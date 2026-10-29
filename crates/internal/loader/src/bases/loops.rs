@@ -17,65 +17,21 @@ mod stock;
 mod tests;
 mod totals;
 
-use enshwick::abi::{HookFlags, Status};
+use enshwick::abi::HookFlags;
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use super::members::Game;
-use super::past16::{SiteError, call_target};
+use super::past16::{Pins, SiteError};
 use crate::base_groups::lookup::Bases;
 use crate::base_groups::window;
 use crate::code::CodePatch;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::mod_index::ModIndex;
+use crate::pinned::bases;
 
-/// Sorts one entity into the first base holding it:
-/// `fn(out, obj, entity, filtered) -> out`.
-const SORT: &str = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 \
-                    48 81 EC 80 00 00 00 41 8B 18";
-/// Sorts every stock entity into the bases: `fn(obj, world)`.
-const SORT_ALL: &str = "48 89 5C 24 10 48 89 6C 24 18 56 57 41 56 B8 60 20 00 00 E8 ?? ?? ?? ??";
-/// The client's logic entity sets: `fn(obj, world)`.
-const REBUILD: &str =
-    "40 55 57 41 56 48 8D AC 24 60 E0 FF FF B8 A0 20 00 00 E8 ?? ?? ?? ?? 48 2B E0";
-/// In the rebuild: `mov r8d, [rip+hash]`, the entity query's call, the
-/// set insert's call.
-const REBUILD_HASH_AT: usize = 0xbc;
-const REBUILD_QUERY_AT: usize = 0xef;
-const REBUILD_INSERT_AT: usize = 0x1d1;
-const MOV_R8D_RIP: [u8; 3] = [0x44, 0x8B, 0x05];
-/// The NPC totals: `fn(obj)`.
-const NPC_TOTALS: &str =
-    "48 89 5C 24 18 48 89 74 24 20 41 56 48 83 EC 20 45 33 F6 48 8B D9 41 8B F6";
-/// The server's update, which counts the animals of each base: `fn(obj,
-/// world)`.
-const SERVER_UPDATE: &str =
-    "40 56 41 54 48 83 EC 38 48 8B F1 4C 89 6C 24 30 48 8B CA 4C 89 74 24 28";
-/// The building stock cache, one base a call: `fn(out, obj) -> out`; its
-/// advance call and its find-or-free call.
-const STOCK_CACHE: &str =
-    "40 56 41 56 41 57 48 83 EC 30 8B 82 EC 1B 00 00 45 33 FF 4C 8B F2 48 8B F1";
-const STOCK_ADVANCE_AT: usize = 0x88;
-const STOCK_FIND_AT: usize = 0x196;
-/// The base ids of the 16 records: `fn(vec, obj)`.
-const BASE_IDS: &str = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8D 5A 30 48 8B F9 \
-                        48 8D B3 00 13 00 00";
-/// The three cleanups, `fn(obj)`, each with the first byte after it: every
-/// leaf has a dead twin of the same bytes before it.
-const BED_CLEANUP: &str = "45 33 C9 4C 8B C1 41 8B D1 39 51 24 76 30 48 8D 81 48 01 00 00 66 66 66 \
-                           0F 1F 84 00 00 00 00 00 44 89 48 FC 48 FF C2 44 89 08 44 89 48 04 48 8D \
-                           80 30 01 00 00 41 8B 48 24 48 3B D1 72 E2 C3 CC 33";
-const COMFORT_CLEANUP: &str = "33 D2 4C 8B C1 39 51 24 76 31 48 8D 81 C0 00 00 00 0F 57 C0 33 C9 48 \
-                               FF C2 0F 11 00 0F 11 40 10 0F 11 40 20 0F 11 40 30 89 48 40 48 8D 80 \
-                               30 01 00 00 41 8B 48 24 48 3B D1 72 D6 C3 CC CC CC CC 45";
-const PROPS_CLEANUP: &str = "45 33 C9 45 8B C1 44 39 41 24 76 29 48 8D 91 08 01 00 00 0F 1F 40 00 \
-                             66 0F 1F 84 00 00 00 00 00 4C 89 0A 48 8D 92 30 01 00 00 8B 41 24 49 \
-                             FF C0 4C 3B C0 72 EB C3 CC CC CC CC CC CC CC CC CC CC 40";
-/// The client's base list, which sizes itself by the count getter it calls
-/// here; the getter, `mov eax, [rcx+0x24]; ret`, and the padding up to the
-/// next function, which a jump to ours replaces.
-const UI_BASES: &str =
-    "40 53 55 56 57 41 55 41 56 41 57 48 83 EC 40 41 B8 18 00 00 00 48 8D 54 24 20";
-const UI_GETTER_AT: usize = 0x31;
+/// The client's count getter the base list sizes itself by, `mov eax,
+/// [rcx+0x24]; ret`, and the padding up to the next function, which a jump
+/// to ours replaces.
 const GETTER: [u8; 14] = [
     0x8B, 0x41, 0x24, 0xC3, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
 ];
@@ -235,35 +191,18 @@ struct Code {
 
 static CODE: std::sync::OnceLock<Code> = std::sync::OnceLock::new();
 
-/// The offset a `mov reg, [rip+d]` at `at`, `opcode.len()` bytes of opcode
-/// and a 4-byte displacement, reads.
-fn rip_operand(code: &[u8], at: usize, opcode: &[u8]) -> Result<usize, SiteError> {
-    let end = at + opcode.len() + 4;
-    let bytes = code.get(at..end).ok_or(SiteError::Cut(at))?;
-    if &bytes[..opcode.len()] != opcode {
-        return Err(SiteError::NotALoad {
-            at,
-            found: bytes.to_vec(),
-        });
-    }
-    let disp = i32::from_le_bytes([bytes[3], bytes[4], bytes[5], bytes[6]]);
-    isize::try_from(disp)
-        .ok()
-        .and_then(|disp| end.checked_add_signed(disp))
-        .ok_or(SiteError::Cut(at))
-}
-
-/// Finds every loop site in `code`, which starts at `start`; the client's
-/// base list only on a `client`.
-pub(super) fn find(code: &[u8], start: usize, client: bool) -> Result<Sites, SiteError> {
-    let find = |pattern: &str| crate::code::find(code, pattern).map_err(SiteError::from);
-    let at = |offset: usize| (start + offset) as u64;
-    let rebuild = find(REBUILD)?;
-    let stock_cache = find(STOCK_CACHE)?;
-    let hash = rip_operand(code, rebuild + REBUILD_HASH_AT, &MOV_R8D_RIP)?;
+/// Finds every loop site in `code`, which starts at `start`, from the build
+/// table's `pins`; the client's count getter only on a `client`.
+pub(super) fn find(
+    code: &[u8],
+    start: usize,
+    client: bool,
+    pins: &Pins<'_>,
+) -> Result<Sites, SiteError> {
+    let address = |id| pins.at(id).map(|offset| start + offset);
+    let at = |id| address(id).map(|a| a as u64);
     let getter = if client {
-        let ui = find(UI_BASES)?;
-        let getter = call_target(code, ui + UI_GETTER_AT)?;
+        let getter = pins.at(bases::COUNT_GETTER)?;
         if code.get(getter..getter + GETTER.len()) != Some(&GETTER[..]) {
             return Err(SiteError::Getter);
         }
@@ -272,118 +211,124 @@ pub(super) fn find(code: &[u8], start: usize, client: bool) -> Result<Sites, Sit
         None
     };
     Ok(Sites {
-        sort: at(find(SORT)?),
-        sort_all: at(find(SORT_ALL)?),
-        rebuild: at(rebuild),
-        npc_totals: at(find(NPC_TOTALS)?),
-        server_update: at(find(SERVER_UPDATE)?),
-        stock_cache: at(stock_cache),
-        base_ids: at(find(BASE_IDS)?),
+        sort: at(bases::SORT)?,
+        sort_all: at(bases::SORT_ALL)?,
+        rebuild: at(bases::REBUILD)?,
+        npc_totals: at(bases::NPC_TOTALS)?,
+        server_update: at(bases::SERVER_UPDATE)?,
+        stock_cache: at(bases::STOCK_CACHE)?,
+        base_ids: at(bases::BASE_IDS)?,
         cleanups: [
-            at(find(BED_CLEANUP)?),
-            at(find(COMFORT_CLEANUP)?),
-            at(find(PROPS_CLEANUP)?),
+            at(bases::BED_CLEANUP)?,
+            at(bases::COMFORT_CLEANUP)?,
+            at(bases::PROPS_CLEANUP)?,
         ],
-        hash_at: start + hash,
-        query: start + call_target(code, rebuild + REBUILD_QUERY_AT)?,
-        insert: start + call_target(code, rebuild + REBUILD_INSERT_AT)?,
-        find: start + call_target(code, stock_cache + STOCK_FIND_AT)?,
-        advance: start + call_target(code, stock_cache + STOCK_ADVANCE_AT)?,
+        hash_at: address(bases::ENTITY_HASH)?,
+        query: address(bases::ENTITY_QUERY)?,
+        insert: address(bases::SET_INSERT)?,
+        find: address(bases::STOCK_FIND)?,
+        advance: address(bases::STOCK_ADVANCE)?,
         getter,
     })
 }
 
 /// Links every loop site and resolves the code the replacements call;
-/// each link's name and status.
-pub(super) fn link(loader: &Loader, sites: &Sites) -> Vec<(&'static str, Status)> {
-    // SAFETY: the hash's u32 sits in the game's mapped image where the
-    // rebuild's own `mov r8d, [rip+d]` reads it.
+/// whether each link holds.
+pub(super) fn link(loader: &Loader, sites: &Sites) -> [bool; 10] {
+    // SAFETY: the table's `bases.entity_hash`, a u32 the table pins inside
+    // the game's mapped image through the rebuild's own `mov r8d, [rip+d]`,
+    // so it is readable before the rebuild's code check; a rebuild that does
+    // not hold is never linked, so the value goes unused.
     let hash = unsafe { read_at::<u32>(sites.hash_at as *const u8, 0) };
     let code = Code {
         hash,
-        // SAFETY: the entity query the rebuild calls at `REBUILD_QUERY_AT`.
+        // SAFETY: the table's `bases.entity_query`, the entity query the
+        // rebuild calls.
         query: unsafe { core::mem::transmute::<usize, QueryFn>(sites.query) },
-        // SAFETY: the set insert the rebuild calls at `REBUILD_INSERT_AT`.
+        // SAFETY: the table's `bases.set_insert`, the set insert the rebuild
+        // calls.
         insert: unsafe { core::mem::transmute::<usize, InsertFn>(sites.insert) },
-        // SAFETY: the find-or-free the stock cache calls at `STOCK_FIND_AT`.
+        // SAFETY: the table's `bases.stock_find`, the find-or-free the stock
+        // cache calls.
         find: unsafe { core::mem::transmute::<usize, FindFn>(sites.find) },
-        // SAFETY: the advance the stock cache calls at `STOCK_ADVANCE_AT`.
+        // SAFETY: the table's `bases.stock_advance`, the advance the stock
+        // cache calls.
         advance: unsafe { core::mem::transmute::<usize, AdvanceFn>(sites.advance) },
     };
     let _first = CODE.set(code);
     let none = HookFlags::NONE;
     let only = HookFlags::EXCLUSIVE;
-    let [beds, comfort, props] = sites.cleanups;
-    vec![
-        (
-            "sort into bases",
-            loader.link(sites.sort, &sort::SORT_NEXT, sort::sort, only),
+    let at = |symbol| Target::Pinned(symbol);
+    [
+        loader.link_feature(
+            super::past16::PAST_16,
+            at(bases::SORT),
+            &sort::SORT_NEXT,
+            sort::sort,
+            only,
         ),
-        (
-            "sort every entity",
-            loader.link(sites.sort_all, &sort::SORT_ALL_NEXT, sort::sort_all, none),
+        loader.link_feature(
+            super::past16::PAST_16,
+            at(bases::SORT_ALL),
+            &sort::SORT_ALL_NEXT,
+            sort::sort_all,
+            none,
         ),
-        (
-            "base ids",
-            loader.link(sites.base_ids, &sort::BASE_IDS_NEXT, sort::base_ids, none),
+        loader.link_feature(
+            super::past16::PAST_16,
+            at(bases::BASE_IDS),
+            &sort::BASE_IDS_NEXT,
+            sort::base_ids,
+            none,
         ),
-        (
-            "logic entity sets",
-            loader.link(
-                sites.rebuild,
-                &rebuild::REBUILD_NEXT,
-                rebuild::rebuild,
-                only,
-            ),
+        loader.link_feature(
+            super::past16::PAST_16,
+            at(bases::REBUILD),
+            &rebuild::REBUILD_NEXT,
+            rebuild::rebuild,
+            only,
         ),
-        (
-            "building stock cache",
-            loader.link(
-                sites.stock_cache,
-                &stock::STOCK_CACHE_NEXT,
-                stock::stock_cache,
-                only,
-            ),
+        loader.link_feature(
+            super::past16::PAST_16,
+            at(bases::STOCK_CACHE),
+            &stock::STOCK_CACHE_NEXT,
+            stock::stock_cache,
+            only,
         ),
-        (
-            "NPC totals",
-            loader.link(
-                sites.npc_totals,
-                &totals::NPC_TOTALS_NEXT,
-                totals::npc_totals,
-                none,
-            ),
+        loader.link_feature(
+            super::past16::PAST_16,
+            at(bases::NPC_TOTALS),
+            &totals::NPC_TOTALS_NEXT,
+            totals::npc_totals,
+            none,
         ),
-        (
-            "animal totals",
-            loader.link(
-                sites.server_update,
-                &totals::SERVER_UPDATE_NEXT,
-                totals::server_update,
-                none,
-            ),
+        loader.link_feature(
+            super::past16::PAST_16,
+            at(bases::SERVER_UPDATE),
+            &totals::SERVER_UPDATE_NEXT,
+            totals::server_update,
+            none,
         ),
-        (
-            "bed count cleanup",
-            loader.link(beds, &totals::BED_CLEANUP_NEXT, totals::bed_cleanup, none),
+        loader.link_feature(
+            super::past16::PAST_16,
+            at(bases::BED_CLEANUP),
+            &totals::BED_CLEANUP_NEXT,
+            totals::bed_cleanup,
+            none,
         ),
-        (
-            "comfort cleanup",
-            loader.link(
-                comfort,
-                &totals::COMFORT_CLEANUP_NEXT,
-                totals::comfort_cleanup,
-                none,
-            ),
+        loader.link_feature(
+            super::past16::PAST_16,
+            at(bases::COMFORT_CLEANUP),
+            &totals::COMFORT_CLEANUP_NEXT,
+            totals::comfort_cleanup,
+            none,
         ),
-        (
-            "crafting prop cleanup",
-            loader.link(
-                props,
-                &totals::PROPS_CLEANUP_NEXT,
-                totals::props_cleanup,
-                none,
-            ),
+        loader.link_feature(
+            super::past16::PAST_16,
+            at(bases::PROPS_CLEANUP),
+            &totals::PROPS_CLEANUP_NEXT,
+            totals::props_cleanup,
+            none,
         ),
     ]
 }

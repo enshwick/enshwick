@@ -453,14 +453,3 @@ fn the_count_getter_jump_lands_on_ours() {
     assert_eq!(bytes[6..], 0x1122_3344_5566_7788u64.to_le_bytes());
     assert_eq!(usize::from(GETTER[2]), COUNT_AT);
 }
-
-#[test]
-fn a_rip_operand_resolves_and_another_load_is_refused() {
-    let mut code = vec![0xCC; 0x20];
-    code[4..11].copy_from_slice(&[0x44, 0x8B, 0x05, 0x10, 0, 0, 0]);
-    assert_eq!(rip_operand(&code, 4, &MOV_R8D_RIP), Ok(11 + 0x10));
-    assert!(matches!(
-        rip_operand(&code, 3, &MOV_R8D_RIP),
-        Err(SiteError::NotALoad { at: 3, .. })
-    ));
-}

@@ -18,8 +18,8 @@ const OUT_COUNT: usize = 0x20;
 
 pub(super) type StockFn = unsafe extern "system" fn(out: *mut u8, obj: *mut u8) -> *mut u8;
 
-// SAFETY: `StockFn` is the signature of the stock cache `STOCK_CACHE`
-// finds, and `link` uses this slot only as its next.
+// SAFETY: `StockFn` is the signature of the stock cache the table's
+// `bases.stock_cache` pins, and `link` uses this slot only as its next.
 pub(super) static STOCK_CACHE_NEXT: Next<StockFn> = unsafe { Next::new() };
 
 pub(super) unsafe extern "system" fn stock_cache(out: *mut u8, obj: *mut u8) -> *mut u8 {

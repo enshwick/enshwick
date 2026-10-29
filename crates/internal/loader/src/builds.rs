@@ -64,6 +64,13 @@ impl KnownBuild {
         self.table.head(id)
     }
 
+    /// The resolved table, for code that reads entries the same way on
+    /// this build and in a test on a game executable.
+    #[must_use]
+    pub fn resolved(&self) -> &Resolved {
+        &self.table
+    }
+
     /// Systems whose reflected entry must equal the pinned address.
     #[must_use]
     pub fn checks(&self) -> &[(String, u64)] {
@@ -440,6 +447,24 @@ mod tests {
             }
         }
         assert!(unchecked.is_empty(), "no check offered: {unchecked:#?}");
+    }
+
+    /// Every symbol whose code the loader replaces or calls as a whole
+    /// carries a pattern over its whole function in every table that pins
+    /// it, so a change to the game's logic there fails the code check and
+    /// turns its feature off.
+    #[test]
+    fn every_replaced_function_carries_a_body_pattern_in_every_table() {
+        let mut wrong = Vec::new();
+        for table in load() {
+            for symbol in crate::pinned::BODIES {
+                let id = symbol.id();
+                if table.symbols().iter().any(|s| s.id() == id && !s.body()) {
+                    wrong.push(format!("{}: {id}", table.name()));
+                }
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
     #[cfg(windows)]

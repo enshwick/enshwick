@@ -4,7 +4,9 @@
 //! The game puts zones that touch into one base. It copies only the first 16
 //! zones of the world's list into the bases, its array of bases holds 16 with
 //! no check (a 17th base would write over the zone list), and a base names
-//! its zones in a 32-bit mask. Raised, found by byte patterns:
+//! its zones in a 32-bit mask. Raised, at functions the build table pins
+//! with patterns over their whole code, so a change to the game's logic
+//! there keeps the game's limits:
 //!
 //! - the bases' copy of the zone list grows to every listed zone;
 //! - the game's grouping may start only the bases ours plans, which groups
@@ -52,6 +54,7 @@ use self::members::{Game, Side, side_of};
 use crate::base_groups::grouping::Grouped;
 use crate::base_groups::limit::{Limits, MAX_BASES, VANILLA_ZONES, Zone, Zones};
 use crate::base_groups::window::{self, Kind};
+use crate::builds::Unhooked;
 use crate::chains::Next;
 use crate::code::{CodePatch, Verdict};
 use crate::host::{Loader, Registered, Target};
@@ -59,6 +62,40 @@ use crate::registry::Registry;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::bases::BASE_AT.id(),
+    pinned::bases::BASE_IDS.id(),
+    pinned::bases::BED_CLEANUP.id(),
+    pinned::bases::CLIENT_CREATE.id(),
+    pinned::bases::CLIENT_DESTROY.id(),
+    pinned::bases::CLIENT_SIZE.id(),
+    pinned::bases::COMFORT_CLEANUP.id(),
+    pinned::bases::COUNT_GETTER.id(),
+    pinned::bases::CTOR.id(),
+    pinned::bases::CURSOR.id(),
+    pinned::bases::CURSOR_BALANCING.id(),
+    pinned::bases::ENTITY_HASH.id(),
+    pinned::bases::ENTITY_QUERY.id(),
+    pinned::bases::GROUPING.id(),
+    pinned::bases::HOLDER_AT.id(),
+    pinned::bases::IN_BASE.id(),
+    pinned::bases::NEW_BASE.id(),
+    pinned::bases::NPC_TOTALS.id(),
+    pinned::bases::PROPS_CLEANUP.id(),
+    pinned::bases::REBUILD.id(),
+    pinned::bases::SERVER_CREATE.id(),
+    pinned::bases::SERVER_DESTROY.id(),
+    pinned::bases::SERVER_SIZE.id(),
+    pinned::bases::SERVER_UPDATE.id(),
+    pinned::bases::SET_INSERT.id(),
+    pinned::bases::SLOT_FREE.id(),
+    pinned::bases::SLOT_INIT.id(),
+    pinned::bases::SORT.id(),
+    pinned::bases::SORT_ALL.id(),
+    pinned::bases::STOCK_ADVANCE.id(),
+    pinned::bases::STOCK_CACHE.id(),
+    pinned::bases::STOCK_FIND.id(),
+    pinned::bases::TEARDOWN.id(),
+    pinned::bases::ZONES_AT.id(),
     pinned::bases::COUNT.id(),
     pinned::bases::ITEM_ALTAR.id(),
     pinned::bases::MAX_ALTARS_REACHED.id(),
@@ -71,42 +108,32 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::building::MAX_ALTARS.id(),
 ];
 
-/// The grouping's first bytes.
-const GROUPING: &str = "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 41 54 41 55 41 56 41 57 \
-                        48 83 EC 50 45 33 E4 4C 8B F2 4C 8B E9 41 8B EC 44 39 61 24";
-/// The new base call's first bytes: the count at +0x24, bases 0x130 apart.
-const NEW_BASE: &str = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 41 56 41 57 48 83 EC 20 \
-                        44 8B 49 24 48 8B F1 49 69 D9 30 01 00 00 41 8D 41 01";
-/// Which base holds a point: `fn(out, bases, point) -> out`.
-const BASE_AT: &str = "48 89 5C 24 08 57 48 83 EC 10 8B 7A 24 45 33 DB 48 8B DA 4C 8B D1 48 85 FF \
-                       0F 84 ?? ?? ?? ?? F2 41 0F 10 00 41 8B 40 08";
-/// Whether base i holds a point: `fn(bases, i, point) -> bool`.
-const IN_BASE: &str =
-    "48 83 EC 18 F2 41 0F 10 18 4D 8B D0 F3 41 0F 10 50 08 0F 28 CB 48 69 C2 30 01 00 00";
-/// Which box of a base holds a point: `fn(out, bases, point) -> out`.
-const HOLDER_AT: &str =
-    "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 8B 72 24 33 DB 4D 8B D8 48 8B FA";
-/// The zones of the base holding a point: `fn(out, list, bases, point) ->
-/// out`.
-const ZONES_AT: &str =
-    "40 55 57 41 56 48 83 EC 40 F2 41 0F 10 01 49 8B E8 41 8B 41 08 4C 8D 44 24 20";
-/// The placement cursor's first bytes, up to `and dword [rcx], 0xfffc9581`.
-const CURSOR: &str = "48 8B C4 4C 89 48 20 4C 89 40 18 55 56 57 41 55 41 57 48 8D A8 88 FE FF FF \
-                      48 81 EC 50 02 00 00 81 21 81 95 FC FF";
-/// In the cursor: an altar (the item's flag at `bases.item_altar`) is refused
-/// when `max_altars(ctx balancing, flame level)` is not above the altar count.
-const CURSOR_ALTAR: &str = "80 7F ?? 00 0F B6 9D A0 01 00 00 74 ?? F6 C3 10 75 ?? 41 81 0F 00 40 00 00 \
-                            48 8B 96 ?? ?? ?? ?? 48 8B 8E ?? ?? ?? ?? 8B 52 14 E8";
-/// The altar flag's offset in `CURSOR_ALTAR`'s `cmp byte [rdi+flag], 0`.
-const CURSOR_ALTAR_FLAG_AT: usize = 2;
-const CURSOR_BALANCING_AT: usize = 35;
-const CURSOR_SPAN: usize = 0x400;
+/// The raised zones, as the log and the Mods screen name them when a build
+/// lacks a site.
+const RAISED_ZONES: &str = "altar zones past 16";
+
+/// The functions the raised limit hooks, in the order of [`Sites`]: the
+/// grouping, the new base call, the four lookups of a base's zones
+/// (`fn(out, bases, point) -> out`, `fn(bases, i, point) -> bool`,
+/// `fn(out, bases, point) -> out`, `fn(out, list, bases, point) -> out`)
+/// and the placement cursor, which refuses an altar when
+/// `max_altars(ctx balancing, flame level)` is not above the altar count.
+const SITE_SYMBOLS: [pinned::Symbol; 7] = [
+    pinned::bases::GROUPING,
+    pinned::bases::NEW_BASE,
+    pinned::bases::BASE_AT,
+    pinned::bases::IN_BASE,
+    pinned::bases::HOLDER_AT,
+    pinned::bases::ZONES_AT,
+    pinned::bases::CURSOR,
+];
 
 /// The bases object's fields, from the build table: the count, each base
 /// `stride` apart with its members mask at `members` right after its box,
 /// and the zone boxes in a list of `zone_size` bytes each, the low corner
 /// first and the high one at `zone_high`; the placement cursor's altar flag
-/// in an item and its "too many altars" bit.
+/// in an item and its "too many altars" bit, and the balancing its context
+/// holds.
 #[derive(Debug, Clone, Copy)]
 struct Fields {
     count: usize,
@@ -118,6 +145,7 @@ struct Fields {
     zone_high: usize,
     item_altar: usize,
     max_altars_reached: u32,
+    balancing: usize,
 }
 
 impl Fields {
@@ -138,6 +166,7 @@ impl Fields {
             item_altar: f(pinned::bases::ITEM_ALTAR)?,
             max_altars_reached: u32::try_from(f(pinned::bases::MAX_ALTARS_REACHED)?)
                 .map_err(|e| e.to_string())?,
+            balancing: f(pinned::bases::CURSOR_BALANCING)?,
         };
         if fields.zone_size != members::ZONE_ENTRY
             || fields.members < fields.zone_size
@@ -159,7 +188,6 @@ struct Sites {
     holder_at: u64,
     zones_at: u64,
     cursor: u64,
-    balancing: usize,
     fields: Fields,
 }
 
@@ -250,26 +278,33 @@ impl Asked {
     }
 }
 
-// SAFETY: `GroupFn` is the signature of the base grouping the `GROUPING`
-// pattern finds, and `link` uses this slot only as that function's next.
+// SAFETY: `GroupFn` is the signature of the base grouping the table's
+// `bases.grouping` pins, and `link` uses this slot only as that function's
+// next.
 static GROUP_NEXT: Next<GroupFn> = unsafe { Next::new() };
-// SAFETY: `AddBaseFn` is the signature of the new base code the `NEW_BASE`
-// pattern finds, and `link` uses this slot only as that function's next.
+// SAFETY: `AddBaseFn` is the signature of the new base code the table's
+// `bases.new_base` pins, and `link` uses this slot only as that function's
+// next.
 static ADD_BASE_NEXT: Next<AddBaseFn> = unsafe { Next::new() };
-// SAFETY: `AnswerFn` is the signature of the lookup the `BASE_AT` pattern
-// finds, and `link` uses this slot only as that function's next.
+// SAFETY: `AnswerFn` is the signature of the lookup the table's
+// `bases.base_at` pins, and `link` uses this slot only as that function's
+// next.
 static BASE_AT_NEXT: Next<AnswerFn> = unsafe { Next::new() };
-// SAFETY: `InBaseFn` is the signature of the lookup the `IN_BASE` pattern
-// finds, and `link` uses this slot only as that function's next.
+// SAFETY: `InBaseFn` is the signature of the lookup the table's
+// `bases.in_base` pins, and `link` uses this slot only as that function's
+// next.
 static IN_BASE_NEXT: Next<InBaseFn> = unsafe { Next::new() };
-// SAFETY: `AnswerFn` is the signature of the lookup the `HOLDER_AT` pattern
-// finds, and `link` uses this slot only as that function's next.
+// SAFETY: `AnswerFn` is the signature of the lookup the table's
+// `bases.holder_at` pins, and `link` uses this slot only as that function's
+// next.
 static HOLDER_AT_NEXT: Next<AnswerFn> = unsafe { Next::new() };
-// SAFETY: `ZonesAtFn` is the signature of the lookup the `ZONES_AT` pattern
-// finds, and `link` uses this slot only as that function's next.
+// SAFETY: `ZonesAtFn` is the signature of the lookup the table's
+// `bases.zones_at` pins, and `link` uses this slot only as that function's
+// next.
 static ZONES_AT_NEXT: Next<ZonesAtFn> = unsafe { Next::new() };
-// SAFETY: `CheckFn` is the signature of the placement cursor the `CURSOR`
-// pattern finds, and `link` uses this slot only as that function's next.
+// SAFETY: `CheckFn` is the signature of the placement cursor the table's
+// `bases.cursor` pins, and `link` uses this slot only as that function's
+// next.
 static CHECK_NEXT: Next<CheckFn> = unsafe { Next::new() };
 // SAFETY: `MaxAltarsFn` is the signature of the build table's
 // `building.max_altars`, and `link` uses this slot only as that function's
@@ -367,83 +402,60 @@ pub(crate) fn request(loader: &Loader, asked: Limits) -> Status {
     Status::OK
 }
 
-/// Finds every site once.
+/// Finds every site once, from the build table.
 fn find(loader: &Loader) -> Status {
     if crate::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
-    let (Some(text), Some(code)) = (
-        crate::code::text(loader.base),
-        crate::code::text_bytes(loader.base),
-    ) else {
-        return Status::MISSING;
+    let fields = match Fields::read(loader) {
+        Ok(fields) => fields,
+        Err(reason) => {
+            crate::log!(WARN, "bases keep 16 altar zones: {reason}");
+            return Status::MISSING;
+        }
     };
-    match Fields::read(loader).and_then(|fields| find_sites(code, fields)) {
+    match sites_of(fields, |symbol| loader.address(symbol)) {
         Ok(sites) => {
-            let start = text.0 as u64;
-            let at = |offset: u64| start + offset;
-            let _first = SITES.set(Sites {
-                grouping: at(sites.grouping),
-                new_base: at(sites.new_base),
-                base_at: at(sites.base_at),
-                in_base: at(sites.in_base),
-                holder_at: at(sites.holder_at),
-                zones_at: at(sites.zones_at),
-                cursor: at(sites.cursor),
-                ..sites
-            });
+            let _first = SITES.set(sites);
             let _first = ZONES.set([
                 ArcSwap::from_pointee(Zones::default()),
                 ArcSwap::from_pointee(Zones::default()),
             ]);
             Status::OK
         }
-        Err(reason) => {
-            crate::log!(WARN, "bases keep 16 altar zones: {reason}");
+        Err(symbol) => {
+            loader.feature_off(RAISED_ZONES, symbol.id(), &Unhooked::Absent.to_string());
             Status::MISSING
         }
     }
 }
 
-/// The cursor's altar check in `code`, which must test the altar flag at
-/// `item_altar`, the offset the detour reads.
-fn cursor_altar(code: &[u8], item_altar: usize) -> Result<usize, String> {
-    let altar = crate::code::find(code, CURSOR_ALTAR)?;
-    let tested = code
-        .get(altar + CURSOR_ALTAR_FLAG_AT)
-        .copied()
-        .ok_or("the cursor is cut")?;
-    if usize::from(tested) == item_altar {
-        Ok(altar)
-    } else {
-        Err(format!(
-            "the cursor tests the altar flag at {tested:#x}, the table names {item_altar:#x}"
-        ))
+/// The sites where `address` puts them, or the first symbol it lacks.
+fn sites_of(
+    fields: Fields,
+    address: impl Fn(pinned::Symbol) -> Option<u64>,
+) -> Result<Sites, pinned::Symbol> {
+    let mut at = [0; SITE_SYMBOLS.len()];
+    for (slot, symbol) in at.iter_mut().zip(SITE_SYMBOLS) {
+        *slot = address(symbol).ok_or(symbol)?;
     }
-}
-
-/// The sites as offsets into `code`.
-fn find_sites(code: &[u8], fields: Fields) -> Result<Sites, String> {
-    let find = |pattern: &str| crate::code::find(code, pattern).map(|at| at as u64);
-    let cursor = crate::code::find(code, CURSOR)?;
-    let altar = cursor_altar(code, fields.item_altar)?;
-    if !(cursor..cursor + CURSOR_SPAN).contains(&altar) {
-        return Err("the cursor's altar check is not in the cursor".into());
-    }
-    let offset: [u8; 4] = code
-        .get(altar + CURSOR_BALANCING_AT..altar + CURSOR_BALANCING_AT + 4)
-        .and_then(|b| b.try_into().ok())
-        .ok_or("the cursor is cut")?;
-    let balancing = usize::try_from(u32::from_le_bytes(offset)).map_err(|e| e.to_string())?;
+    let [
+        grouping,
+        new_base,
+        base_at,
+        in_base,
+        holder_at,
+        zones_at,
+        cursor,
+    ] = at;
     Ok(Sites {
-        grouping: find(GROUPING)?,
-        new_base: find(NEW_BASE)?,
-        base_at: find(BASE_AT)?,
-        in_base: find(IN_BASE)?,
-        holder_at: find(HOLDER_AT)?,
-        zones_at: find(ZONES_AT)?,
-        cursor: cursor as u64,
-        balancing,
+        grouping,
+        new_base,
+        base_at,
+        in_base,
+        holder_at,
+        zones_at,
+        cursor,
         fields,
     })
 }
@@ -510,49 +522,62 @@ pub(crate) fn link(loader: &'static Loader) {
     };
     // A refused link leaves its site unhooked, so arming keeps the game's
     // limits; the other links then hand every call on unchanged.
+    let at = |symbol| Target::Pinned(symbol);
+    let none = HookFlags::NONE;
+    let only = HookFlags::EXCLUSIVE;
     let refused = [
-        (
-            "base grouping",
-            loader.link(sites.grouping, &GROUP_NEXT, group, HookFlags::NONE),
+        loader.link_feature(
+            RAISED_ZONES,
+            at(pinned::bases::GROUPING),
+            &GROUP_NEXT,
+            group,
+            none,
         ),
-        (
-            "new base",
-            loader.link(sites.new_base, &ADD_BASE_NEXT, add_base, HookFlags::NONE),
+        loader.link_feature(
+            RAISED_ZONES,
+            at(pinned::bases::NEW_BASE),
+            &ADD_BASE_NEXT,
+            add_base,
+            none,
         ),
-        (
-            "base at a point",
-            loader.link(sites.base_at, &BASE_AT_NEXT, base_at, HookFlags::EXCLUSIVE),
+        loader.link_feature(
+            RAISED_ZONES,
+            at(pinned::bases::BASE_AT),
+            &BASE_AT_NEXT,
+            base_at,
+            only,
         ),
-        (
-            "point in a base",
-            loader.link(sites.in_base, &IN_BASE_NEXT, in_base, HookFlags::EXCLUSIVE),
+        loader.link_feature(
+            RAISED_ZONES,
+            at(pinned::bases::IN_BASE),
+            &IN_BASE_NEXT,
+            in_base,
+            only,
         ),
-        (
-            "zone at a point",
-            loader.link(
-                sites.holder_at,
-                &HOLDER_AT_NEXT,
-                holder_at,
-                HookFlags::EXCLUSIVE,
-            ),
+        loader.link_feature(
+            RAISED_ZONES,
+            at(pinned::bases::HOLDER_AT),
+            &HOLDER_AT_NEXT,
+            holder_at,
+            only,
         ),
-        (
-            "zones of a base",
-            loader.link(
-                sites.zones_at,
-                &ZONES_AT_NEXT,
-                zones_at,
-                HookFlags::EXCLUSIVE,
-            ),
+        loader.link_feature(
+            RAISED_ZONES,
+            at(pinned::bases::ZONES_AT),
+            &ZONES_AT_NEXT,
+            zones_at,
+            only,
         ),
-        (
-            "placement cursor",
-            loader.link(sites.cursor, &CHECK_NEXT, check, HookFlags::NONE),
+        loader.link_feature(
+            RAISED_ZONES,
+            at(pinned::bases::CURSOR),
+            &CHECK_NEXT,
+            check,
+            none,
         ),
     ]
     .into_iter()
-    .filter(|(_, status)| !status.is_ok())
-    .inspect(|(name, status)| crate::log!(WARN, "{name}: refused ({})", status.0))
+    .filter(|linked| !linked)
     .count();
     if refused == 0 {
         let asked = ASKED.limits();
@@ -936,35 +961,51 @@ mod tests {
         limit.flame_level = 99;
     }
 
-    /// The cursor's altar check with the altar flag at `flag` in the item,
-    /// between filler bytes.
-    fn cursor_with_flag(flag: u8) -> Vec<u8> {
-        let mut code = vec![0xCC; 8];
-        code.extend_from_slice(&[
-            0x80, 0x7F, flag, 0x00, 0x0F, 0xB6, 0x9D, 0xA0, 0x01, 0x00, 0x00,
-        ]);
-        code.extend_from_slice(&[0x74, 0x05, 0xF6, 0xC3, 0x10, 0x75, 0x05]);
-        code.extend_from_slice(&[0x41, 0x81, 0x0F, 0x00, 0x40, 0x00, 0x00]);
-        code.extend_from_slice(&[0x48, 0x8B, 0x96, 0x10, 0x02, 0x00, 0x00]);
-        code.extend_from_slice(&[0x48, 0x8B, 0x8E, 0x18, 0x02, 0x00, 0x00]);
-        code.extend_from_slice(&[0x8B, 0x52, 0x14, 0xE8, 0, 0, 0, 0]);
-        code.extend_from_slice(&[0xCC; 8]);
-        code
-    }
-
     #[test]
-    fn the_cursor_altar_check_is_found_with_the_flag_where_the_table_puts_it() {
-        assert_eq!(cursor_altar(&cursor_with_flag(0x43), 0x43), Ok(8));
-        assert_eq!(cursor_altar(&cursor_with_flag(0x47), 0x47), Ok(8));
-    }
-
-    #[test]
-    fn a_cursor_testing_another_flag_than_the_table_s_is_refused() {
-        let refused = cursor_altar(&cursor_with_flag(0x47), 0x43).unwrap_err();
-        assert!(
-            refused.contains("0x47") && refused.contains("0x43"),
-            "{refused}"
+    fn every_site_is_the_table_s_symbol_and_the_first_one_missing_is_named() {
+        let address =
+            |s: pinned::Symbol| Some(0x1000 + SITE_SYMBOLS.iter().position(|&t| t == s)? as u64);
+        let sites = sites_of(fake::FIELDS, address).unwrap();
+        assert_eq!(sites.targets().len(), SITE_SYMBOLS.len());
+        assert_eq!(sites.cursor, address(pinned::bases::CURSOR).unwrap());
+        let without_zones =
+            |s: pinned::Symbol| (s != pinned::bases::ZONES_AT).then(|| address(s)).flatten();
+        assert_eq!(
+            sites_of(fake::FIELDS, without_zones).map(|_| ()),
+            Err(pinned::bases::ZONES_AT)
         );
+    }
+
+    /// The cursor's code check covers the offsets the detour reads: in
+    /// every table that pins the cursor, its whole-code pattern fixes the
+    /// altar flag test and the balancing load at the table's values.
+    #[test]
+    fn the_cursor_s_pattern_fixes_the_offsets_its_detour_reads() {
+        let hex = |bytes: &[u8]| {
+            bytes
+                .iter()
+                .map(|b| format!("{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        for (file, text) in enshwick_gamedata::embedded() {
+            let table = enshwick_gamedata::Table::parse(text).unwrap();
+            let resolved = table.resolve();
+            if resolved.symbol(pinned::bases::CURSOR.id()).is_none() {
+                continue;
+            }
+            let row = text
+                .lines()
+                .find(|line| line.starts_with(&format!("\"{}\" ", pinned::bases::CURSOR)))
+                .unwrap();
+            let constant = |id: Constant| resolved.constant(id.id()).unwrap();
+            let flag = u8::try_from(constant(pinned::bases::ITEM_ALTAR)).unwrap();
+            let balancing = u32::try_from(constant(pinned::bases::CURSOR_BALANCING)).unwrap();
+            let mut load = vec![0x48, 0x8B, 0x8E];
+            load.extend_from_slice(&balancing.to_le_bytes());
+            assert!(row.contains(&hex(&[0x80, 0x7F, flag, 0x00])), "{file}");
+            assert!(row.contains(&hex(&load)), "{file}");
+        }
     }
 
     #[test]

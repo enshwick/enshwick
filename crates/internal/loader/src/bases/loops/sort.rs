@@ -20,14 +20,14 @@ pub(super) type SortFn = unsafe extern "system" fn(
 ) -> *mut u8;
 pub(super) type BaseIdsFn = unsafe extern "system" fn(vec: *mut u8, obj: *mut u8) -> u64;
 
-// SAFETY: `SortFn` is the signature of the sort `SORT` finds, and `link`
-// uses this slot only as that function's next.
+// SAFETY: `SortFn` is the signature of the sort the table's `bases.sort`
+// pins, and `link` uses this slot only as that function's next.
 pub(super) static SORT_NEXT: Next<SortFn> = unsafe { Next::new() };
-// SAFETY: `ObjWorldFn` is the signature of the sort of every entity
-// `SORT_ALL` finds, and `link` uses this slot only as its next.
+// SAFETY: `ObjWorldFn` is the signature of the sort of every entity the
+// table's `bases.sort_all` pins, and `link` uses this slot only as its next.
 pub(super) static SORT_ALL_NEXT: Next<ObjWorldFn> = unsafe { Next::new() };
-// SAFETY: `BaseIdsFn` is the signature of the base id list `BASE_IDS`
-// finds, and `link` uses this slot only as its next.
+// SAFETY: `BaseIdsFn` is the signature of the base id list the table's
+// `bases.base_ids` pins, and `link` uses this slot only as its next.
 pub(super) static BASE_IDS_NEXT: Next<BaseIdsFn> = unsafe { Next::new() };
 
 pub(super) unsafe extern "system" fn sort(

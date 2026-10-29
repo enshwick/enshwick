@@ -1,13 +1,47 @@
 //! Build table ids under `bases.`.
 
-use super::Constant;
+use super::{Constant, Symbol};
 
+pub(crate) const BASE_AT: Symbol = Symbol::new("bases.base_at");
+pub(crate) const BASE_IDS: Symbol = Symbol::new("bases.base_ids");
+pub(crate) const BED_CLEANUP: Symbol = Symbol::new("bases.bed_cleanup");
+pub(crate) const CLIENT_CREATE: Symbol = Symbol::new("bases.client_create");
+pub(crate) const CLIENT_DESTROY: Symbol = Symbol::new("bases.client_destroy");
+pub(crate) const CLIENT_SIZE: Constant = Constant::new("bases.client_size");
+pub(crate) const COMFORT_CLEANUP: Symbol = Symbol::new("bases.comfort_cleanup");
 pub(crate) const COUNT: Constant = Constant::new("bases.count");
+pub(crate) const COUNT_GETTER: Symbol = Symbol::new("bases.count_getter");
+pub(crate) const CTOR: Symbol = Symbol::new("bases.ctor");
+pub(crate) const CURSOR: Symbol = Symbol::new("bases.cursor");
+pub(crate) const CURSOR_BALANCING: Constant = Constant::new("bases.cursor_balancing");
+pub(crate) const ENTITY_HASH: Symbol = Symbol::new("bases.entity_hash");
+pub(crate) const ENTITY_QUERY: Symbol = Symbol::new("bases.entity_query");
+pub(crate) const GROUPING: Symbol = Symbol::new("bases.grouping");
+pub(crate) const HOLDER_AT: Symbol = Symbol::new("bases.holder_at");
+pub(crate) const IN_BASE: Symbol = Symbol::new("bases.in_base");
 pub(crate) const ITEM_ALTAR: Constant = Constant::new("bases.item_altar");
 pub(crate) const MAX_ALTARS_REACHED: Constant = Constant::new("bases.max_altars_reached");
 pub(crate) const MEMBERS: Constant = Constant::new("bases.members");
+pub(crate) const NEW_BASE: Symbol = Symbol::new("bases.new_base");
+pub(crate) const NPC_TOTALS: Symbol = Symbol::new("bases.npc_totals");
+pub(crate) const PROPS_CLEANUP: Symbol = Symbol::new("bases.props_cleanup");
+pub(crate) const REBUILD: Symbol = Symbol::new("bases.rebuild");
+pub(crate) const SERVER_CREATE: Symbol = Symbol::new("bases.server_create");
+pub(crate) const SERVER_DESTROY: Symbol = Symbol::new("bases.server_destroy");
+pub(crate) const SERVER_SIZE: Constant = Constant::new("bases.server_size");
+pub(crate) const SERVER_UPDATE: Symbol = Symbol::new("bases.server_update");
+pub(crate) const SET_INSERT: Symbol = Symbol::new("bases.set_insert");
+pub(crate) const SLOT_FREE: Symbol = Symbol::new("bases.slot_free");
+pub(crate) const SLOT_INIT: Symbol = Symbol::new("bases.slot_init");
+pub(crate) const SORT: Symbol = Symbol::new("bases.sort");
+pub(crate) const SORT_ALL: Symbol = Symbol::new("bases.sort_all");
+pub(crate) const STOCK_ADVANCE: Symbol = Symbol::new("bases.stock_advance");
+pub(crate) const STOCK_CACHE: Symbol = Symbol::new("bases.stock_cache");
+pub(crate) const STOCK_FIND: Symbol = Symbol::new("bases.stock_find");
 pub(crate) const STRIDE: Constant = Constant::new("bases.stride");
+pub(crate) const TEARDOWN: Symbol = Symbol::new("bases.teardown");
 pub(crate) const ZONE_HIGH: Constant = Constant::new("bases.zone_high");
 pub(crate) const ZONE_LIST: Constant = Constant::new("bases.zone_list");
 pub(crate) const ZONE_LIST_LEN: Constant = Constant::new("bases.zone_list_len");
 pub(crate) const ZONE_SIZE: Constant = Constant::new("bases.zone_size");
+pub(crate) const ZONES_AT: Symbol = Symbol::new("bases.zones_at");
