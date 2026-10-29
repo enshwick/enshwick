@@ -20,10 +20,10 @@ mod tests {
     // order.
     unsafe impl Sync for Memory {}
 
-    const LIVE: usize = 0x5e;
+    const LIVE: usize = 0x5e; // bound, not a game offset: a test's memory
     const FREED: usize = 0;
-    const A: usize = 0x1000;
-    const B: usize = 0x2000;
+    const A: usize = 0x1000; // bound, not a game offset: a test's memory
+    const B: usize = 0x2000; // bound, not a game offset: a test's memory
     const READER: Place = &"the model's reader";
 
     fn memory() -> Arc<Memory> {

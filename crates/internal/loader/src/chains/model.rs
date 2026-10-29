@@ -13,7 +13,7 @@ mod tests {
     use loom::thread;
 
     const TARGET: u64 = 0x10;
-    const ORIGINAL: usize = 0xff;
+    const ORIGINAL: usize = 0xff; // bound, not a game offset: a test's memory
 
     /// A slot for one model run; loom tracks atomics per run, so each run
     /// makes its own.

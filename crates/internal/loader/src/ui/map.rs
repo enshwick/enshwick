@@ -39,7 +39,7 @@ const RETIRED_FRAMES: u64 = 2;
 const MAX_RETIRED: usize = 64;
 
 /// Room for one marker entry, which the build table's entry size must fit.
-const ENTRY_ROOM: usize = 0x100;
+const ENTRY_ROOM: usize = 0x100; // bound, not a game offset: the loader's room
 
 /// Where the map's markers lie, from the build table and reflection.
 #[derive(Debug)]

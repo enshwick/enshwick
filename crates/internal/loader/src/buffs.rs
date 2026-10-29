@@ -49,7 +49,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 
 /// The room the loader keeps for the saved-buff record the restore reads;
 /// the build's record must fit.
-const RECORD: usize = 0x100;
+const RECORD: usize = 0x100; // bound, not a game offset: the loader's room
 /// More buff types than any build has: a count past it is not a count.
 const MAX_TYPES: u32 = 1 << 16;
 /// The value of the record's strength the game's own apply gives a buff.

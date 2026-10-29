@@ -270,7 +270,7 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 /// The slot state of a player in the world, for the joined-player reads.
 pub(crate) const SLOT_IN_GAME: u8 = 3;
 /// Names longer than this are not a client's name.
-const MAX_NAME: usize = 0x100;
+const MAX_NAME: usize = 0x100; // bound, not a game offset: a sanity bound
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT

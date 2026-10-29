@@ -50,10 +50,10 @@ const READ: usize = 32;
 /// A relay and a trampoline: moved instructions grow at most to this.
 const ENTRY: usize = 128;
 /// Windows reserves memory in 64 KiB steps.
-const GRANULARITY: usize = 0x1_0000;
+const GRANULARITY: usize = 0x1_0000; // bound, not a game offset: a fact of Windows
 const BLOCK: usize = GRANULARITY;
 /// How far a `rel32` reaches, kept clear of the edge for the block's length.
-const REACH: usize = 0x7fff_0000 - BLOCK;
+const REACH: usize = 0x7fff_0000 - BLOCK; // bound, not a game offset: a fact of x86-64
 /// How often the writes wait for threads to leave the code being patched.
 const SETTLE_TRIES: u32 = 50;
 /// How long each wait lasts.

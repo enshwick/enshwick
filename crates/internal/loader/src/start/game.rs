@@ -15,7 +15,7 @@ use crate::pe;
 const WINDOW_POLL: Duration = Duration::from_millis(100);
 
 /// The bytes of the executable's headers the loader reads, one page.
-const HEADER_PAGE: usize = 0x400;
+const HEADER_PAGE: usize = 0x400; // bound, not a game offset: the loader's read
 
 /// The folders beside the game's executable the loader keeps.
 pub(super) const GAME_DIRS: [&str; 4] = ["mods", "mod-configs", "mod-data", "logs"];

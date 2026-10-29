@@ -108,7 +108,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// How long a request may wait for the inventory system.
 const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bytes kept for the descriptor before the transaction, which is 16-aligned.
-const DESC_AREA: usize = 0x100;
+const DESC_AREA: usize = 0x100; // bound, not a game offset: the loader's room
 /// Descriptor flags: emit `PickupEvent` and `InventoryFull`.
 const NOTIFY_FLAGS: u8 = 1 | 4;
 /// Descriptor flag the game sets for some actors.

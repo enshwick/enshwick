@@ -8,7 +8,7 @@ const SERVER_EXE: &str = "enshrouded_server.exe";
 const CLIENT_EXE: &str = "enshrouded.exe";
 
 /// The offset of the word that locates the PE signature.
-pub(crate) const PE_POINTER: usize = 0x3c;
+pub(crate) const PE_POINTER: usize = 0x3c; // bound, not a game offset: the PE format
 /// From the PE signature: the section count in the file header.
 pub(crate) const SECTION_COUNT: usize = 6;
 /// From the PE signature: the optional header's size in the file header.
