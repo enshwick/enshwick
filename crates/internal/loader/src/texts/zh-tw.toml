@@ -292,3 +292,5 @@
 "menu.line.off" = "Enshwick {version} · 模組：{mods}，已停用：{off}"
 "menu.line.lacking" = "{line} · 此遊戲版本中部分功能已停用"
 "menu.line.settings" = "{line} · enshwick.toml 有錯誤，請查看記錄檔"
+"menu.line.developer" = "{line} · 開發者工具已開啟"
+"developer.on" = "開發者工具已開啟。僅用於測試模組。"

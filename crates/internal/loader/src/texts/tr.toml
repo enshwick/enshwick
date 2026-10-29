@@ -292,3 +292,5 @@
 "menu.line.off" = "Enshwick {version} · mod: {mods}, kapalı: {off}"
 "menu.line.lacking" = "{line} · bu oyun sürümünde bazı özellikler kapalı"
 "menu.line.settings" = "{line} · enshwick.toml dosyasında hatalar var, günlüğe bakın"
+"menu.line.developer" = "{line} · GELİŞTİRİCİ ARAÇLARI AÇIK"
+"developer.on" = "GELİŞTİRİCİ ARAÇLARI AÇIK. YALNIZCA MOD DENEMEK İÇİNDİR."

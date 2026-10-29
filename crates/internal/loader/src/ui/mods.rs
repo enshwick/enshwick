@@ -727,11 +727,18 @@ fn about(paint: &Painter<'_>, record: &crate::host::ModRecord) {
     }
 }
 
-/// Paints a line for each part of the loader that is off, with its reason.
-/// What the loader itself has off or wrong, above the mods: features this
-/// build lacks, parts a panic turned off, a broken settings file and
-/// discovery off.
+/// What the loader itself has on, off or wrong, above the mods: developer
+/// tools on, features this build lacks, parts a panic turned off, a broken
+/// settings file and discovery off.
 fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
+    if crate::developer_tools::warned(loader) {
+        paint.label(
+            crate::developer_tools::warning().as_bytes(),
+            UiWidget::STYLE_NEGATIVE,
+            true,
+            false,
+        );
+    }
     let lacking = loader.build.lacking(crate::TABLE_IDS);
     if !lacking.is_empty() {
         let line = texts::fill("mods.features.off", &[("features", lacking)]);
