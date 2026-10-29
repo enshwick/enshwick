@@ -1106,15 +1106,7 @@ fn save(loader: &Loader, after_game_save: bool) {
         );
     }
     let path = file(loader, &key);
-    let written = path
-        .parent()
-        .map_or(Ok(()), std::fs::create_dir_all)
-        .and_then(|()| {
-            let fresh = path.with_extension("tmp");
-            std::fs::write(&fresh, &bytes)?;
-            std::fs::rename(&fresh, &path)
-        });
-    if let Err(error) = written {
+    if let Err(error) = enshwick::files::write_atomically(&path, &bytes) {
         crate::log!(WARN, "mod data: {} not written: {error}", path.display());
     }
 }

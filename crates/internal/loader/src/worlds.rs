@@ -243,14 +243,8 @@ mod live {
         std::fs::read_to_string(path).ok()
     }
 
-    /// Writes `text` to `path` through a temporary file and a rename.
     fn write(path: &std::path::Path, text: &str) -> std::io::Result<()> {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        let staged = path.with_extension("toml.new");
-        std::fs::write(&staged, text)?;
-        std::fs::rename(&staged, path)
+        enshwick::files::write_atomically(path, text)
     }
 
     /// What mod `record` reads now: the running world's settings with its

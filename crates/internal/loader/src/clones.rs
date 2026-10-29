@@ -124,16 +124,11 @@ pub(crate) fn update(
     clones.template_aliases()
 }
 
-/// Writes `text` to a temporary file beside `path`, then renames it over.
+/// Writes `text` to `path` under the file's header.
 fn write(path: &Path, text: &str) -> std::io::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let temporary = path.with_extension("toml.tmp");
     let header = "# Written by the Enshwick loader: every resource a mod cloned and the\n\
                   # vanilla one it came from. Keep it: saved stations fall back to these.\n\n";
-    std::fs::write(&temporary, format!("{header}{text}"))?;
-    std::fs::rename(&temporary, path)
+    enshwick::files::write_atomically(path, format!("{header}{text}"))
 }
 
 #[cfg(test)]

@@ -331,13 +331,7 @@ fn write_queue(loader: &Loader, key: &str, waiting: &[Waiting]) {
             })
             .unwrap_or_default()
         );
-        path.parent()
-            .map_or(Ok(()), std::fs::create_dir_all)
-            .and_then(|()| {
-                let fresh = path.with_extension("tmp");
-                std::fs::write(&fresh, text)?;
-                std::fs::rename(&fresh, &path)
-            })
+        enshwick::files::write_atomically(&path, text)
     };
     if let Err(error) = written {
         crate::log!(WARN, "knowledge: {} not written: {error}", path.display());

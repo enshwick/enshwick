@@ -130,7 +130,8 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
         }
     }
 
-    /// Writes `value`: to a temporary file first, then renamed over the old one.
+    /// Writes `value` through [`files::write_atomically`](crate::files::write_atomically),
+    /// which keeps the old file as its backup.
     ///
     /// # Errors
     ///
@@ -153,21 +154,9 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
     }
 }
 
-/// Writes `text` to `path`: to a temporary file first, then renamed over the
-/// old one.
+/// Writes `text` to `path` through [`crate::files::write_atomically`].
 fn write_atomically(path: &Path, text: &str) -> Result<(), StoreError> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| StoreError::io(dir, e))?;
-    }
-    let temporary = path.with_extension("toml.tmp");
-    // On disk before the rename, so a crash leaves the old file or the new.
-    let written = std::fs::File::create(&temporary).and_then(|mut file| {
-        std::io::Write::write_all(&mut file, text.as_bytes())?;
-        file.sync_all()
-    });
-    written
-        .and_then(|()| std::fs::rename(&temporary, path))
-        .map_err(|e| StoreError::io(path, e))
+    crate::files::write_atomically(path, text).map_err(|e| StoreError::io(path, e))
 }
 
 /// The file a [`Hold`] keeps in its mod's data folder.
@@ -291,15 +280,8 @@ impl Hold {
         self.write(&format!("{}\n{text}", first_line(reason)))
     }
 
-    /// Writes `contents` to a temporary file, then renames it to the hold.
     fn write(&self, contents: &str) -> Result<(), StoreError> {
-        if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| StoreError::io(dir, e))?;
-        }
-        let temporary = self.path.with_extension("txt.tmp");
-        std::fs::write(&temporary, contents)
-            .and_then(|()| std::fs::rename(&temporary, &self.path))
-            .map_err(|e| StoreError::io(&self.path, e))
+        write_atomically(&self.path, contents)
     }
 
     /// Releases the hold; nothing happens when it is not set.
@@ -312,12 +294,16 @@ impl Hold {
     ///
     /// See [`Hold`].
     pub fn clear(&self) -> Result<(), StoreError> {
-        match std::fs::remove_file(&self.path) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                Err(StoreError::io(&self.path, e))
+        let backup = crate::files::backup_path(&self.path);
+        for path in [&self.path, &backup] {
+            match std::fs::remove_file(path) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(StoreError::io(path, e));
+                }
+                _ => {}
             }
-            _ => Ok(()),
         }
+        Ok(())
     }
 
     /// The reason, while the hold is set.

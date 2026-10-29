@@ -314,18 +314,13 @@ impl Record {
     /// When the file cannot be written.
     pub fn write(&self, data_dir: &Path) -> std::io::Result<()> {
         let path = data_dir.join(RECORD);
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
         let body = toml::to_string(self).map_err(std::io::Error::other)?;
         let text = format!(
             "# Mod migrations that ran: on each mod's settings file, and per world;\n\
              # and the former ids whose files each renamed mod took over.\n\
              # The loader keeps this file; nothing listed here runs again.\n\n{body}"
         );
-        let staged = path.with_extension("toml.new");
-        std::fs::write(&staged, text)?;
-        std::fs::rename(&staged, path)
+        enshwick::files::write_atomically(&path, text)
     }
 
     /// Counts every migration that ran under the former id `old` as run
@@ -656,15 +651,8 @@ fn stage_stores(
     Ok(())
 }
 
-/// Writes `text` to `path` through a temporary file and a rename, its
-/// folder made when missing.
 fn write(path: &Path, text: &str) -> std::io::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let staged = path.with_extension("toml.new");
-    std::fs::write(&staged, text)?;
-    std::fs::rename(&staged, path)
+    enshwick::files::write_atomically(path, text)
 }
 
 /// Runs the pending migrations of mod `id` on its settings file, or on a

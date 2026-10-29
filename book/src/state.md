@@ -69,8 +69,9 @@ keeps one serde value as `<dir>/<name>.toml`:
 
 - `load()` returns the stored value, or `T::default()` while nothing is stored;
   a file that does not parse is an error;
-- `save(&value)` writes to a temporary file first and renames it over the old
-  one, so a crash never leaves half a file.
+- `save(&value)` writes the file whole through
+  [`files::write_atomically`](#files-of-your-own), so a crash never leaves
+  half a file, and keeps the old one as `<name>.toml.bak`.
 
 ```rust
 use enshwick::state::Store;
@@ -92,6 +93,34 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 Errors come back as a `StoreError` naming the file and the reason. It
 converts into `Off`, so `?` in `init` turns the mod off with that text; outside
 `init`, log it instead. `Hold` and `WorldStore::flush` return the same error.
+
+## Files of your own
+
+A mod that keeps a file in another format uses
+[`enshwick::files`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/files.rs),
+the same calls the stores use:
+
+- `read_if_present(path)` and `read_to_string_if_present(path)` return
+  `Ok(None)` only when no file is there. Any other error, such as a file
+  another program has locked, is an `Err`: never start empty on it, or the
+  next write replaces the player's data with nothing.
+- `write_atomically(path, contents)` writes to a temporary file of its own
+  beside `path`, flushes it to disk and renames it over the old file, which
+  stays as `backup_path(path)`, `<path>.bak`. A crash or a power loss leaves
+  the old file or the new one, and two writers at once never share a
+  temporary file.
+
+```rust
+use enshwick::files;
+
+fn record_visit(dir: &std::path::Path) -> std::io::Result<()> {
+    let path = dir.join("visits.txt");
+    // A file that does not read stops here, before anything is written.
+    let mut visits = files::read_to_string_if_present(&path)?.unwrap_or_default();
+    visits.push_str("visit\n");
+    files::write_atomically(&path, visits)
+}
+```
 
 ## Holds
 
