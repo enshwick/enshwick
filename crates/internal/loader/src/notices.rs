@@ -18,6 +18,7 @@ use enshwick::abi::Status;
 
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::notice_queue::{MAX_WAITING, Pushed, SLOTS, Waiting, push, step_batch};
 use crate::pinned;
 use crate::pinned::Symbol;
 
@@ -31,11 +32,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 
 /// The longest notice text, in bytes.
 pub(crate) const MAX_TEXT: usize = 255;
-/// Text tags the loader cycles through, so a notice still on screen keeps
-/// its text while the next one is written.
-const SLOTS: usize = 8;
-/// Notices waiting for the client's next step at most.
-const MAX_WAITING: usize = 16;
 
 /// The GUIDs of the loader's notice text tags.
 #[expect(clippy::cast_possible_truncation, reason = "the slot fits a byte")]
@@ -96,8 +92,9 @@ impl SlotText {
 
 static SLOT_TEXTS: [SlotText; SLOTS] = [const { SlotText::new() }; SLOTS];
 static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
-/// Notices waiting for the client's next step: entity and text.
-static WAITING: Mutex<Vec<(u32, String)>> = Mutex::new(Vec::new());
+/// The waiting notices, and whether a full queue dropped one since the
+/// last notice it took.
+static WAITING: Mutex<(Waiting, bool)> = Mutex::new((Vec::new(), false));
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 
 type PushFn =
@@ -169,9 +166,16 @@ pub(crate) fn text(id: u32) -> Option<crate::content::Handed> {
 
 /// Queues a notice the server sent for the client's next step.
 pub(crate) fn queue(entity: Entity, text: &str) {
-    let mut waiting = WAITING.relock();
-    if waiting.len() < MAX_WAITING {
-        waiting.push((entity.0, text.to_owned()));
+    let pushed = {
+        let mut guard = WAITING.relock();
+        let (waiting, dropping) = &mut *guard;
+        push(waiting, dropping, entity.0, text)
+    };
+    if pushed == Pushed::FirstDrop {
+        crate::log!(
+            WARN,
+            "notices arrive faster than the game shows them: {MAX_WAITING} wait, newer ones are dropped"
+        );
     }
 }
 
@@ -191,8 +195,9 @@ fn take_slot(text: &str) -> [u8; 16] {
     TAGS[index]
 }
 
-/// Raises the waiting notices in the client's own world, on its thread
-/// before the engine moves its event streams.
+/// Raises waiting notices in the client's own world, on its thread before
+/// the engine moves its event streams: at most one per text slot, the rest
+/// on later steps.
 ///
 /// # Safety
 ///
@@ -201,11 +206,11 @@ fn take_slot(text: &str) -> [u8; 16] {
 ///   event streams, so no system pushes into them during the call.
 pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
     let waiting = {
-        let mut waiting = WAITING.relock();
-        if waiting.is_empty() {
+        let mut guard = WAITING.relock();
+        if guard.0.is_empty() {
             return;
         }
-        std::mem::take(&mut *waiting)
+        step_batch(&mut guard.0)
     };
     let Some(layout) = layout(loader) else {
         return;
