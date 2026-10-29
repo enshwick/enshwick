@@ -78,6 +78,7 @@ mod pacing;
 mod pack_schemas;
 mod packs;
 mod panic_abort;
+mod panic_reasons;
 #[cfg(feature = "unstable")]
 mod players;
 pub mod point_schema;

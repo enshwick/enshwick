@@ -171,7 +171,10 @@ mod tests {
 
         // SAFETY: the chain behind `MOVE` ends in `upgrade`, which takes any level.
         assert_eq!(unsafe { moved(13) }, 14);
-        assert_eq!(loader.faults(), ["panic in hook MOVE"]);
+        assert_eq!(
+            loader.faults(),
+            ["panic in hook MOVE: assertion `left != right` failed: unlucky"]
+        );
 
         let tally = loader.detour(&TALLY).expect("linked");
         assert_eq!(tally(13), 13, "the value the chain gave");
@@ -189,9 +192,9 @@ mod tests {
         assert_eq!(
             loader.faults(),
             [
-                "panic in hook MOVE",
-                "panic in hook TALLY",
-                "panic in hook TALLY_TOO"
+                "panic in hook MOVE: assertion `left != right` failed: unlucky",
+                "panic in hook TALLY: assertion `left != right` failed: unlucky",
+                "panic in hook TALLY_TOO: assertion `left != right` failed: unlucky"
             ]
         );
 
@@ -204,7 +207,7 @@ mod tests {
         );
         assert_eq!(
             loader.faults().last().map(String::as_str),
-            Some("panic in hook EARLY")
+            Some("panic in hook EARLY: assertion `left != right` failed: unlucky")
         );
     }
 

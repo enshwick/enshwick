@@ -609,10 +609,8 @@ pub mod __private {
         }
     }
 
-    pub fn fault_in(hook: &str) {
-        if let Some(host) = crate::host() {
-            host.fault(&format!("panic in hook {hook}"));
-        }
+    pub fn fault_in(hook: &str, payload: &(dyn core::any::Any + Send)) {
+        crate::host::fault_with(&format!("panic in hook {hook}"), payload);
     }
 
     /// The most detailed level the loader keeps, read once at init.
@@ -764,6 +762,7 @@ pub mod __private {
             return Status::BAD_ARGS;
         };
         let host = host.install();
+        crate::host::log_panics();
         MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
         let _watched = host.subscribe(
             crate::abi::Event::LOADER_SETTINGS_CHANGED,
@@ -787,8 +786,9 @@ pub mod __private {
                 host.fault(off.to_reason());
                 Status::REFUSED
             }
-            Err(_) => {
-                host.log(Level::ERROR, "off: init panicked");
+            Err(payload) => {
+                let message = crate::host::panic_text(payload.as_ref());
+                host.fault(&format!("init panicked: {message}"));
                 Status::FAULTED
             }
         }
@@ -829,8 +829,9 @@ pub mod __private {
                 host.fault(off.to_reason());
                 Status::REFUSED
             }
-            Err(_) => {
-                host.log(Level::ERROR, "off: init panicked");
+            Err(payload) => {
+                let message = crate::host::panic_text(payload.as_ref());
+                host.fault(&format!("init panicked: {message}"));
                 Status::FAULTED
             }
         }
@@ -858,10 +859,10 @@ pub mod __private {
         let Some(state) = slot.get() else {
             return;
         };
-        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.shutdown())).is_err()
-            && let Some(host) = crate::host()
+        if let Err(payload) =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.shutdown()))
         {
-            host.fault("panic in shutdown");
+            crate::host::fault_with("panic in shutdown", payload.as_ref());
         }
     }
 
@@ -869,8 +870,10 @@ pub mod __private {
         let (Some(state), Some(host)) = (slot.get(), crate::host()) else {
             return;
         };
-        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.ready(host))).is_err() {
-            host.fault("panic in ready");
+        if let Err(payload) =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.ready(host)))
+        {
+            crate::host::fault_with("panic in ready", payload.as_ref());
         }
     }
 }

@@ -13,6 +13,7 @@ Everything is under `logs/enshwick/` in the game's folder (beside
 | `status.log`    | The latest status summary                             |
 | `crash.log`     | Crashes, each blamed on a mod, the loader or the game |
 | `report.md`     | One report to attach when you ask for help            |
+| `start.log`     | Why the loader did not start, when it stopped early   |
 
 To ask for help, attach `report.md` to an issue. It holds the versions, your
 system, the status summary, the files in `mods/` and the latest warnings and
@@ -94,6 +95,17 @@ when the mod itself returned `Err(Off)` from `init`, the line before it, at
 | `unknown game build <guid>/<age>; the game runs vanilla until Enshwick has its build table`     | The game was updated and `build_patterns = false` in `mod-configs/enshwick.toml`      |
 | `<name> is not where the build table says; nothing loads`                                       | The build looks known but does not match; treat it as unknown                         |
 | `this is not Enshrouded or its dedicated server; nothing loads`                                 | `powrprof.dll` was loaded by another program                                          |
+
+When `loader.log` is missing or empty, read `logs/enshwick/start.log`. The
+stub and the loader write a line there, with the Windows error, when they
+stop before the log opens: the loader DLL is missing or does not load, or
+the game's folder takes no files. When the game's folder takes no files,
+the line goes to `enshwick/start.log` in the Windows temporary folder
+(`%TEMP%`) instead. Each line starts with its date and time (UTC), and the
+file keeps lines from earlier sessions.
+
+A panic in the loader or a mod writes a line at `error` with the message,
+the place in the code and the thread, to `loader.log` or to the mod's log.
 
 On an unknown build every mod's hold applies; see
 [The game stops before the world loads](#the-game-stops-before-the-world-loads).

@@ -151,7 +151,10 @@ mod tests {
         let calls = ORIGINAL_CALLS.load(Ordering::Relaxed);
         assert_eq!(entry(13), 14);
         assert_eq!(ORIGINAL_CALLS.load(Ordering::Relaxed), calls + 1);
-        assert_eq!(loader.faults(), ["panic in hook DOUBLE"]);
+        assert_eq!(
+            loader.faults(),
+            ["panic in hook DOUBLE: assertion `left != right` failed: unlucky"]
+        );
 
         // SAFETY: `enshwick_mod_ready` is the export of this file's `declare_mod!(Test)`,
         // and its `enshwick_mod_init` returned `Status::OK`.

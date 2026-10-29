@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- A panic in a mod logs a line at `error` with its message, place and
+  thread, and the reason of a mod a panic turns off carries the panic's
+  message; a panicking `init` turns the mod off with that reason (#682).
+
 - A world whose save moved to another folder keeps its mods' data: the
   loader moves the folders of the world it came from to its new key, or
   copies them while the old save is still there (#677).

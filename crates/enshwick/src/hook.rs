@@ -376,8 +376,8 @@ macro_rules! detour {
                 let next = $name.next(&frame);
                 match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| BODY(next, $($arg),*))) {
                     ::core::result::Result::Ok(value) => value,
-                    ::core::result::Result::Err(_) => {
-                        $crate::__private::fault_in(::core::stringify!($name));
+                    ::core::result::Result::Err(panic) => {
+                        $crate::__private::fault_in(::core::stringify!($name), panic.as_ref());
                         match frame.take() {
                             ::core::option::Option::Some(returned) => returned,
                             ::core::option::Option::None => {

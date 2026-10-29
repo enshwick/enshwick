@@ -156,8 +156,8 @@ fn expand_hook(
                     || #body(#next, #(#idents),*),
                 )) {
                     ::core::result::Result::Ok(#value) => #value,
-                    ::core::result::Result::Err(_) => {
-                        ::enshwick::__private::fault_in(::core::stringify!(#name));
+                    ::core::result::Result::Err(__enshwick_panic) => {
+                        ::enshwick::__private::fault_in(::core::stringify!(#name), __enshwick_panic.as_ref());
                         match #frame.take() {
                             ::core::option::Option::Some(#returned) => #returned,
                             #[allow(

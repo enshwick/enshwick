@@ -373,7 +373,8 @@ fn load_native(path: &Path) -> Option<String> {
         )
     };
     if module.is_null() {
-        crate::log!(WARN, "{file} could not be loaded");
+        let error = std::io::Error::last_os_error();
+        crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
         return None;
     }
     crate::log!(INFO, "{file} is no Enshwick mod; it runs on its own");
@@ -415,11 +416,8 @@ fn load_from(path: &Path, named: Option<&str>) -> Option<Library> {
         )
     };
     if module.is_null() {
-        crate::log!(
-            WARN,
-            "{file} could not be loaded ({})",
-            crate::errors::BROKEN_DLL
-        );
+        let error = std::io::Error::last_os_error();
+        crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
         return None;
     }
     let library = exports_of(module, &file);
