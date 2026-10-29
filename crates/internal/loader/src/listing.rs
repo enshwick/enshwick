@@ -30,6 +30,17 @@ pub struct Controls {
 }
 
 impl Listing {
+    /// How a list shows: inside the screen's scroll area when it has one
+    /// this frame (`scrolled`), else `per_page` items at a time.
+    #[must_use]
+    pub const fn new(scrolled: bool, per_page: usize) -> Self {
+        if scrolled {
+            Self::Scrolled
+        } else {
+            Self::Paged { per_page }
+        }
+    }
+
     /// The first item of the page showing `first` in a list that now holds
     /// `count` items: the last page when the list shrank below it, and 0
     /// for a scrolled list.
@@ -155,6 +166,31 @@ mod tests {
         assert_eq!(PAGED.next(8), 16);
         assert_eq!(PAGED.previous(8), 0);
         assert_eq!(PAGED.previous(3), 0);
+    }
+
+    #[test]
+    fn a_list_pages_only_without_a_scroll_area() {
+        assert_eq!(Listing::new(true, 4), Listing::Scrolled);
+        assert_eq!(Listing::new(false, 4), Listing::Paged { per_page: 4 });
+    }
+
+    #[test]
+    fn paging_forward_and_back_walks_every_page_once() {
+        let count = 11;
+        let mut first = 0;
+        let mut seen = Vec::new();
+        while let Some(controls) = PAGED.controls(first, count) {
+            seen.push(PAGED.shown(first, count));
+            if !controls.next {
+                break;
+            }
+            first = PAGED.next(first);
+        }
+        assert_eq!(seen, [0..8, 8..11]);
+        assert!(!PAGED.controls(first, count).unwrap().next);
+        first = PAGED.previous(first);
+        assert_eq!(first, 0);
+        assert!(!PAGED.controls(first, count).unwrap().previous);
     }
 
     #[test]

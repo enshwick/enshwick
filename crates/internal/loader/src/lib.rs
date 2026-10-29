@@ -130,6 +130,7 @@ mod mid;
 pub mod migrations;
 pub mod mod_index;
 pub mod modlist;
+pub mod mods_screen;
 #[cfg(windows)]
 mod module;
 pub mod moved_worlds;
@@ -270,6 +271,7 @@ mod voxels;
 mod watch;
 #[cfg(windows)]
 mod weather;
+pub mod widget_checks;
 pub mod wire;
 #[cfg(windows)]
 mod world;
