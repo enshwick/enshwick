@@ -423,6 +423,21 @@ mod tests {
         }
     }
 
+    /// On each executable, every table reads where the zone size's answer
+    /// holds its valid byte.
+    #[test]
+    fn the_zone_size_valid_byte_reads_on_each_executable() {
+        let rows = constants_on_executables(&["balancing.zone_size_valid"]);
+        let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
+            .iter()
+            .filter(|var| std::env::var(var).is_ok())
+            .count();
+        assert!(rows.len() >= named * 2, "{rows:?}");
+        for (table, values) in rows {
+            assert_eq!(values, [Some(0xc)], "{table}");
+        }
+    }
+
     /// On each executable, every table reads the words of the offer test's
     /// out record a refused offer zeroes.
     #[test]

@@ -1254,6 +1254,9 @@ typedef uint32_t EnshwickManifestFlags;
 // `shutdown` and uses only what a reload can unlink (hooks, events,
 // lookups, settings, logging); see the modding book.
 #define EnshwickManifestFlags_RELOAD 2
+// The mod is a developer tool, never for real play: while it runs,
+// every player reads a warning that developer tools are on.
+#define EnshwickManifestFlags_DEVELOPER 4
 
 // A mod the loader loaded, from `HostApi::mods`; the loader itself comes
 // first, with the id `enshwick`.

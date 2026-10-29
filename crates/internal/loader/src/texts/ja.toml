@@ -292,3 +292,5 @@
 "menu.line.off" = "Enshwick {version}・MOD：{mods}、無効：{off}"
 "menu.line.lacking" = "{line}・このゲームバージョンでは一部の機能が無効です"
 "menu.line.settings" = "{line}・enshwick.toml にエラーがあります。ログを確認してください"
+"menu.line.developer" = "{line} · 開発者ツールがオン"
+"developer.on" = "開発者ツールがオンです。MODのテスト専用です。"

@@ -85,6 +85,11 @@ pub struct Settings {
     /// Enshwick, and a game's own client, always read the loader's texts in
     /// their game's language. Read at start.
     pub language: String,
+    /// A message of the day: plain text every player reads in chat on
+    /// joining this server or loading a world here; empty for none. At most
+    /// 4 lines and 500 bytes are kept, so write more lines with "\n" or a
+    /// """ string. Changes apply at the next join or world load.
+    pub motd: String,
 }
 
 /// What the knowledge guard does with a request a vanilla client never makes.
@@ -118,6 +123,7 @@ impl Default for Settings {
             join_note_seconds: JOIN_NOTE_SECONDS,
             allowlist: false,
             language: String::new(),
+            motd: String::new(),
         }
     }
 }

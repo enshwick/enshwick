@@ -131,6 +131,9 @@ let manifest = enshwick::manifest!(
 - `join: true`: see [The join check](join-check.md).
 - `reload: true`: a development server may reload the mod while it runs; see
   [Testing](../testing.md#reloading-a-mod-while-the-game-runs).
+- `developer: true`: the mod is a developer tool, such as a probe that logs
+  what the game does. While it runs, every player reads a warning that
+  developer tools are on; see [The interface](../interface.md).
 - `requires` names mods that must be present in a Cargo-style version range;
   they load first. `after` names mods that load first when present.
 - `recommends` names mods that work well beside this one: they load first when

@@ -292,3 +292,5 @@
 "menu.line.off" = "Enshwick {version} · 모드: {mods}, 꺼짐: {off}"
 "menu.line.lacking" = "{line} · 이 게임 버전에서는 일부 기능이 꺼져 있습니다"
 "menu.line.settings" = "{line} · enshwick.toml에 오류가 있습니다. 로그를 확인하세요"
+"menu.line.developer" = "{line} · 개발자 도구 켜짐"
+"developer.on" = "개발자 도구가 켜져 있습니다. 모드 테스트 전용입니다."
