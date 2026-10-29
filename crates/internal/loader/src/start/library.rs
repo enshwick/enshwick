@@ -125,14 +125,14 @@ pub(super) fn libraries(
                 changed |= list.note(&candidate.id, &library.file);
                 let ids = std::iter::once(candidate.id.as_str()).chain(candidate.former_ids());
                 if let Some(off) = discovery::off_id(&list, ids) {
-                    Skip::IdOff(off.to_owned()).log(&library.file);
+                    log_skip(&Skip::IdOff(off.to_owned()), &library.file);
                     unload(&library);
                     continue;
                 }
                 candidates.push(candidate);
                 libraries.push(library);
             }
-            Err(reason) => Skip::Manifest(reason).log(&library.file),
+            Err(reason) => log_skip(&Skip::Manifest(reason), &library.file),
         }
     }
     let (libraries, candidates) = drop_duplicates(mods_dir, libraries, candidates);
@@ -145,6 +145,14 @@ pub(super) fn libraries(
         crate::log!(WARN, "{} not written: {e}", modlist::LIST_PATH);
     }
     (libraries, candidates, others)
+}
+
+/// Writes the line of `skip` for the DLL `file` to the loader's log.
+fn log_skip(skip: &Skip, file: &str) {
+    let level = skip.level();
+    if crate::log::enabled(level, crate::settings::LOADER_ID) {
+        crate::log::write(level, crate::settings::LOADER_ID, &skip.line(file));
+    }
 }
 
 /// The DLLs in `mods/chain/`, which the stub loads before the loader, and
@@ -240,13 +248,13 @@ fn drop_duplicates(
         return (libraries, candidates);
     }
     for &(extra, runs) in &duplicates {
-        Skip::Duplicate {
+        let skip = Skip::Duplicate {
             id: candidates[extra].id.clone(),
             version: candidates[extra].version.to_string(),
             runs: libraries[runs].file.clone(),
             runs_version: candidates[runs].version.to_string(),
-        }
-        .log(&libraries[extra].file);
+        };
+        log_skip(&skip, &libraries[extra].file);
     }
     libraries
         .into_iter()
@@ -293,7 +301,7 @@ fn discover(
                 .unwrap_or_default();
             let off = list.is_file_off(&file);
             if off {
-                Skip::FileOff.log(&file);
+                log_skip(&Skip::FileOff, &file);
             }
             !off
         })
@@ -420,7 +428,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         find(exports::INIT),
         find(exports::READY),
     ) else {
-        Skip::NotAMod.log(file);
+        log_skip(&Skip::NotAMod, file);
         return None;
     };
     // SAFETY: a mod's `ABI` export has the signature `enshwick::abi::exports`
@@ -436,7 +444,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     // documents for it.
     let ready = unsafe { core::mem::transmute::<Export, ReadyFn>(ready) };
     if abi() != ABI_VERSION {
-        Skip::OtherAbi.log(file);
+        log_skip(&Skip::OtherAbi, file);
         return None;
     }
     // SAFETY: `query` returns the mod's static manifest, null or readable
@@ -445,7 +453,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     let manifest = match unsafe { crate::manifest::read(query()) } {
         Ok(manifest) => manifest,
         Err(reason) => {
-            Skip::Manifest(reason).log(file);
+            log_skip(&Skip::Manifest(reason), file);
             return None;
         }
     };

@@ -43,14 +43,6 @@ impl Skip {
         }
     }
 
-    /// Writes the line for the DLL `file` to the loader's log.
-    pub(crate) fn log(&self, file: &str) {
-        let level = self.level();
-        if crate::log::enabled(level, crate::settings::LOADER_ID) {
-            crate::log::write(level, crate::settings::LOADER_ID, &self.line(file));
-        }
-    }
-
     /// The log line for the DLL `file`, with the error code a problem
     /// carries.
     pub(crate) fn line(&self, file: &str) -> String {
@@ -208,21 +200,6 @@ mod tests {
                  runs 0.2.0; lanterns.dll can be deleted ({})",
                 errors::DUPLICATE_MOD
             )
-        );
-    }
-
-    #[test]
-    fn a_skip_is_logged_once_at_its_level_under_the_loader() {
-        crate::log::capture();
-        Skip::NotAMod.log("half.dll");
-        let lines = crate::log::captured();
-        assert_eq!(
-            lines,
-            [(
-                Level::WARN,
-                crate::settings::LOADER_ID.to_owned(),
-                Skip::NotAMod.line("half.dll")
-            )]
         );
     }
 

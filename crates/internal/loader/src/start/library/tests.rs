@@ -119,6 +119,11 @@ fn target_dir() -> PathBuf {
 /// Builds the fixtures in `dir` and returns the folder of their DLLs, or
 /// `None` where this process cannot run cargo, as under Wine.
 fn build_fixtures(dir: &Path) -> Option<PathBuf> {
+    // Under Wine the tests were built on another system, whose cargo cannot
+    // read this process's paths.
+    if !Path::new(env!("CARGO")).is_absolute() {
+        return None;
+    }
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let api = workspace.join("crates/enshwick").display().to_string();
     let examples = dir.join("examples");
@@ -225,6 +230,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     crate::log::capture();
     let (found, candidates, others) = libraries(&mods, Run::Dry, &mut |_| {});
     let lines = loader_lines();
+    crate::log::end_capture();
 
     let ids: Vec<&str> = candidates.iter().map(|c| c.id.as_str()).collect();
     assert_eq!(ids, ["fixture.lanterns"], "{lines:#?}");
