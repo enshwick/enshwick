@@ -292,7 +292,7 @@ being ignored. Add `#[serde(default)]` if a file written by an older version of
 the mod, without a newer key, should still load.
 
 [`enshwick-game-rates`](https://github.com/enshwick/mod-game-rates)
-reads this setting as `comfort_multiplier`, beside its recipe rates.
+reads this setting as `multiplier` in its `[comfort]` group, beside its recipe rates.
 
 ## Changes while the game runs
 
