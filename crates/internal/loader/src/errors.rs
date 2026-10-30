@@ -10,7 +10,7 @@ use core::fmt;
 pub const SOURCE: &str = include_str!("errors.toml");
 
 /// Where the page of a code lives, before the code in lower case.
-pub const PAGES: &str = "https://enshwick.github.io/docs/errors/";
+pub const PAGES: &str = "https://enshwick.com/errors/";
 
 /// A code of `errors.toml`, shown at the end of a loader message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -273,7 +273,7 @@ mod tests {
     fn a_code_reads_as_its_page() {
         assert_eq!(
             UNKNOWN_BUILD.to_string(),
-            "E1003, see https://enshwick.github.io/docs/errors/e1003/"
+            "E1003, see https://enshwick.com/errors/e1003/"
         );
     }
 }
