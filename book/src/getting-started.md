@@ -112,6 +112,36 @@ This mod sets how many Flame Altars every Flame level allows. The API has a
 call for exactly that, so the mod only answers with a number from its
 settings.
 
+Without settings, the whole mod fits in a few lines. This one always allows
+16 altars:
+
+<!-- smallest-mod -->
+```rust,standalone_crate
+use enshwick::{Load, Mod, Off};
+
+struct AltarCount;
+
+impl Mod for AltarCount {
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
+            id: "you.my-altar-count",
+            side: BOTH,
+            join: true,
+        )
+    }
+
+    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.on_altar_limit(|limit| limit.allowed = 16)?;
+        Ok(Self)
+    }
+}
+
+enshwick::declare_mod!(AltarCount);
+```
+<!-- /smallest-mod -->
+
+With settings, a server admin picks the number:
+
 ```rust,standalone_crate
 use std::sync::atomic::{AtomicU8, Ordering};
 
