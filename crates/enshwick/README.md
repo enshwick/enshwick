@@ -54,6 +54,6 @@ enshwick::declare_mod!(Hello);
 Turn the `test` feature on under `[dev-dependencies]` only. Parts behind the
 `unstable` feature can change in any release. The macros come from
 `enshwick-macros`, an internal crate this one re-exports. See
-[the modding book](https://enshwick.github.io/docs/dev/).
+[the modding book](https://enshwick.com/dev/).
 
 Licensed under [MIT](https://github.com/enshwick/enshwick/blob/main/LICENSE).
