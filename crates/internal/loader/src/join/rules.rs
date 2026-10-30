@@ -94,8 +94,8 @@ pub fn name(reply: &[u8], id: &str) -> String {
 /// # }
 /// use enshwick_loader::join::mod_rules_value;
 ///
-/// let reply = reply(&[("enshwick.mods", "you.trading-post@1.0.0"), ("enshwick.mods.1", "camera@1.0.0")]);
-/// assert_eq!(mod_rules_value(&reply), "you.trading-post@1.0.0,camera@1.0.0");
+/// let reply = reply(&[("enshwick.mods", "you.trading-post@1.0.0"), ("enshwick.mods.1", "you.camera@1.0.0")]);
+/// assert_eq!(mod_rules_value(&reply), "you.trading-post@1.0.0,you.camera@1.0.0");
 /// ```
 #[must_use]
 pub fn mod_rules_value(reply: &[u8]) -> String {
@@ -184,7 +184,7 @@ pub fn sync_value(reply: &[u8], id: &str) -> Option<String> {
 /// use enshwick_loader::join::server_values;
 ///
 /// let reply = reply(&[("enshwick.sync.you.trading-post", "{ cost_multiplier = 2 }")]);
-/// let values = server_values(&reply, ["you.trading-post", "camera"]);
+/// let values = server_values(&reply, ["you.trading-post", "you.camera"]);
 /// assert_eq!(values.len(), 1);
 /// ```
 #[must_use]
@@ -462,16 +462,16 @@ mod tests {
         let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 3, 0];
         for part in [
             "enshwick.mods",
-            "a@1,b@1",
+            "you.a@1,you.b@1",
             "enshwick.mods.1",
-            "c@1",
+            "you.c@1",
             "enshwick",
             "x",
         ] {
             reply.extend_from_slice(part.as_bytes());
             reply.push(0);
         }
-        assert_eq!(mod_rules_value(&reply), "a@1,b@1,c@1");
+        assert_eq!(mod_rules_value(&reply), "you.a@1,you.b@1,you.c@1");
         assert!(mods_complete(&reply));
     }
 
@@ -480,23 +480,23 @@ mod tests {
         let names = Names::new();
         let cut = reply(&[
             ("enshwick", "cd"),
-            ("enshwick.mods", "a@1"),
+            ("enshwick.mods", "you.a@1"),
             ("enshwick.mods.count", "3"),
         ]);
         assert!(!mods_complete(&cut));
-        let plan_cut = plan("ab", "a@1,z@1", Some(("cd", "a@1")), false);
+        let plan_cut = plan("ab", "you.a@1,you.z@1", Some(("cd", "you.a@1")), false);
         assert!(plan_cut.turn_off.is_empty() && plan_cut.joins());
         assert_eq!(plan_cut.note(&names), None);
         let whole = reply(&[
             ("enshwick", "cd"),
-            ("enshwick.mods", "a@1,b@1,c@1"),
+            ("enshwick.mods", "you.a@1,you.b@1,you.c@1"),
             ("enshwick.mods.count", "3"),
         ]);
         assert!(mods_complete(&whole));
-        let plan_whole = plan("ab", "a@1,z@1", Some(("cd", "a@1")), true);
-        assert_eq!(plan_whole.turn_off, ["z"]);
+        let plan_whole = plan("ab", "you.a@1,you.z@1", Some(("cd", "you.a@1")), true);
+        assert_eq!(plan_whole.turn_off, ["you.z"]);
         // A server without a cut list sends no count.
-        assert!(mods_complete(&reply(&[("enshwick.mods", "a@1")])));
+        assert!(mods_complete(&reply(&[("enshwick.mods", "you.a@1")])));
     }
 
     fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
@@ -512,87 +512,92 @@ mod tests {
 
     #[test]
     fn join_values_are_read_across_rules_per_mod() {
-        let advertised = crate::advertise::sync_rules("count", &"x".repeat(200)).unwrap();
+        let advertised = crate::advertise::sync_rules("you.count", &"x".repeat(200)).unwrap();
         let mut rules: Vec<(&str, &str)> = advertised
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        rules.push(("enshwick.sync.zones", "{ a = 1 }"));
+        rules.push(("enshwick.sync.you.zones", "{ a = 1 }"));
         rules.push(("enshwick.sync.gone", ""));
         let reply = reply(&rules);
-        assert_eq!(sync_value(&reply, "count"), Some("x".repeat(200)));
+        assert_eq!(sync_value(&reply, "you.count"), Some("x".repeat(200)));
         assert_eq!(sync_value(&reply, "gone"), None);
         assert_eq!(sync_value(&reply, "missing"), None);
         assert_eq!(
-            server_values(&reply, ["zones", "gone", "other"]),
-            BTreeMap::from([("zones".to_owned(), "{ a = 1 }".to_owned())])
+            server_values(&reply, ["you.zones", "gone", "you.other"]),
+            BTreeMap::from([("you.zones".to_owned(), "{ a = 1 }".to_owned())])
         );
     }
 
     #[test]
     fn only_mods_whose_join_values_change_are_told() {
         let incoming = BTreeMap::from([
-            ("a".to_owned(), "{ x = 1 }".to_owned()),
-            ("b".to_owned(), "{ y = 2 }".to_owned()),
+            ("you.a".to_owned(), "{ x = 1 }".to_owned()),
+            ("you.b".to_owned(), "{ y = 2 }".to_owned()),
         ]);
         let current = [
-            ("a", Some("{ x = 1 }")),
-            ("b", None),
-            ("c", Some("{ z = 3 }")),
+            ("you.a", Some("{ x = 1 }")),
+            ("you.b", None),
+            ("you.c", Some("{ z = 3 }")),
             ("", None),
-            ("d", None),
+            ("you.d", None),
         ];
         assert_eq!(
             changes(current, &incoming),
             [(1, Some("{ y = 2 }".to_owned())), (2, None)]
         );
-        assert!(changes([("a", None)], &BTreeMap::new()).is_empty());
+        assert!(changes([("you.a", None)], &BTreeMap::new()).is_empty());
     }
 
     #[test]
     fn pages_are_read_from_the_rules() {
         let reply = reply(&[
-            ("enshwick.page.a", "https://github.com/enshwick/enshwick"),
-            ("enshwick.page.b", "github:enshwick/enshwick:enshwick-b"),
+            (
+                "enshwick.page.you.a",
+                "https://github.com/enshwick/enshwick",
+            ),
+            ("enshwick.page.you.b", "github:enshwick/enshwick:enshwick-b"),
         ]);
         assert_eq!(
-            page(&reply, "a").as_deref(),
+            page(&reply, "you.a").as_deref(),
             Some("https://github.com/enshwick/enshwick")
         );
-        assert_eq!(page(&reply, "b"), None);
-        assert_eq!(page(&reply, "c"), None);
+        assert_eq!(page(&reply, "you.b"), None);
+        assert_eq!(page(&reply, "you.c"), None);
     }
 
     #[test]
     fn a_server_s_ids_versions_and_names_are_checked_before_anyone_reads_them() {
-        let server =
-            "ok@1.2.0,../evil@1.0.0,x\ny@1.0.0,Caps@1.0.0,pack@0.1.0+ab12,bad@1.0\nInstall,@1";
+        let server = "you.ok@1.2.0,../evil@1.0.0,x\ny@1.0.0,Caps@1.0.0,you.pack@0.1.0+ab12,you.bad@1.0\nInstall,@1";
         assert_eq!(
             wanted(server, ""),
             [
-                ("ok".to_owned(), "1.2.0".to_owned()),
-                ("pack".to_owned(), "0.1.0+ab12".to_owned())
+                ("you.ok".to_owned(), "1.2.0".to_owned()),
+                ("you.pack".to_owned(), "0.1.0+ab12".to_owned())
             ]
         );
         let missing = plan("ab", "", Some(("cd", server)), true);
         assert_eq!(missing.missing.len(), 2, "{:?}", missing.missing);
         let reply = reply(&[
-            ("enshwick.name.ok", "Trading Post\n\nVerified by Enshwick"),
+            (
+                "enshwick.name.you.ok",
+                "Trading Post\n\nVerified by Enshwick",
+            ),
             ("enshwick.name.long", &"n".repeat(500)),
         ]);
-        assert_eq!(name(&reply, "ok"), "Trading PostVerified by Enshwick");
+        assert_eq!(name(&reply, "you.ok"), "Trading PostVerified by Enshwick");
         assert_eq!(name(&reply, "long").chars().count(), MAX_NAME);
     }
 
     #[test]
     fn a_rule_is_found_in_a_rules_reply() {
         let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 2, 0];
-        for part in ["enshwick", "989b6a71", "enshwick.mods", "a@1"] {
+        for part in ["enshwick", "989b6a71", "enshwick.mods", "you.a@1"] {
             reply.extend_from_slice(part.as_bytes());
             reply.push(0);
         }
         assert_eq!(rule(&reply, "enshwick").as_deref(), Some("989b6a71"));
-        assert_eq!(rule(&reply, "enshwick.mods").as_deref(), Some("a@1"));
+        assert_eq!(rule(&reply, "enshwick.mods").as_deref(), Some("you.a@1"));
         assert_eq!(rule(&reply, "missing"), None);
     }
 }

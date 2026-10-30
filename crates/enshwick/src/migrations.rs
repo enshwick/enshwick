@@ -181,12 +181,12 @@ impl Migration {
     ///
     /// impl enshwick::Mod for Rates {
     ///     fn manifest() -> &'static enshwick::abi::Manifest {
-    ///         enshwick::manifest!(id: "you.rates", side: SERVER, replaces: ["comfort"])
+    ///         enshwick::manifest!(id: "you.rates", side: SERVER, replaces: ["you.comfort"])
     ///     }
     ///
     ///     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
     ///         load.migrate(Migrations::new().add("2", |m| {
-    ///             m.take_setting("comfort", "multiplier", "comfort.multiplier")
+    ///             m.take_setting("you.comfort", "multiplier", "comfort.multiplier")
     ///         }))?;
     ///         Ok(Self)
     ///     }
@@ -195,7 +195,7 @@ impl Migration {
     /// enshwick::declare_mod!(Rates);
     ///
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .other_settings("comfort", "multiplier = 2.5\n")
+    ///     .other_settings("you.comfort", "multiplier = 2.5\n")
     ///     .install();
     /// // SAFETY: `enshwick_mod_init` and `enshwick_mod_ready` are the exports
     /// // `declare_mod!` generated in this example.
@@ -366,7 +366,7 @@ impl Migrations {
                     && step
                         .from
                         .split_once(':')
-                        .is_none_or(|(id, key)| !abi::is_valid_former_id(id) || key.is_empty())
+                        .is_none_or(|(id, key)| !abi::is_valid_id(id) || key.is_empty())
                 {
                     return Err(format!(
                         "migration {}: a setting is taken from <mod id>:<key>, not {}",
@@ -727,7 +727,7 @@ mod tests {
         assert!(
             Migrations::new()
                 .add("2", |m| m.take_setting(
-                    "comfort",
+                    "you.comfort",
                     "multiplier",
                     "comfort.multiplier"
                 ))
@@ -736,8 +736,9 @@ mod tests {
         );
         for (from, key, to) in [
             ("Bad Id", "a", "a"),
-            ("comfort", "", "a"),
-            ("comfort", "a", ""),
+            ("comfort", "a", "a"),
+            ("you.comfort", "", "a"),
+            ("you.comfort", "a", ""),
         ] {
             assert!(
                 Migrations::new()

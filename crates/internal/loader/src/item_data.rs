@@ -183,8 +183,9 @@ fn is_part(part: &str) -> bool {
 /// mod's own kind, `mod:name` any mod's.
 fn full_id(mod_id: &str, id: &str) -> Option<String> {
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
-    (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
-        .then(|| format!("{namespace}:{name}"))
+    ((enshwick::abi::is_valid_id(namespace) || namespace == enshwick::mods::LOADER_ID)
+        && is_part(name))
+    .then(|| format!("{namespace}:{name}"))
 }
 
 /// Opens item kind `id` for mod `owner` and returns its index; the same id

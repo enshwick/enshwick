@@ -39,7 +39,7 @@ mod tests {
             pub(crate) size: u16,
         }
 
-        #[enshwick::event(name = "market:opened")]
+        #[enshwick::event(name = "you.market:opened")]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Opened {
             pub(crate) stall: Stall,
@@ -72,7 +72,7 @@ mod tests {
             pub(crate) size: u16,
         }
 
-        #[enshwick::event(name = "market:opened")]
+        #[enshwick::event(name = "you.market:opened")]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Opened {
             pub(crate) stall: Stall,

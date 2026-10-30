@@ -649,9 +649,9 @@ pub fn script(args: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Whether `id` is a mod id, `<author>.<name>`, or an id a renamed mod had
-/// before ids carried an author, of `[a-z0-9-]`; at most 64 characters. The
-/// API's `abi::is_valid_former_id`, which this crate cannot depend on.
+/// Whether `id` is a mod id, `<author>.<name>`, each part of `[a-z0-9-]`; at
+/// most 64 characters. The API's `abi::is_valid_id`, which this crate cannot
+/// depend on.
 fn is_mod_id(id: &str) -> bool {
     let part = |p: &str| {
         !p.is_empty()
@@ -659,10 +659,9 @@ fn is_mod_id(id: &str) -> bool {
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
     };
     id.len() <= 64
-        && match id.split_once('.') {
-            Some((author, name)) => part(author) && part(name),
-            None => part(id),
-        }
+        && id
+            .split_once('.')
+            .is_some_and(|(author, name)| part(author) && part(name))
 }
 
 /// The struct as `repr(C)` with the declaration trait at
@@ -685,7 +684,7 @@ fn expand_declaration(
     if !valid {
         return Err(syn::Error::new_spanned(
             &name,
-            "the name is `<mod id>:<what>`, the mod id `<author>.<name>` or a former id, of `[a-z0-9-]`",
+            "the name is `<mod id>:<what>`, the mod id `<author>.<name>`, each part of `[a-z0-9-]`",
         ));
     }
     if !item.generics.params.is_empty() {

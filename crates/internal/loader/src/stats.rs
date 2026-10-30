@@ -220,7 +220,7 @@ fn is_part(part: &str) -> bool {
 fn full_id(names: &[&str], id: &str) -> Option<(String, bool)> {
     let home = names.get(1).or_else(|| names.first())?;
     let (namespace, name) = id.split_once(':').unwrap_or((home, id));
-    (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
+    ((enshwick::abi::is_valid_id(namespace) || namespace == LOADER_ID) && is_part(name))
         .then(|| (format!("{namespace}:{name}"), names.contains(&namespace)))
 }
 

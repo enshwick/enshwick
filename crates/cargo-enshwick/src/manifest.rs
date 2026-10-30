@@ -213,8 +213,8 @@ mod tests {
             after: ["you.lanterns"],
             recommends: ["you.lanterns" => ""],
             breaks: ["old-stalls" => "<0.3"],
-            replaces: ["stalls"],
-            was: ["market"],
+            replaces: ["you.stalls"],
+            was: ["you.market"],
         );
         assert_eq!(
             // SAFETY: `manifest!` builds a static manifest whose strings and
@@ -226,7 +226,7 @@ mod tests {
              side: both\njoin check: yes\n\
              requires: you.trading-post >=0.1, <1.0\nafter: you.lanterns\n\
              recommends: you.lanterns\nbreaks: old-stalls <0.3\n\
-             replaces: stalls\nwas: market"
+             replaces: you.stalls\nwas: you.market"
         );
     }
 }

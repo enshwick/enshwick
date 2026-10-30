@@ -512,9 +512,9 @@ const RUST_KEYWORDS: &[&str] = &[
     "typeof", "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
 ];
 
-/// Whether `id` is a mod id, current or former.
+/// Whether `id` is a mod id.
 fn is_owner(id: &str) -> bool {
-    enshwick::abi::is_valid_id(id) || enshwick::abi::is_valid_former_id(id)
+    enshwick::abi::is_valid_id(id)
 }
 
 /// Whether `name` is `<mod id>:<what>`, the rule `manifest!` holds a point's

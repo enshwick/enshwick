@@ -389,15 +389,18 @@ mod tests {
     #[test]
     fn a_host_with_the_same_mods_needs_nothing() {
         let names = crate::join::Names::new();
-        assert_eq!(plan("a@1.0,b@2.0", "a@1.0,b@2.0", &names), (vec![], None));
+        assert_eq!(
+            plan("you.a@1.0,you.b@2.0", "you.a@1.0,you.b@2.0", &names),
+            (vec![], None)
+        );
     }
 
     #[test]
     fn mods_the_host_lacks_turn_off_and_other_versions_only_warn() {
         let mut names = crate::join::Names::new();
-        names.insert("b".into(), "Bee".into());
-        let (off, note) = plan("a@1.0,c@3.0", "a@2.0,b@1.0", &names);
-        assert_eq!(off, vec!["b".to_owned()]);
+        names.insert("you.b".into(), "Bee".into());
+        let (off, note) = plan("you.a@1.0,you.c@3.0", "you.a@2.0,you.b@1.0", &names);
+        assert_eq!(off, vec!["you.b".to_owned()]);
         let note = note.unwrap();
         assert!(note.contains("Bee") && !note.contains("(b)"), "{note}");
         assert!(note.contains("a: server 1.0, yours 2.0"), "{note}");
@@ -407,7 +410,7 @@ mod tests {
     #[test]
     fn a_host_s_mod_in_another_version_is_not_turned_off() {
         let names = crate::join::Names::new();
-        let (off, note) = plan("a@1.0", "a@2.0", &names);
+        let (off, note) = plan("you.a@1.0", "you.a@2.0", &names);
         assert!(off.is_empty());
         assert!(note.is_some());
     }

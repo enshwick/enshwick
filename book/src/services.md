@@ -89,7 +89,7 @@ impl Hours {
     pub const CLOSED: Self = Self(1);
 }
 
-#[enshwick::event(name = "market:opened")]
+#[enshwick::event(name = "you.market:opened")]
 #[derive(Clone, Copy, Debug)]
 pub struct Opened {
     pub stall: Stall,

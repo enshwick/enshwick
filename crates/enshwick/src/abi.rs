@@ -92,39 +92,6 @@ pub const fn is_valid_id(id: &str) -> bool {
     }
 }
 
-/// Whether `id` is an id a mod may have had: a valid id, or 1 to 64
-/// characters of `[a-z0-9-]`, the form ids had before they carried an
-/// author.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::abi::is_valid_former_id;
-///
-/// assert!(is_valid_former_id("trading-post"));
-/// assert!(is_valid_former_id("you.trading-post"));
-/// assert!(!is_valid_former_id("Trading Post"));
-/// ```
-#[must_use]
-pub const fn is_valid_former_id(id: &str) -> bool {
-    if is_valid_id(id) {
-        return true;
-    }
-    let bytes = id.as_bytes();
-    if bytes.is_empty() || bytes.len() > 64 {
-        return false;
-    }
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if !(b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
-
 /// The start of every struct that crosses the boundary on its own: its size
 /// and the ABI version of its writer.
 ///

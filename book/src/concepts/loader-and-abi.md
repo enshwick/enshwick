@@ -95,12 +95,12 @@ let manifest = enshwick::manifest!(
     homepage: "https://github.com/you/trading-post",
     join: true,                    // counts in the join check
     reload: true,                  // a development server may reload it
-    requires: ["market-stalls" => ">=0.2, <1.0"],
-    after: ["market-stalls"],
-    recommends: ["caravans" => ">=0.3, <1.0"],
-    breaks: ["old-market" => "<0.5"],
-    replaces: ["barter"],           // a mod this one folds in
-    was: ["trade-post"],            // ids this mod had before a rename
+    requires: ["you.market-stalls" => ">=0.2, <1.0"],
+    after: ["you.market-stalls"],
+    recommends: ["you.caravans" => ">=0.3, <1.0"],
+    breaks: ["you.old-market" => "<0.5"],
+    replaces: ["you.barter"],       // a mod this one folds in
+    was: ["you.trade-post"],        // ids this mod had before a rename
     builds: [{
         side: SERVER,
         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -146,15 +146,15 @@ let manifest = enshwick::manifest!(
   `recommends`, and no range of `breaks` names it, as two dev builds join each
   other.
 - `replaces` names mods this one takes the place of, such as mods it folds
-  in. Players rarely delete the old DLL, so without it both would run. While
+  in, each by its `<author>.<name>` id. Players rarely delete the old DLL, so without it both would run. While
   this mod is present, the loader never starts a replaced mod: it unloads
   that DLL right after reading its manifest and logs once
   `<old> is replaced by <new>; delete mods/<file>`, which `enshwick` on the
   console and the status summary repeat and the lock lists under
   `[[replaced]]`. Their settings stay where they are; take the ones this mod
   keeps with a [migration](../migrations.md#settings-from-another-mod).
-- `was` names the ids this mod had before a rename. It replaces them as
-  `replaces` does, a `requires` or an [extension point](../extending.md)
+- `was` names the `<author>.<name>` ids this mod had before a rename. It
+  replaces them as `replaces` does, a `requires` or an [extension point](../extending.md)
   named by an old id finds this mod, and on the first start the loader copies
   `mod-configs/<old>.toml`, its texts file and everything in `mod-data/<old>/`
   (each world's settings and stores, a hold) to the new id, where the new id

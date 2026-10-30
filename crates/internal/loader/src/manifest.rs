@@ -393,6 +393,10 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, ManifestEr
     {
         return Err(ManifestError::TakesLoadersId(id.to_owned()));
     }
+    if matches!(raw.relation, Relation::REPLACES | Relation::WAS) && !enshwick::abi::is_valid_id(id)
+    {
+        return Err(ManifestError::BadId(id.to_owned()));
+    }
     Ok(resolve::Dependency {
         id: id.to_owned(),
         range,
@@ -525,7 +529,7 @@ mod tests {
     #[test]
     fn a_former_id_parses_and_the_loader_s_own_id_is_never_taken_over() {
         static FORMER: [Dependency; 1] = [Dependency {
-            id: Str::new("market-stalls"),
+            id: Str::new("you.market"),
             range: Str::EMPTY,
             relation: Relation::WAS,
         }];
@@ -545,6 +549,24 @@ mod tests {
         // literals and statics, readable and never written.
         let why = unsafe { parse(&renamed) }.unwrap_err().to_string();
         assert!(why.contains("loader's own"), "{why}");
+    }
+
+    #[test]
+    fn a_former_or_replaced_id_without_its_author_is_refused() {
+        static FLAT: [Dependency; 1] = [Dependency {
+            id: Str::new("market-stalls"),
+            range: Str::EMPTY,
+            relation: Relation::WAS,
+        }];
+        let mut renamed = manifest("you.market-stalls", "0.2.0");
+        renamed.dependencies = FLAT.as_ptr();
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
+        let why = unsafe { parse(&renamed) }.unwrap_err().to_string();
+        assert!(
+            why.contains("\"market-stalls\" is not <author>.<name>"),
+            "{why}"
+        );
     }
 
     #[test]

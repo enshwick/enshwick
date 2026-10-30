@@ -175,7 +175,7 @@ fn one_player_without_an_account_leaving_keeps_the_others_refused() {
     );
 }
 
-const SERVER: &str = "you.trading-post@0.3.0,zones@0.1.0";
+const SERVER: &str = "you.trading-post@0.3.0,you.zones@0.1.0";
 
 fn rules() -> Rules {
     Rules {
@@ -208,7 +208,7 @@ fn note(key: u64, hello: bool, needs: Vec<Need>) -> Step {
 fn all_lacking() -> Vec<Need> {
     vec![
         need("you.trading-post", "0.3.0", None),
-        need("zones", "0.1.0", None),
+        need("you.zones", "0.1.0", None),
     ]
 }
 
@@ -273,7 +273,7 @@ fn kicked_never_left_joins_again() {
             true,
             vec![
                 need("you.trading-post", "0.3.0", Some("0.2.0")),
-                need("zones", "0.1.0", None)
+                need("you.zones", "0.1.0", None)
             ]
         )]
     );
@@ -328,7 +328,7 @@ fn a_matching_hello_lets_the_player_stay_and_extra_mods_do_not_count() {
     let mut gate = Gate::default();
     let start = Instant::now();
     gate.joined(7, SERVER, start, rules());
-    let client = said("camera@1.0.0,you.trading-post@0.3.0,zones@0.1.0");
+    let client = said("you.camera@1.0.0,you.trading-post@0.3.0,you.zones@0.1.0");
     assert_eq!(gate.hello(7, SERVER, &client, start, rules()), (true, None));
     assert_eq!(gate.due(SERVER, at(start, 3600), rules()), []);
 }
@@ -358,7 +358,7 @@ fn an_admitted_player_is_checked_again_when_the_server_s_mods_changed() {
     );
     assert_eq!(
         gate.joined(7, SERVER, start, rules()),
-        [note(7, true, vec![need("zones", "0.1.0", None)])]
+        [note(7, true, vec![need("you.zones", "0.1.0", None)])]
     );
 }
 
@@ -376,7 +376,7 @@ fn a_hello_that_lacks_a_mod_in_the_world_is_told_at_once_and_kicked() {
             true,
             vec![
                 need("you.trading-post", "0.3.0", Some("0.2.0")),
-                need("zones", "0.1.0", None)
+                need("you.zones", "0.1.0", None)
             ]
         ))
     );
@@ -581,7 +581,7 @@ fn a_hosted_game_acts_once_it_knows_its_host_and_never_on_the_host() {
 #[test]
 fn needs_name_the_server_s_mods_the_game_lacks_or_runs_otherwise() {
     assert_eq!(
-        needs(SERVER, Some(&said("zones@0.1.0,other@1.0.0"))),
+        needs(SERVER, Some(&said("you.zones@0.1.0,you.other@1.0.0"))),
         [need("you.trading-post", "0.3.0", None)]
     );
     assert_eq!(needs(SERVER, Some(&said(SERVER))), []);
@@ -597,16 +597,16 @@ fn needs_name_the_server_s_mods_the_game_lacks_or_runs_otherwise() {
 #[test]
 fn a_cut_hello_lacks_only_what_its_list_could_have_named() {
     let cut = Hello {
-        mods: "area@1.0.0,you.trading-post@0.2.0".to_owned(),
+        mods: "you.area@1.0.0,you.trading-post@0.2.0".to_owned(),
         complete: false,
         nonce: 0,
         language: None,
     };
-    let server = "area@1.0.0,camera@1.0.0,you.trading-post@0.3.0,zones@0.1.0";
+    let server = "you.area@1.0.0,you.camera@1.0.0,you.trading-post@0.3.0,you.zones@0.1.0";
     assert_eq!(
         needs(server, Some(&cut)),
         [
-            need("camera", "1.0.0", None),
+            need("you.camera", "1.0.0", None),
             need("you.trading-post", "0.3.0", Some("0.2.0"))
         ],
         "zones sorts after the cut"

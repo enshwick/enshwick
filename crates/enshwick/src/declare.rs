@@ -62,8 +62,8 @@ mod unwind;
 ///     join: true,
 ///     requires: ["you.lockers" => ">=0.1, <1.0"],
 ///     breaks: ["old-survivors" => "<0.3"],
-///     replaces: ["survivors"],
-///     was: ["survivor-copies"],
+///     replaces: ["you.survivors"],
+///     was: ["you.survivor-copies"],
 ///     builds: [{
 ///         side: SERVER,
 ///         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -122,8 +122,8 @@ macro_rules! manifest {
             <$event as $crate::services::ModEvent>::DESCRIBED,
             "an event's schema cannot describe a field's type: derive `Shape` for it",
         );)*)?
-        $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($replaces), "a replaced mod id is <author>.<name> or [a-z0-9-]+");)*)?
-        $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($was), "a former mod id is <author>.<name> or [a-z0-9-]+");)*)?
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_id($replaces), "a replaced mod id is <author>.<name>, each of [a-z0-9-]");)*)?
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_id($was), "a former mod id is <author>.<name>, each of [a-z0-9-]");)*)?
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
             $($($crate::abi::Dependency {
                 id: $crate::abi::Str::new($req),

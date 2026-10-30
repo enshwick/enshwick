@@ -18,7 +18,7 @@ pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
     list.split(',')
         .filter_map(|entry| entry.split_once('@'))
         .filter(|&(id, version)| {
-            enshwick::abi::is_valid_former_id(id)
+            enshwick::abi::is_valid_id(id)
                 && !version.is_empty()
                 && version.len() <= MAX_VERSION
                 && version
@@ -126,9 +126,9 @@ impl Plan {
 /// ```
 /// use enshwick_loader::join::plan;
 ///
-/// let plan = plan("e5db5dca", "you.trading-post@1.0.0,camera@1.0.0", Some(("989b6a71", "you.trading-post@1.0.0")), true);
+/// let plan = plan("e5db5dca", "you.trading-post@1.0.0,you.camera@1.0.0", Some(("989b6a71", "you.trading-post@1.0.0")), true);
 /// assert!(plan.joins());
-/// assert_eq!(plan.turned_off(), ["camera"]);
+/// assert_eq!(plan.turned_off(), ["you.camera"]);
 /// ```
 #[must_use]
 pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>, complete: bool) -> Plan {
@@ -211,7 +211,7 @@ pub fn differences(server: &str, ours: &str, names: &Names) -> Vec<(String, bool
 /// ```
 /// use enshwick_loader::join::wanted;
 ///
-/// let wanted = wanted("you.trading-post@2.0.0,camera@1.0.0", "camera@1.0.0");
+/// let wanted = wanted("you.trading-post@2.0.0,you.camera@1.0.0", "you.camera@1.0.0");
 /// assert_eq!(wanted, [("you.trading-post".to_owned(), "2.0.0".to_owned())]);
 /// ```
 #[must_use]
@@ -229,53 +229,58 @@ mod tests {
 
     #[test]
     fn mods_the_server_lacks_are_turned_off_and_only_the_rest_warn() {
-        let names = Names::from([("c".to_owned(), "Cats".to_owned())]);
+        let names = Names::from([("you.c".to_owned(), "Cats".to_owned())]);
         assert_eq!(
-            plan("ab", "a@1,b@1", Some(("ab", "a@1,b@1")), true),
+            plan(
+                "ab",
+                "you.a@1,you.b@1",
+                Some(("ab", "you.a@1,you.b@1")),
+                true
+            ),
             Plan::default()
         );
-        let none = plan("ab", "a@1,b@1", None, true);
-        assert_eq!(none.turn_off, ["a", "b"]);
+        let none = plan("ab", "you.a@1,you.b@1", None, true);
+        assert_eq!(none.turn_off, ["you.a", "you.b"]);
         assert!(none.note(&names).is_some());
-        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), true);
-        assert_eq!(extra.turn_off, ["b"]);
+        let extra = plan("ab", "you.a@1,you.b@1", Some(("cd", "you.a@1")), true);
+        assert_eq!(extra.turn_off, ["you.b"]);
         assert!(extra.missing.is_empty());
-        let missing = plan("ab", "a@1", Some(("cd", "a@2,c@1")), true);
+        let missing = plan("ab", "you.a@1", Some(("cd", "you.a@2,you.c@1")), true);
         assert!(missing.turn_off.is_empty());
         assert_eq!(
             missing.missing,
             [
                 Need {
-                    id: "a".to_owned(),
+                    id: "you.a".to_owned(),
                     version: "2".to_owned(),
                     yours: Some("1".to_owned()),
                 },
                 Need {
-                    id: "c".to_owned(),
+                    id: "you.c".to_owned(),
                     version: "1".to_owned(),
                     yours: None,
                 },
             ]
         );
         assert_eq!(missing.note(&names), None, "a refusal is no join note");
-        assert!(plan("ab", "a@1", Some(("cd", "a@1")), true).other_loader);
+        assert!(plan("ab", "you.a@1", Some(("cd", "you.a@1")), true).other_loader);
     }
 
     #[test]
     fn a_client_kept_out_turns_nothing_off() {
-        let both = plan("ab", "a@1,b@1", Some(("cd", "a@2")), true);
-        assert_eq!(both.turn_off, ["b"]);
+        let both = plan("ab", "you.a@1,you.b@1", Some(("cd", "you.a@2")), true);
+        assert_eq!(both.turn_off, ["you.b"]);
         assert!(!both.joins());
         assert!(both.turned_off().is_empty());
-        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), true);
+        let extra = plan("ab", "you.a@1,you.b@1", Some(("cd", "you.a@1")), true);
         assert!(extra.joins());
-        assert_eq!(extra.turned_off(), ["b"]);
+        assert_eq!(extra.turned_off(), ["you.b"]);
     }
 
     #[test]
     fn a_mod_that_is_off_on_the_client_keeps_it_out() {
         // Server A lacked count, so it turned off; server B runs it.
-        let plan = plan("x", "", Some(("y", "count@0.2.0")), true);
+        let plan = plan("x", "", Some(("y", "you.count@0.2.0")), true);
         assert!(!plan.joins());
         assert_eq!(plan.missing[0].yours, None);
     }
@@ -283,29 +288,35 @@ mod tests {
     #[test]
     fn wanted_mods_are_the_servers_the_client_lacks_or_runs_otherwise() {
         assert_eq!(
-            wanted("a@1.0.0,b@0.2.0,c@1.0.0", "a@1.0.0,b@0.1.0,d@3.0.0"),
+            wanted(
+                "you.a@1.0.0,you.b@0.2.0,you.c@1.0.0",
+                "you.a@1.0.0,you.b@0.1.0,you.d@3.0.0"
+            ),
             [
-                ("b".to_owned(), "0.2.0".to_owned()),
-                ("c".to_owned(), "1.0.0".to_owned()),
+                ("you.b".to_owned(), "0.2.0".to_owned()),
+                ("you.c".to_owned(), "1.0.0".to_owned()),
             ]
         );
-        assert!(wanted("a@1", "a@1").is_empty());
-        assert!(wanted("", "a@1").is_empty());
+        assert!(wanted("you.a@1", "you.a@1").is_empty());
+        assert!(wanted("", "you.a@1").is_empty());
     }
 
     #[test]
     fn differences_name_both_versions() {
-        let names = Names::from([("d".to_owned(), "Dogs".to_owned())]);
-        let lines: Vec<(bool, String)> =
-            differences("a@1.0.0,b@0.2.0,c@1.0.0", "a@1.0.0,b@0.1.0,d@3.0.0", &names)
-                .into_iter()
-                .map(|(_, on_server, line)| (on_server, line))
-                .collect();
+        let names = Names::from([("you.d".to_owned(), "Dogs".to_owned())]);
+        let lines: Vec<(bool, String)> = differences(
+            "you.a@1.0.0,you.b@0.2.0,you.c@1.0.0",
+            "you.a@1.0.0,you.b@0.1.0,you.d@3.0.0",
+            &names,
+        )
+        .into_iter()
+        .map(|(_, on_server, line)| (on_server, line))
+        .collect();
         assert_eq!(
             lines,
             [
-                (true, "b: server 0.2.0, yours 0.1.0".to_owned()),
-                (true, "c: server 1.0.0, not installed".to_owned()),
+                (true, "you.b: server 0.2.0, yours 0.1.0".to_owned()),
+                (true, "you.c: server 1.0.0, not installed".to_owned()),
                 (false, "Dogs: yours 3.0.0, not on the server".to_owned()),
             ]
         );
