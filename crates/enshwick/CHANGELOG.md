@@ -58,6 +58,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `was` and `replaces` in `manifest!`, `Migration::take_setting` and the
+  names of points and events take only `<author>.<name>` mod ids;
+  `abi::is_valid_former_id` is gone (#749).
+
 - `stats::Origin::Mod` names its mod by the new `mods::ModIndex`, its place
   in load order, which `ModIndex::entry` and `ModEntry::index` resolve
   (#719).
