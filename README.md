@@ -53,12 +53,6 @@ To turn a mod off, set `enabled = false` for it in `mods/enshwick/mods.toml`. To
 remove a mod, delete its DLL from `mods/`. To remove Enshwick, delete
 `powrprof.dll`.
 
-Better Altars replaces the older mods More Altars, Flame altar count and Flame
-altar zones. After you extract a newer `enshwick.zip` over an older install,
-delete `mods/enshwick-more-altars.dll`, `mods/enshwick-flame-altar-count.dll`
-and `mods/enshwick-flame-altar-zones.dll`. Enshwick runs only Better Altars,
-carries their settings over and names each old file in `loader.log`.
-
 ### Mods
 
 | Mod                                                                        | What it does                                                       |
