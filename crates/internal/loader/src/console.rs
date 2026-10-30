@@ -41,15 +41,10 @@ mod world_orders;
 #[cfg(windows)]
 pub(crate) use run::{after_step, run, start, the_console};
 
-/// The command files a server reads in `data_dir`: the loader's own, then
-/// the one of each mod whose work the loader took over
-/// ([`RETIRED`](crate::resolve::RETIRED)), where scripts may still write.
+/// The command files a server reads in `data_dir`: the loader's own.
 #[must_use]
 pub fn command_files(data_dir: &Path) -> Vec<PathBuf> {
-    std::iter::once(LOADER_ID)
-        .chain(crate::resolve::RETIRED.iter().copied())
-        .map(|id| data_dir.join(id).join(file::FILE))
-        .collect()
+    vec![data_dir.join(LOADER_ID).join(file::FILE)]
 }
 
 /// Where a console line came from.
@@ -437,14 +432,9 @@ mod tests {
     }
 
     #[test]
-    fn a_server_reads_its_own_command_file_and_each_retired_mod_s() {
+    fn a_server_reads_the_loader_s_command_file() {
         let data = Path::new("mod-data");
-        let files = command_files(data);
-        assert_eq!(files[0], data.join(LOADER_ID).join(file::FILE));
-        assert_eq!(files.len(), 1 + crate::resolve::RETIRED.len());
-        for id in crate::resolve::RETIRED {
-            assert!(files.contains(&data.join(id).join(file::FILE)));
-        }
+        assert_eq!(command_files(data), [data.join(LOADER_ID).join(file::FILE)]);
     }
 
     #[test]
