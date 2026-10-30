@@ -327,7 +327,7 @@ fn release_server(release: Option<extern "system" fn() -> u32>, began: std::time
 /// replace, so their code never runs and the files can be deleted.
 fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
     for (index, reason) in &plan.skipped {
-        if plan.replaced.iter().any(|&(old, _)| old == *index) || plan.retired.contains(index) {
+        if plan.replaced.iter().any(|&(old, _)| old == *index) {
             continue;
         }
         if reason == resolve::OTHER_SIDE {
@@ -345,11 +345,6 @@ fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
         .replaced
         .iter()
         .map(|&(old, by)| (old, candidates[by].id.as_str()))
-        .chain(
-            plan.retired
-                .iter()
-                .map(|&old| (old, crate::settings::LOADER_ID)),
-        )
         .map(|(old, by)| {
             let library = &libraries[old];
             unload(library);

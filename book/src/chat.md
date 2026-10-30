@@ -101,9 +101,7 @@ The file is append-only. When lines that already ran are changed or
 removed, no line runs again: the loader counts the lines that ran, runs only
 the lines past that count, and writes a warning to the log. To start over,
 empty the file; its next lines run from the first. Administrators and their scripts reach the
-console this way without anyone joining. The loader took over the admin
-tools mod: it never loads, the log names its DLL to delete, and its command
-file in `mod-data/enshwick.admin-tools/` is read too.
+console this way without anyone joining.
 
 ### The server's console window
 
