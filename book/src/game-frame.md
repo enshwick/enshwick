@@ -86,7 +86,7 @@ use enshwick::raw::{read_at, write_at};
 let mut bytes = [1u8, 0, 0, 0, 2, 0];
 // SAFETY: a `u16` lies at offset 4.
 assert_eq!(unsafe { read_at::<u16>(bytes.as_ptr(), 4) }, 2);
-// SAFETY: as above.
+// SAFETY: a `u16` lies at offset 4.
 unsafe { write_at(bytes.as_mut_ptr(), 4, 7_u16) };
 assert_eq!(bytes[4], 7);
 ```

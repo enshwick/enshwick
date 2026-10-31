@@ -258,7 +258,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 [`code::Pattern`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/code.rs)
 is the same parser and search, for use on any slice: `parse`, `matches`,
-`find_all` and `find_unique`. `load.code()` returns the game's code section as
+`find_all` and `find_unique`, so a unit test can check a pattern against a
+copy of the bytes. `code::find_each_unique` searches for many patterns in one
+pass over the code. `load.code()` returns the game's code section as
 a `&[u8]` that starts at its absolute address, for a mod that reads the bytes
 around a match during `init`; it borrows the `Load`, since arming writes into
 the code afterwards:

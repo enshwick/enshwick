@@ -168,12 +168,10 @@ loader refuses the same; define a required owner's point with
 `extend_point` or `observe_point` on the same point returns `Off`.
 
 An owner that is loaded but does not export the point refuses every link to
-it, required or not: `extend_point` and `observe_point` return `Off`, and the
-log says
-`point you.trading-post:price: you.trading-post does not export price; it exports ...`
-(see [what other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use)).
-In a test, `FakeHost::exports` names what the owner exports.
-Without it the fake lets every name through, so a test that links another mod passes the owner's exports.
+it, required or not, and the log says
+`point you.trading-post:price: you.trading-post does not export price; it exports ...`.
+What a refused export does, in the game and in a test, is in
+[What other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use).
 
 ## When the loader leaves a link inert
 

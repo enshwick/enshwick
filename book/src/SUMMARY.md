@@ -73,7 +73,7 @@
   - [Texts](content/texts.md)
   - [A mod without Rust](content/a-mod-without-rust.md)
   - [Data packs](content/packs.md)
-  - [Inventory limits](content/limits.md)
+  - [Vanilla value changes from a mod](content/limits.md)
 - [Inventories](inventories.md)
 - [Item data](item-data.md)
 - [Entity data](entity-data.md)

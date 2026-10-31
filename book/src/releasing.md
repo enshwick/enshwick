@@ -156,10 +156,6 @@ which the loader never started, each with `replaced_by` and its `file`.
 
 ## Removed mods and holds
 
-A mod that keeps a world the vanilla game cannot open safely can set a
-[`state::Hold`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/state.rs).
-While `mod-data/<id>/hold.txt` exists, the loader stops the game before the
-world loads when that mod does not run: removed, skipped, off, or on a game
-build the loader does not know. Removing such a mod therefore needs the
-player to delete its `hold.txt` as well, at their own risk. See
-[State and data folders](state.md).
+Removing a mod that set a hold needs the player to delete its
+`mod-data/<id>/hold.txt` as well, at their own risk; see
+[Holds](state.md#holds).

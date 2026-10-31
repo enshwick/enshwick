@@ -311,50 +311,20 @@ the line is information:
 warn  [you.stacks] max_stack of 3f4093ae-75ed-4e5d-bd0b-784ba83b88f5 is 999 from you.stacks items.toml:2 (Material_T1_Wood_Logs), which overrides 500 from ann.bags items.toml:7 (Material_T1_Wood_Logs)
 ```
 
-A Rust mod declares the same changes with
-[`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes.rs),
-during `init`. With `Load::change_items` and `Load::change_recipes` it
-makes the selections a pack makes. The loader reads the selection from the game's data and merges one
-change per item in the mod's place in load order, as it does for a pack:
-
-```rust
-use enshwick::content::categories::ItemCategoryMask;
-use enshwick::content::changes::{Field, Items, ItemsChange, Value};
-
-fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let materials = Items::Category(ItemCategoryMask::MATERIALS);
-    load.change_items(&ItemsChange::new(materials, Field::MaxStackSize, Value::Times(4.0)), "stacks")
-}
-```
-
-A stack size reaches only items that already stack and keep no state of
-their own, such as durability; weapons and armour stay at one. Overlapping
-selections of two mods report one conflict line per pair, with the count of
-items it covers.
+A Rust mod declares the same changes in its code; see
+[Vanilla value changes from a mod](limits.md).
 
 ### Stack sizes and saved worlds
 
 Unstable: stack sizes and slots may change in any release; a mod changing them
 needs the `unstable` feature ([Stability](../stability.md)).
 
-The game cuts every stack above an item's stack size when a world loads and
-deletes the rest. So a world saved with a pack that raised a stack size
-depends on that pack. The first time such a world loads, the pack sets a
-[hold](../state.md#holds) on that world: if the world is opened again without
-the pack, the game stops before the world loads and the log says which pack
-and items. Other worlds open without the pack as usual.
-
-```text
-error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ..., in world mygame-1a2b3c4d) and the mod does not run: the game stops before the world loads
-```
-
-To remove such a pack safely, split every stack larger than the game's size
-first, then delete `mod-data/<id>/worlds/<key>/hold.txt`, the file the log
-names. When several packs raise one
-item, each of them holds. A pack that only lowers stack sizes sets no hold.
-Beside the holds, the loader keeps every raised size a world was saved
-with and never serves less, so a lower size never cuts a saved stack: see
-[kept stack sizes](limits.md#stack-sizes-and-saved-worlds).
+A world saved with a pack that raised a stack size depends on that pack: the
+pack holds that world, and the loader keeps the raised size;
+[Stack sizes and saved worlds](limits.md#stack-sizes-and-saved-worlds) tells
+both and how they meet. To remove such a pack safely, split every stack larger
+than the game's size first, then delete
+`mod-data/<id>/worlds/<key>/hold.txt`, the file the log names.
 
 ## `workshops.toml`
 

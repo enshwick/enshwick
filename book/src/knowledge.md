@@ -145,6 +145,5 @@ world), the id and the new value; [`QuestCompleted`](events.md) when a
 player completed a quest and got its rewards, with the character and the
 quest's id.
 
-Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
-client, while it hosts a game.
+Where each call works is in
+[What may be called where](concepts/threads.md#what-may-be-called-where).

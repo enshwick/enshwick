@@ -72,7 +72,7 @@ writes five exports:
 | `enshwick_mod_query`    | `fn() -> *const Manifest`                 | Before any of the mod's code runs; static data.        |
 | `enshwick_mod_init`     | `fn(*const HostApi, ModHandle) -> Status` | Once, in load order; registers hooks and the rest.     |
 | `enshwick_mod_ready`    | `fn(*const HostApi, ModHandle)`           | After every chain is armed, if `init` returned OK.     |
-| `enshwick_mod_shutdown` | `fn()`                                    | Before a development reload unloads it; optional (53). |
+| `enshwick_mod_shutdown` | `fn()`                                    | Before a development reload unloads it; optional.      |
 
 A DLL in `mods/` without the first four is logged as `<file> is not an Enshwick mod`
 and unloaded.
