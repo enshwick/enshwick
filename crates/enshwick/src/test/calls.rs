@@ -202,7 +202,7 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::call(name = "you.trading-post:price-of", output = u32)]
+    /// #[enshwick::call(of = trading_post, name = "price-of", output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct PriceOf {
     ///     pub item: u32,
@@ -239,7 +239,7 @@ impl Installed {
     /// ```
     /// use enshwick::services::CallError;
     ///
-    /// #[enshwick::call(name = "you.trading-post:price-of", output = u32)]
+    /// #[enshwick::call(name = "price-of", output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct PriceOf {
     ///     pub item: u32,

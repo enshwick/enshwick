@@ -44,12 +44,12 @@ pub use described::{DescribedEmitter, DescribedEvent};
 /// ```
 /// use enshwick::services::Service;
 ///
-/// #[enshwick::service(name = "you.trading-post:prices", version = 1)]
+/// #[enshwick::service(name = "prices", version = 1)]
 /// pub struct Prices {
 ///     pub price: extern "system" fn(item: u32) -> u32,
 /// }
 ///
-/// assert_eq!(Prices::NAME, "you.trading-post:prices");
+/// assert_eq!(Prices::NAME, "you.hello:prices");
 /// assert_eq!(Prices::LAYOUT.len(), 1);
 /// ```
 pub unsafe trait Service: Sync + 'static {
@@ -77,14 +77,14 @@ pub unsafe trait Service: Sync + 'static {
 /// ```
 /// use enshwick::services::ModEvent;
 ///
-/// #[enshwick::event(name = "you.trading-post:sold")]
+/// #[enshwick::event(name = "sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub item: u32,
 ///     pub price: u32,
 /// }
 ///
-/// assert_eq!(Sold::NAME, "you.trading-post:sold");
+/// assert_eq!(Sold::NAME, "you.hello:sold");
 /// assert_eq!(Sold::LAYOUT.len(), 2);
 /// ```
 pub unsafe trait ModEvent: Copy + 'static {
@@ -276,7 +276,7 @@ pub(crate) fn name(name: &'static str) -> Str {
 /// # Examples
 ///
 /// ```
-/// #[enshwick::event(name = "you.trading-post:sold")]
+/// #[enshwick::event(name = "sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub item: u32,

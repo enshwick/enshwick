@@ -38,13 +38,13 @@ use crate::{Host, Load, Off};
 /// ```
 /// use enshwick::services::Call;
 ///
-/// #[enshwick::call(name = "you.trading-post:price-of", output = u32)]
+/// #[enshwick::call(name = "price-of", output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct PriceOf {
 ///     pub item: u32,
 /// }
 ///
-/// assert_eq!(PriceOf::NAME, "you.trading-post:price-of");
+/// assert_eq!(PriceOf::NAME, "you.hello:price-of");
 /// assert_eq!(PriceOf::MAJOR, 1);
 /// ```
 pub unsafe trait Call: Copy + 'static {
@@ -120,7 +120,7 @@ fn spec<C: Call>() -> CallSpec {
 /// # Examples
 ///
 /// ```
-/// #[enshwick::call(name = "you.trading-post:price-of", output = u32)]
+/// #[enshwick::call(of = trading_post, name = "price-of", output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct PriceOf {
 ///     pub item: u32,
@@ -356,7 +356,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::call(name = "you.trading-post:price-of", output = u32)]
+    /// #[enshwick::call(name = "price-of", output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct PriceOf {
     ///     pub item: u32,

@@ -316,7 +316,7 @@ impl Installed {
     /// ```
     /// use enshwick::points::Verdict;
     ///
-    /// #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u32)]
+    /// #[enshwick::point(name = "limit", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Limit {
     ///     pub level: u32,
@@ -368,7 +368,7 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::point(name = "you.lockers:price", mode = Override, output = u32)]
+    /// #[enshwick::point(of = lockers, name = "price", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Price {
     ///     pub locker: u32,
@@ -428,7 +428,7 @@ impl Installed {
     /// ```
     /// use enshwick::points::Decision;
     ///
-    /// #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u32)]
+    /// #[enshwick::point(of = lockers, name = "limit", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Limit {
     ///     pub level: u32,
