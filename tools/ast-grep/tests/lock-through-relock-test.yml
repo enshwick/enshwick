@@ -34,6 +34,12 @@ valid:
   - |
     #[test]
     fn locks() { let g = M.lock().unwrap(); }
+  - |
+    #[cfg(test)]
+    #[expect(clippy::unwrap_used, reason = "tests")]
+    mod tests {
+        fn f(m: &Mutex<u8>) { let g = m.lock().unwrap(); }
+    }
 invalid:
   - "fn f(m: &Mutex<u8>) { let g = m.lock().unwrap(); }"
   - "fn f(m: &Mutex<u8>) { let g = m.lock().ok(); }"
