@@ -203,9 +203,13 @@ pub(crate) fn expand_id(name: &LitStr) -> syn::Result<TokenStream> {
 
 /// Expands `deps!()`: a module per dependency the crate's `Cargo.toml`
 /// names by alias in `requires`, `after` or `recommends`, with the
-/// dependency's id and its content ids.
+/// dependency's id and its content ids, and the declarations
+/// `cargo enshwick deps` wrote to `src/deps/<alias>.rs`, if any.
 pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
     let (metadata, shown) = cargo_metadata()?;
+    let written = PathBuf::from(&shown)
+        .parent()
+        .map(|dir| dir.join("src").join("deps"));
     let modules = metadata.dependencies.iter().filter_map(|d| {
         let relation = match d.relation {
             "REQUIRES" => "requires",
@@ -259,6 +263,18 @@ pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
                 }
             }
         };
+        let declared = written
+            .as_ref()
+            .map(|dir| dir.join(format!("{}.rs", d.alias)))
+            .filter(|path| path.is_file())
+            .map(|path| {
+                let path = path.display().to_string();
+                quote! {
+                    #[path = #path]
+                    mod declared;
+                    pub use self::declared::*;
+                }
+            });
         Some(quote! {
             #[doc = #doc]
             pub mod #alias {
@@ -266,6 +282,8 @@ pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
                 pub const ID: &str = #id;
 
                 #content
+
+                #declared
             }
         })
     });

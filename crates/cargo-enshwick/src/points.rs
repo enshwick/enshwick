@@ -1,24 +1,25 @@
-//! Another mod's extension point schemas, read and written as a definition
-//! the extending mod compiles.
+//! What another mod offers, read from its schemas and written as the
+//! declarations a mod that depends on it compiles.
 //!
-//! The owner's `declare_mod!(.., points: [..])` puts a schema of each point it
-//! defines into its manifest and into the `.enshpt` section of its DLL, so
-//! the schema is read here without running the owner's code. A schema comes
-//! from another author: every name, type and text it carries is checked
-//! before it enters generated code. The definition names every type the
-//! point reaches and checks its own layout against the hashes the owner's
-//! build wrote.
+//! The owner's `declare_mod!(.., points: [..], calls: [..], events: [..])`
+//! puts a schema of each point, call and event it lists into its manifest
+//! and into the `.enshpt` section of its DLL, so the schema is read here
+//! without running the owner's code. A schema comes from another author:
+//! every name, type and text it carries is checked before it enters
+//! generated code. The declarations name every type they reach and check
+//! their own layout against the hashes the owner's build wrote.
 
 mod calls;
 mod luau;
+mod rust;
 
 use std::fmt::Write as _;
 
 use enshwick_gamedata::reflect::{Image, ImageError, Layout};
 use serde::Deserialize;
 
-pub use calls::rust_call;
-pub use luau::{luau, luau_call, luau_event};
+pub use luau::{LuauDeps, luau_deps};
+pub use rust::rust_deps;
 
 /// The section of a mod DLL that holds its point schemas.
 pub const SECTION: &str = ".enshpt";
@@ -59,6 +60,15 @@ pub enum Error {
         owner: String,
         /// The point asked for.
         name: String,
+    },
+    /// Two declarations of one owner take the same type, which one module
+    /// cannot declare twice.
+    #[error("two declarations of {owner} take the type {ty}")]
+    SharedType {
+        /// The owner's id.
+        owner: String,
+        /// The type.
+        ty: String,
     },
     /// A type the point reaches is not in the schema.
     #[error("the schema of {point} lacks the type {ty}")]
@@ -524,6 +534,18 @@ fn is_point_name(name: &str) -> bool {
         .is_some_and(|(id, what)| is_owner(id) && !what.is_empty() && !what.chars().any(is_hidden))
 }
 
+/// The local name of `name` of `schema`: what follows the owner's id and
+/// `:`, as `of = <alias>` takes it.
+fn local_name<'a>(schema: &Schema, name: &'a str) -> Result<&'a str, Error> {
+    name.strip_prefix(schema.owner.as_str())
+        .and_then(|rest| rest.strip_prefix(':'))
+        .filter(|local| !local.contains(':'))
+        .ok_or_else(|| Error::Invalid {
+            what: "name of its owner",
+            value: name.to_owned(),
+        })
+}
+
 /// The point schemas in the DLL `bytes`; `None` for a DLL without points.
 ///
 /// # Errors
@@ -626,91 +648,6 @@ fn is_hidden(c: char) -> bool {
         )
 }
 
-/// The Rust definition of the point `name` of `schema`, with every named
-/// type it reaches.
-///
-/// # Errors
-///
-/// [`Error`] when the schema lacks the point or a type it names.
-///
-/// # Examples
-///
-/// ```
-/// use cargo_enshwick::points::{Schema, rust};
-///
-/// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
-/// assert!(rust(&schema, "you.stalls:price").is_err());
-/// # Ok::<(), cargo_enshwick::points::Error>(())
-/// ```
-pub fn rust(schema: &Schema, name: &str) -> Result<String, Error> {
-    let point = schema
-        .point
-        .iter()
-        .find(|p| p.name == name)
-        .ok_or_else(|| Error::NoPoint {
-            owner: schema.owner.clone(),
-            name: name.to_owned(),
-        })?;
-    let name = point.name.as_str();
-    let input = find(schema, name, &point.input)?;
-    if input.kind != Kind::Struct || input.field.len() != point.layout.len() {
-        return Err(Error::BadInput(name.to_owned()));
-    }
-    let reached = reached(schema, point, input)?;
-
-    let mode = match point.mode.as_str() {
-        "observe" => "Observe",
-        "advise" => "Advise",
-        "override" => "Override",
-        other => {
-            return Err(Error::UnknownMode {
-                point: name.to_owned(),
-                mode: other.to_owned(),
-            });
-        }
-    };
-    let mut code = String::new();
-    let _ = writeln!(
-        code,
-        "//! The extension point `{name}` of {} {}.\n\
-         //!\n\
-         //! Written by `cargo enshwick point {name}`. Write it again for a newer\n\
-         //! {} rather than edit it; the checks at the end hold it to the owner's\n\
-         //! layout. Declare this module `pub`.\n",
-        schema.owner, schema.version, schema.owner
-    );
-    doc(
-        &mut code,
-        "",
-        &point.doc,
-        &format!("The input of `{name}`."),
-    );
-    let refusable = if point.refusable { ", refusable" } else { "" };
-    let _ = writeln!(
-        code,
-        "#[enshwick::point(name = {name:?}, mode = {mode}, output = {}{refusable})]\n\
-         #[derive(Clone, Copy, Debug)]\npub struct {} {{",
-        rust_type(&point.output),
-        point.input
-    );
-    for field in &input.field {
-        doc(
-            &mut code,
-            "    ",
-            &field.doc,
-            &format!("The `{}` of the input.", field.name),
-        );
-        let _ = writeln!(code, "    pub {}: {},", field.name, rust_type(&field.ty));
-    }
-    code.push_str("}\n");
-    for named in &reached {
-        code.push('\n');
-        named_type(&mut code, named, &schema.owner)?;
-    }
-    layout_checks(&mut code, point, input)?;
-    Ok(code)
-}
-
 /// The named type `type_name` the point `name` of `schema` reaches.
 fn find<'a>(schema: &'a Schema, name: &str, type_name: &str) -> Result<&'a TypeSchema, Error> {
     schema
@@ -760,34 +697,6 @@ fn reached_from<'a>(
     }
     reached.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(reached)
-}
-
-/// The checks that hold the definition of `point` to the owner's layout
-/// hashes.
-fn layout_checks(code: &mut String, point: &PointSchema, input: &TypeSchema) -> Result<(), Error> {
-    let name = point.name.as_str();
-    code.push_str("\nconst _: () = {\n");
-    for (i, hash) in point.layout.iter().enumerate() {
-        let hash: u64 = hash.parse().map_err(|_| Error::BadHash(name.to_owned()))?;
-        let _ = writeln!(
-            code,
-            "    assert!(\n        <{} as enshwick::points::Point>::LAYOUT[{i}].hash == {},\n        \"`{}` differs from the owner's\",\n    );",
-            point.input,
-            hex(hash),
-            input.field[i].name
-        );
-    }
-    let output: u64 = point
-        .output_layout
-        .parse()
-        .map_err(|_| Error::BadHash(name.to_owned()))?;
-    let _ = writeln!(
-        code,
-        "    assert!(\n        <{} as enshwick::points::Point>::OUTPUT[0].hash == {},\n        \"the answer differs from the owner's\",\n    );\n}};",
-        point.input,
-        hex(output)
-    );
-    Ok(())
 }
 
 /// `hash` as a hex literal in groups of four digits.
@@ -881,23 +790,23 @@ fn named_type(code: &mut String, named: &TypeSchema, owner: &str) -> Result<(), 
 mod tests {
     use super::*;
 
-    const SCHEMA: &str = include_str!("../tests/fixtures/stalls.points.toml");
+    const SCHEMA: &str = include_str!("../tests/fixtures/lockers.points.toml");
 
     #[test]
-    fn a_point_becomes_a_definition_with_its_types_and_layout_checks() {
+    fn a_point_becomes_a_declaration_of_the_alias_with_its_types_and_layout_checks() {
         let schema = Schema::parse(SCHEMA).unwrap();
-        let code = rust(&schema, "you.stalls:price").unwrap();
-        assert_eq!(code, include_str!("../tests/fixtures/stalls_price.rs"));
+        let code = rust_deps(&schema, "lockers").unwrap();
+        assert_eq!(code, include_str!("../tests/fixtures/lockers_points.rs"));
     }
 
     #[test]
-    fn the_examples_definition_is_what_the_trading_post_publishes() {
+    fn the_examples_declarations_are_what_the_trading_post_publishes() {
         let schema =
             Schema::parse(include_str!("../../../examples/trading-post/points.toml")).unwrap();
         assert_eq!(
-            rust(&schema, "you.trading-post:price").unwrap(),
-            include_str!("../../../examples/haggling/src/price.rs"),
-            "run cargo enshwick point you.trading-post:price again"
+            rust_deps(&schema, "trading_post").unwrap(),
+            include_str!("../../../examples/haggling/src/deps/trading_post.rs"),
+            "run cargo enshwick deps trading_post again"
         );
     }
 
@@ -944,13 +853,13 @@ mod tests {
     fn a_schema_value_that_would_leave_its_place_in_the_code_is_refused() {
         let hostile = [
             (
-                "mod = \"you.stalls\"",
-                "mod = \"you.stalls\\nfn evil() {}\"",
+                "mod = \"you.lockers\"",
+                "mod = \"you.lockers\\nfn evil() {}\"",
             ),
             ("version = \"1.2.0\"", "version = \"1.2.0 }\""),
             (
-                "name = \"you.stalls:price\"",
-                "name = \"you.stalls:price\\nfn evil() {}\"",
+                "name = \"you.lockers:price\"",
+                "name = \"you.lockers:price\\nfn evil() {}\"",
             ),
             ("input = \"Price\"", "input = \"Price {}\""),
             ("output = \"u32\"", "output = \"u32> evil\""),
@@ -994,17 +903,29 @@ mod tests {
             );
         }
     }
-
     #[test]
     fn a_quote_in_a_point_name_stays_inside_its_string() {
-        let text = SCHEMA.replace("you.stalls:price", "you.stalls:price\\\", evil = (\\\"");
+        let text = SCHEMA.replace("you.lockers:price", "you.lockers:price\\\", evil = (\\\"");
         let schema = Schema::parse(&text).unwrap();
-        let name = schema.points().next().unwrap().to_owned();
-        let code = rust(&schema, &name).unwrap();
+        let code = rust_deps(&schema, "lockers").unwrap();
         assert!(
-            code.contains(r#"name = "you.stalls:price\", evil = (\"""#),
+            code.contains(r#"name = "price\", evil = (\"", of = lockers"#),
             "{code}"
         );
+    }
+
+    #[test]
+    fn an_alias_that_is_no_rust_name_is_refused() {
+        let schema = Schema::parse(SCHEMA).unwrap();
+        for alias in ["", "two words", "lockers::evil", "self", "9lives"] {
+            assert!(
+                matches!(
+                    rust_deps(&schema, alias),
+                    Err(Error::Invalid { what: "alias", .. })
+                ),
+                "{alias:?}"
+            );
+        }
     }
 
     #[test]
@@ -1015,9 +936,16 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_point_or_another_format_is_refused() {
-        let schema = Schema::parse(SCHEMA).unwrap();
-        assert!(rust(&schema, "you.stalls:other").is_err());
+    fn a_name_of_another_mod_or_another_format_is_refused() {
+        let other = SCHEMA.replace("you.lockers:price", "you.lanterns:price");
+        let schema = Schema::parse(&other).unwrap();
+        assert!(matches!(
+            rust_deps(&schema, "lockers"),
+            Err(Error::Invalid {
+                what: "name of its owner",
+                ..
+            })
+        ));
         let newer = SCHEMA.replace("schema = 1", "schema = 2");
         assert!(
             Schema::parse(&newer)

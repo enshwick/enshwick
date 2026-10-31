@@ -1,11 +1,6 @@
-//! Another mod's calls, read from its schema and written as the declaration
-//! a caller compiles.
-
-use std::fmt::Write as _;
+//! Another mod's calls, as its schema describes them.
 
 use serde::Deserialize;
-
-use super::{Error, Kind, Schema, doc, find, hex, named_type, reached_from, rust_type};
 
 /// One call.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -22,122 +17,9 @@ pub(super) struct CallSchema {
     pub(super) layout: Vec<String>,
 }
 
-/// The Rust declaration of the call `name` of `schema`, with every named
-/// type it reaches.
-///
-/// # Errors
-///
-/// [`Error`] when the schema lacks the call or a type it names.
-///
-/// # Examples
-///
-/// ```
-/// use cargo_enshwick::points::{Schema, rust_call};
-///
-/// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
-/// assert!(rust_call(&schema, "you.stalls:rent").is_err());
-/// # Ok::<(), cargo_enshwick::points::Error>(())
-/// ```
-pub fn rust_call(schema: &Schema, name: &str) -> Result<String, Error> {
-    let call = schema
-        .call
-        .iter()
-        .find(|c| c.name == name)
-        .ok_or_else(|| Error::NoCall {
-            owner: schema.owner.clone(),
-            name: name.to_owned(),
-        })?;
-    let name = call.name.as_str();
-    let input = find(schema, name, &call.input)?;
-    if input.kind != Kind::Struct || input.field.len() != call.layout.len() {
-        return Err(Error::BadInput(name.to_owned()));
-    }
-    let reached = reached_from(
-        schema,
-        name,
-        input
-            .field
-            .iter()
-            .map(|f| f.ty.as_str())
-            .chain([call.output.as_str()])
-            .collect(),
-    )?;
-    let mut code = String::new();
-    let _ = writeln!(
-        code,
-        "//! The call `{name}` v{} of {} {}.\n\
-         //!\n\
-         //! Written by `cargo enshwick call {name}`. Write it again for a newer\n\
-         //! {} rather than edit it; the checks at the end hold it to the server's\n\
-         //! layout. Declare this module `pub`.\n",
-        call.major, schema.owner, schema.version, schema.owner
-    );
-    doc(&mut code, "", &call.doc, &format!("The input of `{name}`."));
-    let _ = writeln!(
-        code,
-        "#[enshwick::call(name = {name:?}, output = {}, version = {})]\n\
-         #[derive(Clone, Copy, Debug)]\npub struct {} {{",
-        rust_type(&call.output),
-        call.major,
-        call.input
-    );
-    for field in &input.field {
-        doc(
-            &mut code,
-            "    ",
-            &field.doc,
-            &format!("The `{}` of the input.", field.name),
-        );
-        let _ = writeln!(code, "    pub {}: {},", field.name, rust_type(&field.ty));
-    }
-    code.push_str("}\n");
-    for named in &reached {
-        code.push('\n');
-        named_type(&mut code, named, &schema.owner)?;
-    }
-    checks(&mut code, call, &input.field)?;
-    Ok(code)
-}
-
-/// The checks that hold the declaration of `call` to the server's layout
-/// hashes and sizes.
-fn checks(
-    code: &mut String,
-    call: &CallSchema,
-    fields: &[super::FieldSchema],
-) -> Result<(), Error> {
-    let name = call.name.as_str();
-    let hash = |text: &str| -> Result<u64, Error> {
-        text.parse().map_err(|_| Error::BadHash(name.to_owned()))
-    };
-    code.push_str("\nconst _: () = {\n");
-    for (i, (layout, field)) in call.layout.iter().zip(fields).enumerate() {
-        let _ = writeln!(
-            code,
-            "    assert!(\n        <{} as enshwick::services::Call>::LAYOUT[{i}].hash == {},\n        \"`{}` differs from the server's\",\n    );",
-            call.input,
-            hex(hash(layout)?),
-            field.name
-        );
-    }
-    let _ = writeln!(
-        code,
-        "    assert!(\n        <{} as enshwick::services::Call>::OUTPUT[0].hash == {},\n        \"the answer differs from the server's\",\n    );",
-        call.input,
-        hex(hash(&call.output_layout)?)
-    );
-    let _ = writeln!(
-        code,
-        "    assert!(\n        size_of::<{}>() == {},\n        \"the input's size differs from the server's\"\n    );\n}};",
-        call.input, call.input_size
-    );
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use super::super::{Error, Schema};
-    use super::rust_call;
+    use super::super::{Error, Schema, luau, rust_deps};
 
     const SCHEMA: &str = r#"schema = 1
 mod = "you.trading-post"
@@ -183,39 +65,38 @@ value = 0
 name = "Sell"
 value = 1
 "#;
-
     #[test]
-    fn a_call_becomes_a_declaration_with_its_types_and_checks() {
+    fn a_call_becomes_a_declaration_of_the_alias_with_its_types_and_checks() {
         let schema = Schema::parse(SCHEMA).unwrap();
         assert_eq!(
             schema.calls().collect::<Vec<_>>(),
             ["you.trading-post:price-of"]
         );
-        let code = rust_call(&schema, "you.trading-post:price-of").unwrap();
+        let code = rust_deps(&schema, "trading_post").unwrap();
         insta::assert_snapshot!(code);
     }
 
     #[test]
-    fn the_declaration_of_the_fixture_is_the_one_the_sdk_compiles() {
-        let text = include_str!("../../tests/fixtures/stalls.calls.toml");
+    fn the_declarations_of_the_fixture_are_the_ones_the_sdk_compiles() {
+        let text = include_str!("../../tests/fixtures/lockers.calls.toml");
         let schema = Schema::parse(text).unwrap();
-        let code = rust_call(&schema, "you.stalls:rent").unwrap();
-        assert_eq!(code, include_str!("../../tests/fixtures/stalls_rent.rs"));
+        let code = rust_deps(&schema, "lockers").unwrap();
+        assert_eq!(code, include_str!("../../tests/fixtures/lockers_calls.rs"));
     }
 
     #[test]
     fn the_luau_module_of_the_fixture_is_the_one_the_runtime_is_tested_with() {
-        let text = include_str!("../../tests/fixtures/stalls.calls.toml");
+        let text = include_str!("../../tests/fixtures/lockers.calls.toml");
         let schema = Schema::parse(text).unwrap();
-        let code = super::super::luau_call(&schema, "you.stalls:fee").unwrap();
-        assert_eq!(code, include_str!("../../tests/fixtures/stalls_fee.luau"));
+        let code = luau::luau_call(&schema, "you.lockers:fee", "lockers").unwrap();
+        assert_eq!(code, include_str!("../../tests/fixtures/lockers_fee.luau"));
     }
 
     #[test]
     fn a_luau_module_refuses_a_value_type_or_enum_in_the_input() {
-        let text = include_str!("../../tests/fixtures/stalls.calls.toml");
+        let text = include_str!("../../tests/fixtures/lockers.calls.toml");
         let schema = Schema::parse(text).unwrap();
-        let error = super::super::luau_call(&schema, "you.stalls:rent").unwrap_err();
+        let error = luau::luau_call(&schema, "you.lockers:rent", "lockers").unwrap_err();
         assert!(
             matches!(&error, Error::ScriptInput { field, ty, .. } if field == "deal" && ty == "Deal"),
             "{error}"
@@ -223,12 +104,17 @@ value = 1
     }
 
     #[test]
-    fn a_call_the_schema_lacks_is_named() {
-        let schema = Schema::parse(SCHEMA).unwrap();
-        let error = rust_call(&schema, "you.trading-post:rent").unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            "you.trading-post serves no call you.trading-post:rent"
+    fn the_luau_modules_leave_out_a_call_no_script_can_fill_and_say_why() {
+        let text = include_str!("../../tests/fixtures/lockers.calls.toml");
+        let schema = Schema::parse(text).unwrap();
+        let deps = super::super::luau_deps(&schema, "lockers").unwrap();
+        let names: Vec<&str> = deps.modules.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, ["fee"]);
+        assert_eq!(deps.skipped.len(), 1);
+        assert!(
+            deps.skipped[0].to_string().contains("you.lockers:rent"),
+            "{}",
+            deps.skipped[0]
         );
     }
 
