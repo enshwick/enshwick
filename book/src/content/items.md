@@ -6,11 +6,9 @@ and behaves like it, under a [content id](../content.md#content-ids) of its
 own, with its own name and description if you give them.
 
 ```rust
-use enshwick::content::{Guid, Id, id};
+use enshwick::content::{Id, id, vanilla};
 use enshwick::content::items::NewItem;
 
-/// The vanilla wooden chest.
-const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 /// The new item.
 const LOCKER: Id = id!("locker");
 /// The tags of its name and description.
@@ -24,6 +22,8 @@ const TEXTS: &str = r#"
 "#;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    // The vanilla storage box, by the debug name the item registry gives it.
+    let storage_box = vanilla::item("Prop_Storage_24_T1_Box")?;
     let texts = load.texts(TEXTS)?;
     load.add_texts(&texts, &[
         ("locker.name", LOCKER_NAME),
@@ -32,13 +32,17 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_item(NewItem {
         name: Some(LOCKER_NAME.guid()),
         description: Some(LOCKER_DESCRIPTION.guid()),
-        ..NewItem::new(LOCKER, CHEST)
+        ..NewItem::new(LOCKER, storage_box)
     })
 }
 ```
 
 A real mod keeps the texts in a file and embeds it with
 `include_str!("texts.toml")`; see [Texts](texts.md).
+[`vanilla::item`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/vanilla.rs)
+names a vanilla item by its debug name, also as `deps::vanilla::item` of
+[`deps!`](../concepts/loader-and-abi.md#the-manifest); a name the game lacks turns the mod
+off, with the names that look like it in the log.
 
 ## `NewItem`
 
@@ -82,18 +86,19 @@ water: on the item's own entity, saved with the world, sent to players and
 drawn as a bar on the item's slot.
 
 ```rust
-use enshwick::content::{Guid, Id, id};
+use enshwick::content::{Id, id, vanilla};
 use enshwick::content::items::{FuelSetup, NewItem};
 
 const STAFF: Id = id!("charged-staff");
-const VANILLA_STAFF: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
 /// The staff entity's template, fixed forever.
 const STAFF_ENTITY: Id = STAFF.part("entity");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    // The Blacksmith's summoning staff.
+    let vanilla_staff = vanilla::item("NPC_Crafter_Blacksmith01")?;
     load.add_item(NewItem {
         meter: Some(FuelSetup { template: STAFF_ENTITY, max_fuel_charges: 3, start: 3 }),
-        ..NewItem::new(STAFF, VANILLA_STAFF)
+        ..NewItem::new(STAFF, vanilla_staff)
     })
 }
 ```
@@ -123,19 +128,19 @@ entity already, such as a weapon with durability, cannot take a meter:
 game lists an armour's bonuses: each a [text tag](texts.md) and a number.
 
 ```rust
-use enshwick::content::{Guid, Id, id};
+use enshwick::content::{Id, id, vanilla};
 use enshwick::content::items::{NewItem, ImpactUiValue, StatFormat};
 
-const RING: Id = id!("lucky-ring");
-const VANILLA_RING: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-const LUCK: Id = RING.part("luck");
+const BOX: Id = id!("lucky-box");
+const LUCK: Id = BOX.part("luck");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let storage_box = vanilla::item("Prop_Storage_24_T1_Box")?;
     let texts = load.texts("[en]\nluck = \"Luck\"\n")?;
     load.add_texts(&texts, &[("luck", LUCK)])?;
     load.add_item(NewItem {
         stats: vec![ImpactUiValue { loca_id: LUCK.guid(), value: 5, value_format: StatFormat::Percent }],
-        ..NewItem::new(RING, VANILLA_RING)
+        ..NewItem::new(BOX, storage_box)
     })
 }
 ```
@@ -160,23 +165,23 @@ client first shows it:
   best square, such as 256 by 256.
 
 ```rust
-use enshwick::content::{Guid, Id, id};
+use enshwick::content::{Id, id, vanilla};
 use enshwick::content::icons::{Icon, Pixels, Tint};
 use enshwick::content::items::NewItem;
 
-/// The Blacksmith's summoning staff; its icon is a portrait.
-const VANILLA_STAFF: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
 const STAFF: Id = id!("spectral-staff");
 const STAFF_ICON: Id = STAFF.part("icon");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    // The Blacksmith's summoning staff; its icon is a portrait.
+    let vanilla_staff = vanilla::item("NPC_Crafter_Blacksmith01")?;
     load.add_item(NewItem {
         icon: Some(Icon {
             id: STAFF_ICON,
-            like: VANILLA_STAFF,
+            like: vanilla_staff,
             pixels: Pixels::Tint(Tint { colour: [120, 170, 255], amount: 60 }),
         }),
-        ..NewItem::new(STAFF, VANILLA_STAFF)
+        ..NewItem::new(STAFF, vanilla_staff)
     })
 }
 ```

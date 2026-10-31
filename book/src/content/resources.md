@@ -26,16 +26,16 @@ bytes of the resource `base`:
   registry with one more entry.
 
 ```rust
-use enshwick::content::{Blob, Guid, Id, id, types};
+use enshwick::content::{Blob, Guid, Id, id, types, vanilla};
 
-const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 const LOCKER_ID: Id = id!("locker");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     const LOCKER: Guid = LOCKER_ID.guid();
+    let storage_box = vanilla::item("Prop_Storage_24_T1_Box")?;
     load.declare(LOCKER_ID)?;
-    load.serve(LOCKER.key(types::ITEM_INFO)?, CHEST.key(types::ITEM_INFO)?, |chest| {
-        let mut item = Blob::new(chest);
+    load.serve(LOCKER.key(types::ITEM_INFO)?, storage_box.key(types::ITEM_INFO)?, |base| {
+        let mut item = Blob::new(base);
         // Offsets for illustration: a real mod reads them from reflection.
         let written = item.write(0, &enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes()) && item.write(4, &LOCKER.0);
         written.then(|| item.into_bytes())

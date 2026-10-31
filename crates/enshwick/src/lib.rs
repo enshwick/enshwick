@@ -420,6 +420,11 @@ pub use enshwick_macros::declare_mod;
 /// `you.lockers:price`. Without `of`, a local name is this mod's own. An
 /// alias the table lacks fails the build with the aliases it has.
 ///
+/// `deps::vanilla` names the game's own content by the debug names its data
+/// gives it, the functions of [`content::vanilla`] such as
+/// [`item`](content::vanilla::item); no dependency takes the alias
+/// `vanilla`.
+///
 /// # Examples
 ///
 /// The crate's `Cargo.toml`, as on [`declare_mod!`], requires `lockers` and
@@ -434,8 +439,9 @@ pub use enshwick_macros::declare_mod;
 /// const LOCKER: Id = deps::lockers::id("locker");
 /// assert_eq!(LOCKER.to_string(), "you.lockers:locker");
 /// assert_eq!(deps::lanterns::ID, "you.lanterns");
-/// // Outside the game no other mod runs.
+/// // Outside the game no other mod runs, and no game data reads.
 /// assert_eq!(deps::lanterns::id("lantern"), None);
+/// assert!(deps::vanilla::item("Prop_Production_T1_Forge").is_err());
 ///
 /// #[enshwick::event(of = lockers, name = "opened")]
 /// #[derive(Clone, Copy, Debug)]

@@ -182,6 +182,9 @@ id once. `enshwick::deps!()` writes a module `deps` with a module per alias of
 `id("<name>")`, its content id `<id>:<name>`. A required mod's ids are
 constants, since the loader starts this mod only beside it. An optional mod's
 ids, from `after` or `recommends`, are `None` while that mod does not run.
+`deps::vanilla` names the game's own content by the debug names its data
+gives it, such as `deps::vanilla::item("Prop_Production_T1_Forge")`; no
+dependency takes the alias `vanilla`.
 
 A call, point, service or event takes a local name: `name = "price"` is this
 mod's `<id>:price`, and `of = <alias>` puts the dependency's id in front. An

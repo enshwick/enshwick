@@ -101,11 +101,31 @@ error [lanterns] off: content id lanterns:lamp of lanterns has the key 0x1a2b3c4
 
 Content a mod serves itself with [`Load::serve`](content/resources.md) is
 declared with `load.declare(id)`. References to existing content, a vanilla
-item to clone or another mod's item for a recipe, stay plain
-[`Guid`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)s:
-`Guid::parse` for a vanilla GUID, `Guid::named("you.lockers:locker")` for another
-mod's content, without depending on that mod. Stat kinds and affixes have
-`<mod>:<name>` ids too, and their keys come from the same GUIDs.
+item to clone or another mod's item for a recipe, go through the mod's
+[`deps` module](concepts/loader-and-abi.md#the-manifest), so its code holds
+no GUID literal:
+
+```rust
+use enshwick::content::{Id, id};
+use enshwick::content::items::NewItem;
+
+enshwick::deps!();
+
+// Another mod's content, by the alias the manifest gives that mod.
+const LOCKER: Id = deps::lockers::id("locker");
+assert_eq!(LOCKER.to_string(), "you.lockers:locker");
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    // Vanilla content, by the debug name the game's data gives it.
+    let forge = deps::vanilla::item("Prop_Production_T1_Forge")?;
+    load.add_item(NewItem::new(id!("small-forge"), forge))
+}
+```
+
+A vanilla name the game does not know turns the mod off, with the names
+that look like it in the log. `Guid::named("you.lockers:locker")` still names another mod's content
+without depending on that mod. Stat kinds and affixes have `<mod>:<name>` ids
+too, and their keys come from the same GUIDs.
 
 ## Mods compose
 

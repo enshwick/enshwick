@@ -22,17 +22,16 @@ Unstable: needs the `unstable` feature and may change in any release
 ([Stability](../stability.md)).
 
 ```rust
-use enshwick::content::{Guid, Id, id};
+use enshwick::content::{Id, id, vanilla};
 use enshwick::content::recipes::NewRecipe;
 
-const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 const LOCKER: Id = id!("locker");
 const LOCKER_RECIPE: Id = LOCKER.part("recipe");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_recipe(NewRecipe {
         id: LOCKER_RECIPE,
-        like: CHEST,
+        like: vanilla::item("Prop_Storage_24_T1_Box")?,
         output: LOCKER.guid(),
         output_count: 1,
         cost: 2,
@@ -44,7 +43,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 The new recipe is a copy of the first recipe that makes `like`: same
 workshop, unlock and duration. It makes `output_count` of `output`, and each
 of its ingredient counts is the copied recipe's times `cost`. Here the locker
-is crafted where the wooden chest is, for twice the chest's ingredients.
+is crafted where the storage box is, for twice the box's ingredients.
 
 | Field | Meaning |
 | --- | --- |

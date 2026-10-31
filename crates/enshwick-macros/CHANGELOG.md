@@ -18,6 +18,10 @@ Each entry names the pull request that made the change.
   with local names on `#[call]`, `#[point]`, `#[service]` and `#[event]`
   (#773).
 
+- `deps!` also writes `deps::vanilla`, the running game's content by its
+  debug names; the table refuses a dependency with the alias `vanilla`
+  (#780).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Changed
