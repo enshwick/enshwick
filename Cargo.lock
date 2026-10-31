@@ -471,6 +471,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-example-waypoints"
+version = "0.0.0-dev"
+dependencies = [
+ "arc-swap",
+ "enshwick",
+ "serde",
+]
+
+[[package]]
 name = "enshwick-gamedata"
 version = "1.0.0-alpha.11"
 dependencies = [

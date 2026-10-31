@@ -1,0 +1,21 @@
+[en]
+"mod.name" = "Waypoints"
+"mod.description" = "Marks where you stand and shows the mark on your screen."
+"mark" = "Mark my position"
+"clear" = "Clear my mark"
+"marked" = "Marked."
+"cleared" = "Mark cleared."
+"no-position" = "Your position is not known yet."
+"not-sent" = "Your game did not get the mark: {why}"
+"hud" = "Mark at {x}, {y}, {z}"
+
+[uk]
+"mod.name" = "Waypoints"
+"mod.description" = "Позначає, де ви стоїте, і показує мітку на екрані."
+"mark" = "Позначити моє місце"
+"clear" = "Прибрати мою мітку"
+"marked" = "Позначено."
+"cleared" = "Мітку прибрано."
+"no-position" = "Ваше місце ще невідоме."
+"not-sent" = "Ваша гра не отримала мітку: {why}"
+"hud" = "Мітка в {x}, {y}, {z}"

@@ -109,6 +109,12 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+[`examples/waypoints`](https://github.com/enshwick/enshwick/tree/main/examples/waypoints)
+draws on the HUD what its server half sent over a
+[channel](messages.md), and only on a client: it asks
+`load.host().build().side` before it calls `on_hud`, since a dedicated server
+refuses it. Its test draws the HUD through the fake host with `draw_hud`.
+
 ## Map markers
 
 Unstable: needs the `unstable` feature and may change in any release

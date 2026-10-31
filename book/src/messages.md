@@ -47,6 +47,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+[`examples/waypoints`](https://github.com/enshwick/enshwick/tree/main/examples/waypoints)
+is this mod whole, with its client half, which draws the mark on the HUD,
+and a fake host test for each half.
+
 `send(to, &message)` sends to one peer: a client sends to `Peer::Server`, the
 server to `Peer::Player(key)`. `broadcast(&message)` sends from the server to
 every client that runs Enshwick. `is_ready(peer)` tells whether a peer takes
