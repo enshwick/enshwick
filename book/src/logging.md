@@ -2,7 +2,6 @@
 
 The loader writes one set of logs for itself and every mod, keeps a status
 summary of what runs, and turns a failing mod off with a reason in the log.
-This chapter covers what a mod writes there and where to look.
 
 ## Log macros
 

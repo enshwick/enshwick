@@ -1,19 +1,22 @@
 # Chat, notices and the console
 
+A mod sends players chat lines and notices on screen. A dedicated server's
+console runs the lines typed into its window or appended to its command file.
+
+## No commands for players
+
 Players never type commands: the game client keeps every chat line that
 starts with `/` to itself, and single player has no chat. Anything a player
 or an administrator does is a [player action](actions.md), shown in the
-game's interface. This chapter covers what a mod sends players, and the
-server's console, which runs lines typed into a dedicated server's console
-window or appended to its command file.
-
-Chat lines work on the dedicated server and on a client while it hosts a
-game.
+game's interface.
 
 ## Chat lines
 
 Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
+
+Chat lines work on the dedicated server and on a client while it hosts a
+game.
 
 [`world.broadcast(text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 sends a line to every player and

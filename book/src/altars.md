@@ -3,7 +3,9 @@
 Flame Altars are game data, so the platform reads them for every mod. A mod
 asks for them during `init` with
 [`load.altars()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/altars.rs)
-and gets a `Copy` handle to keep in its state:
+and gets a `Copy` handle to keep in its state.
+
+## Reading the altars
 
 ```rust
 use enshwick::events::AltarsChanged;

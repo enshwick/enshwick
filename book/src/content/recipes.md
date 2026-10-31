@@ -8,6 +8,8 @@ Two calls add recipes:
   looks at every recipe in the registry and adds a scaled copy of each one
   you pick.
 
+## The shared registry
+
 Both patch the game's recipe registry, which every mod shares; patches
 from several mods run in turn, so their recipes end up side by side. To
 change the counts, cost or time of vanilla recipes, declare a data change

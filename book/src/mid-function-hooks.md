@@ -19,6 +19,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+## The address and the handler
+
 The address comes from the mod's [build rows](finding-the-game.md#build-rows-in-the-manifest)
 or from `load.find_code` plus an offset. The handler is a `Fn(&mut Registers)`
 closure that is `Send + Sync + 'static`; it runs on whichever game thread

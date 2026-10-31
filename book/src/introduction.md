@@ -4,6 +4,8 @@ Enshwick is a modding API platform for [Enshrouded](https://enshrouded.com).
 This book is for people who write mods with it. The Enshwick loader comes with
 the platform and runs every mod, so players install one thing.
 
+## What a mod is
+
 A mod takes one of three forms:
 
 - a Rust mod: a `cdylib` built against one crate,
@@ -25,6 +27,8 @@ Its unit tests run without the game against a fake host ([Testing](testing.md)).
 Where the API has no call, a Rust mod links hooks into game functions. When a
 mod fails, the loader turns that mod off, and the game runs vanilla where the
 mod acted.
+
+## How to read this book
 
 Start with [Getting started](getting-started.md), then read
 [Concepts](concepts.md) once. Each other chapter covers one subject; read the

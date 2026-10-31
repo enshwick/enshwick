@@ -1,12 +1,16 @@
 # Mods in C
 
-A mod is a DLL that exports five functions over the C ABI, so any language that
-can include a C header can write one: C, C++, Zig, Odin. The header is
+A mod is a DLL that exports five functions over the C ABI, so C, C++, Zig,
+Odin or any language that can include a C header can write one. Here you build
+the example mod
+[`hello.c`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.c).
+
+## The header and the example
+
+The header is
 [`enshwick.h`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/include/enshwick.h),
 written from the same Rust types the loader uses and checked against the ABI's
-layout on every change. Here you build the example mod
-[`hello.c`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.c),
-which writes one line to the log when it starts.
+layout on every change. `hello.c` writes one line to the log when it starts.
 
 ## Write the mod
 

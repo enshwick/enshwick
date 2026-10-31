@@ -3,13 +3,15 @@
 Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](../stability.md)).
 
-A Rust mod changes vanilla values, such as how many of an item one slot holds
-and how many slots a chest has, with the same
-[changes](packs.md#changes-of-vanilla-values) data packs make: the same
-fields, ranges and selections, merged by the same rule with every pack and mod
-([Several packs on one value](packs.md#several-packs-on-one-value)).
+A Rust mod changes vanilla values, such as an item's stack size or a chest's
+slots, with the same [changes](packs.md#changes-of-vanilla-values) data packs
+make.
 
 ## Changes at init
+
+A change takes the same fields, ranges and selections as a pack's, merged by
+the same rule with every pack and mod
+([Several packs on one value](packs.md#several-packs-on-one-value)).
 
 [`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes.rs)
 declares a change during `init`. With `Load::change_items` and

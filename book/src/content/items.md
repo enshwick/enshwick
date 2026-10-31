@@ -1,9 +1,11 @@
 # Items
 
 [`Load::add_item`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
-adds an item to the game. The new item is a clone of a vanilla one: it looks
-and behaves like it, under a [content id](../content.md#content-ids) of its
-own, with its own name and description if you give them.
+adds an item to the game: a clone of a vanilla one that looks and behaves
+like it, under a [content id](../content.md#content-ids) of its own. It takes
+its own name and description if you give them.
+
+## A first item
 
 ```rust
 use enshwick::content::{Id, id, vanilla};

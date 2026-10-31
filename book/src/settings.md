@@ -1,9 +1,9 @@
 # Settings
 
 A mod's settings live in `mod-configs/<id>.toml` beside the game. The loader
-writes the file from the mod's defaults on first start, and the mod reads it
-during `init`. There are two ways to read it: a typed settings struct under
-`#[enshwick::config]`, or plain serde over a defaults string.
+writes the file from the mod's defaults on first start. The mod reads it
+during `init`, through a typed `#[enshwick::config]` struct or plain serde
+over a defaults string.
 
 ## Typed settings
 
