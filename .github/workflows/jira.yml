@@ -1,19 +1,14 @@
-# Moves the Jira ticket a pull request's branch names (`<type>/WIK-<n>-…`)
-# as the work goes, as the enshwick-ci account. Opened, reopened or ready
-# for review: In Progress. Merged: Done, then each parent whose children are
-# all done. Closed without merge: nothing. A failed push to main reopens the
-# ticket of that commit's pull request with a comment and the run link. A
-# branch without a key is skipped, never failed.
+# Keeps the board in step with pull requests and a red main, as enshwick-ci.
 name: jira
 
 # Any pull request may name a ticket, so no path filter.
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, closed]
-  # The workflows that run on a push to main: a failed run is a red main.
+  # Every workflow that runs on a push to main: a failed run is a red main.
   # Runs the copy on main and reads nothing from the run it follows.
   workflow_run: # zizmor: ignore[dangerous-triggers]
-    workflows: [ci, dev-build]
+    workflows: [ci, dev-build, docs]
     types: [completed]
     branches: [main]
 
@@ -30,7 +25,7 @@ jobs:
         && (github.event.action != 'closed' || github.event.pull_request.merged))
       || (github.event_name == 'workflow_run'
         && github.event.workflow_run.event == 'push'
-        && github.event.workflow_run.conclusion == 'failure')
+        && contains(fromJSON('["failure","timed_out"]'), github.event.workflow_run.conclusion))
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
