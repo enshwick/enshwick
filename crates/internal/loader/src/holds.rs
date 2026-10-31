@@ -127,7 +127,7 @@ pub(crate) fn enforce_world(loader: &crate::host::Loader, world: &str) {
         .mods
         .iter()
         .filter(|m| !m.off.load(std::sync::atomic::Ordering::Acquire))
-        .flat_map(crate::host::ModRecord::names)
+        .map(|m| m.id.as_str())
         .chain([crate::settings::LOADER_ID])
         .collect();
     stop(
@@ -147,7 +147,7 @@ fn stop(held: &[Held], why: &str, loader: Option<&crate::host::Loader>) {
         return;
     }
     for hold in held {
-        let record = loader.and_then(|loader| loader.mods.iter().find(|m| m.owns(&hold.id)));
+        let record = loader.and_then(|loader| loader.mods.iter().find(|m| m.id == hold.id));
         let reason = match record {
             Some(record) => hold.shown(record.texts.relock().as_ref()),
             None => hold.shown(None),

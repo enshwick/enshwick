@@ -191,23 +191,22 @@ impl Registry {
         })
     }
 
-    /// Defines a mod event named after its definer, whose names are its id
-    /// and then its former ids, and returns its id.
+    /// Defines a mod event named after its definer, the mod `owner_id`, and
+    /// returns its id.
     ///
     /// # Errors
     ///
-    /// Why it is refused: a name outside the definer's names, or defined
+    /// Why it is refused: a name outside the definer's namespace, or defined
     /// twice.
     pub(crate) fn define(
         &mut self,
         owner: ModIndex,
-        names: &[&str],
+        owner_id: &str,
         name: &str,
         fields: Fields,
         size: u32,
     ) -> Result<u32, String> {
-        if !enshwick::__private::rules::is_named_after(name, names) {
-            let owner_id = names.first().copied().unwrap_or_default();
+        if !enshwick::__private::rules::is_named_after(name, owner_id) {
             return Err(format!(
                 "event {name}: an event is named `{owner_id}:<what>`"
             ));
@@ -607,7 +606,7 @@ mod tests {
         assert_eq!(
             registry.define(
                 ModIndex::new(0),
-                &["trading-post"],
+                "trading-post",
                 "trading-post:sold",
                 fields(&["a"]),
                 8,
@@ -618,7 +617,7 @@ mod tests {
             registry
                 .define(
                     ModIndex::new(0),
-                    &["trading-post"],
+                    "trading-post",
                     "trading-postx:sold",
                     fields(&["a"]),
                     8,
@@ -629,7 +628,7 @@ mod tests {
             registry
                 .define(
                     ModIndex::new(0),
-                    &["trading-post"],
+                    "trading-post",
                     "trading-post:",
                     fields(&["a"]),
                     8,
@@ -640,7 +639,7 @@ mod tests {
             registry
                 .define(
                     ModIndex::new(0),
-                    &["trading-post"],
+                    "trading-post",
                     "trading-post:sold",
                     fields(&["a"]),
                     8,
@@ -656,7 +655,7 @@ mod tests {
             registry
                 .define(
                     ModIndex::new(0),
-                    &["trading-post"],
+                    "trading-post",
                     "trading-post:sold",
                     fields(&["a", "b"]),
                     8,
@@ -710,7 +709,7 @@ mod tests {
         registry
             .define(
                 ModIndex::new(0),
-                &["trading-post"],
+                "trading-post",
                 "trading-post:sold",
                 fields(&["a"]),
                 4,

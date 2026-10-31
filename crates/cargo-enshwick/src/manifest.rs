@@ -89,7 +89,6 @@ unsafe fn describe(manifest: &Manifest) -> String {
             Relation::BREAKS => "breaks",
             Relation::RECOMMENDS => "recommends",
             Relation::REPLACES => "replaces",
-            Relation::WAS => "was",
             _ => "unknown relation",
         };
         let range = text(&dependency.range);
@@ -214,7 +213,6 @@ mod tests {
             recommends: ["you.lanterns" => ""],
             breaks: ["old-stalls" => "<0.3"],
             replaces: ["stalls"],
-            was: ["market"],
         );
         assert_eq!(
             // SAFETY: `manifest!` builds a static manifest whose strings and
@@ -226,7 +224,7 @@ mod tests {
              side: both\njoin check: yes\n\
              requires: you.trading-post >=0.1, <1.0\nafter: you.lanterns\n\
              recommends: you.lanterns\nbreaks: old-stalls <0.3\n\
-             replaces: stalls\nwas: market"
+             replaces: stalls"
         );
     }
 }

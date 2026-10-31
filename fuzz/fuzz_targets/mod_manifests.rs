@@ -82,15 +82,8 @@ fn check(candidates: &[Candidate], side: Side) {
             if dependency.relation != Relation::REQUIRES {
                 continue;
             }
-            let answers = |j: usize| {
-                candidates[j].id == dependency.id
-                    || candidates[j]
-                        .dependencies
-                        .iter()
-                        .any(|d| d.relation == Relation::WAS && d.id == dependency.id)
-            };
             assert!(
-                before.iter().any(|&j| answers(j)),
+                before.iter().any(|&j| candidates[j].id == dependency.id),
                 "#{i} loads before what it requires, {}",
                 dependency.id
             );

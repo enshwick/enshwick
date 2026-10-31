@@ -883,11 +883,6 @@ typedef uint8_t EnshwickRelation;
 // (any version; the range stays empty): while this one is present, the
 // loader never starts the other and names its DLL to delete.
 #define EnshwickRelation_REPLACES 4
-// The other id is one this mod had before a rename: it replaces that
-// mod as `REPLACES` does, a requirement or a point
-// named by the old id finds this mod, and on the first start the loader
-// copies the old id's settings and data to this one.
-#define EnshwickRelation_WAS 5
 
 // A relation to another mod, by id and SemVer range.
 typedef struct EnshwickDependency {

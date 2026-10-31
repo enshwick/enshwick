@@ -12,7 +12,7 @@ use crate::modlist::{LIST_PATH, ModList};
 pub(crate) enum Skip {
     /// An entry of the mod list that is off names the file.
     FileOff,
-    /// The mod list turns off the mod's id, or the former id it holds.
+    /// The mod list turns off the mod's id.
     IdOff(String),
     /// It exports the interface's version but not all four functions.
     NotAMod,
@@ -72,15 +72,6 @@ impl Skip {
     }
 }
 
-/// The id among `ids`, a mod's own then its former ones, that `list` turns
-/// off.
-pub(crate) fn off_id<'a>(
-    list: &ModList,
-    mut ids: impl Iterator<Item = &'a str>,
-) -> Option<&'a str> {
-    ids.find(|id| list.is_off(id))
-}
-
 /// The mod list as the start reads it.
 #[derive(Debug)]
 pub(crate) struct ListRead {
@@ -122,10 +113,6 @@ pub(crate) fn read_list(read: std::io::Result<String>) -> ListRead {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn list(text: &str) -> ModList {
-        ModList::parse(text).unwrap()
-    }
 
     #[test]
     fn a_file_the_player_turned_off_is_news_without_an_error_code() {
@@ -201,15 +188,6 @@ mod tests {
                 errors::DUPLICATE_MOD
             )
         );
-    }
-
-    #[test]
-    fn a_former_id_turned_off_keeps_the_renamed_mod_off() {
-        let off = list("[\"you.old-lanterns\"]\nenabled = false\n");
-        let ids = ["you.lanterns", "you.old-lanterns"];
-        assert_eq!(off_id(&off, ids.into_iter()), Some("you.old-lanterns"));
-        let on = list("[\"you.lanterns\"]\nenabled = true\n");
-        assert_eq!(off_id(&on, ids.into_iter()), None);
     }
 
     #[test]

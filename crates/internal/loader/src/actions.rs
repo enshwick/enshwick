@@ -261,7 +261,7 @@ pub(crate) fn run(loader: &Loader, key: u64, id: &str, action: &str, args: &str)
     };
     let Some(registered) = running(loader)
         .into_iter()
-        .find(|r| loader.mods.get(r.owner.get()).is_some_and(|m| m.owns(id)))
+        .find(|r| loader.mods.get(r.owner.get()).is_some_and(|m| m.id == id))
     else {
         return;
     };

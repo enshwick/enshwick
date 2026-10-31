@@ -161,13 +161,8 @@ pub(crate) extern "system" fn define_event(
         if out.is_null() {
             return Status::BAD_ARGS;
         }
-        let defined = crate::services::registry().define(
-            index,
-            &record.names(),
-            name,
-            fields,
-            spec.layout.size,
-        );
+        let defined =
+            crate::services::registry().define(index, &record.id, name, fields, spec.layout.size);
         match defined {
             // SAFETY: `HostApi::define_event` has the mod pass `out` null or
             // pointing at a writable, aligned `u32` that no other thread
@@ -310,7 +305,7 @@ pub(crate) extern "system" fn define_point(
         if room.is_none_or(|room| (room as usize) < size_of::<api_frame::PointHandle>()) {
             return Status::BAD_ARGS;
         }
-        let defined = crate::points::registry().define(index, &record.names(), declared);
+        let defined = crate::points::registry().define(index, &record.id, declared);
         match defined {
             // SAFETY: `HostApi::define_point` has the mod pass `out` null or
             // pointing at its version of `PointHandle`, writable for the size
@@ -423,7 +418,7 @@ pub(crate) extern "system" fn declare_content(
         let Some(id) = text(id) else {
             return Status::BAD_ARGS;
         };
-        match crate::ids::declare_content(&record.names(), id) {
+        match crate::ids::declare_content(&record.id, id) {
             // SAFETY: `HostApi::declare_content` has the mod pass `out` null or
             // pointing at a writable, aligned `[u8; 16]` that no other thread
             // touches during the call.

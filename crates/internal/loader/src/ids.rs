@@ -83,17 +83,14 @@ pub(crate) fn with<R>(f: impl FnOnce(&mut Ids) -> R) -> R {
     f(ids.get_or_insert_with(Ids::default))
 }
 
-/// Declares content id `name` for the mod named `names`, its id first and
-/// then its former ids, and returns its GUID: refused for a malformed id,
-/// one outside the mod's namespaces, or one whose game id another content id
-/// has. A renamed mod keeps its content under a former id, so the GUIDs
-/// saved worlds hold stay.
-pub(crate) fn declare_content(names: &[&str], name: &str) -> Result<Guid, String> {
-    let owner = names.first().copied().unwrap_or_default();
+/// Declares content id `name` for the mod `owner` and returns its GUID:
+/// refused for a malformed id, one outside the mod's namespace, or one whose
+/// game id another content id has.
+pub(crate) fn declare_content(owner: &str, name: &str) -> Result<Guid, String> {
     let guid = Guid::try_named(name).ok_or_else(|| format!("content id {name:?} is malformed"))?;
     if name
         .split_once(':')
-        .is_none_or(|(namespace, _)| !names.contains(&namespace))
+        .is_none_or(|(namespace, _)| namespace != owner)
     {
         return Err(format!(
             "content id {name} lies outside the mod's namespace {owner}:"
@@ -136,11 +133,10 @@ mod tests {
     #[test]
     fn content_stays_in_its_mod_s_namespace() {
         assert_eq!(
-            declare_content(&["ids-test"], "ids-test:lamp").ok(),
+            declare_content("ids-test", "ids-test:lamp").ok(),
             Some(Guid::named("ids-test:lamp"))
         );
-        assert!(declare_content(&["ids-test"], "other:lamp").is_err());
-        assert!(declare_content(&["ids-test"], "lamp").is_err());
-        assert!(declare_content(&["me.ids-test", "ids-test"], "ids-test:chair").is_ok());
+        assert!(declare_content("ids-test", "other:lamp").is_err());
+        assert!(declare_content("ids-test", "lamp").is_err());
     }
 }

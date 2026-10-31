@@ -30,12 +30,11 @@ pub fn spans_overlap(a: (usize, usize), b: (usize, usize)) -> bool {
     a.0 < b.0.saturating_add(b.1) && b.0 < a.0.saturating_add(a.1)
 }
 
-/// Whether a point's name is `<id>:<point>` under one of the defining mod's
-/// `ids`: its id and the ids it had before a rename.
+/// Whether a point's name is `<id>:<point>` under the defining mod's `id`.
 #[must_use]
-pub fn is_named_after(name: &str, ids: &[&str]) -> bool {
+pub fn is_named_after(name: &str, id: &str) -> bool {
     name.split_once(':')
-        .is_some_and(|(id, what)| ids.contains(&id) && !what.is_empty())
+        .is_some_and(|(owner, what)| owner == id && !what.is_empty())
 }
 
 /// Whether a mod may declare the rate `rate`: one clients count too needs a
@@ -85,13 +84,11 @@ mod tests {
     }
 
     #[test]
-    fn a_name_is_under_one_of_its_mods_ids() {
-        let ids = ["you.mod", "you.old"];
-        assert!(is_named_after("you.mod:limit", &ids));
-        assert!(is_named_after("you.old:limit", &ids));
-        assert!(!is_named_after("you.mod:", &ids));
-        assert!(!is_named_after("other.mod:limit", &ids));
-        assert!(!is_named_after("limit", &ids));
+    fn a_name_is_under_its_mod_s_id() {
+        assert!(is_named_after("you.mod:limit", "you.mod"));
+        assert!(!is_named_after("you.mod:", "you.mod"));
+        assert!(!is_named_after("other.mod:limit", "you.mod"));
+        assert!(!is_named_after("limit", "you.mod"));
     }
 
     #[test]

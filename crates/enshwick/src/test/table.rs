@@ -324,8 +324,8 @@ pub(crate) enum Registration {
 /// What the fake reads from the mod's manifest, as the loader does.
 #[derive(Debug)]
 pub(crate) struct ManifestFacts {
-    /// The mod's id, then the ids it had before a rename.
-    pub(crate) ids: Vec<String>,
+    /// The mod's id.
+    pub(crate) id: String,
     /// Whether the mod takes part in the join check.
     pub(crate) joins: bool,
 }
@@ -333,28 +333,10 @@ pub(crate) struct ManifestFacts {
 impl ManifestFacts {
     /// The facts of `manifest`.
     fn of(manifest: &crate::abi::Manifest) -> Self {
-        let dependencies = if manifest.dependencies.is_null() {
-            &[][..]
-        } else {
-            // SAFETY: `manifest!` builds `dependencies` as a static array of
-            // `dependency_count` entries, which a non-null pointer points at.
-            unsafe { core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count) }
-        };
-        let id = text(manifest.id);
-        let former = dependencies
-            .iter()
-            .filter(|d| d.relation == crate::abi::Relation::WAS)
-            .map(|d| text(d.id))
-            .filter(|former| *former != id);
         Self {
-            ids: core::iter::once(id.clone()).chain(former).collect(),
+            id: text(manifest.id),
             joins: manifest.flags.contains(crate::abi::ManifestFlags::JOIN),
         }
-    }
-
-    /// The ids as borrowed names.
-    pub(crate) fn names(&self) -> Vec<&str> {
-        self.ids.iter().map(String::as_str).collect()
     }
 }
 

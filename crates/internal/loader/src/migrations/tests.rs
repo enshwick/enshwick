@@ -468,21 +468,6 @@ fn a_new_world_takes_the_other_mod_s_world_values() {
 }
 
 #[test]
-fn taking_over_a_former_id_counts_its_migrations() {
-    let mut record = Record::default();
-    record.ran(None, "old").push("2".into());
-    record
-        .ran(Some("w-1"), "old")
-        .extend(["2".into(), "3".into()]);
-    record.ran(Some("w-1"), "new").push("3".into());
-    record.take_over("new", "old");
-    record.take_over("new", "old");
-    assert_eq!(record.settings["new"], ["2"]);
-    assert_eq!(record.worlds["w-1"]["new"], ["3", "2"]);
-    assert_eq!(record.carried["new"], ["old"]);
-}
-
-#[test]
 fn an_entry_set_to_nothing_leaves_the_record() {
     let mut record = Record::default();
     assert!(!record.set_entry(Some("w1"), "a", Some(Vec::new())));

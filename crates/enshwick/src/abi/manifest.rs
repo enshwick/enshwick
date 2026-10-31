@@ -206,11 +206,6 @@ impl Relation {
     /// (any version; the range stays empty): while this one is present, the
     /// loader never starts the other and names its DLL to delete.
     pub const REPLACES: Self = Self(4);
-    /// The other id is one this mod had before a rename: it replaces that
-    /// mod as [`REPLACES`](Self::REPLACES) does, a requirement or a point
-    /// named by the old id finds this mod, and on the first start the loader
-    /// copies the old id's settings and data to this one.
-    pub const WAS: Self = Self(5);
 }
 
 /// A relation to another mod, by id and SemVer range.

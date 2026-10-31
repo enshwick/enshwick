@@ -87,25 +87,23 @@ pub(crate) struct Offer {
 }
 
 impl Registry {
-    /// Serves a call named after its server, whose names are its id and then
-    /// its former ids.
+    /// Serves a call named after its server, the mod `owner_id`.
     ///
     /// # Errors
     ///
-    /// Why it is refused: a name outside the server's names, or a name and
-    /// major served twice.
+    /// Why it is refused: a name outside the server's namespace, or a name
+    /// and major served twice.
     pub(crate) fn serve(
         &mut self,
         owner: ModIndex,
-        names: &[&str],
+        owner_id: &str,
         declared: Declared,
         callback: CallFn,
         user: usize,
     ) -> Result<(), String> {
         let name = &declared.name;
-        if !enshwick::__private::rules::is_named_after(name, names) {
-            let id = names.first().copied().unwrap_or_default();
-            return Err(format!("call {name}: a call is named `{id}:<call>`"));
+        if !enshwick::__private::rules::is_named_after(name, owner_id) {
+            return Err(format!("call {name}: a call is named `{owner_id}:<call>`"));
         }
         if self
             .served
@@ -441,13 +439,13 @@ mod tests {
     fn a_call_is_served_once_and_named_after_its_server() {
         let mut registry = Registry::default();
         let me = ModIndex::new(0);
-        let names = ["you.trading-post"];
-        assert!(registry.serve(me, &names, price(1), answer, 0).is_ok());
-        let twice = registry.serve(me, &names, price(1), answer, 0).unwrap_err();
+        let id = "you.trading-post";
+        assert!(registry.serve(me, id, price(1), answer, 0).is_ok());
+        let twice = registry.serve(me, id, price(1), answer, 0).unwrap_err();
         assert!(twice.contains("served twice"), "{twice}");
-        assert!(registry.serve(me, &names, price(2), answer, 0).is_ok());
+        assert!(registry.serve(me, id, price(2), answer, 0).is_ok());
         let other = declared("you.haggling:price-of", 1, &[], 0);
-        let outside = registry.serve(me, &names, other, answer, 0).unwrap_err();
+        let outside = registry.serve(me, id, other, answer, 0).unwrap_err();
         assert!(
             outside.contains("named `you.trading-post:<call>`"),
             "{outside}"
@@ -471,8 +469,8 @@ mod tests {
         let mut registry = Registry::default();
         let server = ModIndex::new(0);
         let caller = ModIndex::new(1);
-        let names = ["you.trading-post"];
-        registry.serve(server, &names, price(2), answer, 0).unwrap();
+        let id = "you.trading-post";
+        registry.serve(server, id, price(2), answer, 0).unwrap();
         let wanted = [
             price(2),
             price(1),
@@ -521,7 +519,7 @@ mod tests {
         registry
             .serve(
                 ModIndex::new(2),
-                &["you.off"],
+                "you.off",
                 declared("you.off:rent", 1, &[], 0),
                 answer,
                 0,

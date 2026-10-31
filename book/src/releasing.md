@@ -143,8 +143,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 `join_missing()` is empty before a refused join. See [The join check](concepts/join-check.md) for the check
 itself.
 
-`mods::replaced()` lists the mods in `mods/` that a present mod replaces after
-a rename or a fold (`was:` or `replaces:` in the [manifest](concepts/loader-and-abi.md#the-manifest)),
+`mods::replaced()` lists the mods in `mods/` that a present mod replaces
+(`replaces:` in the [manifest](concepts/loader-and-abi.md#the-manifest)),
 which the loader never started, each with `replaced_by` and its `file`.
 
 ## Where to publish

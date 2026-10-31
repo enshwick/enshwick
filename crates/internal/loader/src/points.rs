@@ -127,29 +127,26 @@ pub(crate) struct Inert {
 
 /// The mods the seal asks about.
 pub(crate) trait Mods: Names {
-    /// The index of the running or off mod `id`, or of the mod that had
-    /// `id` before a rename.
+    /// The index of the running or off mod `id`.
     fn find(&self, id: &str) -> Option<usize>;
 }
 
 impl Registry {
-    /// Defines a point named after its definer, whose names are its id and
-    /// then its former ids, and returns its id and the count of its live
-    /// links.
+    /// Defines a point named after its definer, the mod `owner_id`, and
+    /// returns its id and the count of its live links.
     ///
     /// # Errors
     ///
-    /// Why it is refused: a name outside the definer's names, or defined
+    /// Why it is refused: a name outside the definer's namespace, or defined
     /// twice.
     pub(crate) fn define(
         &mut self,
         owner: ModIndex,
-        names: &[&str],
+        owner_id: &str,
         declared: Declared,
     ) -> Result<(u32, &'static AtomicU32), String> {
         let name = &declared.name;
-        if !enshwick::__private::rules::is_named_after(name, names) {
-            let owner_id = names.first().copied().unwrap_or_default();
+        if !enshwick::__private::rules::is_named_after(name, owner_id) {
             return Err(format!(
                 "point {name}: a point is named `{owner_id}:<point>`"
             ));

@@ -56,7 +56,7 @@ pub(crate) extern "system" fn serve_call(
         };
         let served = crate::calls::registry().serve(
             index,
-            &record.names(),
+            &record.id,
             declared,
             callback,
             user.expose_provenance(),

@@ -105,17 +105,17 @@ fn ask(point: &Sealed, value: u32) -> (PointVerdict, u32) {
 
 fn defined(registry: &mut Registry) -> &'static AtomicU32 {
     registry
-        .define(ModIndex::new(0), &["you.trading-post"], access())
+        .define(ModIndex::new(0), "you.trading-post", access())
         .unwrap()
         .1
 }
 
-/// A mod renamed from `you.trading-post`, and a mod that links it by that id.
-struct Renamed;
+/// A mod that defines points, and a mod that links them.
+struct Traders;
 
-impl Names for Renamed {
+impl Names for Traders {
     fn name(&self, index: usize) -> (&str, &str) {
-        [("me.trading-post", "0.4.0"), ("you.haggling", "0.1.0")]
+        [("you.trading-post", "0.4.0"), ("you.haggling", "0.1.0")]
             .get(index)
             .copied()
             .unwrap_or(("?", "?"))
@@ -125,30 +125,14 @@ impl Names for Renamed {
     }
 }
 
-impl Mods for Renamed {
+impl Mods for Traders {
     fn find(&self, id: &str) -> Option<usize> {
         match id {
-            "me.trading-post" | "you.trading-post" => Some(0),
+            "you.trading-post" => Some(0),
             "you.haggling" => Some(1),
             _ => None,
         }
     }
-}
-
-#[test]
-fn a_link_named_by_a_former_id_finds_the_renamed_owner() {
-    let mut registry = Registry::default();
-    let declared = Declared {
-        name: "me.trading-post:price".to_owned(),
-        ..access()
-    };
-    registry
-        .define(ModIndex::new(0), &["me.trading-post"], declared)
-        .unwrap();
-    registry.attach(link(ModIndex::new(1), set(7))).unwrap();
-    let (points, inert, _) = registry.seal(&Renamed, |_, _| false);
-    assert!(inert.is_empty(), "{inert:?}");
-    assert_eq!(points[0].links.len(), 1);
 }
 
 #[test]
@@ -161,12 +145,12 @@ fn a_link_reading_past_the_owner_s_input_or_answer_is_refused() {
     for (input, output) in [(24, 4), (16, 8)] {
         let mut registry = Registry::default();
         registry
-            .define(ModIndex::new(0), &["you.trading-post"], sized(16, 4))
+            .define(ModIndex::new(0), "you.trading-post", sized(16, 4))
             .unwrap();
         let mut wide = link(ModIndex::new(1), set(7));
         wide.declared = sized(input, output);
         registry.attach(wide).unwrap();
-        let (points, inert, _) = registry.seal(&Renamed, |_, _| false);
+        let (points, inert, _) = registry.seal(&Traders, |_, _| false);
         assert!(points[0].links.is_empty(), "{input} {output}");
         assert_eq!(inert.len(), 1);
     }
@@ -177,12 +161,12 @@ fn points_are_named_after_their_owner_once() {
     let mut registry = Registry::default();
     assert!(
         registry
-            .define(ModIndex::new(0), &["you.trading-post"], access())
+            .define(ModIndex::new(0), "you.trading-post", access())
             .is_ok()
     );
     assert!(
         registry
-            .define(ModIndex::new(0), &["you.trading-post"], access())
+            .define(ModIndex::new(0), "you.trading-post", access())
             .is_err(),
         "twice"
     );
@@ -192,7 +176,7 @@ fn points_are_named_after_their_owner_once() {
     };
     assert!(
         registry
-            .define(ModIndex::new(0), &["you.trading-post"], foreign)
+            .define(ModIndex::new(0), "you.trading-post", foreign)
             .is_err()
     );
     let empty = Declared {
@@ -201,7 +185,7 @@ fn points_are_named_after_their_owner_once() {
     };
     assert!(
         registry
-            .define(ModIndex::new(0), &["you.trading-post"], empty)
+            .define(ModIndex::new(0), "you.trading-post", empty)
             .is_err()
     );
     assert!(registry.attach(link(ModIndex::new(1), 0)).is_ok());
@@ -271,7 +255,7 @@ fn a_refusal_where_the_point_allows_none_is_a_pass() {
     };
     assert!(
         registry
-            .define(ModIndex::new(0), &["you.trading-post"], plain.clone())
+            .define(ModIndex::new(0), "you.trading-post", plain.clone())
             .is_ok()
     );
     let mut refuses = link(ModIndex::new(1), PointVerdict::REFUSE.0 as usize);
@@ -294,7 +278,7 @@ fn an_observed_point_keeps_its_answer() {
     };
     assert!(
         registry
-            .define(ModIndex::new(0), &["you.trading-post"], observed.clone())
+            .define(ModIndex::new(0), "you.trading-post", observed.clone())
             .is_ok()
     );
     let mut watcher = link(ModIndex::new(1), PointVerdict::REFUSE.0 as usize);
@@ -430,7 +414,7 @@ fn a_missing_owner_leaves_the_link_inert_without_a_warning() {
     let mut registry = Registry::default();
     assert!(
         registry
-            .define(ModIndex::new(0), &["you.trading-post"], access())
+            .define(ModIndex::new(0), "you.trading-post", access())
             .is_ok()
     );
     assert!(registry.attach(link(ModIndex::new(1), 0)).is_ok());

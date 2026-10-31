@@ -100,10 +100,7 @@ builds:
 | `points`       | The schemas of the extension points the mod defines, as TOML; also in the `.enshpt` section       |
 
 A dependency may also be `REPLACES` (4), a mod this one takes the place of,
-with an empty range, or `WAS` (5), an id
-this mod had before a rename, which replaces that id as well and carries its
-settings and data over. `HostApi::replaced` lists the mods replaced either way,
-with `ModInfo::replaced_by` naming the mod that replaces each.
+with an empty range. `HostApi::replaced` lists the replaced mods, with `ModInfo::replaced_by` naming the mod that replaces each.
 
 The loader skips a mod whose manifest has another major, an invalid id, the
 loader's own id `enshwick`, a version that is not SemVer, an unknown side, or a

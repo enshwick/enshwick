@@ -179,7 +179,7 @@ fn is_part(part: &str) -> bool {
 }
 
 /// The full id of `id` asked for by a mod whose bare names take the
-/// namespace `mod_id` (its first former id after a rename): `name` names the
+/// namespace `mod_id`: `name` names the
 /// mod's own kind, `mod:name` any mod's.
 fn full_id(mod_id: &str, id: &str) -> Option<String> {
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
@@ -212,7 +212,7 @@ fn open_kind(
     sent: bool,
 ) -> Result<u32, Status> {
     let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
-    let full = full_id(record.home(), id).ok_or(Status::BAD_ARGS)?;
+    let full = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
     let index = KINDS.edit(|pending| {
         if let Some(index) = pending.iter().position(|k| k.id == full) {
             let kind = &mut pending[index];

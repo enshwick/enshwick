@@ -213,15 +213,12 @@ fn is_part(part: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
-/// The full id of `id` asked for by the mod named `names` (its id first,
-/// then its former ids), and whether the namespace is the mod's own. A bare
-/// name takes the namespace where the mod's data lives: its first former
-/// id, or else its id.
-fn full_id(names: &[&str], id: &str) -> Option<(String, bool)> {
-    let home = names.get(1).or_else(|| names.first())?;
-    let (namespace, name) = id.split_once(':').unwrap_or((home, id));
+/// The full id of `id` asked for by the mod `mod_id`, and whether the
+/// namespace is the mod's own. A bare name takes the mod's namespace.
+fn full_id(mod_id: &str, id: &str) -> Option<(String, bool)> {
+    let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
     (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
-        .then(|| (format!("{namespace}:{name}"), names.contains(&namespace)))
+        .then(|| (format!("{namespace}:{name}"), namespace == mod_id))
 }
 
 fn index_of(kinds: &mut Vec<Kind>, id: &str) -> usize {
@@ -264,7 +261,7 @@ pub(crate) fn open(
     def: Option<StatDef>,
 ) -> Result<StatRef, Status> {
     let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
-    let (full, own) = full_id(&record.names(), id).ok_or(Status::BAD_ARGS)?;
+    let (full, own) = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
     declare(loader, owner, Space::Stat, &full)?;
     pending(|p| {
         let index = index_of(&mut p.kinds, &full);
@@ -299,7 +296,7 @@ pub(crate) fn open_affix(
     data: &AffixDefData,
 ) -> Result<StatRef, Status> {
     let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
-    let (full, own) = full_id(&record.names(), id).ok_or(Status::BAD_ARGS)?;
+    let (full, own) = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
     if !own {
         return Err(Status::REFUSED);
     }
@@ -570,7 +567,7 @@ pub(crate) fn modify(loader: &Loader, owner: ModIndex, request: &StatModify) -> 
             let stat_id = sealed.kinds[stat as usize].id.to_string();
             state.saved.retain(|s| {
                 !(s.player == player
-                    && record.is_some_and(|m| m.owns(&s.owner))
+                    && record.is_some_and(|m| m.id == s.owner)
                     && s.key == request.key
                     && s.stat == stat_id)
             });
@@ -629,7 +626,7 @@ pub(crate) fn player_joined(loader: &Loader, player: &PlayerData) {
     with_state(|state| {
         let mut restored = Vec::new();
         for saved in state.saved.iter().filter(|s| s.player == player.key.get()) {
-            let owner = loader.mods.iter().position(|m| m.owns(&saved.owner));
+            let owner = loader.mods.iter().position(|m| m.id == saved.owner);
             let stat = sealed.by_key.get(&key_of(&saved.stat).0).copied();
             if let (Some(owner), Some(stat)) = (owner, stat) {
                 restored.push(Held {

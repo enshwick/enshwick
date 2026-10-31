@@ -126,9 +126,6 @@ table. Unlike other steps, it runs on a settings file or a world the mod has
 never seen too, since that is where a folded mod's values arrive. Where the
 other mod has no value, the setting keeps its default.
 
-A mod that only changes its id lists the old id under `was` instead: the
-loader copies the old id's files whole, and no step is needed.
-
 ## Items under their old ids
 
 An item renamed with `rename_content` keeps its old stacks: the game holds

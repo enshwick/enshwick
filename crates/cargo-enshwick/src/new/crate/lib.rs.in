@@ -45,9 +45,6 @@ impl Mod for {type} {
             // beside, each with a version range ("" for any):
             // recommends: ["someone.other-mod" => ">=0.2, <1.0"],
             // breaks: ["someone.old-mod" => "<0.3"],
-            // After a rename, the old ids: their DLLs never start, and
-            // their settings and data carry over on the first start:
-            // was: ["you.old-name"],
         )
     }
 
