@@ -189,12 +189,11 @@ Under Proton, add each moved file's name to the overrides as well, such as
 
 ## Nothing happens under Proton
 
-The game must load Enshwick's `powrprof.dll` instead of the system one. Add
-this to the game's launch options in Steam:
-
-```text
-WINEDLLOVERRIDES="powrprof=n,b" %command%
-```
+The game must load Enshwick's `powrprof.dll` instead of the system one, with
+an override in the game's launch options:
+[Install Enshwick](https://enshwick.com/guides/install/) shows it, and
+[Run a server on Linux](https://enshwick.com/guides/run-a-linux-server/) does
+for a dedicated server.
 
 ## The join was refused
 
@@ -228,12 +227,5 @@ Only mods with `join: true` count; see [The join check](concepts/join-check.md).
 
 ## How do I remove a mod or Enshwick?
 
-- **A mod:** delete its DLL from `mods/`. Its settings
-  (`mod-configs/<id>.toml`) and data (`mod-data/<id>/`) stay; delete them too
-  for a clean removal. If the mod set a hold, the game stops until you delete
-  `mod-data/<id>/hold.txt` as well.
-- **An update:** an update moved into place keeps the file it replaced as
-  `<file>.previous`. Rename it back to roll back once.
-- **Enshwick:** delete `powrprof.dll` from the game's folder. Without it
-  nothing loads and the game runs vanilla; `mods/`, `mod-configs/`,
-  `mod-data/` and `logs/` can then be deleted.
+[Remove a mod or Enshwick](https://enshwick.com/guides/uninstall/) has the
+steps, holds included.

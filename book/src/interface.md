@@ -239,7 +239,7 @@ working.
 
 A player who joins a server reads up to three things in chat, in this order:
 the developer tools warning, the server's
-[message of the day](servers.md#greet-players), and one line that names the
+[message of the day](https://enshwick.com/guides/run-a-server-in-docker/#greet-players-when-they-join), and one line that names the
 mods, features and parts of the loader that are off. The reasons are in the
 server's log and status summary.
 

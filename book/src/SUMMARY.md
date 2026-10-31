@@ -82,7 +82,6 @@
 
 - [Testing](testing.md)
 - [Releasing mods](releasing.md)
-- [Running a server in Docker or Kubernetes](servers.md)
 
 # Reference
 
