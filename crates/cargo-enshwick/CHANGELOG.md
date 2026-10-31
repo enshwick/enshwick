@@ -19,8 +19,8 @@ Each entry names the pull request that made the change.
 - The `body` pick of `pin --patterns` writes a short window that finds the
   function and a hash of its whole code, never the code itself; a window
   over more than half of the function asks for `body:<rva>` (#710).
-- `cargo enshwick new` writes the crate the mod template makes, with its
-  toolchain file, build flags, lints, texts and tests. Mod names are in
+- `cargo enshwick new` writes a crate with a toolchain file, build flags,
+  lints, texts and tests. Mod names are in
   title case (#696).
 
 ### Fixed
