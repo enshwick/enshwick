@@ -4,15 +4,15 @@
 mod tests {
     use std::sync::Mutex;
 
+    use enshwick::__private::ids;
     use enshwick::Entity;
     use enshwick::ItemId;
     use enshwick::abi::Status;
+    use enshwick::content::EngineFacts;
     use enshwick::voxels::{Voxel, VoxelMaterial, VoxelPos};
     use enshwick::world::{CAPTURE_TILES, Capture, CapturedProp, Prop, World, WorldTransform};
     use enshwick::{Load, Mod, Off, WorldError};
 
-    const TRANSFORM: u32 = 1;
-    const USED_ITEM: u32 = 2;
     const BED: u32 = 3;
     const ANIMAL: u32 = 4;
     const SURVIVOR: u32 = 5;
@@ -83,16 +83,18 @@ mod tests {
             .flat_map(|axis| axis.to_le_bytes())
             .collect();
         transform.extend(orientation.iter().flat_map(|part| part.to_le_bytes()));
-        fake.placed(USED_ITEM, Entity(entity), position)
-            .placed(TRANSFORM, Entity(entity), position)
-            .component(Entity(entity), USED_ITEM, &item.to_le_bytes())
-            .component(Entity(entity), TRANSFORM, &transform)
+        let world = enshwick::test::FakeHost::new().world();
+        let used_item = world.hash(ids::USED_ITEM).unwrap();
+        let current = world.hash(ids::CURRENT_TRANSFORM).unwrap();
+        fake.placed(used_item, Entity(entity), position)
+            .placed(current, Entity(entity), position)
+            .component(Entity(entity), used_item, &item.to_le_bytes())
+            .component(Entity(entity), current, &transform)
     }
 
     fn fake() -> enshwick::test::FakeHost {
         enshwick::test::FakeHost::new()
-            .type_hash("current_transform", TRANSFORM)
-            .type_hash("used_item", USED_ITEM)
+            .world()
             .type_hash("animal_saved", ANIMAL)
             .type_hash("active_npc_state_saved", SURVIVOR)
             .type_hash("base_id_component", ALTAR)
@@ -172,8 +174,7 @@ mod tests {
     #[test]
     fn props_are_missing_on_a_build_without_the_creature_marks() {
         let fake = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", TRANSFORM)
-            .type_hash("used_item", USED_ITEM)
+            .world()
             .constant("current_transform.transform", 0)
             .constant("world_transform.orientation", 24)
             .constant("item_info.placed_entity", 0x3c0);
@@ -196,9 +197,7 @@ mod tests {
 
     #[test]
     fn props_are_missing_on_a_build_without_the_orientation() {
-        let fake = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", TRANSFORM)
-            .type_hash("used_item", USED_ITEM);
+        let fake = enshwick::test::FakeHost::new().world();
         let (_loader, world) = start(prop(fake, 10, 1, [1.0; 3], STILL));
 
         assert_eq!(world.props_in([0.0; 3], [2.0; 3]), Err(WorldError::Missing));
@@ -207,8 +206,7 @@ mod tests {
     #[test]
     fn props_are_missing_on_a_build_without_the_placed_template() {
         let fake = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", TRANSFORM)
-            .type_hash("used_item", USED_ITEM)
+            .world()
             .constant("current_transform.transform", 0)
             .constant("world_transform.orientation", 24);
         let (_loader, world) = start(prop(fake, 10, 1, [1.0; 3], STILL));

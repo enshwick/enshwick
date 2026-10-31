@@ -42,10 +42,7 @@ mod tests {
     }
 
     fn started() -> (enshwick::test::Installed, World) {
-        let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
-            .install();
+        let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Builder)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
@@ -229,8 +226,7 @@ mod tests {
     #[test]
     fn an_edit_past_the_world_s_edge_is_outside_the_world() {
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
+            .world()
             .world_extent([200, 200, 200])
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Builder)`.

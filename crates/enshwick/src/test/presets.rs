@@ -211,6 +211,25 @@ impl FakeHost {
         )
     }
 
+    /// The world's own component types: what [`World`](crate::world::World)
+    /// needs before it resolves, the current transform and the used item.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().world();
+    /// let transform = host.hash(enshwick::__private::ids::CURRENT_TRANSFORM)?;
+    /// let loader = host.placed(transform, enshwick::Entity(2), [0.0; 3]).install();
+    /// # let _ = loader;
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn world(self) -> Self {
+        self.preset(&[ids::CURRENT_TRANSFORM, ids::USED_ITEM], &[], &[])
+    }
+
     /// Sets a hash for each of `types`, then `sizes` and `offsets`.
     fn preset(mut self, types: &[&str], sizes: &[(&str, u32)], offsets: &[(&str, u64)]) -> Self {
         for &id in types {

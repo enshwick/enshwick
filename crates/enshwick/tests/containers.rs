@@ -2,13 +2,14 @@
 
 #[cfg(test)]
 mod tests {
+    use enshwick::__private::ids;
     use enshwick::abi::Status;
+    use enshwick::content::EngineFacts;
     use enshwick::test::FakeHost;
     use enshwick::world::{ContainerKinds, World};
     use enshwick::{Load, Mod, Off};
 
     const SETUP: u32 = 7;
-    const USED_ITEM: u32 = 2;
     const PLAYER: u32 = 8;
     const DROP: u32 = 9;
     const ANIMAL: u32 = 10;
@@ -47,9 +48,7 @@ mod tests {
     );
 
     fn world() -> FakeHost {
-        FakeHost::new()
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", USED_ITEM)
+        FakeHost::new().world()
     }
 
     /// One holder of each kind, with the markers several kinds share: a
@@ -63,14 +62,15 @@ mod tests {
             .iter()
             .filter(|(id, _)| *id != missing)
             .fold(world(), |host, &(id, hash)| host.type_hash(id, hash));
+        let used_item = host.hash(ids::USED_ITEM).unwrap();
         [
-            (10, &[USED_ITEM, LOOT_FILL][..]),
+            (10, &[used_item, LOOT_FILL][..]),
             (11, &[PLAYER]),
             (12, &[DROP, LOOT_FILL]),
             (13, &[]),
-            (14, &[ANIMAL, USED_ITEM]),
+            (14, &[ANIMAL, used_item]),
             (15, &[LOOT_FILL]),
-            (16, &[NPC, USED_ITEM]),
+            (16, &[NPC, used_item]),
             (17, &[RESOURCE]),
         ]
         .into_iter()

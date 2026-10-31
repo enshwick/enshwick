@@ -169,6 +169,7 @@ let item_hash = host.hash(types::ITEM_INFO.id())?;
 | `workshops()`     | `WorkshopLayout` beside `items()`: workshops, templates, crafting components. |
 | `crafting_menu()` | `MenuLayout`, with the UI bundle type.                                       |
 | `ui_images()`     | `ImageLayout`, with the UI image type.                                       |
+| `world()`         | The component types `World` needs: the current transform and the used item. |
 
 A test may still set one fact by hand where it tests that fact, such as a
 build without one layout.
