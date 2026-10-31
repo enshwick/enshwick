@@ -21,6 +21,7 @@
 
 mod affected;
 mod book;
+mod book_links;
 #[cfg(feature = "compat")]
 mod compat;
 mod crate_rules;
@@ -100,20 +101,7 @@ fn run(args: &[String]) -> Result<bool, String> {
     };
     let packages = packages()?;
     let root = workspace_root();
-    let mut problems: Vec<String> = ranges::check(&root, &packages)
-        .into_iter()
-        .map(|problem| format!("manifest range: {problem}"))
-        .collect();
-    problems.extend(
-        book::check(&root)
-            .into_iter()
-            .map(|problem| format!("book: {problem}")),
-    );
-    problems.extend(
-        crate_rules::check()?
-            .into_iter()
-            .map(|problem| format!("crate rule: {problem}")),
-    );
+    let problems = tree_problems(&root, &packages)?;
     if parts.contains(&Part::Host) && !list {
         for problem in &problems {
             say(problem);
@@ -164,6 +152,37 @@ fn run(args: &[String]) -> Result<bool, String> {
         return Ok(true);
     }
     Ok(wine::run(&windows_tests, windows))
+}
+
+/// The problems the checks that compile nothing find in the tree: manifest
+/// ranges, the book and its links, and the crate rules.
+fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<String>, String> {
+    let mut problems: Vec<String> = ranges::check(root, packages)
+        .into_iter()
+        .map(|problem| format!("manifest range: {problem}"))
+        .collect();
+    problems.extend(
+        book::check(root)
+            .into_iter()
+            .map(|problem| format!("book: {problem}")),
+    );
+    let mods = book_links::mods_clone(root).map_err(|why| format!("book links: {why}"))?;
+    let links = book_links::check(root, mods.as_deref());
+    if let Some(note) = &links.skipped {
+        say(note);
+    }
+    problems.extend(
+        links
+            .problems
+            .into_iter()
+            .map(|problem| format!("book link: {problem}")),
+    );
+    problems.extend(
+        crate_rules::check()?
+            .into_iter()
+            .map(|problem| format!("crate rule: {problem}")),
+    );
+    Ok(problems)
 }
 
 /// The workspace root, two levels above this crate.

@@ -156,7 +156,7 @@ fn is_markdown(path: &str) -> bool {
 
 /// Every `.md` file under `dir` but `SUMMARY.md`, as `prefix` plus its
 /// `/`-separated path.
-fn collect(dir: &Path, prefix: &str, into: &mut Vec<String>) -> std::io::Result<()> {
+pub(crate) fn collect(dir: &Path, prefix: &str, into: &mut Vec<String>) -> std::io::Result<()> {
     let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
     entries.sort_by_key(std::fs::DirEntry::file_name);
     for entry in entries {
