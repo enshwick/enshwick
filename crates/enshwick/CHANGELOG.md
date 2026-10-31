@@ -105,6 +105,14 @@ Each entry names the pull request that made the change.
 - `WorldStore` writes a value again at the next save when its background
   write failed, instead of dropping the change (#667).
 
+### Removed
+
+- **Breaking:** `was: [...]` in `manifest!` and `Relation::WAS` are gone. A
+  mod keeps one id: the loader no longer copies a former id's settings and
+  data, no longer finds a mod, its requirements, points, calls, events,
+  content or stats by a former id, and `migrations.toml` no longer keeps a
+  `[carried]` table. `replaces: [...]` still takes ids of the old form (#756).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Added
