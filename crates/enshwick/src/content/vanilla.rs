@@ -973,7 +973,7 @@ pub(crate) mod tests {
     }
 
     /// The archive of [`game`], by key.
-    fn game_data(named: &[(Guid, &str)]) -> std::collections::HashMap<ResourceKey, Vec<u8>> {
+    fn game_data(named: &[(Guid, &str)]) -> rustc_hash::FxHashMap<ResourceKey, Vec<u8>> {
         use super::super::workshops::tests::{CLIENT, CRAFTING, INTERACTION, station};
 
         let (forge, survivor, prop) = (Guid([5; 16]), Guid([6; 16]), Guid([7; 16]));
@@ -996,7 +996,7 @@ pub(crate) mod tests {
         };
         let (crafting, _) = station(&[(CRAFTING, 20), (INTERACTION, 32), (CLIENT, 16)]);
         let (other, _) = station(&[(0x1234_5678, 24)]);
-        let mut data = std::collections::HashMap::new();
+        let mut data = rustc_hash::FxHashMap::default();
         data.insert(
             ITEM_REGISTRY.key_by_hash(HASHES.item_registry),
             registry(named),

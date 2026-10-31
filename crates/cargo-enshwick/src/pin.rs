@@ -23,12 +23,12 @@ mod signature;
 mod staged;
 mod table;
 
-use std::collections::HashMap;
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use enshwick_gamedata::reflect::Fingerprint;
+use rustc_hash::FxHashMap;
 
 use self::exe::Exe;
 use self::rows::{Row, guid_hex};
@@ -312,7 +312,11 @@ fn patterns_only(args: &Args, exe_path: &Path) -> anyhow::Result<bool> {
 
 /// The anchors `--from` and `--from-file` pick for the entries of `row`, in
 /// `exe`.
-fn picks(args: &Args, row: &Row, exe: &Exe<'_>) -> anyhow::Result<HashMap<String, anchor::Anchor>> {
+fn picks(
+    args: &Args,
+    row: &Row,
+    exe: &Exe<'_>,
+) -> anyhow::Result<FxHashMap<String, anchor::Anchor>> {
     let mut lines: Vec<String> = args.from.clone();
     if let Some(path) = &args.from_file {
         let text = fs::read_to_string(path).with_context(|| path.display().to_string())?;
@@ -322,7 +326,7 @@ fn picks(args: &Args, row: &Row, exe: &Exe<'_>) -> anyhow::Result<HashMap<String
                 .filter(|l| !l.is_empty()),
         );
     }
-    let mut out = HashMap::new();
+    let mut out = FxHashMap::default();
     for line in lines {
         let (id, pick) = line
             .split_once('=')
@@ -695,9 +699,15 @@ mod tests {
                     game_version: None,
                     new_build: false,
                 };
-                let (text, _) =
-                    table::render(src, row, &identity, &result.edits, None, &HashMap::new())
-                        .unwrap();
+                let (text, _) = table::render(
+                    src,
+                    row,
+                    &identity,
+                    &result.edits,
+                    None,
+                    &FxHashMap::default(),
+                )
+                .unwrap();
                 assert_eq!(&text, src, "the same build renders the same table");
                 continue;
             }

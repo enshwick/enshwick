@@ -312,7 +312,7 @@ mod tests {
             Some(""),
             "an empty text is still the slot's text"
         );
-        let ids: std::collections::HashSet<u32> = TAGS
+        let ids: rustc_hash::FxHashSet<u32> = TAGS
             .iter()
             .map(|t| enshwick_gamedata::reflect::fnv1a32(t))
             .collect();

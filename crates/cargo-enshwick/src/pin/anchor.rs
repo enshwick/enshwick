@@ -6,10 +6,9 @@
 //! finds it again, and when the table is ported, the instruction is ported
 //! like any address and read on the new build.
 
-use std::collections::HashMap;
-
 use anyhow::{Context as _, bail};
 use enshwick_gamedata::{Locate, Table};
+use rustc_hash::FxHashMap;
 
 use super::exe::Exe;
 use super::patterns::{self, Carrier};
@@ -140,9 +139,9 @@ pub(crate) fn of_table(
     table: &Table,
     exe: &Exe<'_>,
     symbol_at: impl Fn(&str) -> Option<u64>,
-) -> HashMap<String, Anchor> {
+) -> FxHashMap<String, Anchor> {
     let (code, code_rva) = exe.text();
-    let mut out = HashMap::new();
+    let mut out = FxHashMap::default();
     for constant in table.constants() {
         let (Some(pattern), Some(operand)) = (constant.pattern(), constant.operand()) else {
             continue;

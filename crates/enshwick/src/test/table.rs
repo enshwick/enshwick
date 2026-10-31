@@ -180,7 +180,7 @@ pub(crate) struct State {
     /// The buff types the fake knows.
     pub(crate) buff_types: Vec<BuffTypeInfo>,
     /// The buffs of each entity that holds buffs.
-    pub(crate) buffs: std::collections::HashMap<u32, Vec<ActiveBuff>>,
+    pub(crate) buffs: rustc_hash::FxHashMap<u32, Vec<ActiveBuff>>,
     /// Knowledge values by `(character or 0, id)`.
     pub(crate) knowledge: Vec<(Option<crate::Entity>, KnowledgeInfo)>,
     /// The grants the mod asked for: character, id, kind, value.
@@ -360,7 +360,7 @@ impl ManifestFacts {
     pub(crate) fn unexported(
         &self,
         name: &str,
-        exports: &std::collections::HashMap<String, Vec<String>>,
+        exports: &rustc_hash::FxHashMap<String, Vec<String>>,
     ) -> bool {
         name.split_once(':').is_some_and(|(owner, what)| {
             owner != self.id
@@ -376,7 +376,7 @@ impl ManifestFacts {
     pub(crate) fn unexported_content(
         &self,
         name: &str,
-        exports: &std::collections::HashMap<String, Vec<String>>,
+        exports: &rustc_hash::FxHashMap<String, Vec<String>>,
     ) -> bool {
         name.split_once(':').is_some_and(|(owner, what)| {
             owner != self.id
@@ -555,7 +555,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         damage_filters: Vec::new(),
         knowledge_input_filters: Vec::new(),
         buff_types: Vec::new(),
-        buffs: std::collections::HashMap::new(),
+        buffs: rustc_hash::FxHashMap::default(),
         knowledge: Vec::new(),
         grants: Vec::new(),
         revokes: Vec::new(),

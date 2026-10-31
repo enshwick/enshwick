@@ -13,7 +13,7 @@ use crate::pinned;
 pub(super) static PENDING_TEXTS: Mutex<Vec<(u32, u32, String)>> = Mutex::new(Vec::new());
 
 /// Mod texts once sealed: tag id to `(language, text)`, read without a lock.
-pub(super) static TEXTS: OnceLock<std::collections::HashMap<u32, Vec<(u32, &'static str)>>> =
+pub(super) static TEXTS: OnceLock<rustc_hash::FxHashMap<u32, Vec<(u32, &'static str)>>> =
     OnceLock::new();
 
 // SAFETY: `TextFn` is the signature of the build table's `text.lookup`, and
@@ -173,8 +173,8 @@ pub(super) unsafe extern "system" fn lookup_english(
 pub(super) fn seal_texts(loader: &'static Loader) {
     let pending = std::mem::take(&mut *PENDING_TEXTS.relock());
     let count = pending.len();
-    let mut texts: std::collections::HashMap<u32, Vec<(u32, &'static str)>> =
-        std::collections::HashMap::new();
+    let mut texts: rustc_hash::FxHashMap<u32, Vec<(u32, &'static str)>> =
+        rustc_hash::FxHashMap::default();
     for (id, language, text) in pending {
         let text: &'static str = Box::leak(text.into_boxed_str());
         texts.entry(id).or_default().push((language, text));

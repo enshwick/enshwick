@@ -341,7 +341,7 @@ fn change_station(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use rustc_hash::FxHashMap;
 
     use super::*;
     use crate::content::changes::Value;
@@ -368,7 +368,7 @@ mod tests {
     const RESIN: Guid = Guid([3; 16]);
     const STONE: Guid = Guid([4; 16]);
 
-    struct Table(HashMap<(Field, Option<Guid>), Vec<Value>>);
+    struct Table(FxHashMap<(Field, Option<Guid>), Vec<Value>>);
 
     impl RecipeChanges for Table {
         fn of(&self, recipe: Guid) -> Vec<(Field, Option<Guid>)> {
@@ -412,7 +412,7 @@ mod tests {
     }
 
     fn apply(changes: &[((Field, Option<Guid>), Value)]) -> (Blob, usize) {
-        let mut table: HashMap<_, Vec<Value>> = HashMap::new();
+        let mut table: FxHashMap<_, Vec<Value>> = FxHashMap::default();
         for (key, value) in changes {
             table.entry(*key).or_default().push(*value);
         }
@@ -464,7 +464,7 @@ mod tests {
         assert!(blob.set_array(8, at, 2));
         let registry = blob.into_bytes();
         let moved = |to: u32| {
-            let mut table: HashMap<_, Vec<Value>> = HashMap::new();
+            let mut table: FxHashMap<_, Vec<Value>> = FxHashMap::default();
             table.insert((Field::Station, None), vec![Value::Set(f64::from(to))]);
             let (bytes, edited) =
                 change_recipes_in(&LAYOUT, Some(DURATION), &registry, &Table(table)).unwrap();
@@ -525,7 +525,7 @@ mod tests {
         kind[24 + 20..24 + 24].copy_from_slice(&7u32.to_le_bytes());
         assert!(blob.write(at + 48, &kind));
         let bytes = blob.into_bytes();
-        let changes = Table(HashMap::from([
+        let changes = Table(FxHashMap::from_iter([
             ((Field::Cost, None), vec![Value::Times(2.0)]),
             ((Field::Ingredient, Some(STONE)), vec![Value::Set(1.0)]),
         ]));

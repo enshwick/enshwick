@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 
 use crate::abi::{ItemLine, StatModifierData};
 use crate::stats::{ItemStats, Op, StatKey};
@@ -119,7 +119,7 @@ pub fn roll(pool: &[Candidate<'_>], category: u8, rules: RollRules, seed: u64) -
     fitting.dedup_by_key(|c| c.key);
     let (low, high) = (rules.min.min(rules.max), rules.max.max(rules.min));
     let count = rng.u8(low..=high);
-    let mut groups: HashSet<&str> = HashSet::new();
+    let mut groups: FxHashSet<&str> = FxHashSet::default();
     let mut out = Vec::new();
     for _ in 0..count {
         fitting.retain(|c| c.def.group.as_deref().is_none_or(|g| !groups.contains(g)));

@@ -1,6 +1,6 @@
 //! Settings and migrations: the settings text, synced values and migration steps.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::abi::Level;
 use crate::abi::Str;
@@ -219,7 +219,7 @@ impl Installed {
     pub fn migrate_settings(&self, old: &str) -> Result<String, MigrationError> {
         use crate::abi::MigrationStep as S;
         let migrations = table::with(None, |s| s.migrations.clone());
-        let others = table::with(HashMap::new(), |s| s.host.other_settings.clone());
+        let others = table::with(FxHashMap::default(), |s| s.host.other_settings.clone());
         let mut table: toml::Table = toml::from_str(old)?;
         let list = migrations.as_ref().map_or(&[][..], |m| &m.list[..]);
         for (index, (_, steps)) in list.iter().enumerate() {
@@ -352,7 +352,7 @@ fn take(
     table: &mut toml::Table,
     from: &str,
     to: &str,
-    others: &HashMap<String, String>,
+    others: &FxHashMap<String, String>,
 ) -> Result<(), MigrationError> {
     let (id, key) = from
         .split_once(':')
