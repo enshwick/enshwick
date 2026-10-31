@@ -448,7 +448,7 @@ const LIFT_FEATURE: &str = "workshop recipe limit";
 
 /// Why the lift is off, by the table entry it names.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-enum LiftError {
+enum LiftLimitError {
     /// The entry is not in this build's table.
     #[error("is not in this build")]
     NotInBuild { entry: String },
@@ -456,9 +456,10 @@ enum LiftError {
     #[error("does not hold the table's code")]
     CodeDiffers { entry: String },
     /// The entry's address does not fit a pointer.
-    #[error("{reason}")]
+    #[error("does not fit a pointer")]
     Address {
         entry: String,
+        #[source]
         reason: core::num::TryFromIntError,
     },
     /// The table carries no body for the entry.
@@ -476,7 +477,7 @@ enum LiftError {
     NotLinked { entry: String },
 }
 
-impl LiftError {
+impl LiftLimitError {
     /// The table entry, as the log and the Mods screen name it.
     fn entry(&self) -> &str {
         match self {
@@ -492,15 +493,15 @@ impl LiftError {
 
 /// The table's symbol `id` in the running game when its code holds, or
 /// why not.
-fn checked(loader: &Loader, id: pinned::Symbol) -> Result<usize, LiftError> {
+fn checked(loader: &Loader, id: pinned::Symbol) -> Result<usize, LiftLimitError> {
     let entry = || id.id().to_owned();
     let address = loader
         .address(id)
-        .ok_or_else(|| LiftError::NotInBuild { entry: entry() })?;
+        .ok_or_else(|| LiftLimitError::NotInBuild { entry: entry() })?;
     if !loader.code_holds(id) {
-        return Err(LiftError::CodeDiffers { entry: entry() });
+        return Err(LiftLimitError::CodeDiffers { entry: entry() });
     }
-    usize::try_from(address).map_err(|reason| LiftError::Address {
+    usize::try_from(address).map_err(|reason| LiftLimitError::Address {
         entry: entry(),
         reason,
     })
@@ -508,7 +509,7 @@ fn checked(loader: &Loader, id: pinned::Symbol) -> Result<usize, LiftError> {
 
 /// The stop block's patch from the build table: the check's code holds, and
 /// the block it jumps to holds its whole code, which the patch replaces.
-fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftError> {
+fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftLimitError> {
     let _check = checked(loader, pinned::recipe::LIMIT_CHECK)?;
     let stop = checked(loader, pinned::recipe::LIMIT_STOP)?;
     let next = checked(loader, pinned::recipe::LIMIT_NEXT)?;
@@ -517,12 +518,13 @@ fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftError> {
         .build
         .body(pinned::recipe::LIMIT_STOP.id())
         .map(enshwick_gamedata::Body::len)
-        .ok_or_else(|| LiftError::NoBody { entry: entry() })?;
-    let replacement = stop_replacement(stop, next, len).ok_or_else(|| LiftError::TooShort {
-        entry: entry(),
-        len,
-        next,
-    })?;
+        .ok_or_else(|| LiftLimitError::NoBody { entry: entry() })?;
+    let replacement =
+        stop_replacement(stop, next, len).ok_or_else(|| LiftLimitError::TooShort {
+            entry: entry(),
+            len,
+            next,
+        })?;
     let mut expected = vec![0u8; len];
     // SAFETY: `stop` is the table's `recipe.limit_stop`, whose whole `len`
     // bytes of code `checked` compared against the table's body, inside the
@@ -543,7 +545,7 @@ fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftError> {
 pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
     let found = (|| {
         use crate::catalogue::ids;
-        let missing = |id: &str| LiftError::NotInBuild {
+        let missing = |id: &str| LiftLimitError::NotInBuild {
             entry: id.to_owned(),
         };
         let offset = |id: &str| crate::catalogue::offset(loader, id).ok_or_else(|| missing(id));
@@ -554,10 +556,10 @@ pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
             workshop: offset(ids::RECIPE_WORKSHOP)?,
         };
         let patch = limit_patch(loader)?;
-        let lookup = lookup_address(loader).ok_or_else(|| LiftError::NotLinked {
+        let lookup = lookup_address(loader).ok_or_else(|| LiftLimitError::NotLinked {
             entry: pinned::recipe::LIST_LOOKUP.id().to_owned(),
         })?;
-        Ok::<_, LiftError>((layout, patch, lookup))
+        Ok::<_, LiftLimitError>((layout, patch, lookup))
     })();
     let (layout, patch, lookup) = match found {
         Ok(found) => found,
