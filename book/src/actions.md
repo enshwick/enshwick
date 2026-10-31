@@ -3,6 +3,11 @@
 Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
+A mod declares what players and administrators can do as actions; the
+platform offers them in the game's own interface.
+
+## Where actions show
+
 A mod that lets players or administrators do something, such as letting a
 friend open a chest or picking a reward, declares it once as an action, and
 the platform offers it in the game's own interface:
@@ -17,6 +22,8 @@ the platform offers it in the game's own interface:
 
 Actions are the only way players and administrators act in game: the client
 keeps typed `/` lines to itself, and single player has no chat.
+
+## A first action
 
 ```rust
 use enshwick::actions::{Action, Arg, Outcome, Value};

@@ -5,8 +5,12 @@ returns the server's
 [`GameSettings`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_settings.rs):
 the difficulty and gameplay values of its configuration (`gameSettings` in
 `enshrouded_server.json`) or of the host's world menu, read typed and changed
-while the world runs. It is `Copy`; get it during `init` and move it into
-handlers, tasks and actions.
+while the world runs.
+
+## Using the settings
+
+`GameSettings` is `Copy`; get it during `init` and move it into handlers,
+tasks and actions.
 
 ```rust
 use enshwick::actions::{Action, Arg, Outcome, Value};

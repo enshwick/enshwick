@@ -1,12 +1,15 @@
 # Affixes
 
 An affix is a named bundle of [stat](stats.md) modifiers whose values roll
-within ranges, such as "Sturdy" giving 10 to 30 extra health. Single items
-roll affixes as they drop from random loot, come out of crafting, or when a
-mod asks; what an item rolled stays with it, and the entity that wears it
-gets the modifiers. The
+within ranges, such as "Sturdy" giving 10 to 30 extra health. The
 [`affixes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/affixes.rs)
 module holds the API.
+
+## Affixes on items
+
+Single items roll affixes as they drop from random loot, come out of
+crafting, or when a mod asks; what an item rolled stays with it, and the
+entity that wears it gets the modifiers.
 
 Unstable: rolling affixes onto items needs the `unstable` feature and may
 change in any release ([Stability](stability.md)). What an item rolled is

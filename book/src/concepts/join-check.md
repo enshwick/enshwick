@@ -2,8 +2,12 @@
 
 Some mods only work when the server and every player run them in the same
 version: content, or a limit the client's interface also checks. Such a mod
-sets `join: true` in its manifest. Leave it off for mods that change only
-what one side sees or decides, such as a server-only balance change.
+sets `join: true` in its manifest.
+
+## When to leave it off
+
+Leave `join` off for mods that change only what one side sees or decides,
+such as a server-only balance change.
 
 ## What the server advertises
 

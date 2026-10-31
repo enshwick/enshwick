@@ -1,9 +1,13 @@
 # Code patches
 
 A code patch replaces a few bytes of game code: a constant in an instruction, a
-jump, a loop bound. It is the smallest change a mod can make, and the bluntest:
-the bytes stay changed for every caller, and for the rest of the process.
-Reach for a [hook](hooks.md) first; patch only what a hook cannot reach.
+jump, a loop bound. Reach for a [hook](hooks.md) first; patch only what a hook
+cannot reach.
+
+## Asking for a patch
+
+A patch is the smallest change a mod can make, and the bluntest: the bytes
+stay changed for every caller, and for the rest of the process.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

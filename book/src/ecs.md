@@ -2,6 +2,9 @@
 
 Most of the game's simulation runs as ECS systems: functions that walk the rows
 of a query, one row per entity that has the components they ask for.
+
+## A system's context
+
 `load.system(name)` finds a system's update function by its reflected name,
 and a [hook](hooks.md) on it receives the system's query context, `ctx`. The
 types in [`enshwick::ecs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)

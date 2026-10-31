@@ -4,8 +4,11 @@ Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
 A **call** is a described service: one function from an input struct to an
-answer. One mod serves it and other mods call it. The input is a `repr(C)`
-struct, so the server's schema describes the call whole. A mod in any language
+answer, served by one mod and called by others.
+
+## Calls and services
+
+The input is a `repr(C)` struct, so the server's schema describes the call whole. A mod in any language
 the loader runs reaches it from that schema. A [service](services.md) table of
 several functions stays the way for Rust mods that share a crate.
 

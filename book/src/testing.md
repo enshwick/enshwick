@@ -1,11 +1,11 @@
 # Testing
 
 [`enshwick::test`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs) is a
-fake loader for a mod's unit tests. You tell it what the game and the loader
-would answer, start the mod through the same exports the real loader calls,
-then check what the mod asked for and what its hooks and handlers do.
+fake loader for a mod's unit tests.
 
-It is part of `enshwick`, behind the `test` feature. Turn the
+## Turning it on
+
+The fake is part of `enshwick`, behind the `test` feature. Turn the
 feature on for tests only: list the crate again under `[dev-dependencies]`,
 at the same version as under `[dependencies]`. A crate from
 `cargo enshwick new` has it there already:
@@ -16,6 +16,10 @@ enshwick = { workspace = true, features = ["test"] }
 ```
 
 ## The shape of a test
+
+You tell the fake what the game and the loader
+would answer, start the mod through the same exports the real loader calls,
+then check what the mod asked for and what its hooks and handlers do.
 
 1. Build a [`FakeHost`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs)
    with what the game would answer: symbols, settings text, the side.

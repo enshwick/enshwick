@@ -2,8 +2,11 @@
 
 A mod can let other mods change one of its rules at an **extension point**:
 a typed question the mod asks whenever the rule applies, with its own answer
-first and every other mod's link after it. Links attach in order, may change
-the answer or refuse where the point allows, and are checked against the
+first and every other mod's link after it.
+
+## How links work
+
+Links attach in order, may change the answer or refuse where the point allows, and are checked against the
 point's declaration field by field when the game starts, like
 [services](services.md). A link that panics is turned off alone, the player
 can switch one link off without the mod, and the Mods screen and the

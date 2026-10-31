@@ -4,9 +4,12 @@ Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
 [`load.map()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/map.rs)
-returns the `Map` of the game server, dedicated or hosted by a client: the
-markers the world comes with, its frame and the waypoint each player sets. It is
-`Copy`; get it during `init` and move it into handlers and tasks. Every call
+returns the `Map` of the game server, dedicated or hosted by a client.
+
+## Getting the map
+
+The `Map` holds the markers the world comes with, its frame and the waypoint
+each player sets. It is `Copy`; get it during `init` and move it into handlers and tasks. Every call
 belongs on the server's game thread, like the [world](world.md)'s.
 
 ```rust

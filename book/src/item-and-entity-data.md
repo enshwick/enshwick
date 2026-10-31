@@ -3,7 +3,12 @@
 Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
-Item and entity data is what a mod attaches to one thing of the world: a
+Item and entity data is what a mod attaches to one item or entity of the
+world.
+
+## A ring's bonus and a chest's owner
+
+A mod attaches data such as a
 ring's rolled bonus, the name engraved on a sword, the player who owns a placed
 chest, the nickname of a survivor. Each piece belongs to a kind with an id
 `<mod>:<name>` and a value type of the mod's choosing, kept per world beside
