@@ -17,7 +17,7 @@ Each entry names the pull request that made the change.
   lose their text key, and `StatDef` loses `text`. `StatInfo` gains `text`, and
   `StatDef::from_data` is safe. Opening a kind of a loaded mod that does not
   export it returns `Off`, with the owner's exports in the log; the fake
-  loader refuses the same for a mod `FakeHost::exports` names (#PR).
+  loader refuses the same for a mod `FakeHost::exports` names (#797).
 
 - **Breaking:** `pack.toml` names its dependencies as
   `[package.metadata.enshwick]` does: `requires`, `after`, `recommends` and

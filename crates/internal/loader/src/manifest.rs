@@ -268,10 +268,11 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     })
 }
 
-/// Why the mod `asker` may not use the `kind` (call, point, service, event
-/// or stat) `name`, `<owner>:<what>`, whose owner's manifest exports
-/// `exports`; `None` when it may: a name of its own, or one the owner
-/// exports.
+/// Why the mod `asker` may not use the `kind` `name`, `<owner>:<what>`,
+/// whose owner's manifest exports `exports`.
+///
+/// A kind is a call, point, service, event or stat. `None` when it may: a
+/// name of its own, or one the owner exports.
 #[must_use]
 pub fn unexported(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Option<String> {
     let (owner, what) = name.split_once(':')?;
