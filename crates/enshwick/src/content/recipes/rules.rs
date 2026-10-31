@@ -12,10 +12,10 @@ use super::super::{DebugName, Guid, Id};
 ///
 /// ```
 /// use enshwick::content::recipes::Name;
-/// use enshwick::content::{DebugName, Guid, Id};
+/// use enshwick::content::{DebugName, Guid, Id, id};
 ///
 /// let by_guid = Name::from(Guid::parse("7fa62007-a38e-4790-8591-873055fc3f34"));
-/// let by_id = Name::from(Id::new("you.lockers:locker.recipe"));
+/// let by_id = Name::from(id!("locker.recipe"));
 /// let by_debug = Name::from(DebugName("Tool_Torch01_T0_PK"));
 /// assert_ne!(by_guid, by_id);
 /// assert_ne!(by_id, by_debug);
@@ -54,7 +54,7 @@ impl Name<'_> {
     fn text(self) -> std::borrow::Cow<'static, str> {
         match self {
             Self::Guid(guid) => guid.to_string().into(),
-            Self::Content(id) => id.name().into(),
+            Self::Content(id) => id.to_string().into(),
             Self::Debug(name) => name.0.to_owned().into(),
         }
     }
@@ -86,10 +86,10 @@ impl<'a> RecipeRule<'a> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::Id;
+    /// use enshwick::content::{Id, id};
     /// use enshwick::content::recipes::{Name, RecipeRule};
     ///
-    /// const LOCKER_RECIPE: Id = Id::new("you.lockers:locker.recipe");
+    /// const LOCKER_RECIPE: Id = id!("locker.recipe");
     /// assert_eq!(RecipeRule::recipe(LOCKER_RECIPE), RecipeRule::Recipe(Name::Content(LOCKER_RECIPE)));
     /// ```
     #[must_use]
@@ -215,12 +215,12 @@ pub fn enable(rule: RecipeRule<'_>) -> Result<(), Off> {
 /// # Examples
 ///
 /// ```
-/// use enshwick::content::{Guid, Id};
+/// use enshwick::content::{Guid, Id, id};
 /// use enshwick::content::recipes::is_disabled;
 ///
 /// let torch = Guid::parse("7fa62007-a38e-4790-8591-873055fc3f34");
 /// assert!(!is_disabled(torch));
-/// assert!(!is_disabled(Id::new("you.lockers:locker.recipe")));
+/// assert!(!is_disabled(id!("locker.recipe")));
 /// ```
 #[must_use]
 pub fn is_disabled(recipe: impl Into<Guid>) -> bool {

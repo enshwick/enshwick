@@ -50,14 +50,14 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::{Guid, Id};
+    /// use enshwick::content::{Guid, id};
     /// use enshwick::content::recipes::NewRecipe;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.add_recipe(NewRecipe {
-    ///         id: Id::new("my-mod:locker.recipe"),
+    ///         id: id!("locker.recipe"),
     ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///         output: Guid::named("my-mod:locker"),
+    ///         output: id!("locker").guid(),
     ///         output_count: 1,
     ///         cost: 2,
     ///         workshop: None,
@@ -100,16 +100,16 @@ impl Load<'_> {
     /// ```
     /// use std::sync::atomic::{AtomicU32, Ordering};
     ///
-    /// use enshwick::content::{Guid, Id};
+    /// use enshwick::content::{Guid, id};
     /// use enshwick::content::recipes::NewRecipe;
     ///
     /// static COST: AtomicU32 = AtomicU32::new(2);
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.add_recipe_with(|| NewRecipe {
-    ///         id: Id::new("my-mod:locker.recipe"),
+    ///         id: id!("locker.recipe"),
     ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///         output: Guid::named("my-mod:locker"),
+    ///         output: id!("locker").guid(),
     ///         output_count: 1,
     ///         cost: COST.load(Ordering::Relaxed),
     ///         workshop: None,

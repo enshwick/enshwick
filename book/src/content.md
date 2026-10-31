@@ -55,17 +55,28 @@ Every piece of content a mod adds has a **content id**, `<mod>:<name>`:
 the item, its recipe, the station template, the workshop, each text tag and
 icon. The mod side is the mod's own id; the name is 1 to 128 of
 `[a-z0-9_./-]`, so ids read like paths: `you.lockers:locker`, `you.lockers:locker.name`,
-`you.market-stalls:stall/blacksmith`. Declare them as constants with
-[`Id::new`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs);
-a malformed id fails the build:
+`you.market-stalls:stall/blacksmith`.
+
+A mod writes only the name.
+[`id!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/ids.rs)
+puts the mod's id in front, read from `[package.metadata.enshwick]` in the
+crate's `Cargo.toml`, and `part` derives the ids that belong to one piece of
+content from its name. Both are constants, and a malformed name fails the
+build:
 
 ```rust
-use enshwick::content::{Guid, Id};
+use enshwick::content::{Guid, Id, id};
 
-const LOCKER: Id = Id::new("you.lockers:locker");
-assert_eq!(LOCKER.guid(), Guid::named("you.lockers:locker"));
-assert_eq!(LOCKER.guid().to_string(), "67842cb8-d551-542b-8765-fe1af9c28aca");
+// In the mod `you.lockers`, this is `you.lockers:locker`.
+const LOCKER: Id = id!("locker");
+const LOCKER_NAME: Id = LOCKER.part("name");
+
+assert_eq!(LOCKER_NAME.to_string(), format!("{LOCKER}.name"));
+assert_eq!(LOCKER.guid(), Guid::named(&LOCKER.to_string()));
 ```
+
+`Id::new("you.lockers:locker")` takes an id in full, for tests and tools
+that name content outside their own mod.
 
 The game knows content by GUID, so the id turns into one: a version 5
 (name-based, SHA-1) UUID of the id's UTF-8 bytes in Enshwick's namespace
@@ -73,7 +84,7 @@ The game knows content by GUID, so the id turns into one: a version 5
 `e2185889-0e5e-4977-9edd-d6e7bcd1393f`. The same id gives the same GUID on
 every machine, in every release and in any tool: Python's
 `uuid.uuid5(uuid.UUID("e2185889-0e5e-4977-9edd-d6e7bcd1393f"), "you.lockers:locker")`
-prints the GUID above, and `cargo enshwick id you.lockers:locker` prints it with
+prints `67842cb8-d551-542b-8765-fe1af9c28aca`, and `cargo enshwick id you.lockers:locker` prints it with
 its game id. Saves hold these GUIDs and the ids derived from them, so a
 content id is fixed for good once players have the content; to move content
 to another id, keep its old one through a
@@ -81,7 +92,7 @@ to another id, keep its old one through a
 
 The content calls take an `Id` for what they create and declare it to the
 loader, which turns the mod off when the id lies outside the mod's own
-namespace or when its game id, a 32-bit hash of the GUID, is another
+namespace, as an `Id::new` with another mod's id does, or when its game id, a 32-bit hash of the GUID, is another
 content id's, naming both ids and both mods:
 
 ```text

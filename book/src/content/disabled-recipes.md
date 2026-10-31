@@ -112,9 +112,9 @@ hand:
 
 ```rust
 use enshwick::content::recipes::{RecipeRule, disable, is_disabled};
-use enshwick::content::{DebugName, Id};
+use enshwick::content::{DebugName, Id, id};
 
-const LOCKER_RECIPE: Id = Id::new("you.lockers:locker.recipe");
+const LOCKER_RECIPE: Id = id!("locker.recipe");
 
 fn init(_load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // Torches come from the mod's own loot, not from crafting.

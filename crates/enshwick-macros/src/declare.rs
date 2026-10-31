@@ -151,6 +151,41 @@ pub(crate) fn expand(args: &Args) -> syn::Result<TokenStream> {
              inline metadata is for `enshwick::test::declare_mod!`",
         ));
     }
+    let (metadata, shown) = cargo_metadata()?;
+    Ok(exports(args, &metadata, Some(&shown)))
+}
+
+/// Expands `content::id!("<name>")`: the content id `<mod>:<name>` of the
+/// crate's mod, a constant `Id` whose build tracks the crate's `Cargo.toml`.
+pub(crate) fn expand_id(name: &LitStr) -> syn::Result<TokenStream> {
+    let local = name.value();
+    if !is_content_name(&local) {
+        return Err(syn::Error::new(
+            name.span(),
+            "a content name is 1 to 128 of [a-z0-9_./-], without the mod's id: \
+             `id!` puts `<mod>:` in front",
+        ));
+    }
+    let (metadata, shown) = cargo_metadata()?;
+    let full = format!("{}:{local}", metadata.id);
+    Ok(quote! {{
+        const _: &[u8] = ::core::include_bytes!(#shown);
+        ::enshwick::content::Id::new(#full)
+    }})
+}
+
+/// Whether `name` is the name side of a content id: 1 to 128 of
+/// `[a-z0-9_./-]`, as the API's `content::is_id` reads it.
+fn is_content_name(name: &str) -> bool {
+    (1..=128).contains(&name.len())
+        && name.bytes().all(|b| {
+            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'/' | b'-')
+        })
+}
+
+/// The `[package.metadata.enshwick]` table of the crate being built, read,
+/// with the path of its `Cargo.toml` for messages and build tracking.
+fn cargo_metadata() -> syn::Result<(Metadata, String)> {
     let dir = std::env::var("CARGO_MANIFEST_DIR").map_err(|_| {
         syn::Error::new(
             Span::call_site(),
@@ -182,7 +217,7 @@ pub(crate) fn expand(args: &Args) -> syn::Result<TokenStream> {
             format!("{shown}: [package.metadata.enshwick] {e}"),
         )
     })?;
-    Ok(exports(args, &metadata, Some(&shown)))
+    Ok((metadata, shown))
 }
 
 /// Expands `enshwick::test::declare_mod!(Type, "<toml>", ..)`, reading the
@@ -660,5 +695,16 @@ mod tests {
             refused("id = \"you.a\"\nside = \"both\"\n[[builds]]\nside = \"both\"\nguid = \"00\"\nage = 1")
                 .contains("`side = \"server\"`")
         );
+    }
+
+    #[test]
+    fn a_content_name_is_the_name_side_of_a_content_id_only() {
+        for name in ["locker", "stall/blacksmith.name", "bulk-bench_2"] {
+            assert!(is_content_name(name), "{name}");
+        }
+        let long = "a".repeat(129);
+        for name in ["", "you.lockers:locker", "Locker", "locker!", long.as_str()] {
+            assert!(!is_content_name(name), "{name}");
+        }
     }
 }

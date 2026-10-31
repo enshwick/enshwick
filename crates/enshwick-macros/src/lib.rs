@@ -30,6 +30,19 @@ pub fn declare_mod(input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// Names a piece of the mod's own content by its local name.
+///
+/// `id!("locker")` is the constant content id `<mod>:locker`, the mod id
+/// read from the `[package.metadata.enshwick]` table of the crate's
+/// `Cargo.toml`. Examples are on `enshwick::content::id`.
+#[proc_macro]
+pub fn id(input: TokenStream) -> TokenStream {
+    let name = parse_macro_input!(input as syn::LitStr);
+    declare::expand_id(&name)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
 /// Exports a mod type with its metadata given as TOML, so a test binary may
 /// declare several mods. Examples are on `enshwick::test::declare_mod`.
 #[proc_macro]

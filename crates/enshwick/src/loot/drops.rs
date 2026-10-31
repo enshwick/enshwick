@@ -223,11 +223,11 @@ impl Source {
 /// # Examples
 ///
 /// ```
-/// use enshwick::content::Id;
+/// use enshwick::content::{Id, id};
 /// use enshwick::ItemId;
 /// use enshwick::loot::{Drop, Source};
 ///
-/// const STAFF: Id = Id::new("my-mod:staff");
+/// const STAFF: Id = id!("staff");
 ///
 /// let drop = Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.1, Source::bosses()).count(1, 2);
 /// assert_eq!(drop.count, [1, 2]);
@@ -825,10 +825,10 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::Id;
+    /// use enshwick::content::{Id, id};
     /// use enshwick::loot::{Drop, Source, Kinds};
     ///
-    /// const STAFF: Id = Id::new("my-mod:staff");
+    /// const STAFF: Id = id!("staff");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.10, Source::bosses()))?;
@@ -886,10 +886,10 @@ impl Load<'_> {
 /// # Examples
 ///
 /// ```
-/// use enshwick::content::Id;
+/// use enshwick::content::{Id, id};
 /// use enshwick::loot::{Drop, Source, replace_drops};
 ///
-/// const STAFF: Id = Id::new("my-mod:staff");
+/// const STAFF: Id = id!("staff");
 ///
 /// fn set(on: bool) -> Result<(), enshwick::Off> {
 ///     let drops = if on {

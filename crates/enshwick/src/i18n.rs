@@ -646,9 +646,9 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::Id;
+    /// use enshwick::content::{Id, id};
     ///
-    /// const LOCKER_NAME: Id = Id::new("you.lockers:locker.name");
+    /// const LOCKER_NAME: Id = id!("locker.name");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let texts = load.texts("[en]\n\"locker.name\" = \"Locker\"\n[uk]\n\"locker.name\" = \"Шафка\"\n")?;

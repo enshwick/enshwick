@@ -121,6 +121,6 @@ mod tests {
     #[test]
     fn the_tags_are_the_loaders_own() {
         assert_ne!(NAME.guid(), DESCRIPTION.guid());
-        assert_eq!(NAME.name(), "enshwick:stand-in.name");
+        assert_eq!(NAME.to_string(), "enshwick:stand-in.name");
     }
 }

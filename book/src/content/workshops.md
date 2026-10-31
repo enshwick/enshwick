@@ -9,16 +9,16 @@ returns its
 for your recipes.
 
 ```rust
-use enshwick::content::Id;
+use enshwick::content::{Id, id};
 use enshwick::content::recipes::Derived;
 use enshwick::content::workshops::{NewWorkshop, StationRecipe, stations};
 
-const BENCH: Id = Id::new("my-mod:bulk-bench");
-const BENCH_TEMPLATE: Id = Id::new("my-mod:bulk-bench.template");
-const BENCH_WORKSHOP: Id = Id::new("my-mod:bulk-bench.workshop");
-const BENCH_RECIPE: Id = Id::new("my-mod:bulk-bench.recipe");
-const BENCH_NAME: Id = Id::new("my-mod:bulk-bench.name");
-const BENCH_DESCRIPTION: Id = Id::new("my-mod:bulk-bench.description");
+const BENCH: Id = id!("bulk-bench");
+const BENCH_TEMPLATE: Id = id!("bulk-bench.template");
+const BENCH_WORKSHOP: Id = id!("bulk-bench.workshop");
+const BENCH_RECIPE: Id = id!("bulk-bench.recipe");
+const BENCH_NAME: Id = id!("bulk-bench.name");
+const BENCH_DESCRIPTION: Id = id!("bulk-bench.description");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts(r#"

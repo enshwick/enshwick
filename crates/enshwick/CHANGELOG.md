@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `content::id!("locker")` names the mod's own content by its local name:
+  a constant `Id` whose mod side, `<mod>:`, comes from the
+  `[package.metadata.enshwick]` table at build time, so its GUID stays a
+  constant. `Id::part("name")` and `Id::try_part` derive the id
+  `<mod>:locker.name` from it, in a constant too (#PR1).
+
 - `Ui::map_marker_types` lists the client's map marker types from the
   game's registry, each a `MapMarkerType` with its key, its
   `MarkerTypeSorting` group and the game's flags, and `Marker::marker_type`
@@ -57,6 +63,10 @@ Each entry names the pull request that made the change.
   `<name>.toml.bak` beside its file (#658).
 
 ### Changed
+
+- **Breaking:** `Id::name` is gone: an `Id` writes its full id through
+  `Display`, and two ids are equal when their GUIDs are. `Id::new` takes
+  an id in full, for tests and tools (#PR1).
 
 - **Breaking:** a mod names itself once, in the `[package.metadata.enshwick]`
   table of its `Cargo.toml`: `id`, `name`, `side`, `join`, `reload`,
