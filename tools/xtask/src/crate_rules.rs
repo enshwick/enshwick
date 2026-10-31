@@ -124,9 +124,12 @@ fn test_feature(name: &str, package: &serde_json::Value) -> Vec<String> {
 const FEATURE_PREFIXES: [&str; 4] = ["use-", "use_", "with-", "with_"];
 
 /// The problems of `package`'s manifest facts: a feature named for how it
-/// adds, `anyhow` in a library or in the API crate, a `rust-version` other
-/// than the `toolchain`'s major and minor, and a path dependency without a
-/// version in a crate that publishes.
+/// adds, `anyhow` in a package without a binary or in the API crate, a
+/// missing `rust-version` or one other than the `toolchain`'s major and
+/// minor, and a path dependency without a version in a crate that publishes.
+///
+/// `anyhow` belongs to binaries, and a package with both a library and a
+/// binary may use it in its library half too.
 fn manifest_facts(name: &str, package: &serde_json::Value, toolchain: &str) -> Vec<String> {
     let mut problems = Vec::new();
     for feature in package["features"]
@@ -174,12 +177,14 @@ fn manifest_facts(name: &str, package: &serde_json::Value, toolchain: &str) -> V
             ));
         }
     }
-    if let Some(declared) = package["rust_version"].as_str()
-        && major_minor(declared) != toolchain
-    {
-        problems.push(format!(
+    match package["rust_version"].as_str() {
+        None => problems.push(format!(
+            "{name}: no rust-version; it names the pinned toolchain {toolchain}"
+        )),
+        Some(declared) if major_minor(declared) != toolchain => problems.push(format!(
             "{name}: rust-version {declared} is not the pinned toolchain {toolchain}"
-        ));
+        )),
+        Some(_) => {}
     }
     problems
 }
@@ -525,6 +530,20 @@ mod tests {
         assert_eq!(
             manifest_facts("enshwick", &binary, "1.99"),
             ["enshwick: anyhow is for binaries; a library returns a thiserror type"]
+        );
+    }
+
+    #[test]
+    fn a_missing_rust_version_is_a_problem() {
+        let package = serde_json::json!({
+            "features": {},
+            "targets": [{ "kind": ["lib"] }],
+            "publish": [],
+            "dependencies": [],
+        });
+        assert_eq!(
+            manifest_facts("a", &package, "1.99"),
+            ["a: no rust-version; it names the pinned toolchain 1.99"]
         );
     }
 
