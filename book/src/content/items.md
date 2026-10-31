@@ -24,7 +24,7 @@ const TEXTS: &str = r#"
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // The vanilla storage box, by the debug name the item registry gives it.
     let storage_box = vanilla::item("Prop_Storage_24_T1_Box")?;
-    let texts = load.texts(TEXTS)?;
+    let texts = load.texts_from(TEXTS)?;
     load.add_texts(&texts, &[
         ("locker.name", LOCKER_NAME),
         ("locker.description", LOCKER_DESCRIPTION),
@@ -37,8 +37,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-A real mod keeps the texts in a file and embeds it with
-`include_str!("texts.toml")`; see [Texts](texts.md).
+A real mod keeps the texts in `src/texts.toml` and reads them with
+`load.texts()`; see [Texts](texts.md).
 [`vanilla::item`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/vanilla.rs)
 names a vanilla item by its debug name, also as `deps::vanilla::item` of
 [`deps!`](../concepts/loader-and-abi.md#the-manifest); a name the game lacks turns the mod
@@ -136,7 +136,7 @@ const LUCK: Id = BOX.part("luck");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let storage_box = vanilla::item("Prop_Storage_24_T1_Box")?;
-    let texts = load.texts("[en]\nluck = \"Luck\"\n")?;
+    let texts = load.texts_from("[en]\nluck = \"Luck\"\n")?;
     load.add_texts(&texts, &[("luck", LUCK)])?;
     load.add_item(NewItem {
         stats: vec![ImpactUiValue { loca_id: LUCK.guid(), value: 5, value_format: StatFormat::Percent }],

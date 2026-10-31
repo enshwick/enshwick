@@ -14,6 +14,7 @@ use syn::{
 };
 
 mod declare;
+mod texts;
 
 use crate::config::expand_config;
 use crate::shape::expand_layout;
@@ -346,6 +347,21 @@ pub fn deps(input: TokenStream) -> TokenStream {
         .into();
     }
     declare::expand_deps()
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Generates `pub mod texts`, a constant per key of the crate's
+/// `src/texts.toml`, checked when the crate builds. Examples are on
+/// `enshwick::texts`.
+#[proc_macro]
+pub fn texts(input: TokenStream) -> TokenStream {
+    let path = if input.is_empty() {
+        None
+    } else {
+        Some(parse_macro_input!(input as syn::LitStr))
+    };
+    texts::expand(path.as_ref())
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

@@ -22,7 +22,7 @@ keeps typed `/` lines to itself, and single player has no chat.
 use enshwick::actions::{Action, Arg, Outcome, Value};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let texts = load.texts("[en]\n\"set\" = \"Change the weather\"\n")?;
+    let texts = load.texts_from("[en]\n\"set\" = \"Change the weather\"\n")?;
     let actions = load.actions(texts)?;
     let kinds = [("clear", "Clear"), ("rain", "Rain"), ("storm", "Storm")];
     actions.add(

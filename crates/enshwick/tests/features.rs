@@ -11,7 +11,7 @@ mod tests {
 
     impl Mod for Lanterns {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _texts = load.texts(TEXTS)?;
+            let _texts = load.texts_from(TEXTS)?;
             let glow = load.feature("glow", |load| load.symbol("lantern.glow"));
             assert_eq!(glow, None);
             let light = load.feature("light", |load| load.symbol("lantern.light"));

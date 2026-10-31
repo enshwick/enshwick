@@ -62,7 +62,7 @@ impl Off {
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let _texts = load.texts("[en]\n\"glow.off\" = \"No glow on this game version.\"\n")?;
+    ///     let _texts = load.texts_from("[en]\n\"glow.off\" = \"No glow on this game version.\"\n")?;
     ///     let glow = load.feature("glow", |load| {
     ///         load.symbol("lantern.glow").map_err(|_| enshwick::Off::text("glow.off", &[]))
     ///     });
@@ -198,21 +198,30 @@ pub struct Load<'a> {
     host: Host,
     /// Whether the mod takes part in the join check, as its manifest says.
     joins: bool,
+    /// The mod's `src/texts.toml`, as `declare_mod!` embedded it.
+    embedded_texts: Option<&'static str>,
     _init: core::marker::PhantomData<&'a ()>,
 }
 
 impl Load<'_> {
     pub(crate) fn new(host: Host) -> Self {
-        Self::of(host, false)
+        Self::of(host, false, None)
     }
 
-    /// A `Load` for a mod that takes part in the join check when `joins`.
-    pub(crate) fn of(host: Host, joins: bool) -> Self {
+    /// A `Load` for a mod that takes part in the join check when `joins`,
+    /// with the texts `declare_mod!` embedded.
+    pub(crate) fn of(host: Host, joins: bool, embedded_texts: Option<&'static str>) -> Self {
         Self {
             host,
             joins,
+            embedded_texts,
             _init: core::marker::PhantomData,
         }
+    }
+
+    /// The mod's `src/texts.toml`, as `declare_mod!` embedded it.
+    pub(crate) fn embedded_texts(&self) -> Option<&'static str> {
+        self.embedded_texts
     }
 
     /// Whether the mod takes part in the join check, as its manifest says.

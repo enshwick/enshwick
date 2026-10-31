@@ -253,5 +253,38 @@
 ///
 /// enshwick::declare_mod!(Hello, points: [Price]);
 /// ```
+///
+/// A key with a Ukrainian text and no English one:
+///
+/// ```compile_fail
+/// enshwick::texts!("tests/texts/no-english.toml");
+/// ```
+///
+/// A table that is no language code (`ua` for `uk`):
+///
+/// ```compile_fail
+/// enshwick::texts!("tests/texts/unknown-language.toml");
+/// ```
+///
+/// A translation that fills in `{name}` where its English text fills in
+/// `{owner}`:
+///
+/// ```compile_fail
+/// enshwick::texts!("tests/texts/other-values.toml");
+/// ```
+///
+/// A texts path for `declare_mod!`, which reads `src/texts.toml` only:
+///
+/// ```compile_fail
+/// struct Hello;
+///
+/// impl enshwick::Mod for Hello {
+///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+///         Ok(Self)
+///     }
+/// }
+///
+/// enshwick::declare_mod!(Hello, texts = "tests/texts/lockers.toml");
+/// ```
 #[expect(dead_code, reason = "the doc comment carries the cases")]
 struct Refused;
