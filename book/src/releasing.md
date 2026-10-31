@@ -79,21 +79,9 @@ loader build.
 ## The list of loaded mods
 
 [`enshwick::mods::all()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
-lists every loaded mod, the loader first (id `enshwick`), in load order. Each
-[`ModEntry`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
-has:
-
-| Field                                           | What it holds                                                                   |
-| ----------------------------------------------- | ------------------------------------------------------------------------------- |
-| `id`                                            | The mod id                                                                      |
-| `version`                                       | Its SemVer version                                                              |
-| `side`                                          | The sides it runs on                                                            |
-| `join`                                          | Whether it counts in the join check                                             |
-| `running`                                       | Not refused at init and not faulted since                                       |
-| `file`                                          | The DLL's path relative to the game's folder, such as `mods/trading_post.dll`   |
-| `name`                                          | What players read; `entry.label()` gives the name, or the id without a name     |
-| `description`, `authors`, `license`, `homepage` | The manifest's credits; empty for none                                          |
-| `replaced_by`                                   | In `mods::replaced()`, the mod that replaces this one; empty elsewhere          |
+lists every loaded mod, the loader first (id `enshwick`), in load order, each
+a [`ModEntry`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
+with its id, version, side, file, whether it runs and the manifest's credits:
 
 ```rust
 for entry in enshwick::mods::all() {

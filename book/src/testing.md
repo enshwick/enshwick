@@ -143,105 +143,20 @@ assert_eq!(
 
 ## Builder methods
 
-Every method of `FakeHost` takes and returns the builder.
-
-| Method                                | What it sets                                                                                          |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `side(side)`                          | The side the game runs as; `Side::SERVER` by default.                                                 |
-| `hosting(bool)`                       | Whether a client hosts a game now.                                                                    |
-| `server_world(world)`                 | The entity world of the running server; 0 for none.                                                   |
-| `base(address)`                       | The game's image base.                                                                                |
-| `fingerprint(fingerprint)`            | The game build's fingerprint.                                                                         |
-| `handle(handle)`                      | The handle the mod receives; `ModHandle(1)` by default.                                               |
-| `symbol(name, address)`               | What `Load::symbol(name)` finds.                                                                      |
-| `system(name, address)`               | What `Load::system(name)` finds.                                                                      |
-| `constant(name, value)`               | What `Load::constant(name)` finds, an Enshwick id's offset among them.                                |
-| `field_offset(type, field, offset)`   | What `Load::field_offset` finds.                                                                      |
-| `type_size(type, size)`               | What `Load::type_size` finds, by reflected name or Enshwick id.                                       |
-| `type_hash(type, hash)`               | The type hash of a component or resource type, by reflected name or Enshwick id.                      |
-| `settings(text)`                      | The text of the mod's settings file.                                                                  |
-| `data_dir(path)`                      | The path `Load::data_dir` returns; `mod-data/test` by default. Nothing is created.                    |
-| `log_level(level)`                    | The most detailed level kept for the mod's lines.                                                     |
-| `caller_frame(frame)`                 | The caller's context a hook with `HookFlags::CALLER_FRAME` reads.                                     |
-| `component(entity, type_hash, bytes)` | A component of an entity: the fake keeps a copy of `bytes`, aligned, and the mod's writes land in it. |
-| `template(entity, guid)`              | The template GUID of an entity.                                                                       |
-| `placed(type_hash, entity, at)`       | An entity with a component and a place, for `World::entities` and `World::near`.                      |
-| `world_key(key)`                      | The key of the running world, for `World::key` and world stores.                                      |
-| `player(info)`                        | A connected player with a character in the world.                                                     |
-| `loaded(info)`                        | A loaded mod that `enshwick::mods::all()` lists.                                                      |
-| `join_missing(info)`                  | A server mod that `enshwick::mods::join_missing()` lists.                                             |
-| `replaced(info)`                      | A mod another mod replaces, which `enshwick::mods::replaced()` lists.                                 |
-| `console_answer(word, answer)`        | The answer to console lines starting with `word`, which another mod or the loader gives.              |
-| `service(&TABLE)`                     | A service another mod publishes, typed by its `#[service]` declaration.                               |
-| `refuse_hook(target)`                 | Refuses hooks on a target, as when another mod holds it exclusively.                                  |
-| `code(bytes)`                         | The game's code section, for pattern searches.                                                        |
-| `workshop_recipes(limit)`             | The most recipes one workshop takes; 512 by default, `u32::MAX` for lifted.                           |
-| `item(item, max_stack, flags)`        | The static data of an item, for `item_info`.                                                          |
-| `item_places(item, template)`         | The template GUID a player places from an item set with `item`.                                       |
-| `without_inventories()`               | A build without inventory transactions: `inventory_open` answers `Status::MISSING`.                   |
-
-`install()` ends the builder.
+[`FakeHost`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs)
+is a builder: each method sets one thing the game would answer, such as the
+side, a symbol, a component, a player or another mod's service, and
+`install()` ends it. Its rustdoc lists every method.
 
 ## What the installed fake shows
 
-Starting the mod:
-
-| Method               | What it does                                                     |
-| -------------------- | ---------------------------------------------------------------- |
-| `start(init, ready)` | Runs `init`, then `ready` when `init` returned `Status::OK`.     |
-| `init(init)`         | Runs `init` alone; returns its status.                           |
-| `ready(ready)`       | Runs `ready` alone, after a successful `init`.                   |
-| `api()`, `handle()`  | The table and handle the mod is given, for calls to the raw ABI. |
-
-All three start methods are `unsafe`: pass the exports of one `declare_mod!`.
-
-What the mod asked for, each in order:
-
-| Method                               | Returns                                                                 |
-| ------------------------------------ | ----------------------------------------------------------------------- |
-| `logs()`                             | `(Level, String)` lines the mod logged, at the levels the loader kept.  |
-| `faults()`                           | The faults the mod reported, such as a panic in a hook.                 |
-| `hooks()`                            | The hooks linked, as `LinkedHook { target, detour, priority, flags }`.  |
-| `mid_hooks()`                        | The addresses of mid-function hooks.                                    |
-| `subscriptions()`                    | The events subscribed to.                                               |
-| `resources()`                        | The resources served, as `ServedResource { key, base }`.                |
-| `code_patches()`                     | `(address, expected, replacement)` of each code patch.                  |
-| `texts()`                            | `(tag, language, text)` of each text added.                             |
-| `console()`                          | The lines the mod ran with `console::run`.                              |
-| `chat()`                             | `(account key, text)` of each chat line sent; key 0 for everyone.       |
-| `labels()`                           | `(entity, text)` of each label set.                                     |
-| `game_event_types()`                 | The game event types asked for, by hash; 0 for every type.              |
-| `component_bytes(entity, type_hash)` | The bytes of a component the fake holds, as the mod's writes left them. |
-| `destroyed()`                        | The entities the mod asked the world to destroy.                        |
-| `saves()`                            | How many saves the mod asked for.                                       |
-| `published()`                        | `(name, major)` of each service published.                              |
-| `defined_events()`                   | The names of the mod events defined.                                    |
-| `sent_events()`                      | The names of the mod events sent.                                       |
-| `migrations()`                       | The ids of the migrations declared.                                     |
-| `status()`                           | The lines the mod's status sources give now.                            |
-| `settings_defaults()`                | The defaults the mod passed each time it read its settings.             |
-| `reported_synced()`                  | The join values the mod reported each time it read its settings.        |
-| `inventory_requests()`               | The inventory requests not finished yet, as `SubmittedRequest`.         |
-
-Playing the game:
-
-| Method                            | What it does                                                                |
-| --------------------------------- | --------------------------------------------------------------------------- |
-| `detour(&HOOK)`                   | The hook's entry point when the mod linked it; call it as the game would.   |
-| `run_at(address, &mut registers)` | Runs the mid-function hooks at an address; returns how many ran.            |
-| `raise::<E>(&data)`               | Raises an event to the mod's handlers on this thread; returns how many ran. |
-| `raise_raw(event, data)`          | The same for a raw `Event` id; `unsafe`.                                    |
-| `tick(elapsed)`                   | Runs a step `elapsed` after the last, as the loader does; returns the runs. |
-| `raise_game_event(hash, bytes)`   | Hands a game event to the mod's handlers; returns how many ran.             |
-| `send_mod_event(&event)`          | Sends another mod's event to the mod's handlers; returns how many ran.      |
-| `migrate_settings(text)`          | Runs the mod's migrations' settings steps on a settings text.               |
-| `migrate_store(name, text)`       | Runs their store steps on a world store; the name and text it ends with.    |
-| `set_settings(text)`              | Replaces the settings file's text; raise `SettingsChanged` after it.        |
-| `set_server_synced(values)`       | Sets the joined server's join values; raise `SettingsChanged` after it.     |
-| `ask_actions(kind, &player, ..)`  | Asks the mod's [player actions](actions.md) as the loader does.             |
-| `rename(entity, player, text)`    | Asks the mod's rename filters; whether every filter lets it through.        |
-| `build_resource(&key, base)`      | Builds a served resource from base bytes with the mod's patch.              |
-| `finish_inventory(outcome, ops)`  | Finishes the oldest open inventory request; false when none is open.        |
+`install()` returns an
+[`Installed`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs),
+whose methods fall into three groups, each listed in its rustdoc: starting
+the mod (`start`, `init`, `ready`, all `unsafe`: pass the exports of one
+`declare_mod!`), reading back what the mod asked for in order (`logs`,
+`hooks`, `chat` and the rest), and playing the game to it (`detour`,
+`raise`, `tick` and the rest).
 
 Mid-function hooks run on registers you set up:
 
