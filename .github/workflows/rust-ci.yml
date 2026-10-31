@@ -111,6 +111,15 @@ jobs:
       - name: Fetch the base
         run: git cat-file -e "$BASE^{commit}" 2> /dev/null || git fetch -q origin "$BASE"
 
+      # The mods the book links files of, for the book link check; ignored
+      # by git, so no workspace member, tool or scan of this tree takes it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: enshwick/mods
+          path: .mods
+          fetch-depth: 1
+          persist-credentials: false
+
       # Nothing persists between jobs: the toolchain, the Windows SDK and the
       # apt packages come from the cache.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -145,6 +154,8 @@ jobs:
           key: ${{ matrix.part }}
 
       - name: cargo xtask check
+        env:
+          ENSH_MODS_DIR: ${{ github.workspace }}/.mods
         run: |
           args=()
           if [ "$FULL" = true ]; then args+=(--all); else args+=(--base "$BASE"); fi

@@ -105,24 +105,58 @@ pub(crate) fn check(root: &Path, mods: Option<&Path>) -> Found {
 
 /// The clone of enshwick/mods to check against: [`MODS_DIR`], else a
 /// `mods` folder beside the workspace, as a clone of both repositories
-/// lays them out; `None` when neither holds a `Cargo.toml`.
-pub(crate) fn mods_clone(root: &Path) -> Option<PathBuf> {
-    std::env::var_os(MODS_DIR)
-        .map(PathBuf::from)
-        .or_else(|| Some(root.join("../mods")))
-        .filter(|dir| dir.join("Cargo.toml").is_file())
+/// lays them out; `None` when there is no such folder.
+///
+/// # Errors
+///
+/// When [`MODS_DIR`] is set but names no clone, a folder without a
+/// `Cargo.toml`: a check asked for must not pass by skipping.
+pub(crate) fn mods_clone(root: &Path) -> Result<Option<PathBuf>, String> {
+    let is_clone = |dir: &Path| dir.join("Cargo.toml").is_file();
+    if let Some(dir) = std::env::var_os(MODS_DIR).map(PathBuf::from) {
+        return if is_clone(&dir) {
+            Ok(Some(dir))
+        } else {
+            Err(format!(
+                "{MODS_DIR} is {}, which holds no clone of enshwick/mods",
+                dir.display()
+            ))
+        };
+    }
+    let beside = root.join("../mods");
+    Ok(is_clone(&beside).then_some(beside))
 }
 
-/// Every link in `text` to a file or folder on `main` of a repository of
-/// [`Repo::ALL`]; links elsewhere, such as releases, are left out.
+/// Every link in `text`, outside code fences, to a file or folder on `main`
+/// of a repository of [`Repo::ALL`]; links elsewhere, such as releases, are
+/// left out.
 fn file_links(text: &str) -> Vec<FileLink> {
     let mut found = Vec::new();
+    let mut fence: Option<&str> = None;
     for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim_start();
+        let marker = ["```", "~~~"]
+            .into_iter()
+            .find(|marker| trimmed.starts_with(marker));
+        match (fence, marker) {
+            (None, Some(marker)) => {
+                fence = Some(marker);
+                continue;
+            }
+            (Some(open), Some(marker)) if open == marker => {
+                fence = None;
+                continue;
+            }
+            (Some(_), _) => continue,
+            (None, None) => {}
+        }
         for (repo, prefix) in Repo::ALL {
             for (at, _) in line.match_indices(prefix) {
                 let rest = &line[at + prefix.len()..];
                 let end = rest
-                    .find(|c: char| c.is_whitespace() || matches!(c, ')' | '>' | '"' | '\''))
+                    .find(|c: char| {
+                        c.is_whitespace() || matches!(c, ')' | '>' | '"' | '\'' | '`' | '?')
+                    })
                     .unwrap_or(rest.len());
                 let target = &rest[..end];
                 let Some(path) = ["tree/main/", "blob/main/"]
@@ -131,7 +165,12 @@ fn file_links(text: &str) -> Vec<FileLink> {
                 else {
                     continue;
                 };
-                let path = path.split('#').next().unwrap_or("").trim_end_matches('/');
+                let path = path
+                    .split('#')
+                    .next()
+                    .unwrap_or("")
+                    .trim_end_matches(['.', ',', ';', ':'])
+                    .trim_end_matches('/');
                 if !path.is_empty() {
                     found.push(FileLink {
                         line: index + 1,
@@ -154,7 +193,12 @@ mod tests {
         let text = "See [a](https://github.com/enshwick/mods/tree/main/area-loot)\n\
             and [b](https://github.com/enshwick/mods/blob/main/area-loot/src/take.rs#L4),\n\
             <https://github.com/enshwick/enshwick/tree/main/examples/waypoints/> but not\n\
-            [zip](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip).\n";
+            [zip](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip),\n\
+            `https://github.com/enshwick/mods/tree/main/optimizer`, see\n\
+            https://github.com/enshwick/mods/blob/main/game-rates/src/lib.rs?plain=1.\n\
+            ```toml\n\
+            homepage = \"https://github.com/enshwick/mods/tree/main/in-code\"\n\
+            ```\n";
         assert_eq!(
             file_links(text),
             [
@@ -173,6 +217,16 @@ mod tests {
                     repo: Repo::Own,
                     path: "examples/waypoints".to_owned()
                 },
+                FileLink {
+                    line: 5,
+                    repo: Repo::Mods,
+                    path: "optimizer".to_owned()
+                },
+                FileLink {
+                    line: 6,
+                    repo: Repo::Mods,
+                    path: "game-rates/src/lib.rs".to_owned()
+                },
             ]
         );
     }
@@ -180,7 +234,8 @@ mod tests {
     #[test]
     fn the_repository_book_links_only_files_that_exist() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let found = check(&root, mods_clone(&root).as_deref());
+        let mods = mods_clone(&root).expect("ENSH_MODS_DIR, when set, names a clone");
+        let found = check(&root, mods.as_deref());
         assert!(found.problems.is_empty(), "{:?}", found.problems);
     }
 

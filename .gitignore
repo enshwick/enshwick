@@ -15,6 +15,9 @@
 .env
 .env.*
 
+# The clone of enshwick/mods CI checks the book's links against.
+/.mods/
+
 # The built modding book.
 /book/book/
 

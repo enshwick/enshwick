@@ -166,7 +166,8 @@ fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<Str
             .into_iter()
             .map(|problem| format!("book: {problem}")),
     );
-    let links = book_links::check(root, book_links::mods_clone(root).as_deref());
+    let mods = book_links::mods_clone(root).map_err(|why| format!("book links: {why}"))?;
+    let links = book_links::check(root, mods.as_deref());
     if let Some(note) = &links.skipped {
         say(note);
     }
