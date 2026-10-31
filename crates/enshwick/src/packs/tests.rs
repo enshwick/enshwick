@@ -943,6 +943,46 @@ fn a_wrong_alias_id_or_version_of_a_dependency_is_a_problem_at_its_line() {
 }
 
 #[test]
+fn a_reference_by_a_required_alias_names_that_mod_s_content() {
+    let files = files("[[item]]\nid = \"lantern\"\nlike = \"lockers:locker\"\n").with(
+        MANIFEST_FILE,
+        "id = \"you.lanterns\"\nversion = \"1.0.0\"\n[requires]\nlockers = \"you.lockers\"\n",
+    );
+    let pack = Pack::parse_with("you.lanterns", &files, None).unwrap();
+    assert_eq!(
+        Some(pack.items[0].like),
+        Guid::try_named("you.lockers:locker")
+    );
+}
+
+#[test]
+fn a_reference_by_an_alias_the_pack_does_not_require_is_a_problem() {
+    for table in ["after", "recommends", "breaks"] {
+        let files = files("[[item]]\nid = \"lantern\"\nlike = \"lockers:locker\"\n").with(
+            MANIFEST_FILE,
+            format!(
+                "id = \"you.lanterns\"\nversion = \"1.0.0\"\n[{table}]\nlockers = \"you.lockers\"\n"
+            ),
+        );
+        let error = Pack::parse_with("you.lanterns", &files, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("items.toml:1"), "{error}");
+        assert!(error.contains("does not require"), "{error}");
+    }
+}
+
+#[test]
+fn a_full_content_id_keeps_naming_another_mod_s_content() {
+    let files = files("[[item]]\nid = \"lantern\"\nlike = \"you.lockers:locker\"\n");
+    let pack = Pack::parse_with("you.lanterns", &files, None).unwrap();
+    assert_eq!(
+        Some(pack.items[0].like),
+        Guid::try_named("you.lockers:locker")
+    );
+}
+
+#[test]
 fn a_loot_change_of_one_container_changes_its_table_alone() {
     let corpses = Guid([7; 16]);
     let vanilla = crate::content::vanilla::tests::game_with_tables(&[
