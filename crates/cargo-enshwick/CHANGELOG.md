@@ -21,6 +21,9 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `cargo enshwick new` writes `exports` and `requires` into the new mod's
+  `Cargo.toml` as comments, beside `recommends` and `breaks` (#792).
+
 - **Breaking:** `cargo enshwick new` writes the mod's id, side and name into
   `[package.metadata.enshwick]` of its `Cargo.toml`, and `pin` reads and
   writes mods' build rows there, `[[package.metadata.enshwick.builds]]`,

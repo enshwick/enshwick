@@ -15,15 +15,23 @@ repository = "https://github.com/you/{crate}"
 homepage = "https://github.com/you/{crate}"
 publish = false
 
-# What the mod is, read when it builds: `id` names its settings and data,
-# `side` is "server", "client" or "both", `name` is what players read.
+# What the mod is, read when it builds: `id` names its settings and data
+# and goes in front of every name the mod declares, `side` is "server",
+# "client" or "both", `name` is what players read.
 [package.metadata.enshwick]
 id = "{id}"
 side = "{side}"
 name = "{name}"
+# The local names of the calls, points, services and events other mods may
+# use; the loader refuses them the rest:
+# exports = ["price"]
 
-# Mods this one works better with, and mods it does not work beside, each
-# under an alias with a version range:
+# Mods this one needs, works better with, or does not work beside, each
+# under an alias with a version range; `enshwick::deps!()` names them in
+# code by the alias:
+# [package.metadata.enshwick.requires]
+# lockers = { id = "someone.lockers", version = ">=0.1, <1.0" }
+#
 # [package.metadata.enshwick.recommends]
 # other_mod = { id = "someone.other-mod", version = ">=0.2, <1.0" }
 #
