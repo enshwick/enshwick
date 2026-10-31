@@ -685,7 +685,7 @@ fn expand_declaration(
     if !valid {
         return Err(syn::Error::new_spanned(
             &name,
-            "the name is `<mod id>:<what>`, the mod id `<author>.<name>` or a former id, of `[a-z0-9-]`",
+            "the name is `<mod id>:<what>`, the mod id `<author>.<name>` or an id of the old form `[a-z0-9-]+`",
         ));
     }
     if !item.generics.params.is_empty() {

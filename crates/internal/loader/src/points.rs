@@ -207,7 +207,7 @@ impl Registry {
                     .enumerate()
                     .find(|(_, d)| d.declared.name == name)
             };
-            let found = find(&point).or_else(|| renamed(&point, mods).and_then(|p| find(&p)));
+            let found = find(&point);
             let Some((id, definition)) = found else {
                 inert.push(missing(&link, mods));
                 continue;
@@ -305,14 +305,6 @@ fn chain(
             undid_whom: AtomicUsize::new(usize::MAX),
         })
         .collect()
-}
-
-/// The point `point` under its owner's id now, when the owner had the id
-/// the point names before a rename: `old:what` as `new:what`.
-fn renamed(point: &str, mods: &impl Mods) -> Option<String> {
-    let (owner, what) = point.split_once(':')?;
-    let (id, _) = mods.name(mods.find(owner)?);
-    (id != owner).then(|| format!("{id}:{what}"))
 }
 
 /// Why a link whose point no running mod defines stays inert.

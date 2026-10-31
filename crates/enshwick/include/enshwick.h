@@ -4039,11 +4039,10 @@ typedef struct EnshwickHostApi {
                              uint8_t *out,
                              uint32_t capacity);
   // Serves the call `spec` describes with `callback` and `user`, named
-  // `<id>:<call>` after the serving mod or one of its former ids;
-  // `Status::REFUSED` for another name, or a name and major served
-  // twice, `Status::BAD_ARGS` for a spec that does not read. Allowed
-  // during `enshwick_mod_init` only: `Status::TOO_LATE` once every mod
-  // is initialised.
+  // `<id>:<call>` after the serving mod; `Status::REFUSED` for another
+  // name, or a name and major served twice, `Status::BAD_ARGS` for a
+  // spec that does not read. Allowed during `enshwick_mod_init` only:
+  // `Status::TOO_LATE` once every mod is initialised.
   EnshwickStatus (*serve_call)(EnshwickModHandle me,
                                const struct EnshwickCallSpec *spec,
                                EnshwickCallFn callback,

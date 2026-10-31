@@ -179,8 +179,8 @@ fn is_part(part: &str) -> bool {
 }
 
 /// The full id of `id` asked for by a mod whose bare names take the
-/// namespace `mod_id`: `name` names the
-/// mod's own kind, `mod:name` any mod's.
+/// namespace `mod_id`: `name` names the mod's own kind, `mod:name` any
+/// mod's.
 fn full_id(mod_id: &str, id: &str) -> Option<String> {
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
     (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
