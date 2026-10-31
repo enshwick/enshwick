@@ -121,7 +121,7 @@
 /// uninitialised:
 ///
 /// ```compile_fail
-/// #[enshwick::point(name = "you.post:price", mode = Override, output = u32)]
+/// #[enshwick::point(name = "price", mode = Override, output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
 ///     pub item: u32,
@@ -140,7 +140,7 @@
 ///     pub coins: u32,
 /// }
 ///
-/// #[enshwick::point(name = "you.post:best", mode = Override, output = Offer)]
+/// #[enshwick::point(name = "best", mode = Override, output = Offer)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Best {
 ///     pub item: u32,
@@ -150,7 +150,7 @@
 /// A mod event's data with padding:
 ///
 /// ```compile_fail
-/// #[enshwick::event(name = "you.post:sold")]
+/// #[enshwick::event(name = "sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub item: u32,
@@ -161,7 +161,7 @@
 /// A call's input with padding:
 ///
 /// ```compile_fail
-/// #[enshwick::call(name = "you.post:rent", output = u64)]
+/// #[enshwick::call(name = "rent", output = u64)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Rent {
 ///     pub item: u32,
