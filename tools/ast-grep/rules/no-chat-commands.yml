@@ -5,7 +5,9 @@ message: an action goes through the actions API with a UI path, not a typed chat
 note: >-
   Players and admins act through the Mods screen, admin actions and contextual
   windows; a dedicated server's console and command file take the actions
-  API's own lines. The rule refuses an item named for registering or
+  API's own lines. A console's or command file's own `handle_command` or
+  `on_command` is allowed: both are for server admins and automation, not
+  players, so it carries `// ast-grep-ignore` with that reason. The rule refuses an item named for registering or
   handling chat commands. That the loader posts typed `/` lines unchanged is
   held by the chat module's tests.
 ignores:
