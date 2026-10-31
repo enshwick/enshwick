@@ -95,7 +95,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: ${{ fromJSON(inputs.split && '["host", "windows-lint"]' || '["all"]') }}
+        # A pull request also fuzzes, briefly, the targets its change
+        # reaches; a push to main fuzzes every target and fills the fuzz
+        # build cache pull requests restore.
+        part: ${{ fromJSON(inputs.split && ((github.event_name == 'pull_request' || github.event_name == 'push') && '["host", "windows-lint", "fuzz"]' || '["host", "windows-lint"]') || '["all"]') }}
     env:
       # A merge queue entry is checked against the entry before it (its
       # group's parent): only its own pull request's changes are new.
@@ -125,11 +128,12 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.tool_cache }}/rustup
-          key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
+          # The fuzz part's also holds the nightly that setup-rust pins.
+          key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}${{ matrix.part == 'fuzz' && format('-fuzz-{0}', hashFiles('.github/actions/setup-rust/action.yml')) || '' }}
       # The Windows SDK and CRT cargo-xwin downloads, about 12 minutes from
       # Microsoft on a hosted runner. Only the cross-compiling parts here
       # (`windows-lint`, `all`) use it; the job `windows` builds natively.
-      - if: matrix.part != 'host'
+      - if: matrix.part == 'windows-lint' || matrix.part == 'all'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.tool_cache }}/xwin
@@ -142,8 +146,10 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
         with:
-          tools: cargo-nextest@0.9.150,cargo-deny@0.20.2,cargo-machete@0.9.2${{ inputs.semver != '' && matrix.part != 'windows-lint' && ',cargo-semver-checks@0.51.0' || '' }}
-          ast-grep: ${{ matrix.part != 'windows-lint' }}
+          tools: cargo-nextest@0.9.150,cargo-deny@0.20.2,cargo-machete@0.9.2${{ inputs.semver != '' && (matrix.part == 'host' || matrix.part == 'all') && ',cargo-semver-checks@0.51.0' || '' }}
+          ast-grep: ${{ matrix.part == 'host' || matrix.part == 'all' }}
+          sanitizers: ${{ matrix.part == 'fuzz' }}
+          fuzz: ${{ matrix.part == 'fuzz' }}
 
       # The build itself, per part: each job builds a different target.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3

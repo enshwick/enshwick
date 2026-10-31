@@ -1,0 +1,34 @@
+id: no-chat-commands
+language: rust
+severity: error
+message: an action goes through the actions API with a UI path, not a typed chat command
+note: >-
+  Players and admins act through the Mods screen, admin actions and contextual
+  windows; a dedicated server's console and command file take the actions
+  API's own lines. A console's or command file's own `handle_command` or
+  `on_command` is allowed: both are for server admins and automation, not
+  players, so it carries `// ast-grep-ignore` with that reason. The rule refuses an item named for registering or
+  handling chat commands. That the loader posts typed `/` lines unchanged is
+  held by the chat module's tests.
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/benches/**"
+rule:
+  any:
+    - kind: function_item
+      has:
+        field: name
+        regex: '^((add|register|on|handle)_(chat_)?commands?|(chat_)?commands?_(handler|hook|registry)|chat_commands?)$'
+    - kind: field_declaration
+      has:
+        field: name
+        regex: '^((add|register|on|handle)_(chat_)?commands?|chat_commands?)$'
+    - any:
+        - kind: struct_item
+        - kind: enum_item
+        - kind: trait_item
+        - kind: type_item
+      has:
+        field: name
+        regex: '^(Chat)?Command(Context|Handler|Registry|Reply)$|^ChatCommands?$'
