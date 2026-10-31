@@ -5,6 +5,17 @@ valid:
   - "fn name() -> Result<String, Error> { todo() }"
   - "fn run() -> anyhow::Result<String> { todo() }"
   - "fn digits() -> mlua::Result<String> { todo() }"
+  - "fn name() -> Result<Value, MyString> { todo() }"
+  - |
+    #[cfg(test)]
+    #[expect(clippy::unwrap_used, reason = "tests")]
+    mod tests {
+        fn install() -> Result<(), String> { Ok(()) }
+    }
+  - |
+    #[test]
+    #[ignore = "slow"]
+    fn installs() -> Result<(), String> { Ok(()) }
   - |
     #[cfg(test)]
     mod tests {
@@ -13,5 +24,11 @@ valid:
 invalid:
   - "fn parse(text: &str) -> Result<Rule, String> { todo() }"
   - "fn get(key: &str) -> std::result::Result<String, String> { todo() }"
+  - "fn get(key: &str) -> Result<Value, std::string::String> { todo() }"
+  - "fn get(key: &str) -> Result<Value, alloc::string::String> { todo() }"
   - "struct Console { handler: OnceLock<Result<Handler, String>> }"
   - "type At = Box<dyn Fn(&Ask<'_>) -> Result<Subject, String> + Send + Sync>;"
+  - |
+    #[cfg(test)]
+    fn helper() {}
+    fn parse(text: &str) -> Result<Rule, String> { todo() }
