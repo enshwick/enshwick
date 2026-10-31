@@ -288,10 +288,10 @@ pub fn unexported(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Opti
     ))
 }
 
-/// Why the mod `asker` may not name the content id `name`,
-/// `<owner>:<what>`, whose owner's manifest exports `exports`; `None` when
-/// it may: an id of its own, or one whose `what`, or the name `what` is a
-/// part of, the owner exports.
+/// Why the mod `asker` may not name the content id `name`, `<owner>:<what>`.
+///
+/// `exports` are the owner's; `None` when it may: an id of its own, or one
+/// whose `what`, or the name `what` is a part of, the owner exports.
 #[must_use]
 pub fn unexported_content(name: &str, asker: &str, exports: &[&str]) -> Option<String> {
     let (_, what) = name.split_once(':')?;

@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** a required dependency's `deps::<alias>::id` from `deps!` is
+  no longer `const`: it asks the loader and returns `Result<Id, Off>`, `Off`
+  for a name the dependency does not export. An optional one's returns
+  `None` for such a name (#798).
+
 ### Added
 
 - `exports` in `[package.metadata.enshwick]`, the local names other mods may

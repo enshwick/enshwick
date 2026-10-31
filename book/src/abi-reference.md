@@ -396,3 +396,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `map_frame`                  | The map's origin, size and cell size in metres, read once per scene; game thread, quiet              |
 | `request_base_limits`        | Asks for up to the given altar zones and bases, the largest request holding; init only               |
 | `map_marker_types`           | The client's map marker types from the game's registry, read once; any thread                        |
+| `use_content`                | Whether the mod may name a content id: its own, or one its mod exports; any thread                   |
