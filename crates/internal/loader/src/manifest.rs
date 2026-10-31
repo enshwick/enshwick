@@ -288,6 +288,19 @@ pub fn unexported(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Opti
     ))
 }
 
+/// Why the mod `asker` may not name the content id `name`,
+/// `<owner>:<what>`, whose owner's manifest exports `exports`; `None` when
+/// it may: an id of its own, or one whose `what`, or the name `what` is a
+/// part of, the owner exports.
+#[must_use]
+pub fn unexported_content(name: &str, asker: &str, exports: &[&str]) -> Option<String> {
+    let (_, what) = name.split_once(':')?;
+    if enshwick::__private::rules::exports_content(exports, what) {
+        return None;
+    }
+    unexported("content id", name, asker, exports)
+}
+
 /// What a manifest tells players about its mod.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Meta {
@@ -658,6 +671,23 @@ mod tests {
         );
         let none = unexported("service", "you.trading-post:prices", asker, &[]).unwrap();
         assert!(none.ends_with("it exports nothing"), "{none}");
+    }
+
+    #[test]
+    fn another_mod_names_only_the_content_the_owner_exports_and_its_parts() {
+        let exports = ["locker"];
+        let asker = "you.market-stalls";
+        for exported in ["you.lockers:locker", "you.lockers:locker.recipe"] {
+            assert_eq!(unexported_content(exported, asker, &exports), None);
+        }
+        assert_eq!(
+            unexported_content("you.market-stalls:stall", asker, &[]),
+            None
+        );
+        assert_eq!(
+            unexported_content("you.lockers:key", asker, &exports).as_deref(),
+            Some("content id you.lockers:key: you.lockers does not export key; it exports locker")
+        );
     }
 
     #[test]

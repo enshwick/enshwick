@@ -187,14 +187,6 @@
 /// const NAME: enshwick::content::Id = enshwick::content::id!("locker").part("Name");
 /// ```
 ///
-/// A dependency's content name in upper case:
-///
-/// ```compile_fail
-/// enshwick::deps!();
-///
-/// const LOCKER: enshwick::content::Id = deps::lockers::id("Locker");
-/// ```
-///
 /// An alias the crate's `Cargo.toml` does not name:
 ///
 /// ```compile_fail
@@ -213,14 +205,6 @@
 /// pub struct Opened {
 ///     pub locker: u32,
 /// }
-/// ```
-///
-/// An optional dependency's content id used as a required one's:
-///
-/// ```compile_fail
-/// enshwick::deps!();
-///
-/// const LANTERN: enshwick::content::Id = deps::lanterns::id("lantern");
 /// ```
 ///
 /// A point listed in `declare_mod!` that `exports` in the crate's

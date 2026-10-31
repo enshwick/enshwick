@@ -82,6 +82,9 @@ pub struct Pack {
     pub(super) selections: Vec<(ItemsChange, String)>,
     pub(super) recipe_selections: Vec<(RecipesChange, String)>,
     pub(super) skipped: Vec<PackError>,
+    /// The content ids of other mods the pack names, which the loader
+    /// checks against their exports.
+    pub(super) named: Vec<String>,
     pub(super) texts: String,
     pub(super) hash: u32,
 }
@@ -117,6 +120,8 @@ pub(super) struct Reader<'a> {
     /// The dependencies `pack.toml` names, by alias: their ids and
     /// relations.
     pub(super) aliases: BTreeMap<String, (String, Relation)>,
+    /// The content ids of other mods the pack names.
+    pub(super) named: std::collections::BTreeSet<String>,
 }
 
 impl Reader<'_> {
@@ -251,6 +256,11 @@ impl Reader<'_> {
                     at,
                     format!("{reference:?} is no content id: <alias>:<name> or <mod>:<name>"),
                 );
+            } else if full
+                .split_once(':')
+                .is_some_and(|(id, _)| id != self.namespace)
+            {
+                self.named.insert(full);
             }
             return guid.map(|g| (g, Ref::Elsewhere));
         }
@@ -440,6 +450,7 @@ impl Pack {
             defined: BTreeMap::new(),
             vanilla,
             aliases: BTreeMap::new(),
+            named: std::collections::BTreeSet::new(),
         };
         reader.aliases = aliases(&mut reader.errors, files);
         let texts_text = match files.text(TEXTS_FILE) {
@@ -503,6 +514,7 @@ impl Pack {
             selections: Vec::new(),
             recipe_selections: Vec::new(),
             skipped: Vec::new(),
+            named: Vec::new(),
             texts: texts_text,
             hash: files.hash(),
         };
@@ -527,6 +539,7 @@ impl Pack {
         pack.changes.extend(recipe_changes);
         pack.recipe_selections = recipe_selections;
         pack.skipped = reader.skipped;
+        pack.named = reader.named.into_iter().collect();
         if reader.errors.is_empty() {
             Ok(pack)
         } else {

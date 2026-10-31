@@ -200,23 +200,32 @@ pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
         let doc = format!("`{id}`, which this mod {relation}.");
         let content = if d.relation == "REQUIRES" {
             quote! {
-                /// The dependency's content id `<dependency>:<name>`, in a
-                /// constant too, where a malformed name fails the build.
+                /// The dependency's content id `<dependency>:<name>`, once
+                /// the loader lets this mod name it: the dependency's
+                /// `exports` list `<name>` or the name it is a part of.
+                /// Ask once, at init, and keep the id.
+                ///
+                /// # Errors
+                ///
+                /// [`Off`](::enshwick::Off) when the dependency does not
+                /// export the name; the loader logs what it exports.
                 ///
                 /// # Panics
                 ///
                 /// When `name` is not 1 to 128 of `[a-z0-9_./-]`.
-                #[must_use]
-                pub const fn id(name: &'static str) -> ::enshwick::content::Id {
-                    ::enshwick::content::Id::of(ID, name)
+                pub fn id(
+                    name: &'static str,
+                ) -> ::core::result::Result<::enshwick::content::Id, ::enshwick::Off> {
+                    ::enshwick::__private::dependency_id(::enshwick::content::Id::of(ID, name))
                 }
             }
         } else {
             quote! {
                 /// The dependency's content id `<dependency>:<name>`; `None`
-                /// while the dependency does not run. Each call asks the
-                /// loader which mods run: call it once, at init, and keep
-                /// the id.
+                /// while the dependency does not run, and when it does not
+                /// export the name, which the loader logs. Each call asks
+                /// the loader which mods run: call it once, at init, and
+                /// keep the id.
                 ///
                 /// # Panics
                 ///
@@ -225,7 +234,10 @@ pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
                 #[must_use]
                 pub fn id(name: &'static str) -> ::core::option::Option<::enshwick::content::Id> {
                     let id = ::enshwick::content::Id::of(ID, name);
-                    ::enshwick::mods::is_running(ID).then_some(id)
+                    if !::enshwick::mods::is_running(ID) {
+                        return ::core::option::Option::None;
+                    }
+                    ::enshwick::__private::dependency_id(id).ok()
                 }
             }
         };

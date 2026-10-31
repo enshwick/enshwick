@@ -91,7 +91,8 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] as the calls it makes return it, such as for a content id
-    /// the loader refuses.
+    /// the loader refuses, among them another mod's content id that mod
+    /// does not export.
     ///
     /// # Examples
     ///
@@ -110,6 +111,9 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn add_pack(&mut self, pack: &Pack) -> Result<(), Off> {
+        for name in &pack.named {
+            crate::content::named(id(name)?)?;
+        }
         let texts = self.texts(&pack.texts)?;
         let tag = |load: &mut Self, key: &Option<String>| -> Result<Option<Guid>, Off> {
             key.as_ref()
