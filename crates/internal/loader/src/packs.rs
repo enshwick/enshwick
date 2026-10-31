@@ -521,7 +521,7 @@ mod tests {
     #[test]
     fn a_pack_manifest_reads_as_a_mod_s() {
         let manifest = PackManifest::parse(
-            "id = \"you.lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"replaces = [\"lamps\"]\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5\" }\n[after]\nlockers = \"you.lockers\"\n[recommends]\nbags = \"ann.bags\"\n[breaks]\nold = \"old.lanterns\"\n",
+            "id = \"you.lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"\nreplaces = [\"lamps\"]\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5\" }\n[after]\nlockers = \"you.lockers\"\n[recommends]\nbags = \"ann.bags\"\n[breaks]\nold = \"old.lanterns\"\n",
         )
         .unwrap();
         let manifest = manifest_of(&manifest);
