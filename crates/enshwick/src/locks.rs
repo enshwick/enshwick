@@ -65,6 +65,11 @@ pub trait RelockRw<T: ?Sized>: sealed::Sealed {
 /// kept and logs the place; the lock's poison is cleared by its next
 /// [`Relock::relock`].
 ///
+/// # Panics
+///
+/// Each wait panics as [`Condvar::wait`] does: when the condition variable
+/// is used with more than one mutex.
+///
 /// # Examples
 ///
 /// ```
