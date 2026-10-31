@@ -286,7 +286,9 @@ fn forbids_unsafe(path: &Path) -> bool {
 }
 
 /// Whether an inner attribute of the Rust `text` forbids `unsafe_code`,
-/// alone or among other lints, on one line or several, or under `cfg_attr`.
+/// alone or among other lints, on one line or several. Under `cfg_attr` it
+/// counts only with the predicate `not(test)`, which leaves the crate's
+/// own code forbidden.
 fn forbids(text: &str) -> bool {
     let code: String = code(text).chars().filter(|c| !c.is_whitespace()).collect();
     code.match_indices("#![").any(|(start, _)| {
@@ -303,18 +305,36 @@ fn forbids(text: &str) -> bool {
             })
             .map_or(code.len(), |(at, _)| start + 2 + at);
         let attribute = &code[start + 3..end];
-        attribute.match_indices("forbid(").any(|(at, _)| {
-            let own_word = attribute[..at]
-                .chars()
-                .next_back()
-                .is_none_or(|c| !(c.is_alphanumeric() || c == '_'));
-            let lints = &attribute[at + "forbid(".len()..];
-            own_word
-                && lints[..lints.find(')').unwrap_or(lints.len())]
-                    .split(',')
-                    .any(|lint| lint == "unsafe_code")
+        let attributes = match attribute.strip_prefix("cfg_attr(not(test),") {
+            Some(rest) => top_level(rest.strip_suffix(')').unwrap_or(rest)),
+            None => vec![attribute],
+        };
+        attributes.iter().any(|attribute| {
+            attribute
+                .strip_prefix("forbid(")
+                .and_then(|lints| lints.strip_suffix(')'))
+                .is_some_and(|lints| lints.split(',').any(|lint| lint == "unsafe_code"))
         })
     })
+}
+
+/// The items of the comma-separated `list`, split outside parentheses.
+fn top_level(list: &str) -> Vec<&str> {
+    let mut items = Vec::new();
+    let (mut depth, mut start) = (0_usize, 0);
+    for (at, c) in list.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                items.push(&list[start..at]);
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    items.push(&list[start..]);
+    items
 }
 
 /// `path` as the package folder `dir` names it.
@@ -404,5 +424,12 @@ mod tests {
         ));
         assert!(!forbids("#![forbid(unsafe_code_extra)]\n"));
         assert!(!forbids("const S: &str = \"#![forbid(unsafe_code)]\";\n"));
+        assert!(!forbids("#![cfg_attr(test, forbid(unsafe_code))]\n"));
+        assert!(!forbids(
+            "#![cfg_attr(feature = \"x\", forbid(unsafe_code))]\n"
+        ));
+        assert!(forbids(
+            "#![cfg_attr(not(test), deny(missing_docs), forbid(unsafe_code))]\n"
+        ));
     }
 }
