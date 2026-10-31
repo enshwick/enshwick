@@ -404,7 +404,7 @@ unsafe extern "system" fn scale_recipes(
         .unwrap_or_else(|| registry.to_vec());
     let built: &'static [u8] = Box::leak(built.into_boxed_slice());
     // SAFETY: `out` is non-null (checked above) and writable for the call;
-    // the bytes are leaked, so they stay valid and writable for the
+    // the bytes are leaked, so they stay valid and unchanged for the
     // process, as the chain needs for a rebuild.
     unsafe {
         out.write(built.as_ptr());
