@@ -3,6 +3,7 @@ valid:
   - "const PRICES: &str = \"trading-post:prices\";"
   - "const NAME: Id = Id::new(\"enshwick:stand-in.name\");"
   - "static KIND: &str = \"enshwick:stats\";"
+  - "const CRIT: &str = \"you.rpg:crit\";"
   - "fn f(load: &Load) { load.open_stat(PRICES); }"
   - "fn f() -> String { format!(\"{mod_id}:{what}\") }"
   - "fn f() -> &'static str { \"see https://enshwick.dev\" }"
@@ -14,5 +15,6 @@ valid:
     }
 invalid:
   - "fn f(load: &Load) { load.open_stat(\"rpg:crit\"); }"
+  - "fn f(load: &Load) { load.open_stat(\"you.rpg:crit\"); }"
   - "fn f() -> Id { Id::new(\"trading-post:prices\") }"
   - "fn f(services: &Services) { services.find(\"trading-post:sold.v2\", 1); }"
