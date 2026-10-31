@@ -247,9 +247,9 @@ pub struct KnowledgeId(pub u32);
 /// # Examples
 ///
 /// ```
-/// use enshwick::buffs::BuffTypeId;
+/// use enshwick::{buffs::BuffTypeId, content::id};
 ///
-/// const WARMTH: BuffTypeId = BuffTypeId::named("my-mod:warmth");
+/// const WARMTH: BuffTypeId = BuffTypeId::from_guid(id!("warmth").guid());
 /// assert_eq!(WARMTH.to_string(), WARMTH.get().to_string());
 /// ```
 #[repr(transparent)]
@@ -388,9 +388,9 @@ macro_rules! guid_ids {
             /// # Examples
             ///
             /// ```
-            /// use enshwick::content::Id;
+            /// use enshwick::content::{Id, id};
             ///
-            /// const LOCKER: Id = Id::new("you.lockers:locker");
+            /// const LOCKER: Id = id!("locker");
             #[doc = concat!("let id = enshwick::abi::", stringify!($id), "::from_guid(LOCKER.guid());")]
             /// assert_eq!(id.get(), LOCKER.guid().fnv1a());
             /// ```
@@ -399,9 +399,11 @@ macro_rules! guid_ids {
                 Self(guid.fnv1a())
             }
 
-            /// The id of the resource a mod serves under the content id `id`
-            /// (`<mod>:<name>`); a malformed literal fails the build when
-            /// used in a constant.
+            /// The id of the resource under the content id `id` in full
+            /// (`<mod>:<name>`), for tests, tools or another mod's content; a
+            /// mod's own takes [`from_guid`](Self::from_guid) with the
+            /// [`id!`](crate::content::id) of its local name. A malformed
+            /// literal fails the build when used in a constant.
             ///
             /// # Panics
             ///
@@ -410,10 +412,10 @@ macro_rules! guid_ids {
             /// # Examples
             ///
             /// ```
-            /// use enshwick::content::Id;
+            /// use enshwick::content::Guid;
             ///
-            #[doc = concat!("const WARMTH: enshwick::abi::", stringify!($id), " = enshwick::abi::", stringify!($id), "::named(\"my-mod:warmth\");")]
-            #[doc = concat!("assert_eq!(WARMTH, enshwick::abi::", stringify!($id), "::from_guid(Id::new(\"my-mod:warmth\").guid()));")]
+            #[doc = concat!("const LOCKER: enshwick::abi::", stringify!($id), " = enshwick::abi::", stringify!($id), "::named(\"you.lockers:locker\");")]
+            #[doc = concat!("assert_eq!(LOCKER, enshwick::abi::", stringify!($id), "::from_guid(Guid::named(\"you.lockers:locker\")));")]
             /// ```
             #[must_use]
             pub const fn named(id: &str) -> Self {

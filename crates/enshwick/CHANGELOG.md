@@ -66,7 +66,9 @@ Each entry names the pull request that made the change.
 
 - **Breaking:** `Id::name` is gone: an `Id` writes its full id through
   `Display`, and two ids are equal when their GUIDs are. `Id::new` takes
-  an id in full, for tests and tools (#766).
+  an id in full, for tests and tools, as do `BuffTypeId::named` and the
+  other `named` game ids; a mod's own buff type is
+  `BuffTypeId::from_guid(id!("warmth").guid())` (#766).
 
 - **Breaking:** a mod names itself once, in the `[package.metadata.enshwick]`
   table of its `Cargo.toml`: `id`, `name`, `side`, `join`, `reload`,

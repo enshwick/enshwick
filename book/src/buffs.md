@@ -42,9 +42,11 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ## Types
 
 A buff type is named by its `BuffTypeId`: the FNV-1a 32 hash of the type's GUID,
-as the game's content names it; `BuffTypeId::from_guid(bytes)` makes one, and
-`BuffTypeId::named("my-mod:warmth")` makes the id of a buff type a mod serves
-under a [content id](content.md#content-ids).
+as the game's content names it. `BuffTypeId::from_guid(guid)` makes one, and
+`BuffTypeId::from_guid(id!("warmth").guid())` makes the id of a buff type a
+mod serves under its own [content id](content.md#content-ids).
+`BuffTypeId::named("you.lockers:warmth")` takes a content id in full, for
+tests, tools or another mod's buff type.
 `types()` lists every type of the running game (274 on the 1.0 game) with
 its `BuffSlotType` (`Food`, `Buff`, `Debuff`, `Rested` or `Terrain`), its
 default duration, whether the game saves it with a character, whether it

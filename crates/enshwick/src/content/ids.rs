@@ -310,7 +310,8 @@ pub use enshwick_macros::id;
 /// to existing content, vanilla or another mod's, stay [`Guid`]s.
 ///
 /// Two ids are equal when they name the same content, however they were
-/// built.
+/// built. Equal ids may still differ in what they allow: a derived id takes
+/// no further part, while the same id written in full with [`Id::new`] does.
 ///
 /// # Examples
 ///
@@ -353,7 +354,8 @@ impl Id {
         }
     }
 
-    /// [`Id::new`] for an id read at run time; `None` when malformed.
+    /// [`Id::new`] for when a malformed id should not panic; `None` when
+    /// malformed.
     ///
     /// # Examples
     ///
@@ -405,8 +407,8 @@ impl Id {
         self.join(part)
     }
 
-    /// [`Id::part`] for a part read at run time; `None` when the part is
-    /// malformed, the name too long or `self` a part already.
+    /// [`Id::part`] for when a malformed part should not panic; `None` when
+    /// the part is malformed, the name too long or `self` a part already.
     ///
     /// # Examples
     ///
