@@ -22,7 +22,7 @@ Each entry names the pull request that made the change.
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`
   name the running game's content by its debug names, so a mod's code holds
   no vanilla GUID; `deps!` offers them as `deps::vanilla`, and no dependency
-  takes the alias `vanilla` (#PR).
+  takes the alias `vanilla` (#780).
 
 - `deps!()` writes a module `deps` with a module per alias of `requires`,
   `after` and `recommends`: `deps::lockers::ID` and `deps::lockers::id("locker")`,
