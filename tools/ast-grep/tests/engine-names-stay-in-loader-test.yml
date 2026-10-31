@@ -6,3 +6,5 @@ valid:
 invalid:
   - "fn f(load: &Load) { let beds = ComponentType::resolve(load, \"keen::ecs::NpcBed\"); }"
   - "const BED: &str = \"keen::ecs::NpcBed\";"
+  - "const BED: &str = r\"keen::ecs::NpcBed\";"
+  - "const BED: &str = r#\"keen::ecs::NpcBed\"#;"
