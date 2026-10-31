@@ -14,7 +14,9 @@ use crate::loot::{Drop, Kinds, Source};
 
 use super::entries::{FormatEntry, FromEntry, ItemsFile, LootFile, RecipesFile, WorkshopsFile};
 use super::files::{PackError, PackFiles, ParsePackError};
-use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE, TEXTS_FILE, WORKSHOPS_FILE};
+use super::manifest::PackManifest;
+use super::{ITEMS_FILE, LOOT_FILE, MANIFEST_FILE, RECIPES_FILE, TEXTS_FILE, WORKSHOPS_FILE};
+use crate::abi::Relation;
 
 /// A reference in a pack, resolved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -112,6 +114,9 @@ pub(super) struct Reader<'a> {
     pub(super) defined: BTreeMap<String, &'static str>,
     /// The game's content, for vanilla names.
     pub(super) vanilla: Option<&'a Vanilla>,
+    /// The dependencies `pack.toml` names, by alias: their ids and
+    /// relations.
+    pub(super) aliases: BTreeMap<String, (String, Relation)>,
 }
 
 impl Reader<'_> {
@@ -222,14 +227,29 @@ impl Reader<'_> {
         if let Some(guid) = Guid::try_parse(reference) {
             return Some((guid, Ref::Elsewhere));
         }
-        if reference.contains(':') {
-            let guid = Guid::try_named(reference);
+        if let Some((owner, name)) = reference.split_once(':') {
+            let full = match self.aliases.get(owner) {
+                None => reference.to_owned(),
+                Some((id, relation)) if *relation == Relation::REQUIRES => format!("{id}:{name}"),
+                Some((id, _)) => {
+                    self.error(
+                        file,
+                        text,
+                        at,
+                        format!(
+                            "{reference:?}: {owner} is {id}, which pack.toml does not require, so it may not run; name its content once `requires` names it"
+                        ),
+                    );
+                    return None;
+                }
+            };
+            let guid = Guid::try_named(&full);
             if guid.is_none() {
                 self.error(
                     file,
                     text,
                     at,
-                    format!("{reference:?} is no content id: <mod>:<name>"),
+                    format!("{reference:?} is no content id: <alias>:<name> or <mod>:<name>"),
                 );
             }
             return guid.map(|g| (g, Ref::Elsewhere));
@@ -240,7 +260,7 @@ impl Reader<'_> {
         }
         let found = match self.vanilla {
             None => Err(format!(
-                "no {what} {reference:?} in this pack; name another mod's as <mod>:<name>, or a vanilla one by its GUID or, where the game's data is at hand, its debug name"
+                "no {what} {reference:?} in this pack; name a required mod's as <alias>:<name>, or a vanilla one by its GUID or, where the game's data is at hand, its debug name"
             )),
             Some(vanilla) => vanilla
                 .item(reference)
@@ -319,6 +339,27 @@ impl Reader<'_> {
     }
 }
 
+/// The dependencies the `pack.toml` among `files` names, by alias, with
+/// their ids and relations; none without one. A manifest that does not
+/// read is noted in `errors`.
+fn aliases(errors: &mut Vec<PackError>, files: &PackFiles) -> BTreeMap<String, (String, Relation)> {
+    let manifest = match files.text(MANIFEST_FILE) {
+        Ok(None) => return BTreeMap::new(),
+        Ok(Some(text)) => PackManifest::parse(text),
+        Err(error) => Err(error),
+    };
+    match manifest {
+        Ok(manifest) => manifest
+            .dependencies()
+            .map(|(relation, alias, d)| (alias.to_owned(), (d.id.clone(), relation)))
+            .collect(),
+        Err(error) => {
+            errors.push(error);
+            BTreeMap::new()
+        }
+    }
+}
+
 /// The kinds and filters of a drop's `from`.
 pub(super) fn source_of(from: &FromEntry) -> Result<Source, String> {
     let kind = |name: &str| match name {
@@ -349,7 +390,9 @@ pub(super) fn source_of(from: &FromEntry) -> Result<Source, String> {
 impl Pack {
     /// Reads and checks the pack `files` in the namespace `namespace`, the
     /// id of the mod or pack that adds it, with the running game's vanilla
-    /// names ([`Vanilla::game`]) when there is a game.
+    /// names ([`Vanilla::game`]) when there is a game. When `files` holds a
+    /// `pack.toml`, a reference `<alias>:<name>` names the content of the
+    /// mod its `requires` gives that alias.
     ///
     /// # Errors
     ///
@@ -396,7 +439,9 @@ impl Pack {
             skipped: Vec::new(),
             defined: BTreeMap::new(),
             vanilla,
+            aliases: BTreeMap::new(),
         };
+        reader.aliases = aliases(&mut reader.errors, files);
         let texts_text = match files.text(TEXTS_FILE) {
             Ok(text) => text.unwrap_or("").to_owned(),
             Err(error) => {

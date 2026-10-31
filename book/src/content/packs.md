@@ -78,7 +78,11 @@ pack `you.lanterns` is the [content id](../content.md#content-ids)
 of `[a-z0-9_./-]` and unique across the pack's files. A reference is one of:
 
 - a name of the pack: `lantern`;
-- another mod's content id: `you.lockers:locker`;
+- a required mod's name after the alias `requires` gives it: with
+  `lockers = "you.lockers"` in `[requires]`, `lockers:locker` names
+  `you.lockers:locker`. A mod of `after` or `recommends` may not run, so its
+  alias in a reference is a problem at its line;
+- another mod's content id in full: `you.lockers:locker`;
 - a vanilla GUID: `6943053a-32c1-4718-ae22-e61427ddf54d`;
 - a vanilla item's debug name, as the game's item registry lists it:
   `Craftingstation_Workbench`. Where a recipe names a workshop, a crafting
@@ -472,7 +476,7 @@ lacks, chances outside 0 to 1, changes out of range or made twice, and
 in the pack's log with its file, line and column, and the pack stays off:
 
 ```text
-error [you.lanterns] items.toml:7:1: no item "torch" in this pack; name another mod's as <mod>:<name>, or a vanilla one by its GUID or, where the game's data is at hand, its debug name
+error [you.lanterns] items.toml:7:1: no item "torch" in this pack; name a required mod's as <alias>:<name>, or a vanilla one by its GUID or, where the game's data is at hand, its debug name
 ```
 
 `cargo enshwick pack check mods/you.lanterns --game <game folder>` gives the
@@ -557,3 +561,4 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 `Pack::parse` returns every problem with its file and line, which `?` turns
 into the mod's off reason. A mod's pack is not watched: change it and rebuild.
+It has no `pack.toml`, so it names another mod's content by its full id.
