@@ -465,30 +465,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-example-hot-reload"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick",
-]
-
-[[package]]
-name = "enshwick-example-market-stalls"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick",
- "enshwick-example-trading-post-api",
-]
-
-[[package]]
 name = "enshwick-example-trading-post"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick",
- "enshwick-example-trading-post-api",
-]
-
-[[package]]
-name = "enshwick-example-trading-post-api"
 version = "0.0.0-dev"
 dependencies = [
  "enshwick",

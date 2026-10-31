@@ -21,7 +21,6 @@ exports = ["prices", "sold", "price"]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick-example-trading-post-api = { path = "../trading-post-api", version = "0.0.0-dev" }
 enshwick = { workspace = true, features = ["unstable"] }
 
 [dev-dependencies]

@@ -36,23 +36,11 @@ publish = false
 
 # Examples and tools never release.
 [[package]]
-name = "enshwick-example-hot-reload"
-release = false
-
-[[package]]
-name = "enshwick-example-market-stalls"
-release = false
-
-[[package]]
 name = "enshwick-example-haggling"
 release = false
 
 [[package]]
 name = "enshwick-example-trading-post"
-release = false
-
-[[package]]
-name = "enshwick-example-trading-post-api"
 release = false
 
 [[package]]

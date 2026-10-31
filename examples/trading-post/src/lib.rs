@@ -12,7 +12,26 @@ use enshwick::services::Emitter;
 use enshwick::state::ModLocal;
 use enshwick::{Entity, PlayerKey};
 use enshwick::{Load, Mod, Off};
-use enshwick_example_trading_post_api::{Prices, Sold};
+
+/// Item prices, published for other mods.
+#[enshwick::service(name = "you.trading-post:prices", version = 1)]
+#[derive(Debug)]
+pub struct Prices {
+    /// The price of `item` in coins, 0 for an item with no price.
+    pub price: extern "system" fn(item: u32) -> u32,
+    /// Sets the price of `item`; returns the old one.
+    pub set_price: extern "system" fn(item: u32, price: u32) -> u32,
+}
+
+/// An item sold at the trading post, sent on the thread that sold it.
+#[enshwick::event(name = "you.trading-post:sold")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Sold {
+    /// The item sold.
+    pub item: u32,
+    /// What it sold for, in coins.
+    pub price: u32,
+}
 
 /// Items with a price: ids 0 to 63.
 const ITEMS: usize = 64;

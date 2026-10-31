@@ -15,14 +15,14 @@ instead (see [Extending other mods](extending.md)). A single function that
 mods in other languages call too is a [call](calls.md).
 
 The [examples](https://github.com/enshwick/enshwick/tree/main/examples)
-folder holds the two mods this chapter follows: `trading-post` publishes item
-prices and sends `you.trading-post:sold`, and `market-stalls` uses the prices and
-counts the coins from each sale.
+folder holds the mod this chapter follows: `trading-post` publishes item
+prices and sends `you.trading-post:sold`. The chapter's own examples show a
+mod that uses the prices and counts the coins from each sale.
 
 ## One declaration
 
 Declare the table and the event once, in a small crate both mods depend on,
-here `trading-post-api`:
+so the layouts the loader compares come from one source:
 
 ```rust
 /// Item prices, published by `trading-post`.
