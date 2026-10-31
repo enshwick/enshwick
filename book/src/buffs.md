@@ -3,8 +3,8 @@
 [`load.buffs()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/buffs.rs)
 returns the
 [`Buffs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/buffs.rs)
-of the server's world: the buff and debuff types the game knows, the buffs an
-entity has, giving one and removing one. It is `Copy`; get it during `init`
+of the server's world: the buff and debuff types the game knows, an entity's
+buffs, giving and removing one. It is `Copy`; get it during `init`
 and move it into handlers, tasks and actions.
 
 ```rust

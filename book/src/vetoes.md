@@ -1,8 +1,8 @@
 # Crafting, building and interaction vetoes
 
 A mod may refuse a craft, a placement or a player's interaction with an
-entity before the game acts on it. Each is a filter that returns `false` to
-refuse. A filter that panics turns the mod off and lets the action through.
+entity before the game acts on it. Each filter returns `false` to refuse; one
+that panics turns the mod off and lets the action through.
 
 ## Crafting
 

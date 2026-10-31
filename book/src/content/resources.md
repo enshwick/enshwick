@@ -3,7 +3,7 @@
 Items, recipes and workshops are built on one lower-level call,
 [`Load::serve`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs).
 It serves any game resource, new or changed, as if it came from the game's
-archive. Reach for it when the high-level calls do not cover what you need.
+archive. Use it where the high-level calls fall short.
 
 ## Keys and bases
 

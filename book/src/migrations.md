@@ -2,7 +2,11 @@
 
 A new version of a mod sometimes changes what older versions left behind: a
 setting gets a better name or another unit, a world store moves, an item gets
-a new GUID. A **migration** says how to carry the old over. The mod declares
+a new GUID.
+
+## What a migration does
+
+A **migration** says how to carry the old over. The mod declares
 every migration it ever made, oldest first, and the loader runs each one
 once per world and records it, as Factorio does with its saves.
 

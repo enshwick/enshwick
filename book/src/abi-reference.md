@@ -1,9 +1,14 @@
 # ABI reference
 
-The loader and a mod talk through a C ABI: `repr(C)` structs, integer enums,
-`extern "system"` functions, strings borrowed for the call, and no unwinding
-across the boundary. Mods normally use the safe layer of `enshwick`; this
-chapter is for reading logs and the rare call to the raw table. The exact types and signatures are in the
+The loader and a mod talk through a C ABI. Mods normally use the safe layer
+of `enshwick`; this chapter is for reading logs and the rare call to the raw
+table.
+
+## The boundary
+
+The ABI is made of `repr(C)` structs, integer enums, `extern "system"`
+functions, strings borrowed for the call, and no unwinding across the
+boundary. The exact types and signatures are in the
 [`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs). The same types for
 C and other languages are in `enshwick.h`, see [Mods in C](mods-in-c.md).
 

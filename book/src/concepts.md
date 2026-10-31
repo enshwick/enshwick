@@ -3,6 +3,8 @@
 These pages say how the loader and a mod work together. Read them once
 before the chapters on writing a mod; each is short.
 
+## The pages
+
 - [The loader and the ABI](concepts/loader-and-abi.md): how the loader starts,
   how it finds mods, the binary contract between them, and the manifest.
 - [The life of a mod](concepts/lifecycle.md): query, resolve, init, arm and

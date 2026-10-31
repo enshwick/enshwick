@@ -1,11 +1,14 @@
 # Stats
 
 Stats are named numbers on entities: extra health, a chance to crit, a
-damage factor, whether a character glows. Items, buffs and mods modify them;
-the server works the values out once per change, and any mod reads them for
-free. The
+damage factor, whether a character glows. The
 [`stats`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/stats.rs)
 module holds the API.
+
+## A mod's first stats
+
+Items, buffs and mods modify stats; the server works the values out once per
+change, and any mod reads them for free.
 
 ```rust
 use core::time::Duration;

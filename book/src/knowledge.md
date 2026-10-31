@@ -5,7 +5,11 @@ returns the
 [`Knowledge`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/knowledge.rs)
 of the server's world: the values the game keeps for the world and for each
 player, which recipes, quests, journal pages, skill points and much more
-read. It is `Copy`; get it during `init` and move it into handlers, tasks and
+read.
+
+## Getting it
+
+It is `Copy`; get it during `init` and move it into handlers, tasks and
 commands.
 
 ```rust

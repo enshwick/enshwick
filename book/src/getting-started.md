@@ -2,7 +2,11 @@
 
 You set up the tools, create a mod, put it into the game and find its log.
 The first mod uses the API's high-level calls. Raw hooks come last, for what
-the API has no call for. For a mod without Rust, start at
+the API has no call for.
+
+## Mods without Rust
+
+For a mod without Rust, start at
 [Luau mods](luau.md) or [A mod without Rust](content/a-mod-without-rust.md).
 
 ## Performance
