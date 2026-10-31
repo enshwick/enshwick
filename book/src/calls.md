@@ -14,11 +14,21 @@ several functions stays the way for Rust mods that share a crate.
 The server declares the input with
 [`#[call]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/services/calls.rs)
 and the answer's type with `output`. Listed in `declare_mod!` under `calls`,
-the schema goes into the server's DLL:
+the schema goes into the server's DLL. A listed call is for other mods, so
+its name goes into `exports` in the
+[manifest](concepts/loader-and-abi.md#what-other-mods-may-use) too, else the
+build fails:
+
+```toml
+[package.metadata.enshwick]
+id = "you.trading-post"
+side = "server"
+exports = ["price-of"]
+```
 
 ```rust,standalone_crate
 /// What the trading post pays for an item.
-#[enshwick::call(name = "you.trading-post:price-of", output = u32, version = 1)]
+#[enshwick::call(name = "price-of", output = u32, version = 1)]
 #[derive(Clone, Copy, Debug)]
 pub struct PriceOf {
     /// The item.
@@ -125,6 +135,12 @@ once. When the server does not serve the call as declared, `caller` returns
 `call you.trading-post:price-of v1: this mod requires you.trading-post, and the call cannot match: ...`
 with the reason. In a test, serve a required server's call with
 `Installed::serve_call` before the mod starts.
+
+A server that is loaded but does not export the call refuses every caller, required or not:
+`caller` returns `Off` and the log says
+`call you.trading-post:price-of: you.trading-post does not export price-of; it exports prices, sold`.
+In a test, `FakeHost::exports` names what another mod exports.
+Without it the fake lets every name through, so a test that calls another mod passes that mod's exports.
 
 ### The schema
 

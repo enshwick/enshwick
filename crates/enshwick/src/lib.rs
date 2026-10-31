@@ -672,6 +672,46 @@ pub mod __private {
         ""
     }
 
+    /// Whether `name` is `<id>:<what>`, a name of the mod `id` itself.
+    #[must_use]
+    pub const fn is_own(id: &str, name: &str) -> bool {
+        let (id, name) = (id.as_bytes(), name.as_bytes());
+        name.len() > id.len() && name[id.len()] == b':' && same(name.split_at(id.len()).0, id)
+    }
+
+    /// Whether `name` is `<id>:<export>` for one of `exports`, the local
+    /// names a mod's manifest exports.
+    #[must_use]
+    pub const fn is_exported(id: &str, exports: &[&str], name: &str) -> bool {
+        if !is_own(id, name) {
+            return false;
+        }
+        let local = name.as_bytes().split_at(id.len() + 1).1;
+        let mut i = 0;
+        while i < exports.len() {
+            if same(exports[i].as_bytes(), local) {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
+
+    /// Whether two byte strings are equal, in a constant.
+    const fn same(a: &[u8], b: &[u8]) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        let mut i = 0;
+        while i < a.len() {
+            if a[i] != b[i] {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    }
+
     /// Cargo's `authors`, separated by `:`, trimmed and without empty names.
     const fn author_names<const N: usize>(cargo: &'static str) -> ([crate::abi::Str; N], usize) {
         let mut out = [crate::abi::Str::EMPTY; N];

@@ -132,7 +132,7 @@ shapes! {
         Relation { 0 },
         Dependency { id, range, relation },
         ManifestFlags { 0 },
-        Manifest { header, id, version, side, flags, dependencies, dependency_count, builds, build_count, name, description, authors, author_count, license, homepage, points },
+        Manifest { header, id, version, side, flags, dependencies, dependency_count, builds, build_count, name, description, authors, author_count, license, homepage, points, exports, export_count },
         HookFlags { 0 },
         HookSpec { target, detour, next, priority, flags },
         CallerFrame { rsp, rbx, rbp, rdi, rsi, r12, r13, r14, r15 },

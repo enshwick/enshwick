@@ -40,6 +40,21 @@ pub(crate) fn required_owner<'a>(record: &ModRecord, name: &'a str) -> Option<&'
     record.requires(owner).then_some(owner)
 }
 
+/// Why the mod of `record` may not use the `kind` `name`, `<id>:<what>`: a
+/// loaded mod `id` whose manifest does not export `what`. `None` for a name
+/// of its own, an exported one, or one of a mod that is not loaded, which
+/// stays unmatched.
+pub(crate) fn unexported(
+    loader: &Loader,
+    record: &ModRecord,
+    kind: &str,
+    name: &str,
+) -> Option<String> {
+    let (owner, _) = name.split_once(':')?;
+    let (_, provider) = loader.find_mod(owner)?;
+    crate::manifest::unexported(kind, name, &record.id, &provider.exports())
+}
+
 /// The name and layout of a service or event spec the safe layer passed.
 ///
 /// # Safety
@@ -119,7 +134,13 @@ pub(crate) extern "system" fn service(
         let Some((name, fields)) = (unsafe { spec_parts(wanted.name, &wanted.layout) }) else {
             return Status::BAD_ARGS;
         };
-        let found = crate::services::registry().find(name, wanted.major, &fields, loader);
+        let refused = loader
+            .record(me)
+            .and_then(|(_, record)| unexported(loader, record, "service", name));
+        let found = match refused {
+            Some(reason) => Err((Status::REFUSED, reason)),
+            None => crate::services::registry().find(name, wanted.major, &fields, loader),
+        };
         let mut answer = api_frame::ServiceFound::EMPTY;
         let status = match found {
             Ok(found) => {
@@ -193,8 +214,8 @@ pub(crate) extern "system" fn subscribe_event(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("subscribe_event", || {
-        let index = match caller_index(me) {
-            Ok((_, index)) => index,
+        let (loader, index, record) = match calling(me) {
+            Ok(found) => found,
             Err(status) => return status,
         };
         if crate::services::sealed() {
@@ -210,6 +231,10 @@ pub(crate) extern "system" fn subscribe_event(
         let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
             return Status::BAD_ARGS;
         };
+        if let Some(reason) = unexported(loader, record, "event", name) {
+            crate::log::write(Level::WARN, &record.id, &reason);
+            return Status::REFUSED;
+        }
         crate::services::registry().subscribe(
             index,
             name,
@@ -371,7 +396,8 @@ pub(crate) extern "system" fn attach_point(
         let (Some(declared), Some(before), Some(after)) = parts else {
             return Status::BAD_ARGS;
         };
-        let unmet = required_owner(record, &declared.name).and_then(|owner| {
+        let unmet = unexported(loader, record, "point", &declared.name).or_else(|| {
+            let owner = required_owner(record, &declared.name)?;
             let reason = crate::points::registry().unlinkable(&declared, loader)?;
             Some(format!(
                 "point {}: this mod requires {owner}, and the link cannot match: {reason}",

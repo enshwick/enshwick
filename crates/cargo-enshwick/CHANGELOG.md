@@ -14,6 +14,8 @@ Each entry names the pull request that made the change.
 - The `body:<rva>` pick of `pin --patterns`: a symbol checked by its whole
   function, found through the call at `rva` (#710).
 
+- `cargo enshwick manifest` lists what the mod exports (#783).
+
 ### Changed
 
 - **Breaking:** `cargo enshwick new` writes the mod's id, side and name into

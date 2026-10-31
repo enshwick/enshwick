@@ -8,6 +8,17 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** a mod's calls, points, services and events are its own until
+  `exports` in `[package.metadata.enshwick]`, or in a pack's `pack.toml`,
+  lists their local names. The loader refuses another mod everything else of
+  a loaded mod: `Load::caller`, `extend_point`, `observe_point` and
+  `on_mod_event` return `Off`, `service` returns `Off` and
+  `optional_service` returns `None`, with the reason in the log. A point,
+  event or call listed in `declare_mod!` and missing from `exports` fails the
+  build. `Manifest` gains `exports` and `export_count`, which changes
+  `ABI_VERSION`; rebuild every mod. The fake loader refuses the same for a
+  mod `FakeHost::exports` names (#783).
+
 - **Breaking:** `Load::caller`, `Load::extend_point` and `Load::observe_point`
   return `Off` when the mod requires the call's server or the point's owner
   and it does not serve or define it as declared; a required mod initialises

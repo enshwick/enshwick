@@ -54,6 +54,7 @@ mod stalls {
         r#"
         id = "you.stalls"
         side = "server"
+        exports = ["price"]
         "#,
         points: [super::Price]
     );

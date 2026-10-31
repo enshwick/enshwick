@@ -112,6 +112,13 @@ expression: shape
       "default": "",
       "type": "string"
     },
+    "exports": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "homepage": {
       "default": "",
       "type": "string"

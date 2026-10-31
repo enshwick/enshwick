@@ -11,13 +11,14 @@ use syn::punctuated::Punctuated;
 use syn::{Ident, LitStr, Token, Type, bracketed};
 
 /// The keys of the table, the identity the platform reads.
-const KEYS: [&str; 12] = [
+const KEYS: [&str; 13] = [
     "id",
     "name",
     "side",
     "join",
     "reload",
     "developer",
+    "exports",
     "replaces",
     "requires",
     "after",
@@ -144,6 +145,8 @@ struct Metadata {
     join: bool,
     reload: bool,
     developer: bool,
+    /// The local names other mods may use.
+    exports: Vec<String>,
     dependencies: Vec<Dependency>,
     builds: Vec<Build>,
 }
@@ -457,6 +460,7 @@ impl Metadata {
             join: flag(table, "join")?,
             reload: flag(table, "reload")?,
             developer: flag(table, "developer")?,
+            exports: exports_of(table)?,
             dependencies,
             builds,
         })
@@ -474,6 +478,32 @@ fn string(table: &toml::Table, key: &str) -> Result<Option<String>, String> {
                 .ok_or_else(|| format!("`{key}` is a string"))
         })
         .transpose()
+}
+
+/// The local names of `exports`, each a name once.
+fn exports_of(table: &toml::Table) -> Result<Vec<String>, String> {
+    let Some(value) = table.get("exports") else {
+        return Ok(Vec::new());
+    };
+    let names = value
+        .as_array()
+        .ok_or("`exports` is a list of local names")?;
+    let mut seen = BTreeSet::new();
+    names
+        .iter()
+        .map(|name| {
+            let name = name.as_str().ok_or("`exports` is a list of local names")?;
+            if !is_content_name(name) {
+                return Err(format!(
+                    "`exports`: {name:?} is not a local name, 1 to 128 of [a-z0-9_./-] without the mod's id"
+                ));
+            }
+            if !seen.insert(name) {
+                return Err(format!("`exports`: {name:?} is given twice"));
+            }
+            Ok(name.to_owned())
+        })
+        .collect()
 }
 
 /// Whether `key` is `true`; `false` when left out.
@@ -653,22 +683,7 @@ fn manifest(args: &Args, metadata: &Metadata, cargo: Option<&str>) -> TokenStrea
     let id = &metadata.id;
     let name = &metadata.name;
     let side = metadata.side.constant();
-    let mut flags = Vec::new();
-    for (on, flag) in [
-        (metadata.join, "JOIN"),
-        (metadata.reload, "RELOAD"),
-        (metadata.developer, "DEVELOPER"),
-    ] {
-        if on {
-            let flag = Ident::new(flag, Span::call_site());
-            flags.push(quote!(#abi::ManifestFlags::#flag.0));
-        }
-    }
-    let flags = if flags.is_empty() {
-        quote!(#abi::ManifestFlags::NONE)
-    } else {
-        quote!(#abi::ManifestFlags(#(#flags)|*))
-    };
+    let flags = flags_of(metadata);
     let dependencies = metadata.dependencies.iter().map(|d| {
         let (id, range) = (&d.id, &d.range);
         let relation = Ident::new(d.relation, Span::call_site());
@@ -697,12 +712,14 @@ fn manifest(args: &Args, metadata: &Metadata, cargo: Option<&str>) -> TokenStrea
         }
     });
     let (points, events, calls) = (&args.points, &args.events, &args.calls);
+    let exports = export_items(args, metadata);
     quote! {{
         #tracked
         #(const _: () = ::core::assert!(
             <#events as ::enshwick::services::ModEvent>::DESCRIBED,
             "an event's schema cannot describe a field's type: derive `Shape` for it",
         );)*
+        #exports
         static DEPENDENCIES: &[#abi::Dependency] = &[#(#dependencies),*];
         const AUTHOR_COUNT: usize = ::enshwick::__private::author_count(::core::env!("CARGO_PKG_AUTHORS"));
         static AUTHORS: [#abi::Str; AUTHOR_COUNT] =
@@ -739,9 +756,73 @@ fn manifest(args: &Args, metadata: &Metadata, cargo: Option<&str>) -> TokenStrea
                 &[::core::env!("CARGO_PKG_HOMEPAGE"), ::core::env!("CARGO_PKG_REPOSITORY")],
             )),
             points: #abi::Str::new(POINTS),
+            exports: EXPORTS.as_ptr(),
+            export_count: EXPORTS.len(),
         };
         &MANIFEST
     }}
+}
+
+/// The manifest's flags expression.
+fn flags_of(metadata: &Metadata) -> TokenStream {
+    let abi = quote!(::enshwick::abi);
+    let flags: Vec<TokenStream> = [
+        (metadata.join, "JOIN"),
+        (metadata.reload, "RELOAD"),
+        (metadata.developer, "DEVELOPER"),
+    ]
+    .into_iter()
+    .filter(|(on, _)| *on)
+    .map(|(_, flag)| {
+        let flag = Ident::new(flag, Span::call_site());
+        quote!(#abi::ManifestFlags::#flag.0)
+    })
+    .collect();
+    if flags.is_empty() {
+        quote!(#abi::ManifestFlags::NONE)
+    } else {
+        quote!(#abi::ManifestFlags(#(#flags)|*))
+    }
+}
+
+/// The static `EXPORTS` of the manifest, and a check that every point,
+/// event and call the mod lists, which are for other mods, is its own and
+/// among them.
+fn export_items(args: &Args, metadata: &Metadata) -> TokenStream {
+    let abi = quote!(::enshwick::abi);
+    let (id, exports) = (&metadata.id, &metadata.exports);
+    let (points, events, calls) = (&args.points, &args.events, &args.calls);
+    quote! {
+        const EXPORT_NAMES: &[&str] = &[#(#exports),*];
+        #(const _: () = ::core::assert!(
+            ::enshwick::__private::is_own(#id, <#points as ::enshwick::points::Point>::NAME),
+            "a point listed in `declare_mod!` has another mod's id: a mod lists only its own points, events and calls",
+        );)*
+        #(const _: () = ::core::assert!(
+            ::enshwick::__private::is_own(#id, <#events as ::enshwick::services::ModEvent>::NAME),
+            "an event listed in `declare_mod!` has another mod's id: a mod lists only its own points, events and calls",
+        );)*
+        #(const _: () = ::core::assert!(
+            ::enshwick::__private::is_own(#id, <#calls as ::enshwick::services::Call>::NAME),
+            "a call listed in `declare_mod!` has another mod's id: a mod lists only its own points, events and calls",
+        );)*
+        #(const _: () = ::core::assert!(
+            !::enshwick::__private::is_own(#id, <#points as ::enshwick::points::Point>::NAME)
+                || ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#points as ::enshwick::points::Point>::NAME),
+            "a point listed in `declare_mod!` is for other mods: add its local name to `exports` in [package.metadata.enshwick]",
+        );)*
+        #(const _: () = ::core::assert!(
+            !::enshwick::__private::is_own(#id, <#events as ::enshwick::services::ModEvent>::NAME)
+                || ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#events as ::enshwick::services::ModEvent>::NAME),
+            "an event listed in `declare_mod!` is for other mods: add its local name to `exports` in [package.metadata.enshwick]",
+        );)*
+        #(const _: () = ::core::assert!(
+            !::enshwick::__private::is_own(#id, <#calls as ::enshwick::services::Call>::NAME)
+                || ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#calls as ::enshwick::services::Call>::NAME),
+            "a call listed in `declare_mod!` is for other mods: add its local name to `exports` in [package.metadata.enshwick]",
+        );)*
+        static EXPORTS: [#abi::Str; EXPORT_NAMES.len()] = [#(#abi::Str::new(#exports)),*];
+    }
 }
 
 /// A row's symbols or constants as a static slice expression.
@@ -768,6 +849,7 @@ mod tests {
             name = "Market Stalls"
             side = "both"
             join = true
+            exports = ["price-of", "sold"]
             replaces = ["stalls"]
 
             [requires]
@@ -792,6 +874,7 @@ mod tests {
         assert_eq!(metadata.id, "you.market-stalls");
         assert_eq!(metadata.side, Side::Both);
         assert!(metadata.join && !metadata.reload && !metadata.developer);
+        assert_eq!(metadata.exports, ["price-of", "sold"]);
         let relations: Vec<(&str, &str, &str)> = metadata
             .dependencies
             .iter()
@@ -820,6 +903,14 @@ mod tests {
         assert!(refused("id = \"you.a\"\nside = \"all\"").contains("\"all\""));
         assert!(refused("id = \"lanterns\"\nside = \"both\"").contains("<author>.<name>"));
         assert!(refused("side = \"both\"").contains("`id`"));
+        assert!(
+            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"you.a:sold\"]")
+                .contains("not a local name")
+        );
+        assert!(
+            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"sold\", \"sold\"]")
+                .contains("given twice")
+        );
         assert!(
             refused("id = \"you.a\"\nside = \"both\"\n[requires]\nOther = \"you.b\"")
                 .contains("`requires.Other`")

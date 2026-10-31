@@ -100,6 +100,7 @@ side = "both"                      # "server", "client" or "both"
 name = "Trading post"              # what players read; the id when left out
 join = true                        # counts in the join check
 reload = true                      # a development server may reload it
+exports = ["price-of", "sold"]     # what other mods may use
 replaces = ["barter"]              # a mod this one folds in
 
 [package.metadata.enshwick.requires]
@@ -149,6 +150,8 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
 - `developer = true`: the mod is a developer tool, such as a probe that logs
   what the game does. While it runs, every player reads a warning that
   developer tools are on; see [The interface](../interface.md).
+- `exports` lists the local names of what other mods may use; see
+  [What other mods may use](#what-other-mods-may-use).
 - `requires`, `after`, `recommends` and `breaks` are tables of other mods,
   each under an alias of the mod's choosing (a Rust name in snake case,
   unique across the four), as a mod id alone or `{ id, version }` with a
@@ -224,12 +227,39 @@ pub struct Opened {
 assert_eq!(Opened::NAME, "you.lockers:opened");
 ```
 
+### What other mods may use
+
+A mod's calls, points, services and events are its own until it exports
+them. `exports` lists their local names, and the loader refuses another mod a
+reference to any other name of the mod. With `exports = ["price-of", "sold"]`
+in `you.trading-post`, another mod may call `you.trading-post:price-of` and
+hear `you.trading-post:sold`. A link to the point `you.trading-post:margin`
+is refused, and the log says
+`point you.trading-post:margin: you.trading-post does not export margin; it exports price-of, sold`.
+
+- `caller`, `extend_point`, `observe_point` and `on_mod_event` return `Off`,
+  which turns the asking mod off at init.
+- `service` returns `Off` with the reason, and `optional_service` returns
+  `None`.
+- The mod's own names need no export.
+- A mod that is not loaded is not checked; its names stay unmatched.
+- Content ids are not checked: an item or recipe of another mod is named by
+  its GUID inside the game's data, where the loader does not see whose it is.
+
+A [data pack or Luau mod](../content/packs.md) lists its exports the same way,
+as `exports` in its `pack.toml`.
+
+### Schemas for other mods
+
 What the mod defines in Rust goes to `declare_mod!` after its type:
 `points: [..]` lists the [extension points](../extending.md#defining-a-point)
 the mod defines, by their input types, and `events: [..]` and `calls: [..]`
 its [events](../services.md) and [calls](../calls.md). Their schemas go into
 the manifest and into the DLL's `.enshpt` section, where `cargo enshwick
-point`, `event` and `call` read them to write other mods' definitions:
+point`, `event` and `call` read them to write other mods' definitions. A
+listed point, event or call is for other mods, so a name missing from
+`exports` fails the build. With `exports = ["price"]` in the mod's
+`Cargo.toml`:
 
 ```rust,standalone_crate
 #[enshwick::point(name = "price", mode = Override, output = u32)]

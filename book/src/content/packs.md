@@ -62,6 +62,7 @@ homepage = "https://example.com/lanterns"
 | `side` | `both` (the default), `server` or `client` |
 | `join` | whether server and players must run the same pack to play together; on unless `false`, and required for a pack that adds or changes anything players' games read (everything but loot) |
 | `requires` | mods and packs it needs, with a version requirement each |
+| `exports` | the local names of the events and other names its scripts offer other mods, such as `["greeted"]` for `<id>:greeted`; the loader refuses other mods the rest (see [what other mods may use](../concepts/loader-and-abi.md#what-other-mods-may-use)) |
 | `enshwick` | the Enshwick releases the pack is made for, as a version requirement such as `"=1.0.0-alpha.12"`; a loader of another release skips the pack and logs both versions. Empty for any |
 | `[[setting]]` | a setting of a [Luau mod](../luau.md#settings), one table each |
 

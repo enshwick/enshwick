@@ -165,6 +165,30 @@ impl FakeHost {
         self
     }
 
+    /// Another mod `id` that exports only the local names `names`: as the
+    /// loader, the fake refuses the mod a call, link, service or event of
+    /// `id` outside them. Without it, the fake takes every name of another
+    /// mod as exported, where the loader refuses every name of a mod
+    /// without `exports`: a test that links another mod passes that mod's
+    /// exports here, so it fails where the game would.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .exports("you.trading-post", &["price-of", "sold"])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn exports(mut self, id: &str, names: &[&str]) -> Self {
+        self.exports.insert(
+            id.to_owned(),
+            names.iter().map(|&name| name.to_owned()).collect(),
+        );
+        self
+    }
+
     /// A server mod the last refused join found missing, which
     /// `enshwick::mods::join_missing()` lists, in order.
     ///

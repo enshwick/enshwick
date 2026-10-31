@@ -29,8 +29,9 @@ pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String>
 ///
 /// - Every string in `manifest` and its dependencies is readable for its
 ///   length and unchanged for the call.
-/// - `authors` and `dependencies` are null or point at `author_count` and
-///   `dependency_count` aligned entries, readable and unchanged for the call.
+/// - `authors`, `exports` and `dependencies` are null or point at
+///   `author_count`, `export_count` and `dependency_count` aligned entries,
+///   readable and unchanged for the call.
 unsafe fn describe(manifest: &Manifest) -> String {
     // SAFETY: the caller guarantees every string of the manifest, its authors
     // and its dependencies readable and unchanged for the call.
@@ -53,12 +54,21 @@ unsafe fn describe(manifest: &Manifest) -> String {
         unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count) }
     };
     let authors: Vec<String> = authors.iter().map(text).collect();
+    let exports = if manifest.exports.is_null() {
+        &[][..]
+    } else {
+        // SAFETY: `exports` is non-null, checked just before; the caller
+        // guarantees `export_count` aligned names there for the call.
+        unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count) }
+    };
+    let exports: Vec<String> = exports.iter().map(text).collect();
     for (key, value) in [
         ("name", text(&manifest.name)),
         ("description", text(&manifest.description)),
         ("authors", authors.join(", ")),
         ("license", text(&manifest.license)),
         ("homepage", text(&manifest.homepage)),
+        ("exports", exports.join(", ")),
     ] {
         if !value.is_empty() {
             lines.push(format!("{key}: {value}"));
@@ -185,6 +195,8 @@ mod tests {
             license: Str::EMPTY,
             homepage: Str::EMPTY,
             points: Str::EMPTY,
+            exports: core::ptr::null(),
+            export_count: 0,
         }
     }
 
@@ -221,6 +233,7 @@ mod tests {
     #[test]
     fn a_manifest_reads_as_lines() {
         static AUTHORS: [Str; 2] = [Str::new("themaiby"), Str::new("a friend")];
+        static EXPORTS: [Str; 2] = [Str::new("stall"), Str::new("opened")];
         let relation = |id, range, relation| Dependency {
             id: Str::new(id),
             range: Str::new(range),
@@ -244,6 +257,8 @@ mod tests {
             author_count: AUTHORS.len(),
             license: Str::new("MIT"),
             homepage: Str::new("https://github.com/enshwick/enshwick"),
+            exports: EXPORTS.as_ptr(),
+            export_count: EXPORTS.len(),
             ..plain("you.market-stalls", "0.2.0")
         };
         assert_eq!(
@@ -253,7 +268,7 @@ mod tests {
             "id: you.market-stalls\nversion: 0.2.0\nname: Market Stalls\n\
              description: Stalls that sell what players craft\nauthors: themaiby, a friend\n\
              license: MIT\nhomepage: https://github.com/enshwick/enshwick\n\
-             side: both\njoin check: yes\n\
+             exports: stall, opened\nside: both\njoin check: yes\n\
              requires: you.trading-post >=0.1, <1.0\nafter: you.lanterns\n\
              recommends: you.lanterns\nbreaks: old-stalls <0.3\n\
              replaces: stalls"

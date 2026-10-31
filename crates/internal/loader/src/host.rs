@@ -132,6 +132,13 @@ impl ModRecord {
         })
     }
 
+    /// The local names its manifest exports, for other mods to use.
+    pub(crate) fn exports(&self) -> Vec<&str> {
+        // SAFETY: a record's manifest is the loader's copy, kept for the
+        // process with every string and slice in it.
+        unsafe { crate::manifest::exports(self.manifest) }
+    }
+
     /// Why it is off, in the reader's language where its texts have the
     /// reason's text; `None` while it runs.
     pub(crate) fn off_reason_shown(&self) -> Option<String> {
