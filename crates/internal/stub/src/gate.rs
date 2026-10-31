@@ -95,15 +95,17 @@ unsafe fn write_code(at: usize, bytes: &[u8]) -> bool {
     // SAFETY: `target` starts `bytes.len()` bytes mapped in the executable's
     // image (the caller's contract), and `old` is a writable `u32` on this
     // stack.
-    if unsafe {
+    let opened = unsafe {
+        // The stub links no loader code, so it has no `pages` helper.
+        // ast-grep-ignore: memory-calls-through-pages
         VirtualProtect(
             target.cast(),
             bytes.len(),
             PAGE_EXECUTE_READWRITE,
             &raw mut old,
         )
-    } == 0
-    {
+    };
+    if opened == 0 {
         return false;
     }
     // SAFETY: `VirtualProtect` made the `bytes.len()` bytes at `target`
@@ -112,7 +114,8 @@ unsafe fn write_code(at: usize, bytes: &[u8]) -> bool {
     unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
     // SAFETY: `target` starts `bytes.len()` bytes mapped in the executable's
     // image (the caller's contract); `old` is the protection they had and a
-    // writable `u32` on this stack.
+    // writable `u32` on this stack. The stub links no loader code.
+    // ast-grep-ignore: memory-calls-through-pages
     let _restored = unsafe { VirtualProtect(target.cast(), bytes.len(), old, &raw mut old) };
     // SAFETY: `GetCurrentProcess` has no preconditions; its pseudo handle
     // needs no closing.

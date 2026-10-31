@@ -1,5 +1,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, VirtualAlloc};
+
 use super::*;
 
 #[test]

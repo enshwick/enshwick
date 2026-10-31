@@ -1,0 +1,23 @@
+id: docs-without-filler
+language: rust
+severity: error
+message: say the fact without filler such as "simply", "basically", "note that" or "This function"
+note: >-
+  A doc line says what the item does or why, and the filler words add
+  nothing to it. "Note that" counts only where it opens a sentence, since a
+  note is also a thing the loader writes ("a note that names them"). The
+  rule reads `///` and `//!` lines one at a time, so a phrase split over two
+  lines and a block doc comment are not seen.
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/benches/**"
+rule:
+  kind: line_comment
+  all:
+    - regex: '^//[/!]([^/!]|$)'
+    - any:
+        - regex: '(?i)\b(simply|basically)\b'
+        - regex: '^//[/!]\s*Note\s+that\b'
+        - regex: '(?i)[.:;!?]\s+note\s+that\b'
+        - regex: '^//[/!]\s*This function\b'

@@ -1,0 +1,23 @@
+id: test-name-is-a-sentence
+language: rust
+severity: error
+message: name a test with a sentence that states the behaviour, three words or more
+note: >-
+  A test's name is what a failing run prints, so it says what holds:
+  `stale_entry_fails_the_check`, not `stale` or `known_list`. The rule counts
+  the words between underscores of a `#[test]` function, in unit test modules
+  and in `tests/`, and refuses fewer than three; it cannot tell whether three
+  words make a sentence.
+rule:
+  kind: function_item
+  follows:
+    kind: attribute_item
+    stopBy:
+      not:
+        any:
+          - kind: attribute_item
+          - kind: line_comment
+    regex: '^#\[([a-z_]+::)*test(\]|\()'
+  has:
+    field: name
+    regex: '^_*[^_]+(_+[^_]+)?_*$'

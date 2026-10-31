@@ -1,4 +1,8 @@
 //! A peer's messages on their way in, and its rate.
+#![expect(
+    clippy::disallowed_types,
+    reason = "the partial messages are keyed by ids the peer sends, so they keep std's keyed hasher"
+)]
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};

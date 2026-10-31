@@ -223,28 +223,14 @@ fn outcomes(
 /// sections where their headers put them, without relocations or imports;
 /// the base and the image, which live for the process.
 fn map_image(bytes: &[u8]) -> Result<(u64, &'static [u8]), DryRunError> {
-    use windows_sys::Win32::System::Memory::{
-        MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc,
-    };
-
     let headers = pe::Headers::read(bytes).map_err(DryRunError::MissingHeader)?;
     let at = usize::try_from(headers.base).map_err(|_| DryRunError::Unmapped(headers.base))?;
-    // SAFETY: asks for fresh pages at the image's preferred base; the result
-    // is checked before use.
-    let memory = unsafe {
-        VirtualAlloc(
-            core::ptr::with_exposed_provenance(at),
-            headers.size,
-            MEM_RESERVE | MEM_COMMIT,
-            PAGE_READWRITE,
-        )
-    };
-    if memory.is_null() || memory.addr() != at {
-        return Err(DryRunError::Unmapped(headers.base));
-    }
-    // SAFETY: `VirtualAlloc` committed `headers.size` bytes at `memory`, which
+    let memory = crate::pages::allocate(Some(at), headers.size)
+        .filter(|memory| memory.as_ptr().addr() == at)
+        .ok_or(DryRunError::Unmapped(headers.base))?;
+    // SAFETY: `allocate` committed `headers.size` bytes at `memory`, which
     // nothing else references and which stay ours for the process.
-    let image = unsafe { core::slice::from_raw_parts_mut(memory.cast::<u8>(), headers.size) };
+    let image = unsafe { core::slice::from_raw_parts_mut(memory.as_ptr(), headers.size) };
     headers.copy(bytes, image);
     Ok((headers.base, image))
 }

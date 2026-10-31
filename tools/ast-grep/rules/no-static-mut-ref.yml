@@ -1,0 +1,47 @@
+id: no-static-mut-ref
+language: rust
+severity: error
+message: give a mutable borrow of memory the code does not own its real lifetime, not `&'static mut`
+note: >-
+  A `&'static mut` over game or loader memory claims a borrow nothing else
+  touches for the rest of the process, which the game breaks. Walk raw
+  pointers in a scope, or borrow for a lifetime tied to the call. The rule
+  refuses the type wherever it is written; a leaked box handed out once is
+  the rare real case and carries an ignore comment with its reason.
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/benches/**"
+utils:
+  in-test:
+    any:
+      - kind: mod_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[cfg\(.*\btest\b'
+      - kind: function_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[(test|cfg\(.*\btest\b)'
+rule:
+  kind: reference_type
+  all:
+    - has:
+        kind: lifetime
+        regex: "^'static$"
+    - has:
+        kind: mutable_specifier
+  not:
+    inside:
+      stopBy: end
+      matches: in-test

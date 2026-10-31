@@ -1,5 +1,9 @@
 use std::sync::atomic::AtomicU64;
 
+use windows_sys::Win32::System::Memory::{
+    MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, VirtualAlloc,
+};
+
 use super::*;
 
 #[test]
@@ -81,7 +85,7 @@ impl Page {
                 core::ptr::null(),
                 PAGE,
                 MEM_RESERVE | MEM_COMMIT,
-                windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE,
+                PAGE_EXECUTE_READWRITE,
             )
         }
         .cast::<u64>();

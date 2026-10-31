@@ -1,0 +1,18 @@
+id: no-get-prefix
+valid:
+  - "pub fn name(&self) -> &str { &self.name }"
+  - "pub(crate) fn get_slot(i: usize) -> usize { i }"
+  - "fn get_raw() -> u8 { 0 }"
+  - "pub fn target(&self) -> usize { 0 }"
+  - "impl Read for File { fn get_mut(&mut self) {} }"
+  - "impl<T> ModLocal<T> { pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T { todo!() } }"
+  - "impl Slots { pub fn get_mut(&mut self, i: usize) -> Option<&mut u8> { None } }"
+  - |
+    #[cfg(test)]
+    mod tests {
+        pub fn get_fake() -> u8 { 0 }
+    }
+invalid:
+  - "pub fn get_name(&self) -> &str { &self.name }"
+  - "impl World { pub fn get_time(&self) -> u32 { 0 } }"
+  - "pub const fn get_version() -> u32 { 1 }"

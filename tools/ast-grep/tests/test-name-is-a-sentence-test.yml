@@ -1,0 +1,37 @@
+id: test-name-is-a-sentence
+valid:
+  - |
+    #[test]
+    fn stale_entry_fails() {}
+  - |
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn reads_the_header() {}
+  - "fn helper() {}"
+  - "fn build_fake_host() {}"
+  - |
+    #[cfg(test)]
+    mod tests {
+        fn setup() {}
+    }
+invalid:
+  - |
+    #[test]
+    fn stale() {}
+  - |
+    #[test]
+    fn known_list() {}
+  - |
+    #[test]
+    #[cfg(windows)]
+    // The detour needs a real page.
+    fn detour_installs() {}
+  - |
+    #[tokio::test]
+    async fn round_trip() {}
+  - |
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn parses() {}
+    }
