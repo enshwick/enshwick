@@ -206,6 +206,10 @@ pub struct Registers {
 
 /// A handler of a mid-function hook: the saved registers, writable, and the
 /// pointer it was registered with. It must not unwind.
+///
+/// # Examples
+///
+/// See [`MidHookSpec`], which holds it.
 pub type MidHookFn = unsafe extern "system" fn(registers: *mut Registers, user: *mut c_void);
 
 /// A request to run a handler at an instruction inside a game function.

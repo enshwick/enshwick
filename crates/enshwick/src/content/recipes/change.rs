@@ -10,6 +10,10 @@ use super::RecipeLayout;
 const NANOS: f64 = 1e9;
 
 /// What changes in recipes, asked recipe by recipe.
+///
+/// # Examples
+///
+/// See [`change_recipes_in`], whose example implements it.
 pub trait RecipeChanges {
     /// What of `recipe` changes: each field, with its ingredient for
     /// [`Field::Ingredient`].

@@ -198,6 +198,10 @@ impl_headed!(StatChange);
 
 /// A handler of stat changes: the change and the pointer given at
 /// registration. It runs on the game thread, after a step.
+///
+/// # Examples
+///
+/// See [`HostApi::stats_changed`](super::HostApi::stats_changed), which takes it.
 pub type StatChangeFn = unsafe extern "system" fn(change: *const StatChange, user: *mut c_void);
 
 /// One modifier that counts toward an entity's stat, and where it comes

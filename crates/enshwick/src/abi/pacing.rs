@@ -34,11 +34,19 @@ impl_headed!(LoopWaitData);
 
 /// A handler of the event loop's waits: the wait, borrowed for the call,
 /// and the pointer given at registration. It must not unwind.
+///
+/// # Examples
+///
+/// See [`HostApi::loop_wait`](super::HostApi::loop_wait), which takes it.
 pub type LoopWaitFn = unsafe extern "system" fn(wait: *const LoopWaitData, user: *mut c_void);
 
 /// A handler of the server loop's wait between two passes: the wait in
 /// nanoseconds, which it may change, and the pointer given at registration.
 /// It must not unwind.
+///
+/// # Examples
+///
+/// See [`HostApi::server_wait`](super::HostApi::server_wait), which takes it.
 pub type ServerWaitFn = unsafe extern "system" fn(wait_ns: *mut u64, user: *mut c_void);
 
 /// Which waits [`HostApi::loop_wait`](super::HostApi::loop_wait) found and

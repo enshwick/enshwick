@@ -53,4 +53,8 @@ impl NetMessage {
 
 /// A mod's handler for messages on its channel: the message and the pointer
 /// given at registration. It must not unwind.
+///
+/// # Examples
+///
+/// See [`HostApi::net_channel`](super::HostApi::net_channel), which takes it.
 pub type NetMessageFn = unsafe extern "system" fn(message: *const NetMessage, user: *mut c_void);

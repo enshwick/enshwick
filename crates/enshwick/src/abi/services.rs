@@ -150,6 +150,10 @@ impl_headed!(EventSpec);
 
 /// A mod's handler for a mod event: the event's data, valid for the call,
 /// and the pointer given at subscription.
+///
+/// # Examples
+///
+/// See [`HostApi::subscribe_event`](super::HostApi::subscribe_event), which takes it.
 pub type ModEventFn = unsafe extern "system" fn(data: *const c_void, user: *mut c_void);
 
 /// A described service, a call: one function from an input struct to an
@@ -194,6 +198,10 @@ impl_headed!(CallSpec);
 /// [`Status::OK`](super::Status::OK) only once the whole answer is written.
 /// It runs on the caller's thread, any thread, possibly on several at once
 /// and inside another call, and must not unwind.
+///
+/// # Examples
+///
+/// See [`HostApi::serve_call`](super::HostApi::serve_call), which takes it.
 pub type CallFn = unsafe extern "system" fn(
     input: *const c_void,
     output: *mut c_void,

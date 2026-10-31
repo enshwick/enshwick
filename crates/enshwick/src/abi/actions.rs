@@ -74,12 +74,20 @@ impl ActionCall {
 /// A mod's answer to the loader's questions about its player actions: the
 /// call, the pointer given at registration and where to write the reply,
 /// which stays valid until the callback runs again.
+///
+/// # Examples
+///
+/// See [`HostApi::actions`](super::HostApi::actions), which takes it.
 pub type ActionFn =
     unsafe extern "system" fn(call: *const ActionCall, user: *mut c_void, reply: *mut Str);
 
 /// A mod's status source: the pointer given at registration and where to
 /// write the mod's lines for the loader's status summary. The text stays
 /// valid until the source runs again; empty for none.
+///
+/// # Examples
+///
+/// See [`HostApi::status`](super::HostApi::status), which takes it.
 pub type StatusFn = unsafe extern "system" fn(user: *mut c_void, out: *mut Str);
 
 /// A player renaming an entity, handed to the filters registered with
@@ -127,4 +135,8 @@ impl_headed!(RenameCall);
 
 /// A mod's rename filter: the call and the pointer given at registration;
 /// returns 1 to let the rename through, 0 to refuse it.
+///
+/// # Examples
+///
+/// See [`HostApi::rename_filter`](super::HostApi::rename_filter), which takes it.
 pub type RenameCallFn = unsafe extern "system" fn(call: *const RenameCall, user: *mut c_void) -> u8;

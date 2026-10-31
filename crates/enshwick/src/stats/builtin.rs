@@ -72,6 +72,10 @@ const POINTS: Def = Def {
 };
 
 /// A built-in kind's definition, kept const.
+///
+/// # Examples
+///
+/// See [`Def::to_def`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Def {
     multiplicative: bool,

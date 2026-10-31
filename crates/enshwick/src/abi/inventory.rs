@@ -180,6 +180,10 @@ impl InventoryResult {
 
 /// Receives the [`InventoryResult`] of a request, on the server's game thread
 /// after a simulation step; it must not unwind.
+///
+/// # Examples
+///
+/// See [`HostApi::inventory_submit`](super::HostApi::inventory_submit), which takes it.
 pub type InventoryResultFn =
     unsafe extern "system" fn(result: *const InventoryResult, user: *mut c_void);
 

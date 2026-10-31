@@ -82,6 +82,10 @@ impl SurvivorLookup {
 
 /// The mod's survivor lookup: the call and the pointer given at
 /// registration; returns 1 with the answer in `out`, or 0 for the game's own.
+///
+/// # Examples
+///
+/// See [`HostApi::survivor_lookup`](super::HostApi::survivor_lookup), which takes it.
 pub type SurvivorLookupFn = unsafe extern "system" fn(
     call: *const SurvivorLookup,
     user: *mut c_void,
@@ -122,6 +126,10 @@ pub struct BedCheck {
 impl_headed!(BedCheck);
 
 /// A filter of survivors' beds: returns 0 to make the game clear the bed.
+///
+/// # Examples
+///
+/// See [`HostApi::survivor_bed_check`](super::HostApi::survivor_bed_check), which takes it.
 pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *mut c_void) -> u8;
 
 /// A summoning staff's use about to spawn or move a survivor, as
@@ -186,6 +194,11 @@ impl Summon {
 /// A summon filter: returns [`Summon::TAKE`] to make the game take the
 /// item in the same transaction, and only when the spawn or move works,
 /// [`Summon::REFUSE`] to refuse the use, or 0 to leave it.
+///
+/// # Examples
+///
+/// See [`HostApi::summon_filter`](super::HostApi::summon_filter) and
+/// [`HostApi::summoned`](super::HostApi::summoned), which take it.
 pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut c_void) -> u8;
 
 /// The client's survivor menu merging the statuses of every entity of one
@@ -194,6 +207,10 @@ pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut 
 /// The survivor, `count` status bytes at `statuses`, valid for the call, and
 /// the pointer given at registration; returns [`SURVIVOR_STATUS_SET`] or-ed
 /// with the byte to show, or 0 to leave the game's.
+///
+/// # Examples
+///
+/// See [`HostApi::survivor_status`](super::HostApi::survivor_status), which takes it.
 pub type SurvivorStatusFn = unsafe extern "system" fn(
     survivor: NpcId,
     statuses: *const u8,

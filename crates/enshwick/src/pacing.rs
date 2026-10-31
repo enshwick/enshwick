@@ -42,6 +42,10 @@ pub const SERVER_ONLINE_WAIT_NS: u64 = 1_000_000;
 pub const SERVER_SLOW_WAIT_NS: u64 = 100_000;
 
 /// A wait of the engine's event loop on its handles, about to happen.
+///
+/// # Examples
+///
+/// See [`Load::on_loop_wait`], whose handler gets one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct LoopWait {
@@ -53,6 +57,13 @@ pub struct LoopWait {
 }
 
 /// Which of the event loop's waits [`Load::on_loop_wait`] found and hooked.
+///
+/// # Examples
+///
+/// ```
+/// let none = enshwick::pacing::LoopWaits::default();
+/// assert!(!none.handles && !none.messages);
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct LoopWaits {
@@ -96,6 +107,13 @@ where
 
 /// The most worker threads the task groups start with; 0 leaves a group
 /// as the game sizes it.
+///
+/// # Examples
+///
+/// ```
+/// let game_sized = enshwick::pacing::TaskWorkers::default();
+/// assert_eq!((game_sized.default, game_sized.background), (0, 0));
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct TaskWorkers {

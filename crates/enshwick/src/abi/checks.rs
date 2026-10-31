@@ -73,6 +73,10 @@ impl Interaction {
 /// A mod's interaction filter: the call and the pointer given at
 /// registration; returns 0 to refuse, which the game handles as its own
 /// refusal, so nothing moves and nothing is lost.
+///
+/// # Examples
+///
+/// See [`HostApi::interaction_filter`](super::HostApi::interaction_filter), which takes it.
 pub type InteractionFn =
     unsafe extern "system" fn(call: *const Interaction, user: *mut c_void) -> u8;
 
@@ -120,6 +124,10 @@ impl SkillCheck {
 /// A skill override: the check and the pointer given at registration;
 /// returns [`SkillCheck::VANILLA`], [`SkillCheck::UNLOCKED`] or
 /// [`SkillCheck::LOCKED`].
+///
+/// # Examples
+///
+/// See [`HostApi::skill_override`](super::HostApi::skill_override), which takes it.
 pub type SkillCheckFn =
     unsafe extern "system" fn(check: *const SkillCheck, user: *mut c_void) -> u8;
 
@@ -151,6 +159,10 @@ impl_headed!(Comfort);
 
 /// A comfort filter: the registration and the pointer given at
 /// registration; returns the comfort to register.
+///
+/// # Examples
+///
+/// See [`HostApi::comfort_filter`](super::HostApi::comfort_filter), which takes it.
 pub type ComfortFn = unsafe extern "system" fn(comfort: *const Comfort, user: *mut c_void) -> i32;
 
 /// One character's experience before the game applies it, in an
@@ -212,6 +224,10 @@ pub struct ExperiencePass {
 impl_headed!(ExperiencePass);
 
 /// An experience filter: the pass and the pointer given at registration.
+///
+/// # Examples
+///
+/// See [`HostApi::experience_filter`](super::HostApi::experience_filter), which takes it.
 pub type ExperiencePassFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
 
 /// How many altars a Flame level allows, as the loader asks every
@@ -290,4 +306,8 @@ impl_headed!(BaseLimitInfo);
 
 /// An altar limit filter: the limit so far, writable, and the pointer given
 /// at registration. It must not unwind.
+///
+/// # Examples
+///
+/// See [`HostApi::altar_limit_filter`](super::HostApi::altar_limit_filter), which takes it.
 pub type AltarLimitFilterFn = unsafe extern "system" fn(limit: *mut AltarLimit, user: *mut c_void);

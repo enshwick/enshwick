@@ -196,6 +196,10 @@ impl PointVerdict {
 /// A mod's link on an extension point: the input, valid for the call, the
 /// answer so far, which the link may overwrite and then answers
 /// [`PointVerdict::SET`], and the pointer given at attaching.
+///
+/// # Examples
+///
+/// See [`HostApi::attach_point`](super::HostApi::attach_point), which takes it.
 pub type PointFn = unsafe extern "system" fn(
     input: *const c_void,
     value: *mut c_void,
