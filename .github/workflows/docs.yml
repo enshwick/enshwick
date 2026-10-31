@@ -20,7 +20,6 @@ permissions: {}
 
 jobs:
   site:
-    # main: the organization runners run only workflows from main.
     uses: enshwick/.github/.github/workflows/docs-rebuild.yml@main # zizmor: ignore[unpinned-uses]
     secrets:
       ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}

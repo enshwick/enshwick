@@ -132,7 +132,7 @@ fn run(args: &[String]) -> Result<bool, String> {
         .map(|p| p.name.as_str())
         .collect();
     if list {
-        // One name a line, for CI to decide whether to set up Wine at all.
+        // One name a line: the packages CI tests on a Windows runner.
         for name in &windows_tests {
             let _shown = writeln!(std::io::stdout(), "{name}");
         }

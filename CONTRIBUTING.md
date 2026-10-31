@@ -26,9 +26,9 @@ lints the workspace for Windows through
 only on Windows: off Windows its portable modules are tested on the host, and
 `cargo xtask check --windows` runs the rest of its tests under Wine on an
 amd64 Linux host that has it. There, use the Wine of
-[GE-Proton](https://github.com/GloriousEggroll/proton-ge-custom), as CI does:
-unpack a release and put its `files/bin` first on `PATH`. Elsewhere those
-tests run on Windows, and CI runs them on every pull request that touches
+[GE-Proton](https://github.com/GloriousEggroll/proton-ge-custom): unpack a
+release and put its `files/bin` first on `PATH`. Elsewhere those tests run on
+Windows. CI runs them on a Windows runner for every pull request that touches
 them. `cargo xtask check --all` runs the whole suite, the Wine tests included
 where Wine runs. The
 rules the hooks enforce, and the ones they cannot, are in this file:

@@ -1,7 +1,7 @@
 # The merge gate: `cargo xtask check` through the shared workflow, as parallel
-# parts: the changed packages on a pull request (GitHub-hosted) and in the
-# merge queue (the organization runners), the full suite on a push to main,
-# which also fills the build caches pull requests start from.
+# parts on GitHub-hosted runners: the changed packages on a pull request and
+# in the merge queue, the full suite on a push to main, which also fills the
+# build caches pull requests start from.
 name: ci
 
 on:
@@ -21,18 +21,9 @@ concurrency:
 
 jobs:
   rust:
-    # main: the organization runners run only workflows from main.
     uses: enshwick/.github/.github/workflows/rust-ci.yml@main # zizmor: ignore[unpinned-uses]
     permissions:
       contents: read
     with:
       semver: enshwick
       split: true
-      # The Windows lint and tests run natively on the owner's PC while it is
-      # online; the tests run under Wine on the organization runners while
-      # it is offline.
-      clippy-features: enshwick/test,enshwick/unstable,xtask/compat
-      native-tests: true
-    secrets:
-      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
-      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}

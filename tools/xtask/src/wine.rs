@@ -3,7 +3,7 @@
 //!
 //! `cargo xwin test` builds them and runs every test executable, doctests
 //! included, under the host's `wine`. That needs an amd64 Linux host with
-//! Wine installed, as on CI; elsewhere the tests run on Windows.
+//! Wine installed; elsewhere the tests run on Windows.
 
 use std::process::{Command, Stdio};
 
