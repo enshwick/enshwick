@@ -186,5 +186,41 @@
 /// ```compile_fail
 /// const NAME: enshwick::content::Id = enshwick::content::id!("locker").part("Name");
 /// ```
+///
+/// A dependency's content name in upper case:
+///
+/// ```compile_fail
+/// enshwick::deps!();
+///
+/// const LOCKER: enshwick::content::Id = deps::lockers::id("Locker");
+/// ```
+///
+/// An alias the crate's `Cargo.toml` does not name:
+///
+/// ```compile_fail
+/// #[enshwick::event(of = stalls, name = "sold")]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Sold {
+///     pub item: u32,
+/// }
+/// ```
+///
+/// A full name with `of`, which puts the dependency's id in front itself:
+///
+/// ```compile_fail
+/// #[enshwick::event(of = lockers, name = "you.lockers:opened")]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Opened {
+///     pub locker: u32,
+/// }
+/// ```
+///
+/// An optional dependency's content id used as a required one's:
+///
+/// ```compile_fail
+/// enshwick::deps!();
+///
+/// const LANTERN: enshwick::content::Id = deps::lanterns::id("lantern");
+/// ```
 #[expect(dead_code, reason = "the doc comment carries the cases")]
 struct Refused;

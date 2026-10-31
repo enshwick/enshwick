@@ -70,6 +70,9 @@ join = true
 [package.metadata.enshwick.requires]
 lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
 
+[package.metadata.enshwick.recommends]
+lanterns = "you.lanterns"
+
 [[package.metadata.enshwick.builds]]
 side = "server"
 guid = "1c129660cd6efc4f9f0b21652d5ff2bf"

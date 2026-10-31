@@ -218,63 +218,120 @@ fn expand_hook(
 /// Declares a service table: makes the struct `repr(C)` and implements
 /// `enshwick::services::Service` with a layout hash per field.
 ///
-/// `#[service(name = "<publisher id>:<what>", version = <major>)]`; the
+/// `#[service(name = "<what>", of = <alias>, version = <major>)]`; the
 /// version defaults to 1. Fields are `extern "system" fn` pointers or plain
 /// data, appended over time. Examples are on `enshwick::service`.
 #[proc_macro_attribute]
 pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut name: Option<syn::LitStr> = None;
+    let mut of: Option<Ident> = None;
     let mut version: Option<syn::LitInt> = None;
     let settings = syn::meta::parser(|meta| {
         if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
             Ok(())
+        } else if meta.path.is_ident("of") {
+            of = Some(meta.value()?.parse()?);
+            Ok(())
         } else if meta.path.is_ident("version") {
             version = Some(meta.value()?.parse()?);
             Ok(())
         } else {
-            Err(meta.error("expected `name = \"<id>:<what>\"` or `version = <major>`"))
+            Err(meta.error("expected `name = \"<what>\"`, `of = <alias>` or `version = <major>`"))
         }
     });
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
-    expand_layout(
-        &item,
-        name,
-        Some(version.map_or_else(|| quote!(1), |v| quote!(#v))),
-        &quote!(Service),
-    )
-    .unwrap_or_else(|e| e.to_compile_error().into())
+    let (name, tracked) = match resolve(name, of.as_ref()) {
+        Ok(resolved) => resolved,
+        Err(e) => return e.to_compile_error().into(),
+    };
+    let declared = proc_macro2::TokenStream::from(
+        expand_layout(
+            &item,
+            name,
+            Some(version.map_or_else(|| quote!(1), |v| quote!(#v))),
+            &quote!(Service),
+        )
+        .unwrap_or_else(|e| e.to_compile_error().into()),
+    );
+    quote!(#declared #tracked).into()
 }
 
 /// Declares a mod event: makes the struct `repr(C)` and implements
 /// `enshwick::services::ModEvent` with a layout hash per field.
 ///
-/// `#[event(name = "<defining mod id>:<what>")]`; the struct is `Copy`
+/// `#[event(name = "<what>", of = <alias>)]`; the struct is `Copy`
 /// plain data, appended over time. Examples are on
 /// `enshwick::event`.
 #[proc_macro_attribute]
 pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut name: Option<syn::LitStr> = None;
+    let mut of: Option<Ident> = None;
     let settings = syn::meta::parser(|meta| {
         if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
             Ok(())
+        } else if meta.path.is_ident("of") {
+            of = Some(meta.value()?.parse()?);
+            Ok(())
         } else {
-            Err(meta.error("expected `name = \"<id>:<what>\"`"))
+            Err(meta.error("expected `name = \"<what>\"` or `of = <alias>`"))
         }
     });
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
+    let (name, tracked) = match resolve(name, of.as_ref()) {
+        Ok(resolved) => resolved,
+        Err(e) => return e.to_compile_error().into(),
+    };
     let schema = event_schema(&item, name.as_ref());
     let padding = padding_free_assert(&item, "a mod event's data");
     match expand_declaration(&item, name, &schema, &quote!(services::ModEvent)) {
         Ok(declared) => {
             let declared = proc_macro2::TokenStream::from(declared);
-            quote!(#declared #padding).into()
+            quote!(#declared #padding #tracked).into()
         }
         Err(e) => e.to_compile_error().into(),
     }
+}
+
+/// The full name of a declaration given `name` and `of`, with the item that
+/// tracks the `Cargo.toml` read for it.
+fn resolve(
+    name: Option<syn::LitStr>,
+    of: Option<&Ident>,
+) -> syn::Result<(Option<syn::LitStr>, proc_macro2::TokenStream)> {
+    let Some(name) = name else {
+        return match of {
+            Some(of) => Err(syn::Error::new_spanned(of, "`of` needs a `name`")),
+            None => Ok((None, proc_macro2::TokenStream::new())),
+        };
+    };
+    let (full, cargo) = declare::full_name(&name, of)?;
+    let tracked = cargo.map_or_else(proc_macro2::TokenStream::new, |path| {
+        quote!(
+            const _: &[u8] = ::core::include_bytes!(#path);
+        )
+    });
+    Ok((Some(full), tracked))
+}
+
+/// Generates `pub mod deps`, a module per dependency the crate's
+/// `Cargo.toml` names by alias. Examples are on `enshwick::deps`.
+#[proc_macro]
+pub fn deps(input: TokenStream) -> TokenStream {
+    if !input.is_empty() {
+        return syn::Error::new(
+            Span::call_site(),
+            "`deps!()` takes nothing: it reads the crate's Cargo.toml",
+        )
+        .to_compile_error()
+        .into();
+    }
+    declare::expand_deps()
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 /// The `SCHEMA` of a mod event: its `[[event]]` table with the layout
@@ -330,18 +387,21 @@ fn event_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -> proc_macr
 /// implements `enshwick::points::Point` with a layout hash per
 /// field and one for the answer.
 ///
-/// `#[point(name = "<owner id>:<point>", mode = Observe | Advise | Override,
+/// `#[point(name = "<point>", of = <alias>, mode = Observe | Advise | Override,
 /// output = <type>, refusable)]`; `refusable` lets a link refuse. Examples
 /// are on `enshwick::point`.
 #[proc_macro_attribute]
 pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut name: Option<syn::LitStr> = None;
+    let mut of: Option<Ident> = None;
     let mut mode: Option<Ident> = None;
     let mut output: Option<Type> = None;
     let mut refusable = false;
     let settings = syn::meta::parser(|meta| {
         if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
+        } else if meta.path.is_ident("of") {
+            of = Some(meta.value()?.parse()?);
         } else if meta.path.is_ident("mode") {
             mode = Some(meta.value()?.parse()?);
         } else if meta.path.is_ident("output") {
@@ -350,7 +410,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
             refusable = true;
         } else {
             return Err(meta.error(
-                "expected `name = \"<id>:<point>\"`, `mode = Override`, `output = <type>` or `refusable`",
+                "expected `name = \"<point>\"`, `of = <alias>`, `mode = Override`, `output = <type>` or `refusable`",
             ));
         }
         Ok(())
@@ -359,6 +419,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as syn::ItemStruct);
     let ident = item.ident.clone();
     let expanded = (|| {
+        let (name, tracked) = resolve(name, of.as_ref())?;
         let mode = mode.ok_or_else(|| {
             syn::Error::new_spanned(
                 &ident,
@@ -402,6 +463,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
         Ok(quote! {
             #declared
             #padding
+            #tracked
             const _: () = assert!(
                 <#output as ::enshwick::Shape>::PADDING_FREE,
                 "a point's answer has padding, which another language would read uninitialised: add the bytes as fields",
@@ -436,23 +498,26 @@ fn padding_free_assert(item: &syn::ItemStruct, what: &str) -> proc_macro2::Token
 /// `repr(C)` and implements `enshwick::services::Call` with a layout hash
 /// per field and one for the answer.
 ///
-/// `#[call(name = "<server id>:<call>", output = <type>, version = <major>)]`;
+/// `#[call(name = "<call>", of = <alias>, output = <type>, version = <major>)]`;
 /// `version` is 1 when left out. Examples are on `enshwick::call`.
 #[proc_macro_attribute]
 pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut name: Option<syn::LitStr> = None;
+    let mut of: Option<Ident> = None;
     let mut output: Option<Type> = None;
     let mut version: Option<syn::LitInt> = None;
     let settings = syn::meta::parser(|meta| {
         if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
+        } else if meta.path.is_ident("of") {
+            of = Some(meta.value()?.parse()?);
         } else if meta.path.is_ident("output") {
             output = Some(meta.value()?.parse()?);
         } else if meta.path.is_ident("version") {
             version = Some(meta.value()?.parse()?);
         } else {
             return Err(meta.error(
-                "expected `name = \"<id>:<call>\"`, `output = <type>` or `version = <major>`",
+                "expected `name = \"<call>\"`, `of = <alias>`, `output = <type>` or `version = <major>`",
             ));
         }
         Ok(())
@@ -461,6 +526,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as syn::ItemStruct);
     let ident = item.ident.clone();
     let expanded = (|| -> syn::Result<TokenStream> {
+        let (name, tracked) = resolve(name, of.as_ref())?;
         let output = output
             .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
         let major = version.map_or_else(|| quote!(1), |v| quote!(#v));
@@ -491,6 +557,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
         let shape = quote!(::enshwick::Shape);
         Ok(quote! {
             #declared
+            #tracked
 
             const _: () = {
                 assert!(
@@ -713,7 +780,10 @@ fn expand_declaration(
 ) -> syn::Result<TokenStream> {
     let ident = &item.ident;
     let name = name.ok_or_else(|| {
-        syn::Error::new_spanned(ident, "name the declaration: `name = \"<id>:<what>\"`")
+        syn::Error::new_spanned(
+            ident,
+            "name the declaration: `name = \"<what>\"`, with `of = <alias>` for a dependency's",
+        )
     })?;
     let text = name.value();
     let valid = text

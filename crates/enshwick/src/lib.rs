@@ -337,7 +337,7 @@ pub use enshwick_macros::call;
 /// | `reload` | `true`: a development server may reload it ([`ManifestFlags::RELOAD`](abi::ManifestFlags::RELOAD)) |
 /// | `developer` | `true`: a developer tool; every player reads a warning while it runs ([`ManifestFlags::DEVELOPER`](abi::ManifestFlags::DEVELOPER)) |
 /// | `replaces` | ids of mods this one takes the place of; the loader never starts them beside it |
-/// | `requires`, `after`, `recommends`, `breaks` | tables of other mods by alias, each a mod id or `{ id, version }` with a Cargo-style range; `after` takes no range |
+/// | `requires`, `after`, `recommends`, `breaks` | tables of other mods by alias, each a mod id or `{ id, version }` with a Cargo-style range; `after` takes no range; [`deps!`] names them in code |
 /// | `builds` | rows of symbols and constants the mod pins for game builds |
 ///
 /// The version, description, authors, licence and homepage (else the
@@ -369,6 +369,9 @@ pub use enshwick_macros::call;
 /// [package.metadata.enshwick.requires]
 /// lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
 ///
+/// [package.metadata.enshwick.recommends]
+/// lanterns = "you.lanterns"
+///
 /// [[package.metadata.enshwick.builds]]
 /// side = "server"
 /// guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
@@ -395,13 +398,54 @@ pub use enshwick_macros::call;
 /// let manifest = unsafe { &*enshwick_mod_query() };
 /// // SAFETY: `declare_mod!` points the id at a string literal, alive for the process.
 /// assert_eq!(unsafe { manifest.id.as_str() }, Some("you.hello"));
-/// assert_eq!(manifest.dependency_count, 1);
+/// assert_eq!(manifest.dependency_count, 2);
 /// assert_eq!(manifest.build_count, 1);
 /// // SAFETY: `declare_mod!` points the licence at this crate's `[package]`
 /// // licence, a literal alive for the process.
 /// assert_eq!(unsafe { manifest.license.as_str() }, Some("MIT"));
 /// ```
 pub use enshwick_macros::declare_mod;
+/// Names what other mods offer by the aliases the crate's `Cargo.toml`
+/// gives them: `deps!()` writes `pub mod deps`, one module per alias in
+/// `requires`, `after` and `recommends`.
+///
+/// Each module holds `ID`, the dependency's mod id, and `id("<name>")`, its
+/// content id `<dependency>:<name>`. A required dependency's ids are
+/// constants: the loader starts this mod only beside it. An optional one's,
+/// from `after` or `recommends`, are `None` while it does not run; ask once,
+/// at init, and keep the id. A malformed name panics, running or not; in a
+/// constant it fails the build, with the error at the call that wrote it. A call,
+/// point or event of a dependency is declared with its own name and
+/// `of = <alias>`: `#[point(of = lockers, name = "price", ..)]` is
+/// `you.lockers:price`. Without `of`, a local name is this mod's own. An
+/// alias the table lacks fails the build with the aliases it has.
+///
+/// # Examples
+///
+/// The crate's `Cargo.toml`, as on [`declare_mod!`], requires `lockers` and
+/// recommends `lanterns`:
+///
+/// ```rust
+/// use enshwick::content::Id;
+/// use enshwick::services::ModEvent;
+///
+/// enshwick::deps!();
+///
+/// const LOCKER: Id = deps::lockers::id("locker");
+/// assert_eq!(LOCKER.to_string(), "you.lockers:locker");
+/// assert_eq!(deps::lanterns::ID, "you.lanterns");
+/// // Outside the game no other mod runs.
+/// assert_eq!(deps::lanterns::id("lantern"), None);
+///
+/// #[enshwick::event(of = lockers, name = "opened")]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Opened {
+///     pub locker: u32,
+/// }
+///
+/// assert_eq!(Opened::NAME, "you.lockers:opened");
+/// ```
+pub use enshwick_macros::deps;
 /// Declares a mod event other mods subscribe to: the struct becomes
 /// `repr(C)` and implements [`services::ModEvent`] with a layout hash per
 /// field.

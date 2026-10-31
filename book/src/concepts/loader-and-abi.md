@@ -176,6 +176,51 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
   not cover, per side, by the build's GUID and age; see
   [Finding the game](../finding-the-game.md).
 
+The aliases name the dependencies in code too, so a mod writes another mod's
+id once. `enshwick::deps!()` writes a module `deps` with a module per alias of
+`requires`, `after` and `recommends`. Each holds `ID`, the mod's id, and
+`id("<name>")`, its content id `<id>:<name>`. A required mod's ids are
+constants, since the loader starts this mod only beside it. An optional mod's
+ids, from `after` or `recommends`, are `None` while that mod does not run.
+
+A call, point, service or event takes a local name: `name = "price"` is this
+mod's `<id>:price`, and `of = <alias>` puts the dependency's id in front. An
+alias the table lacks fails the build and lists the aliases it has. A name
+with a `:` stays as written, for tests and tools. With `lockers` required and
+`lanterns` recommended:
+
+```toml
+[package.metadata.enshwick.requires]
+lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
+
+[package.metadata.enshwick.recommends]
+lanterns = "you.lanterns"
+```
+
+```rust
+use enshwick::content::Id;
+use enshwick::services::ModEvent;
+
+enshwick::deps!();
+
+const LOCKER: Id = deps::lockers::id("locker");
+assert_eq!(LOCKER.to_string(), "you.lockers:locker");
+
+if let Some(lantern) = deps::lanterns::id("lantern") {
+    enshwick::info!("lanterns run: {lantern} lights the lockers");
+}
+
+/// A locker opened, an event of `lockers`.
+#[enshwick::event(of = lockers, name = "opened")]
+#[derive(Clone, Copy, Debug)]
+pub struct Opened {
+    /// The locker.
+    pub locker: u32,
+}
+
+assert_eq!(Opened::NAME, "you.lockers:opened");
+```
+
 What the mod defines in Rust goes to `declare_mod!` after its type:
 `points: [..]` lists the [extension points](../extending.md#defining-a-point)
 the mod defines, by their input types, and `events: [..]` and `calls: [..]`
@@ -184,7 +229,7 @@ the manifest and into the DLL's `.enshpt` section, where `cargo enshwick
 point`, `event` and `call` read them to write other mods' definitions:
 
 ```rust,standalone_crate
-#[enshwick::point(name = "you.hello:price", mode = Override, output = u32)]
+#[enshwick::point(name = "price", mode = Override, output = u32)]
 #[derive(Clone, Copy, Debug)]
 pub struct Price {
     /// The item.

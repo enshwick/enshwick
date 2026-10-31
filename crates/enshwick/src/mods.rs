@@ -209,6 +209,25 @@ pub fn all() -> Vec<ModEntry> {
         .unwrap_or_default()
 }
 
+/// Whether the mod `id` is loaded and runs: what an optional dependency's
+/// [`deps!`](crate::deps) module asks before it names the mod's content.
+///
+/// `false` before the loader initialises this mod. Each call reads the
+/// loader's listing into a new list, as [`all`] does: ask once, at init, and
+/// keep the answer.
+///
+/// # Examples
+///
+/// ```
+/// if enshwick::mods::is_running("you.lanterns") {
+///     enshwick::info!("lanterns light the stalls");
+/// }
+/// ```
+#[must_use]
+pub fn is_running(id: &str) -> bool {
+    all().iter().any(|entry| entry.id == id && entry.running)
+}
+
 /// The server's join mods that the last refused join found missing on this
 /// client or in another version.
 ///
