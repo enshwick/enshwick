@@ -83,6 +83,7 @@ mod inventory;
 mod pacing;
 mod players;
 mod points;
+mod presets;
 mod props;
 mod rates;
 mod settings;

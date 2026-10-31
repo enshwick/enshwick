@@ -6,8 +6,8 @@
 mod tests {
     use enshwick::abi::Status;
     use enshwick::content::changes::{Field, Recipes, RecipesChange, Value};
-    use enshwick::content::recipes::{Derived, RECIPE_REGISTRY, RecipeKind};
-    use enshwick::content::{Blob, Guid, types};
+    use enshwick::content::recipes::{Derived, RECIPE_REGISTRY, RecipeKind, RecipeLayout};
+    use enshwick::content::{Blob, EngineFacts, Guid, types};
     use enshwick::rates::Rate;
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
@@ -18,8 +18,6 @@ mod tests {
     const CHAIR: Guid = Guid::parse("4a5b6c7d-8e9f-4a0b-9c1d-2e3f4a5b6c7d");
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const MOSS: Guid = Guid::parse("2e3d4c5b-6f7a-4b2c-9d3e-4f5a6b7c8d9e");
-    const RECIPES: u32 = 1;
-    const RECIPE_SIZE: usize = 0xa8;
 
     /// How many each derived copy makes, by the kind of its original: a
     /// distinct count per kind, so the built registry tells which kind each
@@ -71,62 +69,55 @@ mod tests {
 
     /// A registry of one recipe per item in `outputs`, each making one.
     fn registry(outputs: &[Guid]) -> Vec<u8> {
+        let layout = layout();
         let mut blob = Blob::new(&[0u8; 16]);
-        let first = blob.append(&vec![0; RECIPE_SIZE * outputs.len()], 8);
+        let first = blob.append(&vec![0; layout.recipe * outputs.len()], 8);
         for (i, output) in outputs.iter().enumerate() {
-            let at = first + i * RECIPE_SIZE;
+            let at = first + i * layout.recipe;
             let guid = [u8::try_from(i + 1).unwrap(); 16];
-            assert!(blob.write(at, &guid));
-            let mut stack = vec![0u8; 0x18];
+            assert!(blob.write(at + layout.guid, &guid));
+            let mut stack = vec![0u8; layout.stack_size];
             stack[..16].copy_from_slice(&output.0);
-            stack[0x14..0x18].copy_from_slice(&1u32.to_le_bytes());
+            let count = layout.stack_count;
+            stack[count..count + 4].copy_from_slice(&1u32.to_le_bytes());
             let stack_at = blob.append(&stack, 8);
-            assert!(blob.set_array(at + 0x30, stack_at, 1));
+            assert!(blob.set_array(at + layout.output, stack_at, 1));
         }
-        assert!(blob.set_array(0, first, u32::try_from(outputs.len()).unwrap()));
+        let count = u32::try_from(outputs.len()).unwrap();
+        assert!(blob.set_array(layout.recipes, first, count));
         blob.into_bytes()
     }
 
     /// What each recipe of `bytes` makes and how many.
     fn made(bytes: &[u8]) -> Vec<(Guid, u32)> {
+        let layout = layout();
         let blob = Blob::new(bytes);
-        let (first, count) = blob.array(0).unwrap();
+        let (first, count) = blob.array(layout.recipes).unwrap();
         (0..count as usize)
             .map(|i| {
-                let (stack, _) = blob.array(first + i * RECIPE_SIZE + 0x30).unwrap();
-                let mut item = [0u8; 16];
-                item.copy_from_slice(&blob.bytes()[stack..stack + 16]);
-                (Guid(item), blob.read_u32(stack + 0x14).unwrap())
+                let (stack, _) = blob
+                    .array(first + i * layout.recipe + layout.output)
+                    .unwrap();
+                let mut guid = [0u8; 16];
+                guid.copy_from_slice(&blob.bytes()[stack..stack + 16]);
+                let count = blob.read_u32(stack + layout.stack_count).unwrap();
+                (Guid(guid), count)
             })
             .collect()
     }
 
     fn host() -> FakeHost {
-        let mut host = FakeHost::new().type_hash(types::RECIPE_REGISTRY_RESOURCE.id(), RECIPES);
-        for (id, size) in [
-            ("recipe", 0xa8),
-            ("recipe_ingredient", 0x18),
-            ("recipe_stack", 0x18),
-        ] {
-            host = host.type_size(id, size);
-        }
-        for (id, at) in [
-            ("recipe_registry.recipes", 0),
-            ("recipe.guid", 0),
-            ("recipe.id", 0x10),
-            ("recipe.workshop_guid", 0x14),
-            ("recipe.workshop", 0x24),
-            ("recipe.input", 0x28),
-            ("recipe.output", 0x30),
-            ("recipe.required_props", 0x38),
-            ("recipe.debug_name", 0x40),
-            ("recipe.completion", 0x5c),
-            ("recipe_stack.item", 0x10),
-            ("recipe_stack.count", 0x14),
-        ] {
-            host = host.constant(id, at);
-        }
-        host
+        FakeHost::new().recipes()
+    }
+
+    /// The recipe layout `host` gives.
+    fn layout() -> RecipeLayout {
+        RecipeLayout::resolve(&host()).unwrap()
+    }
+
+    /// The hash the recipe registry is served under.
+    fn recipes() -> u32 {
+        host().hash(types::RECIPE_REGISTRY_RESOURCE.id()).unwrap()
     }
 
     #[test]
@@ -141,7 +132,7 @@ mod tests {
         // SAFETY: both functions are the exports of this file's `declare_mod!(Kinds)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        let key = RECIPE_REGISTRY.key_by_hash(RECIPES);
+        let key = RECIPE_REGISTRY.key_by_hash(recipes());
         let built = loader
             .build_resource(&key, &registry(&[PLANK, ROOF, VASE, CHAIR, MOSS, CHEST]))
             .unwrap();
