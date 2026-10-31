@@ -672,19 +672,21 @@ pub mod __private {
         ""
     }
 
+    /// Whether `name` is `<id>:<what>`, a name of the mod `id` itself.
+    #[must_use]
+    pub const fn is_own(id: &str, name: &str) -> bool {
+        let (id, name) = (id.as_bytes(), name.as_bytes());
+        name.len() > id.len() && name[id.len()] == b':' && same(name.split_at(id.len()).0, id)
+    }
+
     /// Whether `name` is `<id>:<export>` for one of `exports`, the local
     /// names a mod's manifest exports.
     #[must_use]
     pub const fn is_exported(id: &str, exports: &[&str], name: &str) -> bool {
-        let (id, name) = (id.as_bytes(), name.as_bytes());
-        if name.len() <= id.len() || name[id.len()] != b':' {
+        if !is_own(id, name) {
             return false;
         }
-        let (owner, rest) = name.split_at(id.len());
-        if !same(owner, id) {
-            return false;
-        }
-        let local = rest.split_at(1).1;
+        let local = name.as_bytes().split_at(id.len() + 1).1;
         let mut i = 0;
         while i < exports.len() {
             if same(exports[i].as_bytes(), local) {

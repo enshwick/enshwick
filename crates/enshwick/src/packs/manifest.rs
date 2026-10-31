@@ -189,20 +189,7 @@ impl PackManifest {
             ));
         }
         manifest.check_settings(text)?;
-        if let Some(name) = manifest
-            .exports
-            .iter()
-            .find(|name| !crate::content::is_id(&format!("{}:{name}", manifest.id)))
-        {
-            return Err(PackError::at(
-                MANIFEST_FILE,
-                text,
-                find(text, "exports"),
-                &format!(
-                    "exports: {name:?} is not a local name, 1 to 128 of [a-z0-9_./-] without the pack's id"
-                ),
-            ));
-        }
+        manifest.check_exports(text)?;
         Ok(manifest)
     }
 
@@ -222,6 +209,30 @@ impl PackManifest {
             "config",
             fields,
         ))
+    }
+
+    /// Refuses an export that is not a local name or given twice, as
+    /// `declare_mod!` refuses one in `[package.metadata.enshwick]`.
+    fn check_exports(&self, text: &str) -> Result<(), PackError> {
+        let mut seen = std::collections::BTreeSet::new();
+        for name in &self.exports {
+            let problem = if !crate::content::is_id(&format!("{}:{name}", self.id)) {
+                format!(
+                    "exports: {name:?} is not a local name, 1 to 128 of [a-z0-9_./-] without the pack's id"
+                )
+            } else if !seen.insert(name) {
+                format!("exports: {name:?} is given twice")
+            } else {
+                continue;
+            };
+            return Err(PackError::at(
+                MANIFEST_FILE,
+                text,
+                find(text, "exports"),
+                &problem,
+            ));
+        }
+        Ok(())
     }
 
     /// Refuses a key that is not `[a-z0-9_]` or given twice, a default

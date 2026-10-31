@@ -853,6 +853,24 @@ fn a_setting_that_cannot_hold_is_a_problem_at_its_key() {
 }
 
 #[test]
+fn an_export_that_is_not_a_local_name_or_given_twice_is_a_problem() {
+    let head = "id = \"you.greeter\"\nversion = \"1.0.0\"\n";
+    let cases = [
+        ("exports = [\"you.greeter:hi\"]\n", "is not a local name"),
+        (
+            "exports = [\"hi\", \"bye\", \"hi\"]\n",
+            "\"hi\" is given twice",
+        ),
+    ];
+    for (exports, problem) in cases {
+        let text = format!("{head}{exports}");
+        let error = PackManifest::parse(&text).unwrap_err().to_string();
+        assert!(error.contains(problem), "{error}");
+        assert!(error.starts_with("pack.toml:3"), "{error}");
+    }
+}
+
+#[test]
 fn a_loot_change_of_one_container_changes_its_table_alone() {
     let corpses = Guid([7; 16]);
     let vanilla = crate::content::vanilla::tests::game_with_tables(&[

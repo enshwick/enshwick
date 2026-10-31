@@ -2881,9 +2881,8 @@ typedef struct EnshwickHostApi {
   // Finds the service `wanted` describes, its table null, and checks
   // that the published layout starts with the wanted one; writes the
   // table and its publisher to `out`, and on `Status::MISSING` or
-  // `Status::REFUSED` the reason; refused for a service of another
-  // loaded mod whose `Manifest::exports`
-  // lack its name.
+  // `Status::REFUSED` the reason; refused for a service of another loaded
+  // mod whose `Manifest::exports` lack its name.
   EnshwickStatus (*service)(EnshwickModHandle me,
                             const struct EnshwickServiceSpec *wanted,
                             struct EnshwickServiceFound *out);
@@ -3564,10 +3563,9 @@ typedef struct EnshwickHostApi {
                                  uint32_t *out);
   // Calls `callback` with `user` and the event's data on every mod event
   // `spec` names, once its definition, checked against `spec`'s layout
-  // when every mod is initialised, matches; `Status::REFUSED` for an
-  // event of another loaded mod whose
-  // `Manifest::exports` lack its name. Allowed
-  // during `enshwick_mod_init` only.
+  // when every mod is initialised, matches. `Status::REFUSED` for an event
+  // of another loaded mod whose `Manifest::exports`
+  // lack its name. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*subscribe_event)(EnshwickModHandle me,
                                     const struct EnshwickEventSpec *spec,
                                     EnshwickModEventFn callback,
@@ -3757,9 +3755,9 @@ typedef struct EnshwickHostApi {
   // names, in the order it asks for. Matched against the point's
   // definition once every mod is initialised; a point no running mod
   // defines, or one whose layout or mode differs, leaves the link inert.
-  // `Status::REFUSED` for a point of another loaded mod whose
-  // `Manifest::exports` lack its name, or of a
-  // required mod that does not define it as `link` declares it. Allowed
+  // `Status::REFUSED` for a point of another loaded mod whose exports
+  // (`Manifest::exports`) lack its name, or of
+  // a required mod that does not define it as `link` declares it. Allowed
   // during `enshwick_mod_init` only.
   EnshwickStatus (*attach_point)(EnshwickModHandle me,
                                  const struct EnshwickPointLink *link,
@@ -4059,12 +4057,12 @@ typedef struct EnshwickHostApi {
   // initialised: the input and the answer must agree field by field and
   // in size, or the call stays unmatched with the reason in the log.
   // `Status::REFUSED` when the mod asked for the name and major already
-  // with another spec, for a call of another loaded mod whose
-  // `Manifest::exports` lack its name, or of a
-  // required mod that does not serve it as `spec` declares it;
-  // `Status::BAD_ARGS` for a spec that does not read
-  // or a null `out`. Allowed during `enshwick_mod_init` only:
-  // `Status::TOO_LATE` once every mod is initialised.
+  // with another spec, for a call of another loaded mod whose exports
+  // (`Manifest::exports`) lack its name, or of
+  // a required mod that does not serve it as `spec` declares it;
+  // `Status::BAD_ARGS` for a spec that does not read or a null `out`.
+  // Allowed during `enshwick_mod_init` only: `Status::TOO_LATE` once
+  // every mod is initialised.
   EnshwickStatus (*find_call)(EnshwickModHandle me,
                               const struct EnshwickCallSpec *spec,
                               uint32_t *out);

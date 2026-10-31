@@ -140,6 +140,7 @@ A server that is loaded but does not export the call refuses every caller, requi
 `caller` returns `Off` and the log says
 `call you.trading-post:price-of: you.trading-post does not export price-of; it exports prices, sold`.
 In a test, `FakeHost::exports` names what another mod exports.
+Without it the fake lets every name through, so a test that calls another mod passes that mod's exports.
 
 ### The schema
 

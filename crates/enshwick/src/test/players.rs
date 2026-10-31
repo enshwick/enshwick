@@ -168,7 +168,9 @@ impl FakeHost {
     /// Another mod `id` that exports only the local names `names`: as the
     /// loader, the fake refuses the mod a call, link, service or event of
     /// `id` outside them. Without it, the fake takes every name of another
-    /// mod as exported.
+    /// mod as exported, where the loader refuses every name of a mod
+    /// without `exports`: a test that links another mod passes that mod's
+    /// exports here, so it fails where the game would.
     ///
     /// # Examples
     ///

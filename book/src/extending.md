@@ -173,6 +173,7 @@ log says
 `point you.trading-post:price: you.trading-post does not export price; it exports ...`
 (see [what other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use)).
 In a test, `FakeHost::exports` names what the owner exports.
+Without it the fake lets every name through, so a test that links another mod passes the owner's exports.
 
 ## When the loader leaves a link inert
 

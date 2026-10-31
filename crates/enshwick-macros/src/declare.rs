@@ -786,7 +786,8 @@ fn flags_of(metadata: &Metadata) -> TokenStream {
 }
 
 /// The static `EXPORTS` of the manifest, and a check that every point,
-/// event and call the mod lists, which are for other mods, is among them.
+/// event and call the mod lists, which are for other mods, is its own and
+/// among them.
 fn export_items(args: &Args, metadata: &Metadata) -> TokenStream {
     let abi = quote!(::enshwick::abi);
     let (id, exports) = (&metadata.id, &metadata.exports);
@@ -794,15 +795,30 @@ fn export_items(args: &Args, metadata: &Metadata) -> TokenStream {
     quote! {
         const EXPORT_NAMES: &[&str] = &[#(#exports),*];
         #(const _: () = ::core::assert!(
-            ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#points as ::enshwick::points::Point>::NAME),
+            ::enshwick::__private::is_own(#id, <#points as ::enshwick::points::Point>::NAME),
+            "a point listed in `declare_mod!` has another mod's id: a mod lists only its own points, events and calls",
+        );)*
+        #(const _: () = ::core::assert!(
+            ::enshwick::__private::is_own(#id, <#events as ::enshwick::services::ModEvent>::NAME),
+            "an event listed in `declare_mod!` has another mod's id: a mod lists only its own points, events and calls",
+        );)*
+        #(const _: () = ::core::assert!(
+            ::enshwick::__private::is_own(#id, <#calls as ::enshwick::services::Call>::NAME),
+            "a call listed in `declare_mod!` has another mod's id: a mod lists only its own points, events and calls",
+        );)*
+        #(const _: () = ::core::assert!(
+            !::enshwick::__private::is_own(#id, <#points as ::enshwick::points::Point>::NAME)
+                || ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#points as ::enshwick::points::Point>::NAME),
             "a point listed in `declare_mod!` is for other mods: add its local name to `exports` in [package.metadata.enshwick]",
         );)*
         #(const _: () = ::core::assert!(
-            ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#events as ::enshwick::services::ModEvent>::NAME),
+            !::enshwick::__private::is_own(#id, <#events as ::enshwick::services::ModEvent>::NAME)
+                || ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#events as ::enshwick::services::ModEvent>::NAME),
             "an event listed in `declare_mod!` is for other mods: add its local name to `exports` in [package.metadata.enshwick]",
         );)*
         #(const _: () = ::core::assert!(
-            ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#calls as ::enshwick::services::Call>::NAME),
+            !::enshwick::__private::is_own(#id, <#calls as ::enshwick::services::Call>::NAME)
+                || ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#calls as ::enshwick::services::Call>::NAME),
             "a call listed in `declare_mod!` is for other mods: add its local name to `exports` in [package.metadata.enshwick]",
         );)*
         static EXPORTS: [#abi::Str; EXPORT_NAMES.len()] = [#(#abi::Str::new(#exports)),*];

@@ -71,9 +71,8 @@ pub struct HostApi {
     /// Finds the service `wanted` describes, its table null, and checks
     /// that the published layout starts with the wanted one; writes the
     /// table and its publisher to `out`, and on [`Status::MISSING`] or
-    /// [`Status::REFUSED`] the reason; refused for a service of another
-    /// loaded mod whose [`Manifest::exports`](super::Manifest::exports)
-    /// lack its name.
+    /// [`Status::REFUSED`] the reason; refused for a service of another loaded
+    /// mod whose [`Manifest::exports`](super::Manifest::exports) lack its name.
     pub service: extern "system" fn(
         me: ModHandle,
         wanted: *const ServiceSpec,
@@ -804,10 +803,9 @@ pub struct HostApi {
         extern "system" fn(me: ModHandle, spec: *const EventSpec, out: *mut u32) -> Status,
     /// Calls `callback` with `user` and the event's data on every mod event
     /// `spec` names, once its definition, checked against `spec`'s layout
-    /// when every mod is initialised, matches; [`Status::REFUSED`] for an
-    /// event of another loaded mod whose
-    /// [`Manifest::exports`](super::Manifest::exports) lack its name. Allowed
-    /// during `enshwick_mod_init` only.
+    /// when every mod is initialised, matches. [`Status::REFUSED`] for an event
+    /// of another loaded mod whose [`Manifest::exports`](super::Manifest::exports)
+    /// lack its name. Allowed during `enshwick_mod_init` only.
     pub subscribe_event: extern "system" fn(
         me: ModHandle,
         spec: *const EventSpec,
@@ -999,9 +997,9 @@ pub struct HostApi {
     /// names, in the order it asks for. Matched against the point's
     /// definition once every mod is initialised; a point no running mod
     /// defines, or one whose layout or mode differs, leaves the link inert.
-    /// [`Status::REFUSED`] for a point of another loaded mod whose
-    /// [`Manifest::exports`](super::Manifest::exports) lack its name, or of a
-    /// required mod that does not define it as `link` declares it. Allowed
+    /// [`Status::REFUSED`] for a point of another loaded mod whose exports
+    /// ([`Manifest::exports`](super::Manifest::exports)) lack its name, or of
+    /// a required mod that does not define it as `link` declares it. Allowed
     /// during `enshwick_mod_init` only.
     pub attach_point: extern "system" fn(
         me: ModHandle,
@@ -1323,12 +1321,12 @@ pub struct HostApi {
     /// initialised: the input and the answer must agree field by field and
     /// in size, or the call stays unmatched with the reason in the log.
     /// [`Status::REFUSED`] when the mod asked for the name and major already
-    /// with another spec, for a call of another loaded mod whose
-    /// [`Manifest::exports`](super::Manifest::exports) lack its name, or of a
-    /// required mod that does not serve it as `spec` declares it;
-    /// [`Status::BAD_ARGS`] for a spec that does not read
-    /// or a null `out`. Allowed during `enshwick_mod_init` only:
-    /// [`Status::TOO_LATE`] once every mod is initialised.
+    /// with another spec, for a call of another loaded mod whose exports
+    /// ([`Manifest::exports`](super::Manifest::exports)) lack its name, or of
+    /// a required mod that does not serve it as `spec` declares it;
+    /// [`Status::BAD_ARGS`] for a spec that does not read or a null `out`.
+    /// Allowed during `enshwick_mod_init` only: [`Status::TOO_LATE`] once
+    /// every mod is initialised.
     pub find_call:
         extern "system" fn(me: ModHandle, spec: *const CallSpec, out: *mut u32) -> Status,
     /// Runs the call `id` from [`HostApi::find_call`] on this thread: the
