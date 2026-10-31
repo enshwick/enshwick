@@ -92,13 +92,8 @@ fn run(args: &[String]) -> Result<bool, String> {
             _ => return Err(USAGE.to_owned()),
         }
     }
-    // No part named: every part, the Windows tests with `--all` or `--windows`.
     let parts = if parts.is_empty() {
-        let mut every = vec![Part::Host, Part::WindowsLint];
-        if all || windows {
-            every.push(Part::WindowsTests);
-        }
-        every
+        Part::every(all || windows)
     } else {
         parts
     };
@@ -234,6 +229,16 @@ enum Part {
 }
 
 impl Part {
+    /// The parts that run when none is named: the host check and the
+    /// Windows lint, and the Windows tests with `--all` or `--windows`.
+    fn every(windows_tests: bool) -> Vec<Self> {
+        let mut every = vec![Self::Host, Self::WindowsLint];
+        if windows_tests {
+            every.push(Self::WindowsTests);
+        }
+        every
+    }
+
     fn parse(name: &str) -> Result<Self, String> {
         match name {
             "host" => Ok(Self::Host),
