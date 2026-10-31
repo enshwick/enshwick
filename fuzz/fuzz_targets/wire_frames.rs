@@ -7,8 +7,8 @@
 #![no_main]
 
 use enshwick_loader::wire::{
-    MAX_MESSAGE, MAX_PARTS, PART_BYTES, PREFIX, Peer, assemble, demo_position, frames, parse,
-    read_hello, remote_message,
+    MAX_MESSAGE, MAX_PARTS, PART_BYTES, PREFIX, Peer, assemble, frames, parse, read_hello,
+    remote_message,
 };
 use libfuzzer_sys::fuzz_target;
 
@@ -25,7 +25,6 @@ fuzz_target!(|data: &[u8]| {
             assert!(message.len() <= MAX_PARTS * PART_BYTES);
             drop(read_hello(&message));
             drop(remote_message(&message));
-            let _ = demo_position(&message);
         }
     }
     let message = &data[..data.len().min(MAX_MESSAGE)];
