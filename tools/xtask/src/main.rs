@@ -8,8 +8,9 @@
 //! packages and of every package that depends on them. Off Windows the
 //! workspace is also linted for Windows through `cargo xwin`, beside the host
 //! checks. `cargo xtask check --windows` also runs the Windows tests of the
-//! crates marked `windows-tests` or `windows-only`, under Wine off Windows. `cargo xtask check
-//! --all` runs the full suite, the Windows tests included when Docker runs.
+//! crates marked `windows-tests` or `windows-only`, under Wine on an amd64
+//! Linux host. `cargo xtask check --all` runs the full suite, the Windows
+//! tests included where they can run.
 //!
 //! `cargo xtask bundle` writes the dev bundle testers unpack into the game
 //! folder ([`bundle`]). `cargo xtask header` rewrites the ABI's C header,
@@ -65,7 +66,6 @@ fn run(args: &[String]) -> Result<bool, String> {
     match task.as_str() {
         "check" => {}
         "bundle" => return bundle::run(rest),
-        "wine-run" => return wine::run_one(rest),
         "header" if rest.is_empty() => return header::run(&workspace_root()),
         _ => return Err(USAGE.to_owned()),
     }
@@ -180,7 +180,7 @@ enum Part {
     /// clippy for the Windows target through cargo-xwin, off Windows.
     WindowsLint,
     /// The tests of the changed packages that run only on Windows, under
-    /// Wine off Windows.
+    /// Wine on an amd64 Linux host.
     WindowsTests,
 }
 
