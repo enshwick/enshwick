@@ -217,6 +217,8 @@ until the mod is back. See [Content](content.md#when-a-mod-is-removed).
 - [`enshwick-better-altars`](https://github.com/enshwick/mods/tree/main/better-altars)
   sets and clears its hold in
   [`hold.rs`](https://github.com/enshwick/mods/blob/main/better-altars/src/hold.rs).
-- [`enshwick-personal-safes`](https://github.com/enshwick/mods/blob/main/personal-safes/src/lib.rs)
-  and [`enshwick-shared-experience`](https://github.com/enshwick/mods/blob/main/shared-experience/src/lib.rs)
-  keep their per-world state in a `WorldStore`, in their `lib.rs`.
+- [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
+  and [`enshwick-shared-experience`](https://github.com/enshwick/mods/tree/main/shared-experience)
+  keep their per-world state in a `WorldStore`, each in its `lib.rs`
+  ([personal-safes](https://github.com/enshwick/mods/blob/main/personal-safes/src/lib.rs),
+  [shared-experience](https://github.com/enshwick/mods/blob/main/shared-experience/src/lib.rs)).

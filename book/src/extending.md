@@ -331,9 +331,12 @@ fn a_regular_gets_more(loader: &enshwick::test::Installed) {
 ## Worked examples
 
 Beside `examples/`, three released mods define points other mods may
-extend, each in its `points.rs`:
-[`enshwick-area-loot`](https://github.com/enshwick/mods/blob/main/area-loot/src/points.rs),
-[`enshwick-personal-safes`](https://github.com/enshwick/mods/blob/main/personal-safes/src/points.rs)
+extend:
+[`enshwick-area-loot`](https://github.com/enshwick/mods/tree/main/area-loot)
+in [`points.rs`](https://github.com/enshwick/mods/blob/main/area-loot/src/points.rs),
+[`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
+in [`points.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/points.rs)
 and
-[`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/blob/main/survivors-per-altar/src/points.rs).
+[`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/tree/main/survivors-per-altar)
+in [`points.rs`](https://github.com/enshwick/mods/blob/main/survivors-per-altar/src/points.rs).
 Their tests link each point through the fake host.
