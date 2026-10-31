@@ -287,6 +287,6 @@ records a mod's requests: `inventory_requests()` lists them and
 `item` and `without_inventories` set what the build has. See
 [Testing](testing.md).
 
-[`enshwick-area-loot`](https://github.com/enshwick/mod-area-loot/blob/main/src/take.rs)
+[`enshwick-area-loot`](https://github.com/enshwick/mods/blob/main/area-loot/src/take.rs)
 uses reads, `MoveAll` batches with `actor`, `allow_partial` and `notify`,
 and chained callbacks; see [Loot containers](content/loot.md#a-worked-example).

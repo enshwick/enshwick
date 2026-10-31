@@ -156,6 +156,6 @@ No mod may take the id `enshwick`.
 
 ## Worked examples
 
-- [`enshwick-personal-safes`](https://github.com/enshwick/mod-personal-safes)
+- [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
   declares who may open a Safe as [player actions](actions.md) and guards its
   labels with a rename filter.

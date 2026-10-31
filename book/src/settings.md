@@ -291,7 +291,7 @@ A file that does not parse turns the mod off at init with serde's message. Add
 being ignored. Add `#[serde(default)]` if a file written by an older version of
 the mod, without a newer key, should still load.
 
-[`enshwick-game-rates`](https://github.com/enshwick/mod-game-rates)
+[`enshwick-game-rates`](https://github.com/enshwick/mods/tree/main/game-rates)
 reads this setting as `multiplier` in its `[comfort]` group, beside its recipe rates.
 
 ## Changes while the game runs
@@ -343,7 +343,7 @@ the settings it read. The mod writes those lines once instead of after
 `config` and again in `on_config_change`.
 
 A table too large for an atomic goes into an `ArcSwap` in the mod's state, as
-[`enshwick-better-altars`](https://github.com/enshwick/mod-better-altars/blob/main/src/count.rs)
+[`enshwick-better-altars`](https://github.com/enshwick/mods/blob/main/better-altars/src/count.rs)
 does with its altar table.
 
 ## Join values
@@ -410,6 +410,6 @@ is, once its `on_config_change` handler has run, and pushed at the same moment
 to every joined player whose client runs Enshwick: their mod's
 `on_config_change` runs with the new values, without joining again.
 
-[`enshwick-better-altars`](https://github.com/enshwick/mod-better-altars)
+[`enshwick-better-altars`](https://github.com/enshwick/mods/tree/main/better-altars)
 keeps its altar table as a join value: the client's building interface asks
 the same function as the server's check.

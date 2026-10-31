@@ -203,7 +203,7 @@ What each piece does:
   under a running game.
 - `declare_mod!` exports the mod and adds `AltarCount::instance()`.
 
-[`enshwick-better-altars`](https://github.com/enshwick/mod-better-altars)
+[`enshwick-better-altars`](https://github.com/enshwick/mods/tree/main/better-altars)
 started as this mod. It adds a table per Flame level swapped with
 `arc-swap`, the table as a join value, and more than 16 altars.
 
