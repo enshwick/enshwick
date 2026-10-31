@@ -94,6 +94,18 @@ fn share(count: usize) -> u64 {
     (BUDGET / count).max(LEAST)
 }
 
+/// The host triple of the nightly compiler, from `rustc -vV`.
+fn host() -> Option<String> {
+    let output = std::process::Command::new("rustc")
+        .args(["+nightly", "-vV"])
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .map(str::to_owned)
+}
+
 /// Runs each of `targets` for its share of the budget over its seed corpus;
 /// whether none found a crash.
 pub(crate) fn run(targets: &[&str]) -> bool {
@@ -101,6 +113,12 @@ pub(crate) fn run(targets: &[&str]) -> bool {
         crate::say("no fuzz target reached; nothing to fuzz");
         return true;
     }
+    // cargo-fuzz builds for the target it was itself built for, which for
+    // its release binary is musl, without a standard library to sanitize.
+    let Some(host) = host() else {
+        crate::say("the nightly compiler names no host; is it installed?");
+        return false;
+    };
     let seconds = format!("-max_total_time={}", share(targets.len()));
     targets.iter().all(|target| {
         let found = format!("target/fuzz/corpus/{target}");
@@ -115,6 +133,8 @@ pub(crate) fn run(targets: &[&str]) -> bool {
                 "fuzz",
                 "run",
                 "-O",
+                "--target",
+                &host,
                 "--target-dir",
                 "target/fuzz",
                 target,
