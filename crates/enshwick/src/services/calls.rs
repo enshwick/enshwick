@@ -391,12 +391,15 @@ impl Load<'_> {
     /// The loader matches it once every mod is initialised: with no running
     /// mod serving `C` as declared here, it logs why, and every call answers
     /// [`CallError::Unmatched`]. Declare the server in the manifest with
-    /// `recommends`, or `requires` when this mod is pointless without it.
+    /// `recommends`, or `requires` when this mod is pointless without it: a
+    /// required server initialises first, so the loader matches the call
+    /// at once.
     ///
     /// # Errors
     ///
-    /// [`Off`] when called after `init`, or when this mod asked for `C`
-    /// already with another declaration.
+    /// [`Off`] when called after `init`, when this mod asked for `C`
+    /// already with another declaration, or when this mod requires the
+    /// server and it does not serve `C` as declared here; the log says why.
     ///
     /// # Examples
     ///

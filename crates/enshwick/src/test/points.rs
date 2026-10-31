@@ -88,6 +88,8 @@ struct Attached {
 pub(crate) struct FakePoints {
     defined: Vec<Defined>,
     attached: Vec<Attached>,
+    /// The points tests define as other mods.
+    others: Vec<Declared>,
 }
 
 /// The declaration a spec carries; `None` for a bad one.
@@ -203,6 +205,19 @@ pub(crate) extern "system" fn attach_point(
         },
     };
     with(Status::MISSING, |s| {
+        let required = s
+            .manifest
+            .as_ref()
+            .is_some_and(|manifest| manifest.requires_owner_of(&attached.declared.name));
+        if required
+            && !s
+                .points
+                .others
+                .iter()
+                .any(|other| other.serves(&attached.declared))
+        {
+            return Status::REFUSED;
+        }
         let attached_already = s
             .points
             .attached
@@ -336,6 +351,29 @@ impl Installed {
             drop(unsafe { Box::from_raw(user) });
         }
         attached
+    }
+
+    /// Defines the point `P` as another mod would, so the mod's links to it
+    /// match when the mod requires that mod.
+    ///
+    /// Define it before the mod's init: a required mod initialises first, so
+    /// the fake, as the loader, refuses a link to a required mod's point it
+    /// does not define by then.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[enshwick::point(name = "you.lockers:price", mode = Override, output = u32)]
+    /// #[derive(Clone, Copy, Debug)]
+    /// pub struct Price {
+    ///     pub locker: u32,
+    /// }
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.define_point::<Price>();
+    /// ```
+    pub fn define_point<P: Point>(&self) {
+        with((), |s| s.points.others.push(Declared::of::<P>()));
     }
 
     /// The points the mod defined, by name, in order.

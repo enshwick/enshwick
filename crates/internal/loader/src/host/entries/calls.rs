@@ -3,7 +3,7 @@
 use enshwick::abi as api_frame;
 use enshwick::abi::{Level, ModHandle, Status};
 
-use crate::host::entries::services::spec_parts;
+use crate::host::entries::services::{required_owner, spec_parts};
 use crate::host::memory::{get_headed, put};
 use crate::host::{caller_index, calling, entry};
 
@@ -77,7 +77,7 @@ pub(crate) extern "system" fn find_call(
     out: *mut u32,
 ) -> Status {
     entry("find_call", || {
-        let (_, index, record) = match calling(me) {
+        let (loader, index, record) = match calling(me) {
             Ok(found) => found,
             Err(status) => return status,
         };
@@ -97,6 +97,17 @@ pub(crate) extern "system" fn find_call(
         let Some(declared) = (unsafe { declared(&spec) }) else {
             return Status::BAD_ARGS;
         };
+        let unmet = required_owner(record, &declared.name).and_then(|owner| {
+            let reason = crate::calls::registry().unmatched(&declared, loader)?;
+            Some(format!(
+                "call {} v{}: this mod requires {owner}, and the call cannot match: {reason}",
+                declared.name, declared.major
+            ))
+        });
+        if let Some(reason) = unmet {
+            crate::log::write(Level::WARN, &record.id, &reason);
+            return Status::REFUSED;
+        }
         let found = crate::calls::registry().find(index, declared);
         match found {
             // SAFETY: `HostApi::find_call` has the mod pass `out` pointing at a

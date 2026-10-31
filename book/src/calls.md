@@ -119,6 +119,13 @@ switched off later answers `CallError::Off`, and a failed handler
 `CallError::Failed`. Declare the server with `recommends`, or `requires` when
 the mod is pointless without it.
 
+A required server initialises first, so the loader matches a call to it at
+once. When the server does not serve the call as declared, `caller` returns
+`Off` and the log says
+`call you.trading-post:price-of v1: this mod requires you.trading-post, and the call cannot match: ...`
+with the reason. In a test, serve a required server's call with
+`Installed::serve_call` before the mod starts.
+
 ### The schema
 
 A call's schema sits in the server's manifest beside its

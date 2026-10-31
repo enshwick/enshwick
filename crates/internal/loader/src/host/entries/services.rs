@@ -7,7 +7,9 @@ use enshwick::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str, TickH
 
 use crate::host::join::keep;
 use crate::host::memory::{get_headed, put, put_headed, text};
-use crate::host::{Loader, Subscription, caller, caller_index, calling, entry, mark_handled};
+use crate::host::{
+    Loader, ModRecord, Subscription, caller, caller_index, calling, entry, mark_handled,
+};
 use crate::locks::Relock;
 
 impl crate::points::Mods for Loader {
@@ -28,6 +30,14 @@ impl crate::services::Names for Loader {
             .get(index)
             .is_none_or(|m| m.off.load(Ordering::Acquire))
     }
+}
+
+/// The mod side of `name`, `<id>:<what>`, when the mod of `record`
+/// requires it: a call or point of a required mod, which initialises first,
+/// so what it offers is known by now.
+pub(crate) fn required_owner<'a>(record: &ModRecord, name: &'a str) -> Option<&'a str> {
+    let (owner, _) = name.split_once(':')?;
+    record.requires(owner).then_some(owner)
 }
 
 /// The name and layout of a service or event spec the safe layer passed.
@@ -335,7 +345,7 @@ pub(crate) extern "system" fn attach_point(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("attach_point", || {
-        let (_, index, record) = match calling(me) {
+        let (loader, index, record) = match calling(me) {
             Ok(found) => found,
             Err(status) => return status,
         };
@@ -361,6 +371,17 @@ pub(crate) extern "system" fn attach_point(
         let (Some(declared), Some(before), Some(after)) = parts else {
             return Status::BAD_ARGS;
         };
+        let unmet = required_owner(record, &declared.name).and_then(|owner| {
+            let reason = crate::points::registry().unlinkable(&declared, loader)?;
+            Some(format!(
+                "point {}: this mod requires {owner}, and the link cannot match: {reason}",
+                declared.name
+            ))
+        });
+        if let Some(reason) = unmet {
+            crate::log::write(Level::WARN, &record.id, &reason);
+            return Status::REFUSED;
+        }
         let attached = crate::points::registry().attach(crate::points::Pending {
             owner: index,
             declared,

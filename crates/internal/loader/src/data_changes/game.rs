@@ -6,7 +6,7 @@ use core::ffi::c_void;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick::abi::{Event, Level, Relation, ResourceKey, Status};
+use enshwick::abi::{Event, Level, ResourceKey, Status};
 use enshwick::content::Guid;
 use enshwick::content::changes::{Change, Entry, Field};
 use enshwick::content::containers::{ContainerLayout, container_slots, resize_container};
@@ -303,15 +303,7 @@ fn requires(loader: &Loader, a: ModIndex, b: ModIndex) -> bool {
     let (Some(a), Some(b)) = (loader.mods.get(a.get()), loader.mods.get(b.get())) else {
         return false;
     };
-    // SAFETY: a record's manifest is the loader's copy, kept for the process
-    // with every string and slice in it.
-    let Ok(candidate) = (unsafe { crate::manifest::parse(a.manifest) }) else {
-        return false;
-    };
-    candidate
-        .dependencies
-        .iter()
-        .any(|d| d.relation == Relation::REQUIRES && b.id == d.id)
+    a.requires(&b.id)
 }
 
 /// Reports each set another mod overrides in both mods' logs and the
