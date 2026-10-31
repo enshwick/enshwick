@@ -5,7 +5,8 @@
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// Slots.
 ///     #[config(range = 1..=4, range = 100..=200)]
@@ -17,7 +18,8 @@
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// Slots.
 ///     #[config(range = ..)]
@@ -29,7 +31,8 @@
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// Slots.
 ///     #[config(range = 10..=1)]
@@ -41,7 +44,8 @@
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// #[config(text = "")]
 /// struct Settings {
 ///     /// Slots.
@@ -62,7 +66,8 @@
 /// }
 ///
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// How long.
 ///     #[serde(with = "seconds")]

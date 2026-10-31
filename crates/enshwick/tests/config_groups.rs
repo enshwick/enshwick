@@ -6,8 +6,8 @@ mod tests {
     use enshwick::config::{Config, Stage};
 
     /// Comfort rules.
-    #[derive(Debug, Default, PartialEq, serde::Deserialize, serde::Serialize, enshwick::Config)]
-    #[serde(default)]
+    #[enshwick::config(default)]
+    #[derive(Debug, Default, PartialEq)]
     struct Comfort {
         /// Comfort per piece of furniture, times this factor.
         #[config(runtime, range = 0.0..=10.0)]
@@ -18,8 +18,8 @@ mod tests {
     }
 
     /// Rates of the game.
-    #[derive(Debug, Default, PartialEq, serde::Deserialize, serde::Serialize, enshwick::Config)]
-    #[serde(default)]
+    #[enshwick::config(default)]
+    #[derive(Debug, Default, PartialEq)]
     struct Rates {
         /// The comfort rules.
         #[config(group)]

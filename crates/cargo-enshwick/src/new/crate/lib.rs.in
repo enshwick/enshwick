@@ -11,8 +11,8 @@ const TEXTS: &str = include_str!("texts.toml");
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// The settings, in `mod-configs/{id}.toml`.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(deny_unknown_fields)]
+#[enshwick::config]
+#[derive(Debug)]
 struct Settings {
     /// Whether the mod does its work.
     // `startup` (applied when a world loads), `runtime` (applied by

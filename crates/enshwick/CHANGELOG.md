@@ -8,6 +8,15 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `#[enshwick::config]` declares a settings struct: it derives
+  serde's `Deserialize` and `Serialize` through the API's serde, refuses
+  unknown keys and derives `Config`, so a mod needs no serde for its
+  settings. `#[enshwick::config(default)]` adds serde's `default`;
+  `validate` and `text` are the derive's struct attributes. `#[derive(Config)]`
+  alone refuses a struct without `#[serde(deny_unknown_fields)]`. Replace
+  `#[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]` and
+  `#[serde(deny_unknown_fields)]` with `#[enshwick::config]` (#795).
+
 - **Breaking:** a mod's content is its own until its `exports` list the
   name, or the name it is a part of: `exports = ["locker"]` lets other mods
   name `locker` and `locker.recipe`. A required dependency's

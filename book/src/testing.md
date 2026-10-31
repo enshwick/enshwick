@@ -38,7 +38,8 @@ use enshwick::abi::{Level, Status};
 use enshwick::{Load, Mod, Next, Off, events, hook};
 
 /// Bonus settings.
-#[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+#[enshwick::config]
+#[derive(Default)]
 struct Settings {
     /// Added to every quest reward.
     bonus: u32,

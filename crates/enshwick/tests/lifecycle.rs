@@ -43,14 +43,16 @@ mod tests {
     }
 
     /// Test settings.
-    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    #[enshwick::config]
+    #[derive(Default)]
     struct Settings {
         /// A limit.
         limit: u32,
     }
 
     /// Test settings.
-    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    #[enshwick::config]
+    #[derive(Default)]
     struct Live {
         /// A limit, the same on the server and its players.
         #[config(sync)]

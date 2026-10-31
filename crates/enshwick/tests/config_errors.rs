@@ -18,7 +18,8 @@ mod tests {
     }
 
     /// Vault settings.
-    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    #[enshwick::config]
+    #[derive(Default)]
     struct Settings {
         /// The code that opens the vault.
         pin: u32,
@@ -92,6 +93,17 @@ mod tests {
         );
         let broken = refused(&loader, "pin = 1\ntoken = \"hunter2\n", "hunter2");
         assert!(broken.starts_with("line 2: "), "{broken}");
+    }
+
+    #[test]
+    fn a_misspelt_key_is_refused_by_its_name() {
+        let loader = started();
+        let reason = refused(
+            &loader,
+            "pim = 1\nmode = \"auto\"\ntoken = \"hunter2\"\n",
+            "hunter2",
+        );
+        assert!(reason.contains("unknown field `pim`"), "{reason}");
     }
 
     proptest::proptest! {

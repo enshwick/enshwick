@@ -151,8 +151,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use enshwick::{Load, Mod, Off};
 
 /// Flame Altar settings.
-#[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(deny_unknown_fields)]
+#[enshwick::config]
 struct Settings {
     /// Altars allowed at every Flame level, 1 to 16.
     altars: u8,
