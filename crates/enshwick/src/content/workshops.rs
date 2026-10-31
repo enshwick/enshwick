@@ -99,7 +99,9 @@ impl WorkshopId {
 /// The station item is `id`; the station's other ids derive from it with
 /// [`Id::part`]: its template `<id>.template`, its workshop `<id>.workshop`,
 /// its recipe `<id>.recipe`, and the tags of its name and description,
-/// `<id>.name` and `<id>.description`. Every id is the mod's own and never
+/// `<id>.name` and `<id>.description`. So `id` is a plain id, never one
+/// derived with [`Id::part`], even when the same id written in full would
+/// fit. Every id is the mod's own and never
 /// changes: saves keep the template GUID of each placed station and the item
 /// id of each stack.
 ///
