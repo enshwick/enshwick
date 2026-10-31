@@ -211,8 +211,8 @@ impl FakeHost {
         )
     }
 
-    /// The world's own component types: what [`World`](crate::world::World)
-    /// needs before it resolves, the current transform and the used item.
+    /// The world's own component types: what `World` needs before it
+    /// resolves, the current transform and the used item.
     ///
     /// # Examples
     ///
