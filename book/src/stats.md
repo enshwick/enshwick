@@ -67,7 +67,7 @@ second and names both ids and both mods; affixes are checked the same way.
 A `Modifier` is a stat, an `Op` and a value. They come from three sources,
 summed in this order:
 
-1. **Worn items**: an item keeps its `ItemStats` as [item data](item-data.md)
+1. **Worn items**: an item keeps its `ItemStats` as [item data](item-and-entity-data.md)
    of the platform's kind `enshwick:stats`; `stats.item(item)` reads it and
    `stats.set_item(item, &stats)` writes it, on the server; `set_item` is
    unstable, as item data is. The items an

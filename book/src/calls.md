@@ -136,11 +136,11 @@ once. When the server does not serve the call as declared, `caller` returns
 with the reason. In a test, serve a required server's call with
 `Installed::serve_call` before the mod starts.
 
-A server that is loaded but does not export the call refuses every caller, required or not:
-`caller` returns `Off` and the log says
+A server that is loaded but does not export the call refuses every caller,
+required or not, and the log says
 `call you.trading-post:price-of: you.trading-post does not export price-of; it exports prices, sold`.
-In a test, `FakeHost::exports` names what another mod exports.
-Without it the fake lets every name through, so a test that calls another mod passes that mod's exports.
+What a refused export does, in the game and in a test, is in
+[What other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use).
 
 ### The schema
 

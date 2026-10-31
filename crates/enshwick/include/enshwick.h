@@ -2838,15 +2838,18 @@ typedef struct EnshwickMapMarkerTypeInfo {
 
 // The table of services the loader offers a mod.
 //
-// Fields are only ever appended; a mod checks `Header::covers` before it
-// calls a field added after the minor it was built against.
+// Until 1.0 any change to its layout is a new `ABI_VERSION`, and a loader
+// loads only mods built for its own. From 1.0 fields are only appended, and
+// a mod checks `Header::covers` before it calls a field added after the
+// release it was built against.
 typedef struct EnshwickHostApi {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The loader's own version.
   struct EnshwickStr host_version;
-  // Writes the running game's identity, as far as the `Header` `out`
-  // starts with says the caller's struct reaches.
+  // Writes the running game's identity, its side, image base, build
+  // fingerprint and where its build table is from, as far as the
+  // `Header` `out` starts with says the caller's struct reaches.
   void (*build)(struct EnshwickBuildInfo *out);
   // Resolves a symbolic id for the running build: the mod's own rows first,
   // then the loader's table.
@@ -3439,8 +3442,8 @@ typedef struct EnshwickHostApi {
   // `Status::MISSING` for a widget this game build lacks.
   EnshwickStatus (*ui_widget)(EnshwickModHandle me, uint64_t frame, struct EnshwickUiWidget *widget);
   // Queues `dialog` and calls `callback` with the answer and `user` once
-  // the player gives it; dialogs show one at a time, in order. Any
-  // thread. Client only (`Status::MISSING` on a server); when the
+  // the player gives it, on the thread that draws the interface; dialogs
+  // show one at a time, in order, in the game's style. Any thread. Client only (`Status::MISSING` on a server); when the
   // interface could not be linked, the dialog shows as a system message
   // box. `Status::REFUSED` when too many wait; `Status::WRONG_THREAD`
   // for `UiDialog::WAITING` on the thread that draws the interface. On
@@ -3550,7 +3553,8 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*stats_changed)(EnshwickModHandle me, EnshwickStatChangeFn callback, void *user);
   // Writes up to `capacity` modifiers that count toward stat `stat` on
   // `entity`, in the order they apply, and how many there are to
-  // `count`; every stat for `u32::MAX`. Any thread.
+  // `count`; every stat for `u32::MAX`. On the server's game thread at a
+  // quiet moment (`Status::WRONG_THREAD` inside a step).
   EnshwickStatus (*stat_sources)(EnshwickModHandle me,
                                  EnshwickEntity entity,
                                  uint32_t stat,
@@ -3836,7 +3840,8 @@ typedef struct EnshwickHostApi {
   // except for a recipe output rate, whose change builds the recipe
   // registry again.
   EnshwickStatus (*set_rate)(EnshwickModHandle me, EnshwickRateId rate, float factor);
-  // Declares a change of a vanilla value. The loader merges the changes
+  // Declares a change of a vanilla value, of one entry or of each item or
+  // recipe a selection picks. The loader merges the changes
   // of every mod once their `init` ran: a set in load order, the last
   // winning and the overridden one reported in both mods' logs and the
   // conflict report; then every factor, multiplied. It builds the changed
@@ -3909,7 +3914,8 @@ typedef struct EnshwickHostApi {
   // in force, from `enshwick_mod_ready` on, with the zones its own
   // grouping takes. `Status::BAD_ARGS` for a null `out`. Any thread.
   EnshwickStatus (*base_limit)(EnshwickModHandle me, struct EnshwickBaseLimitInfo *out);
-  // Reads the voxels of the server's world in the box of `size` voxels
+  // Reads the voxels of the server's world, decoded at full detail, in the
+  // box of `size` voxels
   // from `min`, in voxels of half a metre from the world's corner, into
   // `out`: x fastest, then y, then z, `size[0] * size[1] * size[2]`
   // entries. `min` and `size` are borrowed for the call; `out` points at
@@ -4270,7 +4276,7 @@ typedef struct EnshwickManifest {
   const struct EnshwickDependency *dependencies;
   // How many entries `dependencies` points at.
   size_t dependency_count;
-  // Symbols the mod pins itself, per build.
+  // Symbols and constants the mod pins itself, per build.
   const struct EnshwickBuildRow *builds;
   // How many rows `builds` points at.
   size_t build_count;

@@ -75,6 +75,10 @@ pub trait LoaderEvent: Kind<Data: Copy> {
     /// The event's data from the raw pointer the loader passes; `None` when
     /// it is missing.
     ///
+    /// Fields added after the event read as zero, so a handler gets the
+    /// fields the loader knows; it is skipped only when the data lacks a
+    /// field the event came with.
+    ///
     /// # Safety
     ///
     /// - `raw` is null or the pointer the loader passed with

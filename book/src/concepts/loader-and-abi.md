@@ -256,6 +256,9 @@ is refused, and the log says
   `content id you.lockers:key: you.lockers does not export key; it exports locker`.
 - A data pack's reference to another mod's content, `<alias>:<name>` or
   `<mod>:<name>`, is checked the same way when the pack is added.
+- In a test, `FakeHost::exports` names what another mod exports. Without it
+  the fake lets every name through, so a test that uses another mod passes
+  that mod's exports.
 - The mod's own names need no export.
 - A mod that is not loaded is not checked; its names stay unmatched.
 - A GUID the mod writes itself, such as `Guid::named("you.lockers:key")`, is
@@ -297,33 +300,6 @@ enshwick::declare_mod!(Hello, points: [Price]);
 
 ## The mod
 
-A mod implements
-[`Mod`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs) on its
-state type:
-
-- `init(load)` registers hooks, settings, events and content, and returns the
-  state or an [`Off`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs);
-- `ready(&'static self, host)`, optional, runs once the hooks are armed;
-- `shutdown(&'static self)`, optional, runs before a development reload
-  unloads a mod with `reload = true`.
-
-`Off::new(reason)` turns the mod off with a reason for the log. Every fallible
-call on `Load` returns `Result<_, Off>`, so `?` is the usual way out.
-
-`declare_mod!` exports the type with the manifest: `enshwick_mod_abi`,
-`enshwick_mod_query`, `enshwick_mod_init`, `enshwick_mod_ready` and
-`enshwick_mod_shutdown`, each catching panics. It also
-adds `instance()`, the mod's state once `init` has returned it.
-
-```rust,standalone_crate
-struct Quiet;
-
-impl enshwick::Mod for Quiet {
-    fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-        Err(enshwick::Off::new("nothing to do on this build"))
-    }
-}
-
-enshwick::declare_mod!(Quiet);
-# assert!(Quiet::instance().is_none());
-```
+A mod implements `Mod` on its state type, and `declare_mod!` exports it with
+the manifest; [The life of a mod](lifecycle.md#the-mod) has its methods and
+exports.

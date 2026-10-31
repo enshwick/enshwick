@@ -69,6 +69,5 @@ was within about 260 metres. The `ChunkData` names the chunk by its column
 and `z * size` to `(z + 1) * size` on the other, at any height. A mod that
 works on what lies in an area reads it once its chunk loaded.
 
-Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
-client, while it hosts a game.
+Where each call works is in
+[What may be called where](concepts/threads.md#what-may-be-called-where).

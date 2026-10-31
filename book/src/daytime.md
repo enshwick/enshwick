@@ -85,6 +85,5 @@ after the step in which the day or the night began, whether the clock got
 there or a mod set the time across the turn. They carry no data; `now()`
 reads the clock.
 
-Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
-client, while it hosts a game.
+Where each call works is in
+[What may be called where](concepts/threads.md#what-may-be-called-where).

@@ -84,7 +84,8 @@ impl FakeHost {
         self
     }
 
-    /// The value `Load::constant(name)` finds.
+    /// The value `Load::constant(name)` finds, such as the offset an Enshwick
+    /// id names.
     ///
     /// # Examples
     ///
@@ -114,7 +115,8 @@ impl FakeHost {
         self
     }
 
-    /// The size `Load::type_size(type_name)` finds.
+    /// The size `Load::type_size(type_name)` finds, by reflected name or
+    /// Enshwick id.
     ///
     /// # Examples
     ///
@@ -125,7 +127,8 @@ impl FakeHost {
         self
     }
 
-    /// The ECS type hash of the component type `type_name`.
+    /// The ECS type hash of the component or resource type `type_name`, by
+    /// reflected name or Enshwick id.
     ///
     /// # Examples
     ///

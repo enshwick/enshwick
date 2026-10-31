@@ -40,37 +40,18 @@ unless the DLL has that version:
 cargo enshwick manifest target/x86_64-pc-windows-msvc/release/my_mod.dll --expect-version 0.3.0
 ```
 
-## Releases in this repository
+## The development build
 
-Until the first public release, 1.0.0, this repository has no regular
-releases. The platform's crates carry prerelease versions, `1.0.0-alpha.N`,
-and a mod depends on `enshwick = "=1.0.0-alpha.N"`.
-
-The
-[dev-build workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/dev-build.yml),
-runs on every push to `main` that changes the crates or the tools, and by
-hand. It builds the commit with `cargo xtask dist` and replaces the files
-of the one prerelease tagged `dev`, whose tag moves to that commit, so
-`dev` always carries `main`. `enshwick.zip` there holds the stub and the
-loader, and no mod: each mod ships in its own archive from its own
-repository. `cargo xtask dist` writes the same archive into `target/dist` on
-any machine with `cargo-xwin`. Two development builds of
+Until the first public release, 1.0.0, Enshwick has no regular releases. Its
+crates carry prerelease versions, `1.0.0-alpha.N`, and a mod depends on
+`enshwick = "=1.0.0-alpha.N"`. The prerelease tagged `dev` always carries the
+newest `main`:
+[`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip)
+there holds the stub and the loader, and no mod. Two development builds of
 one commit join each other; builds of different commits carry the same
-versions, so the join check does not tell them apart.
-
-Versions come from [release-plz](https://release-plz.dev), set up in
-[release-plz.toml](https://github.com/enshwick/enshwick/blob/main/release-plz.toml)
-and run by hand through the
-[release-plz workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/release-plz.yml):
-
-1. `release-pr` reads the conventional commits since each crate's last
-   release, checks the public API with cargo-semver-checks, and opens or
-   updates one release pull request with the new versions and each crate's
-   `CHANGELOG.md`.
-2. Once that pull request merges, `release` tags each released crate
-   `<package>-v<version>`, such as `enshwick-v1.0.0-alpha.3`, makes its
-   GitHub release, and publishes the public crates to crates.io. The loader
-   and the stub are tagged only; they never go to crates.io.
+versions, so the join check does not tell them apart. How the platform
+builds and releases its own crates is in
+[CONTRIBUTING.md](https://github.com/enshwick/enshwick/blob/main/CONTRIBUTING.md#releases).
 
 The loader's build tables (see [Finding the game](finding-the-game.md)) are
 compiled into the loader, so a table for a new game build ships with the next
@@ -79,21 +60,9 @@ loader build.
 ## The list of loaded mods
 
 [`enshwick::mods::all()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
-lists every loaded mod, the loader first (id `enshwick`), in load order. Each
-[`ModEntry`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
-has:
-
-| Field                                           | What it holds                                                                   |
-| ----------------------------------------------- | ------------------------------------------------------------------------------- |
-| `id`                                            | The mod id                                                                      |
-| `version`                                       | Its SemVer version                                                              |
-| `side`                                          | The sides it runs on                                                            |
-| `join`                                          | Whether it counts in the join check                                             |
-| `running`                                       | Not refused at init and not faulted since                                       |
-| `file`                                          | The DLL's path relative to the game's folder, such as `mods/trading_post.dll`   |
-| `name`                                          | What players read; `entry.label()` gives the name, or the id without a name     |
-| `description`, `authors`, `license`, `homepage` | The manifest's credits; empty for none                                          |
-| `replaced_by`                                   | In `mods::replaced()`, the mod that replaces this one; empty elsewhere          |
+lists every loaded mod, the loader first (id `enshwick`), in load order, each
+a [`ModEntry`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
+with its id, version, side, file, whether it runs and the manifest's credits:
 
 ```rust
 for entry in enshwick::mods::all() {
@@ -156,10 +125,6 @@ which the loader never started, each with `replaced_by` and its `file`.
 
 ## Removed mods and holds
 
-A mod that keeps a world the vanilla game cannot open safely can set a
-[`state::Hold`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/state.rs).
-While `mod-data/<id>/hold.txt` exists, the loader stops the game before the
-world loads when that mod does not run: removed, skipped, off, or on a game
-build the loader does not know. Removing such a mod therefore needs the
-player to delete its `hold.txt` as well, at their own risk. See
-[State and data folders](state.md).
+Removing a mod that set a hold needs the player to delete its
+`mod-data/<id>/hold.txt` as well, at their own risk; see
+[Holds](state.md#holds).

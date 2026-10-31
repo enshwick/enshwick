@@ -409,7 +409,5 @@ uses labels and a rename filter for its Safes.
 
 ## Chat lines
 
-`world.broadcast(text)` sends `text` to every player's chat, and
-`world.tell(&player, text)` to one player. Both work from any thread: the line
-waits in a queue and the server posts it after the next step. Each line of
-`text` becomes a message of its own. See [Chat, notices and the console](chat.md).
+`world.broadcast(text)` and `world.tell(&player, text)` send chat lines; see
+[Chat lines](chat.md#chat-lines).

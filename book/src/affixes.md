@@ -10,7 +10,7 @@ module holds the API.
 
 Unstable: rolling affixes onto items needs the `unstable` feature and may
 change in any release ([Stability](stability.md)). What an item rolled is
-kept as [item data](item-data.md), so after a restart a roll on an item no
+kept as [item data](item-and-entity-data.md), so after a restart a roll on an item no
 load finds, such as one in a player's inventory, stays aside. Defining
 affixes and reading what an item rolled are stable.
 
@@ -88,7 +88,7 @@ which the server has once a player has been online.
 ## What an item rolled
 
 The roll is part of the item's `ItemStats` (`affixes` and `rolled`), kept as
-[item data](item-data.md) and sent to clients that run Enshwick.
+[item data](item-and-entity-data.md) and sent to clients that run Enshwick.
 `affixes.lines(item)` lists what an item gives, a `Line` per modifier: its
 own first, then each affix's, with the stat's index for `stats.info` and the
 affix's index for `affixes.info`, which names its text key and rarity. That

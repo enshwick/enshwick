@@ -91,7 +91,7 @@ the code that calls or addresses it; a constant's is the instruction picked
 as its use, with the operand that carries it left open to read. A constant
 read `via` a symbol is read again in that symbol's code, and a slot named by
 its `attribute` is kept as it is (see
-[Patterns of the loader's table](https://github.com/enshwick/enshwick/blob/main/book/src/finding-the-game.md#patterns-of-the-loaders-table)).
+[Patterns](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/README.md#patterns)).
 
 ### Workflow
 
