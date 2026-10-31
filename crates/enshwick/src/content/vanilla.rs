@@ -2,9 +2,11 @@
 //! names in the item registry, and crafting stations and their workshops by
 //! the station's item, read from the game's archive.
 //!
-//! [`Vanilla::game`] reads the running game's data; [`Vanilla::new`] reads
-//! any game's through a function of the caller's, as a tool outside the
-//! game does.
+//! [`item`], [`recipe`], [`loot_table`], [`station`] and [`workshop`] name
+//! the running game's content, so a mod's code holds no vanilla GUID;
+//! [`deps!`](crate::deps) offers them as `deps::vanilla`. [`Vanilla::game`]
+//! reads the running game's data; [`Vanilla::new`] reads any game's through
+//! a function of the caller's, as a tool outside the game does.
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
@@ -109,6 +111,106 @@ fn guid_list(items: &[Guid]) -> String {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// The running game's [`Vanilla`], or why it does not read.
+fn game() -> Result<&'static Vanilla, VanillaError> {
+    Vanilla::game().ok_or(VanillaError::Unreadable("data"))
+}
+
+/// The running game's vanilla item with the debug name `name`, such as
+/// `Prop_Production_T1_Forge`: what a mod writes in place of the item's GUID,
+/// also as `deps::vanilla::item` of [`deps!`](crate::deps).
+///
+/// # Errors
+///
+/// As [`Vanilla::item`], and [`VanillaError::Unreadable`] outside the game.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::vanilla::{self, VanillaError};
+///
+/// match vanilla::item("Prop_Production_T1_Forge") {
+///     Ok(forge) => enshwick::info!("the forge is {forge}"),
+///     Err(VanillaError::Unreadable(_)) => {} // outside the game
+///     Err(other) => enshwick::warn!("{other}"),
+/// }
+/// ```
+pub fn item(name: &str) -> Result<Guid, VanillaError> {
+    game()?.item(name)
+}
+
+/// The running game's vanilla recipe with the debug name `name`.
+///
+/// # Errors
+///
+/// As [`Vanilla::recipe`], and [`VanillaError::Unreadable`] outside the
+/// game.
+///
+/// # Examples
+///
+/// ```
+/// let torch = enshwick::content::vanilla::recipe("Tool_Torch01");
+/// assert!(torch.is_err(), "no game runs here");
+/// ```
+pub fn recipe(name: &str) -> Result<Guid, VanillaError> {
+    game()?.recipe(name)
+}
+
+/// The fill table the running game's vanilla container `name` rolls.
+///
+/// # Errors
+///
+/// As [`Vanilla::loot_table`], and [`VanillaError::Unreadable`] outside the
+/// game.
+///
+/// # Examples
+///
+/// ```
+/// let vukah = enshwick::content::vanilla::loot_table("LootContainer_Enemy_Corpse_Vukah");
+/// assert!(vukah.is_err(), "no game runs here");
+/// ```
+pub fn loot_table(name: &str) -> Result<LootTable, VanillaError> {
+    game()?.loot_table(name)
+}
+
+/// The running game's vanilla crafting station whose item has the debug
+/// name `name`, to clone with [`crate::Load::add_workshop`].
+///
+/// # Errors
+///
+/// As [`Vanilla::item`] and [`Vanilla::station`], and
+/// [`VanillaError::Unreadable`] outside the game.
+///
+/// # Examples
+///
+/// ```
+/// let forge = enshwick::content::vanilla::station("Prop_Production_T1_Forge");
+/// assert!(forge.is_err(), "no game runs here");
+/// ```
+pub fn station(name: &str) -> Result<Station, VanillaError> {
+    let vanilla = game()?;
+    vanilla.station(vanilla.item(name)?)
+}
+
+/// The workshop of the running game's vanilla crafting station whose item
+/// has the debug name `name`, for recipes made at it.
+///
+/// # Errors
+///
+/// As [`Vanilla::item`] and [`Vanilla::workshop`], and
+/// [`VanillaError::Unreadable`] outside the game.
+///
+/// # Examples
+///
+/// ```
+/// let forge = enshwick::content::vanilla::workshop("Prop_Production_T1_Forge");
+/// assert!(forge.is_err(), "no game runs here");
+/// ```
+pub fn workshop(name: &str) -> Result<WorkshopId, VanillaError> {
+    let vanilla = game()?;
+    vanilla.workshop(vanilla.item(name)?)
 }
 
 /// The game's vanilla content, read on demand.

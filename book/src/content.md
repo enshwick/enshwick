@@ -101,11 +101,29 @@ error [lanterns] off: content id lanterns:lamp of lanterns has the key 0x1a2b3c4
 
 Content a mod serves itself with [`Load::serve`](content/resources.md) is
 declared with `load.declare(id)`. References to existing content, a vanilla
-item to clone or another mod's item for a recipe, stay plain
-[`Guid`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)s:
-`Guid::parse` for a vanilla GUID, `Guid::named("you.lockers:locker")` for another
-mod's content, without depending on that mod. Stat kinds and affixes have
-`<mod>:<name>` ids too, and their keys come from the same GUIDs.
+item to clone or another mod's item for a recipe, go through the mod's
+[`deps` module](concepts/loader-and-abi.md#the-manifest), so its code holds
+no GUID literal:
+
+```rust
+use enshwick::content::vanilla::VanillaError;
+
+enshwick::deps!();
+
+// Another mod's content, by the alias the manifest gives that mod.
+let locker: enshwick::content::Guid = deps::lockers::id("locker").into();
+// Vanilla content, by the debug name the game's data gives it.
+match deps::vanilla::item("Prop_Production_T1_Forge") {
+    Ok(forge) => enshwick::info!("{locker} is made at {forge}"),
+    Err(VanillaError::Unreadable(_)) => {} // outside the game
+    Err(other) => enshwick::warn!("{other}"),
+}
+```
+
+A vanilla name the game does not know fails with the names that look like
+it. `Guid::named("you.lockers:locker")` still names another mod's content
+without depending on that mod. Stat kinds and affixes have `<mod>:<name>` ids
+too, and their keys come from the same GUIDs.
 
 ## Mods compose
 

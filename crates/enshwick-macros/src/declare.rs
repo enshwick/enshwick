@@ -26,6 +26,10 @@ const KEYS: [&str; 12] = [
     "builds",
 ];
 
+/// The module of `deps!` that names the game's own content, which no
+/// dependency's alias may take.
+const VANILLA: &str = "vanilla";
+
 /// The tables of dependencies by alias, with the ABI relation of each.
 const RELATIONS: [(&str, &str); 4] = [
     ("requires", "REQUIRES"),
@@ -238,6 +242,11 @@ pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
         pub mod deps {
             const _: &[u8] = ::core::include_bytes!(#shown);
 
+            /// The game's own content, by the debug names its data gives it.
+            pub mod vanilla {
+                pub use ::enshwick::content::vanilla::{item, loot_table, recipe, station, workshop};
+            }
+
             #(#modules)*
         }
     })
@@ -400,6 +409,11 @@ impl Metadata {
                 if !is_alias(alias) || syn::parse_str::<Ident>(alias).is_err() {
                     return Err(format!(
                         "`{key}.{alias}`: an alias is a Rust name in snake case, [a-z][a-z0-9_]*, and no keyword"
+                    ));
+                }
+                if alias == VANILLA {
+                    return Err(format!(
+                        "`{key}.{VANILLA}`: `deps::{VANILLA}` names the game's own content; choose another alias"
                     ));
                 }
                 if !aliases.insert(alias.clone()) {
@@ -813,6 +827,10 @@ mod tests {
         assert!(
             refused("id = \"you.a\"\nside = \"both\"\n[requires]\ntype = \"you.b\"")
                 .contains("no keyword")
+        );
+        assert!(
+            refused("id = \"you.a\"\nside = \"both\"\n[recommends]\nvanilla = \"you.b\"")
+                .contains("the game's own content")
         );
         assert!(
             refused("id = \"you.a\"\nside = \"both\"\n[requires]\nb = \"you.b\"\n[breaks]\nb = \"you.c\"")
