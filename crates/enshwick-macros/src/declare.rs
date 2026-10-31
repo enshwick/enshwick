@@ -39,11 +39,13 @@ const RELATIONS: [(&str, &str); 4] = [
     ("breaks", "BREAKS"),
 ];
 
-/// What `declare_mod!` takes: the mod's type, its metadata as TOML for a
-/// test, and the Rust types of the points, events and calls it defines.
+/// What `declare_mod!` takes: the mod's type, its metadata as TOML and the
+/// path of its texts for a test, and the Rust types of the points, events
+/// and calls it defines.
 pub(crate) struct Args {
     ty: Type,
     metadata: Option<LitStr>,
+    texts: Option<LitStr>,
     points: Vec<Type>,
     events: Vec<Type>,
     calls: Vec<Type>,
@@ -55,6 +57,7 @@ impl Parse for Args {
         let mut args = Self {
             ty,
             metadata: None,
+            texts: None,
             points: Vec::new(),
             events: Vec::new(),
             calls: Vec::new(),
@@ -71,6 +74,14 @@ impl Parse for Args {
                 continue;
             }
             let key: Ident = input.parse()?;
+            if key == "texts" {
+                input.parse::<Token![=]>()?;
+                if args.texts.is_some() {
+                    return Err(syn::Error::new(key.span(), "`texts` is given once"));
+                }
+                args.texts = Some(input.parse()?);
+                continue;
+            }
             input.parse::<Token![:]>()?;
             let content;
             bracketed!(content in input);
@@ -160,8 +171,15 @@ pub(crate) fn expand(args: &Args) -> syn::Result<TokenStream> {
              inline metadata is for `enshwick::test::declare_mod!`",
         ));
     }
+    if let Some(texts) = &args.texts {
+        return Err(syn::Error::new(
+            texts.span(),
+            "a mod's texts live in src/texts.toml; `texts = \"..\"` is for `enshwick::test::declare_mod!`",
+        ));
+    }
     let (metadata, shown) = cargo_metadata()?;
-    Ok(exports(args, &metadata, Some(&shown)))
+    let texts = crate::texts::File::read(crate::texts::DEFAULT)?;
+    Ok(exports(args, &metadata, Some(&shown), texts.as_ref()))
 }
 
 /// Expands `content::id!("<name>")`: the content id `<mod>:<name>` of the
@@ -383,7 +401,8 @@ pub(crate) fn expand_test(args: &Args) -> syn::Result<TokenStream> {
     let table: toml::Table = toml::from_str(&literal.value())
         .map_err(|e| syn::Error::new(literal.span(), e.to_string()))?;
     let metadata = Metadata::read(&table).map_err(|e| syn::Error::new(literal.span(), e))?;
-    Ok(exports(args, &metadata, None))
+    let texts = crate::texts::File::for_test(args.texts.as_ref())?;
+    Ok(exports(args, &metadata, None, texts.as_ref()))
 }
 
 impl Metadata {
@@ -674,13 +693,20 @@ fn is_alias(alias: &str) -> bool {
         && bytes.all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
-/// The exports of `args.ty` with the manifest of `metadata`; `cargo` is the
-/// `Cargo.toml` it came from, a file the build then depends on.
-fn exports(args: &Args, metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
+/// The exports of `args.ty` with the manifest of `metadata` and the texts
+/// `Load::texts` serves; `cargo` is the `Cargo.toml` it came from, a file
+/// the build then depends on.
+fn exports(
+    args: &Args,
+    metadata: &Metadata,
+    cargo: Option<&str>,
+    texts: Option<&crate::texts::File>,
+) -> TokenStream {
     let ty = &args.ty;
     let manifest = manifest(args, metadata, cargo);
+    let texts = crate::texts::File::option(texts);
     quote! {
-        ::enshwick::__declare_exports!(#ty, #manifest);
+        ::enshwick::__declare_exports!(#ty, #manifest, #texts);
     }
 }
 

@@ -8,6 +8,15 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** a mod's texts live in `src/texts.toml`, which
+  `declare_mod!` embeds: `load.texts()` takes no argument and returns `Off`
+  for a crate without the file, and `load.texts_from(toml)` hands over texts
+  from a string, such as a data pack's. `enshwick::texts!()` writes
+  `pub mod texts`, a constant per key such as `texts::SAFE_NAME` for
+  `"safe.name"`, with `texts::value`, `texts::ALL` and `texts::TOML`. The
+  build fails when a key has no `en` text, a table is no language code, or
+  a translation fills in other values than its `en` text. Replace
+  `load.texts(include_str!("texts.toml"))` with `load.texts()` (#827).
 - **Breaking:** `#[enshwick::config]` declares a settings struct: it derives
   serde's `Deserialize` and `Serialize` through the API's serde, refuses
   unknown keys and derives `Config`, so a mod needs no serde for its

@@ -27,7 +27,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         debug_name: "Craftingstation_BulkWorkbench".into(),
         ..NewWorkshop::new(BENCH, stations::WORKBENCH)
     };
-    let texts = load.texts(r#"
+    let texts = load.texts_from(r#"
 [en]
 "bench.name" = "Bulk Workbench"
 "bench.description" = "A workbench for building in bulk."

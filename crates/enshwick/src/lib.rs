@@ -619,6 +619,40 @@ pub use enshwick_macros::script;
 /// }
 /// ```
 pub use enshwick_macros::service;
+/// Names the keys of the mod's texts: `texts!()` reads the crate's
+/// `src/texts.toml` when it builds and writes `pub mod texts`, a constant
+/// per key.
+///
+/// A key's constant is the key in upper case with `.` and `-` as `_`, such
+/// as `texts::SAFE_NAME` for `"safe.name"`; its doc shows the English text
+/// and the values it fills in. `texts::value` holds a constant per value
+/// name, such as `value::OWNER` for `{owner}`; `texts::ALL` lists every
+/// key; `texts::TOML` is the file. The build fails when a key has no `en`
+/// text, a table is no language code of [`i18n::Language`], or a
+/// translation fills in other values than its `en` text.
+/// [`declare_mod!`] embeds the same file, which [`Load::texts`] serves.
+///
+/// `texts!("<path>")` reads another file from the crate's root, for tests.
+///
+/// # Examples
+///
+/// The file has `"locker.name" = "Locker"` and
+/// `"locker.label" = "Locker · {owner}"`, in English and Ukrainian:
+///
+/// ```rust
+/// use enshwick::i18n::{Language, Texts};
+///
+/// // In a mod: enshwick::texts!();
+/// enshwick::texts!("tests/texts/lockers.toml");
+///
+/// let all = Texts::parse(texts::TOML)?;
+/// assert_eq!(all.get(texts::LOCKER_NAME, Language::UK_UA), Some("Шафка"));
+/// let label = all.fill(texts::LOCKER_LABEL, Language::FALLBACK, &[(texts::value::OWNER, "Ada")]);
+/// assert_eq!(label, "Locker · Ada");
+/// assert_eq!(texts::ALL, ["locker.label", "locker.name"]);
+/// # Ok::<(), enshwick::Off>(())
+/// ```
+pub use enshwick_macros::texts;
 #[cfg(not(feature = "unstable"))]
 pub(crate) use enshwick_macros::{Script, script};
 pub use hook::{FnPtr, Hook, Next};
@@ -745,6 +779,21 @@ pub mod __private {
         let mut i = 0;
         while i < exports.len() {
             if same(exports[i].as_bytes(), local) {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
+
+    /// Whether `code` is a language's code in text files, as
+    /// [`Language::code`](crate::i18n::Language::code) gives it, for `texts!`.
+    #[must_use]
+    pub const fn is_language_code(code: &str) -> bool {
+        let all = crate::i18n::Language::ALL;
+        let mut i = 0;
+        while i < all.len() {
+            if same(all[i].code().as_bytes(), code.as_bytes()) {
                 return true;
             }
             i += 1;
@@ -970,6 +1019,7 @@ pub mod __private {
         api: *const HostApi,
         me: ModHandle,
         manifest: &'static crate::abi::Manifest,
+        texts: Option<&'static str>,
         slot: &Slot<M>,
     ) -> Status {
         // SAFETY: `Host::new` needs `api` null or a table readable for its
@@ -992,6 +1042,7 @@ pub mod __private {
             M::init(&mut Load::of(
                 host,
                 manifest.flags.contains(ManifestFlags::JOIN),
+                texts,
             ))
         }));
         match outcome {
