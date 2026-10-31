@@ -1,0 +1,50 @@
+id: errors-are-typed
+language: rust
+severity: error
+message: return a `thiserror` type named `Error` or `VerbObjectError`, not a `String`
+note: >-
+  A typed error lets the caller match on what failed, carries its source and
+  converts with `?` into the API's `Off`; a string can only be shown. The
+  rule refuses `Result<_, String>` in library and domain code; the
+  `cargo-enshwick` binary, build scripts, the repository tools and tests may
+  keep strings.
+ignores:
+  - "crates/cargo-enshwick/**"
+  - "tools/**"
+  - "**/build.rs"
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/*_tests.rs"
+  - "**/benches/**"
+utils:
+  in-test:
+    any:
+      - kind: mod_item
+        follows:
+          kind: attribute_item
+          regex: '^#\[cfg\(.*\btest\b'
+      - kind: function_item
+        follows:
+          kind: attribute_item
+          regex: '^#\[(test|cfg\(.*\btest\b)'
+rule:
+  kind: generic_type
+  all:
+    - has:
+        field: type
+        regex: '(^|::)Result$'
+    - has:
+        field: type_arguments
+        has:
+          kind: type_identifier
+          regex: '^String$'
+          nthChild:
+            position: 2
+          all:
+            - nthChild:
+                position: 1
+                reverse: true
+  not:
+    inside:
+      stopBy: end
+      matches: in-test

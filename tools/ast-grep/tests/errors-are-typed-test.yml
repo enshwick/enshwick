@@ -1,0 +1,17 @@
+id: errors-are-typed
+valid:
+  - "fn parse(text: &str) -> Result<Rule, ParseRuleError> { todo() }"
+  - "fn names() -> Result<Vec<String>, Error> { todo() }"
+  - "fn name() -> Result<String, Error> { todo() }"
+  - "fn run() -> anyhow::Result<String> { todo() }"
+  - "fn digits() -> mlua::Result<String> { todo() }"
+  - |
+    #[cfg(test)]
+    mod tests {
+        fn install() -> Result<(), String> { Ok(()) }
+    }
+invalid:
+  - "fn parse(text: &str) -> Result<Rule, String> { todo() }"
+  - "fn get(key: &str) -> std::result::Result<String, String> { todo() }"
+  - "struct Console { handler: OnceLock<Result<Handler, String>> }"
+  - "type At = Box<dyn Fn(&Ask<'_>) -> Result<Subject, String> + Send + Sync>;"
