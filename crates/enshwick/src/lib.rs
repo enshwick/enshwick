@@ -636,8 +636,10 @@ pub use enshwick_macros::service;
 /// and the values it fills in. `texts::value` holds a constant per value
 /// name, such as `value::OWNER` for `{owner}`; `texts::ALL` lists every
 /// key; `texts::TOML` is the file. The build fails when a key has no `en`
-/// text, a table is no language code of [`i18n::Language`], or a
-/// translation fills in other values than its `en` text.
+/// text, a key lacks a text in a language of
+/// [`Language::REQUIRED`](i18n::Language::REQUIRED), a table is no language
+/// code of [`i18n::Language`], or a translation fills in other values than
+/// its `en` text.
 /// [`declare_mod!`] embeds the same file, which [`Load::texts`] serves.
 ///
 /// `texts!("<path>")` reads another file from the crate's root, for tests.
@@ -807,6 +809,31 @@ pub mod __private {
             i += 1;
         }
         false
+    }
+
+    /// Whether `codes`, the languages a key has a text in, hold every
+    /// language of [`Language::REQUIRED`](crate::i18n::Language::REQUIRED),
+    /// for `texts!`.
+    #[must_use]
+    pub const fn has_required_languages(codes: &[&str]) -> bool {
+        let required = crate::i18n::Language::REQUIRED;
+        let mut i = 0;
+        while i < required.len() {
+            let wanted = required[i].code().as_bytes();
+            let mut found = false;
+            let mut j = 0;
+            while j < codes.len() {
+                if same(codes[j].as_bytes(), wanted) {
+                    found = true;
+                }
+                j += 1;
+            }
+            if !found {
+                return false;
+            }
+            i += 1;
+        }
+        true
     }
 
     /// Whether two byte strings are equal, in a constant.

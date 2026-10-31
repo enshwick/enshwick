@@ -4,3 +4,10 @@
 "config" = "{name}"
 "config.enabled" = "On"
 "config.enabled.doc" = "Turns the mod on or off."
+
+[uk]
+"mod.name" = "{name}"
+"mod.description" = "{description}"
+"config" = "{name}"
+"config.enabled" = "Увімкнено"
+"config.enabled.doc" = "Вмикає або вимикає мод."

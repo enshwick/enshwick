@@ -14,6 +14,7 @@ module reads it, and a server owner can add to it or change it.
 
 [uk]
 "locker.name" = "Шафка"
+"locker.description" = "Скриня, яку відчиняє лише її власник."
 
 [de]
 "locker.name" = "Spind"
@@ -70,6 +71,8 @@ tests.
 The mod does not build when the file has one of these faults:
 
 - a key has no `en` text;
+- a key lacks a text, or has an empty one, in a language of
+  `Language::REQUIRED`, `en` and `uk`;
 - a table is not a language code;
 - a translation fills in other values than its `en` text, such as `{name}`
   where the `en` text has `{owner}`.

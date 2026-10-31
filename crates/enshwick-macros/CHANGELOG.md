@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `texts!()` and `declare_mod!` refuse a texts key without a
+  text in each language of `Language::REQUIRED`, `en` and `uk` (#838).
+
 - **Breaking:** `declare_mod!` embeds and checks the crate's
   `src/texts.toml` and hands it to `__declare_exports!`, which takes it as
   a third argument; `test::declare_mod!` takes `texts = "<path>"` (#827).

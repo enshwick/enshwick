@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** a mod does not build when a key of its texts lacks a text
+  in a language of the new `Language::REQUIRED`, `en` and `uk`; add the
+  missing Ukrainian texts (#838).
 - **Breaking:** a mod's texts live in `src/texts.toml`, which
   `declare_mod!` embeds: `load.texts()` takes no argument and returns `Off`
   for a crate without the file, and `load.texts_from(toml)` hands over texts

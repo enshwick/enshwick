@@ -260,6 +260,19 @@
 /// enshwick::texts!("tests/texts/no-english.toml");
 /// ```
 ///
+/// A key with an English text and no Ukrainian one, a language of
+/// `Language::REQUIRED`:
+///
+/// ```compile_fail
+/// enshwick::texts!("tests/texts/no-ukrainian.toml");
+/// ```
+///
+/// An empty Ukrainian text, which counts as none:
+///
+/// ```compile_fail
+/// enshwick::texts!("tests/texts/empty-ukrainian.toml");
+/// ```
+///
 /// A table that is no language code (`ua` for `uk`):
 ///
 /// ```compile_fail
