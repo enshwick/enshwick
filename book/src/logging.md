@@ -2,7 +2,6 @@
 
 The loader writes one set of logs for itself and every mod, keeps a status
 summary of what runs, and turns a failing mod off with a reason in the log.
-This chapter covers what a mod writes there and where to look.
 
 ## Log macros
 
@@ -180,7 +179,7 @@ key with no text shows as the key and its values.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let _texts = load.texts("[en]\n\"glow.off\" = \"No glow: {symbol} is missing.\"\n")?;
+    let _texts = load.texts_from("[en]\n\"glow.off\" = \"No glow: {symbol} is missing.\"\n")?;
     let glow = load.feature("glow", |load| {
         load.symbol("lantern.glow")
             .map_err(|_| enshwick::Off::text("glow.off", &[("symbol", "lantern.glow")]))

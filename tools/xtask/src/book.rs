@@ -1,6 +1,7 @@
 //! The modding book's structure: every chapter `SUMMARY.md` links exists,
 //! every chapter is in `SUMMARY.md`, and every chapter is included by a
-//! doctest harness of the API crate, so its Rust examples compile.
+//! doctest harness of the API crate, so its Rust examples compile. Every
+//! chapter's intro stays short.
 
 use std::path::Path;
 
@@ -27,9 +28,83 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
     if let Err(error) = collect(&source, "", &mut chapters) {
         return vec![format!("{SOURCE}: {error}")];
     }
-    problems(&summary, &chapters, &harnessed, |link| {
+    let mut found = problems(&summary, &chapters, &harnessed, |link| {
         source.join(link).is_file()
+    });
+    for chapter in &chapters {
+        match std::fs::read_to_string(source.join(chapter)) {
+            Ok(text) => found.extend(intro_problem(chapter, &text)),
+            Err(error) => found.push(format!("{SOURCE}/{chapter}: {error}")),
+        }
+    }
+    found
+}
+
+/// A chapter's intro, the prose between its title and its first section,
+/// stays under this many words: on the site it is the page's lead.
+const INTRO_WORDS: usize = 40;
+
+/// The problem with a chapter's intro, if it is not under [`INTRO_WORDS`].
+fn intro_problem(chapter: &str, text: &str) -> Option<String> {
+    let words = intro_words(text);
+    (words >= INTRO_WORDS).then(|| {
+        format!(
+            "{SOURCE}/{chapter}: the intro has {words} words; keep it under {INTRO_WORDS} before the first ## heading"
+        )
     })
+}
+
+/// The words between the `# ` title and the first deeper heading, outside
+/// code fences and HTML comments. A word is a run of non-space characters
+/// with a letter or digit in it.
+fn intro_words(text: &str) -> usize {
+    let mut prose = String::new();
+    let mut fence: Option<&str> = None;
+    let mut titled = false;
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        let marker = ["```", "~~~"]
+            .into_iter()
+            .find(|marker| trimmed.starts_with(marker));
+        match (fence, marker) {
+            (None, Some(marker)) => {
+                fence = Some(marker);
+                continue;
+            }
+            (Some(open), Some(marker)) if open == marker => {
+                fence = None;
+                continue;
+            }
+            (Some(_), _) => continue,
+            (None, None) => {}
+        }
+        if !titled {
+            titled = trimmed.starts_with("# ");
+            continue;
+        }
+        if trimmed.starts_with("##") {
+            break;
+        }
+        prose.push_str(line);
+        prose.push('\n');
+    }
+    let mut words = 0;
+    let mut rest = prose.as_str();
+    while !rest.is_empty() {
+        let (text, after) = match rest.split_once("<!--") {
+            Some((text, comment)) => (
+                text,
+                comment.split_once("-->").map_or("", |(_, after)| after),
+            ),
+            None => (rest, ""),
+        };
+        words += text
+            .split_whitespace()
+            .filter(|word| word.chars().any(char::is_alphanumeric))
+            .count();
+        rest = after;
+    }
+    words
 }
 
 /// The problems, given the summary, the chapters on disk (paths relative to
@@ -141,6 +216,31 @@ mod tests {
                 "extra.md is in no doctest harness",
             ]
         );
+    }
+
+    #[test]
+    fn the_intro_counts_prose_between_the_title_and_the_first_section() {
+        let text = "Before the title.\n\n# Title\n\nOne two three.\n\n```rust\nlet code = 1;\n```\n\n<!-- a note\nover lines -->\n- four, five\n| six | --- |\n\n## Section\n\nSeven eight.\n";
+        assert_eq!(intro_words(text), 6);
+    }
+
+    #[test]
+    fn a_heading_inside_code_does_not_end_the_intro() {
+        let text = "# Title\n\nOne.\n\n```toml\n## not a heading\n```\n\nTwo.\n\n## Section\n";
+        assert_eq!(intro_words(text), 2);
+    }
+
+    #[test]
+    fn an_intro_of_forty_words_is_named() {
+        let long = format!("# Title\n\n{}\n\n## Next\n", ["word"; 40].join(" "));
+        let short = format!("# Title\n\n{}\n\n## Next\n", ["word"; 39].join(" "));
+        assert_eq!(
+            intro_problem("hooks.md", &long).as_deref(),
+            Some(
+                "book/src/hooks.md: the intro has 40 words; keep it under 40 before the first ## heading"
+            )
+        );
+        assert_eq!(intro_problem("hooks.md", &short), None);
     }
 
     #[test]

@@ -5,6 +5,8 @@ reads what a chest, a corpse or a player holds, and changes it through the
 game's own transactions. It works in the game server: the dedicated server,
 or a client while it hosts a game.
 
+## Asking for it
+
 Ask for it during `init` with
 [`load.inventories()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs).
 The returned

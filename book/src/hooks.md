@@ -1,6 +1,11 @@
 # Hooks
 
-A hook puts a function of the mod in front of a game function. Every call the
+A hook puts a function of the mod in front of a game function, for what the
+API has no call for.
+
+## How a hooked call runs
+
+Every call the
 game makes to that function goes through the mod's code first, which may change
 the arguments, call on, change the result, or answer alone.
 

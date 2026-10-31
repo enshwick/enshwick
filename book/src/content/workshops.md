@@ -1,12 +1,16 @@
 # Workshops
 
-A workshop is what a crafting station crafts at: recipes name a workshop,
-and a placed station opens the crafting menu of its workshop.
+A workshop is what a crafting station crafts at.
 [`Load::add_workshop`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
 clones a vanilla station into a new one with a workshop of its own, and
 returns its
 [`WorkshopId`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
 for your recipes.
+
+## A new station
+
+Recipes name a workshop, and a placed station opens the crafting menu of its
+workshop.
 
 ```rust
 use enshwick::content::{Id, id};
@@ -23,7 +27,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         debug_name: "Craftingstation_BulkWorkbench".into(),
         ..NewWorkshop::new(BENCH, stations::WORKBENCH)
     };
-    let texts = load.texts(r#"
+    let texts = load.texts_from(r#"
 [en]
 "bench.name" = "Bulk Workbench"
 "bench.description" = "A workbench for building in bulk."

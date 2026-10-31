@@ -2,6 +2,8 @@
 
 The loader takes every mod through five steps, all at game start.
 
+## The five steps
+
 1. **Query.** The loader calls `enshwick_mod_query` and reads the manifest:
    id, version, side, dependencies, pinned build rows. No other code of the
    mod runs yet. A malformed manifest skips the mod.

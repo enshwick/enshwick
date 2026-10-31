@@ -1,6 +1,9 @@
 # State and data folders
 
-The loader gives every mod two places beside the game:
+The loader gives every mod two places beside the game: one for its settings
+and one for its data.
+
+## Settings and data
 
 | Folder | Holds | Who edits it |
 | --- | --- | --- |

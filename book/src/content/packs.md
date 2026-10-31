@@ -2,7 +2,11 @@
 
 A **data pack** adds items, recipes, workshops, loot and texts from TOML
 files, with no code, and changes vanilla values such as how many of an item
-one slot holds. It is a folder in `mods/` with a `pack.toml` and no DLL:
+one slot holds.
+
+## What a pack is
+
+A pack is a folder in `mods/` with a `pack.toml` and no DLL:
 
 ```text
 mods/

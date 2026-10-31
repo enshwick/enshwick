@@ -1,10 +1,14 @@
 # Code in the game's frame
 
 Hooks, mid-function handlers and hooked ECS systems run inside the game's own
-call stack, on its threads: the game thread, the server's game thread, and the
-worker threads that run ECS systems (see [Threads](concepts/threads.md)). They
-run often, many times per frame, and the frame waits for them. These rules keep
-such code fast and keep the game alive.
+call stack, on its threads. These rules keep such code fast and keep the game
+alive.
+
+## Where such code runs
+
+It runs on the game thread, the server's game thread, and the worker threads
+that run ECS systems (see [Threads](concepts/threads.md)). It runs often, many
+times per frame, and the frame waits for it.
 
 ## The common path does no heavy work
 

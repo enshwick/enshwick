@@ -3,16 +3,18 @@
 mod unwind;
 
 /// The exports of `declare_mod!`: `$manifest` is the block that builds the
-/// mod's static manifest.
+/// mod's static manifest, `$texts` the mod's embedded texts, if any.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __declare_exports {
-    ($ty:ty, $manifest:expr) => {
+    ($ty:ty, $manifest:expr, $texts:expr) => {
         $crate::__require_unwind!();
 
         static __ENSHWICK_INSTANCE: $crate::__private::Slot<$ty> = $crate::__private::Slot::new();
 
         static __ENSHWICK_MANIFEST: &$crate::abi::Manifest = $manifest;
+
+        static __ENSHWICK_TEXTS: ::core::option::Option<&str> = $texts;
 
         impl $ty {
             /// The mod's state, once the loader has initialised it.
@@ -48,7 +50,13 @@ macro_rules! __declare_exports {
             // SAFETY: the caller guarantees `api` is the loader's table, alive
             // for the process, which is the contract of `init`.
             unsafe {
-                $crate::__private::init::<$ty>(api, me, __ENSHWICK_MANIFEST, &__ENSHWICK_INSTANCE)
+                $crate::__private::init::<$ty>(
+                    api,
+                    me,
+                    __ENSHWICK_MANIFEST,
+                    __ENSHWICK_TEXTS,
+                    &__ENSHWICK_INSTANCE,
+                )
             }
         }
 

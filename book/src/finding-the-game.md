@@ -2,8 +2,12 @@
 
 Addresses in the game change with every update, so a mod never hard-codes one.
 It asks the loader during `init`, by name, and the loader answers for the build
-that runs. Every lookup returns `Result<_, Off>`: a mod that cannot find what
-it needs returns the `Off` with `?` and stays off, and the game runs vanilla
+that runs.
+
+## The lookups
+
+Every lookup returns `Result<_, Off>`: a mod that cannot find what it needs
+returns the `Off` with `?` and stays off, and the game runs vanilla
 where it would have acted.
 
 | Call | Finds | Survives updates |

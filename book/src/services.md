@@ -2,7 +2,11 @@
 
 One mod can offer functions to others as a **service**, a table of
 `extern "system"` functions, and tell them what happens with a **mod
-event**, plain data it sends to every mod that subscribed. Mods are separate
+event**, plain data it sends to every mod that subscribed.
+
+## Before you write one
+
+Mods are separate
 DLLs, possibly built with different compilers months apart, so the loader
 checks at load time that both sides agree on every field, and refuses a
 mismatch with a message that names the field.

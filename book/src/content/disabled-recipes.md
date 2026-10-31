@@ -1,12 +1,15 @@
 # Disabling recipes
 
 A server owner takes recipes out of the game, vanilla ones or a mod's, with
-a file and no mod: `mod-configs/enshwick.recipes.toml`. A disabled recipe
-leaves every crafting menu, by hand, at stations and at survivors, and the
-server refuses to craft it. Items that exist stay as they are, and
-administrators still hand them out with a mod's `give` action, which
-makes items without a recipe. Mods disable recipes too, through
-[`recipes::disable`](#from-a-mod).
+a file and no mod: `mod-configs/enshwick.recipes.toml`. Mods disable recipes
+too, through [`recipes::disable`](#from-a-mod).
+
+## What disabling does
+
+A disabled recipe leaves every crafting menu, by hand, at stations and at
+survivors, and the server refuses to craft it. Items that exist stay as they
+are, and administrators still hand them out with a mod's `give` action,
+which makes items without a recipe.
 
 ## The recipe file
 

@@ -2,7 +2,11 @@
 
 A mod's client part draws windows, rows and dialogs with the game's own
 widgets, so what it shows looks like the game: the same panels, fonts,
-settings rows, sounds and button labels in the player's language. Everything
+settings rows, sounds and button labels in the player's language.
+
+## Clients only
+
+Everything
 here is client only; on a server, `load.ui()` and `load.on_frame` return
 [`Off`](concepts/lifecycle.md) with "on clients only".
 

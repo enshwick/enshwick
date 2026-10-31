@@ -2,6 +2,9 @@
 
 A join mod with a client part, such as one that draws something the server
 decides, sends messages between its two halves through a channel.
+
+## Opening a channel
+
 [`load.channel::<M, _>(name, version, handler)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/net.rs)
 opens one during `init`, on both sides, for messages of type `M`, any type
 that serde serializes; `handler` runs on each message that comes in, with

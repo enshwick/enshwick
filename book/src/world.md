@@ -5,8 +5,12 @@ change in any release ([Stability](stability.md)).
 
 [`load.world()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 returns a
-[`World`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs):
-reads of the server's world, component writes, character stats, entity
+[`World`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs),
+the mod's way into the server's world.
+
+## What it offers
+
+A `World` offers reads of the server's world, component writes, character stats, entity
 queries, build rights, labels, chat lines, destroy requests and saves. It is
 `Copy`; get it during `init` and move it into handlers and tasks.
 
