@@ -154,7 +154,8 @@ impl From<ConfigError> for Off {
 /// A mod: what the loader initialises when it loads the DLL.
 ///
 /// Implement it on the mod's state type and export it with
-/// [`declare_mod!`](crate::declare_mod).
+/// [`declare_mod!`](crate::declare_mod), which reads what the mod is from its
+/// `Cargo.toml`.
 ///
 /// # Examples
 ///
@@ -162,19 +163,12 @@ impl From<ConfigError> for Off {
 /// struct Quiet;
 ///
 /// impl enshwick::Mod for Quiet {
-///     fn manifest() -> &'static enshwick::abi::Manifest {
-///         enshwick::manifest!(id: "you.quiet", side: SERVER)
-///     }
-///
 ///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
 ///         Ok(Self)
 ///     }
 /// }
 /// ```
 pub trait Mod: Sized + Send + Sync + 'static {
-    /// What the mod is; static data built with [`manifest!`](crate::manifest).
-    fn manifest() -> &'static crate::abi::Manifest;
-
     /// Registers hooks, services and settings. Nothing takes effect until every
     /// mod is initialised and the loader arms the hooks.
     ///

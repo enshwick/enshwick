@@ -34,23 +34,6 @@ impl Default for Settings {
 pub struct {type};
 
 impl Mod for {type} {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(
-            id: "{id}",
-            side: {side},
-            // What players read; description, authors, license and homepage
-            // come from Cargo.toml.
-            name: "{name}",
-            // Mods this one works better with, and mods it does not work
-            // beside, each with a version range ("" for any):
-            // recommends: ["someone.other-mod" => ">=0.2, <1.0"],
-            // breaks: ["someone.old-mod" => "<0.3"],
-            // After a rename, the old ids: their DLLs never start, and
-            // their settings and data carry over on the first start:
-            // was: ["you.old-name"],
-        )
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         load.texts(TEXTS)?;
         let settings: Settings = load.config()?;

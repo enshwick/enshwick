@@ -381,16 +381,13 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, ManifestEr
             | Relation::BREAKS
             | Relation::RECOMMENDS
             | Relation::REPLACES
-            | Relation::WAS
     ) {
         return Err(ManifestError::UnknownRelation {
             id: id.to_owned(),
             relation: raw.relation.0,
         });
     }
-    if id == crate::settings::LOADER_ID
-        && matches!(raw.relation, Relation::REPLACES | Relation::WAS)
-    {
+    if id == crate::settings::LOADER_ID && raw.relation == Relation::REPLACES {
         return Err(ManifestError::TakesLoadersId(id.to_owned()));
     }
     Ok(resolve::Dependency {
@@ -523,11 +520,11 @@ mod tests {
     }
 
     #[test]
-    fn a_former_id_parses_and_the_loader_s_own_id_is_never_taken_over() {
+    fn an_old_form_id_is_replaced_and_the_loader_s_own_id_never_is() {
         static FORMER: [Dependency; 1] = [Dependency {
             id: Str::new("market-stalls"),
             range: Str::EMPTY,
-            relation: Relation::WAS,
+            relation: Relation::REPLACES,
         }];
         static LOADER: [Dependency; 1] = [Dependency {
             id: Str::new("enshwick"),
@@ -539,7 +536,7 @@ mod tests {
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
         let candidate = unsafe { parse(&renamed) }.unwrap();
-        assert_eq!(candidate.dependencies[0].relation, Relation::WAS);
+        assert_eq!(candidate.dependencies[0].relation, Relation::REPLACES);
         renamed.dependencies = LOADER.as_ptr();
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.

@@ -311,7 +311,7 @@ fn requires(loader: &Loader, a: ModIndex, b: ModIndex) -> bool {
     candidate
         .dependencies
         .iter()
-        .any(|d| d.relation == Relation::REQUIRES && b.owns(&d.id))
+        .any(|d| d.relation == Relation::REQUIRES && b.id == d.id)
 }
 
 /// Reports each set another mod overrides in both mods' logs and the

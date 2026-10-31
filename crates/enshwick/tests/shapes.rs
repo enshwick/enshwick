@@ -217,10 +217,6 @@ mod tests {
     struct Market;
 
     impl Mod for Market {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.my-mod", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on_mod_event(|opened: &base::Opened| {
                 OPENED.fetch_add(u32::from(opened.stall.size), Ordering::Relaxed);
@@ -231,7 +227,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Market);
+    enshwick::test::declare_mod!(
+        Market,
+        r#"
+        id = "you.my-mod"
+        side = "server"
+        "#
+    );
 
     fn started() -> enshwick::test::Installed {
         let loader = enshwick::test::FakeHost::new().install();

@@ -14,17 +14,19 @@ mod tests {
     struct Admin;
 
     impl Mod for Admin {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.admin", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLD.set(load.world()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Admin);
+    enshwick::test::declare_mod!(
+        Admin,
+        r#"
+        id = "you.admin"
+        side = "server"
+        "#
+    );
 
     fn player(entity: u32, key: u64, permissions: u8) -> PlayerInfo {
         PlayerInfo {

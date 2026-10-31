@@ -49,5 +49,5 @@ mdbook serve book
 ```
 
 Its Rust examples compile as doctests of `enshwick`, so
-`cargo test --doc --workspace` checks them. `bun run lint:md` and `typos` check
+`cargo test --doc --workspace` checks them. `rumdl check .` and `typos` check
 the text.

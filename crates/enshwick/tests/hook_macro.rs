@@ -51,18 +51,6 @@ mod tests {
         static ENTRY_TOO: extern "system" fn(n: u32) -> u32 = entry;
     }
 
-    struct Unwritten;
-
-    impl enshwick::Mod for Unwritten {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            panic!("no manifest")
-        }
-
-        fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-            Result::Ok(Self)
-        }
-    }
-
     /// Panics after the chain ran: the original must not run again.
     #[hook]
     fn tally(next: Next<'_, Count>, n: u32) -> u32 {
@@ -131,10 +119,6 @@ mod tests {
     struct Hooks;
 
     impl enshwick::Mod for Hooks {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.hooks", side: SERVER)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             // SAFETY: the fake's symbol is a function of the hook's type.
             unsafe { load.hook(&MOVE, load.symbol("upgrade")?) }?;
@@ -152,7 +136,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Hooks);
+    enshwick::test::declare_mod!(
+        Hooks,
+        r#"
+        id = "you.hooks"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn hooks_run_the_chain_at_most_once_when_their_body_panics() {
@@ -223,10 +213,5 @@ mod tests {
     fn a_body_named_entry_compiles() {
         assert_eq!(ENTRY.name(), "ENTRY");
         assert_eq!(ENTRY_TOO.name(), "ENTRY_TOO");
-    }
-
-    #[test]
-    fn a_panicking_manifest_reads_as_a_refusal() {
-        assert!(enshwick::__private::query::<Unwritten>().is_null());
     }
 }

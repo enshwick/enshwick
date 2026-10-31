@@ -123,9 +123,8 @@ pub(super) fn libraries(
         match unsafe { crate::manifest::parse(library.manifest) } {
             Ok(candidate) => {
                 changed |= list.note(&candidate.id, &library.file);
-                let ids = std::iter::once(candidate.id.as_str()).chain(candidate.former_ids());
-                if let Some(off) = discovery::off_id(&list, ids) {
-                    log_skip(&Skip::IdOff(off.to_owned()), &library.file);
+                if list.is_off(&candidate.id) {
+                    log_skip(&Skip::IdOff(candidate.id.clone()), &library.file);
                     unload(&library);
                     continue;
                 }

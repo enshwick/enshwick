@@ -23,10 +23,6 @@ mod tests {
     struct Rings;
 
     impl Mod for Rings {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.rings", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = BONUS.set(load.item_data("bonus")?);
             let _first = SHARED.set(load.item_data("you.lanterns:oil")?);
@@ -34,7 +30,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Rings);
+    enshwick::test::declare_mod!(
+        Rings,
+        r#"
+        id = "you.rings"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn values_stay_with_their_item() {

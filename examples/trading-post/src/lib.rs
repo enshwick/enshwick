@@ -96,10 +96,6 @@ fn sell(asked: &Price) -> Outcome {
 pub struct TradingPost;
 
 impl Mod for TradingPost {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.trading-post", side: SERVER, points: [Price])
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         load.publish(&PRICES)?;
         let _first = SOLD.set(load.define_event::<Sold>()?);
@@ -128,7 +124,7 @@ impl Mod for TradingPost {
     }
 }
 
-enshwick::declare_mod!(TradingPost);
+enshwick::declare_mod!(TradingPost, points: [Price]);
 
 #[cfg(test)]
 mod tests {
@@ -150,7 +146,9 @@ mod tests {
 
     #[test]
     fn the_published_schema_is_the_manifest_s() {
-        let manifest = <super::TradingPost as enshwick::Mod>::manifest();
+        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
+        // `declare_mod!`, which no thread writes.
+        let manifest = unsafe { &*super::enshwick_mod_query() };
         // SAFETY: the manifest's static text.
         let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
         assert_eq!(text, include_str!("../points.toml"));

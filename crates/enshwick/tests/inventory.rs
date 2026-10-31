@@ -35,17 +35,19 @@ mod tests {
     struct Looter;
 
     impl enshwick::Mod for Looter {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.looter", side: SERVER)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             let _first = INVENTORIES.set(load.inventories()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Looter);
+    enshwick::test::declare_mod!(
+        Looter,
+        r#"
+        id = "you.looter"
+        side = "server"
+        "#
+    );
 
     fn setup(links: &[(u32, u8)]) -> Vec<u8> {
         let mut bytes = vec![0u8; 0x54];

@@ -25,10 +25,6 @@ fn pass(next: Next<'_, Reward>, base: u32) -> u32 {
 struct Bench;
 
 impl Mod for Bench {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "enshwick.bench", side: SERVER)
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let target = load.symbol("bench.reward")?;
         // SAFETY: the target is `vanilla`, of the type `PASS` declares.
@@ -37,7 +33,13 @@ impl Mod for Bench {
     }
 }
 
-enshwick::declare_mod!(Bench);
+enshwick::test::declare_mod!(
+    Bench,
+    r#"
+    id = "enshwick.bench"
+    side = "server"
+    "#
+);
 
 #[expect(clippy::panic, reason = "without its hook the bench measures nothing")]
 fn dispatch(c: &mut Criterion) {

@@ -180,10 +180,6 @@ impl Migration {
     /// struct Rates;
     ///
     /// impl enshwick::Mod for Rates {
-    ///     fn manifest() -> &'static enshwick::abi::Manifest {
-    ///         enshwick::manifest!(id: "you.rates", side: SERVER, replaces: ["comfort"])
-    ///     }
-    ///
     ///     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
     ///         load.migrate(Migrations::new().add("2", |m| {
     ///             m.take_setting("comfort", "multiplier", "comfort.multiplier")
@@ -192,7 +188,16 @@ impl Migration {
     ///     }
     /// }
     ///
-    /// enshwick::declare_mod!(Rates);
+    /// // A test may give the table inline; a real mod writes
+    /// // `enshwick::declare_mod!(Rates)` with the table in its Cargo.toml.
+    /// enshwick::test::declare_mod!(
+    ///     Rates,
+    ///     r#"
+    ///     id = "you.rates"
+    ///     side = "server"
+    ///     replaces = ["comfort"]
+    ///     "#
+    /// );
     ///
     /// let loader = enshwick::test::FakeHost::new()
     ///     .other_settings("comfort", "multiplier = 2.5\n")
@@ -366,7 +371,7 @@ impl Migrations {
                     && step
                         .from
                         .split_once(':')
-                        .is_none_or(|(id, key)| !abi::is_valid_former_id(id) || key.is_empty())
+                        .is_none_or(|(id, key)| !abi::is_valid_old_form_id(id) || key.is_empty())
                 {
                     return Err(format!(
                         "migration {}: a setting is taken from <mod id>:<key>, not {}",

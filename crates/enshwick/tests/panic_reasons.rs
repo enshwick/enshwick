@@ -9,16 +9,18 @@ mod tests {
     struct Lamps;
 
     impl Mod for Lamps {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.lamps", side: SERVER)
-        }
-
         fn init(_load: &mut Load<'_>) -> Result<Self, Off> {
             panic!("the lamp oil ran out")
         }
     }
 
-    enshwick::declare_mod!(Lamps);
+    enshwick::test::declare_mod!(
+        Lamps,
+        r#"
+        id = "you.lamps"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_panicking_init_turns_the_mod_off_with_the_panic_message() {

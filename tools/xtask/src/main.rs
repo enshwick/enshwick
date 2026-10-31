@@ -239,11 +239,10 @@ fn packages() -> Result<Vec<Package>, String> {
                 version: package["version"].as_str().unwrap_or_default().to_owned(),
                 dir,
                 deps,
-                windows_only: package["metadata"]["enshwick"]["windows-only"].as_bool()
-                    == Some(true),
+                windows_only: package["metadata"]["xtask"]["windows-only"].as_bool() == Some(true),
                 windows_tests: ["windows-tests", "windows-only"]
                     .iter()
-                    .any(|key| package["metadata"]["enshwick"][key].as_bool() == Some(true)),
+                    .any(|key| package["metadata"]["xtask"][key].as_bool() == Some(true)),
             }
         })
         .collect())

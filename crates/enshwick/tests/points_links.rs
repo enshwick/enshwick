@@ -37,14 +37,6 @@ mod tests {
     struct Extender;
 
     impl Mod for Extender {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(
-                id: "you.extender",
-                side: SERVER,
-                recommends: ["you.my-mod" => ">=0.0.0-dev, <1.0"],
-            )
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.extend_point(&Order::new().priority(5), |limit: &Limit, so_far: &u32| {
                 assert!(limit.level != 13, "unlucky");
@@ -64,7 +56,16 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Extender);
+    enshwick::test::declare_mod!(
+        Extender,
+        r#"
+        id = "you.extender"
+        side = "server"
+
+        [recommends]
+        my_mod = { id = "you.my-mod", version = ">=0.0.0-dev, <1.0" }
+        "#
+    );
 
     fn started() -> enshwick::test::Installed {
         let loader = enshwick::test::FakeHost::new().install();

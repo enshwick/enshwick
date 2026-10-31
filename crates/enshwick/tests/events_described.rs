@@ -40,10 +40,6 @@ mod tests {
     struct Watcher;
 
     impl Mod for Watcher {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.trading-post", side: SERVER, events: [Sold])
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let size = *SIZE.lock().unwrap();
             load.on_described_mod_event(&described(size), |data| {
@@ -60,7 +56,14 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Watcher);
+    enshwick::test::declare_mod!(
+        Watcher,
+        r#"
+        id = "you.trading-post"
+        side = "server"
+        "#,
+        events: [Sold]
+    );
 
     fn start(size: u32) -> enshwick::test::Installed {
         // After the install, which tests take in turn: set earlier, another
@@ -113,8 +116,11 @@ mod tests {
 
     #[test]
     fn the_manifest_carries_the_event_s_schema() {
-        // SAFETY: `manifest!` keeps its schema text for the process.
-        let text = unsafe { Watcher::manifest().points.as_str() }.unwrap_or("");
+        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
+        // `declare_mod!`, which no thread writes.
+        let manifest = unsafe { &*enshwick_mod_query() };
+        // SAFETY: `declare_mod!` points the schema at static text.
+        let text = unsafe { manifest.points.as_str() }.unwrap_or("");
         assert!(
             text.contains("[[event]]\nname = \"you.trading-post:sold\"\ndata = \"Sold\""),
             "{text}"

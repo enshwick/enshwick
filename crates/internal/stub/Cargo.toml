@@ -28,7 +28,7 @@ windows-sys = { workspace = true, features = [
     "Win32_System_Threading",
 ] }
 
-[package.metadata.enshwick]
+[package.metadata.xtask]
 # Builds only for Windows: off Windows, `cargo xtask check` lints it through
 # cargo xwin and skips its tests.
 windows-only = true

@@ -9,10 +9,6 @@ mod tests {
     struct MoreAltars;
 
     impl Mod for MoreAltars {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.more-altars", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on_altar_limit(|limit| limit.allowed = limit.vanilla.saturating_mul(3))?;
             load.raise_base_limit()?;
@@ -20,7 +16,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(MoreAltars);
+    enshwick::test::declare_mod!(
+        MoreAltars,
+        r#"
+        id = "you.more-altars"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn a_filter_answers_from_the_game_s_count_within_the_raised_limit() {

@@ -79,39 +79,55 @@ so `host()` always answers for the mod that calls it. The
 
 ## The manifest
 
-[`manifest!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
-builds the static data the loader reads before it runs any of the mod's code.
-Fields go in this order; only `id` and `side` are required:
+The manifest is the static data the loader reads before it runs any of the
+mod's code. A mod names itself once, in its crate's `Cargo.toml`, and
+[`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
+builds the manifest from it when the mod compiles. Only `id` and `side` are
+required:
 
-```rust
-let manifest = enshwick::manifest!(
-    id: "you.trading-post",         // <author>.<name>, each of [a-z0-9-]
-    side: BOTH,                     // SERVER, CLIENT or BOTH
-    version: "0.2.0",               // the crate's version when left out
-    name: "Trading post",           // what players read; the id when left out
-    description: "Trade with travelling merchants",
-    authors: ["Your Name"],
-    license: "MIT OR Apache-2.0",
-    homepage: "https://github.com/you/trading-post",
-    join: true,                    // counts in the join check
-    reload: true,                  // a development server may reload it
-    requires: ["market-stalls" => ">=0.2, <1.0"],
-    after: ["market-stalls"],
-    recommends: ["caravans" => ">=0.3, <1.0"],
-    breaks: ["old-market" => "<0.5"],
-    replaces: ["barter"],           // a mod this one folds in
-    was: ["trade-post"],            // ids this mod had before a rename
-    builds: [{
-        side: SERVER,
-        guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
-        age: 387,
-        symbols: ["survivors.spawn_return" => 0x4_05cb],
-        constants: ["survivors.bed_id" => 0x48],
-    }],
-);
-# assert_eq!(manifest.dependency_count, 6);
-# assert_eq!(manifest.author_count, 1);
+```toml
+[package]
+name = "trading-post"
+version = "0.2.0"
+description = "Trade with travelling merchants"
+authors = ["Your Name"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/you/trading-post"
+
+[package.metadata.enshwick]
+id = "you.trading-post"            # <author>.<name>, each of [a-z0-9-]
+side = "both"                      # "server", "client" or "both"
+name = "Trading post"              # what players read; the id when left out
+join = true                        # counts in the join check
+reload = true                      # a development server may reload it
+replaces = ["barter"]              # a mod this one folds in
+
+[package.metadata.enshwick.requires]
+stalls = { id = "you.market-stalls", version = ">=0.2, <1.0" }
+
+[package.metadata.enshwick.after]
+stalls_order = "you.market-stalls"
+
+[package.metadata.enshwick.recommends]
+caravans = { id = "you.caravans", version = ">=0.3, <1.0" }
+
+[package.metadata.enshwick.breaks]
+old_market = { id = "old-market", version = "<0.5" }
+
+[[package.metadata.enshwick.builds]]
+side = "server"
+guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
+age = 387
+
+[package.metadata.enshwick.builds.symbols]
+"survivors.spawn_return" = 0x4_05cb
+
+[package.metadata.enshwick.builds.constants]
+"survivors.bed_id" = 0x48
 ```
+
+A key the table does not take, a side, an id or an alias that is wrong fails
+the build with its name. A changed `Cargo.toml` rebuilds the mod.
 
 - `id` is `<author>.<name>`, each part of `[a-z0-9-]`, at most 64 characters
   in all. It names the mod in logs, its settings file `mod-configs/<id>.toml`
@@ -119,28 +135,31 @@ let manifest = enshwick::manifest!(
   stats, points, services and events (`you.trading-post:prices`). An invalid
   id fails the build; `enshwick` is the loader's own and is refused.
 - `side`: see [Sides and hosting](sides-and-hosting.md).
-- `version` is SemVer. Leave it out so the DLL reports the version you
-  release; the loader names it in every message about the mod.
-- `name`, `description`, `authors`, `license` and `homepage` are what players
-  read: on the Mods screen, in the status summary and in the join check's
-  notes, where `homepage` is the place a player who lacks the mod is sent to.
-  Each but `name` comes from the crate's `Cargo.toml` when left out
-  (`homepage` falls back to `repository`); a mod without a name is shown by
-  its id. The mod's texts translate its name and description under
+- The version is the crate's, SemVer; the loader names it in every message
+  about the mod.
+- `name`, and the crate's `description`, `authors`, `license` and `homepage`
+  (else `repository`), are what players read: on the Mods screen, in the
+  status summary and in the join check's notes, where the homepage is the
+  place a player who lacks the mod is sent to. A mod without a name is shown
+  by its id. The mod's texts translate its name and description under
   [`mod.name` and `mod.description`](../content/texts.md#the-mods-own-name).
-- `join: true`: see [The join check](join-check.md).
-- `reload: true`: a development server may reload the mod while it runs; see
+- `join = true`: see [The join check](join-check.md).
+- `reload = true`: a development server may reload the mod while it runs; see
   [Testing](../testing.md#reloading-a-mod-while-the-game-runs).
-- `developer: true`: the mod is a developer tool, such as a probe that logs
+- `developer = true`: the mod is a developer tool, such as a probe that logs
   what the game does. While it runs, every player reads a warning that
   developer tools are on; see [The interface](../interface.md).
-- `requires` names mods that must be present in a Cargo-style version range;
-  they load first. `after` names mods that load first when present.
+- `requires`, `after`, `recommends` and `breaks` are tables of other mods,
+  each under an alias of the mod's choosing (a Rust name in snake case,
+  unique across the four), as a mod id alone or `{ id, version }` with a
+  Cargo-style version range; no range is any version.
+- `requires` names mods that must be present in the range; they load first.
+  `after` names mods that load first when present, and takes no range.
 - `recommends` names mods that work well beside this one: they load first when
   present, and the loader notes in `loader.log` and the status summary when
   one is missing or outside its range. The mod loads either way.
-- `breaks` names mods this one does not work beside, in a version range (`""`
-  for any): when one of them loads, this mod is skipped with
+- `breaks` names mods this one does not work beside, in the range: when one
+  of them loads, this mod is skipped with
   `does not work beside <id> <version>; remove one of them`.
 - A dev build, version `0.0.0-dev`, meets every range of `requires` and
   `recommends`, and no range of `breaks` names it, as two dev builds join each
@@ -153,25 +172,35 @@ let manifest = enshwick::manifest!(
   console and the status summary repeat and the lock lists under
   `[[replaced]]`. Their settings stay where they are; take the ones this mod
   keeps with a [migration](../migrations.md#settings-from-another-mod).
-- `was` names the ids this mod had before a rename. It replaces them as
-  `replaces` does, a `requires` or an [extension point](../extending.md)
-  named by an old id finds this mod, and on the first start the loader copies
-  `mod-configs/<old>.toml`, its texts file and everything in `mod-data/<old>/`
-  (each world's settings and stores, a hold) to the new id, where the new id
-  has no such file yet, and counts the migrations that ran under the old id as
-  run. The old files stay, for a player who goes back. `migrations.toml`
-  records the copy under `[carried]`, so it happens once. The mod may keep
-  its content, stats, item data, points, services and events under the old
-  id, `<old>:<name>`, so the ids and GUIDs saved worlds hold stay; a bare stat
-  or item-data name takes the first id under `was`. The console, the Mods
-  screen and other mods' links find the mod by an old id too.
-- `points` lists the [extension points](../extending.md#defining-a-point) the
-  mod defines, by their input types. Their schemas go into the manifest and
-  into the DLL's `.enshpt` section, where `cargo enshwick point` reads them
-  to write other mods' definitions.
 - `builds` pins symbols and constants for game builds the loader's table does
   not cover, per side, by the build's GUID and age; see
   [Finding the game](../finding-the-game.md).
+
+What the mod defines in Rust goes to `declare_mod!` after its type:
+`points: [..]` lists the [extension points](../extending.md#defining-a-point)
+the mod defines, by their input types, and `events: [..]` and `calls: [..]`
+its [events](../services.md) and [calls](../calls.md). Their schemas go into
+the manifest and into the DLL's `.enshpt` section, where `cargo enshwick
+point`, `event` and `call` read them to write other mods' definitions:
+
+```rust,standalone_crate
+#[enshwick::point(name = "you.hello:price", mode = Override, output = u32)]
+#[derive(Clone, Copy, Debug)]
+pub struct Price {
+    /// The item.
+    pub item: u32,
+}
+
+struct Hello;
+
+impl enshwick::Mod for Hello {
+    fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+        Ok(Self)
+    }
+}
+
+enshwick::declare_mod!(Hello, points: [Price]);
+```
 
 ## The mod
 
@@ -179,30 +208,24 @@ A mod implements
 [`Mod`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs) on its
 state type:
 
-- `manifest()` returns the `manifest!`;
 - `init(load)` registers hooks, settings, events and content, and returns the
   state or an [`Off`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs);
 - `ready(&'static self, host)`, optional, runs once the hooks are armed;
 - `shutdown(&'static self)`, optional, runs before a development reload
-  unloads a mod with `reload: true`.
+  unloads a mod with `reload = true`.
 
 `Off::new(reason)` turns the mod off with a reason for the log. Every fallible
 call on `Load` returns `Result<_, Off>`, so `?` is the usual way out.
 
-[`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
-exports the type: `enshwick_mod_abi`, `enshwick_mod_query`,
-`enshwick_mod_init`, `enshwick_mod_ready` and `enshwick_mod_shutdown`, each
-catching panics. It also
+`declare_mod!` exports the type with the manifest: `enshwick_mod_abi`,
+`enshwick_mod_query`, `enshwick_mod_init`, `enshwick_mod_ready` and
+`enshwick_mod_shutdown`, each catching panics. It also
 adds `instance()`, the mod's state once `init` has returned it.
 
 ```rust,standalone_crate
 struct Quiet;
 
 impl enshwick::Mod for Quiet {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.quiet", side: SERVER)
-    }
-
     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
         Err(enshwick::Off::new("nothing to do on this build"))
     }

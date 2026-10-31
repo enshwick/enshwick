@@ -92,21 +92,20 @@ pub const fn is_valid_id(id: &str) -> bool {
     }
 }
 
-/// Whether `id` is an id a mod may have had: a valid id, or 1 to 64
-/// characters of `[a-z0-9-]`, the form ids had before they carried an
-/// author.
+/// Whether `id` is a mod id of either form `replaces` takes: a valid id, or
+/// 1 to 64 characters of `[a-z0-9-]`, the old form without an author.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::is_valid_former_id;
+/// use enshwick::abi::is_valid_old_form_id;
 ///
-/// assert!(is_valid_former_id("trading-post"));
-/// assert!(is_valid_former_id("you.trading-post"));
-/// assert!(!is_valid_former_id("Trading Post"));
+/// assert!(is_valid_old_form_id("trading-post"));
+/// assert!(is_valid_old_form_id("you.trading-post"));
+/// assert!(!is_valid_old_form_id("Trading Post"));
 /// ```
 #[must_use]
-pub const fn is_valid_former_id(id: &str) -> bool {
+pub const fn is_valid_old_form_id(id: &str) -> bool {
     if is_valid_id(id) {
         return true;
     }

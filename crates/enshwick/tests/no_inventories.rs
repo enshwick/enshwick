@@ -8,17 +8,19 @@ mod tests {
     struct Looter;
 
     impl enshwick::Mod for Looter {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.looter", side: SERVER)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             load.inventories()?;
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Looter);
+    enshwick::test::declare_mod!(
+        Looter,
+        r#"
+        id = "you.looter"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_build_without_inventories_turns_the_mod_off() {

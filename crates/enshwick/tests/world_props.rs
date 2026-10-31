@@ -15,17 +15,19 @@ mod tests {
     struct Decorator;
 
     impl Mod for Decorator {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.decorator", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLD.set(load.world()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Decorator);
+    enshwick::test::declare_mod!(
+        Decorator,
+        r#"
+        id = "you.decorator"
+        side = "server"
+        "#
+    );
 
     const CHEST: ItemId = ItemId::new(30);
     const PEBBLE: ItemId = ItemId::new(31);

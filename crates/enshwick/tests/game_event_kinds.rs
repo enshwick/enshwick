@@ -38,10 +38,6 @@ mod tests {
     struct Watcher;
 
     impl Mod for Watcher {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.kinds", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on::<HitEvent>(|hit| HITS.lock().unwrap().push(*hit))?;
             load.on::<EntityDiedEvent>(|died| DEATHS.lock().unwrap().push(*died))?;
@@ -64,7 +60,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Watcher);
+    enshwick::test::declare_mod!(
+        Watcher,
+        r#"
+        id = "you.kinds"
+        side = "server"
+        "#
+    );
 
     /// A fake host answering every engine id of the API, each type id 64
     /// bytes under a hash of its own and each offset or enum constant id 8,

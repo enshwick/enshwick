@@ -20,10 +20,6 @@ mod tests {
     struct Timers;
 
     impl Mod for Timers {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.timers", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let scheduler = load.scheduler()?;
             scheduler.every(Duration::ZERO, || {
@@ -35,7 +31,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Timers);
+    enshwick::test::declare_mod!(
+        Timers,
+        r#"
+        id = "you.timers"
+        side = "server"
+        "#
+    );
 
     const STEP: Duration = Duration::from_millis(100);
 

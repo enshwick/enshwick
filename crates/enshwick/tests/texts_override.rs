@@ -9,17 +9,19 @@ mod tests {
     struct Texty;
 
     impl Mod for Texty {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.texty", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.texts("[en]\n\"locker.name\" = \"Locker\"\n")?;
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Texty);
+    enshwick::test::declare_mod!(
+        Texty,
+        r#"
+        id = "you.texty"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn an_override_saved_as_utf16_turns_the_mod_off() {

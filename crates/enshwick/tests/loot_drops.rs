@@ -16,10 +16,6 @@ mod tests {
     }
 
     impl Mod for Drops {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.drops", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let destroyed = load
                 .add_loot(Drop::new(
@@ -32,7 +28,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Drops);
+    enshwick::test::declare_mod!(
+        Drops,
+        r#"
+        id = "you.drops"
+        side = "server"
+        "#
+    );
 
     fn build() -> FakeHost {
         FakeHost::new()

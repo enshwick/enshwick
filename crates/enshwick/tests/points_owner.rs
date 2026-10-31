@@ -43,10 +43,6 @@ mod tests {
     struct Probe;
 
     impl Mod for Probe {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.my-mod", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let limit = load.define_point::<Limit>()?;
             assert!(!limit.is_extended());
@@ -56,7 +52,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Probe);
+    enshwick::test::declare_mod!(
+        Probe,
+        r#"
+        id = "you.my-mod"
+        side = "server"
+        "#
+    );
 
     fn started() -> enshwick::test::Installed {
         let loader = enshwick::test::FakeHost::new().install();

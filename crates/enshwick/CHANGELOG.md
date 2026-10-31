@@ -58,6 +58,18 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** a mod names itself once, in the `[package.metadata.enshwick]`
+  table of its `Cargo.toml`: `id`, `name`, `side`, `join`, `reload`,
+  `developer`, `replaces`, the `builds` rows and its dependencies under
+  aliases (`requires`, `after`, `recommends`, `breaks`, each a mod id or
+  `{ id, version }`). `declare_mod!(Type)` reads the table when the mod
+  compiles, takes the version, description, authors, licence and homepage
+  from `[package]`, and lists points, events and calls after the type
+  (`declare_mod!(Type, points: [..])`). `manifest!` and `Mod::manifest` are
+  gone; a key, side, id or alias the table does not take fails the build
+  with its name. `test::declare_mod!(Type, "<toml>")` gives a test mod its
+  table inline, so one test binary declares several mods (#759).
+
 - `stats::Origin::Mod` names its mod by the new `mods::ModIndex`, its place
   in load order, which `ModIndex::entry` and `ModEntry::index` resolve
   (#719).
@@ -104,6 +116,16 @@ Each entry names the pull request that made the change.
 
 - `WorldStore` writes a value again at the next save when its background
   write failed, instead of dropping the change (#667).
+
+### Removed
+
+- **Breaking:** `was: [...]` in `manifest!` and `Relation::WAS` are gone. A
+  mod keeps one id: the loader no longer copies a former id's settings and
+  data, no longer finds a mod, its requirements, points, calls, events,
+  content or stats by a former id, and `migrations.toml` no longer keeps a
+  `[carried]` table. `replaces: [...]` still takes ids of the old form,
+  which `abi::is_valid_former_id`, now `abi::is_valid_old_form_id`,
+  accepts (#756).
 
 ## [1.0.0-alpha.11] - 2026-10-28
 

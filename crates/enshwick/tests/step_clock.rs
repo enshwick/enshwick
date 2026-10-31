@@ -16,10 +16,6 @@ mod tests {
     struct Timed;
 
     impl Mod for Timed {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.timed", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let clock = load.step_clock()?;
             assert!(core::ptr::eq(clock, load.step_clock()?), "one clock");
@@ -28,7 +24,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Timed);
+    enshwick::test::declare_mod!(
+        Timed,
+        r#"
+        id = "you.timed"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn ticks_move_the_clock_by_their_time_up_to_the_most_a_step_counts() {

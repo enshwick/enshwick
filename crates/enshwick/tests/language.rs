@@ -13,17 +13,19 @@ mod tests {
     struct Reader;
 
     impl Mod for Reader {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.reader", side: CLIENT)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             SEEN.store(load.host().language().0, Ordering::Relaxed);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Reader);
+    enshwick::test::declare_mod!(
+        Reader,
+        r#"
+        id = "you.reader"
+        side = "client"
+        "#
+    );
 
     #[test]
     fn the_mod_reads_the_players_language() {

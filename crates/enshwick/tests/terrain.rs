@@ -14,17 +14,19 @@ mod tests {
     struct Digger;
 
     impl Mod for Digger {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.digger", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = TERRAIN.set(load.terrain());
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Digger);
+    enshwick::test::declare_mod!(
+        Digger,
+        r#"
+        id = "you.digger"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn edits_reach_the_loader_as_asked() {

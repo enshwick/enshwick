@@ -143,7 +143,7 @@ pub(crate) extern "system" fn define_point(
         let named_after_the_mod = s
             .manifest
             .as_ref()
-            .is_none_or(|manifest| crate::rules::is_named_after(&declared.name, &manifest.names()));
+            .is_none_or(|manifest| crate::rules::is_named_after(&declared.name, &manifest.id));
         let points = &mut s.points;
         let defined_twice = points
             .defined

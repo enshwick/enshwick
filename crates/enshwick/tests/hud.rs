@@ -17,10 +17,6 @@ mod tests {
     struct Raid;
 
     impl Mod for Raid {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.raid", side: CLIENT)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = UI.set(load.ui()?);
             load.on_hud(|hud| {
@@ -37,7 +33,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Raid);
+    enshwick::test::declare_mod!(
+        Raid,
+        r#"
+        id = "you.raid"
+        side = "client"
+        "#
+    );
 
     #[test]
     fn hud_items_show_while_drawn_and_markers_replace_each_other() {

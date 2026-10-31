@@ -29,10 +29,6 @@ mod tests {
     struct Loot;
 
     impl Mod for Loot {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "test.fake", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let luck =
                 load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 10.0))?;
@@ -56,7 +52,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Loot);
+    enshwick::test::declare_mod!(
+        Loot,
+        r#"
+        id = "test.fake"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn items_roll_once_the_same_from_a_seed_and_count_when_worn() {

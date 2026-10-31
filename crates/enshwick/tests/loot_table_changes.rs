@@ -13,10 +13,6 @@ mod tests {
     struct Furs;
 
     impl enshwick::Mod for Furs {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.furs", side: SERVER)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             load.change(
                 &Change::in_table(TABLE, FUR, Field::Count, Value::Times(2.0)),
@@ -30,7 +26,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Furs);
+    enshwick::test::declare_mod!(
+        Furs,
+        r#"
+        id = "you.furs"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_change_of_one_table_reaches_the_loader_with_its_item() {

@@ -13,11 +13,11 @@ pub(crate) struct Package {
     pub(crate) dir: String,
     /// Workspace packages it depends on, in any dependency kind.
     pub(crate) deps: Vec<String>,
-    /// Builds only for Windows (`package.metadata.enshwick.windows-only`):
+    /// Builds only for Windows (`package.metadata.xtask.windows-only`):
     /// off Windows it stays out of host builds.
     pub(crate) windows_only: bool,
     /// Has tests of its Windows code, run under Wine off Windows
-    /// (`package.metadata.enshwick.windows-tests`, or `windows-only`).
+    /// (`package.metadata.xtask.windows-tests`, or `windows-only`).
     pub(crate) windows_tests: bool,
 }
 

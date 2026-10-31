@@ -61,6 +61,23 @@ required-features = ["test"]
 [lints]
 workspace = true
 
+# The mod this crate's documentation examples declare with `declare_mod!`.
+[package.metadata.enshwick]
+id = "you.hello"
+side = "both"
+join = true
+
+[package.metadata.enshwick.requires]
+lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
+
+[[package.metadata.enshwick.builds]]
+side = "server"
+guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
+age = 387
+
+[package.metadata.enshwick.builds.symbols]
+"survivors.spawn_return" = 0x4_05cb
+
 [package.metadata.docs.rs]
 targets = ["x86_64-pc-windows-msvc"]
 all-features = true

@@ -12,6 +12,13 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[package.metadata.enshwick]
+id = "you.haggling"
+side = "server"
+
+[package.metadata.enshwick.recommends]
+trading_post = "you.trading-post"
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

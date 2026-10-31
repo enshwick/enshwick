@@ -15,17 +15,19 @@ mod tests {
     struct Herald;
 
     impl Mod for Herald {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.herald", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLD.set(load.world()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Herald);
+    enshwick::test::declare_mod!(
+        Herald,
+        r#"
+        id = "you.herald"
+        side = "server"
+        "#
+    );
 
     fn player(entity: u32, key: u64) -> PlayerInfo {
         PlayerInfo {

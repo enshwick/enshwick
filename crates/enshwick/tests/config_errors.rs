@@ -32,17 +32,19 @@ mod tests {
     struct Vault;
 
     impl Mod for Vault {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.vault", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _settings: Settings = load.config()?;
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Vault);
+    enshwick::test::declare_mod!(
+        Vault,
+        r#"
+        id = "you.vault"
+        side = "server"
+        "#
+    );
 
     fn started() -> Installed {
         let loader = FakeHost::new()

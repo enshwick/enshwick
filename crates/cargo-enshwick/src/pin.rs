@@ -1,11 +1,12 @@
 //! `cargo enshwick pin`: ports the pinned rows of one game build to the next.
 //!
 //! Given the executable the current rows were made for and a new one, it
-//! re-finds every pinned symbol of the loader's build table and of each mod's
-//! `builds:` rows in the new executable, checks the constants against the
-//! code that uses them, and writes the new build's table file (with the code
-//! patterns that find each entry on a build without a table) and new mod rows
-//! in the same Rust format, with a report. It never guesses: whatever it
+//! re-finds every pinned symbol of the loader's build table and of each
+//! mod's `[[package.metadata.enshwick.builds]]` rows in the new executable,
+//! checks the constants against the code that uses them, and writes the new
+//! build's table file (with the code patterns that find each entry on a build
+//! without a table) and new mod rows in each mod's `Cargo.toml`, with a
+//! report. It never guesses: whatever it
 //! cannot place for sure is left out, with a note, and listed for a human.
 //! With `--patterns` it writes the patterns of one build's table from its own
 //! executable. See the README.
@@ -235,13 +236,13 @@ fn port_mods(
             let title = format!("{:?} row", row.side).to_lowercase();
             if args.write {
                 let (at, lead) = row.insertion(&src);
-                inserts.push((at, format!("{lead}{text},")));
+                inserts.push((at, format!("{lead}{text}")));
             }
             sections.push(report::Section {
                 file: file.clone(),
                 title,
                 lines: ported.lines,
-                text: (!args.write).then_some((text, "rust")),
+                text: (!args.write).then_some((text, "toml")),
                 unpatterned: Vec::new(),
             });
         }
@@ -378,7 +379,7 @@ fn table_files(repo: &Path) -> anyhow::Result<Vec<PathBuf>> {
     Ok(out)
 }
 
-/// Every mod source, which may hold `builds:` rows.
+/// Every mod's `Cargo.toml` under `mods/`, which may hold build rows.
 fn mod_sources(repo: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut dirs = vec![repo.join("mods")];
@@ -393,7 +394,7 @@ fn mod_sources(repo: &Path) -> Vec<PathBuf> {
                 if path.file_name().is_none_or(|n| n != "target") {
                     dirs.push(path);
                 }
-            } else if path.extension().is_some_and(|e| e == "rs") {
+            } else if path.file_name().is_some_and(|n| n == "Cargo.toml") {
                 out.push(path);
             }
         }

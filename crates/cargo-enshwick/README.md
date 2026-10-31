@@ -49,10 +49,10 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   `mods/` (such as the game's), or a schema file the owner published.
   With `--luau` it writes the point's Luau module for a Luau mod instead.
 - `call <mod>:<call> --from <path> [--out <file>]` writes the declaration of
-  another mod's call, which the server lists in `manifest!(calls: [..])`.
+  another mod's call, which the server lists in `declare_mod!(.., calls: [..])`.
   With `--luau` it writes the call's Luau module for a Luau mod instead.
 - `event <mod>:<event> --from <path> [--out <file>]` writes the Luau module
-  of another mod's event, which the owner lists in `manifest!(events: [..])`.
+  of another mod's event, which the owner lists in `declare_mod!(.., events: [..])`.
 - `types [<name>...] --from <game> [--rust <file>] [--luau <file>]` writes
   the [game's own types](https://github.com/enshwick/enshwick/blob/main/book/src/game-types.md)
   as Rust and Luau from the reflection data of the game executable `--from`
@@ -77,8 +77,12 @@ can prove each entry and lists the rest for a human. It never guesses.
 
 It reads the loader's tables, one TOML file per build in
 [`crates/enshwick-gamedata/tables`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/tables), and the
-`builds:` rows of every `manifest!` under `mods/`. It ports each table and row
-whose fingerprint is the old executable's. Each entry of the new table also
+`[[package.metadata.enshwick.builds]]` rows of every mod's `Cargo.toml`
+under `mods/`. A row gives its symbols and constants as
+`[package.metadata.enshwick.builds.symbols]` and
+`[package.metadata.enshwick.builds.constants]` tables of `"id" = value`
+lines; `pin` refuses a row that gives them as an inline table or dotted keys.
+It ports each table and row whose fingerprint is the old executable's. Each entry of the new table also
 gets the code pattern that finds it on a later build without a table, taken
 from the new executable: the smallest window of instructions that is unique
 in the code, with moving parts masked, and field and frame offsets too where

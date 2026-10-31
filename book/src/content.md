@@ -29,19 +29,16 @@ hold, have a chapter of their own.
 The game reads its resources on both sides: the server decides what a recipe
 costs and what an item does, the client shows the item and its crafting menu.
 A mod that adds content runs on both, and server and players must run the
-same version of it:
+same version of it. Its [manifest](concepts/loader-and-abi.md#the-manifest) says so:
 
-```rust
-# struct MyMod;
-# impl enshwick::Mod for MyMod {
-fn manifest() -> &'static enshwick::abi::Manifest {
-    enshwick::manifest!(id: "you.my-mod", side: BOTH, join: true)
-}
-#     fn init(_: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> { Ok(Self) }
-# }
+```toml
+[package.metadata.enshwick]
+id = "you.my-mod"
+side = "both"
+join = true
 ```
 
-`join: true` puts the mod in the mod set the server advertises, so a player
+`join = true` puts the mod in the mod set the server advertises, so a player
 without it is warned before joining; see [The join check](concepts/join-check.md).
 [`enshwick-personal-safes`](https://github.com/enshwick/mod-personal-safes)
 and

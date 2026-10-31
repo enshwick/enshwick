@@ -89,7 +89,6 @@ unsafe fn describe(manifest: &Manifest) -> String {
             Relation::BREAKS => "breaks",
             Relation::RECOMMENDS => "recommends",
             Relation::REPLACES => "replaces",
-            Relation::WAS => "was",
             _ => "unknown relation",
         };
         let range = text(&dependency.range);
@@ -163,15 +162,38 @@ fn query(_dll: &Path) -> Result<Manifest, String> {
 
 #[cfg(test)]
 mod tests {
+    use enshwick::abi::{Dependency, Header, ManifestFlags, Relation, Side, Str};
+
     use super::*;
+
+    /// A manifest of `id` and `version` and nothing else, as a DLL holds it.
+    fn plain(id: &'static str, version: &'static str) -> Manifest {
+        Manifest {
+            header: Header::of::<Manifest>(),
+            id: Str::new(id),
+            version: Str::new(version),
+            side: Side::SERVER,
+            flags: ManifestFlags::NONE,
+            dependencies: core::ptr::null(),
+            dependency_count: 0,
+            builds: core::ptr::null(),
+            build_count: 0,
+            name: Str::EMPTY,
+            description: Str::EMPTY,
+            authors: core::ptr::null(),
+            author_count: 0,
+            license: Str::EMPTY,
+            homepage: Str::EMPTY,
+            points: Str::EMPTY,
+        }
+    }
 
     #[test]
     fn a_manifest_without_every_field_of_its_major_is_refused() {
-        let mut short = *enshwick::manifest!(id: "you.old-mod", side: SERVER, version: "1.0.0");
-        // SAFETY: `short` is a whole local manifest with the static strings
-        // of `manifest!`.
+        let mut short = plain("you.old-mod", "1.0.0");
+        // SAFETY: `short` is a whole local manifest with static strings.
         let copied = unsafe { copy(&raw const short) }.unwrap();
-        // SAFETY: `copied` holds the `'static` strings of `manifest!`.
+        // SAFETY: `copied` holds the `'static` strings of `short`.
         assert_eq!(unsafe { copied.id.as_str() }, Some("you.old-mod"));
         short.header.size = u32::try_from(core::mem::offset_of!(Manifest, points)).unwrap();
         // SAFETY: `short` is a local manifest readable for the size its
@@ -183,10 +205,9 @@ mod tests {
 
     #[test]
     fn a_manifest_of_another_abi_version_is_refused_with_the_release_to_rebuild_for() {
-        let mut other = *enshwick::manifest!(id: "you.other-mod", side: SERVER, version: "1.0.0");
+        let mut other = plain("you.other-mod", "1.0.0");
         other.header.abi_version = enshwick::abi::ABI_VERSION.wrapping_add(1);
-        // SAFETY: `other` is a whole local manifest with the static strings
-        // of `manifest!`.
+        // SAFETY: `other` is a whole local manifest with static strings.
         let why = unsafe { copy(&raw const other) }.unwrap_err();
         assert_eq!(
             why,
@@ -199,34 +220,43 @@ mod tests {
 
     #[test]
     fn a_manifest_reads_as_lines() {
-        let manifest = enshwick::manifest!(
-            id: "you.market-stalls",
-            side: BOTH,
-            version: "0.2.0",
-            name: "Market Stalls",
-            description: "Stalls that sell what players craft",
-            authors: ["themaiby", "a friend"],
-            license: "MIT",
-            homepage: "https://github.com/enshwick/enshwick",
-            join: true,
-            requires: ["you.trading-post" => ">=0.1, <1.0"],
-            after: ["you.lanterns"],
-            recommends: ["you.lanterns" => ""],
-            breaks: ["old-stalls" => "<0.3"],
-            replaces: ["stalls"],
-            was: ["market"],
-        );
+        static AUTHORS: [Str; 2] = [Str::new("themaiby"), Str::new("a friend")];
+        let relation = |id, range, relation| Dependency {
+            id: Str::new(id),
+            range: Str::new(range),
+            relation,
+        };
+        let dependencies = [
+            relation("you.trading-post", ">=0.1, <1.0", Relation::REQUIRES),
+            relation("you.lanterns", "", Relation::AFTER),
+            relation("you.lanterns", "", Relation::RECOMMENDS),
+            relation("old-stalls", "<0.3", Relation::BREAKS),
+            relation("stalls", "", Relation::REPLACES),
+        ];
+        let manifest = Manifest {
+            side: Side::BOTH,
+            flags: ManifestFlags::JOIN,
+            dependencies: dependencies.as_ptr(),
+            dependency_count: dependencies.len(),
+            name: Str::new("Market Stalls"),
+            description: Str::new("Stalls that sell what players craft"),
+            authors: AUTHORS.as_ptr(),
+            author_count: AUTHORS.len(),
+            license: Str::new("MIT"),
+            homepage: Str::new("https://github.com/enshwick/enshwick"),
+            ..plain("you.market-stalls", "0.2.0")
+        };
         assert_eq!(
-            // SAFETY: `manifest!` builds a static manifest whose strings and
-            // lists are `'static` data, never written.
-            unsafe { describe(manifest) },
+            // SAFETY: every string and list of `manifest` is a static or a
+            // local that outlives the call, never written.
+            unsafe { describe(&manifest) },
             "id: you.market-stalls\nversion: 0.2.0\nname: Market Stalls\n\
              description: Stalls that sell what players craft\nauthors: themaiby, a friend\n\
              license: MIT\nhomepage: https://github.com/enshwick/enshwick\n\
              side: both\njoin check: yes\n\
              requires: you.trading-post >=0.1, <1.0\nafter: you.lanterns\n\
              recommends: you.lanterns\nbreaks: old-stalls <0.3\n\
-             replaces: stalls\nwas: market"
+             replaces: stalls"
         );
     }
 }

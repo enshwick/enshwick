@@ -126,9 +126,6 @@ table. Unlike other steps, it runs on a settings file or a world the mod has
 never seen too, since that is where a folded mod's values arrive. Where the
 other mod has no value, the setting keeps its default.
 
-A mod that only changes its id lists the old id under `was` instead: the
-loader copies the old id's files whole, and no step is needed.
-
 ## Items under their old ids
 
 An item renamed with `rename_content` keeps its old stacks: the game holds
@@ -179,10 +176,6 @@ use enshwick::migrations::Migrations;
 struct Lockers;
 
 impl enshwick::Mod for Lockers {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.lockers", side: SERVER)
-    }
-
     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
         load.migrate(Migrations::new().add("2", |m| m.rename_setting("cost", "cost_multiplier")))?;
         Ok(Self)

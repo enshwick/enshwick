@@ -9,10 +9,6 @@ mod tests {
     struct Cosy;
 
     impl enshwick::Mod for Cosy {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.cosy", side: SERVER)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             load.on_comfort(|provider| provider.value + 1)?;
             load.rate(Rate::Comfort)?.set(1.5)?;
@@ -20,7 +16,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Cosy);
+    enshwick::test::declare_mod!(
+        Cosy,
+        r#"
+        id = "you.cosy"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn comfort_takes_the_filters_then_the_rate_rounded() {

@@ -92,8 +92,6 @@ pub(crate) struct ModRecord {
     pub(crate) manifest: &'static Manifest,
     /// What its manifest tells players about it.
     pub(crate) meta: crate::manifest::Meta,
-    /// The ids it had before a rename.
-    pub(crate) former: Vec<String>,
     /// Notes on its relations, such as a recommended mod that is missing.
     pub(crate) notes: Vec<String>,
     /// Set when the mod is off: refused at init or faulted later.
@@ -130,25 +128,6 @@ impl ModRecord {
             self.texts.relock().as_ref(),
             &reason,
         ))
-    }
-
-    /// The namespace its bare stat and item-data names take: the first id
-    /// it had before a rename, where its data lives, or else its id.
-    pub(crate) fn home(&self) -> &str {
-        self.former.first().map_or(self.id.as_str(), String::as_str)
-    }
-
-    /// Its id, then the ids it had before a rename: every namespace its
-    /// content, stats, points, services and events may take.
-    pub(crate) fn names(&self) -> Vec<&str> {
-        std::iter::once(self.id.as_str())
-            .chain(self.former.iter().map(String::as_str))
-            .collect()
-    }
-
-    /// Whether `namespace` is its id or one it had before a rename.
-    pub(crate) fn owns(&self, namespace: &str) -> bool {
-        self.id == namespace || self.former.iter().any(|f| f == namespace)
     }
 
     /// The name players read, from the mod's texts in their language, else
@@ -515,13 +494,9 @@ impl Loader {
         false
     }
 
-    /// The mod named `id`, or the mod that had `id` before a rename, as a
-    /// player or an administrator names it.
+    /// The mod named `id`, as a player or an administrator names it.
     pub(crate) fn find_mod(&self, id: &str) -> Option<(usize, &ModRecord)> {
-        let mut mods = self.mods.iter().enumerate();
-        mods.clone()
-            .find(|(_, m)| m.id == id)
-            .or_else(|| mods.find(|(_, m)| m.owns(id)))
+        self.mods.iter().enumerate().find(|(_, m)| m.id == id)
     }
 
     fn record(&self, me: ModHandle) -> Option<(ModIndex, &ModRecord)> {

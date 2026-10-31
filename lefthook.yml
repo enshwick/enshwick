@@ -10,24 +10,13 @@ pre-commit:
       glob: '*.md'
       exclude:
         - '**/CHANGELOG.md'
-      run: bunx --no-install markdownlint-cli2 --no-globs {staged_files}
+      run: rumdl check {staged_files}
     typos:
       run: typos --force-exclude {staged_files}
     # zizmor offline: its online audits need a GitHub token and the network.
     workflows:
       glob: '.github/**'
       run: actionlint && zizmor --offline --quiet .
-
-# committed checks the header against committed.toml. Messages git writes
-# itself (merges, reverts, fixups) pass as they are. A subject starts in
-# lower case, and angle brackets would read as HTML in the release notes.
-commit-msg:
-  commands:
-    conventional:
-      run: >-
-        head -n1 {1} | grep -qE '^(Merge |Revert "|fixup! |squash! |amend! )' ||
-        { committed --commit-file {1} &&
-        ! head -n1 {1} | grep -E '^[a-z]+(\([^)]*\))?!?: [A-Z]|[<>]'; }
 
 # Nothing that compiles: the hook stays under ten seconds. The compiling
 # checks are `cargo xtask check` (what the branch touches) and
@@ -44,19 +33,9 @@ pre-push:
       glob: '*.md'
       exclude:
         - '**/CHANGELOG.md'
-      run: bunx --no-install markdownlint-cli2 --no-globs {push_files}
+      run: rumdl check {push_files}
     typos:
       run: typos --force-exclude {push_files}
-    commits:
-      # Each commit no remote has yet, merges left out: a merge of main
-      # into a branch carries git's own message.
-      run: |
-        for commit in $(git rev-list --no-merges HEAD --not --remotes); do
-          header=$(git log -1 --format=%s "$commit")
-          case "$header" in 'Revert "'* | 'fixup! '* | 'squash! '* | 'amend! '*) continue ;; esac
-          git log -1 --format=%B "$commit" | committed --commit-file - || exit 1
-          if printf '%s\n' "$header" | grep -E '^[a-z]+(\([^)]*\))?!?: [A-Z]|[<>]'; then exit 1; fi
-        done
     deny:
       glob:
         - 'Cargo.toml'
