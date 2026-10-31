@@ -106,7 +106,5 @@ assert_eq!(bytes[4], 7);
 
 ## Panics
 
-A panic in a hook, a mid-function handler or an event handler is caught at the
-boundary: the mod is turned off and the game goes on vanilla (see
-[Hooks](hooks.md#panics)). That is a safety net, not error handling. Never
-panic on purpose in the game's frame; on bad data, forward to vanilla.
+Never panic on purpose in the game's frame; on bad data, forward to vanilla.
+A caught panic turns the whole mod off (see [Hooks](hooks.md#panics)).

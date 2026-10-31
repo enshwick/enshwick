@@ -172,7 +172,9 @@ a hooked function.
 ## The mod's state in a hook
 
 `declare_mod!` adds `instance()` to the mod's type: `Some(&'static Self)` once
-`init` has returned the state, `None` before. A hook can read settings there:
+`init` has returned the state, `None` before and when `init` failed. A hook
+that runs before the state exists, or whose mod failed at init, forwards to
+`next`. A hook can read settings there:
 
 ```rust,standalone_crate
 use enshwick::{Load, Mod, Next, Off};
@@ -205,6 +207,9 @@ impl Mod for MyMod {
 enshwick::declare_mod!(MyMod);
 # fn main() {}
 ```
+
+`instance()` stays `Some` after a later fault; the loader stops calling the
+mod's hooks and handlers instead.
 
 State that changes while the game runs, such as settings applied by
 `on_config_change`, goes in atomics or an `ArcSwap` instead; see
