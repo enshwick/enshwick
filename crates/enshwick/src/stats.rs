@@ -79,22 +79,27 @@ pub const fn key_of(id: &str) -> StatKey {
 }
 
 /// The text key that names the stat kind or affix of full id `id` in its
-/// owner's texts: `<name>.name`, the part content derives for its name.
-/// `None` for an id without a mod side.
+/// owner's texts, `<name>.name`.
+///
+/// It is the name side of the id [`Id::part`] derives for the part `name`;
+/// `None` for an id that is not `<mod>:<name>`, or whose name with `.name`
+/// is longer than a content id's name may be.
 ///
 /// # Examples
 ///
 /// ```
+/// use enshwick::content::Id;
 /// use enshwick::stats::{builtin, name_key};
 ///
 /// assert_eq!(name_key("you.hello:luck").as_deref(), Some("luck.name"));
 /// assert_eq!(name_key(&builtin::HEALTH_MAX.to_string()).as_deref(), Some("health_max.name"));
+/// assert_eq!(Id::new("you.hello:luck").part("name").to_string(), "you.hello:luck.name");
 /// assert_eq!(name_key("luck"), None);
+/// assert_eq!(name_key(&format!("you.hello:{}", "a".repeat(124))), None);
 /// ```
 #[must_use]
 pub fn name_key(id: &str) -> Option<String> {
-    let (_, name) = id.split_once(':')?;
-    Some(format!("{name}.name"))
+    crate::content::part_name(id, crate::content::NAME_PART)
 }
 
 /// The platform's built-in stat kinds, which it applies to the game on the
@@ -381,10 +386,36 @@ impl Stats {
     ///
     /// # Examples
     ///
-    /// ```
-    /// fn name(stats: &enshwick::stats::Stats, stat: enshwick::stats::Stat) -> String {
-    ///     stats.info(stat).map_or_else(String::new, |info| info.id)
+    /// ```rust,standalone_crate
+    /// use std::sync::OnceLock;
+    ///
+    /// use enshwick::content::id;
+    /// use enshwick::stats::{Stat, StatDef, Stats};
+    /// use enshwick::{Load, Mod, Off};
+    ///
+    /// static LUCK: OnceLock<(Stats, Stat)> = OnceLock::new();
+    ///
+    /// struct Lucky;
+    ///
+    /// impl Mod for Lucky {
+    ///     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+    ///         let luck = load.define_stat(id!("luck"), &StatDef::additive())?;
+    ///         let _first = LUCK.set((load.stats()?, luck));
+    ///         Ok(Self)
+    ///     }
     /// }
+    ///
+    /// enshwick::test::declare_mod!(Lucky, "id = \"you.hello\"\nside = \"server\"");
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// // SAFETY: both functions are the exports of `declare_mod!(Lucky)`.
+    /// let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+    /// assert!(status.is_ok());
+    /// let (stats, luck) = LUCK.get().ok_or("init ran")?;
+    /// let info = stats.info(*luck).ok_or("luck is defined")?;
+    /// assert_eq!(info.id, "you.hello:luck");
+    /// assert_eq!(info.text, "luck.name");
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn info(&self, stat: Stat) -> Option<StatInfo> {

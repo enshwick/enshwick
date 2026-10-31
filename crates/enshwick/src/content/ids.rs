@@ -648,6 +648,17 @@ const fn fits(name: &str, part: &str) -> bool {
     !bytes.is_empty() && all_of(bytes, true) && name.len() + 1 + bytes.len() <= 128
 }
 
+/// The part that names a piece of content in its owner's texts.
+pub(crate) const NAME_PART: &str = "name";
+
+/// The name side `<name>.<part>` of the id [`Id::try_part`] derives from
+/// the content id `id`, for an id known only at run time; `None` where
+/// [`is_id`] or [`Id::try_part`] refuses.
+pub(crate) fn part_name(id: &str, part: &str) -> Option<String> {
+    let (_, name) = id.split_once(':')?;
+    (is_id(id) && fits(name, part)).then(|| format!("{name}.{part}"))
+}
+
 impl core::fmt::Display for Guid {
     /// The textual form [`Guid::parse`] reads.
     ///

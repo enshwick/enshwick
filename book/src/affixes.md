@@ -48,7 +48,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 `load.define_affix(id!("sturdy"), &def)` defines `<mod>:sturdy` during
 `init`, on both sides, so clients can name what items rolled. Its text is
-`sturdy.name` in the mod's [texts](content/texts.md). An `AffixDef` holds:
+`sturdy.name` in the mod's [texts](content/texts.md), the same text a stat
+kind or an item of the mod named `sturdy` reads, so give them different
+names. An `AffixDef` holds:
 
 | Field | Means |
 | --- | --- |

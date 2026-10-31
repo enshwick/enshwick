@@ -216,11 +216,26 @@ fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
     Ok(f(pending))
 }
 
-/// The content id `id` asked for by the mod `mod_id`, and whether its
-/// namespace is the mod's own; `None` for one that is not `<mod>:<name>`.
-fn full_id(mod_id: &str, id: &str) -> Option<(String, bool)> {
+/// A content id a mod asks for.
+#[derive(Debug)]
+struct Asked {
+    full: String,
+    /// The text key that names it, see [`name_key`].
+    text: Box<str>,
+    /// Its namespace is the asking mod's own.
+    own: bool,
+}
+
+/// The content id `id` asked for by the mod `mod_id`; `None` for one that
+/// is not `<mod>:<name>` or has no [`name_key`].
+fn full_id(mod_id: &str, id: &str) -> Option<Asked> {
     let (namespace, _) = id.split_once(':')?;
-    enshwick::content::is_id(id).then(|| (id.to_owned(), namespace == mod_id))
+    let text = name_key(id)?.into_boxed_str();
+    Some(Asked {
+        full: id.to_owned(),
+        text,
+        own: namespace == mod_id,
+    })
 }
 
 fn index_of(kinds: &mut Vec<Kind>, id: &str) -> usize {
@@ -264,7 +279,7 @@ pub(crate) fn open(
     def: Option<StatDef>,
 ) -> Result<StatRef, Status> {
     let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
-    let (full, own) = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
+    let Asked { full, text, own } = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
     declare(loader, owner, Space::Stat, &full)?;
     pending(|p| {
         let index = index_of(&mut p.kinds, &full);
@@ -273,7 +288,6 @@ pub(crate) fn open(
             if !own || kind.def.is_some() {
                 return Err(Status::REFUSED);
             }
-            let text = name_key(&full).unwrap_or_default().into_boxed_str();
             kind.def = Some((def, text, owner.get()));
         }
         Ok(StatRef {
@@ -299,7 +313,7 @@ pub(crate) fn open_affix(
     data: &AffixDefData,
 ) -> Result<StatRef, Status> {
     let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
-    let (full, own) = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
+    let Asked { full, text, own } = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
     if !own {
         return Err(Status::REFUSED);
     }
@@ -321,7 +335,7 @@ pub(crate) fn open_affix(
         }
         p.affixes.push(Affix {
             id: full.clone().into_boxed_str(),
-            text: name_key(&full).unwrap_or_default().into_boxed_str(),
+            text,
             def,
         });
         Ok(StatRef {

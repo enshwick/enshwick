@@ -43,7 +43,8 @@ A stat kind has a [content id](content.md#content-ids) and a `StatDef`:
 
 The text that names a kind is the derived part `<name>.name` in its
 owner's [texts](content/texts.md), as content derives its name: the kind
-`<mod>:luck` reads `luck.name`.
+`<mod>:luck` reads `luck.name`. A stat kind, an affix and an item of one
+mod with the same name share that text, so give them different names.
 
 `load.define_stat(id!("luck"), &def)` defines a kind of the mod's own during
 `init`, and a malformed name fails the build. `load.open_stat(id)` opens a

@@ -56,9 +56,10 @@ impl FakeStats {
     }
 }
 
-/// The content id `id`, as the loader takes it: `<mod>:<name>`.
+/// The content id `id`, as the loader takes it: `<mod>:<name>` with a
+/// [`name_key`].
 fn full(id: &str) -> Option<String> {
-    crate::content::is_id(id).then(|| id.to_owned())
+    name_key(id).map(|_| id.to_owned())
 }
 
 /// The text key the loader derives for full id `id`.
