@@ -15,7 +15,7 @@ Each entry names the pull request that made the change.
   `CallError::Unmatched` and the link stayed inert. The fake loader refuses
   the same: serve a required mod's call with `Installed::serve_call`, and
   define its point with the new `Installed::define_point`, before the mod
-  starts (#PR).
+  starts (#777).
 
 ### Added
 
