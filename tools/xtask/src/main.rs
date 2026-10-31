@@ -13,8 +13,8 @@
 //! tests included where they can run.
 //!
 //! `cargo xtask dist` writes `enshwick.zip`, the loader that players unpack
-//! into the game folder ([`dist`]). `cargo xtask header` rewrites the ABI's C header,
-//! which the check holds to the ABI module and its golden layout
+//! into the game folder ([`dist`]). `cargo xtask header` rewrites the ABI's
+//! C header, which the check holds to the ABI module and its golden layout
 //! ([`header`]).
 
 mod affected;
