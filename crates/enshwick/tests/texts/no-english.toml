@@ -1,0 +1,6 @@
+[en]
+"locker.name" = "Locker"
+
+[uk]
+"locker.name" = "Шафка"
+"locker.label" = "Шафка · {owner}"

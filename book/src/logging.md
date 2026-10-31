@@ -179,7 +179,7 @@ key with no text shows as the key and its values.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let _texts = load.texts("[en]\n\"glow.off\" = \"No glow: {symbol} is missing.\"\n")?;
+    let _texts = load.texts_from("[en]\n\"glow.off\" = \"No glow: {symbol} is missing.\"\n")?;
     let glow = load.feature("glow", |load| {
         load.symbol("lantern.glow")
             .map_err(|_| enshwick::Off::text("glow.off", &[("symbol", "lantern.glow")]))

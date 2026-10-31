@@ -10,7 +10,7 @@ mod tests {
 
     impl Mod for Lanterns {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _texts = load.texts(TEXTS)?;
+            let _texts = load.texts_from(TEXTS)?;
             Err(Off::text("lanterns.off", &[("lit", "20")]))
         }
     }

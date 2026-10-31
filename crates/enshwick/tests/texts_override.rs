@@ -10,7 +10,7 @@ mod tests {
 
     impl Mod for Texty {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            load.texts("[en]\n\"locker.name\" = \"Locker\"\n")?;
+            load.texts_from("[en]\n\"locker.name\" = \"Locker\"\n")?;
             Ok(Self)
         }
     }
