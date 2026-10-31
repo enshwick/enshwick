@@ -215,15 +215,7 @@ pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
         if !refused {
             return Status::OK;
         }
-        let (owner, what) = id.split_once(':').unwrap_or_default();
-        let offered = match s.host.exports.get(owner) {
-            Some(names) if !names.is_empty() => format!("it exports {}", names.join(", ")),
-            _ => "it exports nothing".to_owned(),
-        };
-        s.logs.push((
-            crate::abi::Level::WARN,
-            format!("content id {id}: {owner} does not export {what}; {offered}"),
-        ));
+        crate::test::table::warn_unexported(s, "content id", &id);
         Status::REFUSED
     })
 }

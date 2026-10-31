@@ -125,8 +125,9 @@ pub(crate) extern "system" fn stat_open(
         let unexported = parsed.is_none()
             && s.manifest
                 .as_ref()
-                .is_some_and(|manifest| manifest.unexported(&id, &s.host.exports));
+                .is_some_and(|manifest| manifest.unexported_content(&id, &s.host.exports));
         if unexported {
+            super::table::warn_unexported(s, "stat", &id);
             return Err(Status::REFUSED);
         }
         let own = is_own(s, &id);

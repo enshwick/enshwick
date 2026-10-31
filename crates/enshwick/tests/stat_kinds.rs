@@ -179,26 +179,40 @@ mod tests {
     }
 }
 
-/// A dependency's kind, opened through `deps!`: kept when its owner exports
-/// it, refused when it does not.
+/// A dependency's kind: kept when its owner exports its name or the name it
+/// is a part of, refused with the owner's exports when it does not.
 #[cfg(test)]
 mod dependency {
     use std::sync::OnceLock;
 
-    use enshwick::abi::Status;
+    use enshwick::abi::{Level, Status};
+    use enshwick::content::Id;
     use enshwick::stats::{Stat, Stats};
     use enshwick::{Load, Mod, Off};
 
     enshwick::deps!();
 
+    /// The kind the mod opens: a name through `deps!`, or a full id past
+    /// its export check.
+    #[derive(Clone, Copy)]
+    enum Kind {
+        Dependency(&'static str),
+        Full(&'static str),
+    }
+
+    static KIND: OnceLock<Kind> = OnceLock::new();
     static OPENED: OnceLock<(Stats, Stat)> = OnceLock::new();
 
     struct Reader;
 
     impl Mod for Reader {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let luck = load.open_stat(deps::lockers::id("luck")?)?;
-            let _first = OPENED.set((load.stats()?, luck));
+            let id = match KIND.get().copied().unwrap_or(Kind::Dependency("luck")) {
+                Kind::Dependency(name) => deps::lockers::id(name)?,
+                Kind::Full(id) => Id::new(id),
+            };
+            let opened = load.open_stat(id)?;
+            let _first = OPENED.set((load.stats()?, opened));
             Ok(Self)
         }
     }
@@ -214,17 +228,27 @@ mod dependency {
         "#
     );
 
-    fn start(exports: &[&str]) -> Status {
+    /// Starts the mod opening `kind` of `you.lockers`, which exports
+    /// `exports`; its status and the warnings logged.
+    fn start(kind: Kind, exports: &[&str]) -> (Status, Vec<String>) {
+        let _first = KIND.set(kind);
         let loader = enshwick::test::FakeHost::new()
             .exports("you.lockers", exports)
             .install();
         // SAFETY: both functions are the exports of this module's `declare_mod!(Reader)`.
-        unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) }
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let warnings = loader
+            .logs()
+            .into_iter()
+            .filter(|(level, _)| *level == Level::WARN)
+            .map(|(_, line)| line)
+            .collect();
+        (status, warnings)
     }
 
     #[test]
     fn a_kind_its_owner_exports_opens_by_its_dependency_id() {
-        assert_eq!(start(&["luck"]), Status::OK);
+        assert_eq!(start(Kind::Dependency("luck"), &["luck"]).0, Status::OK);
         let (stats, luck) = OPENED.get().unwrap();
         assert_eq!(luck.key(), enshwick::stats::key_of("you.lockers:luck"));
         assert!(
@@ -234,8 +258,25 @@ mod dependency {
     }
 
     #[test]
-    fn a_kind_its_owner_does_not_export_turns_the_mod_off() {
-        assert_ne!(start(&["price"]), Status::OK);
+    fn a_kind_opens_when_its_owner_exports_the_name_it_is_a_part_of() {
+        let (status, warnings) = start(Kind::Dependency("charm.fire"), &["charm"]);
+        assert_eq!(status, Status::OK);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let (_, fire) = OPENED.get().unwrap();
+        assert_eq!(
+            fire.key(),
+            enshwick::stats::key_of("you.lockers:charm.fire")
+        );
+    }
+
+    #[test]
+    fn a_kind_its_owner_does_not_export_is_refused_with_the_owner_s_exports() {
+        let (status, warnings) = start(Kind::Full("you.lockers:luck"), &["price"]);
+        assert_eq!(status, Status::REFUSED);
         assert!(OPENED.get().is_none());
+        assert_eq!(
+            warnings,
+            ["stat you.lockers:luck: you.lockers does not export luck; it exports price"]
+        );
     }
 }

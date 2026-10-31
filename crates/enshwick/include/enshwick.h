@@ -3511,7 +3511,8 @@ typedef struct EnshwickHostApi {
   // index for one id. `Status::BAD_ARGS` for a malformed id or
   // definition; `Status::REFUSED` for a kind defined twice or in
   // another mod's namespace, or a kind of another loaded mod whose
-  // `Manifest::exports` lack its name.
+  // `Manifest::exports` lack its name and the
+  // name it is a part of, with the id and the owner's exports logged.
   // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*stat_open)(EnshwickModHandle me,
                               struct EnshwickStr id,
