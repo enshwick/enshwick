@@ -1,5 +1,6 @@
 id: ids-are-constants
 valid:
+  - "#[enshwick::point(name = \"you.trading-post:price\")] struct Price;"
   - "const PRICES: &str = \"trading-post:prices\";"
   - "const NAME: Id = Id::new(\"enshwick:stand-in.name\");"
   - "static KIND: &str = \"enshwick:stats\";"

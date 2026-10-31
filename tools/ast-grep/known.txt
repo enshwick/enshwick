@@ -1,9 +1,8 @@
 # Findings of the ast-grep rules in code written before the rule, one a line:
 # `<rule> <file> <first line of the matched code>`. `cargo xtask check`
 # fails on a finding not listed here and on an entry nothing matches, so an
-# entry leaves when its code moves to what the rule asks. A deliberate
-# exception is `// ast-grep-ignore` with its reason; only one in generated
-# code, which a regeneration would strip of its comment, goes here.
+# entry leaves when its code moves to what the rule asks. Nothing new goes
+# here: a deliberate exception is `// ast-grep-ignore` with its reason.
 
 # The meter templates a mod serves, collected during its init; they move
 # into the content domain's state struct beside the items they serve.
@@ -125,8 +124,3 @@ static-is-registry-fuse-or-state crates/internal/loader/src/weather.rs static CH
 # The key of the world this process runs; it moves into the worlds
 # domain's state struct.
 static-is-registry-fuse-or-state crates/internal/loader/src/worlds.rs static CURRENT: Mutex<Option<String>> = Mutex::new(None);
-
-# The point's declaration, written by `cargo enshwick point` and written
-# again rather than edited, so an ignore comment would not last; the macro
-# already makes `Price::NAME` the one constant the rest of the code uses.
-ids-are-constants examples/haggling/src/price.rs #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]

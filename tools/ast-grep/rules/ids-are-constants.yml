@@ -4,7 +4,9 @@ severity: error
 message: name a `mod-id:what` id through a constant, not a literal in code
 note: >-
   A service, event, point, stat or content id spelled twice drifts; one
-  `const` keeps every use the same and lets the compiler find them. The rule
+  `const` keeps every use the same and lets the compiler find them. An
+  attribute that declares one, such as `#[enshwick::point(name = ..)]`, is a
+  declaration too. The rule
   sees only literals shaped like `mod-id:what`; setting keys, channel and file
   names have no shape it can tell from other text, so review holds them.
 ignores:
@@ -42,4 +44,5 @@ rule:
       any:
         - kind: const_item
         - kind: static_item
+        - kind: attribute_item
         - matches: in-test
