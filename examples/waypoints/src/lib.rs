@@ -6,14 +6,15 @@
 use arc_swap::ArcSwapOption;
 use enshwick::abi::Side;
 use enshwick::actions::{Action, Outcome, Request};
-use enshwick::i18n::language;
+use enshwick::i18n::{Language, Texts, language};
 use enshwick::net::{Channel, Peer, SendError};
 use enshwick::state::ModLocal;
-use enshwick::ui::{Anchor, Label};
+use enshwick::ui::{Anchor, Hud, Label};
 use enshwick::{Load, Mod, Off, PlayerKey};
 
 // The keys of `src/texts.toml`, in English and Ukrainian.
 enshwick::texts!();
+
 /// What the server tells a player's client: the whole state each time, so a
 /// message that arrives twice changes nothing.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -31,15 +32,59 @@ const CHANNEL_VERSION: u16 = 1;
 
 static CHANNEL: ModLocal<Channel<Waypoint>> = ModLocal::new();
 
+/// The mod's texts, for the client's HUD line.
+static TEXTS: ModLocal<Texts> = ModLocal::new();
+
+/// The mark the client shows, with its HUD line built once for the
+/// language the line is in.
+#[derive(Debug)]
+struct Shown {
+    at: [f64; 3],
+    language: Language,
+    line: String,
+}
+
+impl Shown {
+    fn new(at: [f64; 3], language: Language) -> Self {
+        let [x, y, z] = at.map(|metres| format!("{metres:.0}"));
+        let values = [
+            (texts::value::X, x.as_str()),
+            (texts::value::Y, &y),
+            (texts::value::Z, &z),
+        ];
+        let line = TEXTS
+            .get()
+            .map_or_else(String::new, |all| all.fill(texts::HUD, language, &values));
+        Self { at, language, line }
+    }
+}
+
 /// The mark the client shows: written by the channel's handler, read each
-/// HUD frame without a lock.
-static SHOWN: ArcSwapOption<[f64; 3]> = ArcSwapOption::const_empty();
+/// HUD frame without a lock or an allocation.
+static SHOWN: ArcSwapOption<Shown> = ArcSwapOption::const_empty();
 
 /// Takes what the server sent as the mark to show.
 fn show(waypoint: Waypoint) {
     match waypoint {
-        Waypoint::Set(at) => SHOWN.store(Some(at.into())),
+        Waypoint::Set(at) => SHOWN.store(Some(Shown::new(at, language()).into())),
         Waypoint::Clear => SHOWN.store(None),
+    }
+}
+
+/// Draws the mark, if any; builds its line again only when the player has
+/// changed the game's language since.
+fn draw(hud: &mut Hud<'_>) {
+    let shown = SHOWN.load();
+    let Some(mark) = shown.as_deref() else {
+        return;
+    };
+    let now = language();
+    if mark.language == now {
+        hud.text(Anchor::TopRight, Label::new(&mark.line));
+    } else {
+        let again = Shown::new(mark.at, now);
+        hud.text(Anchor::TopRight, Label::new(&again.line));
+        SHOWN.store(Some(again.into()));
     }
 }
 
@@ -68,6 +113,7 @@ pub struct Waypoints;
 impl Mod for Waypoints {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let all_texts = load.texts()?;
+        let _first = TEXTS.set(all_texts.clone());
         // Both halves open the channel; only the client takes what comes in.
         let channel = load.channel(CHANNEL_NAME, CHANNEL_VERSION, |from, waypoint| {
             if from == Peer::Server {
@@ -79,19 +125,7 @@ impl Mod for Waypoints {
         // A client draws the mark; it also runs the server half while it
         // hosts a game.
         if load.host().build().side == Side::CLIENT {
-            let hud_texts = all_texts.clone();
-            load.on_hud(move |hud| {
-                if let Some(at) = SHOWN.load().as_deref() {
-                    let [x, y, z] = at.map(|metres| format!("{metres:.0}"));
-                    let values = [
-                        (texts::value::X, x.as_str()),
-                        (texts::value::Y, &y),
-                        (texts::value::Z, &z),
-                    ];
-                    let line = hud_texts.fill(texts::HUD, language(), &values);
-                    hud.text(Anchor::TopRight, Label::new(&line));
-                }
-            })?;
+            load.on_hud(draw)?;
         }
 
         let world = load.world()?;
@@ -141,16 +175,15 @@ mod tests {
     }
 
     #[test]
-    fn the_mark_action_sends_the_player_s_position_to_their_client() {
+    fn the_actions_send_the_mark_and_its_clearing_and_need_a_position() {
         let player = PlayerKey::new(7);
         let character = Entity(2);
         let host = FakeHost::new().world().net_peer(Peer::Player(player));
         let transform = host
             .hash(facts::CURRENT_TRANSFORM.id())
             .expect("the preset has it");
-        // A CurrentTransform starts with three fixed-point coordinates, 32
-        // fractional bits each: the character stands at 4, 5, 6.
-        let place: Vec<u8> = [4_i64 << 32, 5 << 32, 6 << 32]
+        // A CurrentTransform starts with the position's fixed-point coordinates.
+        let place: Vec<u8> = enshwick::ecs::fixed([4.0, 5.0, 6.0])
             .iter()
             .flat_map(|c| c.to_le_bytes())
             .collect();
@@ -174,9 +207,36 @@ mod tests {
             answer.as_ref().is_some_and(|text| text.contains("Marked.")),
             "{answer:?}"
         );
+        let answer = loader.ask_actions(ActionCall::RUN, &info, 0, "clear", "");
+        assert!(
+            answer
+                .as_ref()
+                .is_some_and(|text| text.contains("Mark cleared.")),
+            "{answer:?}"
+        );
         let sent = loader.net_sent();
-        assert_eq!(sent.len(), 1);
-        assert_eq!((sent[0].0.as_str(), sent[0].1), ("waypoint@1", player));
+        assert_eq!(sent.len(), 2, "a mark, then its clearing");
+        assert!(
+            sent.iter()
+                .all(|(name, to, _)| name == "waypoint@1" && *to == player)
+        );
+
+        let elsewhere = PlayerInfo {
+            entity: Entity(3),
+            ..info
+        };
+        let answer = loader.ask_actions(ActionCall::RUN, &elsewhere, 0, "mark", "");
+        assert!(
+            answer
+                .as_ref()
+                .is_some_and(|text| text.contains("Your position is not known yet.")),
+            "{answer:?}"
+        );
+        assert_eq!(
+            loader.net_sent().len(),
+            2,
+            "nothing sent without a position"
+        );
 
         let stranger = PlayerKey::new(8);
         assert_eq!(
