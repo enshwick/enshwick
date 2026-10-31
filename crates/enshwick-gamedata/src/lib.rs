@@ -14,6 +14,8 @@
 //! The [`catalogue`] maps the ids the API asks engine facts by to the
 //! game's reflected types and fields.
 
+#![forbid(unsafe_code)]
+
 pub mod archive;
 mod carry;
 pub mod catalogue;
