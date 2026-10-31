@@ -161,17 +161,21 @@ runs:
         echo "$dir" >> "$GITHUB_PATH"
         "$dir/ast-grep" --version
 
-    # cargo-fuzz builds with flags only the nightly compiler takes.
-    # install-action has no manifest for cargo-fuzz: the release binary,
-    # checked against its digest.
+    # cargo-fuzz builds with flags only the nightly compiler takes. A dated
+    # nightly keeps the tool cache and the fuzz build cache valid between
+    # runs; `cargo xtask check --part fuzz` takes it from
+    # `ENSH_FUZZ_TOOLCHAIN`. install-action has no manifest for cargo-fuzz:
+    # the release binary, checked against its digest.
     - name: Install nightly and cargo-fuzz
       if: inputs.fuzz == 'true'
       shell: bash
       env:
+        NIGHTLY: nightly-2026-10-26
         CARGO_FUZZ_VERSION: 0.13.2
         CARGO_FUZZ_SHA256: b5b704018b63e0f151c17a057ac53b5111e1db545d1b9f72fee79f08a545931c
       run: | # zizmor: ignore[github-env] fixed paths only
-        rustup toolchain install nightly --profile minimal
+        rustup toolchain install "$NIGHTLY" --profile minimal
+        echo "ENSH_FUZZ_TOOLCHAIN=$NIGHTLY" >> "$GITHUB_ENV"
         dir="$RUNNER_TEMP/cargo-fuzz"
         archive="$RUNNER_TEMP/cargo-fuzz.tar.gz"
         curl --proto '=https' --tlsv1.2 -sSfL -o "$archive" \

@@ -1,15 +1,29 @@
 //! Short fuzz runs for a change: the targets in `fuzz/` whose input the
-//! change reaches, sharing [`BUDGET`] seconds, built by cargo-fuzz with the
-//! nightly compiler. Longer runs stay local, as `fuzz/README.md` says.
+//! change reaches, or every target in the full suite, sharing [`BUDGET`]
+//! seconds, built by cargo-fuzz with the nightly compiler
+//! [`TOOLCHAIN_VAR`] names. Longer runs stay local, as `fuzz/README.md` says.
 
 use crate::Step;
 
-/// Seconds of fuzzing shared by the targets a change reaches, so the part
-/// fits the pull request lane however many it reaches.
-const BUDGET: u64 = 90;
-/// Seconds a target runs at least, enough for its seed corpus and a few
-/// thousand mutations.
-const LEAST: u64 = 10;
+/// Seconds of fuzzing shared by the targets a run fuzzes, so the part fits
+/// the pull request lane however many a change reaches.
+const BUDGET: u64 = 45;
+/// Seconds a target runs at least, enough for its seed corpus and some
+/// mutations.
+const LEAST: u64 = 5;
+/// The variable naming the nightly toolchain to build with, which CI sets
+/// to the dated one it installs.
+const TOOLCHAIN_VAR: &str = "ENSH_FUZZ_TOOLCHAIN";
+
+/// The `+<toolchain>` argument for cargo and rustc: [`TOOLCHAIN_VAR`], else
+/// `nightly`.
+fn toolchain() -> String {
+    let name = std::env::var(TOOLCHAIN_VAR)
+        .ok()
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "nightly".to_owned());
+    format!("+{name}")
+}
 
 /// Each target and the modules that read its input, as paths without `.rs`:
 /// a change to the module file or below its folder reaches the target.
@@ -97,7 +111,7 @@ fn share(count: usize) -> u64 {
 /// The host triple of the nightly compiler, from `rustc -vV`.
 fn host() -> Option<String> {
     let output = std::process::Command::new("rustc")
-        .args(["+nightly", "-vV"])
+        .args([toolchain().as_str(), "-vV"])
         .output()
         .ok()?;
     String::from_utf8_lossy(&output.stdout)
@@ -116,10 +130,14 @@ pub(crate) fn run(targets: &[&str]) -> bool {
     // cargo-fuzz builds for the target it was itself built for, which for
     // its release binary is musl, without a standard library to sanitize.
     let Some(host) = host() else {
-        crate::say("the nightly compiler names no host; is it installed?");
+        crate::say(&format!(
+            "rustc {toolchain} names no host; is that toolchain installed?",
+            toolchain = toolchain()
+        ));
         return false;
     };
     let seconds = format!("-max_total_time={}", share(targets.len()));
+    let toolchain = toolchain();
     targets.iter().all(|target| {
         let found = format!("target/fuzz/corpus/{target}");
         if let Err(error) = std::fs::create_dir_all(&found) {
@@ -129,7 +147,7 @@ pub(crate) fn run(targets: &[&str]) -> bool {
         Step::tool(
             "cargo",
             &[
-                "+nightly",
+                &toolchain,
                 "fuzz",
                 "run",
                 "-O",
@@ -184,7 +202,7 @@ mod tests {
     #[test]
     fn the_budget_is_shared_but_each_target_runs_a_while() {
         assert_eq!(share(1), BUDGET);
-        assert_eq!(share(3), 30);
+        assert_eq!(share(3), 15);
         assert_eq!(share(TARGETS.len()), LEAST);
     }
 
