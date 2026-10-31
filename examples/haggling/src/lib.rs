@@ -2,8 +2,8 @@
 //! `you.trading-post:price`. Regular customers get more for what they sell,
 //! and the trading post buys no item on the refused list.
 //!
-//! The definition of the point in [`price`] is written by
-//! `cargo enshwick point you.trading-post:price --from <the trading post's DLL>`.
+//! The declaration of the point in [`deps::trading_post`] is written by
+//! `cargo enshwick deps trading_post --from <the trading post's DLL>`.
 
 use std::sync::Arc;
 
@@ -12,9 +12,9 @@ use enshwick::points::{Order, Verdict};
 use enshwick::state::ModLocal;
 use enshwick::{Load, Mod, Off};
 
-pub mod price;
+enshwick::deps!();
 
-use price::{Deal, Price};
+use deps::trading_post::{Deal, Price};
 
 /// Haggling settings.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
@@ -109,7 +109,7 @@ mod tests {
     use enshwick::points::Decision;
     use enshwick::{Entity, PlayerKey};
 
-    use super::price::{Deal, Price};
+    use super::deps::trading_post::{Deal, Price};
 
     const REGULAR: PlayerKey = PlayerKey::new(0x00ab_cdef_0123_4567);
 

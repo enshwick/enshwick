@@ -1,13 +1,13 @@
-//! The extension point `you.trading-post:price` of you.trading-post 0.0.0-dev.
+//! What you.trading-post 0.0.0-dev offers other mods, by the alias `trading_post`.
 //!
-//! Written by `cargo enshwick point you.trading-post:price`. Write it again for a newer
-//! you.trading-post rather than edit it; the checks at the end hold it to the owner's
-//! layout. Declare this module `pub`.
+//! Written by `cargo enshwick deps trading_post`. Write it again for a newer
+//! you.trading-post rather than edit it; the checks hold each declaration to the
+//! owner's layout. `enshwick::deps!()` makes it `deps::trading_post`.
 
 /// The price of an item at the trading post, in coins: the trading post's own price first.
 ///
 /// A refusal means the trading post does not deal. Asked on the thread that runs the player's action.
-#[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]
+#[enshwick::point(name = "price", of = trading_post, mode = Override, output = u32, refusable)]
 #[derive(Clone, Copy, Debug)]
 pub struct Price {
     /// The item, 0 to 63.
@@ -20,19 +20,6 @@ pub struct Price {
     pub character: enshwick::Entity,
     /// Whether the player buys or sells.
     pub deal: Deal,
-}
-
-/// What a player does at the trading post.
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, enshwick::Shape)]
-#[shape(values(BUY, SELL))]
-pub struct Deal(pub u32);
-
-impl Deal {
-    /// `BUY`, as `you.trading-post` names it.
-    pub const BUY: Self = Self(0);
-    /// `SELL`, as `you.trading-post` names it.
-    pub const SELL: Self = Self(1);
 }
 
 const _: () = {
@@ -61,3 +48,16 @@ const _: () = {
         "the answer differs from the owner's",
     );
 };
+
+/// What a player does at the trading post.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, enshwick::Shape)]
+#[shape(values(BUY, SELL))]
+pub struct Deal(pub u32);
+
+impl Deal {
+    /// `BUY`, as `you.trading-post` names it.
+    pub const BUY: Self = Self(0);
+    /// `SELL`, as `you.trading-post` names it.
+    pub const SELL: Self = Self(1);
+}

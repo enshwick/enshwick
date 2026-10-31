@@ -5,8 +5,8 @@
 use std::fmt::Write as _;
 
 use super::{
-    Error, Kind, PointSchema, Schema, TypeSchema, built_in, find, is_named, prose, reached,
-    reached_from,
+    Error, Kind, PointSchema, Schema, TypeSchema, built_in, find, is_named, local_name, prose,
+    reached, reached_from,
 };
 
 /// A type's size and alignment in a `repr(C)` layout.
@@ -187,25 +187,93 @@ fn comment(out: &mut String, indent: &str, text: &str) {
     }
 }
 
-/// The Luau definition of the point `name` of `schema`: a module that
-/// exports the types the point reaches, the named values, and returns the
-/// description `enshwick.extend` links.
+/// The Luau modules of everything `schema` offers other mods, for a Luau
+/// mod whose `pack.toml` names the owner `alias`: each point, call and mod
+/// event, by its local name.
 ///
 /// # Errors
 ///
-/// [`Error`] when the schema lacks the point or a type it names, or its
-/// input is no struct of its layout's fields.
+/// [`Error`] when a name is not of the schema's owner or makes no file
+/// name, the schema lacks a type it names, or a declaration's input is no
+/// struct of its layout's fields.
 ///
 /// # Examples
 ///
 /// ```
-/// use cargo_enshwick::points::{Schema, luau};
+/// use cargo_enshwick::points::{Schema, luau_deps};
 ///
 /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
-/// assert!(luau(&schema, "you.stalls:price").is_err());
+/// let deps = luau_deps(&schema, "stalls")?;
+/// assert!(deps.modules.is_empty() && deps.skipped.is_empty());
 /// # Ok::<(), cargo_enshwick::points::Error>(())
 /// ```
-pub fn luau(schema: &Schema, name: &str) -> Result<String, Error> {
+pub fn luau_deps(schema: &Schema, alias: &str) -> Result<LuauDeps, Error> {
+    let mut deps = LuauDeps {
+        modules: Vec::new(),
+        skipped: Vec::new(),
+    };
+    let mut add = |name: &str, text: String| -> Result<(), Error> {
+        let local = local_name(schema, name)?;
+        if !is_file_name(local) {
+            return Err(Error::Invalid {
+                what: "name for a file",
+                value: name.to_owned(),
+            });
+        }
+        if deps.modules.iter().any(|(known, _)| known == local) {
+            return Err(Error::Invalid {
+                what: "name, taken twice,",
+                value: name.to_owned(),
+            });
+        }
+        deps.modules.push((local.to_owned(), text));
+        Ok(())
+    };
+    for point in schema.points() {
+        add(point, luau(schema, point, alias)?)?;
+    }
+    for call in schema.calls() {
+        match luau_call(schema, call, alias) {
+            Ok(text) => add(call, text)?,
+            Err(error @ Error::ScriptInput { .. }) => deps.skipped.push(error),
+            Err(error) => return Err(error),
+        }
+    }
+    for event in schema.events() {
+        add(event, luau_event(schema, event, alias)?)?;
+    }
+    Ok(deps)
+}
+
+/// The Luau modules [`luau_deps`] writes for one dependency.
+///
+/// # Examples
+///
+/// See [`luau_deps`].
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct LuauDeps {
+    /// Each module by the local name of what it describes, its file name
+    /// without `.luau`.
+    pub modules: Vec<(String, String)>,
+    /// The calls left out, each with why: a script cannot fill their input.
+    pub skipped: Vec<Error>,
+}
+
+/// Whether `local` names a module file on every system: 1 to 128 of
+/// `[a-z0-9_.-]`, not starting with a dot.
+fn is_file_name(local: &str) -> bool {
+    (1..=128).contains(&local.len())
+        && !local.starts_with('.')
+        && local.bytes().all(|b| {
+            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'-')
+        })
+}
+
+/// The Luau definition of the point `name` of `schema`: a module that
+/// exports the types the point reaches, the named values, and returns the
+/// description `enshwick.extend` links.
+pub(super) fn luau(schema: &Schema, name: &str, alias: &str) -> Result<String, Error> {
     let point: &PointSchema = schema
         .point
         .iter()
@@ -230,7 +298,7 @@ pub fn luau(schema: &Schema, name: &str) -> Result<String, Error> {
         point: name,
     };
     let mut out = format!(
-        "--!strict\n-- The extension point `{name}` of {} {}.\n-- Written by `cargo enshwick point {name} --luau`. Write it again for a newer\n-- {} rather than edit it: the runtime links by the layout below.\n",
+        "--!strict\n-- The extension point `{name}` of {} {}.\n-- Written by `cargo enshwick deps {alias} --luau`. Write it again for a newer\n-- {} rather than edit it: the runtime links by the layout below.\n",
         schema.owner, schema.version, schema.owner
     );
     let mut types = reached(schema, point, input)?;
@@ -295,22 +363,7 @@ fn types_and_values(schema: &Schema, types: &[&TypeSchema], out: &mut String) ->
 /// The Luau definition of the mod event `name` of `schema`: a module that
 /// exports the types its data reaches and the named values, and returns the
 /// description `enshwick.on_mod_event` subscribes with.
-///
-/// # Errors
-///
-/// [`Error`] when the schema lacks the event or a type it names, or its
-/// data is no struct of its layout's fields.
-///
-/// # Examples
-///
-/// ```
-/// use cargo_enshwick::points::{Schema, luau_event};
-///
-/// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
-/// assert!(luau_event(&schema, "you.stalls:sold").is_err());
-/// # Ok::<(), cargo_enshwick::points::Error>(())
-/// ```
-pub fn luau_event(schema: &Schema, name: &str) -> Result<String, Error> {
+pub(super) fn luau_event(schema: &Schema, name: &str, alias: &str) -> Result<String, Error> {
     let event = schema
         .event
         .iter()
@@ -329,7 +382,7 @@ pub fn luau_event(schema: &Schema, name: &str) -> Result<String, Error> {
         point: name,
     };
     let mut out = format!(
-        "--!strict\n-- The mod event `{name}` of {} {}.\n-- Written by `cargo enshwick event {name}`. Write it again for a newer\n-- {} rather than edit it: the runtime subscribes by the layout below.\n",
+        "--!strict\n-- The mod event `{name}` of {} {}.\n-- Written by `cargo enshwick deps {alias} --luau`. Write it again for a newer\n-- {} rather than edit it: the runtime subscribes by the layout below.\n",
         schema.owner, schema.version, schema.owner
     );
     let mut types = reached_from(
@@ -362,24 +415,10 @@ fn is_script_input(ty: &str) -> bool {
 
 /// The Luau definition of the call `name` of `schema`: a module that exports
 /// the types its input and answer reach and the named values, and returns
-/// the description `enshwick.caller` asks for the call with.
-///
-/// # Errors
-///
-/// [`Error`] when the schema lacks the call or a type it names, its input
-/// is no struct of its layout's fields, or an input field is of a type
-/// other than a number, a bool, an entity or a GUID.
-///
-/// # Examples
-///
-/// ```
-/// use cargo_enshwick::points::{Schema, luau_call};
-///
-/// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
-/// assert!(luau_call(&schema, "you.stalls:rent").is_err());
-/// # Ok::<(), cargo_enshwick::points::Error>(())
-/// ```
-pub fn luau_call(schema: &Schema, name: &str) -> Result<String, Error> {
+/// the description `enshwick.caller` asks for the call with; an error when
+/// an input field is of a type other than a number, a bool, an entity or a
+/// GUID.
+pub(super) fn luau_call(schema: &Schema, name: &str, alias: &str) -> Result<String, Error> {
     let call = schema
         .call
         .iter()
@@ -405,7 +444,7 @@ pub fn luau_call(schema: &Schema, name: &str) -> Result<String, Error> {
         point: name,
     };
     let mut out = format!(
-        "--!strict\n-- The call `{name}` v{} of {} {}.\n-- Written by `cargo enshwick call {name} --luau`. Write it again for a newer\n-- {} rather than edit it: the runtime calls by the layout below.\n",
+        "--!strict\n-- The call `{name}` v{} of {} {}.\n-- Written by `cargo enshwick deps {alias} --luau`. Write it again for a newer\n-- {} rather than edit it: the runtime calls by the layout below.\n",
         call.major, schema.owner, schema.version, schema.owner
     );
     let mut types = reached_from(
@@ -443,19 +482,23 @@ pub fn luau_call(schema: &Schema, name: &str) -> Result<String, Error> {
 mod tests {
     use super::*;
 
+    const SOLD: &str = "schema = 1\nmod = \"you.post\"\nversion = \"1.0.0\"\n[[event]]\nname = \"you.post:sold\"\ndata = \"Sold\"\ndoc = \"A sale.\"\nlayout = [\"1\", \"2\"]\n[[type]]\nname = \"Sold\"\ndoc = \"A sale.\"\nkind = \"struct\"\n[[type.field]]\nname = \"item\"\ndoc = \"The item.\"\ntype = \"u32\"\n[[type.field]]\nname = \"player\"\ndoc = \"The buyer.\"\ntype = \"u64\"\n";
+
     #[test]
     fn a_point_becomes_a_luau_description_with_its_layout() {
         let schema =
-            Schema::parse(include_str!("../../tests/fixtures/stalls.points.toml")).unwrap();
-        let text = luau(&schema, "you.stalls:price").unwrap();
-        assert_eq!(text, include_str!("../../tests/fixtures/stalls_price.luau"));
+            Schema::parse(include_str!("../../tests/fixtures/lockers.points.toml")).unwrap();
+        let text = luau(&schema, "you.lockers:price", "lockers").unwrap();
+        assert_eq!(
+            text,
+            include_str!("../../tests/fixtures/lockers_price.luau")
+        );
     }
 
     #[test]
     fn an_event_becomes_a_luau_description_with_its_layout() {
-        let text = "schema = 1\nmod = \"you.post\"\nversion = \"1.0.0\"\n[[event]]\nname = \"you.post:sold\"\ndata = \"Sold\"\ndoc = \"A sale.\"\nlayout = [\"1\", \"2\"]\n[[type]]\nname = \"Sold\"\ndoc = \"A sale.\"\nkind = \"struct\"\n[[type.field]]\nname = \"item\"\ndoc = \"The item.\"\ntype = \"u32\"\n[[type.field]]\nname = \"player\"\ndoc = \"The buyer.\"\ntype = \"u64\"\n";
-        let schema = Schema::parse(text).unwrap();
-        let module = luau_event(&schema, "you.post:sold").unwrap();
+        let schema = Schema::parse(SOLD).unwrap();
+        let module = luau_event(&schema, "you.post:sold", "post").unwrap();
         assert!(module.contains("export type Sold = {"), "{module}");
         assert!(module.contains("size = 16,"), "{module}");
         assert!(
@@ -465,13 +508,47 @@ mod tests {
     }
 
     #[test]
+    fn the_modules_of_a_dependency_are_named_by_their_local_names() {
+        let schema = Schema::parse(include_str!(
+            "../../../../examples/trading-post/points.toml"
+        ))
+        .unwrap();
+        let deps = luau_deps(&schema, "trading_post").unwrap();
+        let [(name, text)] = &deps.modules[..] else {
+            panic!("{:?}", deps.modules);
+        };
+        assert_eq!(name, "price");
+        insta::assert_snapshot!(text);
+        let events = luau_deps(&Schema::parse(SOLD).unwrap(), "post").unwrap();
+        assert_eq!(events.modules[0].0, "sold");
+    }
+
+    #[test]
+    fn a_name_that_makes_no_file_name_is_refused() {
+        for bad in ["../../main", "sold/again", ".hidden", "Sold"] {
+            let text = SOLD.replace("you.post:sold", &format!("you.post:{bad}"));
+            let schema = Schema::parse(&text).unwrap();
+            assert!(
+                matches!(
+                    luau_deps(&schema, "post"),
+                    Err(Error::Invalid {
+                        what: "name for a file",
+                        ..
+                    })
+                ),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
     fn a_pointer_sized_enum_reads_as_its_64_bit_integer() {
         for (repr, read) in [("usize", "u64"), ("isize", "i64")] {
             let text = format!(
                 "schema = 1\nmod = \"you.post\"\nversion = \"1.0.0\"\n[[event]]\nname = \"you.post:sold\"\ndata = \"Sold\"\ndoc = \"A sale.\"\nlayout = [\"1\"]\n[[type]]\nname = \"Sold\"\ndoc = \"A sale.\"\nkind = \"struct\"\n[[type.field]]\nname = \"tier\"\ndoc = \"The tier.\"\ntype = \"Tier\"\n[[type]]\nname = \"Tier\"\ndoc = \"A tier.\"\nkind = \"enum\"\nrepr = \"{repr}\"\n[[type.variant]]\nname = \"Low\"\ndoc = \"Low.\"\nvalue = 1\n[[type.variant]]\nname = \"High\"\ndoc = \"High.\"\nvalue = 2\n"
             );
             let schema = Schema::parse(&text).unwrap();
-            let module = luau_event(&schema, "you.post:sold").unwrap();
+            let module = luau_event(&schema, "you.post:sold", "post").unwrap();
             assert!(module.contains("size = 8,"), "{module}");
             assert!(
                 module.contains(&format!(
@@ -488,7 +565,7 @@ mod tests {
             "../../../../examples/trading-post/points.toml"
         ))
         .unwrap();
-        let text = luau(&schema, "you.trading-post:price").unwrap();
+        let text = luau(&schema, "you.trading-post:price", "trading_post").unwrap();
         assert!(text.contains("input = { size = 24, fields = {"), "{text}");
         assert!(
             text.contains("{ name = \"player\", offset = 8, read = \"player_key\""),

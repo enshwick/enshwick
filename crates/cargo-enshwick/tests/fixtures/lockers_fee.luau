@@ -1,7 +1,7 @@
 --!strict
--- The call `you.stalls:fee` v1 of you.stalls 1.2.0.
--- Written by `cargo enshwick call you.stalls:fee --luau`. Write it again for a newer
--- you.stalls rather than edit it: the runtime calls by the layout below.
+-- The call `you.lockers:fee` v1 of you.lockers 1.2.0.
+-- Written by `cargo enshwick deps lockers --luau`. Write it again for a newer
+-- you.lockers rather than edit it: the runtime calls by the layout below.
 
 --- The fee for holding a stall, in coins.
 export type Fee = {
@@ -19,7 +19,7 @@ export type Fee = {
 
 --- The fee for holding a stall, in coins.
 return table.freeze({
-	name = "you.stalls:fee",
+	name = "you.lockers:fee",
 	major = 1,
 	input = { size = 12, fields = {
 		{ name = "character", offset = 0, read = "entity", hash = "13059086432849901944" },
