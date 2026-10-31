@@ -23,7 +23,7 @@ Each package's `CHANGELOG.md` in this pull request lists what changed.
 """
 
 # The loader DLL and the proxy stub are not published to crates.io: their
-# versions live in git tags, and their release carries the dev bundle's files.
+# versions live in git tags, and their release carries `enshwick.zip`.
 [[package]]
 name = "enshwick-loader"
 git_only = true

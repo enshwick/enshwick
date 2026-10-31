@@ -12,16 +12,16 @@
 //! Linux host. `cargo xtask check --all` runs the full suite, the Windows
 //! tests included where they can run.
 //!
-//! `cargo xtask bundle` writes the dev bundle testers unpack into the game
-//! folder ([`bundle`]). `cargo xtask header` rewrites the ABI's C header,
-//! which the check holds to the ABI module and its golden layout
+//! `cargo xtask dist` writes `enshwick.zip`, the loader that players unpack
+//! into the game folder ([`dist`]). `cargo xtask header` rewrites the ABI's
+//! C header, which the check holds to the ABI module and its golden layout
 //! ([`header`]).
 
 mod affected;
 mod book;
-mod bundle;
 #[cfg(feature = "compat")]
 mod compat;
+mod dist;
 mod header;
 mod ranges;
 mod wine;
@@ -34,7 +34,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests]... [--list-windows-tests] | bundle [--out <dir>] [--local] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests]... [--list-windows-tests] | dist [--out <dir>] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -65,7 +65,7 @@ fn run(args: &[String]) -> Result<bool, String> {
     let (task, rest) = args.split_first().ok_or(USAGE)?;
     match task.as_str() {
         "check" => {}
-        "bundle" => return bundle::run(rest),
+        "dist" => return dist::run(rest),
         "header" if rest.is_empty() => return header::run(&workspace_root()),
         _ => return Err(USAGE.to_owned()),
     }

@@ -37,12 +37,14 @@ loads every mod from the `mods/` folder beside it.
 
 1. Download
    [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip).
-   It holds the loader and every mod below. It is a development build of the
-   newest commit. Until the first release, 1.0.0, there are no other builds.
+   It holds the loader and no mod. It is a development build of the newest
+   commit. Until the first release, 1.0.0, there are no other builds.
 2. Extract it into the folder with `enshrouded.exe` (players) or
    `enshrouded_server.exe` (servers). You get `powrprof.dll` and a `mods`
    folder.
-3. Start the game or the server. "Mods" in the main menu and in the pause menu
+3. Download the mods you want. Each mod's page below links its own archive.
+   Extract each one into the same folder.
+4. Start the game or the server. "Mods" in the main menu and in the pause menu
    lists the mods.
 
 On Linux under Proton, add `WINEDLLOVERRIDES="powrprof=n,b" %command%` to the

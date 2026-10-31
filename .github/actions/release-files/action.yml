@@ -1,19 +1,12 @@
 name: Release files
 description: >-
-  Builds a repository's release archives reproducibly with `cargo xtask dist`
-  or `cargo xtask bundle`, each DLL carrying its dependency tree, and puts the
-  PDB and a CycloneDX SBOM of every DLL beside them. Needs setup-rust with
-  cargo-cyclonedx and cargo-auditable.
+  Builds the release archive reproducibly with `cargo xtask dist`, each DLL
+  carrying its dependency tree, and puts the PDB and a CycloneDX SBOM of every
+  DLL beside it. Needs setup-rust with cargo-cyclonedx and cargo-auditable.
 
 inputs:
-  task:
-    description: The xtask that writes the archives, dist or bundle.
-    default: dist
   out:
-    description: The directory the archives, PDBs and SBOMs go to.
-    required: true
-  token:
-    description: A token for gh, which the task uses to download release assets, such as the mods the platform bundle carries.
+    description: The directory the archive, PDBs and SBOMs go to.
     required: true
 
 runs:
@@ -29,20 +22,13 @@ runs:
           echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
         } >> "$GITHUB_ENV"
 
-    - name: cargo xtask ${{ inputs.task }}
+    - name: cargo xtask dist
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.token }}
-        TASK: ${{ inputs.task }}
         OUT: ${{ inputs.out }}
         # Each DLL carries its dependency tree, for `cargo audit bin`.
         ENSHWICK_AUDITABLE: "1"
-      run: |
-        case "$TASK" in
-          dist | bundle) ;;
-          *) echo "::error::task must be dist or bundle, not $TASK"; exit 1 ;;
-        esac
-        cargo xtask "$TASK" --out "$OUT"
+      run: cargo xtask dist --out "$OUT"
 
     # A CycloneDX SBOM and the PDB of every DLL this build made.
     - name: SBOMs and PDBs
