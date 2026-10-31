@@ -5,6 +5,9 @@ valid:
   - "fn f(m: &RwLock<u8>) { let g = m.read(); }"
   - "fn f(file: &mut File, buf: &mut [u8]) { let n = file.read(buf); }"
   - "fn f(x: &u32) -> &u32 { &*x }"
+  - "fn f(x: &u32) -> u32 { *x }"
+  - "fn f(x: u64) -> u32 { (x as u32) * 2 }"
+  - "fn f(address: usize) { unsafe { *(address as *mut u32) = 7; } }"
   - |
     #[cfg(test)]
     mod tests {
@@ -19,3 +22,5 @@ invalid:
   - "fn f(p: *const u32) -> u32 { unsafe { std::ptr::read_unaligned(p) } }"
   - "fn f(p: *const u32) -> u32 { unsafe { ptr::read(p) } }"
   - "fn f(address: usize) -> &'static Table { unsafe { &*(address as *const Table) } }"
+  - "fn f(address: usize) -> u32 { unsafe { *(address as *const u32) } }"
+  - "fn f(p: *const u8) -> u64 { unsafe { *(p as *mut u64) } }"

@@ -6,9 +6,12 @@ note: >-
   `enshwick::raw` reads only `AnyBitPattern` types, so a `bool` or an enum
   never comes out of game memory, and the address sanitizer checks every read
   there. The rule refuses `ptr::read`, `read_unaligned`, `read_volatile` and
-  `&*(address as *const T)` outside it; a read of memory that is not the
-  game's (a mod's buffer, the loader's own image) is a deliberate exception.
-  A `Pod` struct with a `bool` or enum field fails bytemuck's derive.
+  `&*(address as *const T)` and `*(address as *const T)` outside it; a read
+  of memory that is not the game's (a mod's buffer, the loader's own image)
+  is a deliberate exception. A `Pod` struct with a `bool` or enum field
+  fails bytemuck's derive. The rule does not see `p.add(n).read()`,
+  `slice::from_raw_parts` or a deref through a variable, so review holds
+  those.
 ignores:
   - "crates/enshwick/src/raw.rs"
   - "**/tests/**"
@@ -58,6 +61,18 @@ rule:
       has:
         kind: unary_expression
         regex: '^\*\s*\(.*\bas\s+\*(const|mut)\b'
+    - kind: unary_expression
+      regex: '^\*\s*\(.*\bas\s+\*(const|mut)\b'
+      not:
+        any:
+          - inside:
+              kind: reference_expression
+          - inside:
+              kind: assignment_expression
+              field: left
+          - inside:
+              kind: compound_assignment_expr
+              field: left
   not:
     inside:
       stopBy: end
