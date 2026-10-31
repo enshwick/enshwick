@@ -117,7 +117,7 @@ macro_rules! manifest {
             <$event as $crate::services::ModEvent>::DESCRIBED,
             "an event's schema cannot describe a field's type: derive `Shape` for it",
         );)*)?
-        $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($replaces), "a replaced mod id is <author>.<name> or [a-z0-9-]+");)*)?
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_old_form_id($replaces), "a replaced mod id is <author>.<name> or [a-z0-9-]+");)*)?
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
             $($($crate::abi::Dependency {
                 id: $crate::abi::Str::new($req),

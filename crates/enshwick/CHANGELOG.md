@@ -111,7 +111,9 @@ Each entry names the pull request that made the change.
   mod keeps one id: the loader no longer copies a former id's settings and
   data, no longer finds a mod, its requirements, points, calls, events,
   content or stats by a former id, and `migrations.toml` no longer keeps a
-  `[carried]` table. `replaces: [...]` still takes ids of the old form (#756).
+  `[carried]` table. `replaces: [...]` still takes ids of the old form,
+  which `abi::is_valid_former_id`, now `abi::is_valid_old_form_id`,
+  accepts (#756).
 
 ## [1.0.0-alpha.11] - 2026-10-28
 

@@ -366,7 +366,7 @@ impl Migrations {
                     && step
                         .from
                         .split_once(':')
-                        .is_none_or(|(id, key)| !abi::is_valid_former_id(id) || key.is_empty())
+                        .is_none_or(|(id, key)| !abi::is_valid_old_form_id(id) || key.is_empty())
                 {
                     return Err(format!(
                         "migration {}: a setting is taken from <mod id>:<key>, not {}",

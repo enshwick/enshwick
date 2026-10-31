@@ -62,7 +62,8 @@ fn full(id: &str) -> Option<String> {
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
     };
     let (namespace, name) = id.split_once(':').unwrap_or((super::MOD_ID, id));
-    (crate::abi::is_valid_former_id(namespace) && part(name)).then(|| format!("{namespace}:{name}"))
+    (crate::abi::is_valid_old_form_id(namespace) && part(name))
+        .then(|| format!("{namespace}:{name}"))
 }
 
 /// Whether the full id `id` is in the fake mod's namespace.
