@@ -18,7 +18,7 @@ safe API.
 | `cargo-enshwick`       | `crates/cargo-enshwick`    | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, the game's types from reflection, porting a table to a new build; its library reads point schemas for tests and fuzzing | yes                     |
 | `xtask`                | `tools/xtask`              | repository checks, the `dev` archive and `cargo xtask compat`, the maintainers' report of what works on a game build                                                                                                  | no                      |
 | `enshwick-fuzz`        | `fuzz`                     | the fuzz targets for untrusted input, a workspace of their own                                                                                                                                                        | no                      |
-| examples               | `examples/*`               | small mods, one part of the API each                                                                                                                                                                                  | no                      |
+| examples               | `examples/*`               | the whole mods and packs the book follows                                                                                                                                                                             | no                      |
 
 ## Layers
 

@@ -108,7 +108,7 @@ mod's page says it waits for the world or the game to start again.
 | [`crates/enshwick-macros`](crates/enshwick-macros)     | the macros `enshwick` re-exports                              |
 | [`crates/enshwick-gamedata`](crates/enshwick-gamedata) | the build tables and the reader of the game's reflection data |
 | [`crates/internal`](crates/internal)                   | the loader DLL, its `powrprof.dll` stub and the Luau runtime  |
-| [`examples`](examples)                                 | small mods that each show one part of the API                 |
+| [`examples`](examples)                                 | the whole mods and packs the modding book follows             |
 | [`book`](book)                                         | the modding book                                              |
 
 Mods depend on `enshwick` only. The other crates are parts of the platform.

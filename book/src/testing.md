@@ -344,11 +344,67 @@ A mod opts in with `reload = true` in its
   rows changed, or that hooks a function nothing hooked at start, is refused
   or turned off; its version may change.
 
-The log says `<id> reloaded` or why not. The
-[hot-reload example](https://github.com/enshwick/enshwick/tree/main/examples/hot-reload)
-shows the contract: an event, a ticker thread stopped in `shutdown`, and a
-greeting to change. Reloads are for development only, and nothing is
-reloaded unless the setting is on.
+The log says `<id> reloaded` or why not. Reloads are for development only,
+and nothing is reloaded unless the setting is on.
+
+A mod that keeps the contract, with an event, a thread it stops in
+`shutdown` and a greeting to change, and its test:
+
+```rust,standalone_crate
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+use std::time::Duration;
+
+use enshwick::abi::Status;
+use enshwick::{Host, Load, Mod, Off, events};
+
+// Change it and run `cargo enshwick install`: the server logs the new text.
+const GREETING: &str = "hello from the first copy";
+
+#[derive(Default)]
+struct Greeter {
+    stop: AtomicBool,
+    ticker: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl Mod for Greeter {
+    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.on::<events::WorldSaved>(|()| enshwick::info!("saved: {GREETING}"))?;
+        Ok(Self::default())
+    }
+
+    fn ready(&'static self, _host: Host) {
+        enshwick::info!("{GREETING}");
+        let ticker = std::thread::spawn(move || {
+            while !self.stop.load(Ordering::Acquire) {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        });
+        if let Ok(mut slot) = self.ticker.lock() {
+            *slot = Some(ticker);
+        }
+    }
+
+    fn shutdown(&'static self) {
+        self.stop.store(true, Ordering::Release);
+        let ticker = self.ticker.lock().ok().and_then(|mut slot| slot.take());
+        if ticker.is_some_and(|ticker| ticker.join().is_err()) {
+            enshwick::warn!("the ticker panicked");
+        }
+        enshwick::info!("shut down: {GREETING}");
+    }
+}
+
+enshwick::declare_mod!(Greeter);
+
+let loader = enshwick::test::FakeHost::new().install();
+// SAFETY: the exports of `declare_mod!` above.
+let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+assert_eq!(status, Status::OK);
+enshwick_mod_shutdown();
+assert!(loader.logs().iter().any(|(_, line)| line == "shut down: hello from the first copy"));
+```
 
 On a client, a mod with a window or a HUD reloads the same way: change what
 its frame callback draws, `cargo enshwick install`, and the next frame draws
