@@ -188,6 +188,8 @@ impl Migration {
     ///     }
     /// }
     ///
+    /// // A test may give the table inline; a real mod writes
+    /// // `enshwick::declare_mod!(Rates)` with the table in its Cargo.toml.
     /// enshwick::test::declare_mod!(
     ///     Rates,
     ///     r#"

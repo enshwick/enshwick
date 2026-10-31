@@ -158,7 +158,8 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
 - `recommends` names mods that work well beside this one: they load first when
   present, and the loader notes in `loader.log` and the status summary when
   one is missing or outside its range. The mod loads either way.
-- `breaks` names mods this one does not work beside, in the range: when one of them loads, this mod is skipped with
+- `breaks` names mods this one does not work beside, in the range: when one
+  of them loads, this mod is skipped with
   `does not work beside <id> <version>; remove one of them`.
 - A dev build, version `0.0.0-dev`, meets every range of `requires` and
   `recommends`, and no range of `breaks` names it, as two dev builds join each
@@ -190,15 +191,15 @@ pub struct Price {
     pub item: u32,
 }
 
-struct TradingPost;
+struct Hello;
 
-impl enshwick::Mod for TradingPost {
+impl enshwick::Mod for Hello {
     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
         Ok(Self)
     }
 }
 
-enshwick::declare_mod!(TradingPost, points: [Price]);
+enshwick::declare_mod!(Hello, points: [Price]);
 ```
 
 ## The mod
