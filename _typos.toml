@@ -1,6 +1,6 @@
 [files]
 # Fuzz seeds are input bytes, not text.
-extend-exclude = ["CHANGELOG.md", "*.lock", "bun.lock", "*.exports", "texts.toml", "fuzz/corpus/",
+extend-exclude = ["CHANGELOG.md", "*.lock", "*.exports", "texts.toml", "fuzz/corpus/",
   # Texts in other languages than English; the English ones are checked.
   "crates/internal/loader/src/texts/*.toml", "!crates/internal/loader/src/texts/en.toml"]
 
