@@ -65,6 +65,8 @@ fn entry_point() -> Option<usize> {
     let field = unsafe { base.add(0x3c) };
     // SAFETY: `field` is `e_lfanew` inside the mapped DOS header, four
     // readable bytes nothing writes; `read_unaligned` needs no alignment.
+    // The stub links no API crate, so it reads the image's headers itself.
+    // ast-grep-ignore: game-memory-through-raw
     let nt = unsafe { field.cast::<u32>().read_unaligned() };
     let nt = usize::try_from(nt).ok()?;
     // SAFETY: `e_lfanew` is the offset of the NT headers inside the mapped
@@ -73,7 +75,8 @@ fn entry_point() -> Option<usize> {
     let field = unsafe { base.add(nt + 0x28) };
     // SAFETY: `field` is `AddressOfEntryPoint` inside the mapped NT headers,
     // four readable bytes nothing writes; `read_unaligned` needs no
-    // alignment.
+    // alignment. The stub links no API crate, so it reads the headers itself.
+    // ast-grep-ignore: game-memory-through-raw
     let rva = unsafe { field.cast::<u32>().read_unaligned() };
     let rva = usize::try_from(rva).ok().filter(|&rva| rva != 0)?;
     Some(base.addr() + rva)

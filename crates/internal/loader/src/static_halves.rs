@@ -109,7 +109,7 @@ impl StaticHalves {
     pub(crate) unsafe fn is_static(&self, registry: usize, index: *const u16, hash: u32) -> bool {
         // SAFETY: `index` is the non-null type index of the registry's
         // lookup, by the caller's contract, a u16.
-        let index = usize::from(unsafe { index.read_unaligned() });
+        let index = usize::from(unsafe { enshwick::raw::read_at::<u16>(index.cast(), 0) });
         // SAFETY: `registry` is a live component registry, by the caller's
         // contract; the table's `ecs.registry_type_count` offset holds the
         // number of its type records.

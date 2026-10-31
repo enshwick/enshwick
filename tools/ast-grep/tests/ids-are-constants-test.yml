@@ -1,0 +1,21 @@
+id: ids-are-constants
+valid:
+  - "#[enshwick::point(name = \"you.trading-post:price\")] struct Price;"
+  - "const PRICES: &str = \"trading-post:prices\";"
+  - "const NAME: Id = Id::new(\"enshwick:stand-in.name\");"
+  - "static KIND: &str = \"enshwick:stats\";"
+  - "const CRIT: &str = \"you.rpg:crit\";"
+  - "fn f(load: &Load) { load.open_stat(PRICES); }"
+  - "fn f() -> String { format!(\"{mod_id}:{what}\") }"
+  - "fn f() -> &'static str { \"see https://enshwick.dev\" }"
+  - "fn f() -> &'static str { \"expected mod-id:what\" }"
+  - |
+    #[cfg(test)]
+    mod tests {
+        fn f(load: &Load) { load.open_stat("rpg:crit"); }
+    }
+invalid:
+  - "fn f(load: &Load) { load.open_stat(\"rpg:crit\"); }"
+  - "fn f(load: &Load) { load.open_stat(\"you.rpg:crit\"); }"
+  - "fn f() -> Id { Id::new(\"trading-post:prices\") }"
+  - "fn f(services: &Services) { services.find(\"trading-post:sold.v2\", 1); }"

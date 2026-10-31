@@ -1,0 +1,90 @@
+id: static-is-registry-fuse-or-state
+language: rust
+severity: error
+message: keep module state in a `Registry`, a `Fuse` or the domain's state struct, not a loose `static`
+note: >-
+  What mods register goes into a `Registry<T>`, a feature's off switch into a
+  `Fuse`, and the rest of a domain's mutable state into one named struct behind
+  a lock. The rule refuses a `static mut` and a lock around a bare value (a
+  `Vec`, an `Option`, a map, a `String`, a tuple, a number); atomics, set-once
+  cells, detour slots and named state structs pass. Statics that were there
+  before the rule are listed in `tools/ast-grep/known.txt`.
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/*_tests.rs"
+  - "**/benches/**"
+utils:
+  plain-value:
+    any:
+      - kind: tuple_type
+      - kind: primitive_type
+      - kind: array_type
+      - kind: reference_type
+      - kind: type_identifier
+        regex: '^String$'
+      - kind: generic_type
+        has:
+          field: type
+          regex: '(^|::)(Vec|VecDeque|BTreeMap|BTreeSet|HashMap|HashSet|FxHashMap|FxHashSet|Box)$'
+  # A state struct not built yet, `Option<State>`, is the domain's struct.
+  bare-value:
+    any:
+      - matches: plain-value
+      - kind: generic_type
+        all:
+          - has:
+              field: type
+              regex: '(^|::)Option$'
+          - has:
+              field: type_arguments
+              has:
+                nthChild: 1
+                matches: plain-value
+  lock-around-bare-value:
+    kind: generic_type
+    all:
+      - has:
+          field: type
+          regex: '(^|::)(Mutex|RwLock)$'
+      - has:
+          field: type_arguments
+          has:
+            nthChild: 1
+            matches: bare-value
+  in-test:
+    any:
+      - kind: mod_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[cfg\(.*\btest\b'
+      - kind: function_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[(test|cfg\(.*\btest\b)'
+rule:
+  kind: static_item
+  any:
+    - has:
+        kind: mutable_specifier
+    - has:
+        field: type
+        any:
+          - matches: lock-around-bare-value
+          - has:
+              stopBy: end
+              matches: lock-around-bare-value
+  not:
+    inside:
+      stopBy: end
+      matches: in-test

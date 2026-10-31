@@ -1,0 +1,8 @@
+id: engine-names-stay-in-loader
+valid:
+  - "fn f(world: &World) { let beds = world.beds(); }"
+  - "// Reads `keen::ecs::NpcBed` through the loader."
+  - "const NAME: &str = \"trading-post:prices\";"
+invalid:
+  - "fn f(load: &Load) { let beds = ComponentType::resolve(load, \"keen::ecs::NpcBed\"); }"
+  - "const BED: &str = \"keen::ecs::NpcBed\";"

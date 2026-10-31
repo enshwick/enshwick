@@ -143,8 +143,8 @@ impl CallerFrame {
     #[must_use]
     pub unsafe fn return_address(&self) -> u64 {
         // SAFETY: the caller guarantees `rsp` readable for eight bytes with no
-        // concurrent writer; the read is unaligned.
-        unsafe { (self.rsp as *const u64).read_unaligned() }
+        // concurrent writer, the one `read_at` asks for at offset 0.
+        unsafe { crate::raw::read_at(self.rsp as *const u8, 0) }
     }
 }
 

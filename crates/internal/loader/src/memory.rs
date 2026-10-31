@@ -118,6 +118,7 @@ pub(crate) unsafe fn read_stack_word(address: usize) -> usize {
     // SAFETY: the caller guarantees a readable word at `address` with no
     // concurrent writer; `read_unaligned` needs no alignment, and every bit
     // pattern is a `usize`.
+    // ast-grep-ignore: game-memory-through-raw
     unsafe { at(address, 0).cast::<usize>().read_unaligned() }
 }
 
