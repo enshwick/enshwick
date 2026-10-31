@@ -635,8 +635,8 @@ pub use enshwick_macros::service;
 /// as `texts::SAFE_NAME` for `"safe.name"`; its doc shows its text in each
 /// language and the values it fills in. `texts::value` holds a constant per
 /// value name, such as `value::OWNER` for `{owner}`; `texts::ALL` lists
-/// every key; `texts::TOML` is the file. The build fails when a key lacks a
-/// text, or has an empty one, in a language of
+/// every key; `texts::TOML` is the file. The build fails when a text is
+/// empty; when a key lacks a text in a language of
 /// [`Language::REQUIRED`](i18n::Language::REQUIRED), and names those
 /// languages; when a table is no language code of [`i18n::Language`]; or
 /// when two texts of a key fill in different values.

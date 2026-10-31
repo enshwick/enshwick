@@ -256,7 +256,7 @@ impl Language {
     /// The languages every key of a mod's texts needs a text in:
     /// [`Language::FALLBACK`] and Ukrainian. [`texts!`](crate::texts) and
     /// [`declare_mod!`](crate::declare_mod) refuse to build a mod whose
-    /// texts lack one; an empty text counts as none.
+    /// texts lack one.
     ///
     /// # Examples
     ///
@@ -287,7 +287,15 @@ impl Language {
 }
 
 // Every lookup ends in the fallback, so every key needs a text there.
-const _: () = assert!(Language::REQUIRED[0].0 == Language::FALLBACK.0);
+const _: () = {
+    let mut found = false;
+    let mut i = 0;
+    while i < Language::REQUIRED.len() {
+        found |= Language::REQUIRED[i].0 == Language::FALLBACK.0;
+        i += 1;
+    }
+    assert!(found, "Language::REQUIRED holds Language::FALLBACK");
+};
 
 /// The key of the mod's own name in its texts: the Mods screen, the join
 /// dialog and the status show it in the player's language, and the
@@ -719,6 +727,14 @@ impl Load<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_texts_check_names_each_required_language_a_key_lacks() {
+        use crate::__private::missing_languages;
+        assert_eq!(missing_languages(&["en"]).as_str(), "uk");
+        assert_eq!(missing_languages(&["de"]).as_str(), "en], [uk");
+        assert_eq!(missing_languages(&["uk", "de", "en"]).as_str(), "");
+    }
 
     #[test]
     fn a_text_reason_fills_in_the_language_asked_and_plain_words_name_no_text() {

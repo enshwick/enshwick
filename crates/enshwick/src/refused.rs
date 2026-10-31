@@ -267,7 +267,7 @@
 /// enshwick::texts!("tests/texts/no-ukrainian.toml");
 /// ```
 ///
-/// An empty Ukrainian text, which counts as none:
+/// An empty text:
 ///
 /// ```compile_fail
 /// enshwick::texts!("tests/texts/empty-ukrainian.toml");

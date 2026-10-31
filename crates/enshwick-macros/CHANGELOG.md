@@ -8,9 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
-- `texts!()` takes every language rule from `Language::REQUIRED`, names the
-  languages a key lacks in its error, and shows a key's text in every
-  language in its constant's doc (#839).
+- **Breaking:** `texts!()` refuses an empty text in any language. It takes
+  every language rule from `Language::REQUIRED` and names the languages a
+  key lacks. Its error for different values lists each language's values.
+  A key's constant doc shows the key's text in every language (#839).
 
 - **Breaking:** `texts!()` and `declare_mod!` refuse a texts key without a
   text in each language of `Language::REQUIRED`, `en` and `uk` (#838).

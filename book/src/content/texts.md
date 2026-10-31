@@ -70,8 +70,9 @@ tests.
 
 The mod does not build when the file has one of these faults:
 
-- a key lacks a text, or has an empty one, in a language of
-  `Language::REQUIRED`, `en` and `uk`; the error names the languages;
+- a text is empty;
+- a key lacks a text in a language of `Language::REQUIRED`, `en` and
+  `uk`; the error names the languages;
 - a table is not a language code;
 - two texts of a key fill in different values, such as `{name}` in `uk`
   where the `en` text has `{owner}`.

@@ -45,8 +45,8 @@ impl File {
         Ok(Some(file))
     }
 
-    /// The file `path` holding `text`, checked: every text of a key fills
-    /// in the same values. Which languages a key needs is the API's to say,
+    /// The file `path` holding `text`, checked: no text is empty, and every
+    /// text of a key fills in the same values. Which languages a key needs is the API's to say,
     /// in the checks of [`File::language_checks`].
     fn parse(path: String, text: &str) -> syn::Result<Self> {
         let read: BTreeMap<String, BTreeMap<String, String>> =
@@ -66,20 +66,22 @@ impl File {
     fn check(&self) -> syn::Result<()> {
         let path = &self.path;
         for key in self.keys() {
-            let mut texts = self.texts(key).filter(|(_, text)| !text.is_empty());
-            let Some((first, base)) = texts.next() else {
-                continue;
-            };
-            let wanted = values(base);
-            for (code, text) in texts {
-                let given = values(text);
-                if given != wanted {
-                    return Err(refuse(format!(
-                        "{path}: `{key}` in [{code}] fills in {} where its [{first}] text fills in {}",
-                        named(&given),
-                        named(&wanted)
-                    )));
-                }
+            if let Some((code, _)) = self.texts(key).find(|(_, text)| text.is_empty()) {
+                return Err(refuse(format!("{path}: `{key}` in [{code}] is empty")));
+            }
+            let filled: Vec<(&str, BTreeSet<&str>)> = self
+                .texts(key)
+                .map(|(code, text)| (code, values(text)))
+                .collect();
+            if filled.windows(2).any(|pair| pair[0].1 != pair[1].1) {
+                let each: Vec<String> = filled
+                    .iter()
+                    .map(|(code, names)| format!("[{code}] {}", named(names)))
+                    .collect();
+                return Err(refuse(format!(
+                    "{path}: the texts of `{key}` fill in different values: {}",
+                    each.join("; ")
+                )));
             }
         }
         Ok(())
@@ -116,11 +118,7 @@ impl File {
             }
         });
         let required = self.keys().map(|key| {
-            let codes: Vec<&str> = self
-                .texts(key)
-                .filter(|(_, text)| !text.is_empty())
-                .map(|(code, _)| code)
-                .collect();
+            let codes: Vec<&str> = self.texts(key).map(|(code, _)| code).collect();
             let before = format!("{path}: `{key}` has no text in [");
             let after =
                 "], which every key needs: the languages of `enshwick::i18n::Language::REQUIRED`";
@@ -344,14 +342,14 @@ mod tests {
             .unwrap_or_default();
         assert!(
             other.contains(
-                "`a` in [en] fills in {at}, {name} where its [de] text fills in {name}, {wo}"
+                "the texts of `a` fill in different values: [de] {name}, {wo}; [en] {at}, {name}"
             ),
             "{other}"
         );
         let fewer = parse("[en]\na = \"{name}\"\n[de]\na = \"Name\"\n")
             .err()
             .unwrap_or_default();
-        assert!(fewer.contains("fills in no values"), "{fewer}");
+        assert!(fewer.contains("[de] no values; [en] {name}"), "{fewer}");
     }
 
     #[test]
@@ -370,18 +368,21 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_text_counts_as_missing() {
-        let file = parse("[en]\na = \"A\"\n[uk]\na = \"\"\n").unwrap();
-        let checks = file.language_checks().to_string();
+    fn an_empty_text_in_any_language_is_refused() {
+        for file in [
+            "[en]\na = \"A\"\n[uk]\na = \"\"\n",
+            "[en]\na = \"{name}\"\n[uk]\na = \"{name}\"\n[de]\na = \"\"\n",
+        ] {
+            let refused = parse(file).err().unwrap_or_default();
+            assert!(refused.contains("is empty"), "{refused}");
+        }
+        let refused = parse("[en]\na = \"A\"\n[de]\na = \"\"\n")
+            .err()
+            .unwrap_or_default();
         assert!(
-            checks.contains("missing_languages (& [\"en\"])"),
-            "{checks}"
+            refused.contains("texts.toml: `a` in [de] is empty"),
+            "{refused}"
         );
-    }
-
-    #[test]
-    fn an_empty_text_is_not_compared_for_values() {
-        assert!(parse("[en]\na = \"{name}\"\n[uk]\na = \"\"\n").is_ok());
     }
 
     #[test]
