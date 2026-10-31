@@ -105,13 +105,6 @@ doc = false
 bench = false
 
 [[bin]]
-name = "archive"
-path = "fuzz_targets/archive.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "migrations"
 path = "fuzz_targets/migrations.rs"
 test = false

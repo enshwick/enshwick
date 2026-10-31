@@ -3,7 +3,8 @@
 //! mod's requirements load before it.
 //!
 //! Input: mods separated by `0xfe`, each with the fields id, version, side
-//! (`0` to `3`) and dependencies, one `id range relation` per line.
+//! (`0` to `3`) and dependencies, one `id range relation` per line; each
+//! dependency line is also a name the mod exports.
 
 #![no_main]
 
@@ -39,6 +40,7 @@ fn dependencies(text: &str) -> Vec<Dependency> {
 fn candidate(record: &[u8]) -> Option<Candidate> {
     let [id, version, side, deps] = text_fields::<4>(record)?;
     let dependencies = dependencies(deps);
+    let exports: Vec<Str> = deps.lines().take(8).map(Str::new).collect();
     let manifest = Manifest {
         header: Header::of::<Manifest>(),
         id: Str::new(id),
@@ -56,12 +58,16 @@ fn candidate(record: &[u8]) -> Option<Candidate> {
         license: Str::EMPTY,
         homepage: Str::EMPTY,
         points: Str::new(deps),
+        exports: exports.as_ptr(),
+        export_count: exports.len(),
     };
-    // SAFETY: every string borrows the input, and `dependencies` holds
-    // `dependency_count` entries; all outlive the calls.
+    // SAFETY: every string borrows the input, `dependencies` holds
+    // `dependency_count` entries and `exports` `export_count`; all outlive
+    // the calls.
     drop(unsafe { meta(&manifest) });
-    // SAFETY: every string borrows the input, and `dependencies` holds
-    // `dependency_count` entries; both outlive the call.
+    // SAFETY: every string borrows the input, `dependencies` holds
+    // `dependency_count` entries and `exports` `export_count`; all outlive
+    // the call.
     unsafe { parse(&manifest) }.ok()
 }
 

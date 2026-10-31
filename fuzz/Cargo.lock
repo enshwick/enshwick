@@ -360,6 +360,7 @@ dependencies = [
  "arc-swap",
  "arrayvec",
  "base64",
+ "bytemuck",
  "enshwick",
  "enshwick-gamedata",
  "enshwick-luau",
@@ -396,6 +397,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+ "toml",
 ]
 
 [[package]]
