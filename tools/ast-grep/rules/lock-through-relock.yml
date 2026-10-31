@@ -3,17 +3,25 @@ language: rust
 severity: error
 message: take a std lock through `relock()`, the one poison policy
 note: >-
-  `Relock` and `RelockRw` in the crate's `locks.rs` keep the state of a lock
-  a panicking thread held, clear the poison and log the place. Handling the
-  `LockResult` here drops that policy.
+  The `Relock` traits in the crate's `locks.rs` keep the state of a lock a
+  panicking thread held, clear the poison and log the place, for a lock
+  taken and for a `Condvar` wait. Handling the `LockResult` here drops that
+  policy.
 ignores:
   - "**/tests/**"
   - "**/tests.rs"
   - "**/benches/**"
 utils:
+  # A lock taken, or taken again by a `Condvar` wait, which hands back the
+  # guard it was given; `Child::wait` and `Barrier::wait` take no guard.
   taken:
     kind: call_expression
-    pattern: $LOCK.$TAKE()
+    any:
+      - pattern: $LOCK.$TAKE()
+      - pattern: $LOCK.$WAIT($GUARD)
+      - pattern: $LOCK.$WAIT($GUARD, $$$)
+  result-pattern:
+    regex: '^(Ok|Err)\b'
   in-test:
     any:
       - kind: mod_item
@@ -28,23 +36,48 @@ rule:
   any:
     - pattern: $LOCK.$TAKE().$HANDLE($$$)
     - pattern: $LOCK.$TAKE()?
+    - pattern: $LOCK.$WAIT($GUARD).$HANDLE($$$)
+    - pattern: $LOCK.$WAIT($GUARD)?
+    - pattern: $LOCK.$WAIT($GUARD, $$$).$HANDLE($$$)
+    - pattern: $LOCK.$WAIT($GUARD, $$$)?
+    # Only a `LockResult` is matched on `Ok` and `Err`: another type's
+    # `read()`, such as one returning an `Option`, is left alone.
     - kind: let_condition
-      has:
-        field: value
-        matches: taken
+      all:
+        - has:
+            field: value
+            matches: taken
+        - has:
+            field: pattern
+            matches: result-pattern
     - kind: match_expression
-      has:
-        field: value
-        matches: taken
+      all:
+        - has:
+            field: value
+            matches: taken
+        - has:
+            field: body
+            has:
+              kind: match_arm
+              has:
+                field: pattern
+                matches: result-pattern
     # `let Ok(g) = m.lock() else { .. }`, and a `LockResult` bound to a name
     # and handled later. `Stdout::lock` and its kin return a guard, not a
     # `LockResult`.
     - kind: let_declaration
-      has:
-        field: value
-        matches: taken
-        not:
-          regex: '\b(stdout|stderr|stdin)\(\)\s*\.\s*lock\(\)$'
+      all:
+        - has:
+            field: value
+            matches: taken
+            not:
+              regex: '\b(stdout|stderr|stdin)\(\)\s*\.\s*lock\(\)$'
+        - has:
+            field: pattern
+            any:
+              - matches: result-pattern
+              - kind: identifier
+              - regex: '^mut\s+[a-z_][a-z0-9_]*$'
   not:
     inside:
       stopBy: end
@@ -57,5 +90,7 @@ rule:
 constraints:
   TAKE:
     regex: '^(try_)?(lock|read|write)$'
+  WAIT:
+    regex: '^wait(_while|_timeout|_timeout_while)?$'
   HANDLE:
     regex: '^(unwrap|expect|ok|err|unwrap_or|unwrap_or_else|unwrap_or_default|map|map_err|and_then|or_else|is_ok|is_err|inspect|inspect_err)$'
