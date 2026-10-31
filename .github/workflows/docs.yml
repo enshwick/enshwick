@@ -1,6 +1,6 @@
 # Starts the docs site's build when what the site reads from this repository
 # changes on main: the book, the changelog, the API's version and id rules,
-# the build tables, the error codes and the list of our mods.
+# the build tables and the error codes.
 name: docs
 
 on:
@@ -14,7 +14,6 @@ on:
       - "crates/enshwick/src/abi.rs"
       - "crates/enshwick-gamedata/tables/**"
       - "crates/internal/loader/src/errors.toml"
-      - "tools/mods.toml"
       - .github/workflows/docs.yml
       - .github/workflows/docs-rebuild.yml
 

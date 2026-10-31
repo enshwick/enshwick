@@ -9,12 +9,12 @@ image, or a volume, carries them at versions you chose.
 Put `powrprof.dll` and `mods/` into the image beside the server, or into a
 volume mounted there, from files you keep:
 
-- `enshwick.zip` holds the loader and every mod of this repository;
-  `enshwick-loader.zip` holds the loader alone, and `enshwick-<id>.zip` a
-  single mod;
-- until the first release, 1.0.0, these exist only as the development build,
-  `https://github.com/enshwick/enshwick/releases/download/dev/<file>`, which
-  every new build replaces. Download the files once, keep them in your own
+- `enshwick.zip` holds the loader and no mod; each mod comes in an archive
+  of its own from its repository's releases;
+- until the first release, 1.0.0, these exist only as development builds,
+  such as
+  `https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip`,
+  which every new build replaces. Download the files once, keep them in your own
   storage (an artifact store, a bucket, the image's build context) and build
   from there, so that a rebuild of the image gets the same files;
 - pin each archive by its SHA-256, which GitHub shows beside every release

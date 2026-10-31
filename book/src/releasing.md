@@ -49,12 +49,12 @@ and a mod depends on `enshwick = "=1.0.0-alpha.N"`.
 The
 [dev-build workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/dev-build.yml),
 runs on every push to `main` that changes the crates or the tools, and by
-hand. It builds the commit with `cargo xtask bundle` and replaces the files
+hand. It builds the commit with `cargo xtask dist` and replaces the files
 of the one prerelease tagged `dev`, whose tag moves to that commit, so
-`dev` always carries `main`. `enshwick.zip` there holds everything that goes into the game
-folder, each mod of `tools/mods.toml` taken from the `dev` prerelease of its
-own repository. `cargo xtask bundle` writes the same archives into
-`target/bundle` on any machine with `cargo-xwin`. Two development builds of
+`dev` always carries `main`. `enshwick.zip` there holds the stub and the
+loader, and no mod: each mod ships in its own archive from its own
+repository. `cargo xtask dist` writes the same archive into `target/dist` on
+any machine with `cargo-xwin`. Two development builds of
 one commit join each other; builds of different commits carry the same
 versions, so the join check does not tell them apart.
 

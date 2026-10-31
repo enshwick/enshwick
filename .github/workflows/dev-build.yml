@@ -1,9 +1,10 @@
 # A development build of the commit it runs on, until the first public
-# release, 1.0.0: `cargo xtask bundle` on a fresh GitHub-hosted runner,
-# whose archives replace the files of the single prerelease `dev`.
-# enshwick.zip there holds everything that goes into the game folder. Every
-# push to main that changes what the bundle builds from runs it, so `dev`
-# always carries main; a run by hand rebuilds it, or only builds.
+# release, 1.0.0: `cargo xtask dist` on a fresh GitHub-hosted runner,
+# whose files replace those of the single prerelease `dev`. enshwick.zip
+# there holds the stub and the loader; each mod releases from its own
+# repository. Every push to main that changes what the archive builds from
+# runs it, so `dev` always carries main; a run by hand rebuilds it, or only
+# builds.
 name: dev-build
 
 on:
@@ -34,7 +35,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  bundle:
+  dist:
     # A fresh machine: what ships is built and published without the
     # caches that branch builds write to.
     runs-on: ubuntu-26.04
@@ -64,13 +65,10 @@ jobs:
           gh: true
           tools: cargo-cyclonedx@0.5.9,cargo-auditable@0.7.7
 
-      # The archives, and the PDB and SBOM of every DLL. The token reads
-      # release assets, such as the mods' own dev prereleases.
+      # The archive, and the PDB and SBOM of every DLL.
       - uses: ./.github/actions/release-files
         with:
-          task: bundle
           out: ${{ runner.temp }}/dev
-          token: ${{ github.token }}
 
       - name: Save the Windows SDK
         if: github.ref == 'refs/heads/main' && steps.xwin.outputs.cache-hit != 'true'
@@ -100,8 +98,7 @@ jobs:
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
             gh release edit dev --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes" --prerelease --latest=false
             gh release upload dev "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
-            # Files of an earlier build that this one no longer has, such as
-            # the archive of a mod that now releases from its own repository, go.
+            # Files of an earlier build that this one no longer has go.
             gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' |
               while read -r name; do
                 case " ${assets[*]} " in
@@ -117,14 +114,3 @@ jobs:
             gh release create dev "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
               --title "$title" --notes "$notes" --prerelease --latest=false
           fi
-
-  # The site lists the mods of the dev bundle; start its build once a run by
-  # hand changed the prerelease. A push changes the mods only through
-  # tools/mods.toml, which starts the site's build itself (docs.yml).
-  docs:
-    needs: bundle
-    if: inputs.publish
-    uses: ./.github/workflows/docs-rebuild.yml
-    secrets:
-      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
-      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
