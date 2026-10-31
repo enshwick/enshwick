@@ -6,8 +6,9 @@ pinned version through rustup), [lefthook](https://lefthook.dev),
 [typos](https://github.com/crate-ci/typos), cargo-deny,
 [actionlint](https://github.com/rhysd/actionlint) and
 [zizmor](https://docs.zizmor.sh) for the git hooks,
-[ast-grep](https://ast-grep.github.io) for `cargo xtask check`, and on
-Windows the MSVC build tools.
+[ast-grep](https://ast-grep.github.io) and
+[cargo-machete](https://github.com/bnjbvr/cargo-machete) for
+`cargo xtask check`, and on Windows the MSVC build tools.
 
 ```bash
 lefthook install                            # the git hooks
@@ -16,13 +17,13 @@ cargo install --locked cargo-nextest@0.9.150
 cargo nextest run --workspace
 ```
 
-The hooks check formatting, spelling and Markdown before a
-commit, and again before a push, with cargo-deny when a manifest changed and
-actionlint and zizmor when a workflow changed; none
-of them compiles, so they take seconds. Before asking for review, run
-`cargo xtask check`: the code rules clippy cannot express (ast-grep, from
-[`sgconfig.yml`](sgconfig.yml)), clippy and the doctests, and the tests of the
-packages the change touches and of the packages that depend on them. Off Windows it also
+The hooks check formatting, spelling and Markdown before a commit, and again
+before a push, with cargo-deny when a manifest changed and actionlint and
+zizmor when a workflow changed; none of them compiles, so they take seconds.
+Before asking for review, run `cargo xtask check`: the code rules clippy
+cannot express (ast-grep, from [`sgconfig.yml`](sgconfig.yml)), unused
+dependencies, clippy and the doctests, and the tests of the packages the
+change touches and of the packages that depend on them. Off Windows it also
 lints the workspace for Windows through
 [cargo-xwin](https://github.com/rust-cross/cargo-xwin). Most of the loader runs
 only on Windows: off Windows its portable modules are tested on the host, and
