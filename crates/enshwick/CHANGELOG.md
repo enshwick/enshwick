@@ -58,6 +58,18 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** a mod names itself once, in the `[package.metadata.enshwick]`
+  table of its `Cargo.toml`: `id`, `name`, `side`, `join`, `reload`,
+  `developer`, `replaces`, the `builds` rows and its dependencies under
+  aliases (`requires`, `after`, `recommends`, `breaks`, each a mod id or
+  `{ id, version }`). `declare_mod!(Type)` reads the table when the mod
+  compiles, takes the version, description, authors, licence and homepage
+  from `[package]`, and lists points, events and calls after the type
+  (`declare_mod!(Type, points: [..])`). `manifest!` and `Mod::manifest` are
+  gone; a key, side, id or alias the table does not take fails the build
+  with its name. `test::declare_mod!(Type, "<toml>")` gives a test mod its
+  table inline, so one test binary declares several mods (#759).
+
 - `stats::Origin::Mod` names its mod by the new `mods::ModIndex`, its place
   in load order, which `ModIndex::entry` and `ModEntry::index` resolve
   (#719).

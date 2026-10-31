@@ -6,6 +6,11 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `declare_mod!` and `declare_test_mod!`, which build a mod's manifest from
+  its `[package.metadata.enshwick]` table (#759).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Changed
