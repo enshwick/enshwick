@@ -187,7 +187,7 @@ fn uses_unsafe(text: &str) -> bool {
 
 /// The Rust `text` with each comment, string and character literal turned
 /// into one space.
-fn code(text: &str) -> String {
+pub(crate) fn code(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut at = 0;

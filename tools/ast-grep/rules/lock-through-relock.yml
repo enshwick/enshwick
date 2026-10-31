@@ -3,10 +3,10 @@ language: rust
 severity: error
 message: take a std lock through `relock()`, the one poison policy
 note: >-
-  The `Relock` traits in the crate's `locks.rs` keep the state of a lock a
-  panicking thread held, clear the poison and log the place, for a lock
-  taken and for a `Condvar` wait. Handling the `LockResult` here drops that
-  policy.
+  The `Relock` traits of the API, or of the crate's own `locks.rs`, keep the
+  state of a lock a panicking thread held, clear the poison and log the
+  place, for a lock taken and for a `Condvar` wait. Handling the
+  `LockResult` here drops that policy.
 ignores:
   - "**/tests/**"
   - "**/tests.rs"
