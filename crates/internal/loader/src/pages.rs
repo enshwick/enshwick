@@ -96,14 +96,14 @@ pub(crate) fn query(address: usize) -> Option<Region> {
 }
 
 /// Reserves and commits `len` bytes of fresh read-write pages, at `address`
-/// rounded down to the allocation granularity when one is given and where
-/// Windows picks otherwise; `None` when Windows refused or the range is
-/// taken.
+/// rounded down to the 64 KiB allocation granularity when one is given and
+/// where Windows picks otherwise; `None` when Windows refused or the range
+/// is taken.
 pub(crate) fn allocate(address: Option<usize>, len: usize) -> Option<NonNull<u8>> {
     let at = address.map_or(core::ptr::null(), core::ptr::with_exposed_provenance);
-    // SAFETY: by the `VirtualAlloc` documentation, `MEM_RESERVE` takes only
-    // pages no allocation holds, so the call touches no existing memory,
-    // and it returns null when the range is taken or no memory is left.
+    // SAFETY: the `VirtualAlloc` documentation says `MEM_RESERVE` fails on
+    // a range any allocation already reserved, so the call touches no
+    // existing memory; it returns null then, and when no memory is left.
     let block = unsafe { VirtualAlloc(at, len, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) };
     NonNull::new(block.cast::<u8>())
 }
