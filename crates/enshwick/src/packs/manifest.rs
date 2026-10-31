@@ -5,6 +5,7 @@ use serde::Deserialize;
 use super::MANIFEST_FILE;
 use super::files::PackError;
 use super::pack::Pack;
+use crate::abi::Relation;
 
 /// Where a pack runs, in `pack.toml`.
 ///
@@ -41,13 +42,13 @@ pub enum PackSide {
 /// exports = ["lit"]
 ///
 /// [requires]
-/// "you.trading-post" = ">=0.5, <1.0"
+/// market = { id = "you.trading-post", version = ">=0.5, <1.0" }
 /// "#)?;
 /// assert_eq!(manifest.id, "you.lanterns");
 /// assert_eq!(manifest.exports, ["lit"]);
 /// assert_eq!(manifest.side, PackSide::Both);
 /// assert!(manifest.join);
-/// assert_eq!(manifest.requires["you.trading-post"], ">=0.5, <1.0");
+/// assert_eq!(manifest.requires["market"].id, "you.trading-post");
 /// # Ok::<(), enshwick::packs::PackError>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -82,10 +83,25 @@ pub struct PackManifest {
     /// play together; on unless the pack says otherwise.
     #[serde(default = "yes")]
     pub join: bool,
-    /// Mods and packs it needs, by id, each with a Cargo-style version
-    /// requirement (empty for any).
+    /// Mods and packs it needs, by the aliases its files and scripts know
+    /// them by; the loader runs them first and leaves the pack off without
+    /// them.
     #[serde(default)]
-    pub requires: BTreeMap<String, String>,
+    pub requires: BTreeMap<String, PackDependency>,
+    /// Mods it loads after when they run, by alias; they take no version.
+    #[serde(default)]
+    pub after: BTreeMap<String, PackDependency>,
+    /// Mods it works with when they run, by alias, loaded first.
+    #[serde(default)]
+    pub recommends: BTreeMap<String, PackDependency>,
+    /// Mods it cannot run beside, by alias; with a `version`, only those
+    /// versions.
+    #[serde(default)]
+    pub breaks: BTreeMap<String, PackDependency>,
+    /// The ids of mods it takes the place of; the loader runs only this
+    /// one.
+    #[serde(default)]
+    pub replaces: Vec<String>,
     /// The Enshwick releases it is made for, as a Cargo-style version
     /// requirement such as `=1.0.0-alpha.12` (empty for any); a loader of
     /// another release skips the pack and names both.
@@ -163,6 +179,96 @@ pub struct PackSetting {
     pub text: String,
 }
 
+/// One dependency of a pack, the value under its alias in `requires`,
+/// `after`, `recommends` or `breaks`: a mod id, or a table with the `id`
+/// and a `version` requirement.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::packs::PackManifest;
+///
+/// let manifest = PackManifest::parse(r#"
+/// id = "you.lanterns"
+/// version = "1.0.0"
+///
+/// [requires]
+/// market = { id = "you.trading-post", version = ">=0.5, <1.0" }
+/// lockers = "you.lockers"
+/// "#)?;
+/// assert_eq!(manifest.requires["market"].id, "you.trading-post");
+/// assert_eq!(manifest.requires["market"].version, ">=0.5, <1.0");
+/// assert_eq!(manifest.requires["lockers"].version, "");
+/// # Ok::<(), enshwick::packs::PackError>(())
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(from = "DependencyEntry")]
+#[cfg_attr(feature = "schema", schemars(with = "DependencyEntry"))]
+#[non_exhaustive]
+pub struct PackDependency {
+    /// The mod's id.
+    pub id: String,
+    /// A Cargo-style version requirement; empty for any.
+    pub version: String,
+}
+
+/// How `pack.toml` writes a [`PackDependency`].
+#[derive(Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(untagged, expecting = "a mod id, or a table with `id` and `version`")]
+enum DependencyEntry {
+    /// The mod's id alone, for any version.
+    Id(String),
+    /// The mod's id with a version requirement.
+    Table(DependencyTable),
+}
+
+/// The table form of a [`DependencyEntry`].
+#[derive(Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+struct DependencyTable {
+    /// The mod's id.
+    id: String,
+    /// A Cargo-style version requirement; empty for any.
+    #[serde(default)]
+    version: String,
+}
+
+impl From<DependencyEntry> for PackDependency {
+    fn from(entry: DependencyEntry) -> Self {
+        match entry {
+            DependencyEntry::Id(id) => Self {
+                id,
+                version: String::new(),
+            },
+            DependencyEntry::Table(DependencyTable { id, version }) => Self { id, version },
+        }
+    }
+}
+
+/// The names Luau keeps for itself, which no alias takes, so a script
+/// reaches every dependency as `enshwick.deps.<alias>`.
+const LUAU_KEYWORDS: [&str; 21] = [
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "if", "in", "local",
+    "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
+];
+
+/// The module of `enshwick.deps` and `deps!` that names the game's own
+/// content, which no alias takes.
+const VANILLA: &str = "vanilla";
+
+/// The table of `pack.toml` that gives dependencies of `relation`.
+const fn table_of(relation: Relation) -> &'static str {
+    match relation {
+        Relation::AFTER => "after",
+        Relation::RECOMMENDS => "recommends",
+        Relation::BREAKS => "breaks",
+        _ => "requires",
+    }
+}
+
 pub(super) const fn yes() -> bool {
     true
 }
@@ -190,7 +296,93 @@ impl PackManifest {
         }
         manifest.check_settings(text)?;
         manifest.check_exports(text)?;
+        manifest.check_dependencies(text)?;
         Ok(manifest)
+    }
+
+    /// Every dependency by alias, with the relation of the table that names
+    /// it: `requires`, `after`, `recommends` or `breaks`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Relation;
+    /// use enshwick::packs::PackManifest;
+    ///
+    /// let manifest = PackManifest::parse(r#"
+    /// id = "you.lanterns"
+    /// version = "1.0.0"
+    ///
+    /// [requires]
+    /// lockers = "you.lockers"
+    ///
+    /// [after]
+    /// stalls = "you.market-stalls"
+    /// "#)?;
+    /// let aliases: Vec<_> = manifest.dependencies().map(|(relation, alias, _)| (relation, alias)).collect();
+    /// assert_eq!(aliases, [(Relation::REQUIRES, "lockers"), (Relation::AFTER, "stalls")]);
+    /// # Ok::<(), enshwick::packs::PackError>(())
+    /// ```
+    pub fn dependencies(&self) -> impl Iterator<Item = (Relation, &str, &PackDependency)> {
+        [
+            (Relation::REQUIRES, &self.requires),
+            (Relation::AFTER, &self.after),
+            (Relation::RECOMMENDS, &self.recommends),
+            (Relation::BREAKS, &self.breaks),
+        ]
+        .into_iter()
+        .flat_map(|(relation, entries)| {
+            entries
+                .iter()
+                .map(move |(alias, dependency)| (relation, alias.as_str(), dependency))
+        })
+    }
+
+    /// Refuses an alias that is no `[a-z][a-z0-9_]*`, a Luau keyword,
+    /// `vanilla` or given twice across the tables, a dependency that is no
+    /// mod id, a version on `after`, and an id in `replaces` that is none,
+    /// as `declare_mod!` refuses them in `[package.metadata.enshwick]`.
+    fn check_dependencies(&self, text: &str) -> Result<(), PackError> {
+        let mut seen = std::collections::BTreeSet::new();
+        for (relation, alias, dependency) in self.dependencies() {
+            let at = format!("`{}.{alias}`", table_of(relation));
+            let first = alias.bytes().next();
+            let bare = first.is_some_and(|b| b.is_ascii_lowercase())
+                && alias
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+            let problem = if !bare || LUAU_KEYWORDS.contains(&alias) {
+                format!("{at}: an alias is [a-z][a-z0-9_]* and no Luau keyword")
+            } else if alias == VANILLA {
+                format!("{at}: `{VANILLA}` names the game's own content; choose another alias")
+            } else if !seen.insert(alias) {
+                format!("{at}: the alias names another dependency already")
+            } else if !crate::abi::is_valid_id(&dependency.id)
+                && !crate::abi::is_valid_old_form_id(&dependency.id)
+            {
+                format!(
+                    "{at}: {:?} is not <author>.<name> or [a-z0-9-]+",
+                    dependency.id
+                )
+            } else if relation == Relation::AFTER && !dependency.version.is_empty() {
+                format!("{at}: `after` orders by id alone and takes no `version`")
+            } else {
+                continue;
+            };
+            let line = find(text, &format!("{alias} ="));
+            return Err(PackError::at(MANIFEST_FILE, text, line, &problem));
+        }
+        for id in &self.replaces {
+            if !crate::abi::is_valid_id(id) && !crate::abi::is_valid_old_form_id(id) {
+                return Err(PackError::at(
+                    MANIFEST_FILE,
+                    text,
+                    find(text, "replaces"),
+                    &format!("`replaces`: {id:?} is not <author>.<name> or [a-z0-9-]+"),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// The schema of the pack's settings; `None` without any.

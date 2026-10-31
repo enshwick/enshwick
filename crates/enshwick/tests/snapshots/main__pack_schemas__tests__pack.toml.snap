@@ -4,6 +4,32 @@ expression: shape
 ---
 {
   "$defs": {
+    "DependencyTable": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "PackDependency": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/DependencyTable"
+        }
+      ]
+    },
     "PackSetting": {
       "additionalProperties": false,
       "properties": {
@@ -97,12 +123,24 @@ expression: shape
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "after": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      },
+      "type": "object"
+    },
     "authors": {
       "default": [],
       "items": {
         "type": "string"
       },
       "type": "array"
+    },
+    "breaks": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      },
+      "type": "object"
     },
     "description": {
       "default": "",
@@ -138,11 +176,23 @@ expression: shape
       "default": "",
       "type": "string"
     },
-    "requires": {
+    "recommends": {
       "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      },
+      "type": "object"
+    },
+    "replaces": {
+      "default": [],
+      "items": {
         "type": "string"
       },
-      "default": {},
+      "type": "array"
+    },
+    "requires": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      },
       "type": "object"
     },
     "setting": {

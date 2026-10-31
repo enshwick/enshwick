@@ -8,6 +8,15 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `pack.toml` names its dependencies as
+  `[package.metadata.enshwick]` does: `requires`, `after`, `recommends` and
+  `breaks` are tables keyed by alias, each a mod id or `{ id, version }`, and
+  `replaces` lists the mods the pack takes the place of. `PackManifest::requires`
+  holds `PackDependency` values, and `PackManifest::dependencies` lists every
+  table with its `Relation`. An alias is `[a-z][a-z0-9_]*`, unique across the
+  tables, and neither `vanilla` nor a Luau keyword; `after` takes no version.
+  Write `"you.lockers" = ">=0.1"` as `lockers = { id = "you.lockers", version = ">=0.1" }`.
+
 - **Breaking:** a mod's calls, points, services and events are its own until
   `exports` in `[package.metadata.enshwick]`, or in a pack's `pack.toml`,
   lists their local names. The loader refuses another mod everything else of
