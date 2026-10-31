@@ -57,10 +57,20 @@ utils:
       - kind: mod_item
         follows:
           kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
           regex: '^#\[cfg\(.*\btest\b'
       - kind: function_item
         follows:
           kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
           regex: '^#\[(test|cfg\(.*\btest\b)'
 rule:
   kind: static_item

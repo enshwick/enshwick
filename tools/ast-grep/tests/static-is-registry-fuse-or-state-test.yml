@@ -20,6 +20,12 @@ valid:
         static SEEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
     }
   - |
+    #[cfg(test)]
+    #[expect(clippy::unwrap_used, reason = "tests")]
+    mod tests {
+        static SEEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+    }
+  - |
     #[test]
     fn counts() { static CALLS: Mutex<Vec<u32>> = Mutex::new(Vec::new()); }
 invalid:
