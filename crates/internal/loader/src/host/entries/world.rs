@@ -769,7 +769,9 @@ pub(crate) extern "system" fn world_persists(
         // The mod's buffer, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let low = unsafe { min.read_unaligned() };
-        // SAFETY: as for `min`, `max` readable for three `f64`.
+        // SAFETY: `HostApi::world_persists` has the mod pass `max` readable
+        // for three `f64`, borrowed for the call; non-null by the check
+        // before it.
         // The mod's buffer, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let high = unsafe { max.read_unaligned() };

@@ -11,6 +11,7 @@ invalid:
   - "// SAFETY: see above"
   - "// SAFETY: same as before; the NUL ends the loop."
   - "// SAFETY: ditto"
+  - "// SAFETY: as for `min`, `max` readable for three `f64`."
   - "/* SAFETY: as above. */"
   - |
     /* SAFETY: the pointer is valid,

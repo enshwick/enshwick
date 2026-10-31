@@ -11,4 +11,4 @@ rule:
   any:
     - kind: line_comment
     - kind: block_comment
-  regex: '^(//|/\*)\s*SAFETY:(?is).*\b(as above|see above|same as (above|before)|as before|ditto)\b'
+  regex: '^(//|/\*)\s*SAFETY:(?is).*\b(as above|see above|same as (above|before)|as before|ditto|as for `[^`]+`)'
