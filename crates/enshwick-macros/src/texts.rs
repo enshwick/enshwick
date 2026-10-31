@@ -97,8 +97,9 @@ impl File {
             .map(|(key, text)| (key.as_str(), text.as_str()))
     }
 
-    /// A constant check per language code that the API knows it, so the
-    /// language list stays in one place.
+    /// A constant check per language code that the API knows it, and one
+    /// per key that it has a text in every language the API requires, so
+    /// both lists stay in one place.
     fn language_checks(&self) -> TokenStream {
         let checks = self.tables.keys().map(|code| {
             let message = format!(
@@ -109,7 +110,23 @@ impl File {
                 const _: () = ::core::assert!(::enshwick::__private::is_language_code(#code), #message);
             }
         });
-        quote!(#(#checks)*)
+        let required = self.keys().map(|(key, _)| {
+            let codes: Vec<&str> = self
+                .tables
+                .iter()
+                .filter(|(_, entries)| entries.get(key).is_some_and(|text| !text.is_empty()))
+                .map(|(code, _)| code.as_str())
+                .collect();
+            let message = format!(
+                "{}: `{key}` has a text in [{}] only; every key needs one in each language of `enshwick::i18n::Language::REQUIRED`",
+                self.path,
+                codes.join("], [")
+            );
+            quote! {
+                const _: () = ::core::assert!(::enshwick::__private::has_required_languages(&[#(#codes),*]), #message);
+            }
+        });
+        quote!(#(#checks)* #(#required)*)
     }
 
     /// The file of `test::declare_mod!`: at `path` from the crate's root,
@@ -332,6 +349,32 @@ mod tests {
             .err()
             .unwrap_or_default();
         assert!(fewer.contains("fills in no values"), "{fewer}");
+    }
+
+    #[test]
+    fn a_key_without_a_text_in_a_required_language_fails_the_build() {
+        let file = parse("[en]\na = \"A\"\nb = \"B\"\n[uk]\na = \"А\"\n").unwrap();
+        let checks = file.language_checks().to_string();
+        assert!(
+            checks.contains("has_required_languages (& [\"en\"])"),
+            "{checks}"
+        );
+        assert!(checks.contains("`b` has a text in [en] only"), "{checks}");
+        assert!(
+            checks.contains("has_required_languages (& [\"en\" , \"uk\"])"),
+            "{checks}"
+        );
+    }
+
+    #[test]
+    fn an_empty_text_counts_as_missing() {
+        let file = parse("[en]\na = \"A\"\n[uk]\na = \"\"\n").unwrap();
+        let checks = file.language_checks().to_string();
+        assert!(
+            checks.contains("has_required_languages (& [\"en\"])"),
+            "{checks}"
+        );
+        assert!(checks.contains("`a` has a text in [en] only"), "{checks}");
     }
 
     #[test]

@@ -253,6 +253,20 @@ impl Language {
         Self::UK_UA,
     ];
 
+    /// The languages every key of a mod's texts needs a text in:
+    /// [`Language::FALLBACK`] and Ukrainian. [`texts!`](crate::texts) and
+    /// [`declare_mod!`](crate::declare_mod) refuse to build a mod whose
+    /// texts lack one; an empty text counts as none.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::i18n::Language;
+    ///
+    /// assert!(Language::REQUIRED.iter().all(|l| Language::OFFERED.contains(l)));
+    /// ```
+    pub const REQUIRED: &[Self] = &[Self::FALLBACK, Self::UK_UA];
+
     /// The languages a text for this one is looked up in, in order: this
     /// language, the main variety of a regional one (`es-mx`, `es-419`,
     /// `es`), and [`Language::FALLBACK`] last.
