@@ -251,9 +251,7 @@ impl Mod for AltarCount {
 enshwick::declare_mod!(AltarCount);
 ```
 
-- `detour!` declares a hook: a static `MAX_ALTARS` and an entry point that
-  catches panics. The body gets `next`, the rest of the chain, and the
-  function's arguments. See [Hooks](hooks.md).
+- `detour!` declares the hook `MAX_ALTARS`; [Hooks](hooks.md) explains it.
 - `load.symbol` finds the function by its symbolic id on the running build.
   [Finding the game](finding-the-game.md) shows how ids are found and pinned.
 - A hook chains with other mods' hooks on the same function, as
@@ -263,18 +261,9 @@ enshwick::declare_mod!(AltarCount);
 
 ## Where the logs are
 
-The loader writes to `logs/enshwick/` in the game's folder, starting each
-file afresh at every start:
-
-- `all.log`: every line of the loader and every mod;
-- `loader.log`: the loader's lines, such as which mods loaded, were skipped or
-  turned off, and why;
-- `mods/<id>.log`: one mod's lines;
-- `status.log` and `crash.log`: see
-  [Logging and diagnostics](logging.md).
-
-A mod writes there with `enshwick::info!` and the other log macros.
-`mod-configs/enshwick.toml` sets how much is kept.
+The loader writes to `logs/enshwick/` in the game's folder: `loader.log` says
+which mods loaded, were skipped or turned off, and why, and `mods/<id>.log`
+holds your mod's lines. [Log files](logging.md#log-files) has the rest.
 
 ## What to read next
 
