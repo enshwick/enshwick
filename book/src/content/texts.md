@@ -190,16 +190,19 @@ is the text of a tag in the language the player reads the game in, and
 in English, as the game shows it.
 
 ```rust
-use enshwick::content::Guid;
 use enshwick::content::items::vanilla_name;
+use enshwick::content::vanilla;
 use enshwick::i18n::Language;
 use enshwick::survivors::WorkshopSurvivor;
 
-let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-let chest_name = vanilla_name(chest, Language::UK_UA);
-let alchemist = WorkshopSurvivor::find("alchemist").unwrap();
+if let Ok(storage_box) = vanilla::item("Prop_Storage_24_T1_Box") {
+    let box_name = vanilla_name(storage_box, Language::UK_UA);
+    assert!(box_name.is_none_or(|n| !n.is_empty()));
+}
+let alchemist = WorkshopSurvivor::find("alchemist").ok_or("no alchemist")?;
 let name = alchemist.name(Language::UK_UA).unwrap_or("Alchemist");
-assert!(!name.is_empty() && chest_name.is_none_or(|n| !n.is_empty()));
+assert!(!name.is_empty());
+# Ok::<(), &str>(())
 ```
 
 `items::vanilla_name(item, language)` reads a vanilla item's name tag from

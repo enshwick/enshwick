@@ -106,22 +106,24 @@ item to clone or another mod's item for a recipe, go through the mod's
 no GUID literal:
 
 ```rust
-use enshwick::content::vanilla::VanillaError;
+use enshwick::content::{Id, id};
+use enshwick::content::items::NewItem;
 
 enshwick::deps!();
 
 // Another mod's content, by the alias the manifest gives that mod.
-let locker: enshwick::content::Guid = deps::lockers::id("locker").into();
-// Vanilla content, by the debug name the game's data gives it.
-match deps::vanilla::item("Prop_Production_T1_Forge") {
-    Ok(forge) => enshwick::info!("{locker} is made at {forge}"),
-    Err(VanillaError::Unreadable(_)) => {} // outside the game
-    Err(other) => enshwick::warn!("{other}"),
+const LOCKER: Id = deps::lockers::id("locker");
+assert_eq!(LOCKER.to_string(), "you.lockers:locker");
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    // Vanilla content, by the debug name the game's data gives it.
+    let forge = deps::vanilla::item("Prop_Production_T1_Forge")?;
+    load.add_item(NewItem::new(id!("small-forge"), forge))
 }
 ```
 
-A vanilla name the game does not know fails with the names that look like
-it. `Guid::named("you.lockers:locker")` still names another mod's content
+A vanilla name the game does not know turns the mod off, with the names
+that look like it in the log. `Guid::named("you.lockers:locker")` still names another mod's content
 without depending on that mod. Stat kinds and affixes have `<mod>:<name>` ids
 too, and their keys come from the same GUIDs.
 
