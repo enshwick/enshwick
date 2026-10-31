@@ -1,11 +1,12 @@
 //! `cargo enshwick pin`: ports the pinned rows of one game build to the next.
 //!
 //! Given the executable the current rows were made for and a new one, it
-//! re-finds every pinned symbol of the loader's build table and of each mod's
-//! `[[package.metadata.enshwick.builds]]` rows in the new executable, checks the constants against the
-//! code that uses them, and writes the new build's table file (with the code
-//! patterns that find each entry on a build without a table) and new mod rows
-//! in each mod's `Cargo.toml`, with a report. It never guesses: whatever it
+//! re-finds every pinned symbol of the loader's build table and of each
+//! mod's `[[package.metadata.enshwick.builds]]` rows in the new executable,
+//! checks the constants against the code that uses them, and writes the new
+//! build's table file (with the code patterns that find each entry on a build
+//! without a table) and new mod rows in each mod's `Cargo.toml`, with a
+//! report. It never guesses: whatever it
 //! cannot place for sure is left out, with a note, and listed for a human.
 //! With `--patterns` it writes the patterns of one build's table from its own
 //! executable. See the README.

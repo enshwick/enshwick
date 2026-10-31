@@ -60,6 +60,7 @@ pub(crate) struct Row {
     pub(crate) name: Option<String>,
     /// The row, from its first token to its closing brace.
     pub(crate) span: Range<usize>,
+    side_span: Range<usize>,
     guid_span: Range<usize>,
     age_span: Range<usize>,
     name_span: Option<Range<usize>>,
@@ -156,28 +157,8 @@ pub(crate) fn parse(src: &str) -> anyhow::Result<Vec<Row>> {
             + (code[equals + 1..].len() - code[equals + 1..].trim_start().len());
         let value_span = value_start..value_start + value_text.len();
         match part {
-            Part::Fields => match key {
-                "side" => {
-                    row.side = match value_text {
-                        "\"server\"" => Side::Server,
-                        "\"client\"" => Side::Client,
-                        _ => bail!(at_line("`side` is \"server\" or \"client\"")),
-                    };
-                }
-                "guid" => {
-                    let inner = value_text
-                        .strip_prefix('"')
-                        .and_then(|v| v.strip_suffix('"'))
-                        .with_context(|| at_line("`guid` is a string"))?;
-                    inner.clone_into(&mut row.guid);
-                    row.guid_span = value_span.start + 1..value_span.end - 1;
-                }
-                "age" => {
-                    row.age = number(value_text).with_context(|| at_line("`age`"))?;
-                    row.age_span = value_span;
-                }
-                other => bail!(at_line(&format!("a build row has no `{other}`"))),
-            },
+            Part::Fields => field(row, key, value_text, value_span)
+                .map_err(|why| anyhow!("line {}: {why}", index + 1))?,
             Part::Symbols | Part::Constants => {
                 let id = key
                     .strip_prefix('"')
@@ -203,6 +184,39 @@ pub(crate) fn parse(src: &str) -> anyhow::Result<Vec<Row>> {
     Ok(rows)
 }
 
+/// Reads the row field `key` with its value `value` at `span` into `row`.
+fn field(row: &mut Row, key: &str, value: &str, span: Range<usize>) -> anyhow::Result<()> {
+    match key {
+        "side" => {
+            row.side = match value {
+                "\"server\"" => Side::Server,
+                "\"client\"" => Side::Client,
+                _ => bail!("`side` is \"server\" or \"client\""),
+            };
+            row.side_span = span;
+        }
+        "guid" => {
+            let inner = value
+                .strip_prefix('"')
+                .and_then(|v| v.strip_suffix('"'))
+                .context("`guid` is a string")?;
+            inner.clone_into(&mut row.guid);
+            row.guid_span = span.start + 1..span.end - 1;
+        }
+        "age" => {
+            row.age = number(value).context("`age`")?;
+            row.age_span = span;
+        }
+        other => match other.split_once('.').map_or(other, |(head, _)| head) {
+            table @ ("symbols" | "constants") => bail!(
+                "pin reads `{table}` only as a `[package.metadata.enshwick.builds.{table}]` table"
+            ),
+            _ => bail!("a build row has no `{other}`"),
+        },
+    }
+    Ok(())
+}
+
 /// A mod row starting at `start`, its fields still to read.
 fn mod_row(start: usize) -> Row {
     Row {
@@ -212,6 +226,7 @@ fn mod_row(start: usize) -> Row {
         age: 0,
         name: None,
         span: start..start,
+        side_span: 0..0,
         guid_span: 0..0,
         age_span: 0..0,
         name_span: None,
@@ -226,7 +241,7 @@ fn finished(open: Option<(Row, Part)>, index: usize) -> anyhow::Result<Option<Ro
     let Some((row, _)) = open else {
         return Ok(None);
     };
-    if row.guid_span.is_empty() || row.age_span.is_empty() {
+    if row.side_span.is_empty() || row.guid_span.is_empty() || row.age_span.is_empty() {
         let at = if index == usize::MAX {
             "the end".to_owned()
         } else {
@@ -268,6 +283,7 @@ impl Row {
             age,
             name: Some(name),
             span: 0..0,
+            side_span: 0..0,
             guid_span: 0..0,
             age_span: 0..0,
             name_span: None,
@@ -450,6 +466,27 @@ workspace = true
         assert!(parse(src).is_err());
         let src = "[[package.metadata.enshwick.builds]]\nside = \"both\"\n";
         assert!(parse(src).is_err());
+    }
+
+    #[test]
+    fn a_row_without_a_side_is_an_error_never_a_server_row() {
+        let src = "[[package.metadata.enshwick.builds]]\nguid = \"ab\"\nage = 1\n";
+        let why = parse(src).unwrap_err().to_string();
+        assert!(why.contains("needs `side`"), "{why}");
+    }
+
+    #[test]
+    fn inline_symbols_are_refused_with_the_table_form_named() {
+        for symbols in ["symbols = { \"a.b\" = 0x10 }", "symbols.\"a.b\" = 0x10"] {
+            let src = format!(
+                "[[package.metadata.enshwick.builds]]\nside = \"server\"\nguid = \"ab\"\nage = 1\n{symbols}\n"
+            );
+            let why = parse(&src).unwrap_err().to_string();
+            assert!(
+                why.contains("[package.metadata.enshwick.builds.symbols]"),
+                "{why}"
+            );
+        }
     }
 
     #[test]

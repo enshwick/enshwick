@@ -78,8 +78,11 @@ can prove each entry and lists the rest for a human. It never guesses.
 It reads the loader's tables, one TOML file per build in
 [`crates/enshwick-gamedata/tables`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/tables), and the
 `[[package.metadata.enshwick.builds]]` rows of every mod's `Cargo.toml`
-under `mods/`. It ports each table and row
-whose fingerprint is the old executable's. Each entry of the new table also
+under `mods/`. A row gives its symbols and constants as
+`[package.metadata.enshwick.builds.symbols]` and
+`[package.metadata.enshwick.builds.constants]` tables of `"id" = value`
+lines; `pin` refuses a row that gives them as an inline table or dotted keys.
+It ports each table and row whose fingerprint is the old executable's. Each entry of the new table also
 gets the code pattern that finds it on a later build without a table, taken
 from the new executable: the smallest window of instructions that is unique
 in the code, with moving parts masked, and field and frame offsets too where
