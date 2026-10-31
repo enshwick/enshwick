@@ -1,4 +1,4 @@
-# The merge gate: `cargo xtask check` through the shared workflow, as parallel
+# The merge gate: `cargo xtask check` through rust-ci.yml, as parallel
 # parts on GitHub-hosted runners: the changed packages on a pull request and
 # in the merge queue, the full suite on a push to main, which also fills the
 # build caches pull requests start from.
@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   rust:
-    uses: enshwick/.github/.github/workflows/rust-ci.yml@main # zizmor: ignore[unpinned-uses]
+    uses: ./.github/workflows/rust-ci.yml
     permissions:
       contents: read
     with:

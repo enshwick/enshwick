@@ -1,0 +1,4 @@
+rules:
+  # The `$/` form zizmor asks for, which actionlint cannot read yet.
+  self-repository:
+    disable: true

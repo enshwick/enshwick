@@ -1,0 +1,39 @@
+name: Docs rebuild
+
+# Starts the docs site's build on enshwick/docs, so a change to what the site
+# reads from this repository shows there. The site workflow cancels a build
+# in progress on main when a newer one starts, so a burst of calls ends in
+# one build of the newest sources.
+
+on:
+  workflow_call:
+    secrets:
+      ENSHWICK_CI_CLIENT_ID:
+        description: The enshwick-ci app, which may start workflows on enshwick/docs.
+        required: true
+      ENSHWICK_CI_PRIVATE_KEY:
+        description: The enshwick-ci app's private key.
+        required: true
+
+permissions: {}
+
+jobs:
+  start:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Token for enshwick/docs
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+          private-key: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: docs
+          permission-actions: write
+
+      - name: Start the site build
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: gh workflow run site.yml --repo "$GITHUB_REPOSITORY_OWNER/docs" --ref main
