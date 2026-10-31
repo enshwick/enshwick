@@ -47,3 +47,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     })
 }
 ```
+
+## Worked example
+
+[`enshwick-shared-experience`](https://github.com/enshwick/mods/tree/main/shared-experience)
+keeps every character of a world up with the one furthest ahead in
+experience, through `on_experience`, in
+[`lib.rs`](https://github.com/enshwick/mods/blob/main/shared-experience/src/lib.rs).

@@ -111,3 +111,11 @@ outside 0 to 100.
 `FakeHost::without_rate(rate)` builds a game that lacks a rate, and
 `Installed::rate(rate)` returns the factor the loader would put in force,
 or `None` for a rate the mod did not declare.
+
+## Worked example
+
+[`enshwick-game-rates`](https://github.com/enshwick/mods/tree/main/game-rates)
+declares every rate with `load.rate` in
+[`lib.rs`](https://github.com/enshwick/mods/blob/main/game-rates/src/lib.rs),
+and a rate the build lacks stays vanilla alone, with a warning, while the
+others run.
