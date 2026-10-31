@@ -166,4 +166,58 @@ mod tests {
         assert_eq!(texts.len(), 2, "{texts:?}");
         assert!(texts.iter().any(|t| t == "Lantern") && texts.iter().any(|t| t == "Ліхтар"));
     }
+
+    /// A pack that changes another mod's item, as the loader checks it
+    /// against that mod's exports.
+    mod named {
+        use enshwick::abi::{Level, Status};
+        use enshwick::packs::{Pack, PackFiles};
+        use enshwick::test::FakeHost;
+        use enshwick::{Load, Mod, Off};
+
+        struct Stacks;
+
+        impl Mod for Stacks {
+            fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+                let files = PackFiles::new().with(
+                    "items.toml",
+                    "[[change]]\nitems = [\"you.lockers:key\"]\nmax_stack = 50\n",
+                );
+                load.add_pack(&Pack::parse("you.stacks", &files)?)?;
+                Ok(Self)
+            }
+        }
+
+        enshwick::test::declare_mod!(
+            Stacks,
+            r#"
+            id = "you.stacks"
+            side = "server"
+            "#
+        );
+
+        fn start(exports: &[&str]) -> (Status, Vec<(Level, String)>) {
+            let loader = FakeHost::new().exports("you.lockers", exports).install();
+            // SAFETY: both functions are the exports of this module's `declare_mod!(Stacks)`.
+            let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+            (status, loader.logs())
+        }
+
+        #[test]
+        fn another_mod_s_item_it_exports_takes_the_change() {
+            let (status, logs) = start(&["key"]);
+            assert_eq!(status, Status::OK, "{logs:?}");
+        }
+
+        #[test]
+        fn another_mod_s_item_it_does_not_export_turns_the_pack_off() {
+            let (status, logs) = start(&["locker"]);
+            assert_ne!(status, Status::OK);
+            assert!(
+                logs.iter().any(|(level, line)| *level == Level::WARN
+                    && line == "content id you.lockers:key: you.lockers does not export key; it exports locker"),
+                "{logs:?}"
+            );
+        }
+    }
 }

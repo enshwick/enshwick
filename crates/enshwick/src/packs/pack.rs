@@ -124,6 +124,24 @@ pub(super) struct Reader<'a> {
     pub(super) named: std::collections::BTreeSet<String>,
 }
 
+impl<'a> Reader<'a> {
+    /// A reader of the pack `namespace` in `files`, with its aliases read.
+    fn new(namespace: &'a str, files: &'a PackFiles, vanilla: Option<&'a Vanilla>) -> Self {
+        let mut errors = Vec::new();
+        let aliases = aliases(&mut errors, files);
+        Self {
+            namespace,
+            files,
+            errors,
+            skipped: Vec::new(),
+            defined: BTreeMap::new(),
+            vanilla,
+            aliases,
+            named: std::collections::BTreeSet::new(),
+        }
+    }
+}
+
 impl Reader<'_> {
     /// The parsed `name`, or `T::default` when the pack lacks it; problems
     /// are noted.
@@ -442,17 +460,7 @@ impl Pack {
         files: &PackFiles,
         vanilla: Option<&Vanilla>,
     ) -> Result<Self, ParsePackError> {
-        let mut reader = Reader {
-            namespace,
-            files,
-            errors: Vec::new(),
-            skipped: Vec::new(),
-            defined: BTreeMap::new(),
-            vanilla,
-            aliases: BTreeMap::new(),
-            named: std::collections::BTreeSet::new(),
-        };
-        reader.aliases = aliases(&mut reader.errors, files);
+        let mut reader = Reader::new(namespace, files, vanilla);
         let texts_text = match files.text(TEXTS_FILE) {
             Ok(text) => text.unwrap_or("").to_owned(),
             Err(error) => {

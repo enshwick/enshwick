@@ -51,21 +51,22 @@ mod tests {
     #[test]
     #[should_panic(expected = "a content id is <mod>:<name>")]
     fn a_required_dependency_refuses_a_malformed_name() {
-        let _ = deps::lockers::id("Locker");
+        drop(deps::lockers::id("Locker"));
+    }
+
+    /// What a mod's init got for the names it asked `lockers` and
+    /// `lanterns` for, and the fake's warnings.
+    struct Named {
+        status: Status,
+        required: Vec<Result<Id, String>>,
+        optional: Vec<Option<Id>>,
+        warnings: Vec<String>,
     }
 
     /// Starts a mod whose init names `names` of `lockers` and `lanterns`,
     /// beside a running `lanterns`, where `lockers` exports `locker` and
-    /// `lanterns` exports `lantern`: what each `id` answered, and the
-    /// fake's warnings.
-    fn named(
-        names: &'static [&'static str],
-    ) -> (
-        Status,
-        Vec<Result<Id, String>>,
-        Vec<Option<Id>>,
-        Vec<String>,
-    ) {
+    /// `lanterns` exports `lantern`.
+    fn named(names: &'static [&'static str]) -> Named {
         use std::sync::Mutex;
 
         static REQUIRED: Mutex<Vec<Result<Id, String>>> = Mutex::new(Vec::new());
@@ -110,18 +111,22 @@ mod tests {
             .filter(|(level, _)| *level == enshwick::abi::Level::WARN)
             .map(|(_, line)| line)
             .collect();
-        (
+        Named {
             status,
-            std::mem::take(&mut *REQUIRED.lock().unwrap()),
-            std::mem::take(&mut *OPTIONAL.lock().unwrap()),
+            required: std::mem::take(&mut *REQUIRED.lock().unwrap()),
+            optional: std::mem::take(&mut *OPTIONAL.lock().unwrap()),
             warnings,
-        )
+        }
     }
 
     #[test]
     fn a_dependency_s_content_passes_where_it_exports_the_name_or_the_name_it_is_part_of() {
-        let (status, required, optional, warnings) =
-            named(&["locker", "locker.recipe", "lantern.icon"]);
+        let Named {
+            status,
+            required,
+            optional,
+            warnings,
+        } = named(&["locker", "locker.recipe", "lantern.icon"]);
         assert_eq!(status, Status::OK);
         assert_eq!(
             required[..2],
@@ -147,7 +152,12 @@ mod tests {
 
     #[test]
     fn a_required_dependency_s_content_it_does_not_export_is_off() {
-        let (_, required, optional, warnings) = named(&["key"]);
+        let Named {
+            required,
+            optional,
+            warnings,
+            ..
+        } = named(&["key"]);
         let refused = required[0].as_ref().unwrap_err();
         assert!(refused.contains("content id you.lockers:key"), "{refused}");
         assert_eq!(optional, [None]);
