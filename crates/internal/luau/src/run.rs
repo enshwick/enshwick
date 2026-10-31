@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
 use arc_swap::{ArcSwap, ArcSwapOption};
-use enshwick::__private::Relock as _;
+use enshwick::Relock as _;
 use enshwick::abi::{Event, Level, Relation};
 use enshwick::events::Ticked;
 use enshwick::script::{self, EventKind, Opened, Signature, Value};
