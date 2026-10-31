@@ -22,6 +22,7 @@ mod tests {
     struct Kit {
         buffs: Buffs,
         stats: Stats,
+        texts: Texts,
         luck: Stat,
         fire: Stat,
     }
@@ -53,9 +54,11 @@ mod tests {
             })?;
             let stats = load.stats()?;
             let buffs = load.buffs();
+            let texts = load.texts()?;
             let _first = KIT.set(Kit {
                 buffs,
                 stats,
+                texts,
                 luck,
                 fire,
             });
@@ -68,7 +71,8 @@ mod tests {
         r#"
         id = "you.hello"
         side = "server"
-        "#
+        "#,
+        texts = "tests/texts/stat_kinds.toml",
     );
 
     fn close(a: f32, b: f32) -> bool {
@@ -84,6 +88,7 @@ mod tests {
         let Kit {
             buffs,
             stats,
+            texts,
             luck,
             fire,
         } = KIT.get().unwrap();
@@ -96,8 +101,9 @@ mod tests {
         assert_eq!(info.text, "resistance_fire.name");
         let own = stats.info(luck).unwrap();
         assert_eq!(own.id, "you.hello:luck");
-        let texts = Texts::parse("[en]\n\"luck.name\" = \"Luck\"\n").unwrap();
         assert_eq!(texts.fill(&own.text, Language::FALLBACK, &[]), "Luck");
+        let kept = Texts::parse(&loader.published_texts().unwrap()).unwrap();
+        assert_eq!(kept.get(&own.text, Language::UK_UA), Some("Удача"));
 
         stats
             .set(
