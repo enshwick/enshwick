@@ -169,9 +169,27 @@ let item_hash = host.hash(types::ITEM_INFO.id())?;
 | `workshops()`     | `WorkshopLayout` beside `items()`: workshops, templates, crafting components. |
 | `crafting_menu()` | `MenuLayout`, with the UI bundle type.                                       |
 | `ui_images()`     | `ImageLayout`, with the UI image type.                                       |
+| `world()`         | The current transform and used item types `World` needs, and the transform's fields. |
+| `inventory()`     | What `Inventories` reads: setups, sub-inventories, stacks, durability, fuel, owner. |
 
-A test may still set one fact by hand where it tests that fact, such as a
-build without one layout.
+Where no layout type is public, `test::facts` names each fact a test lays its
+blobs out by:
+
+```rust
+use enshwick::content::EngineFacts;
+use enshwick::test::facts;
+
+let host = enshwick::test::FakeHost::new().inventory();
+let stack = host.size(facts::ITEM_STACK.id())?;
+let count = host.offset(facts::ITEM_STACK_COUNT.id())?;
+let mut stacks = vec![0u8; stack * 8];
+stacks[stack + count..stack + count + 4].copy_from_slice(&5u32.to_le_bytes());
+# Ok::<(), enshwick::Off>(())
+```
+
+A test of a build without one fact starts from the preset and drops it with
+`without_fact(facts::WORLD_TRANSFORM_ORIENTATION)`. A test may still set one
+fact by hand where it tests that fact.
 
 ## Builder methods
 

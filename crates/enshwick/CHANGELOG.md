@@ -88,6 +88,13 @@ Each entry names the pull request that made the change.
   other layouts rather than by offsets of its own. `ImageLayout::resolve`
   takes any `EngineFacts`, as the other layouts do (#806).
 
+- `FakeHost::world` sets the current transform and used item types `World`
+  needs and where a transform keeps its position, orientation and scale;
+  `FakeHost::inventory` sets what `Inventories` reads slots, durability and
+  meters by. `test::facts` names each fact a test lays its blobs out by, and
+  `FakeHost::without_fact` drops one, so a world or inventory test copies no
+  type hash or offset of its own (#809).
+
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`
   name the running game's content by its debug names, so a mod's code holds
   no vanilla GUID; `deps!` offers them as `deps::vanilla`, and no dependency

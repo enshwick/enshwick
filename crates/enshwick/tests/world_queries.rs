@@ -7,14 +7,23 @@ mod tests {
     use enshwick::Entity;
     use enshwick::WorldError;
     use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::content::EngineFacts;
     use enshwick::ecs::ComponentType;
     use enshwick::events::{ShutdownStarted, WorldLoaded, WorldSaved};
     use enshwick::state::WorldStore;
+    use enshwick::test::{FakeHost, facts};
     use enshwick::world::World;
     use enshwick::{Load, Mod, Off};
 
-    const TRANSFORM: u32 = 1;
     const BED: u32 = 3;
+
+    /// The hash the world preset gives the current transform.
+    fn transform() -> u32 {
+        FakeHost::new()
+            .world()
+            .hash(facts::CURRENT_TRANSFORM.id())
+            .unwrap()
+    }
 
     static WORLD: OnceLock<World> = OnceLock::new();
     static STORE: OnceLock<WorldStore<Visits>> = OnceLock::new();
@@ -58,13 +67,12 @@ mod tests {
             name_len: 0,
             name: [0; 64],
         };
-        let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", TRANSFORM)
-            .type_hash("used_item", 2)
+        let loader = FakeHost::new()
+            .world()
             .type_hash("keen::ecs::NpcBed", BED)
             .placed(BED, Entity(10), [0.0, 0.0, 30.0])
             .placed(BED, Entity(11), [3.0, 0.0, 4.0])
-            .placed(TRANSFORM, Entity(2), [0.0, 0.0, 0.0])
+            .placed(transform(), Entity(2), [0.0, 0.0, 0.0])
             .player(player)
             .data_dir(data.to_str().unwrap())
             .world_key("world0-1a2b3c4d")
@@ -111,9 +119,8 @@ mod tests {
         let file = data.join("worlds/world0-1a2b3c4d/visits.toml");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "count = ").unwrap();
-        let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", TRANSFORM)
-            .type_hash("used_item", 2)
+        let loader = FakeHost::new()
+            .world()
             .type_hash("keen::ecs::NpcBed", BED)
             .data_dir(data.to_str().unwrap())
             .world_key("world0-1a2b3c4d")

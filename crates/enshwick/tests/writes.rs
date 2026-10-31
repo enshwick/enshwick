@@ -63,8 +63,7 @@ mod tests {
         let dead = set(10, [0, 0, 0, 0, 0, 0, 0, 200]);
         let stamina = set(20, [80, 0, 100, 0, 0, 0, 0, 0]);
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 100)
-            .type_hash("used_item", 101)
+            .world()
             .type_hash("attribute_set.health", 1)
             .type_hash("attribute_set.stamina", 2)
             .type_hash("attribute_set.mana", 3)
