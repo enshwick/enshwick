@@ -393,6 +393,20 @@ impl ManifestFacts {
     }
 }
 
+/// Logs the loader's warning for a mod refused the `kind` `id`,
+/// `<owner>:<what>`, whose owner does not export it.
+pub(crate) fn warn_unexported(s: &mut State, kind: &str, id: &str) {
+    let (owner, what) = id.split_once(':').unwrap_or_default();
+    let offered = match s.host.exports.get(owner) {
+        Some(names) if !names.is_empty() => format!("it exports {}", names.join(", ")),
+        _ => "it exports nothing".to_owned(),
+    };
+    s.logs.push((
+        Level::WARN,
+        format!("{kind} {id}: {owner} does not export {what}; {offered}"),
+    ));
+}
+
 /// Notes the manifest of the mod whose init runs on `api`, when `api` is the
 /// fake's table, so the fake refuses by the mod's names and join flag.
 pub(crate) fn note_manifest(api: *const HostApi, manifest: &crate::abi::Manifest) {

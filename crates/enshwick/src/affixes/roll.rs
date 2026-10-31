@@ -98,7 +98,7 @@ impl RollRules {
 /// use enshwick::affixes::{AffixDef, AffixKey, Candidate, RollRules, roll};
 /// use enshwick::content::categories::ItemCategoryMask;
 ///
-/// let ring = AffixDef::new("ring", ItemCategoryMask::EQUIPMENT);
+/// let ring = AffixDef::new(ItemCategoryMask::EQUIPMENT);
 /// let pool = [Candidate { key: AffixKey(1), def: &ring }];
 /// // An affix without ranges rolls no values.
 /// let first = roll(&pool, 1, RollRules::new(1, 1), 42);
@@ -165,7 +165,7 @@ pub fn roll(pool: &[Candidate<'_>], category: u8, rules: RollRules, seed: u64) -
 /// use enshwick::content::categories::ItemCategoryMask;
 /// use enshwick::stats::ItemStats;
 ///
-/// let ring = AffixDef::new("ring", ItemCategoryMask::EQUIPMENT);
+/// let ring = AffixDef::new(ItemCategoryMask::EQUIPMENT);
 /// let pool = [Candidate { key: AffixKey(1), def: &ring }];
 /// let rolled = reroll(&ItemStats::default(), &pool, 1, RollRules::new(1, 1), 7, true).unwrap();
 /// assert!(rolled.rolled);

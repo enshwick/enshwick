@@ -20,7 +20,7 @@ use crate::abi::{Entity, Header, ItemId, Str};
 ///     default: 0.0,
 ///     min: 0.0,
 ///     max: 1.0,
-///     text: Str::new("stat.crit"),
+///     text: Str::EMPTY,
 /// };
 /// assert!(crit.min <= crit.default && crit.default <= crit.max);
 /// ```
@@ -43,7 +43,8 @@ pub struct StatDefData {
     pub min: f32,
     /// The greatest value.
     pub max: f32,
-    /// The text key that names the stat, in its mod's texts.
+    /// The text key that names the stat in its owner's texts, `<name>.name`,
+    /// from `stat_info`; the loader derives it and ignores what a mod passes.
     pub text: Str,
 }
 
@@ -240,7 +241,7 @@ pub struct StatSource {
 /// let ranges = [AffixModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], min: 10.0, max: 30.0, step: 1.0 }];
 /// let sturdy = AffixDefData {
 ///     header: Header::of::<AffixDefData>(),
-///     text: Str::new("affix.sturdy"),
+///     text: Str::EMPTY,
 ///     group: Str::EMPTY,
 ///     modifiers: ranges.as_ptr(),
 ///     modifier_count: 1,
@@ -256,7 +257,8 @@ pub struct StatSource {
 pub struct AffixDefData {
     /// Size and version of this struct.
     pub header: Header,
-    /// The text key that names the affix, in its mod's texts.
+    /// Not read: the loader names the affix by `<name>.name` in its mod's
+    /// texts. Empty.
     pub text: Str,
     /// Affixes of one group never roll together on an item; empty for none.
     pub group: Str,

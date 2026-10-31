@@ -2,10 +2,11 @@
 
 use enshwick::Entity;
 use enshwick::abi as api_frame;
-use enshwick::abi::{ModHandle, RateId, Status, Str};
+use enshwick::abi::{Level, ModHandle, RateId, Status, Str};
 
 use crate::base_groups::limit::Limits;
 use crate::host::entries::mods::list;
+use crate::host::entries::services::unexported_content;
 use crate::host::memory::{get_headed, put, put_headed, put_headed_list, put_list, text};
 use crate::host::{caller, caller_index, calling, entry};
 
@@ -165,16 +166,23 @@ pub(crate) extern "system" fn stat_open(
             Some(data)
         };
         let def = match def {
-            // SAFETY: the definition's text is borrowed for the call.
-            Some(data) => match unsafe { enshwick::stats::StatDef::from_data(&data) } {
+            Some(data) => match enshwick::stats::StatDef::from_data(&data) {
                 Some(def) => Some(def),
                 None => return Status::BAD_ARGS,
             },
             None => None,
         };
-        match caller_index(me)
-            .and_then(|(loader, index)| crate::stats::open(loader, index, id, def))
+        let (loader, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if def.is_none()
+            && let Some(reason) = unexported_content(loader, record, "stat", id)
         {
+            crate::log::write(Level::WARN, &record.id, &reason);
+            return Status::REFUSED;
+        }
+        match crate::stats::open(loader, index, id, def) {
             // SAFETY: `HostApi::stat_open` has the mod pass `out` null or
             // pointing at a writable, aligned `StatRef` that no other thread
             // touches during the call.

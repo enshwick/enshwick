@@ -14,27 +14,24 @@ fn pool() -> Vec<(AffixKey, AffixDef)> {
     vec![
         (
             AffixKey(1),
-            AffixDef::new("bear", ItemCategoryMask::EQUIPMENT)
+            AffixDef::new(ItemCategoryMask::EQUIPMENT)
                 .with(Range::new(stat(0), Op::Add, 10.0, 30.0).step(1.0)),
         ),
         (
             AffixKey(2),
-            AffixDef::new(
-                "fire",
-                ItemCategoryMask::EQUIPMENT | ItemCategoryMask::WEAPONS,
-            )
-            .with(Range::new(stat(1), Op::Add, 0.05, 0.15))
-            .group("element"),
+            AffixDef::new(ItemCategoryMask::EQUIPMENT | ItemCategoryMask::WEAPONS)
+                .with(Range::new(stat(1), Op::Add, 0.05, 0.15))
+                .group("element"),
         ),
         (
             AffixKey(3),
-            AffixDef::new("ice", ItemCategoryMask::EQUIPMENT)
+            AffixDef::new(ItemCategoryMask::EQUIPMENT)
                 .with(Range::new(stat(2), Op::Add, 0.05, 0.15))
                 .group("element"),
         ),
         (
             AffixKey(4),
-            AffixDef::new("myth", ItemCategoryMask::EQUIPMENT)
+            AffixDef::new(ItemCategoryMask::EQUIPMENT)
                 .with(Range::new(stat(3), Op::Multiply, 1.5, 2.0))
                 .rarity(ItemRarity::Legendary)
                 .weight(1),
@@ -116,7 +113,7 @@ fn categories_decide_what_fits_and_weights_how_often() {
 
 #[test]
 fn definitions_need_modifiers_and_sane_ranges() {
-    let empty = AffixDef::new("x", ItemCategoryMask::WEAPONS);
+    let empty = AffixDef::new(ItemCategoryMask::WEAPONS);
     assert!(empty.check().is_err());
     let backwards = empty.clone().with(Range::new(stat(0), Op::Add, 3.0, 1.0));
     assert!(backwards.check().is_err());

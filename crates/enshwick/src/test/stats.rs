@@ -10,7 +10,7 @@ use crate::abi::{
 };
 use crate::affixes::{AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll};
 use crate::inventory::ItemInstance;
-use crate::stats::{ItemStats, Op, Stat, StatDef, StatKey, aggregate, builtin, key_of};
+use crate::stats::{ItemStats, Op, Stat, StatDef, StatKey, aggregate, builtin, key_of, name_key};
 
 use super::table::with;
 
@@ -36,40 +36,46 @@ pub(crate) struct FakeStats {
     pub(crate) worn: BTreeMap<u32, Vec<ItemInstance>>,
     /// The values the last settle raised, by entity and stat.
     settled: BTreeMap<(u32, u32), f32>,
-    /// Affixes by full id, in the order they were defined.
-    affixes: Vec<(Box<str>, AffixDef)>,
+    /// Affixes by full id with their text keys, in the order they were
+    /// defined.
+    affixes: Vec<(Box<str>, AffixDef, Box<str>)>,
 }
 
 impl FakeStats {
     fn with_builtins() -> Self {
         let mut stats = Self::default();
         for (id, def) in builtin::ALL {
-            let def = def.to_def();
-            let text = def.text.clone().into_boxed_str();
+            let id = id.to_string();
+            let text = text_of(&id);
             stats.kinds.push(Kind {
-                id: id.into(),
-                def: Some((def, text)),
+                id: id.into_boxed_str(),
+                def: Some((def.to_def(), text)),
             });
         }
         stats
     }
 }
 
+/// The content id `id`, as the loader takes it: `<mod>:<name>` with a
+/// [`name_key`].
 fn full(id: &str) -> Option<String> {
-    let part = |p: &str| {
-        (1..=64).contains(&p.len())
-            && p.bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
-    };
-    let (namespace, name) = id.split_once(':').unwrap_or((super::MOD_ID, id));
-    (crate::abi::is_valid_old_form_id(namespace) && part(name))
-        .then(|| format!("{namespace}:{name}"))
+    name_key(id).map(|_| id.to_owned())
 }
 
-/// Whether the full id `id` is in the fake mod's namespace.
-fn is_own(id: &str) -> bool {
+/// The text key the loader derives for full id `id`.
+fn text_of(id: &str) -> Box<str> {
+    name_key(id).unwrap_or_default().into_boxed_str()
+}
+
+/// Whether the full id `id` is in the namespace of the mod the fake runs:
+/// its manifest's id once its init ran, else [`MOD_ID`](super::MOD_ID).
+fn is_own(s: &super::table::State, id: &str) -> bool {
+    let own = s
+        .manifest
+        .as_ref()
+        .map_or(super::MOD_ID, |manifest| manifest.id.as_str());
     id.split_once(':')
-        .is_some_and(|(namespace, _)| namespace == super::MOD_ID)
+        .is_some_and(|(namespace, _)| namespace == own)
 }
 
 fn index_of(stats: &mut FakeStats, id: &str) -> u32 {
@@ -109,23 +115,30 @@ pub(crate) extern "system" fn stat_open(
     // definition alive for the call.
     let def = unsafe { def.as_ref() };
     let parsed = match def {
-        // SAFETY: the ABI lends the definition's text for the call.
-        Some(data) => match unsafe { StatDef::from_data(data) } {
+        Some(data) => match StatDef::from_data(data) {
             Some(def) => Some(def),
             None => return Status::BAD_ARGS,
         },
         None => None,
     };
     let opened = with(Err(Status::MISSING), |s| {
+        let unexported = parsed.is_none()
+            && s.manifest
+                .as_ref()
+                .is_some_and(|manifest| manifest.unexported_content(&id, &s.host.exports));
+        if unexported {
+            super::table::warn_unexported(s, "stat", &id);
+            return Err(Status::REFUSED);
+        }
+        let own = is_own(s, &id);
         let stats = state_stats(s);
         let index = index_of(stats, &id);
         if let Some(def) = parsed {
             let kind = &mut stats.kinds[index as usize];
-            if kind.def.is_some() || !is_own(&id) {
+            if kind.def.is_some() || !own {
                 return Err(Status::REFUSED);
             }
-            let text = def.text.clone().into_boxed_str();
-            kind.def = Some((def, text));
+            kind.def = Some((def, text_of(&id)));
         }
         Ok(index)
     });
@@ -447,7 +460,7 @@ fn pool(stats: &FakeStats) -> Vec<Candidate<'_>> {
     stats
         .affixes
         .iter()
-        .map(|(id, def)| Candidate {
+        .map(|(id, def, _)| Candidate {
             key: AffixKey::of(id),
             def,
         })
@@ -482,6 +495,7 @@ pub(crate) extern "system" fn affix_open(
         return Status::BAD_ARGS;
     };
     let opened = with(Err(Status::MISSING), |s| {
+        let own = is_own(s, &id);
         let stats = state_stats(s);
         let stat = |index: u32| {
             let kind = stats.kinds.get(index as usize)?;
@@ -490,15 +504,17 @@ pub(crate) extern "system" fn affix_open(
                 key: key_of(&kind.id).0,
             }))
         };
-        // SAFETY: the ABI lends the definition's text, group and ranges for
-        // the call.
+        // SAFETY: the ABI lends the definition's group and ranges for the
+        // call.
         let Some(parsed) = (unsafe { AffixDef::from_data(data, stat) }) else {
             return Err(Status::BAD_ARGS);
         };
-        if !is_own(&id) || stats.affixes.iter().any(|(known, _)| **known == *id) {
+        if !own || stats.affixes.iter().any(|(known, _, _)| **known == *id) {
             return Err(Status::REFUSED);
         }
-        stats.affixes.push((id.clone().into_boxed_str(), parsed));
+        stats
+            .affixes
+            .push((id.clone().into_boxed_str(), parsed, text_of(&id)));
         u32::try_from(stats.affixes.len() - 1).map_err(|_| Status::REFUSED)
     });
     match opened {
@@ -595,9 +611,9 @@ pub(crate) extern "system" fn affix_info(
     rarity: *mut u8,
 ) -> Status {
     let found = with(None, |s| {
-        let (_, def) = s.stats.affixes.get(affix as usize)?;
+        let (_, def, text) = s.stats.affixes.get(affix as usize)?;
         // The fake keeps its affixes while installed.
-        Some((Str::new(&def.text), def.rarity.to_raw()))
+        Some((Str::new(text), def.rarity.to_raw()))
     });
     let Some((name, rare)) = found else {
         return Status::MISSING;

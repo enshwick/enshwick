@@ -10,11 +10,12 @@ module holds the API.
 ```rust
 use core::time::Duration;
 use enshwick::actions::{Action, Outcome};
+use enshwick::content::id;
 use enshwick::stats::{Lasting, Modifier, Op, StatDef, builtin};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // A kind of this mod's own, `<mod>:luck`, from 0 to 1.
-    let luck = load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
+    let luck = load.define_stat(id!("luck"), &StatDef::additive().range(0.0, 1.0))?;
     // A built-in kind the platform applies to the game.
     let health = load.open_stat(builtin::HEALTH_MAX)?;
     let stats = load.stats()?;
@@ -31,23 +32,29 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## Kinds
 
-A stat kind has an id `<mod>:<name>`, the mod side a mod id and the name
-1 to 64 of `[a-z0-9_-]`,
-and a `StatDef`:
+A stat kind has a [content id](content.md#content-ids) and a `StatDef`:
 
 | Field | Means |
 | --- | --- |
 | `ty` | `Additive` (points, 0 by default), `Multiplicative` (a factor, 1 by default) or `Flag` (on or off) |
 | `default` | the value without modifiers; `starting_at(v)` sets it |
 | `min`, `max` | the range the value stays in; `range(min, max)` sets it |
-| `text` | the text key that names the stat, in the mod's [texts](content/texts.md) |
 | `format` | how the value reads: `Number`, `Signed` or `Percent` |
 
-`load.define_stat(name, &def)` defines a kind in the mod's own namespace during
-`init`; `load.open_stat(id)` opens any kind by its full id, another mod's or
-a built-in one. Every mod that opens one id shares its values, so mods read
-each other's stats without depending on each other. A kind no mod defines
-reads 0, and the loader logs it. `stats.info(stat)` gives a kind's id and
+The text that names a kind is the derived part `<name>.name` in its
+owner's [texts](content/texts.md), as content derives its name: the kind
+`<mod>:luck` reads `luck.name`. A stat kind, an affix and an item of one
+mod with the same name share that text, so give them different names.
+
+`load.define_stat(id!("luck"), &def)` defines a kind of the mod's own during
+`init`, and a malformed name fails the build. `load.open_stat(id)` opens a
+built-in kind or another mod's: `deps::<alias>::id("luck")` names a kind of
+a dependency. The dependency's
+[`exports`](concepts/loader-and-abi.md#what-other-mods-may-use) must list its
+name or the name it is a part of (`charm` for `charm.fire`), or the loader
+refuses it and names what the dependency exports. Every mod that
+opens one id shares its values. A kind no mod defines reads 0, and the
+loader logs it. `stats.info(stat)` gives a kind's id, text key and
 definition, for a menu or a tooltip.
 
 Item stats store a kind by its key, the game id of the GUID its id turns
@@ -85,7 +92,7 @@ own use and its tests:
 ```rust
 use enshwick::stats::{Op, StatDef, aggregate};
 
-let health = StatDef::additive("stat.health").range(-100.0, 1000.0);
+let health = StatDef::additive().range(-100.0, 1000.0);
 // (0 + 50 + 30) * 1.5, raised to at least 100.
 let value = aggregate(&health, [(Op::Add, 50.0), (Op::Multiply, 1.5), (Op::Add, 30.0), (Op::Max, 100.0)]);
 assert_eq!(value, 120.0);

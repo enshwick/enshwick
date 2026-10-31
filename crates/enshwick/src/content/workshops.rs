@@ -250,7 +250,7 @@ impl NewWorkshop {
 const TEMPLATE: &str = "template";
 const WORKSHOP: &str = "workshop";
 const RECIPE: &str = "recipe";
-const NAME: &str = "name";
+const NAME: &str = super::NAME_PART;
 const DESCRIPTION: &str = "description";
 
 /// Where the fields a workshop edit touches sit on the running build,

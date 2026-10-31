@@ -2,11 +2,14 @@
 //! crit, that items, buffs and mods modify, worked out once per change and
 //! read for free.
 //!
-//! A stat kind has a namespaced id (`<mod>:<name>`) and a [`StatDef`]: what
-//! it is ([`StatType`]), its default, its range and the text key that names
-//! it. A mod defines its own kinds with [`Load::define_stat`] and opens any other,
-//! the platform's built-in ones in [`builtin`] among them, with
-//! [`Load::open_stat`]; every mod that opens one id shares its values.
+//! A stat kind has a content [`Id`] and a [`StatDef`]: what it is
+//! ([`StatType`]), its default and its range. The text that names it is the
+//! derived part `<name>.name` in its owner's texts ([`name_key`]). A mod
+//! defines its own kinds with [`Load::define_stat`], named with
+//! [`id!`](crate::content::id), and opens other kinds with
+//! [`Load::open_stat`]: the platform's built-in ones in [`builtin`], or a
+//! dependency's through [`deps!`](crate::deps), which its owner exports.
+//! Every mod that opens one id shares its values.
 //!
 //! [`Modifier`]s come from three sources: items an entity wears (their
 //! [`ItemStats`]), buffs it has ([`Load::add_buff_modifiers`]) and modifiers a
@@ -23,11 +26,12 @@
 //!
 //! ```
 //! use core::time::Duration;
+//! use enshwick::content::id;
 //! use enshwick::events::PlayerJoined;
 //! use enshwick::stats::{Lasting, Modifier, Op, StatDef, builtin};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let luck = load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
+//!     let luck = load.define_stat(id!("luck"), &StatDef::additive().range(0.0, 1.0))?;
 //!     let health = load.open_stat(builtin::HEALTH_MAX)?;
 //!     let stats = load.stats()?;
 //!     load.on::<PlayerJoined>(move |joined| {
@@ -46,6 +50,7 @@ use crate::abi::{
     Status, Str,
 };
 use crate::buffs::BuffTypeId;
+use crate::content::Id;
 use crate::content::items::StatFormat;
 use crate::inventory::ItemInstance;
 use crate::item_data::ItemData;
@@ -73,6 +78,30 @@ pub const fn key_of(id: &str) -> StatKey {
     StatKey(crate::content::Guid::hashed(id).fnv1a())
 }
 
+/// The text key that names the stat kind or affix of full id `id` in its
+/// owner's texts, `<name>.name`.
+///
+/// It is the name side of the id [`Id::part`] derives for the part `name`;
+/// `None` for an id that is not `<mod>:<name>`, or whose name with `.name`
+/// is longer than a content id's name may be.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::Id;
+/// use enshwick::stats::{builtin, name_key};
+///
+/// assert_eq!(name_key("you.hello:luck").as_deref(), Some("luck.name"));
+/// assert_eq!(name_key(&builtin::HEALTH_MAX.to_string()).as_deref(), Some("health_max.name"));
+/// assert_eq!(Id::new("you.hello:luck").part("name").to_string(), "you.hello:luck.name");
+/// assert_eq!(name_key("luck"), None);
+/// assert_eq!(name_key(&format!("you.hello:{}", "a".repeat(124))), None);
+/// ```
+#[must_use]
+pub fn name_key(id: &str) -> Option<String> {
+    crate::content::part_name(id, crate::content::NAME_PART)
+}
+
 /// The platform's built-in stat kinds, which it applies to the game on the
 /// server.
 ///
@@ -88,7 +117,7 @@ pub const fn key_of(id: &str) -> StatKey {
 /// ```
 /// use enshwick::stats::builtin;
 ///
-/// assert_eq!(builtin::DAMAGE_FIRE, "enshwick:damage_fire");
+/// assert_eq!(builtin::DAMAGE_FIRE.to_string(), "enshwick:damage_fire");
 /// assert!(builtin::ALL.iter().any(|(id, _)| *id == builtin::RESISTANCE));
 /// ```
 pub mod builtin;
@@ -121,6 +150,8 @@ pub struct StatChange {
 pub struct StatInfo {
     /// The full id, `<mod>:<name>`.
     pub id: String,
+    /// The text key that names it in its owner's texts, see [`name_key`].
+    pub text: String,
     /// The definition.
     pub def: StatDef,
 }
@@ -355,14 +386,40 @@ impl Stats {
     ///
     /// # Examples
     ///
-    /// ```
-    /// fn name(stats: &enshwick::stats::Stats, stat: enshwick::stats::Stat) -> String {
-    ///     stats.info(stat).map_or_else(String::new, |info| info.id)
+    /// ```rust,standalone_crate
+    /// use std::sync::OnceLock;
+    ///
+    /// use enshwick::content::id;
+    /// use enshwick::stats::{Stat, StatDef, Stats};
+    /// use enshwick::{Load, Mod, Off};
+    ///
+    /// static LUCK: OnceLock<(Stats, Stat)> = OnceLock::new();
+    ///
+    /// struct Lucky;
+    ///
+    /// impl Mod for Lucky {
+    ///     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+    ///         let luck = load.define_stat(id!("luck"), &StatDef::additive())?;
+    ///         let _first = LUCK.set((load.stats()?, luck));
+    ///         Ok(Self)
+    ///     }
     /// }
+    ///
+    /// enshwick::test::declare_mod!(Lucky, "id = \"you.hello\"\nside = \"server\"");
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// // SAFETY: both functions are the exports of `declare_mod!(Lucky)`.
+    /// let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+    /// assert!(status.is_ok());
+    /// let (stats, luck) = LUCK.get().ok_or("init ran")?;
+    /// let info = stats.info(*luck).ok_or("luck is defined")?;
+    /// assert_eq!(info.id, "you.hello:luck");
+    /// assert_eq!(info.text, "luck.name");
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn info(&self, stat: Stat) -> Option<StatInfo> {
-        let mut def = StatDef::additive("").to_data();
+        let mut def = StatDef::additive().to_data();
         let mut id = Str::EMPTY;
         let status =
             (self.host.api().stat_info)(self.host.handle(), stat.index, &raw mut def, &raw mut id);
@@ -370,12 +427,13 @@ impl Stats {
             return None;
         }
         // SAFETY: `stat_info` returned OK and pointed `def.text` at a text the
-        // loader keeps alive and unchanged for the process.
-        let def = unsafe { StatDef::from_data(&def) }?;
+        // loader keeps alive and unchanged for the process; the text is copied.
+        let text = unsafe { def.text.as_str() }?.to_owned();
+        let def = StatDef::from_data(&def)?;
         // SAFETY: `stat_info` returned OK and pointed `id` at an id the loader
         // keeps alive and unchanged for the process; the id is copied.
         let id = unsafe { id.as_str() }?.to_owned();
-        Some(StatInfo { id, def })
+        Some(StatInfo { id, text, def })
     }
 
     /// Watches `entity` for the items it wears and the buffs it has, or stops
@@ -430,45 +488,47 @@ where
 }
 
 impl Load<'_> {
-    fn open_stat_with(&mut self, id: &str, def: Option<&StatDef>) -> Result<Stat, Off> {
+    fn open_stat_with(&mut self, id: Id, def: Option<&StatDef>) -> Result<Stat, Off> {
         let host = self.host();
         let data = def.map(StatDef::to_data);
         let def_ptr = data.as_ref().map_or(core::ptr::null(), core::ptr::from_ref);
+        let full = id.to_string();
         let mut out = StatRef::default();
-        let status = (host.api().stat_open)(host.handle(), Str::new(id), def_ptr, &raw mut out);
-        crate::load::ok(status, Stat::from_ref(out), || format!("stat {id:?}"))
+        let status = (host.api().stat_open)(host.handle(), Str::new(&full), def_ptr, &raw mut out);
+        crate::load::ok(status, Stat::from_ref(out), || format!("stat {full:?}"))
     }
 
-    /// Defines the mod's stat kind `name` (`<mod>:<name>`, or the full id in
-    /// the mod's namespace), each side 1 to 64 of `[a-z0-9_-]`. Call it
-    /// during `init`, on both sides.
+    /// Defines the mod's stat kind `id`, named with
+    /// [`id!`](crate::content::id). Its text is `<name>.name` in the mod's
+    /// texts ([`name_key`]). Call it during `init`, on both sides.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed id or definition, a kind defined twice, or
-    /// after init.
+    /// [`Off`] for an id of another mod, a malformed definition, a kind
+    /// defined twice, or after init.
     ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn define_stat(&mut self, name: &str, def: &StatDef) -> Result<Stat, Off> {
+    pub fn define_stat(&mut self, id: Id, def: &StatDef) -> Result<Stat, Off> {
         def.check()
-            .map_err(|why| Off::new(format!("stat {name:?}: {why}")))?;
-        self.open_stat_with(name, Some(def))
+            .map_err(|why| Off::new(format!("stat {:?}: {why}", id.to_string())))?;
+        self.open_stat_with(id, Some(def))
     }
 
-    /// Opens stat kind `id` by its full id, another mod's or a built-in one
-    /// from [`builtin`]. A kind no mod defines keeps 0 and reads nothing.
-    /// Call it during `init`, on both sides.
+    /// Opens stat kind `id`: a built-in one from [`builtin`], or another
+    /// mod's through [`deps!`](crate::deps). A kind no mod defines keeps 0
+    /// and reads nothing. Call it during `init`, on both sides.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed id or after init.
+    /// [`Off`] for a kind of a loaded mod that does not export it, or after
+    /// init.
     ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn open_stat(&mut self, id: &str) -> Result<Stat, Off> {
+    pub fn open_stat(&mut self, id: Id) -> Result<Stat, Off> {
         self.open_stat_with(id, None)
     }
 
@@ -534,8 +594,10 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
+    /// enshwick::deps!();
+    ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let luck = load.open_stat("other-mod:luck")?;
+    ///     let luck = load.open_stat(deps::lockers::id("luck")?)?;
     ///     load.on_stats_changed(move |change| {
     ///         if change.stat == luck {
     ///             enshwick::info!("{:?} has luck {}", change.entity, change.new);

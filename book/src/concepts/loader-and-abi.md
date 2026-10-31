@@ -237,16 +237,16 @@ them.
 
 ### What other mods may use
 
-A mod's calls, points, services, events and content are its own until it
-exports them. `exports` lists their local names, and the loader refuses
+A mod's calls, points, services, events, content and stat kinds are its own
+until it exports them. `exports` lists their local names, and the loader refuses
 another mod a reference to any other name of the mod. With `exports = ["price-of", "sold"]`
 in `you.trading-post`, another mod may call `you.trading-post:price-of` and
 hear `you.trading-post:sold`. A link to the point `you.trading-post:margin`
 is refused, and the log says
 `point you.trading-post:margin: you.trading-post does not export margin; it exports price-of, sold`.
 
-- `caller`, `extend_point`, `observe_point` and `on_mod_event` return `Off`,
-  which turns the asking mod off at init.
+- `caller`, `extend_point`, `observe_point`, `on_mod_event` and `open_stat`
+  return `Off`, which turns the asking mod off at init.
 - `service` returns `Off` with the reason, and `optional_service` returns
   `None`.
 - A content id through `deps::<alias>::id` returns `Off` for a required mod

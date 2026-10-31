@@ -184,7 +184,8 @@ typedef struct EnshwickAffixModifierData {
 typedef struct EnshwickAffixDefData {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // The text key that names the affix, in its mod's texts.
+  // Not read: the loader names the affix by `<name>.name` in its mod's
+  // texts. Empty.
   struct EnshwickStr text;
   // Affixes of one group never roll together on an item; empty for none.
   struct EnshwickStr group;
@@ -2174,7 +2175,8 @@ typedef struct EnshwickStatDefData {
   float min;
   // The greatest value.
   float max;
-  // The text key that names the stat, in its mod's texts.
+  // The text key that names the stat in its owner's texts, `<name>.name`,
+  // from `stat_info`; the loader derives it and ignores what a mod passes.
   struct EnshwickStr text;
 } EnshwickStatDefData;
 // A sum of points, such as extra health.
@@ -3506,12 +3508,17 @@ typedef struct EnshwickHostApi {
   // thread.
   EnshwickStatus (*icons_ready)(EnshwickModHandle me);
   // Defines the stat kind `id` with `def`, or opens it with a null
-  // `def`, and writes its index and key to `out`. A mod defines kinds in
-  // its own namespace (`name` or `<mod>:name`); any mod opens any kind,
-  // the loader's built-in ones (`enshwick:<name>`) among them. Every mod
-  // gets the same index for one id. `Status::BAD_ARGS` for a malformed
-  // id or definition, `Status::REFUSED` for a kind defined twice or in
-  // another mod's namespace. Allowed during `enshwick_mod_init` only.
+  // `def`, and writes its index and key to `out`. `id` is a full content
+  // id, `<mod>:<name>`; the text that names the kind is `<name>.name` in
+  // its owner's texts, which the loader derives. A mod defines kinds in
+  // its own namespace and opens the loader's built-in ones
+  // (`enshwick:<name>`) and those of other mods. Every mod gets the same
+  // index for one id. `Status::BAD_ARGS` for a malformed id or
+  // definition; `Status::REFUSED` for a kind defined twice or in
+  // another mod's namespace, or a kind of another loaded mod whose
+  // `Manifest::exports` lack its name and the
+  // name it is a part of, with the id and the owner's exports logged.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*stat_open)(EnshwickModHandle me,
                               struct EnshwickStr id,
                               const struct EnshwickStatDefData *def,
@@ -3581,8 +3588,13 @@ typedef struct EnshwickHostApi {
   // initialised. `Status::REFUSED` for an event another mod defined.
   // Any thread.
   EnshwickStatus (*send_event)(EnshwickModHandle me, uint32_t event, const void *data);
-  // Defines the affix `id` in the mod's namespace with `def` and writes
-  // its index and key to `out`. Allowed during `enshwick_mod_init` only.
+  // Defines the affix `id` with `def` and writes its index and key to
+  // `out`. `id` is a full content id in the mod's namespace,
+  // `<mod>:<name>`; the text that names the affix is `<name>.name` in the
+  // mod's texts, which the loader derives. `Status::BAD_ARGS` for a
+  // malformed id or definition, `Status::REFUSED` for an affix defined
+  // twice or in another mod's namespace. Allowed during
+  // `enshwick_mod_init` only.
   EnshwickStatus (*affix_open)(EnshwickModHandle me,
                                struct EnshwickStr id,
                                const struct EnshwickAffixDefData *def,
