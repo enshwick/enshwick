@@ -1,0 +1,15 @@
+id: no-chat-commands
+valid:
+  - "pub fn command_files(data_dir: &Path) -> Vec<PathBuf> { Vec::new() }"
+  - "pub fn npc_command(&self, npc: u32, order: NpcCommandType) {}"
+  - "pub(crate) fn command(loader: &Loader, args: &str) -> String { String::new() }"
+  - "pub fn add_action(&self, action: Action) {}"
+  - "pub enum NpcCommandType { GoToPosition }"
+  - "enum Command { Pack, New }"
+invalid:
+  - "pub fn add_command(&self, name: &str, run: fn(&CommandContext)) {}"
+  - "pub fn register_chat_command(&self, name: &str) {}"
+  - "fn on_command(line: &str) {}"
+  - "pub struct CommandContext { pub player: u32 }"
+  - "pub struct HostApi { pub add_command: extern \"system\" fn() }"
+  - "pub trait ChatCommand { fn run(&self); }"

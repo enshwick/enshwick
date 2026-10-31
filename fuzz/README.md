@@ -39,6 +39,10 @@ holds the small seed corpus kept in the repository. A crash is written to
 `cargo +nightly fuzz run -O --target-dir target/fuzz <target> <file>`.
 A crash becomes a regression test beside the code it found, then a fix.
 
-CI does not fuzz. Before a pull request that changes what a target reads,
-run that target here, for a minute with `-- -max_total_time=60` after the
-command above.
+On a pull request CI runs `cargo xtask check --part fuzz`: the targets
+whose input the change reaches share 90 seconds, each at least 10, over the
+seed corpus. Which modules reach which target is the table in
+[`tools/xtask/src/fuzz.rs`](../tools/xtask/src/fuzz.rs); a new target gets
+a row there. Before a pull request that changes what a target reads, also
+run that target here for longer, a minute or more with
+`-- -max_total_time=60` after the command above.

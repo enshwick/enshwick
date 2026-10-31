@@ -10,7 +10,8 @@
 //! checks. `cargo xtask check --windows` also runs the Windows tests of the
 //! crates marked `windows-tests` or `windows-only`, under Wine on an amd64
 //! Linux host. `cargo xtask check --all` runs the full suite, the Windows
-//! tests included where they can run.
+//! tests included where they can run. `cargo xtask check --part fuzz` runs
+//! the fuzz targets the change reaches for a short while ([`fuzz`]).
 //!
 //! `cargo xtask dist` writes `enshwick.zip`, the loader that players unpack
 //! into the game folder ([`dist`]). `cargo xtask header` rewrites the ABI's
@@ -26,6 +27,7 @@ mod book_links;
 mod compat;
 mod crate_rules;
 mod dist;
+mod fuzz;
 mod header;
 mod ranges;
 mod rules;
@@ -39,7 +41,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests]... [--list-windows-tests] | dist [--out <dir>] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] | dist [--out <dir>] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -100,6 +102,12 @@ fn run(args: &[String]) -> Result<bool, String> {
     } else {
         parts
     };
+    if parts.contains(&Part::Fuzz) {
+        let fuzzed = fuzz_part(&base, all);
+        if !fuzzed || parts.len() == 1 {
+            return Ok(fuzzed);
+        }
+    }
     let packages = packages()?;
     let root = workspace_root();
     let problems = tree_problems(&root, &packages)?;
@@ -199,6 +207,16 @@ fn touches(scope: &Scope, package: &str) -> bool {
     }
 }
 
+/// The fuzz part: the targets the change since `base` reaches, or every
+/// target in the full suite or without a merge base; whether none crashed.
+fn fuzz_part(base: &str, all: bool) -> bool {
+    let targets = match changed_files(base) {
+        Some(files) if !all => fuzz::reached(&files),
+        _ => fuzz::all(),
+    };
+    fuzz::run(&targets)
+}
+
 /// A part of the check, so CI can run the parts as parallel jobs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Part {
@@ -210,6 +228,9 @@ enum Part {
     /// The tests of the changed packages that run only on Windows, under
     /// Wine on an amd64 Linux host.
     WindowsTests,
+    /// Short runs of the fuzz targets the change reaches ([`fuzz`]); only
+    /// when named, since it needs the nightly compiler.
+    Fuzz,
 }
 
 impl Part {
@@ -218,6 +239,7 @@ impl Part {
             "host" => Ok(Self::Host),
             "windows-lint" => Ok(Self::WindowsLint),
             "windows-tests" => Ok(Self::WindowsTests),
+            "fuzz" => Ok(Self::Fuzz),
             _ => Err(format!("unknown part {name}; {USAGE}")),
         }
     }
