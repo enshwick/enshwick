@@ -77,6 +77,7 @@
 mod calls;
 mod content;
 mod events;
+pub mod facts;
 mod gameplay;
 mod hooks;
 mod inventory;

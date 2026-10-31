@@ -2,10 +2,9 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::__private::ids;
     use enshwick::abi::Status;
     use enshwick::content::EngineFacts;
-    use enshwick::test::FakeHost;
+    use enshwick::test::{FakeHost, facts};
     use enshwick::world::{ContainerKinds, World};
     use enshwick::{Load, Mod, Off};
 
@@ -62,7 +61,7 @@ mod tests {
             .iter()
             .filter(|(id, _)| *id != missing)
             .fold(world(), |host, &(id, hash)| host.type_hash(id, hash));
-        let used_item = host.hash(ids::USED_ITEM).unwrap();
+        let used_item = host.hash(facts::USED_ITEM.id()).unwrap();
         [
             (10, &[used_item, LOOT_FILL][..]),
             (11, &[PLAYER]),

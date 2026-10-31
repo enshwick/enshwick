@@ -10,6 +10,7 @@ use crate::content::icons::IMAGE_FIELDS;
 use crate::engine_ids as ids;
 
 use super::FakeHost;
+use super::facts::Fact;
 
 impl FakeHost {
     /// Items and the item registry: what
@@ -211,23 +212,95 @@ impl FakeHost {
         )
     }
 
-    /// The world's own component types: what `World` needs before it
-    /// resolves, the current transform and the used item.
+    /// The world's own component types and where a placed thing keeps its
+    /// transform: what `World` needs before it resolves, and what its prop
+    /// reads and the effects' transforms lay out by.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
     ///
     /// let host = enshwick::test::FakeHost::new().world();
-    /// let transform = host.hash(enshwick::__private::ids::CURRENT_TRANSFORM)?;
+    /// let transform = host.hash(facts::CURRENT_TRANSFORM.id())?;
     /// let loader = host.placed(transform, enshwick::Entity(2), [0.0; 3]).install();
     /// # let _ = loader;
     /// # Ok::<(), enshwick::Off>(())
     /// ```
     #[must_use]
     pub fn world(self) -> Self {
-        self.preset(&[ids::CURRENT_TRANSFORM, ids::USED_ITEM], &[], &[])
+        self.preset(
+            &[ids::CURRENT_TRANSFORM, ids::USED_ITEM],
+            &[],
+            &[
+                (ids::CURRENT_TRANSFORM_TRANSFORM, 0),
+                (ids::WORLD_TRANSFORM_POSITION, 0),
+                (ids::WORLD_TRANSFORM_ORIENTATION, 24),
+                (ids::WORLD_TRANSFORM_SCALE, 40),
+            ],
+        )
+    }
+
+    /// Inventories on the server: the component types, stack size and
+    /// offsets [`Inventories`](crate::inventory::Inventories) reads slots,
+    /// durability and meters by. The ECS reads and the skipped entity stay
+    /// the test's own symbols.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().inventory();
+    /// let stack = host.size(facts::ITEM_STACK.id())?;
+    /// assert!(host.offset(facts::ITEM_STACK_PIDE.id())? + 4 <= stack);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn inventory(self) -> Self {
+        self.preset(
+            &[
+                ids::INVENTORY_SETUP,
+                ids::INVENTORY,
+                ids::DURABILITY,
+                ids::FUEL,
+                ids::OWNER,
+            ],
+            &[(ids::ITEM_STACK, 12)],
+            &[
+                (ids::INVENTORY_SETUP_LINKS, 0),
+                (ids::INVENTORY_SETUP_CATEGORIES, 0x40),
+                (ids::INVENTORY_SETUP_INITIALIZED, 0x53),
+                (ids::ITEM_STACK_COUNT, 4),
+                (ids::ITEM_STACK_PIDE, 8),
+                (ids::DURABILITY_MAX, 2),
+                (ids::FUEL_MAX, 2),
+            ],
+        )
+    }
+
+    /// Plays a build that lacks `fact`, whichever preset set it, so a test
+    /// of what turns off without it starts from the preset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new()
+    ///     .world()
+    ///     .without_fact(facts::WORLD_TRANSFORM_ORIENTATION);
+    /// assert!(host.offset(facts::WORLD_TRANSFORM_ORIENTATION.id()).is_err());
+    /// ```
+    #[must_use]
+    pub fn without_fact(mut self, fact: Fact) -> Self {
+        self.type_hashes.remove(fact.id());
+        self.type_sizes.remove(fact.id());
+        self.constants.remove(fact.id());
+        self
     }
 
     /// Sets a hash for each of `types`, then `sizes` and `offsets`.

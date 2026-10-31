@@ -4,11 +4,11 @@
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::__private::ids;
     use enshwick::Entity;
     use enshwick::ItemId;
     use enshwick::abi::Status;
     use enshwick::content::EngineFacts;
+    use enshwick::test::facts::{self, Fact};
     use enshwick::voxels::{Voxel, VoxelMaterial, VoxelPos};
     use enshwick::world::{CAPTURE_TILES, Capture, CapturedProp, Prop, World, WorldTransform};
     use enshwick::{Load, Mod, Off, WorldError};
@@ -54,8 +54,8 @@ mod tests {
     }
 
     /// A placed prop through the fake's entity builders: its `UsedItem`,
-    /// a `CurrentTransform` holding the position, then the orientation, and
-    /// the template its item places.
+    /// a `CurrentTransform` holding the position and orientation, and the
+    /// template its item places.
     fn prop(
         fake: enshwick::test::FakeHost,
         entity: u32,
@@ -78,29 +78,38 @@ mod tests {
         position: [f64; 3],
         orientation: [f32; 4],
     ) -> enshwick::test::FakeHost {
-        let mut transform: Vec<u8> = enshwick::ecs::fixed(position)
-            .iter()
-            .flat_map(|axis| axis.to_le_bytes())
-            .collect();
-        transform.extend(orientation.iter().flat_map(|part| part.to_le_bytes()));
         let world = enshwick::test::FakeHost::new().world();
-        let used_item = world.hash(ids::USED_ITEM).unwrap();
-        let current = world.hash(ids::CURRENT_TRANSFORM).unwrap();
+        let at = |fact: Fact| world.offset(fact.id()).unwrap();
+        let base = at(facts::CURRENT_TRANSFORM_TRANSFORM);
+        let (position_at, orientation_at) = (
+            base + at(facts::WORLD_TRANSFORM_POSITION),
+            base + at(facts::WORLD_TRANSFORM_ORIENTATION),
+        );
+        let mut transform = vec![0u8; (position_at + 24).max(orientation_at + 16)];
+        for (i, axis) in enshwick::ecs::fixed(position).iter().enumerate() {
+            let start = position_at + i * 8;
+            transform[start..start + 8].copy_from_slice(&axis.to_le_bytes());
+        }
+        for (i, part) in orientation.iter().enumerate() {
+            let start = orientation_at + i * 4;
+            transform[start..start + 4].copy_from_slice(&part.to_le_bytes());
+        }
+        let used_item = world.hash(facts::USED_ITEM.id()).unwrap();
+        let current = world.hash(facts::CURRENT_TRANSFORM.id()).unwrap();
         fake.placed(used_item, Entity(entity), position)
             .placed(current, Entity(entity), position)
             .component(Entity(entity), used_item, &item.to_le_bytes())
             .component(Entity(entity), current, &transform)
     }
 
+    /// A world with its items and the marks of creatures and flame altars.
     fn fake() -> enshwick::test::FakeHost {
         enshwick::test::FakeHost::new()
             .world()
+            .items()
             .type_hash("animal_saved", ANIMAL)
             .type_hash("active_npc_state_saved", SURVIVOR)
             .type_hash("base_id_component", ALTAR)
-            .constant("current_transform.transform", 0)
-            .constant("world_transform.orientation", 24)
-            .constant("item_info.placed_entity", 0x3c0)
     }
 
     fn start(fake: enshwick::test::FakeHost) -> (enshwick::test::Installed, World) {
@@ -173,11 +182,7 @@ mod tests {
 
     #[test]
     fn props_are_missing_on_a_build_without_the_creature_marks() {
-        let fake = enshwick::test::FakeHost::new()
-            .world()
-            .constant("current_transform.transform", 0)
-            .constant("world_transform.orientation", 24)
-            .constant("item_info.placed_entity", 0x3c0);
+        let fake = enshwick::test::FakeHost::new().world().items();
         let (_loader, world) = start(prop(fake, 10, 50, [10.0; 3], STILL));
         assert_eq!(
             world.props_in([0.0; 3], [20.0; 3]),
@@ -197,7 +202,7 @@ mod tests {
 
     #[test]
     fn props_are_missing_on_a_build_without_the_orientation() {
-        let fake = enshwick::test::FakeHost::new().world();
+        let fake = fake().without_fact(facts::WORLD_TRANSFORM_ORIENTATION);
         let (_loader, world) = start(prop(fake, 10, 1, [1.0; 3], STILL));
 
         assert_eq!(world.props_in([0.0; 3], [2.0; 3]), Err(WorldError::Missing));
@@ -205,10 +210,7 @@ mod tests {
 
     #[test]
     fn props_are_missing_on_a_build_without_the_placed_template() {
-        let fake = enshwick::test::FakeHost::new()
-            .world()
-            .constant("current_transform.transform", 0)
-            .constant("world_transform.orientation", 24);
+        let fake = fake().without_fact(facts::ITEM_INFO_PLACED_ENTITY);
         let (_loader, world) = start(prop(fake, 10, 1, [1.0; 3], STILL));
 
         assert_eq!(world.props_in([0.0; 3], [2.0; 3]), Err(WorldError::Missing));

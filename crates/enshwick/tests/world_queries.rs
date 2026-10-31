@@ -4,7 +4,6 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::__private::ids;
     use enshwick::Entity;
     use enshwick::WorldError;
     use enshwick::abi::{Header, PlayerInfo, Status};
@@ -12,7 +11,7 @@ mod tests {
     use enshwick::ecs::ComponentType;
     use enshwick::events::{ShutdownStarted, WorldLoaded, WorldSaved};
     use enshwick::state::WorldStore;
-    use enshwick::test::FakeHost;
+    use enshwick::test::{FakeHost, facts};
     use enshwick::world::World;
     use enshwick::{Load, Mod, Off};
 
@@ -22,7 +21,7 @@ mod tests {
     fn transform() -> u32 {
         FakeHost::new()
             .world()
-            .hash(ids::CURRENT_TRANSFORM)
+            .hash(facts::CURRENT_TRANSFORM.id())
             .unwrap()
     }
 
