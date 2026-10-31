@@ -120,6 +120,53 @@ pub(crate) enum DeclareServiceError {
     TooMany,
 }
 
+/// Why a mod's lookup of a service finds nothing it can use; the mod reads
+/// the message beside [`FindServiceError::status`].
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum FindServiceError {
+    /// No running mod publishes the name.
+    #[error("no running mod publishes it")]
+    Unpublished,
+    /// Running mods publish the name only at other majors, listed as
+    /// `v<major> from <id> <version>`.
+    #[error("only {others} is published; this mod was built for v{major}")]
+    OtherMajors { others: String, major: u32 },
+    /// The publishing mod is off.
+    #[error("{id} {version} publishes it, but is off")]
+    PublisherOff { id: String, version: String },
+    /// The published table does not serve the fields the mod asks for.
+    #[error("{id} {version}: {mismatch}; {}", advice(mismatch, id))]
+    Layout {
+        id: String,
+        version: String,
+        mismatch: LayoutError,
+    },
+    /// The publishing mod does not export the service to the asking mod.
+    #[error("{reason}")]
+    Unexported { reason: String },
+}
+
+impl FindServiceError {
+    /// The status the mod's call returns: missing while nothing usable
+    /// runs, refused when what runs does not fit or is not exported.
+    pub(crate) const fn status(&self) -> Status {
+        match self {
+            Self::Unpublished | Self::PublisherOff { .. } => Status::MISSING,
+            Self::OtherMajors { .. } | Self::Layout { .. } | Self::Unexported { .. } => {
+                Status::REFUSED
+            }
+        }
+    }
+}
+
+/// What the mod's author does about `mismatch` with the publisher `id`.
+fn advice(mismatch: &LayoutError, id: &str) -> String {
+    match mismatch {
+        LayoutError::Newer { .. } => format!("update {id}"),
+        _ => "both mods must compile one declaration".to_owned(),
+    }
+}
+
 impl Registry {
     /// Publishes a service.
     ///
@@ -167,16 +214,15 @@ impl Registry {
     ///
     /// # Errors
     ///
-    /// [`Status::MISSING`] when no running mod publishes it, and
-    /// [`Status::REFUSED`] when the published table does not serve
-    /// `fields`, each with the reason.
+    /// A [`FindServiceError`] when no running mod publishes it, its
+    /// publisher is off or the published table does not serve `fields`.
     pub(crate) fn find(
         &self,
         name: &str,
         major: u32,
         fields: &[(String, u64)],
         names: &impl Names,
-    ) -> Result<Found, (Status, String)> {
+    ) -> Result<Found, FindServiceError> {
         let same_name = || self.published.iter().filter(|p| p.name == name);
         let Some(published) = same_name().find(|p| p.major == major) else {
             let others: Vec<String> = same_name()
@@ -187,33 +233,27 @@ impl Registry {
                 })
                 .collect();
             return Err(if others.is_empty() {
-                (Status::MISSING, "no running mod publishes it".to_owned())
+                FindServiceError::Unpublished
             } else {
-                (
-                    Status::REFUSED,
-                    format!(
-                        "only {} is published; this mod was built for v{major}",
-                        others.join(", ")
-                    ),
-                )
+                FindServiceError::OtherMajors {
+                    others: others.join(", "),
+                    major,
+                }
             });
         };
         let (id, version) = names.name(published.owner.get());
         if names.off(published.owner.get()) {
-            return Err((
-                Status::MISSING,
-                format!("{id} {version} publishes it, but is off"),
-            ));
+            return Err(FindServiceError::PublisherOff {
+                id: id.to_owned(),
+                version: version.to_owned(),
+            });
         }
         compare(&view(fields), &view(&published.fields)).map_err(|mismatch| {
-            let advice = match mismatch {
-                LayoutError::Newer { .. } => format!("; update {id}"),
-                _ => "; both mods must compile one declaration".to_owned(),
-            };
-            (
-                Status::REFUSED,
-                format!("{id} {version}: {mismatch}{advice}"),
-            )
+            FindServiceError::Layout {
+                id: id.to_owned(),
+                version: version.to_owned(),
+                mismatch,
+            }
         })?;
         Ok(Found {
             owner: published.owner,
@@ -530,12 +570,12 @@ mod tests {
                 )
                 .is_ok()
         );
-        let Err((status, reason)) =
-            registry.find("trading-post:prices", 1, &fields(&["a", "b"]), &mods())
+        let Err(refused) = registry.find("trading-post:prices", 1, &fields(&["a", "b"]), &mods())
         else {
             panic!("served");
         };
-        assert_eq!(status, Status::REFUSED);
+        assert_eq!(refused.status(), Status::REFUSED);
+        let reason = refused.to_string();
         assert!(reason.contains("trading-post 0.3.0"), "{reason}");
         assert!(reason.contains("`b`"), "{reason}");
         assert!(reason.ends_with("update trading-post"), "{reason}");
@@ -556,12 +596,11 @@ mod tests {
                 )
                 .is_ok()
         );
-        let Err((status, reason)) =
-            registry.find("trading-post:prices", 1, &fields(&["a"]), &mods())
-        else {
+        let Err(refused) = registry.find("trading-post:prices", 1, &fields(&["a"]), &mods()) else {
             panic!("served");
         };
-        assert_eq!(status, Status::REFUSED);
+        assert_eq!(refused.status(), Status::REFUSED);
+        let reason = refused.to_string();
         assert!(reason.contains("v2 from trading-post 0.3.0"), "{reason}");
     }
 
@@ -569,7 +608,7 @@ mod tests {
     fn nothing_published_is_missing() {
         let registry = Registry::default();
         let found = registry.find("trading-post:prices", 1, &fields(&["a"]), &mods());
-        assert!(matches!(found, Err((Status::MISSING, _))));
+        assert_eq!(found.map(|_| ()), Err(super::FindServiceError::Unpublished));
     }
 
     #[test]
@@ -590,7 +629,9 @@ mod tests {
         let mut off = mods();
         off.0[0].2 = true;
         let found = registry.find("trading-post:prices", 1, &fields(&["a"]), &off);
-        assert!(matches!(found, Err((Status::MISSING, reason)) if reason.contains("is off")));
+        assert!(
+            matches!(&found, Err(refused) if refused.status() == Status::MISSING && refused.to_string().contains("is off"))
+        );
     }
 
     #[test]

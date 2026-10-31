@@ -6,6 +6,8 @@ valid:
   - "fn run() -> anyhow::Result<String> { todo() }"
   - "fn digits() -> mlua::Result<String> { todo() }"
   - "fn name() -> Result<Value, MyString> { todo() }"
+  - "fn pairs() -> Result<(String, String), Error> { todo() }"
+  - "fn undo() -> Result<(), (Status, u32)> { todo() }"
   - |
     #[cfg(test)]
     #[expect(clippy::unwrap_used, reason = "tests")]
@@ -27,6 +29,8 @@ invalid:
   - "fn get(key: &str) -> Result<Value, std::string::String> { todo() }"
   - "fn get(key: &str) -> Result<Value, alloc::string::String> { todo() }"
   - "struct Console { handler: OnceLock<Result<Handler, String>> }"
+  - "fn find() -> Result<Found, (Status, String)> { todo() }"
+  - "fn run() -> Result<Option<String>, (String, String)> { todo() }"
   - "type At = Box<dyn Fn(&Ask<'_>) -> Result<Subject, String> + Send + Sync>;"
   - |
     #[cfg(test)]

@@ -64,6 +64,11 @@ fn scratch(name: &str) -> PathBuf {
     dir
 }
 
+/// Why a run that must fail failed, as the log shows it.
+fn failed(outcome: Result<Option<String>, RunMigrationsError>) -> String {
+    outcome.unwrap_err().to_string()
+}
+
 #[test]
 fn settings_steps_keep_comments() {
     let text = "# Cost.\ncost = 3 # each\n# Limit.\nlimit = 4\nold = true\n";
@@ -218,15 +223,14 @@ fn a_migration_that_fails_midway_changes_nothing() {
         }
     };
     let mut record = Record::default();
-    let (_, reason) = run(
+    let reason = failed(run(
         &mut record,
         target,
         "you.trading-post",
         &all,
         &refuse,
         false,
-    )
-    .unwrap_err();
+    ));
     assert!(reason.contains("refused"), "{reason}");
     assert_eq!(WorldRecord::read(&world).unwrap(), None);
     assert_eq!(
@@ -279,8 +283,9 @@ fn a_world_the_mod_never_saw_starts_current() {
             &all,
             &double,
             false
-        ),
-        Ok(None)
+        )
+        .ok(),
+        Some(None)
     );
     assert_eq!(ran_on(&world), ["2"]);
     let _gone = std::fs::remove_dir_all(&dir);
@@ -327,7 +332,7 @@ fn a_failure_records_the_migrations_before_it() {
         migration("3", vec![step(MigrationStep::MAP_SETTING, "limit", "")]),
     ];
     let mut record = Record::default();
-    let (_, reason) = run(
+    let reason = failed(run(
         &mut record,
         Target::Settings {
             path: &file,
@@ -337,8 +342,7 @@ fn a_failure_records_the_migrations_before_it() {
         &all,
         &double,
         false,
-    )
-    .unwrap_err();
+    ));
     assert!(reason.starts_with("migration 3: setting limit"), "{reason}");
     assert_eq!(record.settings["you.trading-post"], ["2"]);
     assert_eq!(
@@ -407,10 +411,10 @@ fn a_settings_file_waits_until_written_then_starts_current_with_taken_values() {
     ];
     let mut record = Record::default();
     let target = |born| Target::Settings { path: &file, born };
-    assert_eq!(
+    assert!(matches!(
         run(&mut record, target(false), "rates", &all, &double, false),
         Ok(None)
-    );
+    ));
     assert!(
         record.settings.is_empty(),
         "nothing recorded before the file"
@@ -458,10 +462,10 @@ fn a_new_world_takes_the_other_mod_s_world_values() {
         key: "w-2",
         dir: &data.join("rates/worlds/w-2"),
     };
-    assert_eq!(
+    assert!(matches!(
         run(&mut record, other, "rates", &all, &double, false),
         Ok(None)
-    );
+    ));
     assert_eq!(ran_on(&data.join("rates/worlds/w-2")), ["2"]);
     assert!(!data.join("rates/worlds/w-2/settings.toml").exists());
     let _gone = std::fs::remove_dir_all(&data);
@@ -661,10 +665,10 @@ fn a_world_keeps_its_own_record_so_a_lost_shared_record_runs_nothing_twice() {
     assert!(record.worlds.is_empty(), "{record:?}");
 
     let mut lost = Record::default();
-    assert_eq!(
+    assert!(matches!(
         run(&mut lost, target, "you.lockers", &all, &fives, false),
         Ok(None)
-    );
+    ));
     assert_eq!(
         std::fs::read_to_string(world.join("settings.toml")).unwrap(),
         "limit = 4\n"
@@ -687,8 +691,9 @@ fn a_world_keeps_its_own_record_so_a_lost_shared_record_runs_nothing_twice() {
             &all,
             &fives,
             false
-        ),
-        Ok(None)
+        )
+        .ok(),
+        Some(None)
     );
     assert_eq!(
         std::fs::read_to_string(copy.join("keepers.toml")).unwrap(),
@@ -732,15 +737,14 @@ fn a_world_record_that_does_not_read_runs_nothing() {
     };
     for broken in ["", "ran = ["] {
         std::fs::write(world.join(WORLD_RECORD), broken).unwrap();
-        let (_, reason) = run(
+        let reason = failed(run(
             &mut Record::default(),
             target,
             "you.lockers",
             &all,
             &fives,
             false,
-        )
-        .unwrap_err();
+        ));
         assert!(reason.contains(WORLD_RECORD), "{reason}");
         assert_eq!(
             std::fs::read_to_string(world.join("settings.toml")).unwrap(),
@@ -758,15 +762,14 @@ fn a_store_that_does_not_read_fails_its_migration_instead_of_counting_as_absent(
         key: "w1",
         dir: &world,
     };
-    let (_, reason) = run(
+    let reason = failed(run(
         &mut Record::default(),
         target,
         "you.lockers",
         &all,
         &fives,
         false,
-    )
-    .unwrap_err();
+    ));
     assert!(reason.starts_with("migration 3: owners.toml"), "{reason}");
     assert_eq!(ran_on(&world), ["2"]);
     assert!(!world.join("keepers.toml").exists());

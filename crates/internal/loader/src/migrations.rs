@@ -656,6 +656,44 @@ fn stage_stores(
     Ok(())
 }
 
+/// Why a run of a mod's migrations stopped, with the plan line of what was
+/// pending.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum RunMigrationsError {
+    /// A pending migration failed; the ones before it are recorded.
+    #[error("migration {migration}: {reason}")]
+    Failed {
+        /// The plan line of the run.
+        plan: String,
+        /// The migration that failed.
+        migration: String,
+        /// Why it failed.
+        reason: Box<MigrationError>,
+    },
+    /// Nothing ran: the world's folder or its record does not read, or the
+    /// record of a world the mod never saw does not commit.
+    #[error(transparent)]
+    NotRun(Box<MigrationError>),
+}
+
+impl From<MigrationError> for RunMigrationsError {
+    fn from(reason: MigrationError) -> Self {
+        Self::NotRun(Box::new(reason))
+    }
+}
+
+impl RunMigrationsError {
+    /// The plan line of what was pending; empty when nothing ran.
+    #[must_use]
+    pub fn plan(&self) -> &str {
+        match self {
+            Self::Failed { plan, .. } => plan,
+            Self::NotRun(_) => "",
+        }
+    }
+}
+
 /// Runs the pending migrations of mod `id` on its settings file, recorded
 /// in `record`, or on a world folder with its `settings.toml`, recorded in
 /// the folder; returns the plan line, when anything was pending.
@@ -668,9 +706,10 @@ fn stage_stores(
 ///
 /// # Errors
 ///
-/// The plan line and why the first failing migration failed; the ones
-/// before it are recorded, and all of them on a file the mod never saw. On
-/// a world whose record does not read nothing runs, and the plan is empty.
+/// [`RunMigrationsError::Failed`] with the plan line and why the first
+/// failing migration failed; the ones before it are recorded, and all of
+/// them on a file the mod never saw. [`RunMigrationsError::NotRun`] on a
+/// world whose folder or record does not read: nothing runs.
 pub fn run(
     record: &mut Record,
     target: Target<'_>,
@@ -678,7 +717,7 @@ pub fn run(
     all: &[Migration],
     map: MapFn<'_>,
     dry: bool,
-) -> Result<Option<String>, (String, String)> {
+) -> Result<Option<String>, RunMigrationsError> {
     match target {
         Target::Settings { path, born } => {
             if !path.exists() {
@@ -729,7 +768,7 @@ fn run_on_settings(
     all: &[Migration],
     map: MapFn<'_>,
     dry: bool,
-) -> Result<Option<String>, (String, String)> {
+) -> Result<Option<String>, RunMigrationsError> {
     let source = |other: &str| {
         enshwick::files::read_to_string_if_present(&path.with_file_name(format!("{other}.toml")))
     };
@@ -755,7 +794,11 @@ fn run_on_settings(
                 staged.commit(None)
             });
         if let Err(reason) = applied {
-            return Err((line, format!("migration {}: {reason}", migration.id)));
+            return Err(RunMigrationsError::Failed {
+                plan: line,
+                migration: migration.id.clone(),
+                reason: Box::new(reason),
+            });
         }
         if !fresh {
             ran.push(migration.id.clone());
@@ -776,15 +819,12 @@ fn run_on_world(
     all: &[Migration],
     map: MapFn<'_>,
     dry: bool,
-) -> Result<Option<String>, (String, String)> {
-    let failed = |reason: MigrationError| (String::new(), reason.to_string());
-    let fresh = !dir
-        .try_exists()
-        .map_err(|e| failed(staged::failed(dir, e)))?;
+) -> Result<Option<String>, RunMigrationsError> {
+    let fresh = !dir.try_exists().map_err(|e| staged::failed(dir, e))?;
     let own = if fresh {
         None
     } else {
-        WorldRecord::read(dir).map_err(|e| failed(MigrationError::WorldRecord(e)))?
+        WorldRecord::read(dir).map_err(MigrationError::WorldRecord)?
     };
     let shared = record.entry(Some(key), id);
     let mut ran = match (&own, shared) {
@@ -793,7 +833,7 @@ fn run_on_world(
         (None, None) => Vec::new(),
     };
     if !fresh && !dry {
-        recover(dir, &ran).map_err(failed)?;
+        recover(dir, &ran)?;
     }
     let source = |other: &str| {
         enshwick::files::read_to_string_if_present(&Target::World { key, dir }.source(other))
@@ -829,16 +869,17 @@ fn run_on_world(
             staged.commit(Some((&backup_of(dir, &migration.id), &migration.id)))
         });
         if let Err(reason) = applied {
-            let line = line.unwrap_or_default();
-            return Err((line, format!("migration {}: {reason}", migration.id)));
+            return Err(RunMigrationsError::Failed {
+                plan: line.unwrap_or_default(),
+                migration: migration.id.clone(),
+                reason: Box::new(reason),
+            });
         }
     }
     if unrecorded && line.is_none() {
         let mut staged = Staged::default();
         staged.record(dir, WorldRecord { ran });
-        staged
-            .commit(None)
-            .map_err(|reason| (line.clone().unwrap_or_default(), reason.to_string()))?;
+        staged.commit(None)?;
     }
     record.set_entry(Some(key), id, None);
     Ok(line.filter(|_| changed || !fresh))
