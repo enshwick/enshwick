@@ -239,6 +239,11 @@ the user's [manifest](concepts/loader-and-abi.md#the-manifest):
 trading_post = { id = "you.trading-post", version = ">=0.1, <1.0" }
 ```
 
+The alias names the publisher in the user's declarations:
+`#[enshwick::event(of = trading_post, name = "sold")]` is
+`you.trading-post:sold`, and the same `of` works on `#[service]` (see
+[naming dependencies](concepts/loader-and-abi.md#the-manifest)).
+
 `requires` loads the publisher first, and skips the user with a reason when
 the publisher is missing or its version is out of range. Before 1.0 every
 minor release may bump `0.x`, and `^0.1` refuses 0.2.0: name the whole series

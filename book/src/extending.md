@@ -147,6 +147,11 @@ under an alias, with a version range or none:
 trading_post = "you.trading-post"
 ```
 
+The alias then names the owner in the point's declaration:
+`#[enshwick::point(of = trading_post, name = "price", ..)]` is
+`you.trading-post:price` (see
+[naming dependencies](concepts/loader-and-abi.md#the-manifest)).
+
 With `recommends`, a missing owner leaves the link inert, which is no error:
 the mod runs and `loader.log` says
 `point you.trading-post:price: the link stays inert: you.trading-post does not run`. Use

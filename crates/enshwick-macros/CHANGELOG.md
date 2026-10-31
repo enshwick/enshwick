@@ -14,6 +14,10 @@ Each entry names the pull request that made the change.
 - `id!`, the content id `<mod>:<name>` of a local name, with the mod id
   from the same table (#766).
 
+- `deps!`, a module per dependency alias of the same table, and `of = <alias>`
+  with local names on `#[call]`, `#[point]`, `#[service]` and `#[event]`
+  (#PR).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Changed

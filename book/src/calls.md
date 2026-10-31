@@ -39,6 +39,9 @@ enshwick::declare_mod!(TradingPost, calls: [PriceOf]);
 ```
 
 - Name it after the serving mod, `<id>:<call>`. The loader refuses other names.
+  A local `name = "price-of"` gets the mod's own id in front at build time; a
+  caller writes `of = <alias>` with the alias its manifest gives the server
+  (see [naming dependencies](concepts/loader-and-abi.md#the-manifest)).
 - `version` is the call's major, 1 when left out. A changed field or answer is a
   new major, which the server may serve beside the old one.
 - Every type in the input and the answer has a [`Shape`](services.md#shapes)

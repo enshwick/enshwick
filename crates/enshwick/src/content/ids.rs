@@ -185,15 +185,18 @@ impl Guid {
 
     /// The version 5 UUID of `name` in [`NAMESPACE`], in memory order.
     pub(crate) const fn hashed(name: &str) -> Self {
-        Self::hashed_part(name, "")
+        Self::hashed_parts("", name, "")
     }
 
-    /// [`Guid::hashed`] of `name`, then `.` and `part` unless `part` is
-    /// empty, without joining the two.
-    const fn hashed_part(name: &str, part: &str) -> Self {
-        let mut input = const_sha1::ConstSlice::new()
-            .push_slice(&NAMESPACE_BYTES)
-            .push_slice(name.as_bytes());
+    /// [`Guid::hashed`] of `owner`, `:` and `name` (`name` alone when
+    /// `owner` is empty), then `.` and `part` unless `part` is empty,
+    /// without joining them.
+    const fn hashed_parts(owner: &str, name: &str, part: &str) -> Self {
+        let mut input = const_sha1::ConstSlice::new().push_slice(&NAMESPACE_BYTES);
+        if !owner.is_empty() {
+            input = input.push_slice(owner.as_bytes()).push_slice(b":");
+        }
+        input = input.push_slice(name.as_bytes());
         if !part.is_empty() {
             input = input.push_slice(b".").push_slice(part.as_bytes());
         }
@@ -250,32 +253,52 @@ pub(super) const NAMESPACE_BYTES: [u8; 16] = [
 /// ```
 #[must_use]
 pub const fn is_id(id: &str) -> bool {
-    let bytes = id.as_bytes();
-    let mut colon = None;
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b == b':' {
-            if colon.is_some() {
-                return false;
-            }
-            colon = Some(i);
-        } else {
-            let common = b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-';
-            let in_name = colon.is_some() && b == b'/';
-            if !common && !in_name && b != b'.' {
-                return false;
-            }
-        }
-        i += 1;
-    }
-    match colon {
+    match colon(id) {
         Some(at) => {
-            let name = bytes.len() - at - 1;
-            at >= 1 && at <= 64 && name >= 1 && name <= 128
+            let (owner, rest) = id.as_bytes().split_at(at);
+            is_owner(owner) && is_name(rest.split_at(1).1)
         }
         None => false,
     }
+}
+
+/// Where the first `:` of `id` is.
+const fn colon(id: &str) -> Option<usize> {
+    let bytes = id.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b':' {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Whether `bytes` is the mod side of a content id: 1 to 64 of `[a-z0-9_.-]`.
+const fn is_owner(bytes: &[u8]) -> bool {
+    !bytes.is_empty() && bytes.len() <= 64 && all_of(bytes, false)
+}
+
+/// Whether `bytes` is the name side of a content id: 1 to 128 of
+/// `[a-z0-9_./-]`.
+const fn is_name(bytes: &[u8]) -> bool {
+    !bytes.is_empty() && bytes.len() <= 128 && all_of(bytes, true)
+}
+
+/// Whether every byte is of `[a-z0-9_.-]`, or `/` too with `slash`.
+const fn all_of(bytes: &[u8], slash: bool) -> bool {
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        let common =
+            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'-' | b'.');
+        if !(common || (slash && b == b'/')) {
+            return false;
+        }
+        i += 1;
+    }
+    true
 }
 
 /// Names a piece of the mod's own content by its local name: `id!("locker")`
@@ -306,8 +329,9 @@ pub use enshwick_macros::id;
 /// [`Id::part`]. Content calls such as [`Load::add_item`](crate::Load::add_item)
 /// take an `Id` for what they create and declare it to the loader, which turns
 /// the mod off when its id lies outside the mod's namespace or its game id
-/// ([`Guid::fnv1a`]) is another content id's; the log names both. References
-/// to existing content, vanilla or another mod's, stay [`Guid`]s.
+/// ([`Guid::fnv1a`]) is another content id's; the log names both. Another
+/// mod's content is named through [`deps!`](crate::deps), by the alias the
+/// crate's `Cargo.toml` gives that mod.
 ///
 /// Two ids are equal when they name the same content, however they were
 /// built. Equal ids may still differ in what they allow: a derived id takes
@@ -325,7 +349,9 @@ pub use enshwick_macros::id;
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Id {
-    /// The id the parts follow, `<mod>:<name>`.
+    /// The mod side, `<mod>`.
+    pub(super) owner: &'static str,
+    /// The name side the part follows.
     pub(super) name: &'static str,
     /// The derived part after `name` and a `.`; empty for none.
     pub(super) part: &'static str,
@@ -346,11 +372,14 @@ impl Id {
     ///
     /// See [`Id`].
     #[must_use]
+    #[expect(
+        clippy::panic,
+        reason = "const evaluation: a malformed literal fails the build"
+    )]
     pub const fn new(name: &'static str) -> Self {
-        Self {
-            name,
-            part: "",
-            guid: Guid::named(name),
+        match Self::try_new(name) {
+            Some(id) => id,
+            None => panic!("a content id is <mod>:<name>"),
         }
     }
 
@@ -367,13 +396,77 @@ impl Id {
     /// ```
     #[must_use]
     pub const fn try_new(name: &'static str) -> Option<Self> {
-        match Guid::try_named(name) {
-            Some(guid) => Some(Self {
-                name,
-                part: "",
-                guid,
-            }),
-            None => None,
+        if !is_id(name) {
+            return None;
+        }
+        let Some(at) = colon(name) else {
+            return None;
+        };
+        let (owner, rest) = name.split_at(at);
+        Some(Self::joined(owner, rest.split_at(1).1, ""))
+    }
+
+    /// The content id `<owner>:<name>` from its two sides, in a constant
+    /// too: what a mod's [`deps!`](crate::deps) module names another
+    /// mod's content with. A malformed side fails the build when used in a
+    /// constant.
+    ///
+    /// # Panics
+    ///
+    /// When `owner` is not 1 to 64 of `[a-z0-9_.-]` or `name` not 1 to 128
+    /// of `[a-z0-9_./-]`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Id;
+    ///
+    /// const LOCKER: Id = Id::of("you.lockers", "locker");
+    /// assert_eq!(LOCKER, Id::new("you.lockers:locker"));
+    /// assert_eq!(LOCKER.to_string(), "you.lockers:locker");
+    /// ```
+    #[must_use]
+    #[expect(
+        clippy::panic,
+        reason = "const evaluation: a malformed literal fails the build"
+    )]
+    pub const fn of(owner: &'static str, name: &'static str) -> Self {
+        match Self::try_of(owner, name) {
+            Some(id) => id,
+            None => panic!(
+                "a content id is <mod>:<name>, the mod 1 to 64 of [a-z0-9_.-], the name 1 to 128 of [a-z0-9_./-]"
+            ),
+        }
+    }
+
+    /// [`Id::of`] for when a malformed side should not panic; `None` when
+    /// either is malformed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Id;
+    ///
+    /// assert!(Id::try_of("you.lockers", "locker").is_some());
+    /// assert!(Id::try_of("you.lockers", "Locker").is_none());
+    /// assert!(Id::try_of("", "locker").is_none());
+    /// ```
+    #[must_use]
+    pub const fn try_of(owner: &'static str, name: &'static str) -> Option<Self> {
+        if is_owner(owner.as_bytes()) && is_name(name.as_bytes()) {
+            Some(Self::joined(owner, name, ""))
+        } else {
+            None
+        }
+    }
+
+    /// The id of the checked sides and part.
+    const fn joined(owner: &'static str, name: &'static str, part: &'static str) -> Self {
+        Self {
+            owner,
+            name,
+            part,
+            guid: Guid::hashed_parts(owner, name, part),
         }
     }
 
@@ -431,11 +524,7 @@ impl Id {
 
     /// `self` with `part` after it, both checked.
     const fn join(self, part: &'static str) -> Self {
-        Self {
-            name: self.name,
-            part,
-            guid: Guid::hashed_part(self.name, part),
-        }
+        Self::joined(self.owner, self.name, part)
     }
 
     /// The mod side of the id.
@@ -446,10 +535,8 @@ impl Id {
     /// assert_eq!(enshwick::content::Id::new("you.lockers:locker").namespace(), "you.lockers");
     /// ```
     #[must_use]
-    pub fn namespace(self) -> &'static str {
-        self.name
-            .split_once(':')
-            .map_or("", |(namespace, _)| namespace)
+    pub const fn namespace(self) -> &'static str {
+        self.owner
     }
 
     /// Its GUID.
@@ -546,7 +633,7 @@ impl core::fmt::Display for Id {
     /// assert_eq!(Id::new("a:b").part("c").to_string(), "a:b.c");
     /// ```
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(self.name)?;
+        write!(f, "{}:{}", self.owner, self.name)?;
         if self.part.is_empty() {
             return Ok(());
         }
@@ -554,28 +641,11 @@ impl core::fmt::Display for Id {
     }
 }
 
-/// Whether `part` after the content id `name` and a `.` makes a content id:
+/// Whether `part` after the name side `name` and a `.` makes a content id:
 /// `part` 1 or more of `[a-z0-9_./-]`, the name side at most 128 with it.
 const fn fits(name: &str, part: &str) -> bool {
     let bytes = part.as_bytes();
-    if bytes.is_empty() {
-        return false;
-    }
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        let allowed =
-            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'/' | b'-');
-        if !allowed {
-            return false;
-        }
-        i += 1;
-    }
-    let mut colon = 0;
-    while colon < name.len() && name.as_bytes()[colon] != b':' {
-        colon += 1;
-    }
-    name.len() - colon + bytes.len() <= 128
+    !bytes.is_empty() && all_of(bytes, true) && name.len() + 1 + bytes.len() <= 128
 }
 
 impl core::fmt::Display for Guid {

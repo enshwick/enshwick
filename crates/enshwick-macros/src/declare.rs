@@ -116,6 +116,8 @@ impl Side {
 
 /// One relation to another mod.
 struct Dependency {
+    /// The name the mod's code knows it by; empty for `replaces`.
+    alias: String,
     id: String,
     range: String,
     relation: &'static str,
@@ -172,6 +174,124 @@ pub(crate) fn expand_id(name: &LitStr) -> syn::Result<TokenStream> {
         const _: &[u8] = ::core::include_bytes!(#shown);
         ::enshwick::content::Id::new(#full)
     }})
+}
+
+/// Expands `deps!()`: a module per dependency the crate's `Cargo.toml`
+/// names by alias in `requires`, `after` or `recommends`, with the
+/// dependency's id and its content ids.
+pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
+    let (metadata, shown) = cargo_metadata()?;
+    let modules = metadata.dependencies.iter().filter_map(|d| {
+        let relation = match d.relation {
+            "REQUIRES" => "requires",
+            "RECOMMENDS" => "recommends",
+            "AFTER" => "loads after",
+            _ => return None,
+        };
+        let alias = Ident::new(&d.alias, Span::call_site());
+        let id = &d.id;
+        let doc = format!("`{id}`, which this mod {relation}.");
+        let content = if d.relation == "REQUIRES" {
+            quote! {
+                /// The dependency's content id `<dependency>:<name>`, in a
+                /// constant too, where a malformed name fails the build.
+                ///
+                /// # Panics
+                ///
+                /// When `name` is not 1 to 128 of `[a-z0-9_./-]`.
+                #[must_use]
+                pub const fn id(name: &'static str) -> ::enshwick::content::Id {
+                    ::enshwick::content::Id::of(ID, name)
+                }
+            }
+        } else {
+            quote! {
+                /// The dependency's content id `<dependency>:<name>`; `None`
+                /// while the dependency does not run.
+                ///
+                /// # Panics
+                ///
+                /// When `name` is not 1 to 128 of `[a-z0-9_./-]`.
+                #[must_use]
+                pub fn id(name: &'static str) -> ::core::option::Option<::enshwick::content::Id> {
+                    ::enshwick::mods::is_running(ID).then(|| ::enshwick::content::Id::of(ID, name))
+                }
+            }
+        };
+        Some(quote! {
+            #[doc = #doc]
+            pub mod #alias {
+                /// The dependency's mod id.
+                pub const ID: &str = #id;
+
+                #content
+            }
+        })
+    });
+    Ok(quote! {
+        /// The mods this one depends on, by the aliases its `Cargo.toml` gives
+        /// them.
+        pub mod deps {
+            const _: &[u8] = ::core::include_bytes!(#shown);
+
+            #(#modules)*
+        }
+    })
+}
+
+/// The full name `<mod id>:<what>` of a call, point or event declared with
+/// `name`: as written when it holds a `:`, else after the id of the
+/// dependency `of` or, without `of`, of the crate's own mod. With the name,
+/// the `Cargo.toml` it read, if any, for build tracking.
+pub(crate) fn full_name(
+    name: &LitStr,
+    of: Option<&Ident>,
+) -> syn::Result<(LitStr, Option<String>)> {
+    let text = name.value();
+    if text.contains(':') {
+        if let Some(of) = of {
+            return Err(syn::Error::new(
+                of.span(),
+                "with `of`, the name is the dependency's own, without `<mod id>:`",
+            ));
+        }
+        return Ok((name.clone(), None));
+    }
+    let (metadata, shown) = cargo_metadata()?;
+    let owner = match of {
+        None => metadata.id.clone(),
+        Some(of) => {
+            let alias = of.to_string();
+            let named: Vec<&str> = metadata
+                .dependencies
+                .iter()
+                .filter(|d| matches!(d.relation, "REQUIRES" | "RECOMMENDS" | "AFTER"))
+                .map(|d| d.alias.as_str())
+                .collect();
+            let found = metadata
+                .dependencies
+                .iter()
+                .find(|d| d.alias == alias && named.contains(&d.alias.as_str()))
+                .ok_or_else(|| {
+                    let known = if named.is_empty() {
+                        "it names none".to_owned()
+                    } else {
+                        format!("it names {}", named.join(", "))
+                    };
+                    syn::Error::new(
+                        of.span(),
+                        format!(
+                            "`of = {alias}`: {shown} names no dependency `{alias}` in `requires`, `after` or `recommends`; {known}"
+                        ),
+                    )
+                })?;
+            found.id.clone()
+        }
+    };
+    Ok((
+        LitStr::new(&format!("{owner}:{text}"), name.span()),
+        Some(shown),
+    ))
 }
 
 /// Whether `name` is the name side of a content id: 1 to 128 of
@@ -270,9 +390,9 @@ impl Metadata {
                 .as_table()
                 .ok_or_else(|| format!("`{key}` is a table of dependencies by alias"))?;
             for (alias, entry) in entries {
-                if !is_alias(alias) {
+                if !is_alias(alias) || syn::parse_str::<Ident>(alias).is_err() {
                     return Err(format!(
-                        "`{key}.{alias}`: an alias is a Rust name in snake case, [a-z][a-z0-9_]*"
+                        "`{key}.{alias}`: an alias is a Rust name in snake case, [a-z][a-z0-9_]*, and no keyword"
                     ));
                 }
                 if !aliases.insert(alias.clone()) {
@@ -293,6 +413,7 @@ impl Metadata {
                     ));
                 }
                 dependencies.push(Dependency {
+                    alias: String::new(),
                     id: id.to_owned(),
                     range: String::new(),
                     relation: "REPLACES",
@@ -384,6 +505,7 @@ fn dependency(
         ));
     }
     Ok(Dependency {
+        alias: alias.to_owned(),
         id,
         range,
         relation,
@@ -680,6 +802,10 @@ mod tests {
         assert!(
             refused("id = \"you.a\"\nside = \"both\"\n[requires]\nOther = \"you.b\"")
                 .contains("`requires.Other`")
+        );
+        assert!(
+            refused("id = \"you.a\"\nside = \"both\"\n[requires]\ntype = \"you.b\"")
+                .contains("no keyword")
         );
         assert!(
             refused("id = \"you.a\"\nside = \"both\"\n[requires]\nb = \"you.b\"\n[breaks]\nb = \"you.c\"")

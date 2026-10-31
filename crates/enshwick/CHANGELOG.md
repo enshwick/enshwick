@@ -8,6 +8,15 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `deps!()` writes a module `deps` with a module per alias of `requires`,
+  `after` and `recommends`: `deps::lockers::ID` and `deps::lockers::id("locker")`,
+  the dependency's content id, a constant for a required dependency and an
+  `Option` for an optional one, `None` while it does not run. `#[call]`,
+  `#[point]`, `#[service]` and `#[event]` take a local name, the mod's own,
+  or one of a dependency with `of = <alias>`. `Id::of` and `Id::try_of` build
+  an id from its two sides in a constant, and `mods::is_running` says whether
+  a mod runs (#PR).
+
 - `content::id!("locker")` names the mod's own content by its local name:
   a constant `Id` whose mod side, `<mod>:`, comes from the
   `[package.metadata.enshwick]` table at build time, so its GUID stays a
