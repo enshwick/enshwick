@@ -1,0 +1,37 @@
+id: static-is-registry-fuse-or-state
+valid:
+  - "static FILTERS: Registry<Registered<CheckFn>> = Registry::new();"
+  - "static FUSE: Fuse = Fuse::new(\"fog of war\");"
+  - "static FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new(\"day length\");"
+  - "static WANTED: AtomicBool = AtomicBool::new(false);"
+  - "static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();"
+  - "static NEXT: Next<RevealFn> = unsafe { Next::new() };"
+  - "static LEVELS: ArcSwapOption<Settings> = ArcSwapOption::const_empty();"
+  - "static STATE: Mutex<SceneState> = Mutex::new(SceneState::new());"
+  - "static OUTBOX: Mutex<Outbox<Line>> = Mutex::new(Outbox::new(8));"
+  - "static SERVING: Mutex<()> = Mutex::new(());"
+  - "static STATE: Transactions = Transactions::new();"
+  - "static SERVER: Mutex<Option<ServerState>> = Mutex::new(None);"
+  - "static NUL: u8 = 0;"
+  - "const LIMIT: usize = 8;"
+  - |
+    #[cfg(test)]
+    mod tests {
+        static SEEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+    }
+  - |
+    #[test]
+    fn counts() { static CALLS: Mutex<Vec<u32>> = Mutex::new(Vec::new()); }
+invalid:
+  - "static PENDING: Mutex<Vec<CodePatch>> = Mutex::new(Vec::new());"
+  - "static CURRENT: Mutex<Option<String>> = Mutex::new(None);"
+  - "static WHERE: Mutex<Option<[i64; 3]>> = Mutex::new(None);"
+  - "static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());"
+  - "static LAST: std::sync::Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = std::sync::Mutex::new(None);"
+  - "static KEY_NAME: Mutex<String> = Mutex::new(String::new());"
+  - "static WAITING: Mutex<(Vec<u32>, bool)> = Mutex::new((Vec::new(), false));"
+  - "static TABLE: RwLock<Vec<u32>> = RwLock::new(Vec::new());"
+  - "static COUNT: Mutex<u32> = Mutex::new(0);"
+  - "static mut COUNT: u32 = 0;"
+  - "static QUEUES: Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> = Fresh::new();"
+  - "fn f() { static SEEN: Mutex<Vec<u32>> = Mutex::new(Vec::new()); }"

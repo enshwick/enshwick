@@ -1,0 +1,21 @@
+id: game-memory-through-raw
+valid:
+  - "fn f(base: usize) -> u32 { unsafe { memory::read(base, 0x10) } }"
+  - "fn f(p: *mut u8) -> u32 { unsafe { enshwick::raw::read_at(p, 4) } }"
+  - "fn f(m: &RwLock<u8>) { let g = m.read(); }"
+  - "fn f(file: &mut File, buf: &mut [u8]) { let n = file.read(buf); }"
+  - "fn f(x: &u32) -> &u32 { &*x }"
+  - |
+    #[cfg(test)]
+    mod tests {
+        fn f(p: *const u32) -> u32 { unsafe { p.read_unaligned() } }
+    }
+invalid:
+  - "fn f(p: *const u32) -> u32 { unsafe { p.read_unaligned() } }"
+  - "fn f(slot: *const u64) -> u64 { unsafe { slot.read_volatile() } }"
+  - "fn f(p: *const u8) -> u32 { unsafe { p.cast::<u32>().read() } }"
+  - "fn f(rsp: usize) -> u64 { unsafe { (rsp as *const u64).read() } }"
+  - "fn f(p: *const u32) -> u32 { unsafe { core::ptr::read(p) } }"
+  - "fn f(p: *const u32) -> u32 { unsafe { std::ptr::read_unaligned(p) } }"
+  - "fn f(p: *const u32) -> u32 { unsafe { ptr::read(p) } }"
+  - "fn f(address: usize) -> &'static Table { unsafe { &*(address as *const Table) } }"

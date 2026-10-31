@@ -638,9 +638,11 @@ pub(crate) extern "system" fn voxel_read(
     }
     // SAFETY: `min` is non-null, checked above; the safe layer passes three
     // `u32`s for the call, and an unaligned read needs no alignment.
+    // ast-grep-ignore: game-memory-through-raw
     let min = unsafe { min.read_unaligned() };
     // SAFETY: `size` is non-null, checked above; the safe layer passes three
     // `u32`s for the call, and an unaligned read needs no alignment.
+    // ast-grep-ignore: game-memory-through-raw
     let size = unsafe { size.read_unaligned() };
     if Voxel::read_count(min, size).is_none_or(|count| count > capacity) {
         return Status::BAD_ARGS;
@@ -796,8 +798,10 @@ pub(crate) extern "system" fn world_persists(
     }
     // SAFETY: the safe layer passes `min` pointing at three live `f64` for
     // the call, non-null by the check before it.
+    // ast-grep-ignore: game-memory-through-raw
     let low = unsafe { min.read_unaligned() };
     // SAFETY: as for `min`, `max` points at three live `f64`.
+    // ast-grep-ignore: game-memory-through-raw
     let high = unsafe { max.read_unaligned() };
     let finite = low.iter().chain(&high).all(|v| v.is_finite());
     if !finite || (0..3).any(|a| high[a] < low[a]) {

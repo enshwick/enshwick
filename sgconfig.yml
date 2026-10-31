@@ -1,6 +1,8 @@
 # ast-grep: the code rules clippy cannot express, run by `cargo xtask check`.
 # A deliberate exception is `// ast-grep-ignore: <rule id>` on the line
-# above, with its reason in the comment before it.
+# above, with its reason in the comment before it. Code written before a
+# rule is listed in `tools/ast-grep/known.txt` until it moves to what the
+# rule asks; the list only shrinks.
 ruleDirs:
   - tools/ast-grep/rules
 testConfigs:

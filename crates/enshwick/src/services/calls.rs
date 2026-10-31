@@ -573,6 +573,7 @@ pub(crate) unsafe extern "system" fn run_typed<C: Call, F: Fn(&C) -> C::Output>(
     // the caller's bytes are a valid `C` (a typed caller's own, or a
     // described caller's under its safety contract), live for the call, and
     // may be unaligned.
+    // ast-grep-ignore: game-memory-through-raw
     let input = unsafe { input.cast::<C>().read_unaligned() };
     let output = output.cast::<C::Output>();
     let Ok(answer) =

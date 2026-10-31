@@ -52,6 +52,7 @@ fn commit(
         let slot = unsafe { ops.add(i) };
         // SAFETY: `slot` is inside the `count` ops the safe layer passes,
         // borrowed for the call; an unaligned read needs no alignment.
+        // ast-grep-ignore: game-memory-through-raw
         let op = unsafe { slot.read_unaligned() };
         if op.reserved != 0 {
             return Status::BAD_ARGS;

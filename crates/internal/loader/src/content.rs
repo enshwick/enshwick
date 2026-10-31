@@ -211,7 +211,9 @@ fn write_differences(held: usize, new: usize, len: usize) -> usize {
         let slot = held.wrapping_add(at);
         // SAFETY: `held` is the resource the game reads, `len` bytes a patch
         // built and left writable for the process (`ResourcePatchFn`), and
-        // `at` is below `len`.
+        // `at` is below `len`. A volatile read, which `enshwick::raw` has
+        // not: the bytes are the patch's own, read while the game reads them.
+        // ast-grep-ignore: game-memory-through-raw
         let old = unsafe { slot.read_volatile() };
         if old != byte {
             // SAFETY: `held` is the patch's build of `len` bytes, writable for

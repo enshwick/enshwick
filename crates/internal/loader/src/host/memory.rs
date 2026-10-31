@@ -76,6 +76,7 @@ pub(crate) unsafe fn get_headed<T: enshwick::abi::Headed>(
 pub(crate) unsafe fn stride_of<T>(out: *const T) -> Option<usize> {
     // SAFETY: the caller guarantees `out` readable for a `Header`'s eight
     // bytes with no concurrent writer; the read is unaligned.
+    // ast-grep-ignore: game-memory-through-raw
     let size = unsafe { out.cast::<Header>().read_unaligned() }.size as usize;
     (size >= size_of::<Header>()).then_some(size)
 }

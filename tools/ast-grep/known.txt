@@ -1,0 +1,58 @@
+# Findings of the ast-grep rules in code written before the rule, one a line:
+# `<rule> <file> <first line of the matched code>`. `cargo xtask check`
+# fails on a finding not listed here and on an entry nothing matches, so an
+# entry leaves when its code moves to what the rule asks. Nothing new goes
+# here: a deliberate exception is `// ast-grep-ignore` with its reason.
+
+# Locks around a bare value, each a domain's state kept before the rule; it
+# moves into the domain's `Registry` or state struct when the module changes.
+static-is-registry-fuse-or-state crates/enshwick/src/content/items.rs static METERS: crate::fresh::Fresh<Mutex<Vec<FuelSetup>>> = crate::fresh::Fresh::new();
+static-is-registry-fuse-or-state crates/enshwick/src/i18n.rs static HANDED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, Texts)>>> =
+static-is-registry-fuse-or-state crates/enshwick/src/loot/drops.rs static DROPS: Fresh<Mutex<Vec<(u64, Drop)>>> = Fresh::new();
+static-is-registry-fuse-or-state crates/enshwick/src/loot/drops.rs static WATCHERS: Fresh<Mutex<Vec<Watcher>>> = Fresh::new();
+static-is-registry-fuse-or-state crates/enshwick/src/schedule.rs static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
+static-is-registry-fuse-or-state crates/internal/loader/src/actions.rs static REGISTERED: Mutex<Vec<Registered>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/altars.rs static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/code.rs static PENDING: Mutex<Vec<CodePatch>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/content.rs static PENDING: Mutex<Vec<Served>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/content/texts.rs pub(super) static PENDING_TEXTS: Mutex<Vec<(u32, u32, String)>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/daytime.rs static SPEED_MODS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/deaths.rs static SEEN: Mutex<Vec<[u8; 64]>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/detour.rs static BLOCKS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/diag.rs static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/diag.rs static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/diag.rs static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/events.rs static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/fog.rs static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/game_events.rs static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/host/join.rs pub(crate) static JOIN_MISSING: Mutex<Vec<Missing>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/inventory.rs static FINISHED: Mutex<Vec<Finished>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/knowledge/changes.rs static RAISED: Mutex<Vec<KnowledgeData>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/log.rs static CAPTURED: Mutex<Option<Vec<(Level, String, String)>>> = Mutex::new(None);
+static-is-registry-fuse-or-state crates/internal/loader/src/migrations/live.rs static BORN: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/migrations/live.rs static REGISTERED: Mutex<Vec<Arc<Registered>>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/notices.rs static WAITING: Mutex<(Waiting, bool)> = Mutex::new((Vec::new(), false));
+static-is-registry-fuse-or-state crates/internal/loader/src/packs.rs static PACKS: Mutex<Option<FxHashMap<String, Loaded>>> = Mutex::new(None);
+static-is-registry-fuse-or-state crates/internal/loader/src/progress.rs static COMFORT: Mutex<Vec<Registered<ComfortFn>>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/progress.rs static EXPERIENCE_FILTERS: Mutex<Vec<Registered<ExperiencePassFn>>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/progress.rs static SKILLS: Mutex<Vec<(u32, Registered<SkillCheckFn>)>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/reload.rs static CALLS: Mutex<Vec<Vec<&'static str>>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/reload.rs static HELD: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/remote.rs static LAST_EDIT: Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = Mutex::new(None);
+static-is-registry-fuse-or-state crates/internal/loader/src/saves.rs static SEEN: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/status.rs static SOURCES: Mutex<Vec<Source>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/survivors.rs static BED_CHECKS: Mutex<Vec<Registered<BedCheckFn>>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/survivors.rs static ITEMS: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/survivors.rs static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
+static-is-registry-fuse-or-state crates/internal/loader/src/survivors.rs static SUMMONED: Mutex<Vec<Registered<SummonFn>>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/survivors.rs static SUMMONS: Mutex<Vec<Registered<SummonFn>>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/ui/actions.rs static KEY_NAME: Mutex<String> = Mutex::new(String::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/ui/actions.rs static OPEN: Mutex<Option<(String, String)>> = Mutex::new(None);
+static-is-registry-fuse-or-state crates/internal/loader/src/ui/demo.rs static ANSWER: Mutex<Option<&'static str>> = Mutex::new(None);
+static-is-registry-fuse-or-state crates/internal/loader/src/ui/demo.rs static HUD_SAMPLES: Mutex<Option<f32>> = Mutex::new(None);
+static-is-registry-fuse-or-state crates/internal/loader/src/ui/demo.rs static WHERE: Mutex<Option<[i64; 3]>> = Mutex::new(None);
+static-is-registry-fuse-or-state crates/internal/loader/src/ui/dialog.rs static SHOWN: Mutex<VecDeque<Arc<Shown>>> = Mutex::new(VecDeque::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/ui/dialog.rs static WAITING: Mutex<VecDeque<Pending>> = Mutex::new(VecDeque::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/watch.rs static WRITTEN: Mutex<Vec<(PathBuf, Stamp)>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/weather.rs static CHUNK_EVENTS: Mutex<Vec<(Event, ChunkData)>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/internal/loader/src/worlds.rs static CURRENT: Mutex<Option<String>> = Mutex::new(None);

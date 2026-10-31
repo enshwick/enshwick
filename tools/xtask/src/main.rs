@@ -28,6 +28,7 @@ mod crate_rules;
 mod dist;
 mod header;
 mod ranges;
+mod rules;
 mod wine;
 
 use std::collections::BTreeSet;
@@ -473,14 +474,12 @@ const fn workspace_rustdoc(code: bool, full: bool) -> bool {
     code || full
 }
 
-/// The ast-grep rules' own tests, the rules over the repository, then the
-/// dependencies no crate uses.
-fn source_checks() -> [Step; 3] {
-    [
-        Step::tool("ast-grep", &["test", "--skip-snapshot-tests"]),
-        Step::tool("ast-grep", &["scan"]),
-        Step::tool("cargo-machete", &[]),
-    ]
+/// The ast-grep rules' own tests, the rules over the repository ([`rules`]),
+/// then the dependencies no crate uses.
+fn source_checks() -> bool {
+    Step::tool("ast-grep", &["test", "--skip-snapshot-tests"]).run(false)
+        && rules::scan(&workspace_root())
+        && Step::tool("cargo-machete", &[]).run(false)
 }
 
 /// Runs the checks of `scope`. Every build selects the whole workspace, so
@@ -491,7 +490,7 @@ fn source_checks() -> [Step; 3] {
 fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> bool {
     // The source checks read every file in about a second without compiling,
     // so they run whatever changed: a change to a rule alone touches no package.
-    if parts.contains(&Part::Host) && !source_checks().iter().all(|step| step.run(false)) {
+    if parts.contains(&Part::Host) && !source_checks() {
         return false;
     }
     let on_windows = cfg!(windows);

@@ -258,6 +258,7 @@ pub unsafe fn read_headed<T: Headed>(raw: *const T, required: usize) -> Option<T
     }
     // SAFETY: `raw` is non-null and the caller guarantees it is readable for
     // its header, the first eight bytes of every `Headed` type.
+    // ast-grep-ignore: game-memory-through-raw
     let header = unsafe { raw.cast::<Header>().read_unaligned() };
     if !header.covers(required.max(size_of::<Header>())) {
         return None;
@@ -266,6 +267,7 @@ pub unsafe fn read_headed<T: Headed>(raw: *const T, required: usize) -> Option<T
         // SAFETY: the caller guarantees `raw` readable for `header.size`
         // bytes, which the check above found at least a whole `T`, and
         // `Headed` makes any bytes the writer wrote a valid `T`.
+        // ast-grep-ignore: game-memory-through-raw
         return Some(unsafe { raw.read_unaligned() });
     }
     let known = (header.size as usize).min(size_of::<T>());
@@ -311,6 +313,7 @@ pub unsafe fn write_headed<T: Headed>(out: *mut T, value: T) -> bool {
     }
     // SAFETY: `out` is non-null and the caller guarantees it is readable for
     // its header, the first eight bytes of every `Headed` type.
+    // ast-grep-ignore: game-memory-through-raw
     let room = unsafe { out.cast::<Header>().read_unaligned() }.size as usize;
     if room < size_of::<Header>() {
         return false;

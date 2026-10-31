@@ -1,0 +1,54 @@
+id: game-memory-through-raw
+language: rust
+severity: error
+message: read game memory through `enshwick::raw`, the one `Pod`-bounded reader
+note: >-
+  `enshwick::raw` reads only `AnyBitPattern` types, so a `bool` or an enum
+  never comes out of game memory, and the address sanitizer checks every read
+  there. The rule refuses `ptr::read`, `read_unaligned`, `read_volatile` and
+  `&*(address as *const T)` outside it; a read of memory that is not the
+  game's (a mod's buffer, the loader's own image) is a deliberate exception.
+  A `Pod` struct with a `bool` or enum field fails bytemuck's derive.
+ignores:
+  - "crates/enshwick/src/raw.rs"
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/*_tests.rs"
+  - "**/benches/**"
+utils:
+  in-test:
+    any:
+      - kind: mod_item
+        follows:
+          kind: attribute_item
+          regex: '^#\[cfg\(.*\btest\b'
+      - kind: function_item
+        follows:
+          kind: attribute_item
+          regex: '^#\[(test|cfg\(.*\btest\b)'
+rule:
+  any:
+    - pattern: $P.read_unaligned()
+    - pattern: $P.read_volatile()
+    - pattern: $P.cast::<$T>().read()
+    - pattern: $P.read()
+      has:
+        field: function
+        has:
+          field: value
+          kind: parenthesized_expression
+          has:
+            kind: type_cast_expression
+            regex: 'as\s+\*(const|mut)\b'
+    - kind: call_expression
+      has:
+        field: function
+        regex: '^((core|std)::)?ptr::read(_unaligned|_volatile)?$'
+    - kind: reference_expression
+      has:
+        kind: unary_expression
+        regex: '^\*\s*\(.*\bas\s+\*(const|mut)\b'
+  not:
+    inside:
+      stopBy: end
+      matches: in-test
