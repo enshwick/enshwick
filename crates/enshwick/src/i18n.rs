@@ -1,6 +1,6 @@
-//! Translations: a mod ships its texts per language in one TOML file, a
+//! Translations: a mod ships its texts per language in `src/texts.toml`, a
 //! server owner may add to them or change them, and the game shows them for
-//! the player's language.
+//! the player's language. [`texts!`](crate::texts) names the keys.
 //!
 //! ```toml
 //! [en]

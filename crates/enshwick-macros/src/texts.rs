@@ -223,12 +223,13 @@ fn items(file: &File) -> Result<TokenStream, String> {
             ));
         }
         let fills = values(text);
-        let mut doc = format!("`{key}`: \"{}\"", literal_markdown(text));
-        if !fills.is_empty() {
+        let filled = if fills.is_empty() {
+            String::new()
+        } else {
             let list: Vec<String> = fills.iter().map(|v| format!("`{v}`")).collect();
-            doc.push_str(&format!(", which fills in {}", list.join(", ")));
-        }
-        doc.push('.');
+            format!(", which fills in {}", list.join(", "))
+        };
+        let doc = format!("`{key}`: \"{}\"{filled}.", literal_markdown(text));
         all_values.extend(fills);
         let ident = Ident::new(&name, Span::call_site());
         constants.push(quote! {

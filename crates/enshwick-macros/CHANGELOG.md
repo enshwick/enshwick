@@ -8,12 +8,19 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `declare_mod!` embeds and checks the crate's
+  `src/texts.toml` and hands it to `__declare_exports!`, which takes it as
+  a third argument; `test::declare_mod!` takes `texts = "<path>"` (#827).
+
 - **Breaking:** a required dependency's `deps::<alias>::id` from `deps!` is
   no longer `const`: it asks the loader and returns `Result<Id, Off>`, `Off`
   for a name the dependency does not export. An optional one's returns
   `None` for such a name (#798).
 
 ### Added
+
+- `texts!()`, a constant per key of the crate's `src/texts.toml`, checked
+  when the crate builds (#827).
 
 - `#[config]`, which declares a settings struct: serde's derives through the
   API's serde, unknown keys refused and `Config` (#795).
