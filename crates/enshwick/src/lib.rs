@@ -43,7 +43,7 @@
 //!
 //! | Area | Modules |
 //! | --- | --- |
-//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`], [`i18n`], [`status`], [`state`], [`files`], [`migrations`] |
+//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`](mod@config), [`i18n`], [`status`], [`state`], [`files`], [`migrations`] |
 //! | Hooks and game memory | [`detour!`], [`hook`](macro@hook), [`code`], [`ecs`], [`raw`], [`pacing`] |
 //! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
 //! | The server's world | [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
