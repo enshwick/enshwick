@@ -5,11 +5,14 @@ message: a mod names game data through the API's ids and types, not an engine na
 note: >-
   Engine names, offsets and addresses live in the loader and its build tables,
   so a game update changes a table, not every mod. The rule reads string
-  literals that spell a `keen::` name in the example mods; the API crate is
-  held by its `engine_names` test. An offset or an address in a number is
-  left to review.
+  literals, raw ones included, that spell a `keen::` name in the example mods;
+  the API crate is held by its `engine_names` test. A reflected name without
+  the `keen::` prefix, and an offset or an address in a number, are not seen
+  and are left to review.
 files:
   - "examples/**"
 rule:
-  kind: string_literal
+  any:
+    - kind: string_literal
+    - kind: raw_string_literal
   regex: '\bkeen::'
