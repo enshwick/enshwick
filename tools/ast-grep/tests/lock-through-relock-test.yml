@@ -11,6 +11,16 @@ valid:
         }
     }
   - |
+    impl<T> Relock<T> for Mutex<T> {
+        fn relock(&self) -> MutexGuard<'_, T> {
+            let Ok(guard) = self.lock() else {
+                return self.lock().unwrap_or_else(PoisonError::into_inner);
+            };
+            guard
+        }
+    }
+  - "fn f() { let err = std::io::stderr().lock(); }"
+  - |
     #[cfg(test)]
     mod tests {
         fn f(m: &Mutex<u8>) { let g = m.lock().unwrap(); }
@@ -26,3 +36,6 @@ invalid:
   - "fn f(m: &Mutex<u8>) { if let Ok(g) = m.lock() { drop(g); } }"
   - "fn f(m: &Mutex<u8>) { match m.try_lock() { Ok(g) => drop(g), Err(_) => {} } }"
   - "fn f(m: &Mutex<u8>) -> Result<(), E> { let g = m.lock()?; Ok(()) }"
+  - "fn f(m: &Mutex<u8>) { let Ok(g) = m.lock() else { return }; drop(g); }"
+  - "fn f(m: &RwLock<u8>) { let Ok(g) = m.try_read() else { return }; drop(g); }"
+  - "fn f(m: &Mutex<u8>) { let r = m.lock(); drop(r.unwrap()); }"

@@ -516,14 +516,14 @@ impl<T> WorldStore<T> {
         writing
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, WorldSlot<T>> {
+    fn relock(&self) -> std::sync::MutexGuard<'_, WorldSlot<T>> {
         self.slot.relock()
     }
 }
 
 impl<T> core::fmt::Debug for WorldStore<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let slot = self.lock();
+        let slot = self.relock();
         f.debug_struct("WorldStore")
             .field("name", &slot.name)
             .field("key", &slot.open.as_ref().map(|open| &open.key))
@@ -607,7 +607,7 @@ where
     /// new one does not parse.
     pub(crate) fn open(&self, key: &str) -> Result<(), StoreError> {
         self.close()?;
-        let mut slot = self.lock();
+        let mut slot = self.relock();
         let store = Store::new(&slot.worlds.join(key), &slot.name);
         let value = store
             .load()
@@ -629,7 +629,7 @@ where
     pub(crate) fn close(&self) -> Result<(), StoreError> {
         drop(self.wait_for_writes());
         self.flush()?;
-        let mut slot = self.lock();
+        let mut slot = self.relock();
         slot.open = None;
         slot.shut = None;
         Ok(())
@@ -654,7 +654,7 @@ where
     /// }
     /// ```
     pub fn flush(&self) -> Result<(), StoreError> {
-        let mut slot = self.lock();
+        let mut slot = self.relock();
         // A background write still running would land after this one.
         let _writing = self.wait_for_writes();
         if let Some(open) = slot.open.as_mut() {
@@ -671,7 +671,7 @@ where
     /// the game thread waits only for a previous write still under way. A
     /// write that fails leaves the value changed for the next save.
     pub(crate) fn flush_in_background(&self) {
-        let mut slot = self.lock();
+        let mut slot = self.relock();
         let mut writing = self.wait_for_writes();
         let Some(open) = slot.open.as_mut() else {
             return;
@@ -719,7 +719,7 @@ where
     /// }
     /// ```
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> Option<R> {
-        self.lock().open.as_ref().map(|open| f(&open.value))
+        self.relock().open.as_ref().map(|open| f(&open.value))
     }
 
     /// `f` on the running world's value, which is written when the world
@@ -730,7 +730,7 @@ where
     ///
     /// See [`WorldStore`].
     pub fn update<R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
-        let mut slot = self.lock();
+        let mut slot = self.relock();
         let open = slot.open.as_mut()?;
         open.changed = true;
         Some(f(&mut open.value))
@@ -754,7 +754,7 @@ where
     /// ```
     #[must_use]
     pub fn shut_reason(&self) -> Option<String> {
-        self.lock().shut.clone()
+        self.relock().shut.clone()
     }
 
     /// The key of the world whose value is open.
@@ -770,7 +770,7 @@ where
     /// ```
     #[must_use]
     pub fn key(&self) -> Option<String> {
-        self.lock().open.as_ref().map(|open| open.key.clone())
+        self.relock().open.as_ref().map(|open| open.key.clone())
     }
 }
 

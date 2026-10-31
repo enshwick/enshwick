@@ -36,6 +36,15 @@ rule:
       has:
         field: value
         matches: taken
+    # `let Ok(g) = m.lock() else { .. }`, and a `LockResult` bound to a name
+    # and handled later. `Stdout::lock` and its kin return a guard, not a
+    # `LockResult`.
+    - kind: let_declaration
+      has:
+        field: value
+        matches: taken
+        not:
+          regex: '\b(stdout|stderr|stdin)\(\)\s*\.\s*lock\(\)$'
   not:
     inside:
       stopBy: end

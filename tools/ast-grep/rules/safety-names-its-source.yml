@@ -5,7 +5,10 @@ message: a SAFETY comment names its invariant and where it comes from, not an ea
 note: >-
   Write out the invariant and its source again (an engine fact with its game
   build, a check above it by name, a type's guarantee), even when it repeats
-  the comment before.
+  the comment before. The rule reads the `//` line that opens with SAFETY and
+  a whole `/* SAFETY: */` block; the next lines of a `//` comment go to review.
 rule:
-  kind: line_comment
-  regex: '^//\s*SAFETY:.*(?i)\b(as above|see above|same as (above|before)|as before|ditto)\b'
+  any:
+    - kind: line_comment
+    - kind: block_comment
+  regex: '^(//|/\*)\s*SAFETY:(?is).*\b(as above|see above|same as (above|before)|as before|ditto)\b'
