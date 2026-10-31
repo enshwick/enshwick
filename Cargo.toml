@@ -9,6 +9,7 @@ members = [
     "examples/haggling",
     "examples/trading-post",
     "examples/hello-c",
+    "examples/waypoints",
     "tools/xtask",
 ]
 
