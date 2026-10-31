@@ -49,7 +49,8 @@ loader starts it.
 
 ## Keep it current
 
-A struct that starts with an `EnshwickHeader` only grows at its end, and the
-loader reads your struct only as far as your header says, so a mod built against
-an older `enshwick.h` keeps loading. Take a newer header for the newer fields
-and functions. The [ABI reference](abi-reference.md) has the rules.
+Until 1.0 a loader loads only mods built for its own ABI version, so rebuild
+the mod against the `enshwick.h` of each Enshwick release whose
+`ENSHWICK_ABI_VERSION` differs from the one you built with. From 1.0 structs
+grow only at their end, and a mod built against an older header keeps loading.
+The [ABI reference](abi-reference.md#versions) has the rules.

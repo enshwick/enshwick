@@ -2836,8 +2836,10 @@ typedef struct EnshwickMapMarkerTypeInfo {
 
 // The table of services the loader offers a mod.
 //
-// Fields are only ever appended; a mod checks `Header::covers` before it
-// calls a field added after the minor it was built against.
+// Until 1.0 any change to its layout is a new `ABI_VERSION`, and a loader
+// loads only mods built for its own. From 1.0 fields are only appended, and
+// a mod checks `Header::covers` before it calls a field added after the
+// release it was built against.
 typedef struct EnshwickHostApi {
   // Size and version of this struct.
   struct EnshwickHeader header;
