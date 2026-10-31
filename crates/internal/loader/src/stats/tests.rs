@@ -49,26 +49,23 @@ fn combat_kinds() -> Sealed {
     sealed(&[
         (
             "enshwick:damage",
-            StatDef::multiplicative("d").range(0.0, 100.0),
+            StatDef::multiplicative().range(0.0, 100.0),
         ),
-        (
-            "enshwick:resistance",
-            StatDef::additive("r").range(-1.0, 1.0),
-        ),
+        ("enshwick:resistance", StatDef::additive().range(-1.0, 1.0)),
         (
             "enshwick:damage_fire",
-            StatDef::multiplicative("df").range(0.0, 100.0),
+            StatDef::multiplicative().range(0.0, 100.0),
         ),
         (
             "enshwick:resistance_fire",
-            StatDef::additive("rf").range(-1.0, 1.0),
+            StatDef::additive().range(-1.0, 1.0),
         ),
     ])
 }
 
 #[test]
-fn ids_take_the_mod_s_namespace_and_say_whose_they_are() {
-    assert_eq!(full_id("rpg", "crit"), Some(("rpg:crit".into(), true)));
+fn ids_are_content_ids_and_say_whose_they_are() {
+    assert_eq!(full_id("rpg", "crit"), None);
     assert_eq!(
         full_id("me.rpg", "rpg:luck"),
         Some(("rpg:luck".into(), false))
@@ -80,6 +77,10 @@ fn ids_take_the_mod_s_namespace_and_say_whose_they_are() {
     );
     assert_eq!(full_id("rpg", "Crit"), None);
     assert_eq!(full_id("rpg", "a:b:c"), None);
+    assert_eq!(
+        full_id("rpg", "rpg:charm/fire.big"),
+        Some(("rpg:charm/fire.big".into(), true))
+    );
 }
 
 #[test]

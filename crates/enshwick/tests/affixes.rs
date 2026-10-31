@@ -11,6 +11,7 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::content::categories::ItemCategoryMask;
+    use enshwick::content::id;
     use enshwick::inventory::ItemInstance;
     use enshwick::stats::{Op, Stat, StatDef, Stats};
     use enshwick::{Load, Mod, Off};
@@ -30,16 +31,15 @@ mod tests {
 
     impl Mod for Loot {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let luck =
-                load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 10.0))?;
+            let luck = load.define_stat(id!("luck"), &StatDef::additive().range(0.0, 10.0))?;
             load.define_affix(
-                "lucky",
-                &AffixDef::new("affix.lucky", ItemCategoryMask::EQUIPMENT)
+                id!("lucky"),
+                &AffixDef::new(ItemCategoryMask::EQUIPMENT)
                     .with(Range::new(luck, Op::Add, 1.0, 5.0).step(1.0))
                     .rarity(ItemRarity::Rare),
             )?;
             assert!(
-                load.define_affix("lucky", &AffixDef::new("x", ItemCategoryMask::EQUIPMENT))
+                load.define_affix(id!("lucky"), &AffixDef::new(ItemCategoryMask::EQUIPMENT))
                     .is_err(),
                 "no modifiers"
             );
@@ -55,7 +55,7 @@ mod tests {
     enshwick::test::declare_mod!(
         Loot,
         r#"
-        id = "test.fake"
+        id = "you.hello"
         side = "both"
         "#
     );
@@ -107,7 +107,7 @@ mod tests {
         let lines = affixes.lines(ring);
         assert_eq!(lines.len(), 1);
         let info = affixes.info(lines[0].affix.unwrap()).unwrap();
-        assert_eq!(info.text, "affix.lucky");
+        assert_eq!(info.text, "lucky.name");
         assert_eq!(info.rarity, ItemRarity::Rare);
     }
 }

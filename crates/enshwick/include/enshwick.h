@@ -184,7 +184,8 @@ typedef struct EnshwickAffixModifierData {
 typedef struct EnshwickAffixDefData {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // The text key that names the affix, in its mod's texts.
+  // Not read: the loader names the affix by `<name>.name` in its mod's
+  // texts. Empty.
   struct EnshwickStr text;
   // Affixes of one group never roll together on an item; empty for none.
   struct EnshwickStr group;
@@ -2174,7 +2175,8 @@ typedef struct EnshwickStatDefData {
   float min;
   // The greatest value.
   float max;
-  // The text key that names the stat, in its mod's texts.
+  // The text key that names the stat in its owner's texts, `<name>.name`,
+  // from `stat_info`; the loader derives it and ignores what a mod passes.
   struct EnshwickStr text;
 } EnshwickStatDefData;
 // A sum of points, such as extra health.

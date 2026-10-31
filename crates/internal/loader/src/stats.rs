@@ -34,7 +34,8 @@ use enshwick::abi::{
     StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, Str,
 };
 use enshwick::affixes::{AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll};
-use enshwick::stats::{ItemStats, Op, Stat, StatDef, aggregate, builtin, key_of};
+use enshwick::content::Id;
+use enshwick::stats::{ItemStats, Op, Stat, StatDef, aggregate, builtin, key_of, name_key};
 use rustc_hash::FxHashMap;
 
 use crate::host::{Loader, Registered};
@@ -88,8 +89,8 @@ struct Sealed {
     by_type: [Option<(u32, u32)>; TYPES],
     /// The built-in maximum kinds: health, stamina, mana.
     maxima: [u32; 3],
-    /// Every mod's affixes, by full id, in the order they were defined.
-    affixes: Box<[(Box<str>, AffixDef)]>,
+    /// Every mod's affixes, in the order they were defined.
+    affixes: Box<[Affix]>,
 }
 
 /// What mods register during init.
@@ -98,8 +99,18 @@ struct Pending {
     kinds: Vec<Kind>,
     buffs: Vec<(u32, StatModifierData)>,
     handlers: Vec<Registered<StatChangeFn>>,
-    affixes: Vec<(Box<str>, AffixDef)>,
+    affixes: Vec<Affix>,
     used: bool,
+}
+
+/// One affix.
+#[derive(Debug)]
+struct Affix {
+    /// The full id.
+    id: Box<str>,
+    /// The text key that names it, see [`name_key`].
+    text: Box<str>,
+    def: AffixDef,
 }
 
 /// A modifier a mod keeps on an entity.
@@ -192,11 +203,11 @@ fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
     let pending = pending.get_or_insert_with(|| {
         let mut fresh = Pending::default();
         for (id, def) in builtin::ALL {
-            let def = def.to_def();
-            let text = def.text.clone().into_boxed_str();
+            let id = id.to_string();
+            let text = name_key(&id).unwrap_or_default().into_boxed_str();
             fresh.kinds.push(Kind {
-                id: id.into(),
-                def: Some((def, text, (ModIndex::LOADER).get())),
+                id: id.into_boxed_str(),
+                def: Some((def.to_def(), text, (ModIndex::LOADER).get())),
             });
         }
         fresh
@@ -205,20 +216,11 @@ fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
     Ok(f(pending))
 }
 
-/// Whether `part` may be the name side of an id: 1 to 64 of `[a-z0-9_-]`.
-fn is_part(part: &str) -> bool {
-    (1..=64).contains(&part.len())
-        && part
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
-}
-
-/// The full id of `id` asked for by the mod `mod_id`, and whether the
-/// namespace is the mod's own. A bare name takes the mod's namespace.
+/// The content id `id` asked for by the mod `mod_id`, and whether its
+/// namespace is the mod's own; `None` for one that is not `<mod>:<name>`.
 fn full_id(mod_id: &str, id: &str) -> Option<(String, bool)> {
-    let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
-    (enshwick::abi::is_valid_old_form_id(namespace) && is_part(name))
-        .then(|| (format!("{namespace}:{name}"), namespace == mod_id))
+    let (namespace, _) = id.split_once(':')?;
+    enshwick::content::is_id(id).then(|| (id.to_owned(), namespace == mod_id))
 }
 
 fn index_of(kinds: &mut Vec<Kind>, id: &str) -> usize {
@@ -242,7 +244,8 @@ fn declare(loader: &Loader, owner: ModIndex, space: Space, full: &str) -> Result
     let declared = crate::ids::with(|ids| {
         if space == Space::Stat {
             for (id, _) in builtin::ALL {
-                let _builtin = ids.declare(LOADER_ID, Space::Stat, id, key_of(id).0);
+                let id = id.to_string();
+                let _builtin = ids.declare(LOADER_ID, Space::Stat, &id, key_of(&id).0);
             }
         }
         ids.declare(by, space, full, key)
@@ -270,7 +273,7 @@ pub(crate) fn open(
             if !own || kind.def.is_some() {
                 return Err(Status::REFUSED);
             }
-            let text = def.text.clone().into_boxed_str();
+            let text = name_key(&full).unwrap_or_default().into_boxed_str();
             kind.def = Some((def, text, owner.get()));
         }
         Ok(StatRef {
@@ -313,10 +316,14 @@ pub(crate) fn open_affix(
         // SAFETY: the caller passes the definition's text and ranges for
         // the call.
         let def = unsafe { AffixDef::from_data(data, stat) }.ok_or(Status::BAD_ARGS)?;
-        if p.affixes.iter().any(|(known, _)| **known == *full) {
+        if p.affixes.iter().any(|known| *known.id == *full) {
             return Err(Status::REFUSED);
         }
-        p.affixes.push((full.clone().into_boxed_str(), def));
+        p.affixes.push(Affix {
+            id: full.clone().into_boxed_str(),
+            text: name_key(&full).unwrap_or_default().into_boxed_str(),
+            def,
+        });
         Ok(StatRef {
             index: u32::try_from(p.affixes.len() - 1).map_err(|_| Status::REFUSED)?,
             key: AffixKey::of(&full).0,
@@ -329,9 +336,9 @@ fn pool(sealed: &Sealed) -> Vec<Candidate<'_>> {
     sealed
         .affixes
         .iter()
-        .map(|(id, def)| Candidate {
-            key: AffixKey::of(id),
-            def,
+        .map(|affix| Candidate {
+            key: AffixKey::of(&affix.id),
+            def: &affix.def,
         })
         .collect()
 }
@@ -375,12 +382,12 @@ pub(crate) fn item_lines(pide: u32, item: u32) -> Result<Vec<ItemLine>, Status> 
 /// The text key and rarity of affix `affix`.
 pub(crate) fn affix_info(affix: u32) -> Result<(Str, u8), Status> {
     let sealed = SEALED.get().ok_or(Status::MISSING)?;
-    let (_, def) = sealed
+    let affix = sealed
         .affixes
         .get(usize::try_from(affix).map_err(|_| Status::BAD_ARGS)?)
         .ok_or(Status::MISSING)?;
     // The affixes live as long as the process, so their text does too.
-    Ok((Str::new(&def.text), def.rarity.to_raw()))
+    Ok((Str::new(&affix.text), affix.def.rarity.to_raw()))
 }
 
 /// Registers mod `owner`'s handler of changes. During init only.
@@ -408,11 +415,12 @@ pub(crate) fn seal() {
     for kind in pending.kinds.iter().filter(|k| k.def.is_none()) {
         crate::log!(WARN, "stats: {} is opened but no mod defines it", kind.id);
     }
-    let index = |id: &str| {
+    let index = |id: Id| {
+        let id = id.to_string();
         pending
             .kinds
             .iter()
-            .position(|k| &*k.id == id)
+            .position(|k| *k.id == *id)
             .and_then(|i| u32::try_from(i).ok())
             .unwrap_or(u32::MAX)
     };
@@ -425,7 +433,7 @@ pub(crate) fn seal() {
         .iter()
         .map(|k| {
             k.def.as_ref().map_or_else(
-                || StatDef::additive("").range(0.0, 0.0),
+                || StatDef::additive().range(0.0, 0.0),
                 |(d, _, _)| d.clone(),
             )
         })

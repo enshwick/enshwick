@@ -17,6 +17,7 @@ affixes and reading what an item rolled are stable.
 ```rust
 use enshwick::affixes::{AffixCraft, AffixDef, AffixLoot, Range, ItemRarity, RollRules};
 use enshwick::content::categories::ItemCategoryMask;
+use enshwick::content::id;
 use enshwick::loot::Source;
 use enshwick::stats::{Op, builtin};
 
@@ -24,13 +25,13 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let health = load.open_stat(builtin::HEALTH_MAX)?;
     let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
     load.define_affix(
-        "sturdy",
-        &AffixDef::new("affix.sturdy", ItemCategoryMask::EQUIPMENT)
+        id!("sturdy"),
+        &AffixDef::new(ItemCategoryMask::EQUIPMENT)
             .with(Range::new(health, Op::Add, 10.0, 30.0).step(1.0)),
     )?;
     load.define_affix(
-        "fireproof",
-        &AffixDef::new("affix.fireproof", ItemCategoryMask::EQUIPMENT)
+        id!("fireproof"),
+        &AffixDef::new(ItemCategoryMask::EQUIPMENT)
             .with(Range::new(fire, Op::Add, 0.05, 0.2).step(0.01))
             .rarity(ItemRarity::Rare)
             .weight(20)
@@ -45,12 +46,12 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## Defining affixes
 
-`load.define_affix(name, &def)` defines `<mod>:<name>` during `init`, on both
-sides, so clients can name what items rolled. An `AffixDef` holds:
+`load.define_affix(id!("sturdy"), &def)` defines `<mod>:sturdy` during
+`init`, on both sides, so clients can name what items rolled. Its text is
+`sturdy.name` in the mod's [texts](content/texts.md). An `AffixDef` holds:
 
 | Field | Means |
 | --- | --- |
-| `text` | the text key that names the affix, in the mod's [texts](content/texts.md) |
 | `ranges` | each modifier's stat, operation and range; `Range::step` rolls in steps |
 | `weight` | how likely it rolls against the others, 100 by default |
 | `rarity` | `Common` to `Legendary`; a roll may cap it |

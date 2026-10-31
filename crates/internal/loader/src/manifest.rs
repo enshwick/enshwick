@@ -268,8 +268,8 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     })
 }
 
-/// Why the mod `asker` may not use the `kind` (call, point, service or
-/// event) `name`, `<owner>:<what>`, whose owner's manifest exports
+/// Why the mod `asker` may not use the `kind` (call, point, service, event
+/// or stat) `name`, `<owner>:<what>`, whose owner's manifest exports
 /// `exports`; `None` when it may: a name of its own, or one the owner
 /// exports.
 #[must_use]
@@ -658,6 +658,13 @@ mod tests {
         );
         let none = unexported("service", "you.trading-post:prices", asker, &[]).unwrap();
         assert!(none.ends_with("it exports nothing"), "{none}");
+        assert_eq!(
+            unexported("stat", "you.trading-post:luck", asker, &exports).as_deref(),
+            Some(
+                "stat you.trading-post:luck: you.trading-post does not export luck; \
+                 it exports price-of, sold"
+            )
+        );
     }
 
     #[test]

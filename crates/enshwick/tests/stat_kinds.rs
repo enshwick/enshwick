@@ -9,6 +9,8 @@ mod tests {
     use enshwick::Entity;
     use enshwick::abi::{BuffTypeInfo, Header, Status};
     use enshwick::buffs::{Apply, BuffTypeId, Buffs};
+    use enshwick::content::{Id, id};
+    use enshwick::i18n::{Language, Texts};
     use enshwick::inventory::ItemInstance;
     use enshwick::stats::{
         ItemStats, Lasting, Modifier, Op, Origin, Stat, StatChange, StatDef, Stats, builtin,
@@ -31,15 +33,15 @@ mod tests {
 
     impl Mod for Rpg {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let luck = load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
+            let luck = load.define_stat(id!("luck"), &StatDef::additive().range(0.0, 1.0))?;
             let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
             assert!(
-                load.define_stat("other:luck", &StatDef::additive("x"))
+                load.define_stat(Id::new("other:luck"), &StatDef::additive())
                     .is_err(),
                 "another mod's namespace"
             );
             assert!(
-                load.define_stat("luck", &StatDef::additive("x")).is_err(),
+                load.define_stat(id!("luck"), &StatDef::additive()).is_err(),
                 "defined twice"
             );
             load.add_buff_modifiers(BLESSED, &[Modifier::new(luck, Op::Add, 0.25)])?;
@@ -64,7 +66,7 @@ mod tests {
     enshwick::test::declare_mod!(
         Rpg,
         r#"
-        id = "test.fake"
+        id = "you.hello"
         side = "server"
         "#
     );
@@ -90,8 +92,12 @@ mod tests {
 
         assert!(close(stats.value(player, luck), 0.0));
         let info = stats.info(fire).unwrap();
-        assert_eq!(info.id, builtin::RESISTANCE_FIRE);
-        assert_eq!(stats.info(luck).unwrap().id, "test.fake:luck");
+        assert_eq!(info.id, builtin::RESISTANCE_FIRE.to_string());
+        assert_eq!(info.text, "resistance_fire.name");
+        let own = stats.info(luck).unwrap();
+        assert_eq!(own.id, "you.hello:luck");
+        let texts = Texts::parse("[en]\n\"luck.name\" = \"Luck\"\n").unwrap();
+        assert_eq!(texts.fill(&own.text, Language::FALLBACK, &[]), "Luck");
 
         stats
             .set(
@@ -170,5 +176,66 @@ mod tests {
         stats.remove(player, "bless", luck).unwrap();
         assert!(close(stats.value(player, luck), 0.5));
         assert!(loader.stat_modifiers().is_empty());
+    }
+}
+
+/// A dependency's kind, opened through `deps!`: kept when its owner exports
+/// it, refused when it does not.
+#[cfg(test)]
+mod dependency {
+    use std::sync::OnceLock;
+
+    use enshwick::abi::Status;
+    use enshwick::stats::{Stat, Stats};
+    use enshwick::{Load, Mod, Off};
+
+    enshwick::deps!();
+
+    static OPENED: OnceLock<(Stats, Stat)> = OnceLock::new();
+
+    struct Reader;
+
+    impl Mod for Reader {
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            let luck = load.open_stat(deps::lockers::id("luck"))?;
+            let _first = OPENED.set((load.stats()?, luck));
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        Reader,
+        r#"
+        id = "you.hello"
+        side = "server"
+
+        [requires]
+        lockers = "you.lockers"
+        "#
+    );
+
+    fn start(exports: &[&str]) -> Status {
+        let loader = enshwick::test::FakeHost::new()
+            .exports("you.lockers", exports)
+            .install();
+        // SAFETY: both functions are the exports of this module's `declare_mod!(Reader)`.
+        unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) }
+    }
+
+    #[test]
+    fn a_kind_its_owner_exports_opens_by_its_dependency_id() {
+        assert_eq!(start(&["luck"]), Status::OK);
+        let (stats, luck) = OPENED.get().unwrap();
+        assert_eq!(luck.key(), enshwick::stats::key_of("you.lockers:luck"));
+        assert!(
+            stats.info(*luck).is_none(),
+            "opened, defined by no running mod"
+        );
+    }
+
+    #[test]
+    fn a_kind_its_owner_does_not_export_turns_the_mod_off() {
+        assert_ne!(start(&["price"]), Status::OK);
+        assert!(OPENED.get().is_none());
     }
 }

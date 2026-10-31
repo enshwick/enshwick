@@ -8,6 +8,17 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** stat kinds and affixes take a content `Id`:
+  `load.define_stat(id!("luck"), &def)`, `load.define_affix(id!("bear"), &def)`,
+  and `load.open_stat(deps::lockers::id("luck"))` for a dependency's kind.
+  The `stats::builtin` kinds are `Id` constants. The text that names a kind
+  or an affix is `<name>.name` in its owner's texts, and `stats::name_key`
+  gives it: `StatDef::additive`, `multiplicative`, `flag` and `AffixDef::new`
+  lose their text key, and `StatDef` loses `text`. `StatInfo` gains `text`, and
+  `StatDef::from_data` is safe. Opening a kind of a loaded mod that does not
+  export it returns `Off`, with the owner's exports in the log; the fake
+  loader refuses the same for a mod `FakeHost::exports` names (#PR).
+
 - **Breaking:** `pack.toml` names its dependencies as
   `[package.metadata.enshwick]` does: `requires`, `after`, `recommends` and
   `breaks` are tables keyed by alias, each a mod id or `{ id, version }`, and
