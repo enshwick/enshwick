@@ -170,7 +170,7 @@ runs:
       if: inputs.fuzz == 'true'
       shell: bash
       env:
-        NIGHTLY: nightly-2026-10-26
+        NIGHTLY: nightly-2026-10-31
         CARGO_FUZZ_VERSION: 0.13.2
         CARGO_FUZZ_SHA256: b5b704018b63e0f151c17a057ac53b5111e1db545d1b9f72fee79f08a545931c
       run: | # zizmor: ignore[github-env] fixed paths only
