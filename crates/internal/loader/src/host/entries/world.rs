@@ -691,11 +691,13 @@ pub(crate) extern "system" fn voxel_read(
         // SAFETY: `min` is non-null, checked above; `HostApi::voxel_read` has
         // the mod pass it pointing at three `u32`s borrowed for the call, and
         // an unaligned read needs no alignment.
+        // The mod's buffer, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let min = unsafe { min.read_unaligned() };
         // SAFETY: `size` is non-null, checked above; `HostApi::voxel_read`
         // has the mod pass it pointing at three `u32`s borrowed for the call,
         // and an unaligned read needs no alignment.
+        // The mod's buffer, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let size = unsafe { size.read_unaligned() };
         let request = match crate::voxels::ReadBox::new(min, size, capacity) {
@@ -764,9 +766,11 @@ pub(crate) extern "system" fn world_persists(
         // SAFETY: `HostApi::world_persists` has the mod pass `min` readable
         // for three `f64`, borrowed for the call; non-null by the check
         // before it.
+        // The mod's buffer, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let low = unsafe { min.read_unaligned() };
         // SAFETY: as for `min`, `max` readable for three `f64`.
+        // The mod's buffer, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let high = unsafe { max.read_unaligned() };
         let edit = match crate::rights::EditBox::between(low, high) {

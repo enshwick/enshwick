@@ -56,6 +56,7 @@ fn commit(
         let slot = unsafe { ops.add(i) };
         // SAFETY: `slot` is inside the `count` ops the mod passes, borrowed
         // for the call; an unaligned read needs no alignment.
+        // The mod's ops array, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let op = unsafe { slot.read_unaligned() };
         if op.reserved != 0 {

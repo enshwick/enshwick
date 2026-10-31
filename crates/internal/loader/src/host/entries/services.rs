@@ -351,6 +351,7 @@ pub(crate) extern "system" fn define_point(
         // Checked before the point is defined: a point whose handle is lost
         // could never be asked, nor defined again.
         // SAFETY: a non-null out pointer from a mod starts with its header.
+        // The mod's headed out struct, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let room = (!out.is_null()).then(|| unsafe { out.cast::<Header>().read_unaligned() }.size);
         if room.is_none_or(|room| (room as usize) < size_of::<api_frame::PointHandle>()) {
