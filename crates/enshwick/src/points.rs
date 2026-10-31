@@ -462,11 +462,14 @@ impl Load<'_> {
     /// with a definition whose input lacks or changed a field of `P`, or
     /// whose answer or mode differs, it logs why and the link stays inert.
     /// Declare the owner in the manifest with `recommends`, or `requires`
-    /// when this mod is pointless without it.
+    /// when this mod is pointless without it: a required owner initialises
+    /// first, so the loader matches the link at once.
     ///
     /// # Errors
     ///
-    /// [`Off`] when called after `init`, or when this mod links `P` already.
+    /// [`Off`] when called after `init`, when this mod links `P` already,
+    /// or when this mod requires the owner and it does not define `P` as
+    /// declared here; the log says why.
     ///
     /// # Examples
     ///
@@ -499,7 +502,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when called after `init`, or when this mod links `P` already.
+    /// As [`Load::extend_point`].
     ///
     /// # Examples
     ///

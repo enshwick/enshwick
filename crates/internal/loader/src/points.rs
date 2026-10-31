@@ -184,6 +184,16 @@ impl Registry {
         Ok(())
     }
 
+    /// Why a link declared `want` would stay inert against the points
+    /// defined so far; `None` when it matches. What a required owner, which
+    /// initialises first, has defined is all it defines.
+    pub(crate) fn unlinkable(&self, want: &Declared, mods: &impl Mods) -> Option<String> {
+        match self.defined.iter().find(|d| d.declared.name == want.name) {
+            None => Some(absent(&want.name, mods).0),
+            Some(definition) => refusal(want, definition, mods).map(|(reason, _)| reason),
+        }
+    }
+
     /// Matches every link with its point and orders each point's links:
     /// the sealed points by id, the links left inert, and the links whose
     /// order closes a cycle, which run by their priority. `link_off` says
@@ -212,7 +222,7 @@ impl Registry {
                 inert.push(missing(&link, mods));
                 continue;
             };
-            if let Some((reason, level)) = refusal(&link, definition, mods) {
+            if let Some((reason, level)) = refusal(&link.declared, definition, mods) {
                 inert.push(Inert {
                     owner: link.owner,
                     point,
@@ -310,8 +320,19 @@ fn chain(
 /// Why a link whose point no running mod defines stays inert.
 fn missing(link: &Pending, mods: &impl Mods) -> Inert {
     let point = &link.declared.name;
-    let owner_id = point.split_once(':').map_or(point.as_str(), |(id, _)| id);
-    let (reason, level) = match mods.find(owner_id) {
+    let (reason, level) = absent(point, mods);
+    Inert {
+        owner: link.owner,
+        point: point.clone(),
+        reason,
+        level,
+    }
+}
+
+/// Why no running mod defines `point`, and how loud to say it.
+fn absent(point: &str, mods: &impl Mods) -> (String, Level) {
+    let owner_id = point.split_once(':').map_or(point, |(id, _)| id);
+    match mods.find(owner_id) {
         None => (format!("{owner_id} does not run"), Level::INFO),
         Some(owner) if mods.off(owner) => {
             let (id, version) = mods.name(owner);
@@ -324,22 +345,16 @@ fn missing(link: &Pending, mods: &impl Mods) -> Inert {
                 Level::WARN,
             )
         }
-    };
-    Inert {
-        owner: link.owner,
-        point: point.clone(),
-        reason,
-        level,
     }
 }
 
-/// Why `link` does not serve `definition`, if it does not.
-fn refusal(link: &Pending, definition: &Definition, mods: &impl Mods) -> Option<(String, Level)> {
+/// Why a link declared `want` does not serve `definition`, if it does not.
+fn refusal(want: &Declared, definition: &Definition, mods: &impl Mods) -> Option<(String, Level)> {
     let (id, version) = mods.name(definition.owner.get());
     if mods.off(definition.owner.get()) {
         return Some((format!("{id} {version} is off"), Level::INFO));
     }
-    let (want, have) = (&link.declared, &definition.declared);
+    let have = &definition.declared;
     if (want.mode, want.refuse) != (have.mode, have.refuse) {
         return Some((
             format!(

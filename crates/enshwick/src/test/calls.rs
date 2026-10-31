@@ -122,6 +122,13 @@ pub(crate) extern "system" fn find_call(
         return Status::BAD_ARGS;
     };
     let id = with(None, |s| {
+        let required = s
+            .manifest
+            .as_ref()
+            .is_some_and(|manifest| manifest.requires_owner_of(&declared.name));
+        if required && !s.calls.others.iter().any(|o| o.declared == declared) {
+            return None;
+        }
         let wanted = &mut s.calls.wanted;
         let index = match wanted
             .iter()
@@ -183,6 +190,10 @@ pub(crate) extern "system" fn call(
 impl Installed {
     /// Serves the call `C` with `handler`, as another mod would, for the
     /// mod's [`Caller`](crate::services::Caller)s of `C`.
+    ///
+    /// Serve a call of a mod the mod requires before the mod's init: a
+    /// required mod initialises first, so the fake, as the loader, refuses
+    /// a caller of a call it does not serve by then.
     ///
     /// # Examples
     ///

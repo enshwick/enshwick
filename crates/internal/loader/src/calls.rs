@@ -182,6 +182,13 @@ impl Registry {
         (routes, offers)
     }
 
+    /// Why `want` would stay unmatched against the calls served so far;
+    /// `None` when it matches. What a required server, which initialises
+    /// first, has served is all it serves.
+    pub(crate) fn unmatched(&self, want: &Declared, mods: &impl Mods) -> Option<String> {
+        self.route(want, mods).err()
+    }
+
     /// The server of `want`, or why none.
     fn route(&self, want: &Declared, mods: &impl Mods) -> Result<Server, String> {
         let named: Vec<&Served> = self
@@ -529,5 +536,21 @@ mod tests {
         let (routes, _) = registry.seal(&mods);
         let reason = routes[0].server.as_ref().unwrap_err();
         assert_eq!(reason, "you.off 0.1.0 serves it, but is off");
+    }
+
+    #[test]
+    fn an_asked_call_is_checked_against_what_is_served_so_far() {
+        let mods = running();
+        let mut registry = Registry::default();
+        let id = "you.trading-post";
+        registry
+            .serve(ModIndex::new(0), id, price(2), answer, 0)
+            .unwrap();
+        assert_eq!(registry.unmatched(&price(2), &mods), None);
+        let older = registry.unmatched(&price(1), &mods).unwrap_or_default();
+        assert!(older.contains("serves v2, this mod asks for v1"), "{older}");
+        let rent = declared("you.trading-post:rent", 1, &[], 0);
+        let none = registry.unmatched(&rent, &mods).unwrap_or_default();
+        assert!(none.contains("serves no such call"), "{none}");
     }
 }

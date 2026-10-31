@@ -328,15 +328,35 @@ pub(crate) struct ManifestFacts {
     pub(crate) id: String,
     /// Whether the mod takes part in the join check.
     pub(crate) joins: bool,
+    /// The ids of the mods it requires.
+    pub(crate) requires: Vec<String>,
 }
 
 impl ManifestFacts {
     /// The facts of `manifest`.
     fn of(manifest: &crate::abi::Manifest) -> Self {
+        let dependencies = if manifest.dependencies.is_null() {
+            &[][..]
+        } else {
+            // SAFETY: a manifest points at `dependency_count` dependencies,
+            // `declare_mod!`'s static array, alive for the process.
+            unsafe { core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count) }
+        };
         Self {
             id: text(manifest.id),
             joins: manifest.flags.contains(crate::abi::ManifestFlags::JOIN),
+            requires: dependencies
+                .iter()
+                .filter(|d| d.relation == crate::abi::Relation::REQUIRES)
+                .map(|d| text(d.id))
+                .collect(),
         }
+    }
+
+    /// Whether the mod requires the mod side of `name`, `<id>:<what>`.
+    pub(crate) fn requires_owner_of(&self, name: &str) -> bool {
+        name.split_once(':')
+            .is_some_and(|(owner, _)| self.requires.iter().any(|id| id == owner))
     }
 }
 

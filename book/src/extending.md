@@ -156,8 +156,15 @@ With `recommends`, a missing owner leaves the link inert, which is no error:
 the mod runs and `loader.log` says
 `point you.trading-post:price: the link stays inert: you.trading-post does not run`. Use
 `requires` when the mod is pointless without the owner: the loader then skips
-the mod with a reason. Links match once every mod is initialised, so load
-order does not matter. A mod links each point once: a second
+the mod with a reason. A required owner initialises first, so the loader
+checks a link to its point at once: when the owner defines no such point, or
+another declaration of it, `extend_point` and `observe_point` return `Off`
+and the log says
+`point you.trading-post:price: this mod requires you.trading-post, and the link cannot match: ...`
+with a reason of the table below. Other links match once every mod is
+initialised, so load order does not matter for them. In a test, the fake
+loader refuses the same; define a required owner's point with
+`Installed::define_point` before the mod starts. A mod links each point once: a second
 `extend_point` or `observe_point` on the same point returns `Off`.
 
 ## When the loader leaves a link inert

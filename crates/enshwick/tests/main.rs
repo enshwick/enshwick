@@ -106,6 +106,7 @@ mod recipe_kinds;
 #[cfg(feature = "unstable")]
 mod recipe_menu;
 mod recipe_rules;
+mod required_names;
 mod resource_types;
 mod schedule;
 mod services;

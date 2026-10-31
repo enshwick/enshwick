@@ -157,6 +157,25 @@ fn a_link_reading_past_the_owner_s_input_or_answer_is_refused() {
 }
 
 #[test]
+fn a_link_is_checked_against_the_points_defined_so_far() {
+    let mut registry = Registry::default();
+    let mods = loaded();
+    let absent = registry.unlinkable(&access(), &mods).unwrap_or_default();
+    assert!(absent.contains("defines no such point"), "{absent}");
+    let _live = defined(&mut registry);
+    assert_eq!(registry.unlinkable(&access(), &mods), None);
+    let advised = Declared {
+        mode: PointMode::ADVISE,
+        ..access()
+    };
+    let differs = registry.unlinkable(&advised, &mods).unwrap_or_default();
+    assert!(
+        differs.contains("must compile one declaration"),
+        "{differs}"
+    );
+}
+
+#[test]
 fn points_are_named_after_their_owner_once() {
     let mut registry = Registry::default();
     assert!(

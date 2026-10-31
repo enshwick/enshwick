@@ -120,6 +120,18 @@ pub(crate) struct ModRecord {
 }
 
 impl ModRecord {
+    /// Whether its manifest requires the mod `id`.
+    pub(crate) fn requires(&self, id: &str) -> bool {
+        // SAFETY: a record's manifest is the loader's copy, kept for the
+        // process with every string and slice in it.
+        unsafe { crate::manifest::parse(self.manifest) }.is_ok_and(|candidate| {
+            candidate
+                .dependencies
+                .iter()
+                .any(|d| d.relation == api_frame::Relation::REQUIRES && d.id == id)
+        })
+    }
+
     /// Why it is off, in the reader's language where its texts have the
     /// reason's text; `None` while it runs.
     pub(crate) fn off_reason_shown(&self) -> Option<String> {

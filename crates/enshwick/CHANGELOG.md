@@ -6,6 +6,17 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `Load::caller`, `Load::extend_point` and `Load::observe_point`
+  return `Off` when the mod requires the call's server or the point's owner
+  and it does not serve or define it as declared; a required mod initialises
+  first, so the loader knows at once and logs why. Before, the call answered
+  `CallError::Unmatched` and the link stayed inert. The fake loader refuses
+  the same: serve a required mod's call with `Installed::serve_call`, and
+  define its point with the new `Installed::define_point`, before the mod
+  starts (#PR).
+
 ### Added
 
 - `deps!()` writes a module `deps` with a module per alias of `requires`,
