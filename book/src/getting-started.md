@@ -56,7 +56,8 @@ the crate too. The crate holds:
   panics;
 - `Cargo.toml` also holds the mod's
   [manifest](concepts/loader-and-abi.md#the-manifest), its id, side and name,
-  in `[package.metadata.enshwick]`;
+  in `[package.metadata.enshwick]`, with `exports` and the dependency tables
+  as comments;
 - `src/lib.rs`: a settings type with one field, `enabled`, a mod type named
   after the id's name (`my-mod` becomes `MyMod`), `declare_mod!` and two
   tests: every text exists in every language, and the
@@ -78,7 +79,7 @@ runtime there. Lints and dependencies come from the workspace where it
 declares them. A folder the workspace excludes gets a workspace of its own.
 
 It builds and loads as it is: on first start it writes
-`mod-configs/my-mod.toml` and logs one line.
+`mod-configs/you.my-mod.toml` and logs one line.
 
 ## Install it into the game
 
