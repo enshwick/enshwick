@@ -44,15 +44,15 @@ impl File {
                 ));
             }
         };
-        let file = Self::parse(shown, &text).map_err(|e| syn::Error::new(Span::call_site(), e))?;
+        let file = Self::parse(shown, &text)?;
         Ok(Some(file))
     }
 
     /// The file `path` holding `text`, checked: every key has an `en` text,
     /// and every translation fills in the values its `en` text does.
-    fn parse(path: String, text: &str) -> Result<Self, String> {
+    fn parse(path: String, text: &str) -> syn::Result<Self> {
         let read: BTreeMap<String, BTreeMap<String, String>> =
-            toml::from_str(text).map_err(|e| format!("{path}: {}", e.message()))?;
+            toml::from_str(text).map_err(|e| refuse(format!("{path}: {}", e.message())))?;
         let mut tables: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
         for (code, entries) in read {
             tables
@@ -65,23 +65,23 @@ impl File {
         Ok(file)
     }
 
-    fn check(&self) -> Result<(), String> {
+    fn check(&self) -> syn::Result<()> {
         let path = &self.path;
         let english = self.tables.get(ENGLISH);
         for (code, entries) in &self.tables {
             for (key, text) in entries {
                 let Some(base) = english.and_then(|en| en.get(key)) else {
-                    return Err(format!(
+                    return Err(refuse(format!(
                         "{path}: `{key}` in [{code}] has no text in [{ENGLISH}], which every key needs"
-                    ));
+                    )));
                 };
                 let (wanted, given) = (values(base), values(text));
                 if wanted != given {
-                    return Err(format!(
+                    return Err(refuse(format!(
                         "{path}: `{key}` in [{code}] fills in {} where its [{ENGLISH}] text fills in {}",
                         named(&given),
                         named(&wanted)
-                    ));
+                    )));
                 }
             }
         }
@@ -179,17 +179,22 @@ fn named(names: &BTreeSet<&str>) -> String {
 }
 
 /// The constant name of a key or value: upper case, `.` and `-` as `_`.
-fn constant(name: &str) -> Result<String, String> {
+fn constant(name: &str) -> syn::Result<String> {
     let ok = name.bytes().next().is_some_and(|b| b.is_ascii_alphabetic())
         && name
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'));
     if !ok {
-        return Err(format!(
+        return Err(refuse(format!(
             "`{name}` makes no Rust name: a key starts with a letter and holds [A-Za-z0-9_.-]"
-        ));
+        )));
     }
     Ok(name.to_ascii_uppercase().replace(['.', '-'], "_"))
+}
+
+/// A refusal of the texts file, shown at the macro call.
+fn refuse(message: impl core::fmt::Display) -> syn::Error {
+    syn::Error::new(Span::call_site(), message)
 }
 
 /// `text` for a doc comment, its Markdown taken literally.
@@ -209,18 +214,18 @@ fn literal_markdown(text: &str) -> String {
 
 /// The items of the `texts` module: the file and a constant per key and
 /// per value name.
-fn items(file: &File) -> Result<TokenStream, String> {
+fn items(file: &File) -> syn::Result<TokenStream> {
     let mut seen: BTreeMap<String, &str> = BTreeMap::new();
     let mut keys = Vec::new();
     let mut constants = Vec::new();
     let mut all_values = BTreeSet::new();
     for (key, text) in file.keys() {
-        let name = constant(key).map_err(|e| format!("{}: {e}", file.path))?;
+        let name = constant(key).map_err(|e| refuse(format!("{}: {e}", file.path)))?;
         if let Some(other) = seen.insert(name.clone(), key) {
-            return Err(format!(
+            return Err(refuse(format!(
                 "{}: `{other}` and `{key}` both make the constant `{name}`; rename one",
                 file.path
-            ));
+            )));
         }
         let fills = values(text);
         let filled = if fills.is_empty() {
@@ -241,12 +246,12 @@ fn items(file: &File) -> Result<TokenStream, String> {
     let mut seen_values: BTreeMap<String, &str> = BTreeMap::new();
     let mut value_constants = Vec::new();
     for value in all_values {
-        let name = constant(value).map_err(|e| format!("{}: {e}", file.path))?;
+        let name = constant(value).map_err(|e| refuse(format!("{}: {e}", file.path)))?;
         if let Some(other) = seen_values.insert(name.clone(), value) {
-            return Err(format!(
+            return Err(refuse(format!(
                 "{}: the values `{other}` and `{value}` both make the constant `value::{name}`; rename one",
                 file.path
-            ));
+            )));
         }
         let ident = Ident::new(&name, Span::call_site());
         let doc = format!("`{value}`, a value the texts fill in.");
@@ -297,7 +302,7 @@ mod tests {
     use super::*;
 
     fn parse(text: &str) -> Result<File, String> {
-        File::parse("texts.toml".to_owned(), text)
+        File::parse("texts.toml".to_owned(), text).map_err(|e| e.to_string())
     }
 
     #[test]
@@ -353,7 +358,10 @@ mod tests {
         assert!(constant("1st").is_err());
         assert!(constant("a key").is_err());
         let file = parse("[en]\n\"a.b\" = \"A\"\n\"a_b\" = \"B\"\n").unwrap();
-        let refused = items(&file).err().unwrap_or_default();
+        let refused = items(&file)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
         assert!(
             refused.contains("both make the constant `A_B`"),
             "{refused}"
