@@ -1,6 +1,6 @@
 # The fuzz targets, a workspace of their own: cargo-fuzz builds them with the
 # nightly compiler and sanitizer flags, which the main workspace never sees.
-# `cargo +nightly fuzz run <target>` runs one; the nightly lane runs each.
+# `cargo +nightly fuzz run <target>` runs one.
 [package]
 name = "enshwick-fuzz"
 version = "0.0.0"

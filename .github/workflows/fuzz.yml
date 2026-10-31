@@ -1,6 +1,6 @@
 # Every fuzz target for a few seconds, on a pull request that changes what
 # the targets read: messages from other players, files people edit, tables,
-# patterns, game images and archives. The nightly lane runs them for minutes.
+# patterns, game images and archives.
 name: fuzz
 
 on:

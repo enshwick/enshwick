@@ -216,15 +216,6 @@ checks that every pattern of each table matches exactly once on its own
 build and yields the table's value, and that the patterns cover at least as
 many entries as they do today.
 
-### Game build watch
-
-[`game-build-watch.yml`](https://github.com/enshwick/enshwick/blob/main/.github/workflows/game-build-watch.yml) runs
-every hour on the organization's runners, never on pull requests. It reads
-the public Steam build ids of the dedicated server (app 2278520) and the
-client (app 1203620). For each build that no table names in `steam_build`,
-it opens one `game-update` issue; porting the table with `pin` is then a
-maintainer's pull request.
-
 ## More
 
 The [modding book](https://github.com/enshwick/enshwick/blob/main/book/src/SUMMARY.md) covers what goes into the mod.
