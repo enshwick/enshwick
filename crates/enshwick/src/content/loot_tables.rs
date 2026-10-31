@@ -169,6 +169,10 @@ pub fn template_table(layout: &FillTableLayout, template: &[u8]) -> Option<(Stri
 
 /// The value in force of `field` for the item with game id `item`, from
 /// `base`; `None` when nothing changes it.
+///
+/// # Examples
+///
+/// See [`change_random_loot`], which takes one.
 pub type LootValue<'a> = &'a dyn Fn(ItemId, Field, f64) -> Option<f64>;
 
 /// A whole value in force as the integer type `T`, which the field's range
@@ -242,6 +246,17 @@ pub fn change_random_loot(
 ///
 /// It keeps the proportion to the largest stack it had and never falls
 /// below the new largest, so the game's own drop factor keeps its room.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::loot_tables::scaled_ceiling;
+///
+/// // A ceiling of 20 for a largest stack of 10: doubled to 20, the ceiling becomes 40.
+/// assert_eq!(scaled_ceiling(20, 10, 20), 40);
+/// // The ceiling never falls below the new largest stack.
+/// assert_eq!(scaled_ceiling(5, 10, 40), 40);
+/// ```
 #[must_use]
 pub fn scaled_ceiling(scaled: u16, max: u16, new_max: u16) -> u16 {
     if max == 0 {

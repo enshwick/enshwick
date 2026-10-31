@@ -299,6 +299,10 @@ impl KnowledgeInput {
 
 /// A mod's knowledge input filter: the request and the pointer given at
 /// registration; returns 1 to let it through, 0 to refuse it.
+///
+/// # Examples
+///
+/// The safe layer wraps it in `Load::on_knowledge_input`, behind the `unstable` feature.
 pub type KnowledgeInputFn =
     unsafe extern "system" fn(call: *const KnowledgeInput, user: *mut c_void) -> u8;
 
@@ -637,4 +641,9 @@ impl_headed!(PlayerData);
 /// A mod's handler for an [`Event`]: the event, its data (null for events
 /// without data, valid for the call, and no other thread writes it during
 /// the call) and the pointer given at subscription.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on`](crate::Load::on) and
+/// [`Load::on_tick`](crate::Load::on_tick).
 pub type EventFn = unsafe extern "system" fn(event: Event, data: *const c_void, user: *mut c_void);

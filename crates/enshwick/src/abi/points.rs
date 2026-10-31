@@ -196,6 +196,11 @@ impl PointVerdict {
 /// A mod's link on an extension point: the input, valid for the call, the
 /// answer so far, which the link may overwrite and then answers
 /// [`PointVerdict::SET`], and the pointer given at attaching.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::extend_point`](crate::Load::extend_point) and
+/// [`Load::observe_point`](crate::Load::observe_point).
 pub type PointFn = unsafe extern "system" fn(
     input: *const c_void,
     value: *mut c_void,

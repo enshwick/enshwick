@@ -126,6 +126,10 @@ impl_headed!(AltarZone);
 
 /// An altar zone filter: the zone so far, writable, and the pointer given
 /// at registration. It must not unwind.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_altar_zone`](crate::Load::on_altar_zone).
 pub type AltarZoneFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mut c_void);
 
 /// A placement the game refused because the object's box does not lie in a
@@ -168,5 +172,10 @@ impl_headed!(BuildingZoneCheck);
 
 /// A mod's zone check filter: the check and the pointer given at
 /// registration; returns 1 to accept the placement after all.
+///
+/// # Examples
+///
+/// The safe layer wraps it in
+/// [`Load::on_building_zone_check`](crate::Load::on_building_zone_check).
 pub type BuildingZoneCheckFn =
     unsafe extern "system" fn(check: *const BuildingZoneCheck, user: *mut c_void) -> u8;

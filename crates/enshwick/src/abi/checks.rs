@@ -73,6 +73,10 @@ impl Interaction {
 /// A mod's interaction filter: the call and the pointer given at
 /// registration; returns 0 to refuse, which the game handles as its own
 /// refusal, so nothing moves and nothing is lost.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_interaction`](crate::Load::on_interaction).
 pub type InteractionFn =
     unsafe extern "system" fn(call: *const Interaction, user: *mut c_void) -> u8;
 
@@ -120,6 +124,10 @@ impl SkillCheck {
 /// A skill override: the check and the pointer given at registration;
 /// returns [`SkillCheck::VANILLA`], [`SkillCheck::UNLOCKED`] or
 /// [`SkillCheck::LOCKED`].
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_skill`](crate::Load::on_skill).
 pub type SkillCheckFn =
     unsafe extern "system" fn(check: *const SkillCheck, user: *mut c_void) -> u8;
 
@@ -151,6 +159,10 @@ impl_headed!(Comfort);
 
 /// A comfort filter: the registration and the pointer given at
 /// registration; returns the comfort to register.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_comfort`](crate::Load::on_comfort).
 pub type ComfortFn = unsafe extern "system" fn(comfort: *const Comfort, user: *mut c_void) -> i32;
 
 /// One character's experience before the game applies it, in an
@@ -212,6 +224,10 @@ pub struct ExperiencePass {
 impl_headed!(ExperiencePass);
 
 /// An experience filter: the pass and the pointer given at registration.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_experience`](crate::Load::on_experience).
 pub type ExperiencePassFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
 
 /// How many altars a Flame level allows, as the loader asks every
@@ -290,4 +306,8 @@ impl_headed!(BaseLimitInfo);
 
 /// An altar limit filter: the limit so far, writable, and the pointer given
 /// at registration. It must not unwind.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_altar_limit`](crate::Load::on_altar_limit).
 pub type AltarLimitFilterFn = unsafe extern "system" fn(limit: *mut AltarLimit, user: *mut c_void);

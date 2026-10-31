@@ -32,6 +32,10 @@ pub struct ResourceKey {
 /// stay valid and writable for the life of the process: a rebuild
 /// ([`HostApi::rebuild_resource`](super::HostApi::rebuild_resource)) writes
 /// over the last patch's bytes.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::serve`](crate::Load::serve).
 pub type ResourcePatchFn = unsafe extern "system" fn(
     base: *const u8,
     base_len: usize,

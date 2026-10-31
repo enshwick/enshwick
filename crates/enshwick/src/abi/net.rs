@@ -53,4 +53,8 @@ impl NetMessage {
 
 /// A mod's handler for messages on its channel: the message and the pointer
 /// given at registration. It must not unwind.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::channel`](crate::Load::channel).
 pub type NetMessageFn = unsafe extern "system" fn(message: *const NetMessage, user: *mut c_void);
