@@ -233,7 +233,7 @@ under way counts as asked. Before the world has loaded it is refused.
 its folder, such as `world0-1a2b3c4d`, the same in every session. A
 [world store](state.md#per-world-state) files the mod's state under it. A
 world whose save moves to another folder gets a new key, and the loader
-moves its mods' data along ([Move a world](servers.md#move-a-world)).
+moves its mods' data along ([Move a world to another folder](https://enshwick.com/guides/run-a-server-in-docker/#move-a-world-to-another-folder)).
 
 Like the reads, all three need the game thread; `key()` works from any
 thread.

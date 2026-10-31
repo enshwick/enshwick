@@ -45,7 +45,6 @@ chapters! {
     Limits => "content/limits.md",
     Inventories => "inventories.md",
     Releasing => "releasing.md",
-    Servers => "servers.md",
     Stability => "stability.md",
     AbiReference => "abi-reference.md",
     ModsInC => "mods-in-c.md",

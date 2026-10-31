@@ -24,10 +24,11 @@ use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, Reci
 
 /// The table of services the loader offers a mod.
 ///
-/// Until 1.0 any change to its layout is a new [`ABI_VERSION`](crate::abi::ABI_VERSION), and a loader
-/// loads only mods built for its own. From 1.0 fields are only appended, and
-/// a mod checks [`Header::covers`] before it calls a field added after the
-/// release it was built against.
+/// Until 1.0 any change to its layout is a new
+/// [`ABI_VERSION`](crate::abi::ABI_VERSION), and a loader loads only mods
+/// built for its own. From 1.0 fields are only appended, and a mod checks
+/// [`Header::covers`] before it calls a field added after the release it was
+/// built against.
 ///
 /// # Examples
 ///
@@ -677,11 +678,12 @@ pub struct HostApi {
     pub ui_widget: extern "system" fn(me: ModHandle, frame: u64, widget: *mut UiWidget) -> Status,
     /// Queues `dialog` and calls `callback` with the answer and `user` once
     /// the player gives it, on the thread that draws the interface; dialogs
-    /// show one at a time, in order, in the game's style. Any thread. Client only ([`Status::MISSING`] on a server); when the
-    /// interface could not be linked, the dialog shows as a system message
-    /// box. [`Status::REFUSED`] when too many wait; [`Status::WRONG_THREAD`]
-    /// for [`UiDialog::WAITING`] on the thread that draws the interface. On
-    /// an error status `callback` is never called.
+    /// show one at a time, in order, in the game's style. Any thread. Client
+    /// only ([`Status::MISSING`] on a server); when the interface could not
+    /// be linked, the dialog shows as a system message box.
+    /// [`Status::REFUSED`] when too many wait; [`Status::WRONG_THREAD`] for
+    /// [`UiDialog::WAITING`] on the thread that draws the interface. On an
+    /// error status `callback` is never called.
     pub ui_dialog: extern "system" fn(
         me: ModHandle,
         dialog: *const UiDialog,

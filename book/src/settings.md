@@ -250,29 +250,20 @@ world loads": they apply when the world loads again; `restart` rows say "when
 the game starts again". A change is
 written at once, as the game applies its own settings.
 
-The Mods screen, "Mods" in the title screen's main menu and in the pause menu
-beside Settings, lists the mods with their names, versions, descriptions,
-authors and status, and edits each player's own (`client`) settings. Over
-the pause menu while hosting, its "World settings" button opens the game's
-world settings.
+The Mods screen edits each player's own (`client`) settings. There a text
+setting shows the game's own text field, and its value goes through the same
+checks as any other change. A text longer than 256 bytes, and any text on a
+game build where the loader cannot draw the text field, shows as a line with
+the file's name instead. A `secret` shows only its mark, never its value.
 
-On the Mods screen a text setting shows the game's own text field. Click
-it, type, and press Enter: the value goes through the same checks as any
-other change, and a refusal shows above the list. Only Enter sets the
-value: typing that ends any other way sets nothing. A text longer than 256
-bytes, and any text on a game build where the loader cannot draw the text
-field, shows as a line with the file's name instead. A `secret` shows only
-its mark, never its value.
-
-On a client joined to a dedicated server, the screen also offers "Server
-settings": the server's mods with settings, and each one's values as the
-server's world holds them, asked over the loader's own messages. An
-administrator changes them there; the server checks the permission on its
-own record of the player, runs the same checks as the console, writes its
+On a client joined to a dedicated server, an administrator changes the
+server's settings from the Mods screen. The server checks the permission on
+its own record of the player, runs the same checks as the console, writes its
 world's settings, and answers with the outcome and the new values. Other
 players see the join values only, without changes. Fields marked `secret`
 never leave the server, and a player changes at most a few settings a
-second.
+second. What a player clicks for each of these is in
+[Change a mod's settings](https://enshwick.com/guides/change-mod-settings/).
 
 Before anything writes, the loader runs the mod's own check: `load.config()`
 hands it over, and it parses what the mod would read and runs the type's

@@ -112,7 +112,7 @@ The keys of `mod-configs/enshwick.toml`:
 | `join_note_seconds`  | `10`      | seconds between the chat line and the disconnect; read at start                                                         |
 | `allowlist`          | `false`   | on a dedicated server, let in only the [allowlist](world.md#the-allowlist)'s accounts and administrators; read at start |
 | `language`           | `""`      | on a dedicated server, language code of the console's and other texts no player's game names; empty for English         |
-| `motd`               | `""`      | the [message of the day](servers.md#greet-players) players read in chat; at most 4 lines and 500 bytes                  |
+| `motd`               | `""`      | the [message of the day](https://enshwick.com/guides/run-a-server-in-docker/#greet-players-when-they-join) players read in chat; at most 4 lines and 500 bytes |
 
 The file rejects unknown keys. A file that does not parse at start is logged
 and the loader runs with the defaults; a change that does not parse is logged
@@ -282,8 +282,8 @@ and changes to game data rather than code, are not seen.
 
 ## Faults
 
-When the loader turns a mod off, the mod's log has an error
-`off: <reason>`, and the Mods screen shows the reason under the mod, in the
+When the loader turns a mod off, `loader.log` and the mod's log say why, the
+mod's log with an error `off: <reason>`, and the Mods screen shows the reason under the mod, in the
 reader's language for an `Off::text`. The summary's list of mods turned off
 keeps the reason, and `enshwick` on the console marks the mod `(off)`. A
 hardware fault that ends the game goes to `crash.log` instead, and the next
