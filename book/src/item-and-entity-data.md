@@ -3,8 +3,8 @@
 Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
-Item and entity data is what a mod attaches to one thing of the world, kept
-per world beside the game's save.
+Item and entity data is what a mod attaches to one item or entity of the
+world.
 
 ## A ring's bonus and a chest's owner
 

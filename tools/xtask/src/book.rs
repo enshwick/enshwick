@@ -49,7 +49,7 @@ fn intro_problem(chapter: &str, text: &str) -> Option<String> {
     let words = intro_words(text);
     (words >= INTRO_WORDS).then(|| {
         format!(
-            "{chapter}: the intro has {words} words; keep it under {INTRO_WORDS} before the first ## heading"
+            "{SOURCE}/{chapter}: the intro has {words} words; keep it under {INTRO_WORDS} before the first ## heading"
         )
     })
 }
@@ -236,7 +236,9 @@ mod tests {
         let short = format!("# Title\n\n{}\n\n## Next\n", ["word"; 39].join(" "));
         assert_eq!(
             intro_problem("hooks.md", &long).as_deref(),
-            Some("hooks.md: the intro has 40 words; keep it under 40 before the first ## heading")
+            Some(
+                "book/src/hooks.md: the intro has 40 words; keep it under 40 before the first ## heading"
+            )
         );
         assert_eq!(intro_problem("hooks.md", &short), None);
     }

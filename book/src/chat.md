@@ -1,8 +1,7 @@
 # Chat, notices and the console
 
-This chapter covers what a mod sends players, and the server's console, which
-runs lines typed into a dedicated server's console window or appended to its
-command file.
+A mod sends players chat lines and notices on screen. A dedicated server's
+console runs the lines typed into its window or appended to its command file.
 
 ## No commands for players
 
