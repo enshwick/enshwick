@@ -85,7 +85,9 @@ pub(crate) enum Edit {
     Note(String),
 }
 
-/// The header of a mod's build row.
+/// The key of a mod's build rows.
+const BUILDS: &str = "package.metadata.enshwick.builds";
+/// The header of a mod's build row, without whitespace.
 const ROW: &str = "[[package.metadata.enshwick.builds]]";
 /// The header of a row's symbols.
 const SYMBOLS: &str = "[package.metadata.enshwick.builds.symbols]";
@@ -116,7 +118,8 @@ pub(crate) fn parse(src: &str) -> anyhow::Result<Vec<Row>> {
         let code = code_of(body);
         let indent = body.len() - body.trim_start().len();
         if code.starts_with('[') {
-            let part = match code {
+            let header: String = code.chars().filter(|c| !c.is_whitespace()).collect();
+            let part = match header.as_str() {
                 ROW => {
                     rows.extend(finished(open.take(), index)?);
                     open = Some((mod_row(start + indent), Part::Fields));
@@ -124,6 +127,9 @@ pub(crate) fn parse(src: &str) -> anyhow::Result<Vec<Row>> {
                 }
                 SYMBOLS => Part::Symbols,
                 CONSTANTS => Part::Constants,
+                other if other.trim_start_matches('[').starts_with(BUILDS) => {
+                    bail!("line {}: pin does not read the table `{code}`", index + 1)
+                }
                 _ => {
                     rows.extend(finished(open.take(), index)?);
                     continue;
@@ -252,13 +258,18 @@ fn finished(open: Option<(Row, Part)>, index: usize) -> anyhow::Result<Option<Ro
     Ok(Some(row))
 }
 
-/// The line without its comment, trimmed; a `#` inside a string stays.
+/// The line without its comment, trimmed; a `#` inside a basic or literal
+/// string stays, and `\"` does not end a basic string.
 fn code_of(line: &str) -> &str {
-    let mut quoted = false;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
     for (at, c) in line.char_indices() {
-        match c {
-            '"' => quoted = !quoted,
-            '#' if !quoted => return line[..at].trim(),
+        match (quote, c) {
+            (Some('"'), _) if escaped => escaped = false,
+            (Some('"'), '\\') => escaped = true,
+            (Some(open), c) if c == open => quote = None,
+            (None, '"' | '\'') => quote = Some(c),
+            (None, '#') => return line[..at].trim(),
             _ => {}
         }
     }
@@ -487,6 +498,37 @@ workspace = true
                 "{why}"
             );
         }
+    }
+
+    #[test]
+    fn headers_with_spaces_read_as_the_plain_headers() {
+        let spaced = MOD
+            .replace(
+                "[[package.metadata.enshwick.builds]]",
+                "[[ package.metadata.enshwick.builds ]]",
+            )
+            .replace(
+                "[package.metadata.enshwick.builds.symbols]",
+                "[ package.metadata.enshwick.builds.symbols ]",
+            );
+        let rows = parse(&spaced).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].symbols.len(), 2);
+        assert_eq!(rows[1].symbols[0].value, 0x2d_8295);
+    }
+
+    #[test]
+    fn an_unknown_table_under_the_build_rows_is_an_error() {
+        let src = "[[package.metadata.enshwick.builds]]\nside = \"server\"\nguid = \"ab\"\nage = 1\n\n[package.metadata.enshwick.builds.checks]\n\"a.b\" = 1\n";
+        let why = parse(src).unwrap_err().to_string();
+        assert!(why.contains("does not read the table"), "{why}");
+    }
+
+    #[test]
+    fn a_hash_in_a_string_is_no_comment() {
+        assert_eq!(code_of(r##"guid = "a\"#b" # note"##), r##"guid = "a\"#b""##);
+        assert_eq!(code_of(r"name = 'a\' # note"), r"name = 'a\'");
+        assert_eq!(code_of("name = 'a#b' # note"), "name = 'a#b'");
     }
 
     #[test]

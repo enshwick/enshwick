@@ -419,7 +419,7 @@ fn entries(row: &toml::Table, key: &str) -> Result<Vec<(String, u64)>, String> {
                 .as_integer()
                 .and_then(|v| u64::try_from(v).ok())
                 .map(|v| (id.clone(), v))
-                .ok_or_else(|| format!("`builds.{key}.{id:?}` is a whole number, such as 0x4_05cb"))
+                .ok_or_else(|| format!("`builds.{key}.{id:?}` is a whole number from 0 to TOML's largest, 0x7fff_ffff_ffff_ffff, such as 0x4_05cb"))
         })
         .collect()
 }
@@ -441,8 +441,8 @@ fn is_id(id: &str) -> bool {
             .is_some_and(|(a, n)| is_part(a) && is_part(n))
 }
 
-/// Whether `id` is a mod id or one of the form ids had before they carried an
-/// author; the API's `abi::is_valid_former_id`.
+/// Whether `id` is a mod id or one of the old form without an author that
+/// `replaces` still takes; the API's `abi::is_valid_old_form_id`.
 fn is_old_or_new_id(id: &str) -> bool {
     is_id(id) || (id.len() <= 64 && is_part(id))
 }
