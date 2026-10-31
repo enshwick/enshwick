@@ -78,10 +78,11 @@ jobs:
   rust:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.gate.outputs.run == 'true') }}
-    uses: enshwick/.github/.github/workflows/rust-ci.yml@main # zizmor: ignore[unpinned-uses]
+    uses: enshwick/.github/.github/workflows/rust-ci.yml@ci/WIK-168-hosted-windows-tests # zizmor: ignore[unpinned-uses]
     permissions:
       contents: read
     with:
+      full: true
       semver: enshwick
       split: true
 
