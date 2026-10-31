@@ -85,6 +85,14 @@ const ITEM: char = '\u{1f}';
 const PAIR: char = '\u{1e}';
 
 /// `text` with no tab, line break or separator left in it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::actions::sheet::clean;
+///
+/// assert_eq!(clean("two\tparts\n"), "two parts ");
+/// ```
 #[must_use]
 pub fn clean(text: &str) -> String {
     text.chars()

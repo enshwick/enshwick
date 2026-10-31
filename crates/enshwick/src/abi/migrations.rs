@@ -88,6 +88,10 @@ pub struct Migration {
 /// ([`MigrationStep::MAP_SETTING`]) or a whole TOML file
 /// ([`MigrationStep::MAP_STORE`]), and the answer goes to `out`, valid until
 /// the next call; an error status with the reason in `out` fails the migration.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::migrate`](crate::Load::migrate).
 pub type MigrateFn = unsafe extern "system" fn(
     user: *mut c_void,
     migration: u32,

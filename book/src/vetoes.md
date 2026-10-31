@@ -94,3 +94,11 @@ without asking. The filters run in the server's world only, in the dedicated
 server or a hosting client, on the thread of the system that checks the
 interaction: keep them quick and never block. Several mods may filter; any
 refusal wins.
+
+## Worked example
+
+[`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
+links its interaction filter in
+[`lib.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/lib.rs),
+and [`access.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/access.rs)
+decides who may open, move and dismantle a Safe.

@@ -211,3 +211,14 @@ serves a cloned template any more, the game reads the vanilla template under
 the clone's GUID, so a placed object of a removed mod loads as the vanilla
 object it was cloned from, and an item of a removed mod stays as a stand-in
 until the mod is back. See [Content](content.md#when-a-mod-is-removed).
+
+## Worked examples
+
+- [`enshwick-better-altars`](https://github.com/enshwick/mods/tree/main/better-altars)
+  sets and clears its hold in
+  [`hold.rs`](https://github.com/enshwick/mods/blob/main/better-altars/src/hold.rs).
+- [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
+  and [`enshwick-shared-experience`](https://github.com/enshwick/mods/tree/main/shared-experience)
+  keep their per-world state in a `WorldStore`, each in its `lib.rs`
+  ([personal-safes](https://github.com/enshwick/mods/blob/main/personal-safes/src/lib.rs),
+  [shared-experience](https://github.com/enshwick/mods/blob/main/shared-experience/src/lib.rs)).

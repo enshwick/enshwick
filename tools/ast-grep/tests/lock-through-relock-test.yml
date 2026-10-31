@@ -20,6 +20,12 @@ valid:
         }
     }
   - "fn f() { let err = std::io::stderr().lock(); }"
+  - "fn f(s: &Settings) { match s.read() { Some(v) => drop(v), other => drop(other) } }"
+  - "fn f(s: &Settings) { let Some(v) = s.read() else { return }; drop(v); }"
+  - "fn f(s: &Settings) { if let Some(v) = s.read() { drop(v); } }"
+  - "fn f(c: &Condvar, g: MutexGuard<'_, u8>) { let g = c.relock_wait(g); }"
+  - "fn f(child: &mut Child) -> io::Result<()> { child.wait()?; Ok(()) }"
+  - "fn f(b: &Barrier) { let leader = b.wait().is_leader(); }"
   - |
     #[cfg(test)]
     mod tests {
@@ -39,3 +45,10 @@ invalid:
   - "fn f(m: &Mutex<u8>) { let Ok(g) = m.lock() else { return }; drop(g); }"
   - "fn f(m: &RwLock<u8>) { let Ok(g) = m.try_read() else { return }; drop(g); }"
   - "fn f(m: &Mutex<u8>) { let r = m.lock(); drop(r.unwrap()); }"
+  - "fn f(m: &Mutex<u8>) { let mut r = m.lock(); drop(r.unwrap()); }"
+  - "fn f(m: &Mutex<u8>) { match m.lock() { Err(_) => {}, Ok(g) => drop(g) } }"
+  - "fn f(c: &Condvar, g: MutexGuard<'_, u8>) { let g = c.wait(g).unwrap(); }"
+  - "fn f(c: &Condvar, g: MutexGuard<'_, bool>) { let g = c.wait_while(g, |s| !*s).unwrap_or_else(PoisonError::into_inner); }"
+  - "fn f(c: &Condvar, g: MutexGuard<'_, u8>, d: Duration) { let (g, t) = c.wait_timeout(g, d).unwrap(); }"
+  - "fn f(c: &Condvar, g: MutexGuard<'_, bool>, d: Duration) -> Result<(), E> { let (g, t) = c.wait_timeout_while(g, d, |s| !*s)?; Ok(()) }"
+  - "fn f(c: &Condvar, g: MutexGuard<'_, u8>) { if let Ok(g) = c.wait(g) { drop(g); } }"

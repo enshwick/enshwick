@@ -3,8 +3,9 @@
 //!
 //! The mod that owns a rule declares it once with
 //! [`#[point]`](macro@crate::point): a `repr(C)` input, the type of the
-//! answer, a name `<owner id>:<point>` and a [`Mode`]. The owner defines it
-//! with [`Load::define_point`] and asks it with [`OwnedPoint::decide`],
+//! answer, a local name the macro makes `<owner id>:<point>` and a
+//! [`Mode`]. The owner defines it with [`Load::define_point`] and asks it
+//! with [`OwnedPoint::decide`],
 //! passing its own answer; other mods attach links with
 //! [`Load::extend_point`] or [`Load::observe_point`], ordered by
 //! [`Order`]. The loader checks every link's declaration against the
@@ -101,13 +102,13 @@ impl Mode {
 /// ```
 /// use enshwick::points::{Mode, Point};
 ///
-/// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32)]
+/// #[enshwick::point(name = "price", mode = Override, output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
 ///     pub item: u32,
 /// }
 ///
-/// assert_eq!(Price::NAME, "you.trading-post:price");
+/// assert_eq!(Price::NAME, "you.hello:price");
 /// assert_eq!(Price::MODE, Mode::Override);
 /// assert!(!Price::REFUSE);
 /// ```
@@ -293,7 +294,7 @@ impl Order {
 /// # Examples
 ///
 /// ```
-/// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32)]
+/// #[enshwick::point(name = "price", mode = Override, output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
 ///     pub item: u32,
@@ -350,7 +351,7 @@ impl<P: Point> OwnedPoint<P> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32)]
+    /// #[enshwick::point(name = "price", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Price {
     ///     pub item: u32,
@@ -476,7 +477,7 @@ impl Load<'_> {
     /// ```
     /// use enshwick::points::{Order, Verdict};
     ///
-    /// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32)]
+    /// #[enshwick::point(of = trading_post, name = "price", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Price {
     ///     pub item: u32,
@@ -509,7 +510,7 @@ impl Load<'_> {
     /// ```
     /// use enshwick::points::Order;
     ///
-    /// #[enshwick::point(name = "you.trading-post:price", mode = Observe, output = u32)]
+    /// #[enshwick::point(of = trading_post, name = "price", mode = Observe, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Price {
     ///     pub item: u32,

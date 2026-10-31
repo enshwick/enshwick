@@ -168,10 +168,18 @@ use settings::FakeMigrations;
 
 /// A mod's `enshwick_mod_init` export, as [`declare_mod!`](crate::declare_mod)
 /// writes it.
+///
+/// # Examples
+///
+/// See [`Installed::start`], which takes one.
 pub type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status;
 
 /// A mod's `enshwick_mod_ready` export, as [`declare_mod!`](crate::declare_mod)
 /// writes it.
+///
+/// # Examples
+///
+/// See [`Installed::start`], which takes one.
 pub type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
 
 /// The id the fake loader gives the mod it runs: the namespace its stats,

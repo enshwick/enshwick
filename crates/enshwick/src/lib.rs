@@ -43,7 +43,7 @@
 //!
 //! | Area | Modules |
 //! | --- | --- |
-//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`](mod@config), [`i18n`], [`status`], [`state`], [`files`], [`migrations`] |
+//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`](mod@config), [`i18n`], [`status`], [`state`], [`files`], [`migrations`], [`Relock`] |
 //! | Hooks and game memory | [`detour!`], [`hook`](macro@hook), [`code`], [`ecs`], [`raw`], [`pacing`] |
 //! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
 //! | The server's world | [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
@@ -282,7 +282,7 @@ pub use enshwick_macros::Script;
 ///     pub const SELL: Self = Self(1);
 /// }
 ///
-/// #[enshwick::event(name = "you.trading-post:sold")]
+/// #[enshwick::event(name = "sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub price: Coins,
@@ -298,14 +298,15 @@ pub use enshwick_macros::Shape;
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
 ///
-/// `#[call(name = "<server id>:<call>", output = <type>, version = <major>)]`;
-/// `version` is 1 when left out. A changed field or answer is a new major.
-/// Every type in it has a [`trait@Shape`].
+/// `#[call(name = "<call>", output = <type>, version = <major>)]`, with
+/// `of = <alias>` for a dependency's call ([`deps!`]); `version` is 1 when
+/// left out. A changed field or answer is a new major. Every type in it has
+/// a [`trait@Shape`].
 ///
 /// # Examples
 ///
 /// ```
-/// #[enshwick::call(name = "you.trading-post:price-of", output = u32)]
+/// #[enshwick::call(name = "price-of", output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct PriceOf {
 ///     pub item: u32,
@@ -412,6 +413,7 @@ pub use enshwick_macros::config;
 ///
 /// [package.metadata.enshwick.recommends]
 /// lanterns = "you.lanterns"
+/// trading_post = "you.trading-post"
 ///
 /// [[package.metadata.enshwick.builds]]
 /// side = "server"
@@ -439,7 +441,7 @@ pub use enshwick_macros::config;
 /// let manifest = unsafe { &*enshwick_mod_query() };
 /// // SAFETY: `declare_mod!` points the id at a string literal, alive for the process.
 /// assert_eq!(unsafe { manifest.id.as_str() }, Some("you.hello"));
-/// assert_eq!(manifest.dependency_count, 2);
+/// assert_eq!(manifest.dependency_count, 3);
 /// assert_eq!(manifest.build_count, 1);
 /// // SAFETY: `declare_mod!` points the licence at this crate's `[package]`
 /// // licence, a literal alive for the process.
@@ -470,7 +472,7 @@ pub use enshwick_macros::declare_mod;
 /// # Examples
 ///
 /// The crate's `Cargo.toml`, as on [`declare_mod!`], requires `lockers` and
-/// recommends `lanterns`:
+/// recommends `lanterns` and `trading_post`:
 ///
 /// ```rust
 /// use enshwick::content::Id;
@@ -499,14 +501,17 @@ pub use enshwick_macros::deps;
 /// `repr(C)` and implements [`services::ModEvent`] with a layout hash per
 /// field.
 ///
-/// `#[event(name = "<defining mod id>:<what>")]`; the struct is `Copy`
+/// `#[event(name = "<what>")]` for this mod's event, `#[event(of = <alias>,
+/// name = "<what>")]` for a dependency's ([`deps!`]); the struct is `Copy`
 /// plain data and grows by appending fields, as a
 /// [`#[service]`](macro@service) table does.
 ///
 /// # Examples
 ///
+/// The crate's `Cargo.toml` recommends `trading_post`, which sends `sold`:
+///
 /// ```
-/// #[enshwick::event(name = "you.trading-post:sold")]
+/// #[enshwick::event(of = trading_post, name = "sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub item: u32,
@@ -548,18 +553,21 @@ pub use enshwick_macros::hook;
 /// `repr(C)` and implements [`points::Point`] with a layout hash per field
 /// and one for the answer, which the loader checks for every link.
 ///
-/// `#[point(name = "<owner id>:<point>", mode = Observe | Advise | Override,
-/// output = <type>, refusable)]`; `refusable` lets a link refuse, which
-/// stops the chain. The input grows by appending fields; a changed field or
-/// answer type needs a new name. Every type in it has a [`trait@Shape`], so
+/// `#[point(name = "<point>", mode = Observe | Advise | Override, output =
+/// <type>, refusable)]`, with `of = <alias>` for a dependency's point
+/// ([`deps!`]); `refusable` lets a link refuse, which stops the chain. The
+/// input grows by appending fields; a changed field or answer type needs a
+/// new name. Every type in it has a [`trait@Shape`], so
 /// a change deep inside a field refuses the link too.
 ///
 /// # Examples
 ///
+/// The crate's `Cargo.toml` recommends `trading_post`, which owns `price`:
+///
 /// ```
 /// use enshwick::points::{Order, Verdict};
 ///
-/// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]
+/// #[enshwick::point(of = trading_post, name = "price", mode = Override, output = u32, refusable)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
 ///     pub item: u32,
@@ -593,9 +601,9 @@ pub use enshwick_macros::script;
 /// and implements [`services::Service`] with a layout hash per field, which
 /// the loader checks when a mod asks for the service.
 ///
-/// `#[service(name = "<publisher id>:<what>", version = <major>)]`, the
-/// version 1 when left out. Fields are `extern "system" fn` pointers or
-/// plain data. Append fields to grow the table: users built against the
+/// `#[service(name = "<what>", version = <major>)]`, with `of = <alias>`
+/// for a dependency's service ([`deps!`]); the version is 1 when left out.
+/// Fields are `extern "system" fn` pointers or plain data. Append fields to grow the table: users built against the
 /// shorter table keep working. Change a published field only with a new
 /// major. Every type in it has a [`trait@Shape`], so a change deep inside a
 /// field refuses the user too.
@@ -603,7 +611,7 @@ pub use enshwick_macros::script;
 /// # Examples
 ///
 /// ```
-/// #[enshwick::service(name = "you.trading-post:prices", version = 1)]
+/// #[enshwick::service(name = "prices", version = 1)]
 /// pub struct Prices {
 ///     pub price: extern "system" fn(item: u32) -> u32,
 /// }
@@ -658,6 +666,7 @@ pub(crate) use enshwick_macros::{Script, script};
 pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};
+pub use locks::{Relock, RelockRw, RelockWait};
 pub use shape::Shape;
 pub use world_error::WorldError;
 
@@ -667,7 +676,6 @@ pub mod __private {
     pub use serde;
 
     pub use crate::hook::Frame;
-    pub use crate::locks::Relock;
     pub use crate::script::convert::{argument, record_fields};
 
     use std::sync::OnceLock;

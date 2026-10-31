@@ -180,6 +180,11 @@ impl InventoryResult {
 
 /// Receives the [`InventoryResult`] of a request, on the server's game thread
 /// after a simulation step; it must not unwind.
+///
+/// # Examples
+///
+/// The safe layer wraps it in
+/// [`Inventories::submit`](crate::inventory::Inventories::submit).
 pub type InventoryResultFn =
     unsafe extern "system" fn(result: *const InventoryResult, user: *mut c_void);
 

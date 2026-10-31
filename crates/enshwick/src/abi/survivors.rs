@@ -82,6 +82,10 @@ impl SurvivorLookup {
 
 /// The mod's survivor lookup: the call and the pointer given at
 /// registration; returns 1 with the answer in `out`, or 0 for the game's own.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_survivor_lookup`](crate::Load::on_survivor_lookup).
 pub type SurvivorLookupFn = unsafe extern "system" fn(
     call: *const SurvivorLookup,
     user: *mut c_void,
@@ -122,6 +126,11 @@ pub struct BedCheck {
 impl_headed!(BedCheck);
 
 /// A filter of survivors' beds: returns 0 to make the game clear the bed.
+///
+/// # Examples
+///
+/// The safe layer wraps it in
+/// [`Load::on_survivor_bed_check`](crate::Load::on_survivor_bed_check).
 pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *mut c_void) -> u8;
 
 /// A summoning staff's use about to spawn or move a survivor, as
@@ -186,6 +195,11 @@ impl Summon {
 /// A summon filter: returns [`Summon::TAKE`] to make the game take the
 /// item in the same transaction, and only when the spawn or move works,
 /// [`Summon::REFUSE`] to refuse the use, or 0 to leave it.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_summon`](crate::Load::on_summon) and
+/// [`Load::on_summoned`](crate::Load::on_summoned).
 pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut c_void) -> u8;
 
 /// The client's survivor menu merging the statuses of every entity of one
@@ -194,6 +208,10 @@ pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut 
 /// The survivor, `count` status bytes at `statuses`, valid for the call, and
 /// the pointer given at registration; returns [`SURVIVOR_STATUS_SET`] or-ed
 /// with the byte to show, or 0 to leave the game's.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_survivor_status`](crate::Load::on_survivor_status).
 pub type SurvivorStatusFn = unsafe extern "system" fn(
     survivor: NpcId,
     statuses: *const u8,

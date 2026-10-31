@@ -71,6 +71,10 @@ impl_headed!(EventTypeInfo);
 
 /// A mod's handler for game events: the event and the pointer given at
 /// subscription. It must not unwind.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on`](crate::Load::on), for a game event's type.
 pub type GameEventFn = unsafe extern "system" fn(event: *const GameEventData, user: *mut c_void);
 
 /// An entity placed in the world, from [`HostApi::entities`](super::HostApi::entities).
@@ -215,6 +219,10 @@ impl_headed!(CraftCheck);
 
 /// A mod's craft filter: the request and the pointer given at registration;
 /// returns 1 to let it through, 0 to refuse it.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_craft`](crate::Load::on_craft).
 pub type CraftCheckFn = unsafe extern "system" fn(call: *const CraftCheck, user: *mut c_void) -> u8;
 
 /// A placement the game's cursor check allows, handed to the filters
@@ -245,6 +253,10 @@ impl_headed!(BuildCheck);
 
 /// A mod's build filter: the placement and the pointer given at
 /// registration; returns 1 to let it through, 0 to refuse it.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_build`](crate::Load::on_build).
 pub type BuildCheckFn = unsafe extern "system" fn(call: *const BuildCheck, user: *mut c_void) -> u8;
 
 /// The clock of the server's world, written by [`HostApi::time_of_day`](super::HostApi::time_of_day).
@@ -376,6 +388,10 @@ impl DamageCheck {
 
 /// A mod's damage filter: the damage, which it may change, and the pointer
 /// given at registration. It runs on the game's worker threads.
+///
+/// # Examples
+///
+/// The safe layer wraps it in `Load::on_damage`, behind the `unstable` feature.
 pub type DamageFilterFn = unsafe extern "system" fn(check: *mut DamageCheck, user: *mut c_void);
 
 /// A knowledge value, written by [`HostApi::knowledge`](super::HostApi::knowledge).

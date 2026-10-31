@@ -141,3 +141,12 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 The check runs on both sides, since a client predicts placement, and while a
 player aims a piece: keep it cheap and never block in it. A mod that changes
 placement this way counts in the join check, so every player runs it.
+
+## Worked example
+
+[`enshwick-better-altars`](https://github.com/enshwick/mods/tree/main/better-altars)
+is a whole mod on these calls:
+[`lib.rs`](https://github.com/enshwick/mods/blob/main/better-altars/src/lib.rs)
+answers `on_altar_limit` per Flame level from its settings, and
+[`zones.rs`](https://github.com/enshwick/mods/blob/main/better-altars/src/zones.rs)
+sizes the zones with `on_altar_zone` and sizes them again on `AltarsChanged`.

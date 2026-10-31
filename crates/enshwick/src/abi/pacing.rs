@@ -34,11 +34,19 @@ impl_headed!(LoopWaitData);
 
 /// A handler of the event loop's waits: the wait, borrowed for the call,
 /// and the pointer given at registration. It must not unwind.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_loop_wait`](crate::Load::on_loop_wait).
 pub type LoopWaitFn = unsafe extern "system" fn(wait: *const LoopWaitData, user: *mut c_void);
 
 /// A handler of the server loop's wait between two passes: the wait in
 /// nanoseconds, which it may change, and the pointer given at registration.
 /// It must not unwind.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_server_wait`](crate::Load::on_server_wait).
 pub type ServerWaitFn = unsafe extern "system" fn(wait_ns: *mut u64, user: *mut c_void);
 
 /// Which waits [`HostApi::loop_wait`](super::HostApi::loop_wait) found and

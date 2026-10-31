@@ -94,6 +94,7 @@ pub mod point_schema;
 mod points_described;
 mod points_links;
 mod points_owner;
+mod poisoned_locks;
 mod published_texts;
 #[cfg(feature = "unstable")]
 mod rates;

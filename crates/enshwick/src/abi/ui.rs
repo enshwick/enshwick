@@ -49,6 +49,11 @@ impl UiFrame {
 
 /// A mod's callback for each frame of the client's interface: the frame and
 /// the pointer given at registration. It must not unwind.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::on_frame`](crate::Load::on_frame) and
+/// [`Load::on_hud`](crate::Load::on_hud).
 pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut c_void);
 
 /// One widget, drawn with [`HostApi::ui_widget`](super::HostApi::ui_widget): `kind` says which, and
@@ -412,6 +417,10 @@ impl UiDialog {
 ///
 /// Called once, on the thread that draws the interface, or on a thread of the
 /// loader's when the dialog shows as a system window. It must not unwind.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Ui::dialog`](crate::ui::Ui::dialog).
 pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 
 /// A mod's check of a new text of its settings file, before the loader writes
@@ -424,6 +433,10 @@ pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 /// reason shows as written. A name holds no `=`; neither holds a tab.
 ///
 /// It must not unwind.
+///
+/// # Examples
+///
+/// The safe layer wraps it in [`Load::config`](crate::Load::config).
 pub type ConfigCheckFn =
     unsafe extern "system" fn(text: Str, why: *mut Str, user: *mut c_void) -> Status;
 

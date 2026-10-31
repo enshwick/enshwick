@@ -35,7 +35,9 @@ A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod). A pack
 with a `main.luau` is a [Luau mod](../luau.md).
 
 The repository's `examples/` folder holds three packs to start from:
-`you.material-stacks`, `you.recipe-cost-and-time` and `you.storage-slots`.
+[`you.material-stacks`](https://github.com/enshwick/enshwick/tree/main/examples/you.material-stacks),
+[`you.recipe-cost-and-time`](https://github.com/enshwick/enshwick/tree/main/examples/you.recipe-cost-and-time)
+and [`you.storage-slots`](https://github.com/enshwick/enshwick/tree/main/examples/you.storage-slots).
 
 `cargo enshwick new --data you.material-stacks` starts a pack: the folder
 `you.material-stacks/` with every file above, each showing its first change

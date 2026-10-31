@@ -322,6 +322,10 @@ impl Param {
 
 /// The call shim a [`Function`] runs: the receiver and the arguments, each
 /// already of its parameter's type.
+///
+/// # Examples
+///
+/// See [`Function`], whose `#[script]` methods get one each.
 pub type Call<T> = fn(&T, Vec<Value>) -> Result<Value, Error>;
 
 /// A method of `T` a script may call, from [`#[script]`](macro@crate::script).

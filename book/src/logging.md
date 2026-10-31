@@ -290,3 +290,9 @@ start shows its line in the log and at the top of `status.log`.
 
 What turns a mod off, and the reason each case logs, is in
 [When a mod fails](concepts/lifecycle.md#when-a-mod-fails).
+
+## Worked example
+
+[`enshwick-optimizer`](https://github.com/enshwick/mods/tree/main/optimizer)
+adds its lines to the status summary with `add_status`, in
+[`lib.rs`](https://github.com/enshwick/mods/blob/main/optimizer/src/lib.rs).

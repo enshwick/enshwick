@@ -16,7 +16,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::service(name = "you.trading-post:prices")]
+    /// #[enshwick::service(name = "prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
@@ -60,7 +60,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::service(name = "you.trading-post:prices")]
+    /// #[enshwick::service(of = trading_post, name = "prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
@@ -84,7 +84,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::service(name = "you.trading-post:prices")]
+    /// #[enshwick::service(of = trading_post, name = "prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
