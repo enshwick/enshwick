@@ -1,6 +1,6 @@
-//! Translations: a mod ships its texts per language in one TOML file, a
+//! Translations: a mod ships its texts per language in `src/texts.toml`, a
 //! server owner may add to them or change them, and the game shows them for
-//! the player's language.
+//! the player's language. [`texts!`](crate::texts) names the keys.
 //!
 //! ```toml
 //! [en]
@@ -576,27 +576,55 @@ static HANDED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, 
     crate::fresh::Fresh::new();
 
 impl Load<'_> {
-    /// The mod's texts: `embedded`, usually `include_str!("texts.toml")`,
-    /// with `mod-configs/<id>.texts.toml` over it when the server has one.
-    /// The loader keeps them too, to label the mod's settings on the Mods
+    /// The mod's texts: its `src/texts.toml`, which
+    /// [`declare_mod!`](crate::declare_mod) embeds and checks, with
+    /// `mod-configs/<id>.texts.toml` over it when the server has one. The
+    /// loader keeps them too, to label the mod's settings on the Mods
     /// screen: `config.<field>` (or the field's `text` key) for a row,
     /// `<key>.doc` for its description and `<key>.<choice>` for a choice.
+    /// [`texts!`](crate::texts) names the keys.
     ///
     /// # Errors
     ///
-    /// [`Off`] when either file is malformed.
+    /// [`Off`] when the crate has no `src/texts.toml` or the server's file
+    /// is malformed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::i18n::Language;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let texts = load.texts()?;
+    ///     enshwick::info!("{}", texts.fill("safe.name", Language::FALLBACK, &[]));
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn texts(&mut self) -> Result<Texts, Off> {
+        let embedded = self
+            .embedded_texts()
+            .ok_or_else(|| Off::new("texts: the mod's crate has no src/texts.toml"))?;
+        self.texts_from(embedded)
+    }
+
+    /// Texts from `toml` as [`Load::texts`] hands them over, such as a data
+    /// pack's; each call adds to what the loader keeps.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when `toml` or the server's file is malformed.
     ///
     /// # Examples
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let texts = load.texts("[en]\n\"locker.name\" = \"Locker\"\n")?;
+    ///     let texts = load.texts_from("[en]\n\"locker.name\" = \"Locker\"\n")?;
     ///     let _ = texts;
     ///     Ok(())
     /// }
     /// ```
-    pub fn texts(&mut self, embedded: &str) -> Result<Texts, Off> {
-        let mut texts = Texts::parse(embedded)?;
+    pub fn texts_from(&mut self, toml: &str) -> Result<Texts, Off> {
+        let mut texts = Texts::parse(toml)?;
         let data = self.data_dir()?;
         // `<game>/mod-data/<id>` beside `<game>/mod-configs/`.
         let overrides = data
@@ -651,7 +679,7 @@ impl Load<'_> {
     /// const LOCKER_NAME: Id = id!("locker.name");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let texts = load.texts("[en]\n\"locker.name\" = \"Locker\"\n[uk]\n\"locker.name\" = \"Шафка\"\n")?;
+    ///     let texts = load.texts_from("[en]\n\"locker.name\" = \"Locker\"\n[uk]\n\"locker.name\" = \"Шафка\"\n")?;
     ///     load.add_texts(&texts, &[("locker.name", LOCKER_NAME)])
     /// }
     /// ```

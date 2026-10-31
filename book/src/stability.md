@@ -2,9 +2,7 @@
 
 From 1.0 the `enshwick` crate follows
 [Semantic Versioning](https://semver.org/), so a mod built against 1.x still
-builds against every later 1.y and loads in a 1.y loader. Only the `unstable`
-feature stands outside that promise: what it holds may change in any release, a
-patch included.
+builds against every later 1.y and loads in a 1.y loader.
 
 ## What is stable
 
@@ -20,6 +18,9 @@ Everything the crate offers without a feature:
 - services, mod events, extension points, messages and the interface.
 
 ## What `unstable` holds
+
+Only the `unstable` feature stands outside that promise: what it holds may
+change in any release, a patch included.
 
 | Part                                                                                                                                                      | Why it is unstable                                                                                       |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |

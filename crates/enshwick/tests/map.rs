@@ -18,8 +18,6 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     const WAYPOINT: u32 = 2;
-    const TRANSFORM: u32 = 3;
-    const USED_ITEM: u32 = 4;
     const TOWN: Guid = Guid::parse("5d2e6a2b-0c3f-4d8e-9a71-3e5f0b1c2d4e");
     const LABEL: Guid = Guid::parse("0b6f4c1a-7e2d-4a90-b3c8-1d2e3f405162");
 
@@ -79,9 +77,7 @@ mod tests {
     /// The world's own types and the map's markers, as on a build without
     /// waypoints.
     fn markers_only() -> enshwick::test::FakeHost {
-        enshwick::test::FakeHost::new()
-            .type_hash("current_transform", TRANSFORM)
-            .type_hash("used_item", USED_ITEM)
+        enshwick::test::FakeHost::new().world()
     }
 
     fn fake() -> enshwick::test::FakeHost {

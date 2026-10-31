@@ -8,6 +8,47 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** a mod's texts live in `src/texts.toml`, which
+  `declare_mod!` embeds: `load.texts()` takes no argument and returns `Off`
+  for a crate without the file, and `load.texts_from(toml)` hands over texts
+  from a string, such as a data pack's. `enshwick::texts!()` writes
+  `pub mod texts`, a constant per key such as `texts::SAFE_NAME` for
+  `"safe.name"`, with `texts::value`, `texts::ALL` and `texts::TOML`. The
+  build fails when a key has no `en` text, a table is no language code, or
+  a translation fills in other values than its `en` text. Replace
+  `load.texts(include_str!("texts.toml"))` with `load.texts()` (#827).
+- **Breaking:** `#[enshwick::config]` declares a settings struct: it derives
+  serde's `Deserialize` and `Serialize` through the API's serde, refuses
+  unknown keys and derives `Config`, so a mod needs no serde for its
+  settings. `#[enshwick::config(default)]` adds serde's `default`;
+  `validate` and `text` are the derive's struct attributes. `#[derive(Config)]`
+  alone refuses a struct without `#[serde(deny_unknown_fields)]`. Replace
+  `#[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]` and
+  `#[serde(deny_unknown_fields)]` with `#[enshwick::config]` (#795).
+- **Breaking:** stat kinds and affixes take a content `Id`:
+  `load.define_stat(id!("luck"), &def)`, `load.define_affix(id!("bear"), &def)`,
+  and `load.open_stat(deps::lockers::id("luck")?)` for a dependency's kind.
+  The `stats::builtin` kinds are `Id` constants. The text that names a kind
+  or an affix is `<name>.name` in its owner's texts, and `stats::name_key`
+  gives it: `StatDef::additive`, `multiplicative`, `flag` and `AffixDef::new`
+  lose their text key, and `StatDef` loses `text`. `StatInfo` gains `text`, and
+  `StatDef::from_data` is safe. Opening a kind of a loaded mod that does not
+  export it returns `Off`, with the owner's exports in the log, and so does
+  an id whose `<name>.name` is longer than a content id's name may be. The
+  fake host refuses the same, the exports for a mod `FakeHost::exports`
+  names (#797).
+
+- **Breaking:** a mod's content is its own until its `exports` list the
+  name, or the name it is a part of: `exports = ["locker"]` lets other mods
+  name `locker` and `locker.recipe`. A required dependency's
+  `deps::<alias>::id` is no longer `const` and returns `Result<Id, Off>`,
+  `Off` for a name the dependency does not export; an optional one's returns
+  `None` for it. `Load::add_pack` returns `Off` for another mod's content id
+  a pack names outside that mod's exports. The loader logs the id with what
+  the mod exports. `HostApi` gains `use_content`, which changes
+  `ABI_VERSION`; rebuild every mod. The fake loader refuses the same for a
+  mod `FakeHost::exports` names (#798).
+
 - **Breaking:** `pack.toml` names its dependencies as
   `[package.metadata.enshwick]` does: `requires`, `after`, `recommends` and
   `breaks` are tables keyed by alias, each a mod id or `{ id, version }`, and
@@ -49,6 +90,19 @@ Each entry names the pull request that made the change.
   starts (#777).
 
 ### Added
+
+- `FakeHost::items`, `recipes`, `workshops`, `crafting_menu` and `ui_images`
+  set every engine fact one area's layouts resolve, and `FakeHost` answers
+  `EngineFacts`, so a test lays out its game data by `ItemLayout` and the
+  other layouts rather than by offsets of its own. `ImageLayout::resolve`
+  takes any `EngineFacts`, as the other layouts do (#806).
+
+- `FakeHost::world` sets the current transform and used item types `World`
+  needs and where a transform keeps its position, orientation and scale;
+  `FakeHost::inventory` sets what `Inventories` reads slots, durability and
+  meters by. `test::facts` names each fact a test lays its blobs out by, and
+  `FakeHost::without_fact` drops one, so a world or inventory test copies no
+  type hash or offset of its own (#809).
 
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`
   name the running game's content by its debug names, so a mod's code holds

@@ -5,9 +5,9 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::Status;
-    use enshwick::content::icons::{Icon, Pixels, Tint, formats};
-    use enshwick::content::items::NewItem;
-    use enshwick::content::{Guid, Id, types};
+    use enshwick::content::icons::{Icon, ImageLayout, Pixels, Tint, formats};
+    use enshwick::content::items::{ItemLayout, NewItem};
+    use enshwick::content::{EngineFacts, Guid, Id, types};
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
 
@@ -16,8 +16,6 @@ mod tests {
     const VANILLA: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
     const ICON_ID: Id = Id::new("you.staffs:staff.icon");
     const ICON: Guid = ICON_ID.guid();
-    const ITEM: u32 = 1;
-    const IMAGE: u32 = 3;
     /// The vanilla icon's pixels: one BC1 block, all white, 4 by 4.
     const WHITE: [u8; 8] = [0xff, 0xff, 0x00, 0x00, 0, 0, 0, 0];
     const WHITE_HASH: [u32; 4] = [8, 1, 2, 3];
@@ -49,67 +47,34 @@ mod tests {
         "#
     );
 
-    /// The fake's reflection for an item edit, and with `layout` the UI
-    /// image layout a client's table has.
-    fn host(layout: bool) -> FakeHost {
-        let mut host = FakeHost::new()
-            .type_hash(types::ITEM_INFO.id(), ITEM)
-            .type_hash(types::ITEM_REGISTRY_RESOURCE.id(), 2)
-            .type_hash(types::UI_TEXTURE_RESOURCE.id(), IMAGE)
-            .type_size("item_stat", 0x28);
-        for (id, at) in [
-            ("item_info.id", 0),
-            ("item_info.object", 4),
-            ("item_info.name", 0x48),
-            ("item_info.icon_image", 0x58),
-            ("item_info.description", 0x68),
-            ("item_info.flags", 0x78),
-            ("item_info.pid_entity", 0x80),
-            ("item_info.ui_values", 0x90),
-        ] {
-            host = host.constant(id, at);
-        }
-        for (id, at) in [
-            ("item_stat.label", 0),
-            ("item_stat.format", 4),
-            ("item_stat.value", 8),
-            ("item_stat.signed", 0x24),
-        ] {
-            host = host.constant(id, at);
-        }
-        host = host
-            .constant("item_registry.refs", 0)
-            .constant("item_registry.names", 0x38);
-        if layout {
-            for (name, at) in [
-                ("content", 0),
-                ("width", 0x28),
-                ("height", 0x2c),
-                ("flags", 0x30),
-                ("format", 0x31),
-                ("levels", 0x32),
-            ] {
-                host = host.constant(&format!("ui_image.{name}"), at);
-            }
-        }
-        host
-    }
-
-    /// The vanilla icon's UI image: its content, 4 by 4 BC1, one level.
-    fn vanilla_image() -> Vec<u8> {
-        let mut image = vec![0u8; 0x40];
+    /// The vanilla icon's UI image as `host` lays it out: its content, 4 by
+    /// 4 BC1, one level.
+    fn vanilla_image(host: &FakeHost) -> Vec<u8> {
+        let layout = ImageLayout::resolve(host).unwrap();
+        let mut image = vec![0u8; host.size(types::UI_TEXTURE_RESOURCE.id()).unwrap()];
         for (i, word) in WHITE_HASH.iter().enumerate() {
-            image[i * 4..i * 4 + 4].copy_from_slice(&word.to_le_bytes());
+            let at = layout.content + i * 4;
+            image[at..at + 4].copy_from_slice(&word.to_le_bytes());
         }
-        image[0x28..0x2c].copy_from_slice(&4u32.to_le_bytes());
-        image[0x2c..0x30].copy_from_slice(&4u32.to_le_bytes());
-        image[0x30..0x33].copy_from_slice(&[1, formats::BC1, 1]);
+        for at in [layout.width, layout.height] {
+            image[at..at + 4].copy_from_slice(&4u32.to_le_bytes());
+        }
+        image[layout.flags] = 1;
+        image[layout.format] = formats::BC1;
+        image[layout.levels] = 1;
         image
     }
 
     #[test]
     fn the_icon_is_recoloured_and_named_once_icons_show() {
-        let loader = host(true)
+        let host = FakeHost::new().items().ui_images();
+        let images = ImageLayout::resolve(&host).unwrap();
+        let items = ItemLayout::resolve(&host).unwrap();
+        let item_hash = host.hash(types::ITEM_INFO.id()).unwrap();
+        let image_hash = host.hash(types::UI_TEXTURE_RESOURCE.id()).unwrap();
+        let item_size = host.size(types::ITEM_INFO.id()).unwrap();
+        let vanilla = vanilla_image(&host);
+        let loader = host
             .archive(WHITE_HASH, WHITE.to_vec())
             .icons_ready()
             .install();
@@ -117,13 +82,19 @@ mod tests {
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let image = loader
-            .build_resource(&ICON.key_by_hash(IMAGE), &vanilla_image())
+            .build_resource(&ICON.key_by_hash(image_hash), &vanilla)
             .unwrap();
-        assert_eq!((image[0x31], image[0x32]), (formats::RGBA8, 1));
+        assert_eq!(
+            (image[images.format], image[images.levels]),
+            (formats::RGBA8, 1)
+        );
         let served = loader.served_content();
         assert_eq!(served.len(), 1);
         let (hash, pixels) = &served[0];
-        assert_eq!(image[..4], hash[0].to_le_bytes());
+        assert_eq!(
+            image[images.content..images.content + 4],
+            hash[0].to_le_bytes()
+        );
         assert_eq!(pixels.len(), 4 * 4 * 4);
         assert!(
             pixels
@@ -134,8 +105,9 @@ mod tests {
             "white turned blue"
         );
         let item = loader
-            .build_resource(&STAFF.key_by_hash(ITEM), &[0u8; 0x98])
+            .build_resource(&STAFF.key_by_hash(item_hash), &vec![0u8; item_size])
             .unwrap();
-        assert_eq!(&item[0x58..0x68], &ICON.0);
+        let icon = items.icon_image;
+        assert_eq!(&item[icon..icon + 16], &ICON.0);
     }
 }

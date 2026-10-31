@@ -1,12 +1,16 @@
 # Mods in C
 
-A mod is a DLL that exports five functions over the C ABI, so any language that
-can include a C header can write one: C, C++, Zig, Odin. The header is
+A mod is a DLL that exports five functions over the C ABI, so C, C++, Zig,
+Odin or any language that can include a C header can write one. Here you build
+the example mod
+[`hello.c`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.c).
+
+## The header and the example
+
+The header is
 [`enshwick.h`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/include/enshwick.h),
 written from the same Rust types the loader uses and checked against the ABI's
-layout on every change. Here you build the example mod
-[`hello.c`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.c),
-which writes one line to the log when it starts.
+layout on every change. `hello.c` writes one line to the log when it starts.
 
 ## Write the mod
 
@@ -49,7 +53,8 @@ loader starts it.
 
 ## Keep it current
 
-A struct that starts with an `EnshwickHeader` only grows at its end, and the
-loader reads your struct only as far as your header says, so a mod built against
-an older `enshwick.h` keeps loading. Take a newer header for the newer fields
-and functions. The [ABI reference](abi-reference.md) has the rules.
+Until 1.0 a loader loads only mods built for its own ABI version, so rebuild
+the mod against the `enshwick.h` of each Enshwick release whose
+`ENSHWICK_ABI_VERSION` differs from the one you built with. From 1.0 structs
+grow only at their end, and a mod built against an older header keeps loading.
+The [ABI reference](abi-reference.md#versions) has the rules.

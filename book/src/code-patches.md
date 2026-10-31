@@ -1,9 +1,13 @@
 # Code patches
 
 A code patch replaces a few bytes of game code: a constant in an instruction, a
-jump, a loop bound. It is the smallest change a mod can make, and the bluntest:
-the bytes stay changed for every caller, and for the rest of the process.
-Reach for a [hook](hooks.md) first; patch only what a hook cannot reach.
+jump, a loop bound. Reach for a [hook](hooks.md) first; patch only what a hook
+cannot reach.
+
+## Asking for a patch
+
+A patch is the smallest change a mod can make, and the bluntest: the bytes
+stay changed for every caller, and for the rest of the process.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -61,23 +65,7 @@ Write patches whose effect is safe without the rest of the mod.
 
 ## Patterns
 
-A pattern is hex bytes separated by spaces, two digits each, `??` or `?` for a
-byte that may be anything. It needs at least one fixed byte and must match
-exactly once in the game's code. Wildcard what changes between builds, such as
-displacements and offsets, and keep enough fixed bytes around the site to make
-it unique. Check the bytes you patch in the pattern too: `expected` must match
-them at arming anyway.
-
-[`code::Pattern`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/code.rs)
-parses and searches patterns on any slice, which helps test them against a
-copy of the bytes in a unit test. `code::find_each_unique` searches for many
-patterns in one pass over the code:
-
-```rust
-use enshwick::code::Pattern;
-
-let pattern = Pattern::parse("83 F8 08 72 ??").unwrap();
-let code = [0x90, 0x83, 0xf8, 0x08, 0x72, 0x05, 0xc3];
-assert_eq!(pattern.find_unique(&code), Ok(1));
-assert_eq!(pattern.len(), 5);
-```
+A patch site is found by a code pattern, as in
+[Code patterns](finding-the-game.md#code-patterns). Wildcard what changes
+between builds, such as displacements and offsets, and include the bytes you
+patch in the pattern: `expected` must match them at arming anyway.

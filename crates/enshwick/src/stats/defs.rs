@@ -27,10 +27,10 @@ pub enum StatType {
 /// use enshwick::content::items::StatFormat;
 /// use enshwick::stats::{StatDef, StatType};
 ///
-/// let crit = StatDef::additive("stat.crit").range(0.0, 1.0).format(StatFormat::Percent);
+/// let crit = StatDef::additive().range(0.0, 1.0).format(StatFormat::Percent);
 /// assert_eq!(crit.ty, StatType::Additive);
 /// assert_eq!((crit.default, crit.min, crit.max), (0.0, 0.0, 1.0));
-/// let haste = StatDef::multiplicative("stat.haste");
+/// let haste = StatDef::multiplicative();
 /// assert_eq!(haste.default, 1.0);
 /// ```
 #[derive(Clone, Debug, PartialEq)]
@@ -44,57 +44,54 @@ pub struct StatDef {
     pub min: f32,
     /// The greatest value.
     pub max: f32,
-    /// The text key that names the stat in the mod's texts.
-    pub text: String,
     /// How the value reads.
     pub format: StatFormat,
 }
 
 impl StatDef {
-    fn of(ty: StatType, default: f32, text: &str, format: StatFormat) -> Self {
+    const fn of(ty: StatType, default: f32, format: StatFormat) -> Self {
         Self {
             ty,
             default,
             min: f32::MIN,
             max: f32::MAX,
-            text: text.to_owned(),
             format,
         }
     }
 
-    /// A sum of points, 0 by default, named by text key `text`.
+    /// A sum of points, 0 by default.
     ///
     /// # Examples
     ///
     /// See [`StatDef`].
     #[must_use]
-    pub fn additive(text: &str) -> Self {
-        Self::of(StatType::Additive, 0.0, text, StatFormat::Signed)
+    pub const fn additive() -> Self {
+        Self::of(StatType::Additive, 0.0, StatFormat::Signed)
     }
 
-    /// A factor, 1 by default, named by text key `text`.
+    /// A factor, 1 by default.
     ///
     /// # Examples
     ///
     /// See [`StatDef`].
     #[must_use]
-    pub fn multiplicative(text: &str) -> Self {
-        Self::of(StatType::Multiplicative, 1.0, text, StatFormat::Percent)
+    pub const fn multiplicative() -> Self {
+        Self::of(StatType::Multiplicative, 1.0, StatFormat::Percent)
     }
 
-    /// On or off, off by default, named by text key `text`.
+    /// On or off, off by default.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::stats::{Op, StatDef, aggregate};
     ///
-    /// let glows = StatDef::flag("stat.glows");
+    /// let glows = StatDef::flag();
     /// assert_eq!(aggregate(&glows, [(Op::Add, 3.0)]), 1.0);
     /// ```
     #[must_use]
-    pub fn flag(text: &str) -> Self {
-        let mut def = Self::of(StatType::Flag, 0.0, text, StatFormat::Number);
+    pub const fn flag() -> Self {
+        let mut def = Self::of(StatType::Flag, 0.0, StatFormat::Number);
         def.min = 0.0;
         def.max = 1.0;
         def
@@ -119,7 +116,7 @@ impl StatDef {
     /// ```
     /// use enshwick::stats::StatDef;
     ///
-    /// assert_eq!(StatDef::additive("stat.base").starting_at(5.0).default, 5.0);
+    /// assert_eq!(StatDef::additive().starting_at(5.0).default, 5.0);
     /// ```
     #[must_use]
     pub const fn starting_at(mut self, value: f32) -> Self {
@@ -150,7 +147,8 @@ impl StatDef {
         Ok(())
     }
 
-    /// The definition as the loader takes it, borrowing the text.
+    /// The definition as the loader takes it; the loader names the kind
+    /// itself (see [`name_key`](crate::stats::name_key)).
     ///
     /// # Examples
     ///
@@ -158,7 +156,7 @@ impl StatDef {
     /// use enshwick::abi::StatDefData;
     /// use enshwick::stats::StatDef;
     ///
-    /// let data = StatDef::multiplicative("stat.haste").to_data();
+    /// let data = StatDef::multiplicative().to_data();
     /// assert_eq!(data.ty, StatDefData::MULTIPLICATIVE);
     /// ```
     #[must_use]
@@ -179,30 +177,23 @@ impl StatDef {
             default: self.default,
             min: self.min,
             max: self.max,
-            text: Str::new(&self.text),
+            text: Str::EMPTY,
         }
     }
 
-    /// The definition the loader handed out; `None` for one that does not
-    /// read.
-    ///
-    /// # Safety
-    ///
-    /// - `data.text` is null or points at its `len` bytes, alive and unchanged
-    ///   for the call.
+    /// The definition the loader handed out, without its text; `None` for
+    /// one that does not read.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::stats::StatDef;
     ///
-    /// let haste = StatDef::multiplicative("stat.haste");
-    /// let data = haste.to_data();
-    /// // SAFETY: `data.text` points into `haste`, alive and unchanged here.
-    /// assert_eq!(unsafe { StatDef::from_data(&data) }, Some(haste));
+    /// let haste = StatDef::multiplicative();
+    /// assert_eq!(StatDef::from_data(&haste.to_data()), Some(haste));
     /// ```
     #[must_use]
-    pub unsafe fn from_data(data: &StatDefData) -> Option<Self> {
+    pub fn from_data(data: &StatDefData) -> Option<Self> {
         let ty = match data.ty {
             StatDefData::ADDITIVE => StatType::Additive,
             StatDefData::MULTIPLICATIVE => StatType::Multiplicative,
@@ -214,15 +205,11 @@ impl StatDef {
             StatDefData::PERCENT => StatFormat::Percent,
             _ => StatFormat::Number,
         };
-        // SAFETY: the caller keeps the text's bytes alive and unchanged for the
-        // call, and `text` is copied before it returns.
-        let text = unsafe { data.text.as_str() }?;
         let def = Self {
             ty,
             default: data.default,
             min: data.min,
             max: data.max,
-            text: text.to_owned(),
             format,
         };
         def.check().is_ok().then_some(def)

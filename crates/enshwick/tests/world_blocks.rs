@@ -56,8 +56,7 @@ mod tests {
 
     fn started() -> (enshwick::test::Installed, World) {
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
+            .world()
             .player(info(WORLDER, PlayerInfo::CAN_EDIT_WORLD))
             .player(info(GUEST, PlayerInfo::CAN_ACCESS_INVENTORIES))
             .building_area([0.0; 3], [1000.0; 3])

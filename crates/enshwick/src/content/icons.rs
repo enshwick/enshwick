@@ -14,7 +14,7 @@
 use crate::abi::HostApi;
 use crate::{Load, Off};
 
-use super::{Blob, Guid, Id, types};
+use super::{Blob, EngineFacts, Guid, Id, types};
 
 /// The widest and tallest PNG an icon may be, in pixels; a larger one does
 /// not decode.
@@ -220,6 +220,17 @@ pub fn decode_png(png: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     ))
 }
 
+/// The loader's table ids of a UI image's fields, in [`ImageLayout`] order:
+/// the type is not reflected, so the ids are the table's alone.
+pub(crate) const IMAGE_FIELDS: [&str; 6] = [
+    "ui_image.content",
+    "ui_image.width",
+    "ui_image.height",
+    "ui_image.flags",
+    "ui_image.format",
+    "ui_image.levels",
+];
+
 /// Where a UI image keeps its fields, from the loader's table for the
 /// running build: the type is not reflected.
 ///
@@ -257,18 +268,16 @@ impl ImageLayout {
     ///     enshwick::info!("icons on this build: {known}");
     /// }
     /// ```
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        let at = |name: &str| {
-            load.constant(&format!("ui_image.{name}"))
-                .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
-        };
+    pub fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
+        let [content, width, height, flags, format, levels] = IMAGE_FIELDS;
+        let at = |id: &str| facts.offset(id);
         Ok(Self {
-            content: at("content")?,
-            width: at("width")?,
-            height: at("height")?,
-            flags: at("flags")?,
-            format: at("format")?,
-            levels: at("levels")?,
+            content: at(content)?,
+            width: at(width)?,
+            height: at(height)?,
+            flags: at(flags)?,
+            format: at(format)?,
+            levels: at(levels)?,
         })
     }
 

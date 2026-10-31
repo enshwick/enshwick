@@ -1,9 +1,8 @@
-# Crafting and building vetoes
+# Crafting, building and interaction vetoes
 
-A mod may refuse a craft or a placement before the game acts on it.
-[Interactions](interactions.md) with entities, from opening a chest to
-dismantling a piece, have their own filter. A filter that panics turns the mod off and lets the action
-through.
+A mod may refuse a craft, a placement or a player's interaction with an
+entity before the game acts on it. Each filter returns `false` to refuse; one
+that panics turns the mod off and lets the action through.
 
 ## Crafting
 
@@ -57,3 +56,41 @@ runs the mod too shows the cursor as not allowed, so give the same answer on
 both sides: base it on what both know, the item and the place, or on
 [join values](settings.md#join-values) the server shares. A client without the
 mod shows the placement as allowed, and the server places nothing.
+
+## Interactions
+
+[`load.on_interaction`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/interactions.rs)
+runs a filter before the game lets a player interact with an entity, from
+opening a chest to dismantling a piece. It gets an `Interaction`: what the
+player does (`kind`), the player, the target, and the item the target was
+placed from and where it stands, when the platform could read them.
+Returning `false` refuses it.
+
+```rust
+use enshwick::interactions::Kind;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    const LOCKED_CHEST: enshwick::ItemId = enshwick::ItemId::new(0x5e01);
+    load.on_interaction(|i| !(i.item == Some(LOCKED_CHEST) && matches!(i.kind, Kind::Open | Kind::Move | Kind::Sort)))
+}
+```
+
+| Kind         | When it is asked                                          | What a refusal does              |
+| ------------ | --------------------------------------------------------- | -------------------------------- |
+| `Open`       | The game is about to offer the Open prompt                | No prompt                        |
+| `Move`       | Items move out of or into the target, or one of its slots | The move is undone on the client |
+| `Sort`       | The target's inventory is sorted                          | Nothing is sorted                |
+| `Stock`      | The target lends its stock to crafting or building nearby | It is left out of the stock      |
+| `Dismantle`  | The cursor offers to pick up or tear down the target      | No pick-up or tear-down          |
+| `QuickStash` | The player flips the target's Quick Stash switch          | The switch stays                 |
+| `Upgrade`    | The player upgrades the target into another piece         | Nothing is upgraded              |
+
+Each refusal takes the game's own path for a refused action, so nothing moves
+and nothing is lost. `Stock` is asked without the target's item or position:
+answer it from what the mod has already seen of the target.
+
+An interaction without a player's character or without a target is allowed
+without asking. The filters run in the server's world only, in the dedicated
+server or a hosting client, on the thread of the system that checks the
+interaction: keep them quick and never block. Several mods may filter; any
+refusal wins.

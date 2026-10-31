@@ -1,19 +1,22 @@
 # Chat, notices and the console
 
+A mod sends players chat lines and notices on screen. A dedicated server's
+console runs the lines typed into its window or appended to its command file.
+
+## No commands for players
+
 Players never type commands: the game client keeps every chat line that
 starts with `/` to itself, and single player has no chat. Anything a player
 or an administrator does is a [player action](actions.md), shown in the
-game's interface. This chapter covers what a mod sends players, and the
-server's console, which runs lines typed into a dedicated server's console
-window or appended to its command file.
-
-Chat lines, labels and rename filters work on the dedicated server and on a
-client while it hosts a game.
+game's interface.
 
 ## Chat lines
 
 Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
+
+Chat lines work on the dedicated server and on a client while it hosts a
+game.
 
 [`world.broadcast(text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 sends a line to every player and
@@ -143,10 +146,9 @@ input, such as a Windows service, reads only its command file.
 
 A player is named by name, or by account: the 16 hex digits
 `enshwick world` shows, or hex with `0x` in front. A name several players
-share is refused, with their accounts. The game never kicks or bans an
-administrator online, and kicks only players online; a ban of an account
-that is not online goes straight onto the ban list, and the loader removes
-that account if it joins before the server restarts.
+share is refused, with their accounts. `kick` and `ban` follow the game's
+rules, such as for administrators and accounts not online; see
+[Kicking and banning](world.md#kicking-and-banning).
 
 Places for `spawn` and `teleport` lie within 100 km of the origin on each
 axis; a place farther out gets the usage line. In a game a client hosts,
@@ -157,5 +159,4 @@ No mod may take the id `enshwick`.
 ## Worked examples
 
 - [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
-  declares who may open a Safe as [player actions](actions.md) and guards its
-  labels with a rename filter.
+  declares who may open a Safe as [player actions](actions.md).

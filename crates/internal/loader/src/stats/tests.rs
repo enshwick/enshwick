@@ -49,37 +49,45 @@ fn combat_kinds() -> Sealed {
     sealed(&[
         (
             "enshwick:damage",
-            StatDef::multiplicative("d").range(0.0, 100.0),
+            StatDef::multiplicative().range(0.0, 100.0),
         ),
-        (
-            "enshwick:resistance",
-            StatDef::additive("r").range(-1.0, 1.0),
-        ),
+        ("enshwick:resistance", StatDef::additive().range(-1.0, 1.0)),
         (
             "enshwick:damage_fire",
-            StatDef::multiplicative("df").range(0.0, 100.0),
+            StatDef::multiplicative().range(0.0, 100.0),
         ),
         (
             "enshwick:resistance_fire",
-            StatDef::additive("rf").range(-1.0, 1.0),
+            StatDef::additive().range(-1.0, 1.0),
         ),
     ])
 }
 
 #[test]
-fn ids_take_the_mod_s_namespace_and_say_whose_they_are() {
-    assert_eq!(full_id("rpg", "crit"), Some(("rpg:crit".into(), true)));
+fn ids_are_content_ids_and_say_whose_they_are() {
+    let asked =
+        |mod_id: &str, id: &str| full_id(mod_id, id).map(|a| (a.full, a.text.into_string(), a.own));
+    let some = |full: &str, text: &str, own| Some((full.to_owned(), text.to_owned(), own));
+    assert_eq!(asked("rpg", "crit"), None);
     assert_eq!(
-        full_id("me.rpg", "rpg:luck"),
-        Some(("rpg:luck".into(), false))
+        asked("me.rpg", "rpg:luck"),
+        some("rpg:luck", "luck.name", false)
     );
-    assert_eq!(full_id("rpg", "rpg:crit"), Some(("rpg:crit".into(), true)));
     assert_eq!(
-        full_id("rpg", "enshwick:damage"),
-        Some(("enshwick:damage".into(), false))
+        asked("rpg", "rpg:crit"),
+        some("rpg:crit", "crit.name", true)
     );
-    assert_eq!(full_id("rpg", "Crit"), None);
-    assert_eq!(full_id("rpg", "a:b:c"), None);
+    assert_eq!(
+        asked("rpg", "enshwick:damage"),
+        some("enshwick:damage", "damage.name", false)
+    );
+    assert_eq!(asked("rpg", "Crit"), None);
+    assert_eq!(asked("rpg", "a:b:c"), None);
+    assert_eq!(
+        asked("rpg", "rpg:charm/fire.big"),
+        some("rpg:charm/fire.big", "charm/fire.big.name", true)
+    );
+    assert_eq!(asked("rpg", &format!("rpg:{}", "a".repeat(124))), None);
 }
 
 #[test]

@@ -5,8 +5,12 @@ returns the server's
 [`GameSettings`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_settings.rs):
 the difficulty and gameplay values of its configuration (`gameSettings` in
 `enshrouded_server.json`) or of the host's world menu, read typed and changed
-while the world runs. It is `Copy`; get it during `init` and move it into
-handlers, tasks and actions.
+while the world runs.
+
+## Using the settings
+
+`GameSettings` is `Copy`; get it during `init` and move it into handlers,
+tasks and actions.
 
 ```rust
 use enshwick::actions::{Action, Arg, Outcome, Value};
@@ -57,8 +61,8 @@ A change lasts until the server stops, and the configuration's values return
 with the next start, unless the game saves its configuration first. A
 dedicated server writes `gameSettings` back to `enshrouded_server.json`
 whenever its configuration changes, such as after a ban, an unban or an
-admin's settings change, and a change made here may then reach the file. `keep(|s| ...)` (minor
-57) changes the settings the same way and keeps the fields whose value it
+admin's settings change, and a change made here may then reach the file. `keep(|s| ...)`
+changes the settings the same way and keeps the fields whose value it
 changed with the running world: the loader applies them again each time that
 world loads, by the end of its first step, over what the configuration says.
 The loader keeps them by field name in
@@ -85,6 +89,5 @@ or `keep` edits the values in force, so mods that touch different values
 never meet, and the last change to one value wins; kept fields add up the
 same way.
 
-Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
-client, while it hosts a game.
+Where each call works is in
+[What may be called where](concepts/threads.md#what-may-be-called-where).

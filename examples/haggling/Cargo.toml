@@ -25,7 +25,6 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 arc-swap.workspace = true
 enshwick.workspace = true
-serde.workspace = true
 
 [dev-dependencies]
 enshwick = { workspace = true, features = ["test"] }

@@ -48,8 +48,7 @@ mod tests {
         let wrong = set(99, [1; 8]);
         let fuel = set(60, [2, 3, 0, 0, 0, 0, 0, 0]);
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 100)
-            .type_hash("used_item", 101)
+            .world()
             .type_hash("attribute_set.health", 1)
             .type_hash("attribute_set.stamina", 2)
             .type_hash("attribute_set.mana", 3)

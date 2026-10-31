@@ -7,8 +7,8 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     /// Altar settings.
-    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
-    #[config(validate = Settings::check)]
+    #[enshwick::config(validate = Settings::check)]
+    #[derive(Default)]
     struct Settings {
         /// Altars at the first level.
         #[config(range = 1..=20)]

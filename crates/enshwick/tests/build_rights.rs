@@ -60,8 +60,7 @@ mod tests {
     /// `CanEditWorld` alone, one with `CanEditBase` too, one with neither.
     fn installed() -> enshwick::test::Installed {
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
+            .world()
             .player(info(WORLDER, PlayerInfo::CAN_EDIT_WORLD))
             .player(info(
                 BUILDER,

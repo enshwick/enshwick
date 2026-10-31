@@ -56,6 +56,7 @@ use net::{net_channel, net_ready, net_send};
 pub(crate) use services::view;
 use services::{
     declare_content, define_event, publish, send_event, service, subscribe, subscribe_event,
+    use_content,
 };
 use transactions::{
     transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
@@ -369,11 +370,41 @@ impl ManifestFacts {
         })
     }
 
+    /// Whether the content id `name`, `<id>:<what>`, is of another mod whose
+    /// exports [`FakeHost::exports`] gave and cover neither `what` nor the
+    /// name it is a part of, which the loader refuses the mod.
+    pub(crate) fn unexported_content(
+        &self,
+        name: &str,
+        exports: &std::collections::HashMap<String, Vec<String>>,
+    ) -> bool {
+        name.split_once(':').is_some_and(|(owner, what)| {
+            owner != self.id
+                && exports
+                    .get(owner)
+                    .is_some_and(|names| !crate::rules::exports_content(names, what))
+        })
+    }
+
     /// Whether the mod requires the mod side of `name`, `<id>:<what>`.
     pub(crate) fn requires_owner_of(&self, name: &str) -> bool {
         name.split_once(':')
             .is_some_and(|(owner, _)| self.requires.iter().any(|id| id == owner))
     }
+}
+
+/// Logs the loader's warning for a mod refused the `kind` `id`,
+/// `<owner>:<what>`, whose owner does not export it.
+pub(crate) fn warn_unexported(s: &mut State, kind: &str, id: &str) {
+    let (owner, what) = id.split_once(':').unwrap_or_default();
+    let offered = match s.host.exports.get(owner) {
+        Some(names) if !names.is_empty() => format!("it exports {}", names.join(", ")),
+        _ => "it exports nothing".to_owned(),
+    };
+    s.logs.push((
+        Level::WARN,
+        format!("{kind} {id}: {owner} does not export {what}; {offered}"),
+    ));
 }
 
 /// Notes the manifest of the mod whose init runs on `api`, when `api` is the
@@ -820,4 +851,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     map_frame,
     request_base_limits,
     map_marker_types,
+    use_content,
 };

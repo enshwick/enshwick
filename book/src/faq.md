@@ -3,40 +3,16 @@
 ## Where are the logs?
 
 Everything is under `logs/enshwick/` in the game's folder (beside
-`enshrouded.exe` or `enshrouded_server.exe`):
-
-| File            | What it holds                                         |
-| --------------- | ----------------------------------------------------- |
-| `all.log`       | Every line, from the loader and every mod             |
-| `loader.log`    | The loader's lines                                    |
-| `mods/<id>.log` | One mod's lines                                       |
-| `status.log`    | The latest status summary                             |
-| `crash.log`     | Crashes, each blamed on a mod, the loader or the game |
-| `report.md`     | One report to attach when you ask for help            |
-| `start.log`     | Why the loader did not start, when it stopped early   |
+`enshrouded.exe` or `enshrouded_server.exe`).
+[Log files](logging.md#log-files) lists each file and how long it is kept,
+and [Levels](logging.md#levels) sets how much is written. One more file,
+`start.log`, says why the loader did not start when it stopped early; see
+[Nothing loads at all](#nothing-loads-at-all).
 
 To ask for help, attach `report.md` to an issue. It holds the versions, your
 system, the status summary, the files in `mods/` and the latest warnings and
 errors, mods' messages included. Paths show the game's folder as `<game>` and
 leave out your user name. Read the report before you share it.
-
-`all.log`, `loader.log` and the mod logs start empty each session; the two
-sessions before stay as `all.1.log` and `all.2.log` (and so on for each
-file), at most 8 MiB each. Each line
-names its time (UTC), level and source:
-
-```text
-01:02:03.004Z warn  [you.lockers] merged 3 altars
-```
-
-How much is kept is set in `mod-configs/enshwick.toml`, for all sources and
-per mod id (`enshwick` is the loader); see
-[Logging and diagnostics](logging.md):
-
-```toml
-log_level = "info"
-log_levels = { "you.lockers" = "debug" }
-```
 
 ## What is in crash.log?
 
@@ -72,13 +48,9 @@ then.
 
 ## What is in status.log?
 
-A summary the loader writes a minute after start, then every
-`status_minutes` (10 by default, 0 for on demand only), and when an
-console runs `enshwick status`. Each write replaces the last. It lists
-the game build, every mod with its version and whether it runs, the lines each
-running mod adds with `load.add_status`, the mods turned off and why, what mods
-serve and patch, and the hooked functions. With `diagnostics = true` in
-`mod-configs/enshwick.toml` it also counts the calls of every hooked function.
+The latest status summary: the mods, whether each runs, and what they share.
+[Status summary](logging.md#status-summary) lists what it holds and when it
+is written.
 
 ## Why is my mod off?
 
@@ -217,12 +189,11 @@ Under Proton, add each moved file's name to the overrides as well, such as
 
 ## Nothing happens under Proton
 
-The game must load Enshwick's `powrprof.dll` instead of the system one. Add
-this to the game's launch options in Steam:
-
-```text
-WINEDLLOVERRIDES="powrprof=n,b" %command%
-```
+The game must load Enshwick's `powrprof.dll` instead of the system one, with
+an override in the game's launch options:
+[Install Enshwick](https://enshwick.com/guides/install/) shows it, and
+[Run a server on Linux](https://enshwick.com/guides/run-a-linux-server/) does
+for a dedicated server.
 
 ## The join was refused
 
@@ -256,12 +227,5 @@ Only mods with `join: true` count; see [The join check](concepts/join-check.md).
 
 ## How do I remove a mod or Enshwick?
 
-- **A mod:** delete its DLL from `mods/`. Its settings
-  (`mod-configs/<id>.toml`) and data (`mod-data/<id>/`) stay; delete them too
-  for a clean removal. If the mod set a hold, the game stops until you delete
-  `mod-data/<id>/hold.txt` as well.
-- **An update:** an update moved into place keeps the file it replaced as
-  `<file>.previous`. Rename it back to roll back once.
-- **Enshwick:** delete `powrprof.dll` from the game's folder. Without it
-  nothing loads and the game runs vanilla; `mods/`, `mod-configs/`,
-  `mod-data/` and `logs/` can then be deleted.
+[Remove a mod or Enshwick](https://enshwick.com/guides/uninstall/) has the
+steps, holds included.

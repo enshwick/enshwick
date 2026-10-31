@@ -1,7 +1,11 @@
 # Random loot
 
 `load.add_loot(drop)` puts an item into random loot with an exact chance per
-roll, on top of the vanilla loot. The item is a vanilla one or one from
+roll, on top of the vanilla loot.
+
+## Adding drops
+
+The item is a vanilla one or one from
 [`add_item`](items.md); the game skips an item its registry does not hold.
 The API is in
 [`loot/drops.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot/drops.rs).

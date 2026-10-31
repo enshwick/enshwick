@@ -2,8 +2,10 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use syn::ext::IdentExt as _;
+use syn::parse::Parser as _;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned as _;
-use syn::{Attribute, Data, DeriveInput, Expr, Fields, Ident, Lit, Meta, Type};
+use syn::{Attribute, Data, DeriveInput, Expr, Fields, Ident, Lit, Meta, Token, Type};
 
 use crate::{comment, doc_text, local};
 
@@ -229,6 +231,65 @@ pub(super) fn same_keys_as_serde(attrs: &[Attribute]) -> syn::Result<()> {
     Ok(())
 }
 
+/// The struct `input` under `#[enshwick::config(args)]`: serde's derives
+/// through the API's serde, unknown keys refused, `default` as serde's, the
+/// other arguments as the `Config` derive's struct attributes.
+pub(super) fn expand_attribute(
+    args: proc_macro2::TokenStream,
+    input: &DeriveInput,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let args = Punctuated::<Meta, Token![,]>::parse_terminated.parse2(args)?;
+    let mut default = false;
+    let mut forwarded = Vec::new();
+    for arg in args {
+        if matches!(&arg, Meta::Path(path) if path.is_ident("default")) {
+            if default {
+                return Err(syn::Error::new_spanned(arg, "`default` is given twice"));
+            }
+            default = true;
+        } else {
+            forwarded.push(arg);
+        }
+    }
+    let default = default.then(|| quote!(default,));
+    let forwarded = (!forwarded.is_empty()).then(|| quote!(#[config(#(#forwarded),*)]));
+    Ok(quote! {
+        #[derive(
+            ::enshwick::__private::serde::Deserialize,
+            ::enshwick::__private::serde::Serialize,
+            ::enshwick::Config,
+        )]
+        #[serde(crate = "::enshwick::__private::serde", #default deny_unknown_fields)]
+        #forwarded
+        #input
+    })
+}
+
+/// Refuses a settings struct that would read past an unknown key: serde
+/// ignores one unless the struct says `deny_unknown_fields`.
+pub(super) fn refuses_unknown_keys(input: &DeriveInput) -> syn::Result<()> {
+    let refused = input
+        .attrs
+        .iter()
+        .filter(|a| a.path().is_ident("serde"))
+        .filter_map(|a| match &a.meta {
+            Meta::List(list) => Some(list.tokens.clone()),
+            _ => None,
+        })
+        .flatten()
+        .any(|token| {
+            matches!(token, proc_macro2::TokenTree::Ident(word) if word == "deny_unknown_fields")
+        });
+    if refused {
+        Ok(())
+    } else {
+        Err(syn::Error::new_spanned(
+            &input.ident,
+            "a settings file must not hide a misspelt key: declare the struct with `#[enshwick::config]`",
+        ))
+    }
+}
+
 /// The named fields of a settings struct without generics.
 pub(super) fn settings_fields(input: &DeriveInput) -> syn::Result<&syn::FieldsNamed> {
     if !input.generics.params.is_empty() {
@@ -238,6 +299,7 @@ pub(super) fn settings_fields(input: &DeriveInput) -> syn::Result<&syn::FieldsNa
         ));
     }
     same_keys_as_serde(&input.attrs)?;
+    refuses_unknown_keys(input)?;
     let Data::Struct(data) = &input.data else {
         return Err(syn::Error::new_spanned(
             &input.ident,
@@ -590,4 +652,52 @@ pub(super) fn group_stage_tokens(
         })
         .collect();
     (values, merges)
+}
+
+#[cfg(test)]
+mod tests {
+    use quote::quote;
+    use syn::{DeriveInput, parse_quote};
+
+    use super::{expand_attribute, refuses_unknown_keys};
+
+    #[test]
+    fn the_derive_alone_refuses_a_struct_that_reads_past_unknown_keys() {
+        let open: DeriveInput = parse_quote!(
+            struct Settings {
+                limit: u32,
+            }
+        );
+        let closed: DeriveInput = parse_quote!(
+            #[serde(default, deny_unknown_fields)]
+            struct Settings {
+                limit: u32,
+            }
+        );
+        assert!(refuses_unknown_keys(&open).is_err());
+        assert!(refuses_unknown_keys(&closed).is_ok());
+    }
+
+    #[test]
+    fn the_attribute_refuses_unknown_keys_and_forwards_the_struct_attributes() {
+        let input: DeriveInput = parse_quote!(
+            struct Settings {
+                limit: u32,
+            }
+        );
+        let expanded = expand_attribute(quote!(default, validate = check), &input).unwrap();
+        let text = expanded.to_string();
+        assert!(text.contains("default , deny_unknown_fields"), "{text}");
+        assert!(text.contains("# [config (validate = check)]"), "{text}");
+        let declared: DeriveInput = syn::parse2(expanded).unwrap();
+        assert!(refuses_unknown_keys(&declared).is_ok());
+    }
+
+    #[test]
+    fn the_attribute_takes_default_once() {
+        let input: DeriveInput = parse_quote!(
+            struct Settings {}
+        );
+        assert!(expand_attribute(quote!(default, default), &input).is_err());
+    }
 }

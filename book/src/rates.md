@@ -4,7 +4,11 @@ Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
 A game rate multiplies something the game hands out, such as experience or
-workshop speed. A mod declares each
+workshop speed.
+
+## Declaring a rate
+
+A mod declares each
 [`Rate`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/rates.rs)
 it multiplies with `load.rate(rate)` during `init`. The call returns a
 `RateHandle`, and its `set(factor)` puts the mod's factor in force: 1 is
@@ -14,8 +18,8 @@ speed keeps at least 0.01 and a loot stack at least 1.
 ```rust
 use enshwick::rates::{ExperienceGroup, Rate};
 
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(default)]
+#[enshwick::config(default)]
+#[derive(Debug)]
 struct Settings {
     /// Experience from defeated enemies, times this.
     #[config(runtime, range = 0.0..=100.0)]

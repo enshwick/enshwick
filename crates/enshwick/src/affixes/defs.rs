@@ -131,8 +131,6 @@ impl Range {
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct AffixDef {
-    /// The text key that names the affix, in the mod's texts.
-    pub text: String,
     /// The modifiers and their ranges.
     pub ranges: Vec<Range>,
     /// How likely it rolls against the others, 100 by default.
@@ -146,16 +144,14 @@ pub struct AffixDef {
 }
 
 impl AffixDef {
-    /// An affix named by text key `text` that rolls on `categories`, with
-    /// no modifiers yet.
+    /// An affix that rolls on `categories`, with no modifiers yet.
     ///
     /// # Examples
     ///
     /// See the [module](crate::affixes).
     #[must_use]
-    pub fn new(text: &str, categories: ItemCategoryMask) -> Self {
+    pub const fn new(categories: ItemCategoryMask) -> Self {
         Self {
-            text: text.to_owned(),
             ranges: Vec::new(),
             weight: 100,
             rarity: ItemRarity::Common,
@@ -183,7 +179,7 @@ impl AffixDef {
     /// use enshwick::affixes::AffixDef;
     /// use enshwick::content::categories::ItemCategoryMask;
     ///
-    /// assert_eq!(AffixDef::new("a", ItemCategoryMask::WEAPONS).weight(5).weight, 5);
+    /// assert_eq!(AffixDef::new(ItemCategoryMask::WEAPONS).weight(5).weight, 5);
     /// ```
     #[must_use]
     pub const fn weight(mut self, weight: u32) -> Self {
@@ -210,7 +206,7 @@ impl AffixDef {
     /// use enshwick::affixes::AffixDef;
     /// use enshwick::content::categories::ItemCategoryMask;
     ///
-    /// let def = AffixDef::new("a", ItemCategoryMask::WEAPONS).group("element");
+    /// let def = AffixDef::new(ItemCategoryMask::WEAPONS).group("element");
     /// assert_eq!(def.group.as_deref(), Some("element"));
     /// ```
     #[must_use]
@@ -235,8 +231,9 @@ impl AffixDef {
         Ok(())
     }
 
-    /// The definition as the loader takes it, borrowing the text and
-    /// `ranges`, which the caller keeps alive for the call.
+    /// The definition as the loader takes it, borrowing the group and
+    /// `ranges`, which the caller keeps alive for the call; the loader names
+    /// the affix itself.
     ///
     /// # Examples
     ///
@@ -244,7 +241,7 @@ impl AffixDef {
     /// use enshwick::affixes::AffixDef;
     /// use enshwick::content::categories::ItemCategoryMask;
     ///
-    /// let def = AffixDef::new("a", ItemCategoryMask::WEAPONS);
+    /// let def = AffixDef::new(ItemCategoryMask::WEAPONS);
     /// let ranges = def.to_ranges();
     /// assert_eq!(def.to_data(&ranges).modifier_count, 0);
     /// ```
@@ -252,7 +249,7 @@ impl AffixDef {
     pub fn to_data(&self, ranges: &[AffixModifierData]) -> AffixDefData {
         AffixDefData {
             header: Header::of::<AffixDefData>(),
-            text: Str::new(&self.text),
+            text: Str::EMPTY,
             group: self.group.as_deref().map_or(Str::EMPTY, Str::new),
             modifiers: ranges.as_ptr(),
             modifier_count: u32::try_from(ranges.len()).unwrap_or(u32::MAX),
@@ -263,13 +260,14 @@ impl AffixDef {
         }
     }
 
-    /// The definition the loader took, its stats named by `stat`; `None`
-    /// for one that does not read or names a stat `stat` does not know.
+    /// The definition the loader took, without its text, its stats named by
+    /// `stat`; `None` for one that does not read or names a stat `stat` does
+    /// not know.
     ///
     /// # Safety
     ///
-    /// - `data.text` and `data.group` are null or point at their `len` bytes,
-    ///   alive and unchanged for the call.
+    /// - `data.group` is null or points at its `len` bytes, alive and
+    ///   unchanged for the call.
     /// - `data.modifiers` is null or points at `modifier_count` initialised
     ///   ranges, aligned and alive for the call.
     ///
@@ -282,7 +280,7 @@ impl AffixDef {
     /// use enshwick::stats::{Op, Stat};
     ///
     /// let health = Stat::from_ref(StatRef { index: 0, key: 9 });
-    /// let def = AffixDef::new("bear", ItemCategoryMask::EQUIPMENT).with(Range::new(health, Op::Add, 1.0, 2.0));
+    /// let def = AffixDef::new(ItemCategoryMask::EQUIPMENT).with(Range::new(health, Op::Add, 1.0, 2.0));
     /// let ranges = def.to_ranges();
     /// let data = def.to_data(&ranges);
     /// // SAFETY: `data` points into `def` and `ranges`, both alive and unchanged here.
@@ -294,9 +292,6 @@ impl AffixDef {
         data: &AffixDefData,
         stat: impl Fn(u32) -> Option<Stat>,
     ) -> Option<Self> {
-        // SAFETY: the caller keeps the text's bytes alive and unchanged for the
-        // call, and the text is copied at once.
-        let text = unsafe { data.text.as_str() }?.to_owned();
         // SAFETY: the caller keeps the group's bytes alive and unchanged for
         // the call, and `group` is copied before it returns.
         let group = unsafe { data.group.as_str() }?;
@@ -311,7 +306,6 @@ impl AffixDef {
             unsafe { core::slice::from_raw_parts(data.modifiers, data.modifier_count as usize) }
         };
         let def = Self {
-            text,
             ranges: ranges
                 .iter()
                 .map(|r| {

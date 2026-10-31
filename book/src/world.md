@@ -5,8 +5,12 @@ change in any release ([Stability](stability.md)).
 
 [`load.world()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 returns a
-[`World`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs):
-reads of the server's world, component writes, character stats, entity
+[`World`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs),
+the mod's way into the server's world.
+
+## What it offers
+
+A `World` offers reads of the server's world, component writes, character stats, entity
 queries, build rights, labels, chat lines, destroy requests and saves. It is
 `Copy`; get it during `init` and move it into handlers and tasks.
 
@@ -233,7 +237,7 @@ under way counts as asked. Before the world has loaded it is refused.
 its folder, such as `world0-1a2b3c4d`, the same in every session. A
 [world store](state.md#per-world-state) files the mod's state under it. A
 world whose save moves to another folder gets a new key, and the loader
-moves its mods' data along ([Move a world](servers.md#move-a-world)).
+moves its mods' data along ([Move a world to another folder](https://enshwick.com/guides/run-a-server-in-docker/#move-a-world-to-another-folder)).
 
 Like the reads, all three need the game thread; `key()` works from any
 thread.
@@ -409,7 +413,5 @@ uses labels and a rename filter for its Safes.
 
 ## Chat lines
 
-`world.broadcast(text)` sends `text` to every player's chat, and
-`world.tell(&player, text)` to one player. Both work from any thread: the line
-waits in a queue and the server posts it after the next step. Each line of
-`text` becomes a message of its own. See [Chat, notices and the console](chat.md).
+`world.broadcast(text)` and `world.tell(&player, text)` send chat lines; see
+[Chat lines](chat.md#chat-lines).

@@ -43,7 +43,7 @@
 //!
 //! | Area | Modules |
 //! | --- | --- |
-//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`], [`i18n`], [`status`], [`state`], [`files`], [`migrations`] |
+//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`](mod@config), [`i18n`], [`status`], [`state`], [`files`], [`migrations`] |
 //! | Hooks and game memory | [`detour!`], [`hook`](macro@hook), [`code`], [`ecs`], [`raw`], [`pacing`] |
 //! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
 //! | The server's world | [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
@@ -85,7 +85,7 @@
 //!
 //! ```rust,standalone_crate
 //! /// Hello's settings.
-//! #[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
+//! #[enshwick::config]
 //! struct Settings {
 //!     /// Altars added at every Flame level.
 //!     extra_altars: u8,
@@ -318,6 +318,47 @@ pub use enshwick_macros::Shape;
 /// ```
 #[cfg(feature = "unstable")]
 pub use enshwick_macros::call;
+/// Declares a mod's settings struct: serde's `Deserialize` and `Serialize`,
+/// unknown keys refused and [`trait@config::Config`], so the mod needs no
+/// serde of its own.
+///
+/// `#[enshwick::config(default)]` fills the keys a file leaves out from
+/// `Default`. `validate = path` and `text = "key"` are the struct
+/// attributes of [`trait@config::Config`]; field attributes stay
+/// `#[config(..)]` and `#[serde(..)]`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::config::Config;
+///
+/// /// Locker settings.
+/// #[enshwick::config(default)]
+/// #[derive(Default)]
+/// struct Settings {
+///     /// How many lockers one player may own.
+///     #[config(startup, range = 1..=16)]
+///     limit: u32,
+/// }
+///
+/// assert!(Settings::template().contains("limit = 0"));
+/// ```
+///
+/// A misspelt key is refused with its name, not read past:
+///
+/// ```
+/// /// Locker settings.
+/// #[enshwick::config]
+/// #[derive(Debug, Default)]
+/// struct Settings {
+///     /// How many lockers one player may own.
+///     limit: u32,
+/// }
+///
+/// let error = toml::from_str::<Settings>("limits = 4").map_err(|e| e.to_string());
+/// assert!(error.is_err_and(|e| e.contains("unknown field `limits`")));
+/// ```
+pub use enshwick_macros::config;
 /// Exports a [`Mod`] from the DLL with its manifest, which it reads from the
 /// crate's `Cargo.toml` at compile time.
 ///
@@ -412,11 +453,12 @@ pub use enshwick_macros::declare_mod;
 /// `requires`, `after` and `recommends`.
 ///
 /// Each module holds `ID`, the dependency's mod id, and `id("<name>")`, its
-/// content id `<dependency>:<name>`. A required dependency's ids are
-/// constants: the loader starts this mod only beside it. An optional one's,
-/// from `after` or `recommends`, are `None` while it does not run; ask once,
-/// at init, and keep the id. A malformed name panics, running or not; in a
-/// constant it fails the build, with the error at the call that wrote it. A call,
+/// content id `<dependency>:<name>`, once the loader lets this mod name it:
+/// the dependency's `exports` list `<name>` or the name it is a part of. A
+/// required dependency's `id` returns [`Off`] for a name it does not export.
+/// An optional one's, from `after` or `recommends`, is `None` while it does
+/// not run or does not export the name. Ask once, at init, and keep the id.
+/// A malformed name panics, running or not. A call,
 /// point or event of a dependency is declared with its own name and
 /// `of = <alias>`: `#[point(of = lockers, name = "price", ..)]` is
 /// `you.lockers:price`. Without `of`, a local name is this mod's own. An
@@ -438,8 +480,8 @@ pub use enshwick_macros::declare_mod;
 ///
 /// enshwick::deps!();
 ///
-/// const LOCKER: Id = deps::lockers::id("locker");
-/// assert_eq!(LOCKER.to_string(), "you.lockers:locker");
+/// let locker: Id = deps::lockers::id("locker")?;
+/// assert_eq!(locker.to_string(), "you.lockers:locker");
 /// assert_eq!(deps::lanterns::ID, "you.lanterns");
 /// // Outside the game no other mod runs, and no game data reads.
 /// assert_eq!(deps::lanterns::id("lantern"), None);
@@ -452,6 +494,7 @@ pub use enshwick_macros::declare_mod;
 /// }
 ///
 /// assert_eq!(Opened::NAME, "you.lockers:opened");
+/// # Ok::<(), enshwick::Off>(())
 /// ```
 pub use enshwick_macros::deps;
 /// Declares a mod event other mods subscribe to: the struct becomes
@@ -583,6 +626,40 @@ pub use enshwick_macros::script;
 /// }
 /// ```
 pub use enshwick_macros::service;
+/// Names the keys of the mod's texts: `texts!()` reads the crate's
+/// `src/texts.toml` when it builds and writes `pub mod texts`, a constant
+/// per key.
+///
+/// A key's constant is the key in upper case with `.` and `-` as `_`, such
+/// as `texts::SAFE_NAME` for `"safe.name"`; its doc shows the English text
+/// and the values it fills in. `texts::value` holds a constant per value
+/// name, such as `value::OWNER` for `{owner}`; `texts::ALL` lists every
+/// key; `texts::TOML` is the file. The build fails when a key has no `en`
+/// text, a table is no language code of [`i18n::Language`], or a
+/// translation fills in other values than its `en` text.
+/// [`declare_mod!`] embeds the same file, which [`Load::texts`] serves.
+///
+/// `texts!("<path>")` reads another file from the crate's root, for tests.
+///
+/// # Examples
+///
+/// The file has `"locker.name" = "Locker"` and
+/// `"locker.label" = "Locker · {owner}"`, in English and Ukrainian:
+///
+/// ```rust
+/// use enshwick::i18n::{Language, Texts};
+///
+/// // In a mod: enshwick::texts!();
+/// enshwick::texts!("tests/texts/lockers.toml");
+///
+/// let all = Texts::parse(texts::TOML)?;
+/// assert_eq!(all.get(texts::LOCKER_NAME, Language::UK_UA), Some("Шафка"));
+/// let label = all.fill(texts::LOCKER_LABEL, Language::FALLBACK, &[(texts::value::OWNER, "Ada")]);
+/// assert_eq!(label, "Locker · Ada");
+/// assert_eq!(texts::ALL, ["locker.label", "locker.name"]);
+/// # Ok::<(), enshwick::Off>(())
+/// ```
+pub use enshwick_macros::texts;
 #[cfg(not(feature = "unstable"))]
 pub(crate) use enshwick_macros::{Script, script};
 pub use hook::{FnPtr, Hook, Next};
@@ -594,6 +671,7 @@ pub use world_error::WorldError;
 #[doc(hidden)]
 pub mod __private {
     pub use const_format::concatcp;
+    pub use serde;
 
     pub use crate::hook::Frame;
     pub use crate::locks::Relock;
@@ -679,6 +757,17 @@ pub mod __private {
         ""
     }
 
+    /// `id`, a dependency's content id, once the loader lets this mod name
+    /// it, for `deps!`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`](crate::Off) when the loader refuses the id, as one the
+    /// dependency does not export.
+    pub fn dependency_id(id: crate::content::Id) -> Result<crate::content::Id, crate::Off> {
+        crate::content::named(id)
+    }
+
     /// Whether `name` is `<id>:<what>`, a name of the mod `id` itself.
     #[must_use]
     pub const fn is_own(id: &str, name: &str) -> bool {
@@ -697,6 +786,21 @@ pub mod __private {
         let mut i = 0;
         while i < exports.len() {
             if same(exports[i].as_bytes(), local) {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
+
+    /// Whether `code` is a language's code in text files, as
+    /// [`Language::code`](crate::i18n::Language::code) gives it, for `texts!`.
+    #[must_use]
+    pub const fn is_language_code(code: &str) -> bool {
+        let all = crate::i18n::Language::ALL;
+        let mut i = 0;
+        while i < all.len() {
+            if same(all[i].code().as_bytes(), code.as_bytes()) {
                 return true;
             }
             i += 1;
@@ -922,6 +1026,7 @@ pub mod __private {
         api: *const HostApi,
         me: ModHandle,
         manifest: &'static crate::abi::Manifest,
+        texts: Option<&'static str>,
         slot: &Slot<M>,
     ) -> Status {
         // SAFETY: `Host::new` needs `api` null or a table readable for its
@@ -944,6 +1049,7 @@ pub mod __private {
             M::init(&mut Load::of(
                 host,
                 manifest.flags.contains(ManifestFlags::JOIN),
+                texts,
             ))
         }));
         match outcome {

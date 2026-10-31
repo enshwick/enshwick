@@ -416,9 +416,8 @@ A read costs one lock and one copy for each 4-metre brick it touches.
 Reads, like edits, need a quiet moment: inside a step, from a filter or a
 hook, they fail with `WrongThread`.
 
-Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
-client, while it hosts a game.
+Where each call works is in
+[What may be called where](concepts/threads.md#what-may-be-called-where).
 
 ## Capturing a region
 

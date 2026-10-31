@@ -9,7 +9,8 @@ mod tests {
     use enshwick::{Load, Mod, Off, events};
 
     /// Limits.
-    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    #[enshwick::config]
+    #[derive(Default)]
     struct Settings {
         /// Read once per world.
         #[config(startup)]

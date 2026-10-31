@@ -182,9 +182,11 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
 The aliases name the dependencies in code too, so a mod writes another mod's
 id once. `enshwick::deps!()` writes a module `deps` with a module per alias of
 `requires`, `after` and `recommends`. Each holds `ID`, the mod's id, and
-`id("<name>")`, its content id `<id>:<name>`. A required mod's ids are
-constants, since the loader starts this mod only beside it. An optional mod's
-ids, from `after` or `recommends`, are `None` while that mod does not run.
+`id("<name>")`, its content id `<id>:<name>`, once the loader lets this mod
+name it (see [what other mods may use](#what-other-mods-may-use)). A required
+mod's `id` returns the id, or `Off` when that mod does not export the name.
+An optional mod's `id`, from `after` or `recommends`, is `None` while that
+mod does not run or does not export the name. Ask at init and keep the id.
 `deps::vanilla` names the game's own content by the debug names its data
 gives it, such as `deps::vanilla::item("Prop_Production_T1_Forge")`; no
 dependency takes the alias `vanilla`.
@@ -209,8 +211,9 @@ use enshwick::services::ModEvent;
 
 enshwick::deps!();
 
-const LOCKER: Id = deps::lockers::id("locker");
-assert_eq!(LOCKER.to_string(), "you.lockers:locker");
+// Outside the game every content id passes; in it, the one `lockers` exports.
+let locker: Id = deps::lockers::id("locker")?;
+assert_eq!(locker.to_string(), "you.lockers:locker");
 
 if let Some(lantern) = deps::lanterns::id("lantern") {
     enshwick::info!("lanterns run: {lantern} lights the lockers");
@@ -225,6 +228,7 @@ pub struct Opened {
 }
 
 assert_eq!(Opened::NAME, "you.lockers:opened");
+# Ok::<(), enshwick::Off>(())
 ```
 
 A [data pack or Luau mod](../content/packs.md#packtoml) names its
@@ -233,22 +237,32 @@ them.
 
 ### What other mods may use
 
-A mod's calls, points, services and events are its own until it exports
-them. `exports` lists their local names, and the loader refuses another mod a
-reference to any other name of the mod. With `exports = ["price-of", "sold"]`
+A mod's calls, points, services, events, content and stat kinds are its own
+until it exports them. `exports` lists their local names, and the loader refuses
+another mod a reference to any other name of the mod. With `exports = ["price-of", "sold"]`
 in `you.trading-post`, another mod may call `you.trading-post:price-of` and
 hear `you.trading-post:sold`. A link to the point `you.trading-post:margin`
 is refused, and the log says
 `point you.trading-post:margin: you.trading-post does not export margin; it exports price-of, sold`.
 
-- `caller`, `extend_point`, `observe_point` and `on_mod_event` return `Off`,
-  which turns the asking mod off at init.
+- `caller`, `extend_point`, `observe_point`, `on_mod_event` and `open_stat`
+  return `Off`, which turns the asking mod off at init.
 - `service` returns `Off` with the reason, and `optional_service` returns
   `None`.
+- A content id through `deps::<alias>::id` returns `Off` for a required mod
+  and `None` for an optional one. An exported content name exports its
+  parts too: with `exports = ["locker"]`, `you.lockers:locker.recipe` passes.
+  The log says
+  `content id you.lockers:key: you.lockers does not export key; it exports locker`.
+- A data pack's reference to another mod's content, `<alias>:<name>` or
+  `<mod>:<name>`, is checked the same way when the pack is added.
+- In a test, `FakeHost::exports` names what another mod exports. Without it
+  the fake lets every name through, so a test that uses another mod passes
+  that mod's exports.
 - The mod's own names need no export.
 - A mod that is not loaded is not checked; its names stay unmatched.
-- Content ids are not checked: an item or recipe of another mod is named by
-  its GUID inside the game's data, where the loader does not see whose it is.
+- A GUID the mod writes itself, such as `Guid::named("you.lockers:key")`, is
+  not checked: inside the game's data the loader does not see whose it is.
 
 A [data pack or Luau mod](../content/packs.md) lists its exports the same way,
 as `exports` in its `pack.toml`.
@@ -286,33 +300,6 @@ enshwick::declare_mod!(Hello, points: [Price]);
 
 ## The mod
 
-A mod implements
-[`Mod`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs) on its
-state type:
-
-- `init(load)` registers hooks, settings, events and content, and returns the
-  state or an [`Off`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs);
-- `ready(&'static self, host)`, optional, runs once the hooks are armed;
-- `shutdown(&'static self)`, optional, runs before a development reload
-  unloads a mod with `reload = true`.
-
-`Off::new(reason)` turns the mod off with a reason for the log. Every fallible
-call on `Load` returns `Result<_, Off>`, so `?` is the usual way out.
-
-`declare_mod!` exports the type with the manifest: `enshwick_mod_abi`,
-`enshwick_mod_query`, `enshwick_mod_init`, `enshwick_mod_ready` and
-`enshwick_mod_shutdown`, each catching panics. It also
-adds `instance()`, the mod's state once `init` has returned it.
-
-```rust,standalone_crate
-struct Quiet;
-
-impl enshwick::Mod for Quiet {
-    fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-        Err(enshwick::Off::new("nothing to do on this build"))
-    }
-}
-
-enshwick::declare_mod!(Quiet);
-# assert!(Quiet::instance().is_none());
-```
+A mod implements `Mod` on its state type, and `declare_mod!` exports it with
+the manifest; [The life of a mod](lifecycle.md#the-mod) has its methods and
+exports.

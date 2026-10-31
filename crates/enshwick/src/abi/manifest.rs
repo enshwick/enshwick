@@ -320,7 +320,7 @@ pub struct Manifest {
     pub dependencies: *const Dependency,
     /// How many entries `dependencies` points at.
     pub dependency_count: usize,
-    /// Symbols the mod pins itself, per build.
+    /// Symbols and constants the mod pins itself, per build.
     pub builds: *const BuildRow,
     /// How many rows `builds` points at.
     pub build_count: usize,

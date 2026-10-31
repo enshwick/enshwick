@@ -3,8 +3,8 @@
 [`load.buffs()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/buffs.rs)
 returns the
 [`Buffs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/buffs.rs)
-of the server's world: the buff and debuff types the game knows, the buffs an
-entity has, giving one and removing one. It is `Copy`; get it during `init`
+of the server's world: the buff and debuff types the game knows, an entity's
+buffs, giving and removing one. It is `Copy`; get it during `init`
 and move it into handlers, tasks and actions.
 
 ```rust
@@ -82,6 +82,5 @@ Clients see buffs given and removed as the game's own, with their icons and
 times. The game saves the types it saves with a character, buffs from mods
 among them; other types end when the player leaves.
 
-Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
-client, while it hosts a game.
+Where each call works is in
+[What may be called where](concepts/threads.md#what-may-be-called-where).

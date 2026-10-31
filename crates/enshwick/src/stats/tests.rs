@@ -5,7 +5,7 @@ fn close(a: f32, b: f32) -> bool {
 }
 
 fn def() -> StatDef {
-    StatDef::additive("t").range(-1000.0, 1000.0)
+    StatDef::additive().range(-1000.0, 1000.0)
 }
 
 #[test]
@@ -35,7 +35,7 @@ fn the_range_holds_and_bad_values_are_skipped() {
         aggregate(&def(), [(Op::Multiply, f32::INFINITY)]),
         0.0
     ));
-    let factor = StatDef::multiplicative("f").range(0.0, 10.0);
+    let factor = StatDef::multiplicative().range(0.0, 10.0);
     assert!(close(
         aggregate(&factor, [(Op::Multiply, 1.5), (Op::Multiply, 2.0)]),
         3.0
@@ -45,7 +45,7 @@ fn the_range_holds_and_bad_values_are_skipped() {
 
 #[test]
 fn flags_read_as_zero_or_one() {
-    let flag = StatDef::flag("f");
+    let flag = StatDef::flag();
     assert!(close(aggregate(&flag, []), 0.0));
     assert!(close(
         aggregate(&flag, [(Op::Add, 1.0), (Op::Add, 1.0)]),
@@ -59,23 +59,22 @@ fn flags_read_as_zero_or_one() {
 
 #[test]
 fn definitions_out_of_their_own_range_are_refused() {
-    assert!(StatDef::additive("x").range(1.0, 2.0).check().is_err());
-    assert!(StatDef::additive("x").range(2.0, 1.0).check().is_err());
-    assert!(StatDef::multiplicative("x").check().is_ok());
-    assert!(
-        StatDef::additive("x")
-            .starting_at(f32::NAN)
-            .check()
-            .is_err()
-    );
+    assert!(StatDef::additive().range(1.0, 2.0).check().is_err());
+    assert!(StatDef::additive().range(2.0, 1.0).check().is_err());
+    assert!(StatDef::multiplicative().check().is_ok());
+    assert!(StatDef::additive().starting_at(f32::NAN).check().is_err());
 }
 
 #[test]
 fn built_in_kinds_are_valid_and_their_keys_differ() {
-    let mut keys: Vec<_> = builtin::ALL.iter().map(|(id, _)| key_of(id)).collect();
+    let mut keys: Vec<_> = builtin::ALL
+        .iter()
+        .map(|(id, _)| key_of(&id.to_string()))
+        .collect();
     for (id, def) in builtin::ALL {
         assert!(def.to_def().check().is_ok(), "{id}");
-        assert!(id.starts_with("enshwick:"));
+        assert_eq!(id.namespace(), "enshwick");
+        assert_eq!(key_of(&id.to_string()).0, id.guid().fnv1a());
     }
     keys.sort_unstable();
     keys.dedup();

@@ -24,8 +24,11 @@ use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, Reci
 
 /// The table of services the loader offers a mod.
 ///
-/// Fields are only ever appended; a mod checks [`Header::covers`] before it
-/// calls a field added after the minor it was built against.
+/// Until 1.0 any change to its layout is a new
+/// [`ABI_VERSION`](crate::abi::ABI_VERSION), and a loader loads only mods
+/// built for its own. From 1.0 fields are only appended, and a mod checks
+/// [`Header::covers`] before it calls a field added after the release it was
+/// built against.
 ///
 /// # Examples
 ///
@@ -37,8 +40,9 @@ pub struct HostApi {
     pub header: Header,
     /// The loader's own version.
     pub host_version: Str,
-    /// Writes the running game's identity, as far as the [`Header`] `out`
-    /// starts with says the caller's struct reaches.
+    /// Writes the running game's identity, its side, image base, build
+    /// fingerprint and where its build table is from, as far as the
+    /// [`Header`] `out` starts with says the caller's struct reaches.
     pub build: extern "system" fn(out: *mut BuildInfo),
     /// Resolves a symbolic id for the running build: the mod's own rows first,
     /// then the loader's table.
@@ -673,12 +677,13 @@ pub struct HostApi {
     /// [`Status::MISSING`] for a widget this game build lacks.
     pub ui_widget: extern "system" fn(me: ModHandle, frame: u64, widget: *mut UiWidget) -> Status,
     /// Queues `dialog` and calls `callback` with the answer and `user` once
-    /// the player gives it; dialogs show one at a time, in order. Any
-    /// thread. Client only ([`Status::MISSING`] on a server); when the
-    /// interface could not be linked, the dialog shows as a system message
-    /// box. [`Status::REFUSED`] when too many wait; [`Status::WRONG_THREAD`]
-    /// for [`UiDialog::WAITING`] on the thread that draws the interface. On
-    /// an error status `callback` is never called.
+    /// the player gives it, on the thread that draws the interface; dialogs
+    /// show one at a time, in order, in the game's style. Any thread. Client
+    /// only ([`Status::MISSING`] on a server); when the interface could not
+    /// be linked, the dialog shows as a system message box.
+    /// [`Status::REFUSED`] when too many wait; [`Status::WRONG_THREAD`] for
+    /// [`UiDialog::WAITING`] on the thread that draws the interface. On an
+    /// error status `callback` is never called.
     pub ui_dialog: extern "system" fn(
         me: ModHandle,
         dialog: *const UiDialog,
@@ -739,12 +744,17 @@ pub struct HostApi {
     /// thread.
     pub icons_ready: extern "system" fn(me: ModHandle) -> Status,
     /// Defines the stat kind `id` with `def`, or opens it with a null
-    /// `def`, and writes its index and key to `out`. A mod defines kinds in
-    /// its own namespace (`name` or `<mod>:name`); any mod opens any kind,
-    /// the loader's built-in ones (`enshwick:<name>`) among them. Every mod
-    /// gets the same index for one id. [`Status::BAD_ARGS`] for a malformed
-    /// id or definition, [`Status::REFUSED`] for a kind defined twice or in
-    /// another mod's namespace. Allowed during `enshwick_mod_init` only.
+    /// `def`, and writes its index and key to `out`. `id` is a full content
+    /// id, `<mod>:<name>`; the text that names the kind is `<name>.name` in
+    /// its owner's texts, which the loader derives. A mod defines kinds in
+    /// its own namespace and opens the loader's built-in ones
+    /// (`enshwick:<name>`) and those of other mods. Every mod gets the same
+    /// index for one id. [`Status::BAD_ARGS`] for a malformed id or
+    /// definition; [`Status::REFUSED`] for a kind defined twice or in
+    /// another mod's namespace, or a kind of another loaded mod whose
+    /// [`Manifest::exports`](super::Manifest::exports) lack its name and the
+    /// name it is a part of, with the id and the owner's exports logged.
+    /// Allowed during `enshwick_mod_init` only.
     pub stat_open: extern "system" fn(
         me: ModHandle,
         id: Str,
@@ -782,7 +792,8 @@ pub struct HostApi {
         extern "system" fn(me: ModHandle, callback: StatChangeFn, user: *mut c_void) -> Status,
     /// Writes up to `capacity` modifiers that count toward stat `stat` on
     /// `entity`, in the order they apply, and how many there are to
-    /// `count`; every stat for `u32::MAX`. Any thread.
+    /// `count`; every stat for `u32::MAX`. On the server's game thread at a
+    /// quiet moment ([`Status::WRONG_THREAD`] inside a step).
     pub stat_sources: extern "system" fn(
         me: ModHandle,
         entity: Entity,
@@ -817,8 +828,13 @@ pub struct HostApi {
     /// initialised. [`Status::REFUSED`] for an event another mod defined.
     /// Any thread.
     pub send_event: extern "system" fn(me: ModHandle, event: u32, data: *const c_void) -> Status,
-    /// Defines the affix `id` in the mod's namespace with `def` and writes
-    /// its index and key to `out`. Allowed during `enshwick_mod_init` only.
+    /// Defines the affix `id` with `def` and writes its index and key to
+    /// `out`. `id` is a full content id in the mod's namespace,
+    /// `<mod>:<name>`; the text that names the affix is `<name>.name` in the
+    /// mod's texts, which the loader derives. [`Status::BAD_ARGS`] for a
+    /// malformed id or definition, [`Status::REFUSED`] for an affix defined
+    /// twice or in another mod's namespace. Allowed during
+    /// `enshwick_mod_init` only.
     pub affix_open: extern "system" fn(
         me: ModHandle,
         id: Str,
@@ -1073,7 +1089,8 @@ pub struct HostApi {
     /// except for a recipe output rate, whose change builds the recipe
     /// registry again.
     pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
-    /// Declares a change of a vanilla value. The loader merges the changes
+    /// Declares a change of a vanilla value, of one entry or of each item or
+    /// recipe a selection picks. The loader merges the changes
     /// of every mod once their `init` ran: a set in load order, the last
     /// winning and the overridden one reported in both mods' logs and the
     /// conflict report; then every factor, multiplied. It builds the changed
@@ -1155,7 +1172,8 @@ pub struct HostApi {
     /// in force, from `enshwick_mod_ready` on, with the zones its own
     /// grouping takes. [`Status::BAD_ARGS`] for a null `out`. Any thread.
     pub base_limit: extern "system" fn(me: ModHandle, out: *mut BaseLimitInfo) -> Status,
-    /// Reads the voxels of the server's world in the box of `size` voxels
+    /// Reads the voxels of the server's world, decoded at full detail, in the
+    /// box of `size` voxels
     /// from `min`, in voxels of half a metre from the world's corner, into
     /// `out`: x fastest, then y, then z, `size[0] * size[1] * size[2]`
     /// entries. `min` and `size` are borrowed for the call; `out` points at
@@ -1496,4 +1514,11 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Checks that the mod may name the content id `id`, `<mod>:<name>`:
+    /// [`Status::OK`] for one of its own, one of a mod that is not loaded,
+    /// and one whose mod's manifest exports `<name>` or the name it is a
+    /// part of (`locker` for `locker.recipe`); [`Status::REFUSED`] for any
+    /// other, with the id and the owner's exports logged;
+    /// [`Status::BAD_ARGS`] for a malformed id. Any thread.
+    pub use_content: extern "system" fn(me: ModHandle, id: Str) -> Status,
 }

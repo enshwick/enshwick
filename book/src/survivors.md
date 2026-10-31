@@ -2,7 +2,11 @@
 
 The game keeps one entity per survivor and asks for it from many of its
 systems: when a survivor sleeps, roams, gets a bed, or comes to a summoning
-staff. A mod that keeps several entities of one survivor answers those
+staff.
+
+## Lookups
+
+A mod that keeps several entities of one survivor answers those
 questions itself through
 [`load.on_survivor_lookup`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/survivors.rs).
 The platform tells the askers apart and reads what each works on; the mod

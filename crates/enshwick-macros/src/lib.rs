@@ -14,6 +14,7 @@ use syn::{
 };
 
 mod declare;
+mod texts;
 
 use crate::config::expand_config;
 use crate::shape::expand_layout;
@@ -72,11 +73,27 @@ pub fn declare_test_mod(input: TokenStream) -> TokenStream {
 /// with `sync`; `group`, on a field that is a `Config` of its own, makes it
 /// a table of the file. The derive implements `schema`, `values`, `merge_values` and
 /// a `validate` that checks ranges and choices before the struct's own
-/// check.
+/// check. It refuses a struct without `#[serde(deny_unknown_fields)]`, so a
+/// misspelt key never passes unread; `#[enshwick::config]` adds it.
 #[proc_macro_derive(Config, attributes(config))]
 pub fn derive_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     expand_config(&input).unwrap_or_else(|e| e.to_compile_error().into())
+}
+
+/// Declares a settings struct: derives serde's `Deserialize` and
+/// `Serialize` through the API's serde, refuses unknown keys and derives
+/// `Config`.
+///
+/// `default` fills the keys a file leaves out from `Default`; `validate =
+/// path` and `text = "key"` are the derive's struct attributes. Examples are
+/// on `enshwick::config`.
+#[proc_macro_attribute]
+pub fn config(args: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    config::expand_attribute(args.into(), &input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 /// Declares a hook from its body: the function stays, and a static `Hook`
@@ -330,6 +347,21 @@ pub fn deps(input: TokenStream) -> TokenStream {
         .into();
     }
     declare::expand_deps()
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Generates `pub mod texts`, a constant per key of the crate's
+/// `src/texts.toml`, checked when the crate builds. Examples are on
+/// `enshwick::texts`.
+#[proc_macro]
+pub fn texts(input: TokenStream) -> TokenStream {
+    let path = if input.is_empty() {
+        None
+    } else {
+        Some(parse_macro_input!(input as syn::LitStr))
+    };
+    texts::expand(path.as_ref())
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

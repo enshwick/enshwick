@@ -6,15 +6,13 @@
 mod tests {
     use enshwick::abi::Status;
     use enshwick::content::changes::{Change, Field, Value};
-    use enshwick::content::{Guid, types};
+    use enshwick::content::{EngineFacts, Guid, ResourceType, types};
     use enshwick::packs::{Pack, PackFiles};
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
 
     const CHEST: &str = "6943053a-32c1-4718-ae22-e61427ddf54d";
     const RECIPE: &str = "b2c1d2e3-4f50-4a61-8b72-c3d4e5f60718";
-    const ITEM: u32 = 1;
-    const RECIPES: u32 = 3;
 
     struct Lanterns;
 
@@ -46,52 +44,12 @@ mod tests {
     );
 
     fn host() -> FakeHost {
-        let mut host = FakeHost::new()
-            .type_hash(types::ITEM_INFO.id(), ITEM)
-            .type_hash(types::ITEM_REGISTRY_RESOURCE.id(), 2)
-            .type_hash(types::RECIPE_REGISTRY_RESOURCE.id(), RECIPES)
-            .type_size("item_stat", 0x28)
-            .type_size("recipe", 0xa8)
-            .type_size("recipe_ingredient", 0x18)
-            .type_size("recipe_stack", 0x18);
-        for (id, at) in [
-            ("item_info.id", 0),
-            ("item_info.object", 4),
-            ("item_info.name", 0x48),
-            ("item_info.icon_image", 0x58),
-            ("item_info.description", 0x68),
-            ("item_info.flags", 0x78),
-            ("item_info.pid_entity", 0x80),
-            ("item_info.ui_values", 0x90),
-        ] {
-            host = host.constant(id, at);
-        }
-        for (id, at) in [
-            ("item_stat.label", 0),
-            ("item_stat.format", 4),
-            ("item_stat.value", 8),
-            ("item_stat.signed", 0x24),
-        ] {
-            host = host.constant(id, at);
-        }
-        for (id, at) in [
-            ("recipe.guid", 0),
-            ("recipe.id", 0x10),
-            ("recipe.workshop_guid", 0x14),
-            ("recipe.workshop", 0x24),
-            ("recipe.input", 0x28),
-            ("recipe.output", 0x30),
-            ("recipe.completion", 0x5c),
-            ("recipe.required_props", 0x38),
-            ("recipe.debug_name", 0x40),
-        ] {
-            host = host.constant(id, at);
-        }
-        host.constant("recipe_registry.recipes", 0)
-            .constant("recipe_stack.item", 0x10)
-            .constant("recipe_stack.count", 0x14)
-            .constant("item_registry.refs", 0)
-            .constant("item_registry.names", 0x38)
+        FakeHost::new().items().recipes()
+    }
+
+    /// The hash `host` gives the resource type `ty`.
+    fn hash(ty: ResourceType) -> u32 {
+        host().hash(ty.id()).unwrap()
     }
 
     fn start() -> enshwick::test::Installed {
@@ -120,11 +78,13 @@ mod tests {
         let loader = start();
         let served: Vec<_> = loader.resources().iter().map(|r| (r.key, r.base)).collect();
         let lantern = Guid::named("you.lanterns:lantern");
+        let item = hash(types::ITEM_INFO);
         assert!(served.contains(&(
-            lantern.key_by_hash(ITEM),
-            Guid::parse(CHEST).key_by_hash(ITEM)
+            lantern.key_by_hash(item),
+            Guid::parse(CHEST).key_by_hash(item)
         )));
-        assert!(served.iter().any(|(key, _)| key.type_hash == RECIPES));
+        let recipes = hash(types::RECIPE_REGISTRY_RESOURCE);
+        assert!(served.iter().any(|(key, _)| key.type_hash == recipes));
     }
 
     #[test]
@@ -165,5 +125,59 @@ mod tests {
             .collect();
         assert_eq!(texts.len(), 2, "{texts:?}");
         assert!(texts.iter().any(|t| t == "Lantern") && texts.iter().any(|t| t == "Ліхтар"));
+    }
+
+    /// A pack that changes another mod's item, as the loader checks it
+    /// against that mod's exports.
+    mod named {
+        use enshwick::abi::{Level, Status};
+        use enshwick::packs::{Pack, PackFiles};
+        use enshwick::test::FakeHost;
+        use enshwick::{Load, Mod, Off};
+
+        struct Stacks;
+
+        impl Mod for Stacks {
+            fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+                let files = PackFiles::new().with(
+                    "items.toml",
+                    "[[change]]\nitems = [\"you.lockers:key\"]\nmax_stack = 50\n",
+                );
+                load.add_pack(&Pack::parse("you.stacks", &files)?)?;
+                Ok(Self)
+            }
+        }
+
+        enshwick::test::declare_mod!(
+            Stacks,
+            r#"
+            id = "you.stacks"
+            side = "server"
+            "#
+        );
+
+        fn start(exports: &[&str]) -> (Status, Vec<(Level, String)>) {
+            let loader = FakeHost::new().exports("you.lockers", exports).install();
+            // SAFETY: both functions are the exports of this module's `declare_mod!(Stacks)`.
+            let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+            (status, loader.logs())
+        }
+
+        #[test]
+        fn another_mod_s_item_it_exports_takes_the_change() {
+            let (status, logs) = start(&["key"]);
+            assert_eq!(status, Status::OK, "{logs:?}");
+        }
+
+        #[test]
+        fn another_mod_s_item_it_does_not_export_turns_the_pack_off() {
+            let (status, logs) = start(&["locker"]);
+            assert_ne!(status, Status::OK);
+            assert!(
+                logs.iter().any(|(level, line)| *level == Level::WARN
+                    && line == "content id you.lockers:key: you.lockers does not export key; it exports locker"),
+                "{logs:?}"
+            );
+        }
     }
 }

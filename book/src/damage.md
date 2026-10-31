@@ -5,7 +5,11 @@ change in any release ([Stability](stability.md)).
 
 [`load.on_damage(filter)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/damage.rs)
 runs a filter on damage about to reach an entity's health in the server's
-world, before the game applies it. The filter gets a
+world, before the game applies it.
+
+## Filtering damage
+
+The filter gets a
 [`Damage`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/damage.rs)
 to read and change; what it leaves is what the game applies.
 

@@ -2,7 +2,8 @@
 //! "of the Bear" giving 10 to 30 extra health, rolled onto single items as
 //! they drop or are crafted and kept with the item.
 //!
-//! A mod defines its affixes with [`Load::define_affix`]: the [`Modifier`](crate::stats::Modifier)s'
+//! A mod defines its affixes with [`Load::define_affix`], each named by a
+//! content id and by the text `<name>.name` in the mod's texts: the [`Modifier`](crate::stats::Modifier)s'
 //! ranges, a weight against the other affixes, a [`ItemRarity`], the item
 //! [`ItemCategoryMask`](crate::content::categories::ItemCategoryMask) it rolls on and an optional group whose affixes never roll
 //! together. Every mod's affixes form one pool. What an item rolled is part
@@ -23,13 +24,14 @@
 //! ```
 //! use enshwick::affixes::{AffixDef, Range, ItemRarity};
 //! use enshwick::content::categories::ItemCategoryMask;
+//! use enshwick::content::id;
 //! use enshwick::stats::{Op, builtin};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let health = load.open_stat(builtin::HEALTH_MAX)?;
 //!     load.define_affix(
-//!         "bear",
-//!         &AffixDef::new("affix.bear", ItemCategoryMask::EQUIPMENT)
+//!         id!("bear"),
+//!         &AffixDef::new(ItemCategoryMask::EQUIPMENT)
 //!             .with(Range::new(health, Op::Add, 10.0, 30.0).step(1.0))
 //!             .rarity(ItemRarity::Uncommon),
 //!     )?;
@@ -38,6 +40,7 @@
 //! ```
 
 use crate::abi::{ItemLine, StatRef, Str};
+use crate::content::Id;
 use crate::inventory::ItemInstance;
 use crate::stats::Op;
 use crate::{Host, Load, Off};
@@ -50,7 +53,8 @@ use crate::{Host, Load, Off};
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AffixInfo {
-    /// The text key that names it.
+    /// The text key that names it in its owner's texts, see
+    /// [`name_key`](crate::stats::name_key).
     pub text: String,
     /// How rare it is.
     pub rarity: ItemRarity,
@@ -171,27 +175,35 @@ impl Affixes {
 }
 
 impl Load<'_> {
-    /// Defines the mod's affix `name` (`<mod>:<name>`). Call it during
-    /// `init`, on both sides, so clients name what items rolled.
+    /// Defines the mod's affix `id`, named with [`id!`](crate::content::id).
+    /// Its text is `<name>.name` in the mod's texts
+    /// ([`name_key`](crate::stats::name_key)). Call it during `init`, on both
+    /// sides, so clients name what items rolled.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed id or definition, an affix defined twice, or
+    /// [`Off`] for an id of another mod, a malformed definition, an affix
+    /// defined twice, or
     /// after init.
     ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn define_affix(&mut self, name: &str, def: &AffixDef) -> Result<AffixId, Off> {
+    pub fn define_affix(&mut self, id: Id, def: &AffixDef) -> Result<AffixId, Off> {
+        let full = id.to_string();
         def.check()
-            .map_err(|why| Off::new(format!("affix {name:?}: {why}")))?;
+            .map_err(|why| Off::new(format!("affix {full:?}: {why}")))?;
         let host = self.host();
         let ranges = def.to_ranges();
         let data = def.to_data(&ranges);
         let mut out = StatRef::default();
-        let status =
-            (host.api().affix_open)(host.handle(), Str::new(name), &raw const data, &raw mut out);
-        crate::load::ok(status, out.index, || format!("affix {name:?}")).map(AffixId::new)
+        let status = (host.api().affix_open)(
+            host.handle(),
+            Str::new(&full),
+            &raw const data,
+            &raw mut out,
+        );
+        crate::load::ok(status, out.index, || format!("affix {full:?}")).map(AffixId::new)
     }
 
     /// The affix pool and rolls. Call it during `init`.

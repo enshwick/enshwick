@@ -35,37 +35,50 @@ module reads it, and a server owner can add to it or change it.
   `zh-cn`, `zh-tw` and `uk`. The game's English reads as `en-us`, which
   falls back to `en`.
 
-Embed the file with `include_str!("texts.toml")` and read it during `init`
-with
-[`Load::texts`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs):
+Keep the file at `src/texts.toml`, beside `lib.rs`.
+[`declare_mod!`](../concepts/loader-and-abi.md#the-manifest) embeds it, and
+[`Load::texts`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
+reads it during `init`.
+[`enshwick::texts!()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
+writes a module `texts` with a constant per key, so code names a key the
+file has:
 
 ```rust
 use enshwick::content::{Id, id};
 
 const LOCKER_NAME: Id = id!("locker.name");
-const LOCKER_DESCRIPTION: Id = id!("locker.description");
+const LOCKER_LABEL: Id = id!("locker.label");
 
-// In a mod: const TEXTS: &str = include_str!("texts.toml");
-const TEXTS: &str = r#"
-[en]
-"locker.name" = "Locker"
-"locker.description" = "A chest only its owner can open."
-
-[uk]
-"locker.name" = "Шафка"
-"#;
+// In a mod: enshwick::texts!();
+enshwick::texts!("tests/texts/lockers.toml");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let texts = load.texts(TEXTS)?;
+    let texts = load.texts()?;
     load.add_texts(&texts, &[
-        ("locker.name", LOCKER_NAME),
-        ("locker.description", LOCKER_DESCRIPTION),
+        (texts::LOCKER_NAME, LOCKER_NAME),
+        (texts::LOCKER_LABEL, LOCKER_LABEL),
     ])
 }
 ```
 
-`load.texts` returns `Err(Off)` when the embedded file or the override file
-below is malformed, with the file's path in the message for the override.
+A key's constant is the key in upper case with `.` and `-` as `_`:
+`texts::LOCKER_NAME` for `"locker.name"`. `texts::value` has a constant per
+value name the texts fill in, such as `value::OWNER` for `{owner}`.
+`texts::ALL` lists every key, and `texts::TOML` is the file itself, for
+tests.
+
+The mod does not build when the file has one of these faults:
+
+- a key has no `en` text;
+- a table is not a language code;
+- a translation fills in other values than its `en` text, such as `{name}`
+  where the `en` text has `{owner}`.
+
+`load.texts` returns `Err(Off)` when the crate has no `src/texts.toml` or
+the override file below is malformed, with the override's path in the
+message.
+[`Load::texts_from(toml)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
+hands over texts from a string, as for a data pack.
 
 ## Texts the game shows
 
@@ -143,7 +156,7 @@ key it lacks, so a language the game adds shows up as missing texts, and
 ```rust
 use enshwick::i18n::{Language, Texts};
 
-// In a mod: const TEXTS: &str = include_str!("texts.toml");
+// In a mod, `texts::TOML` of `enshwick::texts!()`.
 const TEXTS: &str = "[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n";
 
 // The body of the mod's test `every_text_exists_in_all_languages`.

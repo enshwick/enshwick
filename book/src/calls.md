@@ -4,8 +4,11 @@ Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
 A **call** is a described service: one function from an input struct to an
-answer. One mod serves it and other mods call it. The input is a `repr(C)`
-struct, so the server's schema describes the call whole. A mod in any language
+answer, served by one mod and called by others.
+
+## Calls and services
+
+The input is a `repr(C)` struct, so the server's schema describes the call whole. A mod in any language
 the loader runs reaches it from that schema. A [service](services.md) table of
 several functions stays the way for Rust mods that share a crate.
 
@@ -136,11 +139,11 @@ once. When the server does not serve the call as declared, `caller` returns
 with the reason. In a test, serve a required server's call with
 `Installed::serve_call` before the mod starts.
 
-A server that is loaded but does not export the call refuses every caller, required or not:
-`caller` returns `Off` and the log says
+A server that is loaded but does not export the call refuses every caller,
+required or not, and the log says
 `call you.trading-post:price-of: you.trading-post does not export price-of; it exports prices, sold`.
-In a test, `FakeHost::exports` names what another mod exports.
-Without it the fake lets every name through, so a test that calls another mod passes that mod's exports.
+What a refused export does, in the game and in a test, is in
+[What other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use).
 
 ### The schema
 

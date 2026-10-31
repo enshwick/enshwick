@@ -2,7 +2,6 @@
 
 The loader writes one set of logs for itself and every mod, keeps a status
 summary of what runs, and turns a failing mod off with a reason in the log.
-This chapter covers what a mod writes there and where to look.
 
 ## Log macros
 
@@ -112,7 +111,7 @@ The keys of `mod-configs/enshwick.toml`:
 | `join_note_seconds`  | `10`      | seconds between the chat line and the disconnect; read at start                                                         |
 | `allowlist`          | `false`   | on a dedicated server, let in only the [allowlist](world.md#the-allowlist)'s accounts and administrators; read at start |
 | `language`           | `""`      | on a dedicated server, language code of the console's and other texts no player's game names; empty for English         |
-| `motd`               | `""`      | the [message of the day](servers.md#greet-players) players read in chat; at most 4 lines and 500 bytes                  |
+| `motd`               | `""`      | the [message of the day](https://enshwick.com/guides/run-a-server-in-docker/#greet-players-when-they-join) players read in chat; at most 4 lines and 500 bytes |
 
 The file rejects unknown keys. A file that does not parse at start is logged
 and the loader runs with the defaults; a change that does not parse is logged
@@ -180,7 +179,7 @@ key with no text shows as the key and its values.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let _texts = load.texts("[en]\n\"glow.off\" = \"No glow: {symbol} is missing.\"\n")?;
+    let _texts = load.texts_from("[en]\n\"glow.off\" = \"No glow: {symbol} is missing.\"\n")?;
     let glow = load.feature("glow", |load| {
         load.symbol("lantern.glow")
             .map_err(|_| enshwick::Off::text("glow.off", &[("symbol", "lantern.glow")]))
@@ -282,23 +281,12 @@ and changes to game data rather than code, are not seen.
 
 ## Faults
 
-A mod is turned off when:
+When the loader turns a mod off, `loader.log` and the mod's log say why, the
+mod's log with an error `off: <reason>`, and the Mods screen shows the reason under the mod, in the
+reader's language for an `Off::text`. The summary's list of mods turned off
+keeps the reason, and `enshwick` on the console marks the mod `(off)`. A
+hardware fault that ends the game goes to `crash.log` instead, and the next
+start shows its line in the log and at the top of `status.log`.
 
-- `init` returns `Err(Off)`: the log has an error `off: <reason>`, and the
-  Mods screen shows the reason under the mod, in the reader's language for
-  an `Off::text`;
-- `init` panics: an error `off: init panicked`;
-- a hook, event handler, action, status closure or `ready` panics
-  later: an error `off: <what panicked>`.
-
-The panic is caught at the boundary, the loader unlinks every hook of the mod,
-and the game goes on vanilla where the mod acted. Its event handlers, actions
-and status lines stop with it. The summary's list of mods turned off keeps the
-reason, and `enshwick` on the console marks the mod `(off)`.
-
-A hardware fault, such as an access violation in a mod's code, is not a panic
-and cannot be caught. When it ends the game, the loader writes `crash.log`,
-naming the mod whose code faulted, whose callback it was running, or whose
-code was on the stack, before the game's own crash handling runs; the next
-start shows the line in its log and at the top of `status.log`. See
-[What is in crash.log?](faq.md#what-is-in-crashlog).
+What turns a mod off, and the reason each case logs, is in
+[When a mod fails](concepts/lifecycle.md#when-a-mod-fails).

@@ -1,8 +1,8 @@
 use super::with_server;
 
 /// Test settings.
-#[derive(Debug, Default, serde::Deserialize, serde::Serialize, crate::Config)]
-#[config(validate = Settings::check)]
+#[crate::config(validate = Settings::check)]
+#[derive(Debug, Default)]
 struct Settings {
     /// A join value.
     #[config(sync)]

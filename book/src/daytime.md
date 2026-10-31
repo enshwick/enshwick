@@ -5,9 +5,12 @@ returns the
 [`Clock`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/daytime.rs)
 of the server's world: the time of day, and setting it.
 [`load.clock_speed()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/daytime.rs)
-returns the mod's `ClockSpeed`, its say in how fast the clock runs. Both are
-`Copy`; get them during `init` and move them into handlers, tasks and
-actions.
+returns the mod's `ClockSpeed`, its say in how fast the clock runs.
+
+## Using the clock
+
+Both are `Copy`; get them during `init` and move them into handlers, tasks
+and actions.
 
 The game's clock runs in game hours. On the 1.0 game the day lasts from 06:00 to
 22:00 and takes 30 real minutes, the night 12 by default; the server's settings change
@@ -85,6 +88,5 @@ after the step in which the day or the night began, whether the clock got
 there or a mod set the time across the turn. They carry no data; `now()`
 reads the clock.
 
-Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
-client, while it hosts a game.
+Where each call works is in
+[What may be called where](concepts/threads.md#what-may-be-called-where).

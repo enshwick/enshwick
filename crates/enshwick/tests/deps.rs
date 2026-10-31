@@ -39,13 +39,134 @@ mod tests {
     use super::{Lit, Price, Rang, deps};
 
     #[test]
-    fn a_required_dependency_names_its_content_in_a_constant() {
-        const LOCKER: Id = deps::lockers::id("locker");
+    fn a_required_dependency_names_its_content_outside_the_game() {
+        let locker = deps::lockers::id("locker").unwrap();
         assert_eq!(deps::lockers::ID, "you.lockers");
-        assert_eq!(LOCKER, Id::new("you.lockers:locker"));
-        assert_eq!(LOCKER.guid(), Guid::named("you.lockers:locker"));
-        assert_eq!(LOCKER.namespace(), "you.lockers");
-        assert_eq!(LOCKER.part("name").to_string(), "you.lockers:locker.name");
+        assert_eq!(locker, Id::new("you.lockers:locker"));
+        assert_eq!(locker.guid(), Guid::named("you.lockers:locker"));
+        assert_eq!(locker.namespace(), "you.lockers");
+        assert_eq!(locker.part("name").to_string(), "you.lockers:locker.name");
+    }
+
+    #[test]
+    #[should_panic(expected = "a content id is <mod>:<name>")]
+    fn a_required_dependency_refuses_a_malformed_name() {
+        drop(deps::lockers::id("Locker"));
+    }
+
+    /// What a mod's init got for the names it asked `lockers` and
+    /// `lanterns` for, and the fake's warnings.
+    struct Named {
+        status: Status,
+        required: Vec<Result<Id, String>>,
+        optional: Vec<Option<Id>>,
+        warnings: Vec<String>,
+    }
+
+    /// Starts a mod whose init names `names` of `lockers` and `lanterns`,
+    /// beside a running `lanterns`, where `lockers` exports `locker` and
+    /// `lanterns` exports `lantern`.
+    fn named(names: &'static [&'static str]) -> Named {
+        use std::sync::Mutex;
+
+        static REQUIRED: Mutex<Vec<Result<Id, String>>> = Mutex::new(Vec::new());
+        static OPTIONAL: Mutex<Vec<Option<Id>>> = Mutex::new(Vec::new());
+        static NAMES: Mutex<&[&str]> = Mutex::new(&[]);
+
+        struct Namer;
+
+        impl Mod for Namer {
+            fn init(_load: &mut Load<'_>) -> Result<Self, Off> {
+                for &name in *NAMES.lock().unwrap() {
+                    let required = deps::lockers::id(name).map_err(|off| off.to_string());
+                    REQUIRED.lock().unwrap().push(required);
+                    OPTIONAL.lock().unwrap().push(deps::lanterns::id(name));
+                }
+                Ok(Self)
+            }
+        }
+
+        enshwick::test::declare_mod!(
+            Namer,
+            r#"
+            id = "you.hello"
+            side = "server"
+            "#
+        );
+
+        *NAMES.lock().unwrap() = names;
+        let loader = enshwick::test::FakeHost::new()
+            .loaded(ModInfo {
+                id: Str::new("you.lanterns"),
+                ..ModInfo::EMPTY
+            })
+            .exports("you.lockers", &["locker"])
+            .exports("you.lanterns", &["lantern"])
+            .install();
+        // SAFETY: both functions are the exports of this function's `declare_mod!(Namer)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let warnings = loader
+            .logs()
+            .into_iter()
+            .filter(|(level, _)| *level == enshwick::abi::Level::WARN)
+            .map(|(_, line)| line)
+            .collect();
+        Named {
+            status,
+            required: std::mem::take(&mut *REQUIRED.lock().unwrap()),
+            optional: std::mem::take(&mut *OPTIONAL.lock().unwrap()),
+            warnings,
+        }
+    }
+
+    #[test]
+    fn a_dependency_s_content_passes_where_it_exports_the_name_or_the_name_it_is_part_of() {
+        let Named {
+            status,
+            required,
+            optional,
+            warnings,
+        } = named(&["locker", "locker.recipe", "lantern.icon"]);
+        assert_eq!(status, Status::OK);
+        assert_eq!(
+            required[..2],
+            [
+                Ok(Id::new("you.lockers:locker")),
+                Ok(Id::new("you.lockers:locker.recipe"))
+            ]
+        );
+        assert_eq!(
+            optional,
+            [None, None, Some(Id::new("you.lanterns:lantern.icon"))]
+        );
+        assert_eq!(
+            warnings,
+            [
+                "content id you.lanterns:locker: you.lanterns does not export locker; it exports lantern",
+                "content id you.lanterns:locker.recipe: you.lanterns does not export locker.recipe; it exports lantern",
+                "content id you.lockers:lantern.icon: you.lockers does not export lantern.icon; it exports locker",
+            ]
+        );
+        assert!(required[2].is_err());
+    }
+
+    #[test]
+    fn a_required_dependency_s_content_it_does_not_export_is_off() {
+        let Named {
+            required,
+            optional,
+            warnings,
+            ..
+        } = named(&["key"]);
+        let refused = required[0].as_ref().unwrap_err();
+        assert!(refused.contains("content id you.lockers:key"), "{refused}");
+        assert_eq!(optional, [None]);
+        assert!(
+            warnings.contains(
+                &"content id you.lockers:key: you.lockers does not export key; it exports locker"
+                    .to_owned()
+            )
+        );
     }
 
     #[test]

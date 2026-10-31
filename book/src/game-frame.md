@@ -1,10 +1,14 @@
 # Code in the game's frame
 
 Hooks, mid-function handlers and hooked ECS systems run inside the game's own
-call stack, on its threads: the game thread, the server's game thread, and the
-worker threads that run ECS systems (see [Threads](concepts/threads.md)). They
-run often, many times per frame, and the frame waits for them. These rules keep
-such code fast and keep the game alive.
+call stack, on its threads. These rules keep such code fast and keep the game
+alive.
+
+## Where such code runs
+
+It runs on the game thread, the server's game thread, and the worker threads
+that run ECS systems (see [Threads](concepts/threads.md)). It runs often, many
+times per frame, and the frame waits for it.
 
 ## The common path does no heavy work
 
@@ -86,7 +90,7 @@ use enshwick::raw::{read_at, write_at};
 let mut bytes = [1u8, 0, 0, 0, 2, 0];
 // SAFETY: a `u16` lies at offset 4.
 assert_eq!(unsafe { read_at::<u16>(bytes.as_ptr(), 4) }, 2);
-// SAFETY: as above.
+// SAFETY: a `u16` lies at offset 4.
 unsafe { write_at(bytes.as_mut_ptr(), 4, 7_u16) };
 assert_eq!(bytes[4], 7);
 ```
@@ -106,7 +110,5 @@ assert_eq!(bytes[4], 7);
 
 ## Panics
 
-A panic in a hook, a mid-function handler or an event handler is caught at the
-boundary: the mod is turned off and the game goes on vanilla (see
-[Hooks](hooks.md#panics)). That is a safety net, not error handling. Never
-panic on purpose in the game's frame; on bad data, forward to vanilla.
+Never panic on purpose in the game's frame; on bad data, forward to vanilla.
+A caught panic turns the whole mod off (see [Hooks](hooks.md#panics)).

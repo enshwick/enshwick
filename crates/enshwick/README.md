@@ -30,7 +30,7 @@ join = true
 
 ```rust
 /// Hello's settings.
-#[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
+#[enshwick::config]
 struct Settings {
     /// Altars added at every Flame level.
     extra_altars: u8,

@@ -278,7 +278,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1424 align 8
+HostApi size 1432 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -456,6 +456,7 @@ HostApi size 1424 align 8
     map_frame at 1400 size 8 type extern "system" fn(ModHandle, *mut MapFrameInfo) -> Status
     request_base_limits at 1408 size 8 type extern "system" fn(ModHandle, u32, u32) -> Status
     map_marker_types at 1416 size 8 type extern "system" fn(ModHandle, *mut MapMarkerTypeInfo, u32, u32, *mut u32) -> Status
+    use_content at 1424 size 8 type extern "system" fn(ModHandle, Str) -> Status
 Interaction size 56 align 8
     header at 0 size 8 type Header
     kind at 8 size 4 type u32

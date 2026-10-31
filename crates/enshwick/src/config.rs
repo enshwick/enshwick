@@ -1,6 +1,6 @@
 //! Typed mod settings, in `mod-configs/<id>.toml` beside the game.
 //!
-//! `#[derive(Config)]` writes the file from the type and describes every
+//! [`#[enshwick::config]`](macro@crate::config) writes the file from the type and describes every
 //! field in a [`Schema`]: when it takes effect ([`Stage`]), the values it
 //! accepts, its documentation and the text key a translation of it uses. The
 //! loader reads the schema to answer `enshwick config` on the console and to check values before it
@@ -23,8 +23,8 @@ pub use values::{__Values, __check_field, __entry};
 /// A mod's settings type: parsed from its file, which is written from the
 /// type on first start.
 ///
-/// Derive it with `#[derive(Config)]` together with serde's `Deserialize` and
-/// `Serialize` and `Default`; doc comments become the file's comments. Field
+/// Declare the struct with [`#[enshwick::config]`](macro@crate::config) and
+/// derive `Default`; doc comments become the file's comments. Field
 /// attributes:
 ///
 /// - a stage, one of `#[config(startup)]` (applied when a world loads),
@@ -52,16 +52,29 @@ pub use values::{__Values, __check_field, __entry};
 ///   `<field>.<key>`, and the Mods screen shows them together. A group's
 ///   fields take their own stages, ranges and texts.
 ///
-/// `#[config(validate = path)]` on the struct adds a check of its own, and
-/// `#[config(text = "key")]` names the text key of the whole set, `config`
-/// by default.
+/// `#[enshwick::config(validate = path)]` adds a check of its own, and
+/// `#[enshwick::config(text = "key")]` names the text key of the whole set,
+/// `config` by default.
+///
+/// An unknown key in the file is always refused with its name. The derive
+/// alone, without `#[serde(deny_unknown_fields)]`, fails the build:
+///
+/// ```compile_fail
+/// /// Settings.
+/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// struct Settings {
+///     /// A misspelt key would pass unread.
+///     limit: u32,
+/// }
+/// ```
 ///
 /// A field takes one stage, or `startup, sync`; any other two fail the
 /// build:
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// Both at once.
 ///     #[config(client, sync)]
@@ -74,7 +87,8 @@ pub use values::{__Values, __check_field, __entry};
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// A password every client would see.
 ///     #[config(sync, secret)]
@@ -86,7 +100,8 @@ pub use values::{__Values, __check_field, __entry};
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// Live and from the server at once.
 ///     #[config(runtime, sync)]
@@ -98,7 +113,8 @@ pub use values::{__Values, __check_field, __entry};
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// A password every client would see.
 ///     #[config(startup, sync, secret)]
@@ -111,7 +127,8 @@ pub use values::{__Values, __check_field, __entry};
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// Renamed.
 ///     #[serde(rename = "max-count")]
@@ -125,7 +142,8 @@ pub use values::{__Values, __check_field, __entry};
 /// use enshwick::config::Config;
 ///
 /// /// Altar settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// Altars allowed at each Flame level.
 ///     altars: Vec<u8>,
@@ -154,7 +172,8 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// use enshwick::config::{Config, Stage};
     ///
     /// /// Locker settings.
-    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    /// #[enshwick::config]
+    /// #[derive(Default)]
     /// struct Settings {
     ///     /// How many lockers one player may own.
     ///     #[config(startup, range = 1..=16)]
@@ -182,7 +201,8 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// use enshwick::config::{Config, Stage};
     ///
     /// /// Locker settings.
-    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    /// #[enshwick::config]
+    /// #[derive(Default)]
     /// struct Settings {
     ///     /// How many lockers one player may own.
     ///     #[config(startup)]
@@ -214,7 +234,8 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// use enshwick::config::{Config, Stage};
     ///
     /// /// Locker settings.
-    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    /// #[enshwick::config]
+    /// #[derive(Default)]
     /// struct Settings {
     ///     /// How many lockers one player may own.
     ///     #[config(startup)]
@@ -248,8 +269,8 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// use enshwick::config::Config;
     ///
     /// /// Comfort settings.
-    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
-    /// #[config(validate = Settings::check)]
+    /// #[enshwick::config(validate = Settings::check)]
+    /// #[derive(Default)]
     /// struct Settings {
     ///     /// Comfort per piece of furniture, times this factor.
     ///     multiplier: f32,
@@ -283,7 +304,8 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// use enshwick::config::Config;
     ///
     /// /// Altar settings.
-    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    /// #[enshwick::config]
+    /// #[derive(Default)]
     /// struct Settings {
     ///     /// Altars allowed at each Flame level.
     ///     #[config(sync)]
@@ -314,7 +336,8 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// use enshwick::config::Config;
     ///
     /// /// Altar settings.
-    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    /// #[enshwick::config]
+    /// #[derive(Default)]
     /// struct Settings {
     ///     /// Altars allowed at each Flame level.
     ///     #[config(sync)]
@@ -566,8 +589,8 @@ mod tests {
     }
 
     /// Test settings.
-    #[derive(Debug, Default, PartialEq, serde::Deserialize, serde::Serialize, crate::Config)]
-    #[serde(default)]
+    #[crate::config(default)]
+    #[derive(Debug, Default, PartialEq)]
     struct Settings {
         /// A join value.
         #[config(sync)]
@@ -625,7 +648,8 @@ mod tests {
     }
 
     /// Staged settings.
-    #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize, crate::Config)]
+    #[crate::config]
+    #[derive(Debug, PartialEq)]
     #[config(text = "lockers.config")]
     struct Staged {
         /// How many, read when the world loads.
@@ -654,7 +678,8 @@ mod tests {
     }
 
     /// World rules a joined client takes from the server.
-    #[derive(Debug, Default, PartialEq, serde::Deserialize, serde::Serialize, crate::Config)]
+    #[crate::config]
+    #[derive(Debug, Default, PartialEq)]
     struct Rules {
         /// The rule of the world.
         #[config(startup, sync)]
@@ -784,7 +809,8 @@ workers = 2"
     #[test]
     fn an_f32_at_its_decimal_bound_passes_and_reads_as_written() {
         /// Ratio.
-        #[derive(Debug, serde::Deserialize, serde::Serialize, crate::Config)]
+        #[crate::config]
+        #[derive(Debug)]
         struct Ratio {
             /// Share.
             #[config(range = 0.0..=0.1, choices = [0.05, 0.1, 1.0])]
@@ -810,7 +836,8 @@ workers = 2"
     #[test]
     fn a_field_toml_cannot_hold_still_leaves_the_others_checked() {
         /// Mixed.
-        #[derive(Default, serde::Deserialize, serde::Serialize, crate::Config)]
+        #[crate::config]
+        #[derive(Default)]
         struct Mixed {
             /// Keyed by number, which TOML cannot write.
             names: std::collections::HashMap<u32, String>,
@@ -841,9 +868,8 @@ workers = 2"
     fn the_template_parses_back_whatever_the_names_and_docs() {
         /** Block doc,
         over two lines. */
-        #[derive(
-            Debug, Default, PartialEq, serde::Deserialize, serde::Serialize, crate::Config,
-        )]
+        #[crate::config]
+        #[derive(Debug, Default, PartialEq)]
         struct Odd {
             /** A raw name,
             documented in a block. */
@@ -863,7 +889,8 @@ workers = 2"
     #[test]
     fn types_without_join_values_write_none() {
         /// Plain.
-        #[derive(Default, serde::Deserialize, serde::Serialize, crate::Config)]
+        #[crate::config]
+        #[derive(Default)]
         struct Plain {
             /// A value.
             value: u8,
@@ -877,7 +904,8 @@ workers = 2"
     #[test]
     fn a_held_change_names_its_keys_and_never_a_secret_value() {
         /// Login.
-        #[derive(Default, serde::Deserialize, serde::Serialize, crate::Config)]
+        #[crate::config]
+        #[derive(Default)]
         struct Login {
             /// The server's password.
             #[config(startup, secret)]
@@ -908,7 +936,8 @@ workers = 2"
         #[expect(non_upper_case_globals, reason = "the names the derive binds")]
         const defaults: u8 = 0;
         /// Names.
-        #[derive(Default, serde::Deserialize, serde::Serialize, crate::Config)]
+        #[crate::config]
+        #[derive(Default)]
         struct Names {
             /// A field named as a generated local.
             #[config(startup)]

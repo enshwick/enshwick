@@ -1,13 +1,19 @@
 # Luau mods
 
+A Luau mod is a [data pack](content/packs.md) with scripts: a folder in
+`mods/` with a `pack.toml`, a `main.luau`, and any other `.luau` files it
+loads, up to four folders deep.
+
+## What a Luau mod can do
+
 Luau support is in progress. Today a Luau mod hears events, works with
 players, chat, timers, inventories and its settings, and talks to other mods.
 It cannot set game rules yet, such as rates or limits. A
 [Rust mod](getting-started.md) can.
 
-A Luau mod is a [data pack](content/packs.md) with scripts: a folder in
-`mods/` with a `pack.toml`, a `main.luau`, and any other `.luau` files it
-loads, up to four folders deep. The loader runs it as it runs any pack: it is in the mod list and the
+## How the loader runs it
+
+The loader runs it as it runs any pack: it is in the mod list and the
 lock, counts in [the join check](concepts/join-check.md) with the hash of
 every script, has its log `logs/enshwick/mods/<id>.log`, and is turned off
 alone when it goes wrong. It may hold data files too, such as `items.toml`.

@@ -44,6 +44,15 @@ pub fn may_declare_rate(rate: RateId, joins: bool) -> bool {
     joins || !Rate::from_id(rate).is_some_and(Rate::seen_by_clients)
 }
 
+/// Whether a mod's `exports` let other mods name its content `name`, the
+/// local part of a content id: `name` itself or the name it is a part of
+/// (`locker` for `locker.recipe`) is exported.
+#[must_use]
+pub fn exports_content<S: AsRef<str>>(exports: &[S], name: &str) -> bool {
+    let exported = |local: &str| exports.iter().any(|e| e.as_ref() == local);
+    exported(name) || name.match_indices('.').any(|(at, _)| exported(&name[..at]))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,6 +110,20 @@ mod tests {
             .find(|rate| !rate.seen_by_clients())
             .map(Rate::id);
         assert!(own.is_some_and(|own| may_declare_rate(own, false)));
+    }
+
+    #[test]
+    fn an_exported_name_exports_its_parts_too() {
+        let exports = ["locker", "bench.recipe"];
+        assert!(exports_content(&exports, "locker"));
+        assert!(exports_content(&exports, "locker.recipe"));
+        assert!(exports_content(&exports, "locker.icon.png"));
+        assert!(exports_content(&exports, "bench.recipe"));
+        assert!(!exports_content(&exports, "bench"));
+        assert!(!exports_content(&exports, "bench.name"));
+        assert!(!exports_content(&exports, "lockers"));
+        assert!(!exports_content(&exports, "locker-key"));
+        assert!(!exports_content::<&str>(&[], "locker"));
     }
 
     fn seen_by_clients(rate: RateId) -> bool {

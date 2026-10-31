@@ -43,8 +43,7 @@ mod tests {
     #[test]
     fn accounts_are_banned_online_or_not_and_administrators_never() {
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
+            .world()
             .player(player(10, 7, 0))
             .player(player(11, 8, PlayerInfo::CAN_KICK_BAN))
             .install();
@@ -88,10 +87,7 @@ mod tests {
 
     #[test]
     fn the_allowlist_lists_each_account_once_from_any_thread() {
-        let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
-            .install();
+        let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
@@ -140,8 +136,7 @@ mod tests {
     fn the_allowlist_is_missing_outside_a_dedicated_server() {
         let loader = enshwick::test::FakeHost::new()
             .side(enshwick::abi::Side::CLIENT)
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
+            .world()
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
@@ -162,8 +157,7 @@ mod tests {
     #[test]
     fn the_host_is_never_kicked_or_banned_and_a_second_ban_is_no_error() {
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
+            .world()
             .host_key(enshwick::PlayerKey::new(7))
             .player(player(10, 7, 0))
             .install();
@@ -198,10 +192,7 @@ mod tests {
 
     #[test]
     fn account_actions_wait_for_the_game_thread() {
-        let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
-            .install();
+        let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);

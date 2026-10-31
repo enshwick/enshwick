@@ -487,6 +487,17 @@ pub fn rebuild(key: ResourceKey) -> Result<(), Off> {
     crate::load::ok(status, (), || "rebuild resource".to_owned())
 }
 
+/// `id`, another mod's content id, once the loader lets this mod name it:
+/// its own, or one its mod exports. Outside the game every id passes.
+pub(crate) fn named(id: Id) -> Result<Id, Off> {
+    let Some(host) = crate::host() else {
+        return Ok(id);
+    };
+    let name = id.to_string();
+    let status = (host.api().use_content)(host.handle(), Str::new(&name));
+    crate::load::ok(status, id, || format!("content id {id}"))
+}
+
 impl Load<'_> {
     /// Declares the mod's content id `id` and returns its GUID. The content
     /// calls declare what they create themselves; call it for content the

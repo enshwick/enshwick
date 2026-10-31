@@ -202,6 +202,24 @@ pub(crate) extern "system" fn declare_content(
     })
 }
 
+pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
+    let id = text(id);
+    if crate::content::Guid::try_named(&id).is_none() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        let refused = s
+            .manifest
+            .as_ref()
+            .is_some_and(|manifest| manifest.unexported_content(&id, &s.host.exports));
+        if !refused {
+            return Status::OK;
+        }
+        crate::test::table::warn_unexported(s, "content id", &id);
+        Status::REFUSED
+    })
+}
+
 pub(crate) extern "system" fn subscribe(
     _me: ModHandle,
     event: Event,

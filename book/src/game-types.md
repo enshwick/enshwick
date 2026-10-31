@@ -2,7 +2,11 @@
 
 For a struct the API does not wrap, such as a component a
 [hooked system](ecs.md) hands you, `cargo enshwick types` writes the game's own
-types as Rust or Luau from the game's reflection data. The names are the game's:
+types as Rust or Luau from the game's reflection data.
+
+## The game's names
+
+The names are the game's:
 `keen::ecs::Health` becomes `game::keen::ecs::Health`, a field `dataStorage`
 becomes `data_storage`, and an enum constant `MagicalFog` becomes `MAGICAL_FOG`.
 

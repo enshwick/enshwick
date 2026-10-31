@@ -2,7 +2,11 @@
 
 You set up the tools, create a mod, put it into the game and find its log.
 The first mod uses the API's high-level calls. Raw hooks come last, for what
-the API has no call for. For a mod without Rust, start at
+the API has no call for.
+
+## Mods without Rust
+
+For a mod without Rust, start at
 [Luau mods](luau.md) or [A mod without Rust](content/a-mod-without-rust.md).
 
 ## Performance
@@ -151,8 +155,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use enshwick::{Load, Mod, Off};
 
 /// Flame Altar settings.
-#[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(deny_unknown_fields)]
+#[enshwick::config]
 struct Settings {
     /// Altars allowed at every Flame level, 1 to 16.
     altars: u8,
@@ -252,9 +255,7 @@ impl Mod for AltarCount {
 enshwick::declare_mod!(AltarCount);
 ```
 
-- `detour!` declares a hook: a static `MAX_ALTARS` and an entry point that
-  catches panics. The body gets `next`, the rest of the chain, and the
-  function's arguments. See [Hooks](hooks.md).
+- `detour!` declares the hook `MAX_ALTARS`; [Hooks](hooks.md) explains it.
 - `load.symbol` finds the function by its symbolic id on the running build.
   [Finding the game](finding-the-game.md) shows how ids are found and pinned.
 - A hook chains with other mods' hooks on the same function, as
@@ -264,18 +265,9 @@ enshwick::declare_mod!(AltarCount);
 
 ## Where the logs are
 
-The loader writes to `logs/enshwick/` in the game's folder, starting each
-file afresh at every start:
-
-- `all.log`: every line of the loader and every mod;
-- `loader.log`: the loader's lines, such as which mods loaded, were skipped or
-  turned off, and why;
-- `mods/<id>.log`: one mod's lines;
-- `status.log` and `crash.log`: see
-  [Logging and diagnostics](logging.md).
-
-A mod writes there with `enshwick::info!` and the other log macros.
-`mod-configs/enshwick.toml` sets how much is kept.
+The loader writes to `logs/enshwick/` in the game's folder: `loader.log` says
+which mods loaded, were skipped or turned off, and why, and `mods/<id>.log`
+holds your mod's lines. [Log files](logging.md#log-files) has the rest.
 
 ## What to read next
 

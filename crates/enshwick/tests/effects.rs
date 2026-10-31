@@ -7,7 +7,10 @@ mod tests {
     use enshwick::Entity;
     use enshwick::WorldError;
     use enshwick::abi::{Status, TeleportRequest};
+    use enshwick::content::EngineFacts;
     use enshwick::effects::{Effects, NpcCommandType, Spawn, Teleport};
+    use enshwick::test::FakeHost;
+    use enshwick::test::facts::{self, Fact};
     use enshwick::{Load, Mod, Off};
 
     static EFFECTS: OnceLock<Effects> = OnceLock::new();
@@ -38,10 +41,15 @@ mod tests {
         let npc = "npc_command_event";
         let threat = "add_threat_target_event";
         let ping = "ui_ping_event";
-        let loader = enshwick::test::FakeHost::new()
-            .constant("world_transform.position", 0)
-            .constant("world_transform.orientation", 24)
-            .constant("world_transform.scale", 40)
+        let world = FakeHost::new().world();
+        let at = |fact: Fact| world.offset(fact.id()).unwrap();
+        let (position, orientation, scale) = (
+            at(facts::WORLD_TRANSFORM_POSITION),
+            at(facts::WORLD_TRANSFORM_ORIENTATION),
+            at(facts::WORLD_TRANSFORM_SCALE),
+        );
+        let loader = FakeHost::new()
+            .world()
             .type_hash(npc, 1)
             .type_size(npc, 72)
             .constant("npc_command_event.type", 8)
@@ -78,14 +86,17 @@ mod tests {
         let (ty, order) = &emits[0];
         assert_eq!((*ty, order.len(), order[8]), (1, 72, 1));
         assert_eq!(u32::from_le_bytes(word(order, 12)), 42);
-        assert_eq!(i64::from_le_bytes(word(order, 16)), 1 << 32);
-        assert_eq!(i64::from_le_bytes(word(order, 32)), -3 << 32);
+        assert_eq!(i64::from_le_bytes(word(order, 16 + position)), 1 << 32);
         assert_eq!(
-            word::<4>(order, 16 + 36),
+            i64::from_le_bytes(word(order, 16 + position + 16)),
+            -3 << 32
+        );
+        assert_eq!(
+            word::<4>(order, 16 + orientation + 12),
             1.0f32.to_le_bytes(),
             "w of the quaternion"
         );
-        assert_eq!(word::<4>(order, 16 + 40), 1.0f32.to_le_bytes(), "scale");
+        assert_eq!(word::<4>(order, 16 + scale), 1.0f32.to_le_bytes(), "scale");
         let (_, aggro) = &emits[1];
         assert_eq!(u32::from_le_bytes(word(aggro, 8)), 5);
         assert_eq!(u32::from_le_bytes(word(aggro, 12)), 6);

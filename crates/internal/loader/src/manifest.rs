@@ -268,10 +268,11 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     })
 }
 
-/// Why the mod `asker` may not use the `kind` (call, point, service or
-/// event) `name`, `<owner>:<what>`, whose owner's manifest exports
-/// `exports`; `None` when it may: a name of its own, or one the owner
-/// exports.
+/// Why the mod `asker` may not use the `kind` `name`, `<owner>:<what>`,
+/// whose owner's manifest exports `exports`.
+///
+/// A kind is a call, point, service or event. `None` when it may: a name of
+/// its own, or one the owner exports.
 #[must_use]
 pub fn unexported(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Option<String> {
     let (owner, what) = name.split_once(':')?;
@@ -286,6 +287,20 @@ pub fn unexported(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Opti
     Some(format!(
         "{kind} {name}: {owner} does not export {what}; {offered}"
     ))
+}
+
+/// Why the mod `asker` may not name the content id `name`, `<owner>:<what>`,
+/// as a `kind`: a `content id` or a `stat`.
+///
+/// `exports` are the owner's; `None` when it may: an id of its own, or one
+/// whose `what`, or the name `what` is a part of, the owner exports.
+#[must_use]
+pub fn unexported_content(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Option<String> {
+    let (_, what) = name.split_once(':')?;
+    if enshwick::__private::rules::exports_content(exports, what) {
+        return None;
+    }
+    unexported(kind, name, asker, exports)
 }
 
 /// What a manifest tells players about its mod.
@@ -658,6 +673,39 @@ mod tests {
         );
         let none = unexported("service", "you.trading-post:prices", asker, &[]).unwrap();
         assert!(none.ends_with("it exports nothing"), "{none}");
+    }
+
+    #[test]
+    fn another_mod_names_only_the_content_the_owner_exports_and_its_parts() {
+        let exports = ["locker", "charm"];
+        let asker = "you.market-stalls";
+        for exported in ["you.lockers:locker", "you.lockers:locker.recipe"] {
+            assert_eq!(
+                unexported_content("content id", exported, asker, &exports),
+                None
+            );
+        }
+        assert_eq!(
+            unexported_content("stat", "you.lockers:charm.fire", asker, &exports),
+            None
+        );
+        assert_eq!(
+            unexported_content("content id", "you.market-stalls:stall", asker, &[]),
+            None
+        );
+        assert_eq!(
+            unexported_content("content id", "you.lockers:key", asker, &exports).as_deref(),
+            Some(
+                "content id you.lockers:key: you.lockers does not export key; \
+                 it exports locker, charm"
+            )
+        );
+        assert_eq!(
+            unexported_content("stat", "you.lockers:luck", asker, &exports).as_deref(),
+            Some(
+                "stat you.lockers:luck: you.lockers does not export luck; it exports locker, charm"
+            )
+        );
     }
 
     #[test]

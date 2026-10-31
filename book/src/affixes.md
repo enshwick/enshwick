@@ -1,22 +1,26 @@
 # Affixes
 
 An affix is a named bundle of [stat](stats.md) modifiers whose values roll
-within ranges, such as "Sturdy" giving 10 to 30 extra health. Single items
-roll affixes as they drop from random loot, come out of crafting, or when a
-mod asks; what an item rolled stays with it, and the entity that wears it
-gets the modifiers. The
+within ranges, such as "Sturdy" giving 10 to 30 extra health. The
 [`affixes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/affixes.rs)
 module holds the API.
 
+## Affixes on items
+
+Single items roll affixes as they drop from random loot, come out of
+crafting, or when a mod asks; what an item rolled stays with it, and the
+entity that wears it gets the modifiers.
+
 Unstable: rolling affixes onto items needs the `unstable` feature and may
 change in any release ([Stability](stability.md)). What an item rolled is
-kept as [item data](item-data.md), so after a restart a roll on an item no
+kept as [item data](item-and-entity-data.md), so after a restart a roll on an item no
 load finds, such as one in a player's inventory, stays aside. Defining
 affixes and reading what an item rolled are stable.
 
 ```rust
 use enshwick::affixes::{AffixCraft, AffixDef, AffixLoot, Range, ItemRarity, RollRules};
 use enshwick::content::categories::ItemCategoryMask;
+use enshwick::content::id;
 use enshwick::loot::Source;
 use enshwick::stats::{Op, builtin};
 
@@ -24,13 +28,13 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let health = load.open_stat(builtin::HEALTH_MAX)?;
     let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
     load.define_affix(
-        "sturdy",
-        &AffixDef::new("affix.sturdy", ItemCategoryMask::EQUIPMENT)
+        id!("sturdy"),
+        &AffixDef::new(ItemCategoryMask::EQUIPMENT)
             .with(Range::new(health, Op::Add, 10.0, 30.0).step(1.0)),
     )?;
     load.define_affix(
-        "fireproof",
-        &AffixDef::new("affix.fireproof", ItemCategoryMask::EQUIPMENT)
+        id!("fireproof"),
+        &AffixDef::new(ItemCategoryMask::EQUIPMENT)
             .with(Range::new(fire, Op::Add, 0.05, 0.2).step(0.01))
             .rarity(ItemRarity::Rare)
             .weight(20)
@@ -45,12 +49,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## Defining affixes
 
-`load.define_affix(name, &def)` defines `<mod>:<name>` during `init`, on both
-sides, so clients can name what items rolled. An `AffixDef` holds:
+`load.define_affix(id!("sturdy"), &def)` defines `<mod>:sturdy` during
+`init`, on both sides, so clients can name what items rolled. Its text is
+`sturdy.name` in the mod's [texts](content/texts.md), the same text a stat
+kind or an item of the mod named `sturdy` reads, so give them different
+names. An `AffixDef` holds:
 
 | Field | Means |
 | --- | --- |
-| `text` | the text key that names the affix, in the mod's [texts](content/texts.md) |
 | `ranges` | each modifier's stat, operation and range; `Range::step` rolls in steps |
 | `weight` | how likely it rolls against the others, 100 by default |
 | `rarity` | `Common` to `Legendary`; a roll may cap it |
@@ -85,7 +91,7 @@ which the server has once a player has been online.
 ## What an item rolled
 
 The roll is part of the item's `ItemStats` (`affixes` and `rolled`), kept as
-[item data](item-data.md) and sent to clients that run Enshwick.
+[item data](item-and-entity-data.md) and sent to clients that run Enshwick.
 `affixes.lines(item)` lists what an item gives, a `Line` per modifier: its
 own first, then each affix's, with the stat's index for `stats.info` and the
 affix's index for `affixes.info`, which names its text key and rarity. That

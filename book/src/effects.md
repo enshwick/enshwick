@@ -126,6 +126,5 @@ Items lying in the world are entities too, but a dropped stack carries the
 item and its count in components the spawn does not fill; to hand a player
 items, use [inventory transactions](inventories.md).
 
-Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
-client, while it hosts a game.
+Where each call works is in
+[What may be called where](concepts/threads.md#what-may-be-called-where).

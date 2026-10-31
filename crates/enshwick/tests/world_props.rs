@@ -50,8 +50,7 @@ mod tests {
     /// The fake started from `host`, with the items and the old chest.
     fn started_from(host: enshwick::test::FakeHost) -> (enshwick::test::Installed, World) {
         let loader = host
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
+            .world()
             .item(CHEST, 1, 0)
             .item_places(CHEST, [0x3a; 16])
             .item(PEBBLE, 99, 0)

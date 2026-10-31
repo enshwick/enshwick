@@ -24,7 +24,8 @@
 //! use enshwick::{Load, Mod, Next, Off, events, hook};
 //!
 //! /// The bonus settings.
-//! #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+//! #[enshwick::config]
+//! #[derive(Default)]
 //! struct Settings {
 //!     /// What each reward gains.
 //!     bonus: u32,
@@ -76,12 +77,14 @@
 mod calls;
 mod content;
 mod events;
+pub mod facts;
 mod gameplay;
 mod hooks;
 mod inventory;
 mod pacing;
 mod players;
 mod points;
+mod presets;
 mod props;
 mod rates;
 mod settings;

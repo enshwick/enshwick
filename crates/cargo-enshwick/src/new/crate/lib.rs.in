@@ -4,15 +4,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::{Load, Mod, Off};
 
-/// The mod's texts, a table per language; the settings' labels among them.
-const TEXTS: &str = include_str!("texts.toml");
+// The keys of `src/texts.toml`, a table per language; the settings' labels
+// among them.
+enshwick::texts!();
 
 /// Whether the mod does its work now; a settings change updates it.
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// The settings, in `mod-configs/{id}.toml`.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(deny_unknown_fields)]
+#[enshwick::config]
+#[derive(Debug)]
 struct Settings {
     /// Whether the mod does its work.
     // `startup` (applied when a world loads), `runtime` (applied by
@@ -35,7 +36,7 @@ pub struct {type};
 
 impl Mod for {type} {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.texts(TEXTS)?;
+        load.texts()?;
         let settings: Settings = load.config()?;
         ENABLED.store(settings.enabled, Ordering::Relaxed);
         load.on_config_change(|settings: Settings| {
@@ -50,20 +51,15 @@ enshwick::declare_mod!({type});
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use enshwick::abi::Status;
+    use enshwick::i18n::Texts;
 
     use super::*;
 
     #[test]
     fn every_text_exists_in_all_languages() {
-        let languages: BTreeMap<String, BTreeMap<String, String>> = toml::from_str(TEXTS).unwrap();
-        for (language, entries) in &languages {
-            for key in languages.values().flat_map(BTreeMap::keys) {
-                assert!(entries.contains_key(key), "{key} has no {language}");
-            }
-        }
+        let texts = Texts::parse(texts::TOML).unwrap();
+        assert_eq!(texts.untranslated(), []);
     }
 
     #[test]

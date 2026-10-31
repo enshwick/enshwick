@@ -2,8 +2,12 @@
 
 Some mods only work when the server and every player run them in the same
 version: content, or a limit the client's interface also checks. Such a mod
-sets `join: true` in its manifest. Leave it off for mods that change only
-what one side sees or decides, such as a server-only balance change.
+sets `join: true` in its manifest.
+
+## When to leave it off
+
+Leave `join` off for mods that change only what one side sees or decides,
+such as a server-only balance change.
 
 ## What the server advertises
 
@@ -116,9 +120,6 @@ with the server's value over its own file, which stays as it is. See
 
 ## Mods the player lacks
 
-When the check keeps a player out, the loader raises
-[`events::JoinRefused`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs)
-on the client after the player closes the dialog, and
-[`mods::join_missing()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
-lists the missing mods with the server's versions and homepages; see
-[Releasing mods](../releasing.md).
+A mod hears of a refused join through `JoinRefused` and reads the mods the
+player lacks with `mods::join_missing()`; see
+[A server's pages and the join check](../releasing.md#a-servers-pages-and-the-join-check).

@@ -55,7 +55,7 @@ use entries::mods::{
 use entries::net::{net_channel, net_ready, net_send};
 use entries::services::{
     attach_point, declare_content, define_event, define_point, publish, run_point, send_event,
-    service, set_tick_every, subscribe, subscribe_event, subscribe_tick,
+    service, set_tick_every, subscribe, subscribe_event, subscribe_tick, use_content,
 };
 use entries::transactions::{
     transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
@@ -152,11 +152,8 @@ impl ModRecord {
     /// The name players read, from the mod's texts in their language, else
     /// from its manifest; empty when neither names it.
     pub(crate) fn name(&self) -> String {
-        let texts = self.texts.lock().ok();
-        self.meta.name_in(
-            texts.as_ref().and_then(|t| t.as_ref()),
-            crate::texts::language(),
-        )
+        self.meta
+            .name_in(self.texts.relock().as_ref(), crate::texts::language())
     }
 
     /// The name players read, or the id when nothing names the mod.
@@ -167,11 +164,8 @@ impl ModRecord {
     /// What the mod does, from its texts in the player's language, else
     /// from its manifest.
     pub(crate) fn description(&self) -> String {
-        let texts = self.texts.lock().ok();
-        self.meta.description_in(
-            texts.as_ref().and_then(|t| t.as_ref()),
-            crate::texts::language(),
-        )
+        self.meta
+            .description_in(self.texts.relock().as_ref(), crate::texts::language())
     }
 
     /// Whether it takes part in the join check while it runs.
@@ -859,6 +853,7 @@ pub(crate) static API: HostApi = HostApi {
     map_frame,
     request_base_limits,
     map_marker_types,
+    use_content,
 };
 
 /// The loader and the calling mod, when the mod is on.

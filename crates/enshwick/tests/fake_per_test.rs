@@ -8,7 +8,8 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     /// Test settings.
-    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    #[enshwick::config]
+    #[derive(Default)]
     struct Settings {
         /// A rate.
         rate: u32,

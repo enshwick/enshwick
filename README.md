@@ -49,7 +49,7 @@ loads every mod from the `mods/` folder beside it.
 
 On Linux under Proton, add `WINEDLLOVERRIDES="powrprof=n,b" %command%` to the
 game's launch options. For a server in Docker or Kubernetes, see
-[Running a server in Docker or Kubernetes](book/src/servers.md).
+[Run a server in Docker or Kubernetes](https://enshwick.com/guides/run-a-server-in-docker/).
 
 To turn a mod off, set `enabled = false` for it in `mods/enshwick/mods.toml`. To
 remove a mod, delete its DLL from `mods/`. To remove Enshwick, delete

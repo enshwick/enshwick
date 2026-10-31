@@ -53,8 +53,7 @@ mod tests {
         let mut setup = vec![0u8; 0x28];
         setup[0x8] = 1;
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
+            .world()
             .type_hash("keen::ecs::FuelSetup", FUEL_SETUP)
             .type_hash("keen::ecs::Fuel", FUEL)
             .type_size("keen::ecs::FuelSetup", 0x28)

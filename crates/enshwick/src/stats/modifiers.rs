@@ -80,7 +80,7 @@ impl Op {
 /// ```
 /// use enshwick::stats::{Op, StatDef, aggregate};
 ///
-/// let health = StatDef::additive("stat.health").range(-100.0, 1000.0);
+/// let health = StatDef::additive().range(-100.0, 1000.0);
 /// // (0 + 50 + 30) * 1.5, raised to at least 100.
 /// assert_eq!(aggregate(&health, [(Op::Add, 50.0), (Op::Multiply, 1.5), (Op::Add, 30.0), (Op::Max, 100.0)]), 120.0);
 /// // An override wins, the range still holds.

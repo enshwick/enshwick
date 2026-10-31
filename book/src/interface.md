@@ -2,7 +2,11 @@
 
 A mod's client part draws windows, rows and dialogs with the game's own
 widgets, so what it shows looks like the game: the same panels, fonts,
-settings rows, sounds and button labels in the player's language. Everything
+settings rows, sounds and button labels in the player's language.
+
+## Clients only
+
+Everything
 here is client only; on a server, `load.ui()` and `load.on_frame` return
 [`Off`](concepts/lifecycle.md) with "on clients only".
 
@@ -239,7 +243,7 @@ working.
 
 A player who joins a server reads up to three things in chat, in this order:
 the developer tools warning, the server's
-[message of the day](servers.md#greet-players), and one line that names the
+[message of the day](https://enshwick.com/guides/run-a-server-in-docker/#greet-players-when-they-join), and one line that names the
 mods, features and parts of the loader that are off. The reasons are in the
 server's log and status summary.
 

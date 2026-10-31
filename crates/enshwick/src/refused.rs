@@ -5,7 +5,8 @@
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// Slots.
 ///     #[config(range = 1..=4, range = 100..=200)]
@@ -17,7 +18,8 @@
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// Slots.
 ///     #[config(range = ..)]
@@ -29,7 +31,8 @@
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// Slots.
 ///     #[config(range = 10..=1)]
@@ -41,7 +44,8 @@
 ///
 /// ```compile_fail
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// #[config(text = "")]
 /// struct Settings {
 ///     /// Slots.
@@ -62,7 +66,8 @@
 /// }
 ///
 /// /// Settings.
-/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+/// #[enshwick::config]
+/// #[derive(Default)]
 /// struct Settings {
 ///     /// How long.
 ///     #[serde(with = "seconds")]
@@ -187,14 +192,6 @@
 /// const NAME: enshwick::content::Id = enshwick::content::id!("locker").part("Name");
 /// ```
 ///
-/// A dependency's content name in upper case:
-///
-/// ```compile_fail
-/// enshwick::deps!();
-///
-/// const LOCKER: enshwick::content::Id = deps::lockers::id("Locker");
-/// ```
-///
 /// An alias the crate's `Cargo.toml` does not name:
 ///
 /// ```compile_fail
@@ -213,14 +210,6 @@
 /// pub struct Opened {
 ///     pub locker: u32,
 /// }
-/// ```
-///
-/// An optional dependency's content id used as a required one's:
-///
-/// ```compile_fail
-/// enshwick::deps!();
-///
-/// const LANTERN: enshwick::content::Id = deps::lanterns::id("lantern");
 /// ```
 ///
 /// A point listed in `declare_mod!` that `exports` in the crate's
@@ -263,6 +252,39 @@
 /// }
 ///
 /// enshwick::declare_mod!(Hello, points: [Price]);
+/// ```
+///
+/// A key with a Ukrainian text and no English one:
+///
+/// ```compile_fail
+/// enshwick::texts!("tests/texts/no-english.toml");
+/// ```
+///
+/// A table that is no language code (`ua` for `uk`):
+///
+/// ```compile_fail
+/// enshwick::texts!("tests/texts/unknown-language.toml");
+/// ```
+///
+/// A translation that fills in `{name}` where its English text fills in
+/// `{owner}`:
+///
+/// ```compile_fail
+/// enshwick::texts!("tests/texts/other-values.toml");
+/// ```
+///
+/// A texts path for `declare_mod!`, which reads `src/texts.toml` only:
+///
+/// ```compile_fail
+/// struct Hello;
+///
+/// impl enshwick::Mod for Hello {
+///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+///         Ok(Self)
+///     }
+/// }
+///
+/// enshwick::declare_mod!(Hello, texts = "tests/texts/lockers.toml");
 /// ```
 #[expect(dead_code, reason = "the doc comment carries the cases")]
 struct Refused;

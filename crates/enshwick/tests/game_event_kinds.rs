@@ -114,8 +114,7 @@ mod tests {
             .type_hash("experience_credit", CREDIT)
             .type_hash("handle_equipment_slot_changed_event", EQUIPPED)
             .type_size("experience_credit", 8)
-            .type_hash("current_transform", 1)
-            .type_hash("used_item", 2)
+            .world()
     }
 
     #[test]

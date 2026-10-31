@@ -5,7 +5,11 @@ returns the
 [`Knowledge`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/knowledge.rs)
 of the server's world: the values the game keeps for the world and for each
 player, which recipes, quests, journal pages, skill points and much more
-read. It is `Copy`; get it during `init` and move it into handlers, tasks and
+read.
+
+## Getting it
+
+It is `Copy`; get it during `init` and move it into handlers, tasks and
 commands.
 
 ```rust
@@ -145,6 +149,5 @@ world), the id and the new value; [`QuestCompleted`](events.md) when a
 player completed a quest and got its rewards, with the character and the
 quest's id.
 
-Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
-client, while it hosts a game.
+Where each call works is in
+[What may be called where](concepts/threads.md#what-may-be-called-where).
