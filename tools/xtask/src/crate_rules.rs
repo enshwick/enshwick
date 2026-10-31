@@ -180,9 +180,19 @@ fn has_unsafe(dir: &Path) -> Result<bool, String> {
 /// Whether the Rust `text` has the `unsafe` keyword outside comments,
 /// strings and character literals.
 fn uses_unsafe(text: &str) -> bool {
+    code(text)
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .any(|word| word == "unsafe")
+}
+
+/// The Rust `text` with each comment, string and character literal turned
+/// into one space.
+fn code(text: &str) -> String {
     let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
     let mut at = 0;
     while at < bytes.len() {
+        let start = at;
         match bytes[at] {
             b'/' if bytes.get(at + 1) == Some(&b'/') => {
                 at = text[at..].find('\n').map_or(bytes.len(), |end| at + end);
@@ -205,40 +215,50 @@ fn uses_unsafe(text: &str) -> bool {
                 }
             }
             b'"' => at = string_end(bytes, at + 1, None),
-            // A character literal, `'"'` or `'\''`; a lifetime is skipped
-            // one byte at a time.
+            // A character literal, `'"'` or `'\''`; the quote of a lifetime
+            // stays.
             b'\'' => {
                 let rest = &text[at + 1..];
-                at += match rest.chars().next() {
+                let len = match rest.chars().next() {
                     Some('\\') => rest
                         .get(2..)
                         .and_then(|escaped| escaped.find('\''))
-                        .map_or(1, |end| end + 4),
-                    Some(c) if rest[c.len_utf8()..].starts_with('\'') => c.len_utf8() + 2,
-                    _ => 1,
+                        .map(|end| end + 4),
+                    Some(c) if rest[c.len_utf8()..].starts_with('\'') => Some(c.len_utf8() + 2),
+                    _ => None,
                 };
+                if let Some(len) = len {
+                    at += len;
+                } else {
+                    at += 1;
+                    out.push(b'\'');
+                    continue;
+                }
             }
             byte if byte.is_ascii_alphabetic() || byte == b'_' => {
-                let start = at;
                 while at < bytes.len() && (bytes[at].is_ascii_alphanumeric() || bytes[at] == b'_') {
                     at += 1;
                 }
-                let word = &text[start..at];
-                if word == "unsafe" {
-                    return true;
-                }
+                out.extend_from_slice(&bytes[start..at]);
                 // A raw string: `r"..."`, `r#"..."#`, `br"..."`.
-                if matches!(word, "r" | "br" | "cr") {
+                if matches!(&text[start..at], "r" | "br" | "cr") {
                     let hashes = bytes[at..].iter().take_while(|&&b| b == b'#').count();
                     if bytes.get(at + hashes) == Some(&b'"') {
                         at = string_end(bytes, at + hashes + 1, Some(hashes));
+                        out.push(b' ');
                     }
                 }
+                continue;
             }
-            _ => at += 1,
+            byte => {
+                at += 1;
+                out.push(byte);
+                continue;
+            }
         }
+        out.push(b' ');
     }
-    false
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Where the string literal whose text starts at `at` ends: past its closing
@@ -262,12 +282,59 @@ fn string_end(bytes: &[u8], mut at: usize, raw: Option<usize>) -> usize {
 
 /// Whether the crate root at `path` forbids unsafe code.
 fn forbids_unsafe(path: &Path) -> bool {
-    std::fs::read_to_string(path).is_ok_and(|text| {
-        text.lines().any(|line| {
-            let line = line.trim_start();
-            line.starts_with("#![") && line.contains("forbid(unsafe_code)")
+    std::fs::read_to_string(path).is_ok_and(|text| forbids(&text))
+}
+
+/// Whether an inner attribute of the Rust `text` forbids `unsafe_code`,
+/// alone or among other lints, on one line or several. Under `cfg_attr` it
+/// counts only with the predicate `not(test)`, which leaves the crate's
+/// own code forbidden.
+fn forbids(text: &str) -> bool {
+    let code: String = code(text).chars().filter(|c| !c.is_whitespace()).collect();
+    code.match_indices("#![").any(|(start, _)| {
+        let mut depth = 0_usize;
+        let end = code[start + 2..]
+            .char_indices()
+            .find(|&(_, c)| {
+                match c {
+                    '[' => depth += 1,
+                    ']' => depth -= 1,
+                    _ => {}
+                }
+                depth == 0
+            })
+            .map_or(code.len(), |(at, _)| start + 2 + at);
+        let attribute = &code[start + 3..end];
+        let attributes = match attribute.strip_prefix("cfg_attr(not(test),") {
+            Some(rest) => top_level(rest.strip_suffix(')').unwrap_or(rest)),
+            None => vec![attribute],
+        };
+        attributes.iter().any(|attribute| {
+            attribute
+                .strip_prefix("forbid(")
+                .and_then(|lints| lints.strip_suffix(')'))
+                .is_some_and(|lints| lints.split(',').any(|lint| lint == "unsafe_code"))
         })
     })
+}
+
+/// The items of the comma-separated `list`, split outside parentheses.
+fn top_level(list: &str) -> Vec<&str> {
+    let mut items = Vec::new();
+    let (mut depth, mut start) = (0_usize, 0);
+    for (at, c) in list.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                items.push(&list[start..at]);
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    items.push(&list[start..]);
+    items
 }
 
 /// `path` as the package folder `dir` names it.
@@ -345,13 +412,24 @@ mod tests {
 
     #[test]
     fn a_crate_root_forbids_unsafe_by_an_inner_attribute() {
-        let dir = std::env::temp_dir().join(format!("xtask-crate-rules-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let root = dir.join("lib.rs");
-        std::fs::write(&root, "//! A crate.\n\n#![forbid(unsafe_code)]\n").unwrap();
-        assert!(forbids_unsafe(&root));
-        std::fs::write(&root, "//! #![forbid(unsafe_code)]\n").unwrap();
-        assert!(!forbids_unsafe(&root));
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(forbids("//! A crate.\n\n#![forbid(unsafe_code)]\n"));
+        assert!(forbids("#![forbid(missing_docs, unsafe_code)]\n"));
+        assert!(forbids(
+            "#![forbid(\n    unsafe_code,\n    missing_docs,\n)]\n"
+        ));
+        assert!(forbids("#![cfg_attr(not(test), forbid(unsafe_code))]\n"));
+        assert!(!forbids("//! #![forbid(unsafe_code)]\n"));
+        assert!(!forbids(
+            "#![deny(unsafe_code)]\n#![forbid(missing_docs)]\n"
+        ));
+        assert!(!forbids("#![forbid(unsafe_code_extra)]\n"));
+        assert!(!forbids("const S: &str = \"#![forbid(unsafe_code)]\";\n"));
+        assert!(!forbids("#![cfg_attr(test, forbid(unsafe_code))]\n"));
+        assert!(!forbids(
+            "#![cfg_attr(feature = \"x\", forbid(unsafe_code))]\n"
+        ));
+        assert!(forbids(
+            "#![cfg_attr(not(test), deny(missing_docs), forbid(unsafe_code))]\n"
+        ));
     }
 }
