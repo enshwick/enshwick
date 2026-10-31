@@ -286,6 +286,9 @@ impl Language {
     }
 }
 
+// Every lookup ends in the fallback, so every key needs a text there.
+const _: () = assert!(Language::REQUIRED[0].0 == Language::FALLBACK.0);
+
 /// The key of the mod's own name in its texts: the Mods screen, the join
 /// dialog and the status show it in the player's language, and the
 /// manifest's `name` where the texts lack it.

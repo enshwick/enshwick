@@ -70,11 +70,10 @@ tests.
 
 The mod does not build when the file has one of these faults:
 
-- a key has no `en` text;
 - a key lacks a text, or has an empty one, in a language of
-  `Language::REQUIRED`, `en` and `uk`;
+  `Language::REQUIRED`, `en` and `uk`; the error names the languages;
 - a table is not a language code;
-- a translation fills in other values than its `en` text, such as `{name}`
+- two texts of a key fill in different values, such as `{name}` in `uk`
   where the `en` text has `{owner}`.
 
 `load.texts` returns `Err(Off)` when the crate has no `src/texts.toml` or
