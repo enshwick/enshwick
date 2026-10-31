@@ -10,8 +10,9 @@
 //! checks. `cargo xtask check --windows` also runs the Windows tests of the
 //! crates marked `windows-tests` or `windows-only`, under Wine on an amd64
 //! Linux host. `cargo xtask check --all` runs the full suite, the Windows
-//! tests included where they can run. `cargo xtask check --part fuzz` runs
-//! the fuzz targets the change reaches for a short while ([`fuzz`]).
+//! tests included where they can run, but no fuzzing. `cargo xtask check
+//! --part fuzz` runs the fuzz targets the change reaches for a short while,
+//! or with `--all` every target ([`fuzz`]).
 //!
 //! `cargo xtask dist` writes `enshwick.zip`, the loader that players unpack
 //! into the game folder ([`dist`]). `cargo xtask header` rewrites the ABI's
@@ -41,7 +42,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] | dist [--out <dir>] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
