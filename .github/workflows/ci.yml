@@ -25,5 +25,6 @@ jobs:
     permissions:
       contents: read
     with:
+      full: true
       semver: enshwick
       split: true
