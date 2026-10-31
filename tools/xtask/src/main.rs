@@ -446,11 +446,13 @@ const fn workspace_rustdoc(code: bool, full: bool) -> bool {
     code || full
 }
 
-/// The ast-grep rules' own tests, then the rules over the repository.
-fn code_rules() -> [Step; 2] {
+/// The ast-grep rules' own tests, the rules over the repository, then the
+/// dependencies no crate uses.
+fn code_rules() -> [Step; 3] {
     [
         Step::tool("ast-grep", &["test", "--skip-snapshot-tests"]),
         Step::tool("ast-grep", &["scan"]),
+        Step::tool("cargo-machete", &[]),
     ]
 }
 
@@ -460,7 +462,7 @@ fn code_rules() -> [Step; 2] {
 /// after another (they share the build lock); the Windows lint runs beside
 /// them.
 fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> bool {
-    // The code rules of `sgconfig.yml` read every file in about a second, so
+    // The code rules read every file in about a second without compiling, so
     // they run whatever changed: a change to a rule alone touches no package.
     if parts.contains(&Part::Host) && !code_rules().iter().all(|step| step.run(false)) {
         return false;
