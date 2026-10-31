@@ -284,7 +284,7 @@ fn log_lines(loader: &Loader, args: &str) -> String {
                 lines.join("\n")
             }
         }
-        Err(word) => texts::fill("enshwick.log.usage", &[("word", &word)]),
+        Err(why) => texts::fill("enshwick.log.usage", &[("word", &why.word)]),
     }
 }
 
@@ -325,9 +325,11 @@ fn config(loader: &Loader, args: &str) -> String {
         Request::Set(_, key, value) => match configure::apply(loader, index, key, value, "console")
         {
             Ok(change) => configure::changed(id, key, &change),
-            Err(reply) => reply,
+            Err(why) => why.reply(),
         },
-        Request::Get(_, key) => configure::get(id, &schema, &text, key).unwrap_or_else(|e| e),
+        Request::Get(_, key) => {
+            configure::get(id, &schema, &text, key).unwrap_or_else(|why| why.reply())
+        }
         _ => configure::list(id, &schema, &text),
     }
 }

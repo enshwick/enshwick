@@ -14,7 +14,7 @@ use crate::texts;
 mod apply;
 pub mod rows;
 #[cfg(windows)]
-pub(crate) use apply::apply;
+pub(crate) use apply::{ApplySettingError, apply};
 
 /// What `enshwick config` was asked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -145,8 +145,8 @@ pub fn list(id: &str, schema: &Schema, text: &str) -> String {
 ///
 /// # Errors
 ///
-/// A reply when the mod has no such setting.
-pub fn get(id: &str, schema: &Schema, text: &str, key: &str) -> Result<String, String> {
+/// [`FindSettingError`] when the mod has no such setting.
+pub fn get(id: &str, schema: &Schema, text: &str, key: &str) -> Result<String, FindSettingError> {
     let field = field(id, schema, key)?;
     let value = current(text, field);
     // A secret's default is as secret as its value.
@@ -190,28 +190,22 @@ pub fn element(key: &str) -> (&str, Option<usize>) {
         .unwrap_or((key, None))
 }
 
-fn field<'a>(id: &str, schema: &'a Schema, key: &str) -> Result<&'a Field, String> {
-    schema.field(element(key).0).ok_or_else(|| {
-        let keys: Vec<&str> = schema.fields.iter().map(|f| f.key.as_str()).collect();
-        texts::fill(
-            "config.no-key",
-            &[("id", id), ("key", key), ("keys", &keys.join(", "))],
-        )
-    })
+fn field<'a>(id: &str, schema: &'a Schema, key: &str) -> Result<&'a Field, FindSettingError> {
+    schema
+        .field(element(key).0)
+        .ok_or_else(|| FindSettingError {
+            id: id.to_owned(),
+            key: key.to_owned(),
+            keys: schema.fields.iter().map(|f| f.key.clone()).collect(),
+        })
 }
 
 /// `value` as typed into the chat, as a TOML value for `field`: TOML, or
 /// for a text setting the words as they are.
-fn typed(field: &Field, value: &str) -> Result<toml_edit::Value, String> {
-    let no_value = || {
-        texts::fill(
-            "config.bad-value",
-            &[
-                ("value", value),
-                ("key", &field.key),
-                ("accepts", &accepts(field)),
-            ],
-        )
+fn typed(field: &Field, value: &str) -> Result<toml_edit::Value, ChangeSettingError> {
+    let no_value = || ChangeSettingError::BadValue {
+        field: Box::new(field.clone()),
+        value: value.to_owned(),
     };
     let parsed = value.parse::<toml_edit::Value>();
     let parsed = match (parsed, field.kind) {
@@ -231,10 +225,9 @@ fn typed(field: &Field, value: &str) -> Result<toml_edit::Value, String> {
     if let Some(value) = checked.get("v")
         && field.check(value).is_err()
     {
-        return Err(refused(&texts::fill(
-            "refused.value",
-            &[("key", &field.key), ("accepts", &accepts(field))],
-        )));
+        return Err(ChangeSettingError::Refused {
+            field: Box::new(field.clone()),
+        });
     }
     Ok(parsed)
 }
@@ -259,28 +252,34 @@ pub struct Change {
 ///
 /// # Errors
 ///
-/// A reply when the mod has no such setting, the value does not fit it or
-/// the file is not TOML.
+/// [`ChangeSettingError`] when the mod has no such setting, the value does
+/// not fit it or the file is not TOML.
 pub fn set(
     id: &str,
     schema: &Schema,
     text: &str,
     key: &str,
     value: &str,
-) -> Result<Change, String> {
+) -> Result<Change, ChangeSettingError> {
     let field = field(id, schema, key)?;
     if field.secret {
-        return Err(texts::fill("remote.secret", &[("key", key)]));
+        return Err(ChangeSettingError::Secret {
+            key: key.to_owned(),
+        });
     }
-    let mut doc: DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
-        texts::fill("refused.toml", &[("id", id), ("error", e.message())])
+    let mut doc: DocumentMut = text.parse().map_err(|source| ChangeSettingError::Toml {
+        id: id.to_owned(),
+        source,
     })?;
     let value = if let (base, Some(index)) = element(key) {
         set_element(&mut doc, field, base, index, value)?
     } else {
         let new = typed(field, value)?;
         if !crate::worlds::set_at(doc.as_table_mut(), key, new) {
-            return Err(texts::fill("refused.toml", &[("id", id), ("error", key)]));
+            return Err(ChangeSettingError::Unwritable {
+                id: id.to_owned(),
+                key: key.to_owned(),
+            });
         }
         crate::worlds::value_at(doc.as_table(), key)
             .map(|v| v.clone().decorated("", "").to_string())
@@ -303,7 +302,7 @@ fn set_element(
     base: &str,
     index: usize,
     value: &str,
-) -> Result<String, String> {
+) -> Result<String, ChangeSettingError> {
     let mut element = field.clone();
     element.kind = field.element_kind();
     let mut new = typed(&element, value)?;
@@ -325,12 +324,124 @@ fn set_element(
     Ok(written)
 }
 
-/// The reply when a list has no element `index`.
-fn no_element(field: &Field, index: usize) -> String {
-    texts::fill(
-        "config.no-element",
-        &[("key", &field.key), ("index", &index.to_string())],
-    )
+/// The refusal when a list has no element `index`.
+fn no_element(field: &Field, index: usize) -> ChangeSettingError {
+    ChangeSettingError::NoElement {
+        key: field.key.clone(),
+        index,
+    }
+}
+
+/// Why a mod has no setting of a key.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{id} has no setting {key}")]
+pub struct FindSettingError {
+    id: String,
+    key: String,
+    /// The keys the mod has.
+    keys: Vec<String>,
+}
+
+impl FindSettingError {
+    /// The reply in the game's language, which names the keys the mod has.
+    #[must_use]
+    pub fn reply(&self) -> String {
+        texts::fill(
+            "config.no-key",
+            &[
+                ("id", &self.id),
+                ("key", &self.key),
+                ("keys", &self.keys.join(", ")),
+            ],
+        )
+    }
+}
+
+/// Why a setting was not changed.
+#[derive(Clone, Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum ChangeSettingError {
+    /// The mod has no such setting.
+    #[error(transparent)]
+    Find(#[from] FindSettingError),
+    /// The setting is secret: only the server's file changes it.
+    #[error("{key} is secret, changed in the server's file only")]
+    Secret {
+        /// The setting's key.
+        key: String,
+    },
+    /// The settings file is no TOML.
+    #[error("the settings file of {id} is no TOML: {source}")]
+    Toml {
+        /// The mod's id.
+        id: String,
+        /// What the parser found.
+        #[source]
+        source: toml_edit::TomlError,
+    },
+    /// The key cannot be written into the file's tables.
+    #[error("{key} does not fit the tables of the settings file of {id}")]
+    Unwritable {
+        /// The mod's id.
+        id: String,
+        /// The setting's key.
+        key: String,
+    },
+    /// The typed words are no value of the setting.
+    #[error("{value:?} is no value of {}", field.key)]
+    BadValue {
+        /// The setting.
+        field: Box<Field>,
+        /// The words typed.
+        value: String,
+    },
+    /// The value lies outside what the setting accepts.
+    #[error("{} does not accept the value", field.key)]
+    Refused {
+        /// The setting.
+        field: Box<Field>,
+    },
+    /// The list has no such element.
+    #[error("{key} has no element {index}")]
+    NoElement {
+        /// The list's key.
+        key: String,
+        /// The element asked for.
+        index: usize,
+    },
+}
+
+impl ChangeSettingError {
+    /// The reply in the game's language.
+    #[must_use]
+    pub fn reply(&self) -> String {
+        match self {
+            Self::Find(error) => error.reply(),
+            Self::Secret { key } => texts::fill("remote.secret", &[("key", key)]),
+            Self::Toml { id, source } => {
+                texts::fill("refused.toml", &[("id", id), ("error", source.message())])
+            }
+            Self::Unwritable { id, key } => {
+                texts::fill("refused.toml", &[("id", id), ("error", key)])
+            }
+            Self::BadValue { field, value } => texts::fill(
+                "config.bad-value",
+                &[
+                    ("value", value),
+                    ("key", &field.key),
+                    ("accepts", &accepts(field)),
+                ],
+            ),
+            Self::Refused { field } => refused(&texts::fill(
+                "refused.value",
+                &[("key", &field.key), ("accepts", &accepts(field))],
+            )),
+            Self::NoElement { key, index } => texts::fill(
+                "config.no-element",
+                &[("key", key), ("index", &index.to_string())],
+            ),
+        }
+    }
 }
 
 /// The reply to a change of `id`'s `key`, on a game server or not.
@@ -441,6 +552,7 @@ mod tests {
         assert!(
             get("you.trading-post", &schema(), FILE, "nope")
                 .unwrap_err()
+                .reply()
                 .contains("it has limit")
         );
     }
@@ -486,7 +598,9 @@ mod tests {
         let shared = get("you.trading-post", &schema(), &file, "shared").unwrap();
         assert!(!shared.contains("letmein"), "{shared}");
         assert_eq!(
-            set("you.trading-post", &schema(), &file, "token", "\"x\"").unwrap_err(),
+            set("you.trading-post", &schema(), &file, "token", "\"x\"")
+                .unwrap_err()
+                .reply(),
             "token is changed in the server's file only."
         );
     }
@@ -507,12 +621,14 @@ mod tests {
         assert!(
             set("you.trading-post", &schema(), FILE, "limit", "40")
                 .unwrap_err()
+                .reply()
                 .contains("1 to 16")
         );
         assert!(set("you.trading-post", &schema(), FILE, "limit", "many").is_err());
         assert!(
             set("you.trading-post", &schema(), FILE, "language", "de")
                 .unwrap_err()
+                .reply()
                 .contains("one of")
         );
         let radius = set("you.trading-post", &schema(), FILE, "radius", "10").unwrap();
@@ -523,7 +639,9 @@ mod tests {
             "{}",
             words.text
         );
-        let broken = set("you.trading-post", &schema(), "limit = ", "limit", "2").unwrap_err();
+        let broken = set("you.trading-post", &schema(), "limit = ", "limit", "2")
+            .unwrap_err()
+            .reply();
         assert!(
             broken
                 .starts_with("Not changed: mod-configs/you.trading-post.toml is not valid TOML: ")
@@ -531,7 +649,9 @@ mod tests {
             "{broken}"
         );
         assert_eq!(
-            set("you.trading-post", &schema(), FILE, "limit", "40").unwrap_err(),
+            set("you.trading-post", &schema(), FILE, "limit", "40")
+                .unwrap_err()
+                .reply(),
             "Not changed: limit takes 1 to 16."
         );
     }

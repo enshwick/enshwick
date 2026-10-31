@@ -64,7 +64,7 @@ pub(crate) extern "system" fn serve_call(
         match served {
             Ok(()) => Status::OK,
             Err(reason) => {
-                crate::log::write(Level::WARN, &record.id, &reason);
+                crate::log::write(Level::WARN, &record.id, &reason.to_string());
                 Status::REFUSED
             }
         }
@@ -116,7 +116,7 @@ pub(crate) extern "system" fn find_call(
             // call; checked non-null above.
             Ok(id) => unsafe { put(out, id) },
             Err(reason) => {
-                crate::log::write(Level::WARN, &record.id, &reason);
+                crate::log::write(Level::WARN, &record.id, &reason.to_string());
                 Status::REFUSED
             }
         }

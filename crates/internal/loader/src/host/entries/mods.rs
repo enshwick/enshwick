@@ -367,7 +367,7 @@ pub(crate) extern "system" fn config_check(
 
 /// Runs mod `index`'s check of the new settings text `text`; `Ok` for a mod
 /// without one.
-pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), String> {
+pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), CheckSettingsError> {
     let Some(record) = loader()
         .and_then(|loader| loader.mods.get(index))
         .filter(|record| !record.off.load(Ordering::Acquire))
@@ -396,10 +396,32 @@ pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), String> {
     }
     // SAFETY: the reason stays valid until the mod's next check.
     let why = unsafe { why.as_str() };
-    Err(why.map_or_else(
-        || crate::texts::fill("refused.by-mod", &[]),
-        |why| crate::configure::mod_reason(record.texts.relock().as_ref(), why),
-    ))
+    Err(why.map_or(CheckSettingsError::Unexplained, |why| {
+        CheckSettingsError::Refused {
+            reason: crate::configure::mod_reason(record.texts.relock().as_ref(), why),
+        }
+    }))
+}
+
+/// Why a mod refuses a new settings text.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum CheckSettingsError {
+    /// The mod gave no reason.
+    #[error("the mod refuses the settings")]
+    Unexplained,
+    /// The mod's reason, in the reader's language.
+    #[error("the mod refuses the settings: {reason}")]
+    Refused { reason: String },
+}
+
+impl CheckSettingsError {
+    /// The refusal as the reader reads it.
+    pub(crate) fn reply(&self) -> String {
+        match self {
+            Self::Unexplained => crate::texts::fill("refused.by-mod", &[]),
+            Self::Refused { reason } => reason.clone(),
+        }
+    }
 }
 
 pub(crate) extern "system" fn texts(me: ModHandle, toml: Str) -> Status {

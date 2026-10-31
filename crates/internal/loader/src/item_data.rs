@@ -921,17 +921,35 @@ fn write_file(server: &Server) -> Vec<u8> {
 ///
 /// Why a file that is there does not read: the system refused it, it is cut
 /// short, or it is of a version this loader does not know.
-fn read_world(path: &Path) -> Result<(Vec<Pending>, Vec<String>), String> {
+fn read_world(path: &Path) -> Result<(Vec<Pending>, Vec<String>), ReadWorldDataError> {
     match enshwick::files::read_if_present(path) {
         Ok(None) => Ok(Default::default()),
-        Ok(Some(bytes)) => read_file(&bytes).ok_or_else(|| {
-            format!(
-                "{} does not read to its end, or is of a version this loader does not know",
-                path.display()
-            )
+        Ok(Some(bytes)) => read_file(&bytes).ok_or_else(|| ReadWorldDataError::Unknown {
+            path: path.to_owned(),
         }),
-        Err(error) => Err(format!("{} does not read: {error}", path.display())),
+        Err(source) => Err(ReadWorldDataError::Io {
+            path: path.to_owned(),
+            source,
+        }),
     }
+}
+
+/// Why a world's file of mod data that is there does not read.
+#[derive(Debug, thiserror::Error)]
+enum ReadWorldDataError {
+    /// The system refused the file.
+    #[error("{} does not read: {source}", path.display())]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    /// The file is cut short or of a version this loader does not know.
+    #[error(
+        "{} does not read to its end, or is of a version this loader does not know",
+        path.display()
+    )]
+    Unknown { path: PathBuf },
 }
 
 /// A write of world `key`'s values failed: the next save writes them again,

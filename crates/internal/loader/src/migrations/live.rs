@@ -144,7 +144,7 @@ fn with_entry<R>(
     id: &str,
     stands_alone: bool,
     f: impl FnOnce(&mut Record) -> R,
-) -> Result<R, String> {
+) -> Result<R, ReadRecordError> {
     static REPORTED: std::sync::Once = std::sync::Once::new();
     let mut part = Record::default();
     {
@@ -152,8 +152,8 @@ fn with_entry<R>(
         if held.is_none() {
             match Record::read(&loader.data_dir) {
                 Ok(read) => *held = Some(read),
-                Err(e) => {
-                    let reason = format!("mod-data/{} does not read ({e})", super::RECORD);
+                Err(source) => {
+                    let reason = ReadRecordError { source };
                     REPORTED.call_once(|| {
                         crate::log!(
                             ERROR,
@@ -182,6 +182,14 @@ fn with_entry<R>(
         crate::log!(WARN, "migrations: the record was not written: {e}");
     }
     Ok(result)
+}
+
+/// Why the shared record of migrations that ran does not read.
+#[derive(Debug, thiserror::Error)]
+#[error("mod-data/{} does not read ({source})", super::RECORD)]
+struct ReadRecordError {
+    #[source]
+    source: super::RecordError,
 }
 
 /// Logs a run's outcome under mod `id`.
@@ -260,7 +268,7 @@ fn run_settings(loader: &Loader, reg: &Registered, born: bool) -> bool {
             dry_run(),
         )
     })
-    .unwrap_or_else(|reason| Err((String::new(), reason)));
+    .unwrap_or_else(|reason| Err((String::new(), reason.to_string())));
     report(&record.id, "the settings file", &outcome);
     if matches!(outcome, Ok(Some(_))) {
         crate::watch::wrote(&path);
@@ -310,7 +318,7 @@ pub(crate) fn world_loaded(loader: &Loader, key: &str) {
                 dry_run(),
             )
         })
-        .unwrap_or_else(|reason| Err((String::new(), reason)));
+        .unwrap_or_else(|reason| Err((String::new(), reason.to_string())));
         report(&record.id, &format!("world {key}"), &outcome);
         if let Err((_, reason)) = outcome {
             loader.turn_off(

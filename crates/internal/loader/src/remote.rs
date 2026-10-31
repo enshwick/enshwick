@@ -359,25 +359,58 @@ pub fn values_text(values: &str) -> String {
 ///
 /// # Errors
 ///
-/// The reply for the client: not an administrator, a secret field, or too
-/// soon after the last change.
+/// [`AdmitEditError`]: not an administrator, a secret field, or too soon
+/// after the last change.
 pub fn admit(
     schema: &Schema,
     key: &str,
     admin: bool,
     last: Option<Instant>,
     now: Instant,
-) -> Result<(), String> {
+) -> Result<(), AdmitEditError> {
     if !admin {
-        return Err(texts::fill("remote.admins", &[]));
+        return Err(AdmitEditError::NotAdmin);
     }
     if schema.field(key).is_some_and(|f| f.secret) {
-        return Err(texts::fill("remote.secret", &[("key", key)]));
+        return Err(AdmitEditError::Secret {
+            key: key.to_owned(),
+        });
     }
     if last.is_some_and(|last| now.duration_since(last) < EDIT_GAP) {
-        return Err(texts::fill("remote.busy", &[]));
+        return Err(AdmitEditError::Busy);
     }
     Ok(())
+}
+
+/// Why the server refuses a client's change of a setting before it reaches
+/// the settings file.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum AdmitEditError {
+    /// The player is no administrator.
+    #[error("only administrators change settings")]
+    NotAdmin,
+    /// The setting is secret.
+    #[error("{key} is secret, changed in the server's file only")]
+    Secret {
+        /// The setting's key.
+        key: String,
+    },
+    /// The player changed a setting a moment ago.
+    #[error("too soon after the last change")]
+    Busy,
+}
+
+impl AdmitEditError {
+    /// The reply for the client, in its player's language.
+    #[must_use]
+    pub fn reply(&self) -> String {
+        match self {
+            Self::NotAdmin => texts::fill("remote.admins", &[]),
+            Self::Secret { key } => texts::fill("remote.secret", &[("key", key)]),
+            Self::Busy => texts::fill("remote.busy", &[]),
+        }
+    }
 }
 
 /// What the server does with a message a client sent, by [`Queries::gate`].
@@ -457,7 +490,7 @@ mod live {
     use enshwick::abi::PlayerInfo;
     use enshwick::config::Schema;
 
-    use super::{Gate, Message, Queries, admit, redacted, texts, values_text};
+    use super::{AdmitEditError, Gate, Message, Queries, admit, redacted, texts, values_text};
     use crate::host::Loader;
 
     /// When each player last changed a setting.
@@ -629,7 +662,7 @@ mod live {
             } => {
                 let reply = edit(loader, key, &id, &setting, &value, admin);
                 let ok = reply.is_ok();
-                let text = reply.unwrap_or_else(|why| why);
+                let text = reply.unwrap_or_else(|why| why.reply());
                 crate::net::to_player(key, &Message::Result { ok, text });
                 snapshot(loader, key, &id, admin);
             }
@@ -728,15 +761,15 @@ mod live {
         setting: &str,
         value: &str,
         admin: bool,
-    ) -> Result<String, String> {
+    ) -> Result<String, EditSettingError> {
         let (index, record) = loader
             .find_mod(id)
-            .ok_or_else(|| texts::fill("remote.unknown", &[("id", id)]))?;
+            .ok_or_else(|| EditSettingError::UnknownMod { id: id.to_owned() })?;
         let schema = record
             .schema
             .relock()
             .clone()
-            .ok_or_else(|| texts::fill("remote.no-schema", &[("id", id)]))?;
+            .ok_or_else(|| EditSettingError::NoSchema { id: id.to_owned() })?;
         let now = Instant::now();
         {
             let mut last = LAST_EDIT.relock();
@@ -747,6 +780,35 @@ mod live {
         let who = player(loader, key).map_or_else(|| format!("{key:016x}"), |p| name(&p));
         let change = crate::configure::apply(loader, index, setting, value, &who)?;
         Ok(crate::configure::changed(id, setting, &change))
+    }
+
+    /// Why the server did not change a setting a client sent.
+    #[derive(Debug, thiserror::Error)]
+    enum EditSettingError {
+        /// No mod of the id runs.
+        #[error("no mod {id} runs")]
+        UnknownMod { id: String },
+        /// The mod has no settings.
+        #[error("{id} has no settings")]
+        NoSchema { id: String },
+        /// The change is refused before it reaches the file.
+        #[error(transparent)]
+        Admit(#[from] AdmitEditError),
+        /// The change was not written.
+        #[error(transparent)]
+        Apply(#[from] crate::configure::ApplySettingError),
+    }
+
+    impl EditSettingError {
+        /// The reply for the client, in its player's language.
+        fn reply(&self) -> String {
+            match self {
+                Self::UnknownMod { id } => texts::fill("remote.unknown", &[("id", id)]),
+                Self::NoSchema { id } => texts::fill("remote.no-schema", &[("id", id)]),
+                Self::Admit(error) => error.reply(),
+                Self::Apply(error) => error.reply(),
+            }
+        }
     }
 }
 

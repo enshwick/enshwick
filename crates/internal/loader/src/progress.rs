@@ -229,7 +229,7 @@ pub(crate) fn link(loader: &'static Loader) {
         Err(why) => {
             if wants[2] {
                 crate::log!(WARN, "experience filters off: {why}");
-                crate::diag::part_off("experience", &why);
+                crate::diag::part_off("experience", &why.to_string());
             }
             None
         }

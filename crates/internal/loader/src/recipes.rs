@@ -174,11 +174,13 @@ impl RuleFile {
     /// # Errors
     ///
     /// The problem with its line, when the file is no recipe file.
-    pub fn parse(file: &str, text: &str) -> Result<Self, String> {
-        let form: FileForm = toml::from_str(text).map_err(|e| {
-            let line = e.span().map_or(1, |span| line_of(text, span.start));
-            format!("{file}:{line}: {}", e.message().trim_end())
-        })?;
+    pub fn parse(file: &str, text: &str) -> Result<Self, ParseRulesError> {
+        let form: FileForm =
+            toml::from_str(text).map_err(|source: toml::de::Error| ParseRulesError {
+                file: file.to_owned(),
+                line: source.span().map_or(1, |span| line_of(text, span.start)),
+                source,
+            })?;
         let rules = |lists: ListsForm| -> Vec<Rule> {
             [
                 (Kind::Recipe, lists.recipes),
@@ -204,6 +206,10 @@ impl RuleFile {
         })
     }
 }
+
+mod errors;
+
+pub use errors::{EditRulesError, ParseRulesError, ResolveRuleError};
 
 /// One recipe of the registry, as rules find it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -362,18 +368,17 @@ impl Names {
     }
 
     /// The item with debug name `name`.
-    fn item(&self, name: &str) -> Result<Guid, String> {
+    fn item(&self, name: &str) -> Result<Guid, ResolveRuleError> {
         match self.items.get(name).map(Vec::as_slice) {
             Some([one]) => Ok(*one),
-            Some(several) if !several.is_empty() => Err(format!(
-                "{} items are named {name:?}: {}; name one by its GUID",
-                several.len(),
-                list(several)
-            )),
-            _ => Err(format!(
-                "no item {name:?}{}",
-                near_list(&near(self.items.keys().map(String::as_str), name))
-            )),
+            Some(several) if !several.is_empty() => Err(ResolveRuleError::SeveralItems {
+                name: name.to_owned(),
+                guids: several.to_vec(),
+            }),
+            _ => Err(ResolveRuleError::NoItem {
+                name: name.to_owned(),
+                near: owned(&near(self.items.keys().map(String::as_str), name)),
+            }),
         }
     }
 }
@@ -386,7 +391,12 @@ fn list(guids: &[Guid]) -> String {
         .join(", ")
 }
 
-fn near_list(near: &[&str]) -> String {
+/// `names`, owned.
+fn owned(names: &[&str]) -> Vec<String> {
+    names.iter().map(|&name| name.to_owned()).collect()
+}
+
+fn near_list(near: &[String]) -> String {
     if near.is_empty() {
         String::new()
     } else {
@@ -437,10 +447,10 @@ fn reference(name: &str) -> Reference<'_> {
 /// # Errors
 ///
 /// What is wrong with the name, with the names that look like it.
-pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, String> {
+pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, ResolveRuleError> {
     let name = rule.name.as_str();
     if name.is_empty() {
-        return Err("an empty name".to_owned());
+        return Err(ResolveRuleError::Empty);
     }
     match rule.kind {
         Kind::Recipe => match reference(name) {
@@ -449,21 +459,22 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, St
                 .iter()
                 .find(|r| r.guid == guid || r.id == guid.fnv1a())
                 .map(|r| vec![r.id])
-                .ok_or_else(|| format!("no recipe {name}")),
+                .ok_or_else(|| ResolveRuleError::NoRecipeGuid {
+                    name: name.to_owned(),
+                }),
             Reference::Name(name) => match index.by_name.get(name).map(Vec::as_slice) {
                 Some([one]) => Ok(vec![index.recipes[*one].id]),
                 Some(several) if !several.is_empty() => {
                     let guids: Vec<Guid> = several.iter().map(|&i| index.recipes[i].guid).collect();
-                    Err(format!(
-                        "{} recipes are named {name:?}: {}; name one by its GUID",
-                        several.len(),
-                        list(&guids)
-                    ))
+                    Err(ResolveRuleError::SeveralRecipes {
+                        name: name.to_owned(),
+                        guids,
+                    })
                 }
-                _ => Err(format!(
-                    "no recipe {name:?}{}",
-                    near_list(&near(index.by_name.keys().map(String::as_str), name))
-                )),
+                _ => Err(ResolveRuleError::NoRecipe {
+                    name: name.to_owned(),
+                    near: owned(&near(index.by_name.keys().map(String::as_str), name)),
+                }),
             },
         },
         Kind::Output => {
@@ -478,7 +489,9 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, St
                 .map(|r| r.id)
                 .collect();
             if found.is_empty() {
-                Err(format!("no recipe makes {name}"))
+                Err(ResolveRuleError::NothingMakes {
+                    name: name.to_owned(),
+                })
             } else {
                 Ok(found)
             }
@@ -491,10 +504,11 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, St
                     Reference::Guid(guid) => guid.fnv1a(),
                     Reference::Name(name) => {
                         let item = names.item(name)?;
-                        *names
-                            .workshops
-                            .get(&item.fnv1a())
-                            .ok_or_else(|| format!("{name} has no workshop"))?
+                        *names.workshops.get(&item.fnv1a()).ok_or_else(|| {
+                            ResolveRuleError::NoWorkshop {
+                                name: name.to_owned(),
+                            }
+                        })?
                     }
                 }
             };
@@ -505,7 +519,9 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, St
                 .map(|r| r.id)
                 .collect();
             if found.is_empty() {
-                Err(format!("no recipe is made at {name}"))
+                Err(ResolveRuleError::NothingAt {
+                    name: name.to_owned(),
+                })
             } else {
                 Ok(found)
             }
@@ -592,8 +608,13 @@ pub fn describe(recipe: &Recipe, names: &Names) -> String {
 /// # Errors
 ///
 /// When `text` is no TOML or its lists are no lists.
-pub fn edit_file(text: &str, kind: Kind, name: &str, disable: bool) -> Result<String, String> {
-    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e| format!("{e}"))?;
+pub fn edit_file(
+    text: &str,
+    kind: Kind,
+    name: &str,
+    disable: bool,
+) -> Result<String, EditRulesError> {
+    let mut doc: toml_edit::DocumentMut = text.parse()?;
     let (to, from) = if disable {
         ("disable", "enable")
     } else {
@@ -610,12 +631,15 @@ pub fn edit_file(text: &str, kind: Kind, name: &str, disable: bool) -> Result<St
         .entry(to)
         .or_insert_with(toml_edit::table)
         .as_table_like_mut()
-        .ok_or_else(|| format!("[{to}] is no table"))?;
+        .ok_or(EditRulesError::NotTable { table: to })?;
     let list = table
         .entry(kind.key())
         .or_insert(toml_edit::value(toml_edit::Array::new()))
         .as_array_mut()
-        .ok_or_else(|| format!("{to}.{} is no list", kind.key()))?;
+        .ok_or(EditRulesError::NotList {
+            table: to,
+            key: kind.key(),
+        })?;
     if !list.iter().any(|v| v.as_str() == Some(name)) {
         list.push(name);
     }
@@ -720,7 +744,9 @@ mod tests {
 
     #[test]
     fn a_broken_file_says_where() {
-        let why = RuleFile::parse("r.toml", "[disable]\nrecipe = [\"A\"]\n").unwrap_err();
+        let why = RuleFile::parse("r.toml", "[disable]\nrecipe = [\"A\"]\n")
+            .unwrap_err()
+            .to_string();
         assert!(why.starts_with("r.toml:2: "), "{why}");
         assert!(RuleFile::parse("r.toml", "").unwrap().disable.is_empty());
         assert!(RuleFile::parse("r.toml", TEMPLATE).is_ok());
@@ -760,7 +786,11 @@ mod tests {
     #[test]
     fn unknown_and_ambiguous_names_say_what_to_write() {
         let (index, names) = (index(), names());
-        let why = |kind: Kind, name: &str| resolve(&rule(kind, name), &index, &names).unwrap_err();
+        let why = |kind: Kind, name: &str| {
+            resolve(&rule(kind, name), &index, &names)
+                .unwrap_err()
+                .to_string()
+        };
         assert_eq!(
             why(Kind::Recipe, "Block_Wod"),
             "no recipe \"Block_Wod\"; near: Block_Wood"

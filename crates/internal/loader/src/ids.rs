@@ -32,6 +32,30 @@ impl Space {
     }
 }
 
+/// Why the loader refuses an id a mod declares.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum DeclareIdError {
+    /// Another name of the space holds the name's key.
+    #[error(
+        "{noun} {name} of {owner} has the key {key:#010x} of {noun} {known} of {by}; one of them needs another name",
+        noun = space.noun()
+    )]
+    Taken {
+        space: Space,
+        name: String,
+        owner: String,
+        key: u32,
+        known: String,
+        by: String,
+    },
+    /// The name is no content id.
+    #[error("content id {name:?} is malformed")]
+    Malformed { name: String },
+    /// The name lies outside the mod's namespace.
+    #[error("content id {name} lies outside the mod's namespace {owner}:")]
+    Outside { name: String, owner: String },
+}
+
 /// The ids seen so far, by space and key: the name and the mod it came from.
 #[derive(Debug, Default)]
 pub(crate) struct Ids {
@@ -47,14 +71,17 @@ impl Ids {
         space: Space,
         name: &str,
         key: u32,
-    ) -> Result<(), String> {
+    ) -> Result<(), DeclareIdError> {
         match self.known.get(&(space, key)) {
             Some((known, _)) if **known == *name => Ok(()),
-            Some((known, by)) => Err(format!(
-                "{noun} {name} of {owner} has the key {key:#010x} of {noun} {known} of {by}; \
-                 one of them needs another name",
-                noun = space.noun(),
-            )),
+            Some((known, by)) => Err(DeclareIdError::Taken {
+                space,
+                name: name.to_owned(),
+                owner: owner.to_owned(),
+                key,
+                known: known.to_string(),
+                by: by.to_string(),
+            }),
             None => {
                 self.known.insert((space, key), (name.into(), owner.into()));
                 Ok(())
@@ -86,15 +113,18 @@ pub(crate) fn with<R>(f: impl FnOnce(&mut Ids) -> R) -> R {
 /// Declares content id `name` for the mod `owner` and returns its GUID:
 /// refused for a malformed id, one outside the mod's namespace, or one whose
 /// game id another content id has.
-pub(crate) fn declare_content(owner: &str, name: &str) -> Result<Guid, String> {
-    let guid = Guid::try_named(name).ok_or_else(|| format!("content id {name:?} is malformed"))?;
+pub(crate) fn declare_content(owner: &str, name: &str) -> Result<Guid, DeclareIdError> {
+    let guid = Guid::try_named(name).ok_or_else(|| DeclareIdError::Malformed {
+        name: name.to_owned(),
+    })?;
     if name
         .split_once(':')
         .is_none_or(|(namespace, _)| namespace != owner)
     {
-        return Err(format!(
-            "content id {name} lies outside the mod's namespace {owner}:"
-        ));
+        return Err(DeclareIdError::Outside {
+            name: name.to_owned(),
+            owner: owner.to_owned(),
+        });
     }
     with(|ids| ids.declare(owner, Space::Content, name, guid.fnv1a()))?;
     Ok(guid)
@@ -116,7 +146,10 @@ mod tests {
     fn two_names_with_one_key_name_both_mods() {
         let mut ids = Ids::default();
         assert!(ids.declare("a", Space::Content, "a:x", 7).is_ok());
-        let why = ids.declare("b", Space::Content, "b:y", 7).unwrap_err();
+        let why = ids
+            .declare("b", Space::Content, "b:y", 7)
+            .unwrap_err()
+            .to_string();
         assert!(
             why.contains("b:y of b") && why.contains("a:x of a"),
             "{why}"

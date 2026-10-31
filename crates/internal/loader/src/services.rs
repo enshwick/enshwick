@@ -95,6 +95,31 @@ pub(crate) struct Slot {
     pub(crate) subscribers: Box<[Subscriber]>,
 }
 
+/// Why the loader refuses a service a mod publishes or an event it defines.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum DeclareServiceError {
+    /// The mod publishes the name and major already.
+    #[error("service {name} v{major}: published twice")]
+    PublishedTwice { name: String, major: u32 },
+    /// Another mod publishes the name and major already.
+    #[error("service {name} v{major}: {id} {version} publishes it already")]
+    PublishedBy {
+        name: String,
+        major: u32,
+        id: String,
+        version: String,
+    },
+    /// The event's name lies outside the defining mod's namespace.
+    #[error("event {name}: an event is named `{owner}:<what>`")]
+    Namespace { name: String, owner: String },
+    /// An event of the name is defined already.
+    #[error("event {name}: defined twice")]
+    DefinedTwice { name: String },
+    /// More events than an id holds.
+    #[error("too many events")]
+    TooMany,
+}
+
 impl Registry {
     /// Publishes a service.
     ///
@@ -109,17 +134,23 @@ impl Registry {
         fields: Fields,
         table: usize,
         names: &impl Names,
-    ) -> Result<(), String> {
+    ) -> Result<(), DeclareServiceError> {
         if let Some(held) = self
             .published
             .iter()
             .find(|p| p.name == name && p.major == major)
         {
             let (id, version) = names.name(held.owner.get());
+            let name = name.to_owned();
             return Err(if held.owner == owner {
-                format!("service {name} v{major}: published twice")
+                DeclareServiceError::PublishedTwice { name, major }
             } else {
-                format!("service {name} v{major}: {id} {version} publishes it already")
+                DeclareServiceError::PublishedBy {
+                    name,
+                    major,
+                    id: id.to_owned(),
+                    version: version.to_owned(),
+                }
             });
         }
         self.published.push(Published {
@@ -205,16 +236,19 @@ impl Registry {
         name: &str,
         fields: Fields,
         size: u32,
-    ) -> Result<u32, String> {
+    ) -> Result<u32, DeclareServiceError> {
         if !enshwick::__private::rules::is_named_after(name, owner_id) {
-            return Err(format!(
-                "event {name}: an event is named `{owner_id}:<what>`"
-            ));
+            return Err(DeclareServiceError::Namespace {
+                name: name.to_owned(),
+                owner: owner_id.to_owned(),
+            });
         }
         if self.defined.iter().any(|d| d.name == name) {
-            return Err(format!("event {name}: defined twice"));
+            return Err(DeclareServiceError::DefinedTwice {
+                name: name.to_owned(),
+            });
         }
-        let id = u32::try_from(self.defined.len()).map_err(|_| "too many events".to_owned())?;
+        let id = u32::try_from(self.defined.len()).map_err(|_| DeclareServiceError::TooMany)?;
         self.defined.push(Definition {
             owner,
             name: name.to_owned(),

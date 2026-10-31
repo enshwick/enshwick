@@ -121,7 +121,7 @@ pub(crate) extern "system" fn publish(
         match published {
             Ok(()) => Status::OK,
             Err(reason) => {
-                crate::log::write(Level::WARN, &record.id, &reason);
+                crate::log::write(Level::WARN, &record.id, &reason.to_string());
                 Status::REFUSED
             }
         }
@@ -215,7 +215,7 @@ pub(crate) extern "system" fn define_event(
             // touches during the call.
             Ok(id) => unsafe { put(out, id) },
             Err(reason) => {
-                crate::log::write(Level::WARN, &record.id, &reason);
+                crate::log::write(Level::WARN, &record.id, &reason.to_string());
                 Status::REFUSED
             }
         }
@@ -371,7 +371,7 @@ pub(crate) extern "system" fn define_point(
                 )
             },
             Err(reason) => {
-                crate::log::write(Level::WARN, &record.id, &reason);
+                crate::log::write(Level::WARN, &record.id, &reason.to_string());
                 Status::REFUSED
             }
         }
@@ -435,7 +435,7 @@ pub(crate) extern "system" fn attach_point(
         match attached {
             Ok(()) => Status::OK,
             Err(reason) => {
-                crate::log::write(Level::WARN, &record.id, &reason);
+                crate::log::write(Level::WARN, &record.id, &reason.to_string());
                 Status::REFUSED
             }
         }
@@ -486,7 +486,7 @@ pub(crate) extern "system" fn declare_content(
             // touches during the call.
             Ok(guid) => unsafe { put(out, guid.0) },
             Err(why) => {
-                loader.turn_off(index, &why);
+                loader.turn_off(index, &why.to_string());
                 Status::REFUSED
             }
         }

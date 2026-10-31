@@ -8,8 +8,8 @@ use enshwick::abi::Status;
 use crate::host::Loader;
 use crate::pinned;
 
-use super::STATE;
 use super::accounts::{Act, Decision, Online, Route, Target, decide, event};
+use super::{FindGameCodeError, STATE};
 
 /// The build table ids the console names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -69,28 +69,30 @@ fn handler(loader: &Loader) -> Option<&'static Handler> {
 }
 
 /// The handler and its action's layout, or what is missing.
-fn find(loader: &Loader) -> Result<Handler, String> {
+fn find(loader: &Loader) -> Result<Handler, FindGameCodeError> {
     let reflection = &loader.reflection;
-    let offset = |field: &str| {
+    let offset = |field: &'static str| {
         reflection
             .field_offset(EVENT, field)
             .ok()
             .and_then(|at| usize::try_from(at).ok())
-            .ok_or_else(|| format!("the reflected {EVENT}.{field}"))
+            .ok_or(FindGameCodeError::Field { ty: EVENT, field })
     };
     let address = loader
         .address(pinned::server::ACCOUNT_ACTION)
         .and_then(|address| usize::try_from(address).ok())
-        .ok_or_else(|| format!("the table entry {}", pinned::server::ACCOUNT_ACTION.id()))?;
+        .ok_or(FindGameCodeError::Entry {
+            id: pinned::server::ACCOUNT_ACTION.id(),
+        })?;
     let size = reflection
         .type_info(EVENT)
         .ok()
         .and_then(|info| usize::try_from(info.size()).ok())
-        .ok_or_else(|| format!("the reflected {EVENT}"))?;
+        .ok_or(FindGameCodeError::Type { ty: EVENT })?;
     let account = offset(EVENT_ACCOUNT)?;
     let act = offset(EVENT_ACT)?;
     if event(size, account, act, Act::Kick, 0).is_none() {
-        return Err(format!("a reflected {EVENT} that holds its fields"));
+        return Err(FindGameCodeError::Layout { ty: EVENT });
     }
     Ok(Handler {
         // SAFETY: the table's `server.account_action` address is the game's

@@ -92,6 +92,30 @@ pub fn replaced() -> &'static [Replaced] {
     REPLACED.get().map_or(&[], Vec::as_slice)
 }
 
+/// Why `mods.toml` does not read.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ParseModListError {
+    /// The text is no TOML; the message is the first line of the parser's.
+    #[error("{}", first_line(.0))]
+    Toml(#[from] toml_edit::TomlError),
+    /// An entry is no table.
+    #[error("{id} is not a table such as [{id}]")]
+    NotTable {
+        /// The entry's key.
+        id: String,
+    },
+}
+
+/// The first line of `error`'s message.
+fn first_line(error: &toml_edit::TomlError) -> String {
+    error
+        .to_string()
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_owned()
+}
+
 /// `mods.toml`, parsed with its comments and layout kept.
 #[derive(Debug, Clone)]
 pub struct ModList {
@@ -113,12 +137,10 @@ impl ModList {
     ///
     /// A reason for the log when the text is not TOML or an entry is not a
     /// table.
-    pub fn parse(text: &str) -> Result<Self, String> {
-        let doc: DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
-            e.to_string().lines().next().unwrap_or_default().to_owned()
-        })?;
+    pub fn parse(text: &str) -> Result<Self, ParseModListError> {
+        let doc: DocumentMut = text.parse()?;
         if let Some((id, _)) = doc.iter().find(|(_, item)| !item.is_table_like()) {
-            return Err(format!("{id} is not a table such as [{id}]"));
+            return Err(ParseModListError::NotTable { id: id.to_owned() });
         }
         Ok(Self { doc })
     }
@@ -391,6 +413,7 @@ enabled = true
         assert!(
             ModList::parse("\"you.trading-post\" = true\n")
                 .unwrap_err()
+                .to_string()
                 .contains("not a table")
         );
     }

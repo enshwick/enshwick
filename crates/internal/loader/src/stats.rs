@@ -260,7 +260,7 @@ fn declare(loader: &Loader, owner: ModIndex, space: Space, full: &str) -> Result
         ids.declare(by, space, full, key)
     });
     declared.map_err(|why| {
-        loader.turn_off(owner, &why);
+        loader.turn_off(owner, &why.to_string());
         Status::REFUSED
     })
 }

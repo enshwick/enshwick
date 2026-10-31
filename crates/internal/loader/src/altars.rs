@@ -181,14 +181,14 @@ struct Fields {
 }
 
 impl Fields {
-    fn read(loader: &Loader) -> Result<Self, String> {
-        let field = |ty: &str, name: &str| {
+    fn read(loader: &Loader) -> Result<Self, LinkAltarsError> {
+        let field = |ty: &'static str, name: &'static str| {
             loader
                 .reflection
                 .field_offset(ty, name)
                 .ok()
                 .and_then(|v| usize::try_from(v).ok())
-                .ok_or(format!("no {ty}.{name} in this build"))
+                .ok_or(LinkAltarsError::NoField { ty, name })
         };
         let transform = field("keen::ecs::CurrentTransform", "transform")?;
         Ok(Self {
@@ -198,6 +198,21 @@ impl Fields {
         })
     }
 }
+
+/// Why the altars stay off on this build.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+enum LinkAltarsError {
+    /// The build's reflection lacks a field the altars read.
+    #[error("no {ty}.{name} in this build")]
+    NoField {
+        ty: &'static str,
+        name: &'static str,
+    },
+    /// A system the altars hook no longer fits its layout.
+    #[error(transparent)]
+    Components(#[from] crate::ecs::MatchComponentsError),
+}
+
 static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
 /// The mods' altar zone filters, in load order.
 static SIZERS: Registry<Sizer> = Registry::new();
