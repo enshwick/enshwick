@@ -5,9 +5,6 @@
 # Build output
 /target/
 
-# Rebuilt from manifests and lockfiles
-node_modules/
-
 # Local settings and scratch
 .cache/
 .idea/

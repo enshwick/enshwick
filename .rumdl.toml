@@ -1,0 +1,6 @@
+[global]
+disable = ["line-length"]
+exclude = ["target", "research", "**/CHANGELOG.md"]
+
+[no-duplicate-heading]
+siblings-only = true

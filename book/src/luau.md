@@ -47,7 +47,6 @@ global `enshwick`.
    ```
 
    With the game's types, add `--definitions:@game=types/game.d.luau`.
-
 4. Copy the folder into the game's `mods/` folder as `mods/you.greeter/`.
 
 The repository's `examples/you.welcome` is a Luau mod to start from.
