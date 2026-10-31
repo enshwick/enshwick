@@ -9,8 +9,8 @@ use crate::Step;
 /// the pull request lane however many a change reaches.
 const BUDGET: u64 = 45;
 /// Seconds a target runs at least, enough for its seed corpus and some
-/// mutations.
-const LEAST: u64 = 5;
+/// mutations; low, since a change to the fuzz crate reaches every target.
+const LEAST: u64 = 2;
 /// The variable naming the nightly toolchain to build with, which CI sets
 /// to the dated one it installs.
 const TOOLCHAIN_VAR: &str = "ENSH_FUZZ_TOOLCHAIN";

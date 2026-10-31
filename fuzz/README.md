@@ -40,7 +40,7 @@ holds the small seed corpus kept in the repository. A crash is written to
 A crash becomes a regression test beside the code it found, then a fix.
 
 On a pull request CI runs `cargo xtask check --part fuzz`: the targets
-whose input the change reaches share 45 seconds, each at least 5, over the
+whose input the change reaches share 45 seconds, each at least 2, over the
 seed corpus, built unoptimized (`--dev`) so the build fits too. A push to `main` runs every target the same way and fills the
 build cache pull requests start from. CI builds with the dated nightly that
 [`setup-rust`](../.github/actions/setup-rust/action.yml) pins and hands
