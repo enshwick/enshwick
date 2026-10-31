@@ -150,7 +150,11 @@ pub(crate) fn run(targets: &[&str]) -> bool {
                 &toolchain,
                 "fuzz",
                 "run",
-                "-O",
+                // The workspace crates build anew in every CI run, since a
+                // checkout gives their files new times; unoptimized they
+                // build in about a quarter of the time, which a short run
+                // needs more than speed per input.
+                "--dev",
                 "--target",
                 &host,
                 "--target-dir",
