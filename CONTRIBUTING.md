@@ -9,7 +9,7 @@ and on Windows the MSVC build tools.
 ```bash
 bun install                                 # repository tools and the git hooks
 bun run lint:md                             # markdownlint on every document, as the hooks run it
-cargo install --locked cargo-nextest@0.9.149
+cargo install --locked cargo-nextest@0.9.150
 cargo nextest run --workspace
 ```
 
