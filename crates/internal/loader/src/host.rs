@@ -22,7 +22,7 @@ mod entries;
 mod join;
 mod memory;
 
-pub(crate) use entries::mods::check_settings;
+pub(crate) use entries::mods::{CheckSettingsError, check_settings};
 
 use entries::build::{
     build, caller_frame, constant, data_dir, event_types, field_offset, log_level, symbol, system,

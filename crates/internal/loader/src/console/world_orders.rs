@@ -37,9 +37,9 @@ pub(crate) fn order(loader: &Loader, order: Order, args: &str) -> String {
     })
 }
 
-/// The player online `words` name, or the answer that says why none.
-fn player(loader: &Loader, words: &str) -> Result<PlayerInfo, String> {
-    let players = crate::world::players(loader).map_err(tools::unread)?;
+/// The player online `words` name, or why none.
+fn player(loader: &Loader, words: &str) -> Result<PlayerInfo, FindPlayerError> {
+    let players = crate::world::players(loader).map_err(FindPlayerError::Unread)?;
     let online: Vec<accounts::Online> = players
         .iter()
         .map(|p| accounts::Online {
@@ -50,32 +50,54 @@ fn player(loader: &Loader, words: &str) -> Result<PlayerInfo, String> {
         .collect();
     let key = match accounts::target(words, &online) {
         Ok(Target::Player(found)) => found.key,
-        Ok(Target::Account(key)) => {
-            return Err(texts::fill(
-                "console.order.offline",
-                &[("account", &format!("{key:016x}"))],
-            ));
+        Ok(Target::Account(key)) => return Err(FindPlayerError::Offline { key }),
+        Err(Refusal::Shared(word, keys)) => return Err(FindPlayerError::Shared { word, keys }),
+        Err(Refusal::Unknown(word)) => return Err(FindPlayerError::Unknown { word }),
+        Err(_) => {
+            return Err(FindPlayerError::Unknown {
+                word: words.to_owned(),
+            });
         }
-        Err(Refusal::Shared(word, keys)) => {
-            return Err(texts::fill(
-                "console.account.shared",
-                &[("word", &word), ("accounts", &accounts::listed(&keys))],
-            ));
-        }
-        Err(Refusal::Unknown(word)) => {
-            return Err(texts::fill("console.account.unknown", &[("word", &word)]));
-        }
-        Err(_) => return Err(texts::fill("console.account.unknown", &[("word", words)])),
     };
     players
         .into_iter()
         .find(|p| p.key == enshwick::PlayerKey::new(key) && p.entity != Entity(0))
-        .ok_or_else(|| {
-            texts::fill(
+        .ok_or(FindPlayerError::Offline { key })
+}
+
+/// Why the words of an order name no player online.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+enum FindPlayerError {
+    /// The players online did not read.
+    #[error("the players online do not read: {0:?}")]
+    Unread(Status),
+    /// The words name an account that is not online.
+    #[error("account {key:016x} is not online")]
+    Offline { key: u64 },
+    /// The word names several accounts.
+    #[error("{word} names several accounts")]
+    Shared { word: String, keys: Vec<u64> },
+    /// The word names no account.
+    #[error("{word} names no account")]
+    Unknown { word: String },
+}
+
+impl FindPlayerError {
+    /// The console's answer.
+    fn reply(&self) -> String {
+        match self {
+            Self::Unread(status) => tools::unread(*status),
+            Self::Offline { key } => texts::fill(
                 "console.order.offline",
                 &[("account", &format!("{key:016x}"))],
-            )
-        })
+            ),
+            Self::Shared { word, keys } => texts::fill(
+                "console.account.shared",
+                &[("word", word), ("accounts", &accounts::listed(keys))],
+            ),
+            Self::Unknown { word } => texts::fill("console.account.unknown", &[("word", word)]),
+        }
+    }
 }
 
 /// What a give is for, kept until the game answers it.
@@ -127,7 +149,7 @@ fn give(loader: &Loader, give: &orders::Give<'_>) -> String {
         },
         Recipients::Named(words) => match player(loader, words) {
             Ok(player) => vec![player],
-            Err(answer) => return answer,
+            Err(why) => return why.reply(),
         },
     };
     if players.is_empty() {
@@ -195,7 +217,7 @@ fn spawn(loader: &Loader, spawn: &orders::Spawn<'_>) -> String {
         Place::Beside(words) => {
             let player = match player(loader, words) {
                 Ok(player) => player,
-                Err(answer) => return answer,
+                Err(why) => return why.reply(),
             };
             let Some([x, y, z]) =
                 crate::world::fixed_position(loader, player.entity).map(answers::metres)
@@ -259,7 +281,7 @@ fn spawn(loader: &Loader, spawn: &orders::Spawn<'_>) -> String {
 fn teleport(loader: &Loader, order: &orders::Teleport<'_>) -> String {
     let player = match player(loader, order.who) {
         Ok(player) => player,
-        Err(answer) => return answer,
+        Err(why) => return why.reply(),
     };
     let request = TeleportRequest {
         header: Header::of::<TeleportRequest>(),

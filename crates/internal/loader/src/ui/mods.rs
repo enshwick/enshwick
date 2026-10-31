@@ -937,7 +937,7 @@ fn settings(
     Some(
         match crate::configure::apply(loader, index, &key, &value, "the Mods screen") {
             Ok(change) => (crate::configure::changed(&record.id, &key, &change), true),
-            Err(reply) => (reply, false),
+            Err(why) => (why.reply(), false),
         },
     )
 }

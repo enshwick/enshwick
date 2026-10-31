@@ -493,7 +493,7 @@ fn menu_system(loader: &Loader) -> Option<Target<'static>> {
         )),
         Err(why) => {
             crate::log!(WARN, "survivor menu off: {why}");
-            crate::diag::part_off("survivor menu", &why);
+            crate::diag::part_off("survivor menu", &why.to_string());
             None
         }
     }

@@ -91,11 +91,38 @@ struct State {
     /// The game's account action handler and its action's layout, or why
     /// this build lacks them.
     #[cfg(windows)]
-    handler: std::sync::OnceLock<Result<admin::Handler, String>>,
+    handler: std::sync::OnceLock<Result<admin::Handler, FindGameCodeError>>,
     /// The game's ban list add and its entry's layout, or why this build
     /// lacks them.
     #[cfg(windows)]
-    ban_list: std::sync::OnceLock<Result<ban_list::BanList, String>>,
+    ban_list: std::sync::OnceLock<Result<ban_list::BanList, FindGameCodeError>>,
+}
+
+/// What this build lacks for one of the console's account tools.
+#[cfg(windows)]
+#[derive(Debug, thiserror::Error)]
+enum FindGameCodeError {
+    /// A build table entry.
+    #[error("the table entry {id}")]
+    Entry { id: &'static str },
+    /// A build table entry whose code matches its pattern.
+    #[error("the table entry {id} with code that matches it")]
+    Code { id: &'static str },
+    /// A reflected type.
+    #[error("the reflected {ty}")]
+    Type { ty: &'static str },
+    /// A reflected field.
+    #[error("the reflected {ty}.{field}")]
+    Field {
+        ty: &'static str,
+        field: &'static str,
+    },
+    /// A reflected type too small for its fields.
+    #[error("a reflected {ty} that holds its fields")]
+    Layout { ty: &'static str },
+    /// A ban entry whose fields do not fit in it.
+    #[error("a ban entry its fields fit in ({entry:x?})")]
+    BanEntry { entry: accounts::BanFields },
 }
 
 static STATE: State = State {
@@ -334,11 +361,11 @@ pub fn parse(line: &str) -> Line<'_> {
 ///
 /// # Errors
 ///
-/// The first word that is none of them.
+/// [`ParseLogQueryError`] with the first word that is none of them.
 pub fn log_query(
     args: &str,
     known: impl Fn(&str) -> bool,
-) -> Result<(Option<String>, Level, usize), String> {
+) -> Result<(Option<String>, Level, usize), ParseLogQueryError> {
     let mut source = None;
     let mut level = Level::DEBUG;
     let mut count = 10;
@@ -350,10 +377,20 @@ pub fn log_query(
         } else if word.eq_ignore_ascii_case(LOADER_ID) || known(word) {
             source = Some(word.to_ascii_lowercase());
         } else {
-            return Err(word.to_owned());
+            return Err(ParseLogQueryError {
+                word: word.to_owned(),
+            });
         }
     }
     Ok((source, level, count))
+}
+
+/// Why `enshwick log` does not read its words.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{word:?} is no number, level or source of log lines")]
+pub struct ParseLogQueryError {
+    /// The first word that is no number, level or known source.
+    pub word: String,
 }
 
 #[cfg(test)]
@@ -480,6 +517,11 @@ mod tests {
             log_query("Enshwick 999", known),
             Ok((Some("enshwick".to_owned()), Level::DEBUG, MAX_LOG_LINES))
         );
-        assert_eq!(log_query("nobody", known), Err("nobody".to_owned()));
+        assert_eq!(
+            log_query("nobody", known),
+            Err(ParseLogQueryError {
+                word: "nobody".to_owned()
+            })
+        );
     }
 }

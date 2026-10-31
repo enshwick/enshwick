@@ -505,11 +505,11 @@ pub(crate) fn reload(
     changes: Vec<(Change, String)>,
     items: Vec<(ItemsChange, String)>,
     recipes: Vec<(RecipesChange, String)>,
-) -> Result<usize, String> {
+) -> Result<usize, ReloadChangesError> {
     let sealed = CHANGES
         .sealed
         .get()
-        .ok_or_else(|| "no changes were in force at start".to_owned())?;
+        .ok_or(ReloadChangesError::NoneAtStart)?;
     let one = changes.into_iter().map(|(change, source)| {
         Pending::One(Declared {
             owner,
@@ -645,7 +645,7 @@ fn apply(
     sealed: &Sealed,
     declared: &mut Vec<Declared>,
     next: Vec<Declared>,
-) -> Result<Vec<ResourceKey>, String> {
+) -> Result<Vec<ResourceKey>, ReloadChangesError> {
     let loader = sealed.loader;
     let patched = sealed.patched.get().cloned().unwrap_or_default();
     let (merged, conflicts) = merge(&next, |a, b| requires(loader, a, b));
@@ -653,20 +653,15 @@ fn apply(
         .into_iter()
         .find(|item| !patched.contains(&item.key_by_hash(crate::catalogue::types::ITEM_INFO)))
     {
-        return Err(format!(
-            "the values of {item} change for the first time, which takes a restart"
-        ));
+        return Err(ReloadChangesError::Values { item });
     }
     let recipes = RECIPE_REGISTRY.key_by_hash(crate::catalogue::types::RECIPE_REGISTRY);
     if !merged.entries(Entry::Recipe).is_empty() && !patched.contains(&recipes) {
-        return Err("recipes change for the first time, which takes a restart".to_owned());
+        return Err(ReloadChangesError::Recipes);
     }
     let stations = |merged: &Merged| stations(merged, |_| true);
     if stations(&merged) != stations(&sealed.merged()) {
-        return Err(
-            "a recipe moves to another station, which takes a restart: the menus are built at start"
-                .to_owned(),
-        );
+        return Err(ReloadChangesError::Station);
     }
     let templates = sealed.templates.get();
     let slotted = merged
@@ -675,26 +670,20 @@ fn apply(
         .filter(|item| merged.keys(*item).iter().any(|k| k.field == Field::Slots));
     for item in slotted {
         if !templates.is_some_and(|t| t.contains_key(&item)) {
-            return Err(format!(
-                "the container slots of {item} change for the first time, which takes a restart"
-            ));
+            return Err(ReloadChangesError::Slots { item });
         }
     }
     let looted = sealed.loot_items.get();
     for item in merged.loot_items() {
         if !looted.is_some_and(|items| items.contains(&item)) {
-            return Err(format!(
-                "the loot of {item} changes for the first time, which takes a restart"
-            ));
+            return Err(ReloadChangesError::Loot { item });
         }
     }
     let fill = catalogue::type_hash(catalogue::ids::LOOT_FILL_TABLE);
     for (table, _) in merged.table_items() {
         let key = fill.map(|hash| table.key_by_hash(hash));
         if !key.is_some_and(|key| patched.contains(&key)) {
-            return Err(format!(
-                "the loot table {table} changes for the first time, which takes a restart"
-            ));
+            return Err(ReloadChangesError::Table { table });
         }
     }
     report(loader, &conflicts);
@@ -709,23 +698,58 @@ fn apply(
 ///
 /// The resources that did not build again: their base was not kept, or
 /// their length changed, such as an ingredient taken out or added.
-fn rebuild(patched: &[ResourceKey]) -> Result<usize, String> {
+fn rebuild(patched: &[ResourceKey]) -> Result<usize, ReloadChangesError> {
     let mut failed = Vec::new();
     for key in patched {
         let status = crate::content::rebuild(ModIndex::LOADER, *key);
         if !status.is_ok() {
-            failed.push(format!("{}:{:08x}", Guid(key.guid), key.type_hash));
+            failed.push(*key);
         }
     }
     if failed.is_empty() {
         Ok(patched.len())
     } else {
-        Err(format!(
-            "{} resources do not build again in place: {}",
-            failed.len(),
-            failed.join(", ")
-        ))
+        Err(ReloadChangesError::Rebuild { failed })
     }
+}
+
+/// Why a development reload's changes of values take a restart.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum ReloadChangesError {
+    /// No changes were sealed at start.
+    #[error("no changes were in force at start")]
+    NoneAtStart,
+    /// An item's values change, which the loader did not patch at start.
+    #[error("the values of {item} change for the first time, which takes a restart")]
+    Values { item: Guid },
+    /// Recipes change, which the loader did not patch at start.
+    #[error("recipes change for the first time, which takes a restart")]
+    Recipes,
+    /// A recipe moves to another station.
+    #[error(
+        "a recipe moves to another station, which takes a restart: the menus are built at start"
+    )]
+    Station,
+    /// A container's slots change, whose template the loader did not keep.
+    #[error("the container slots of {item} change for the first time, which takes a restart")]
+    Slots { item: Guid },
+    /// An item's loot changes, which the loader did not patch at start.
+    #[error("the loot of {item} changes for the first time, which takes a restart")]
+    Loot { item: Guid },
+    /// A loot table changes, which the loader did not patch at start.
+    #[error("the loot table {table} changes for the first time, which takes a restart")]
+    Table { table: Guid },
+    /// Resources did not build again in place.
+    #[error("{} resources do not build again in place: {}", failed.len(), shown(failed))]
+    Rebuild { failed: Vec<ResourceKey> },
+}
+
+/// `keys` as `<guid>:<type hash>`, joined.
+fn shown(keys: &[ResourceKey]) -> String {
+    keys.iter()
+        .map(|key| format!("{}:{:08x}", Guid(key.guid), key.type_hash))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The loader's patches of the loot tables the changes reach: the random

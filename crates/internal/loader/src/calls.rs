@@ -72,7 +72,7 @@ pub(crate) struct Route {
     /// The major it asked for.
     pub(crate) major: u32,
     /// The matched server, or why it stays unmatched.
-    pub(crate) server: Result<Server, String>,
+    pub(crate) server: Result<Server, RouteCallError>,
 }
 
 /// A served call, for the status summary.
@@ -100,17 +100,23 @@ impl Registry {
         declared: Declared,
         callback: CallFn,
         user: usize,
-    ) -> Result<(), String> {
+    ) -> Result<(), DeclareCallError> {
         let name = &declared.name;
         if !enshwick::__private::rules::is_named_after(name, owner_id) {
-            return Err(format!("call {name}: a call is named `{owner_id}:<call>`"));
+            return Err(DeclareCallError::Namespace {
+                name: name.clone(),
+                owner: owner_id.to_owned(),
+            });
         }
         if self
             .served
             .iter()
             .any(|s| s.declared.name == *name && s.declared.major == declared.major)
         {
-            return Err(format!("call {name} v{}: served twice", declared.major));
+            return Err(DeclareCallError::ServedTwice {
+                name: name.clone(),
+                major: declared.major,
+            });
         }
         self.served.push(Served {
             owner,
@@ -128,7 +134,11 @@ impl Registry {
     ///
     /// Why it is refused: the mod asked for the call already with another
     /// declaration, or too many calls are asked for.
-    pub(crate) fn find(&mut self, owner: ModIndex, declared: Declared) -> Result<u32, String> {
+    pub(crate) fn find(
+        &mut self,
+        owner: ModIndex,
+        declared: Declared,
+    ) -> Result<u32, DeclareCallError> {
         let known = self.wanted.iter().position(|w| {
             w.owner == owner
                 && w.declared.name == declared.name
@@ -144,17 +154,17 @@ impl Registry {
                 index
             }
             Some(_) => {
-                return Err(format!(
-                    "call {} v{}: asked for twice, declared differently",
-                    declared.name, declared.major
-                ));
+                return Err(DeclareCallError::AskedTwice {
+                    name: declared.name,
+                    major: declared.major,
+                });
             }
             None => {
                 self.wanted.push(Wanted { owner, declared });
                 self.wanted.len() - 1
             }
         };
-        u32::try_from(index).map_err(|_| "too many calls".to_owned())
+        u32::try_from(index).map_err(|_| DeclareCallError::TooMany)
     }
 
     /// Matches every asked call with its server: the routes by id, and the
@@ -185,12 +195,12 @@ impl Registry {
     /// Why `want` would stay unmatched against the calls served so far;
     /// `None` when it matches. What a required server, which initialises
     /// first, has served is all it serves.
-    pub(crate) fn unmatched(&self, want: &Declared, mods: &impl Mods) -> Option<String> {
+    pub(crate) fn unmatched(&self, want: &Declared, mods: &impl Mods) -> Option<RouteCallError> {
         self.route(want, mods).err()
     }
 
     /// The server of `want`, or why none.
-    fn route(&self, want: &Declared, mods: &impl Mods) -> Result<Server, String> {
+    fn route(&self, want: &Declared, mods: &impl Mods) -> Result<Server, RouteCallError> {
         let named: Vec<&Served> = self
             .served
             .iter()
@@ -199,20 +209,16 @@ impl Registry {
         let Some(served) = named.iter().find(|s| s.declared.major == want.major) else {
             return Err(unserved(want, &named, mods));
         };
-        let (id, version) = mods.name(served.owner.get());
+        let by = Mod::of(mods, served.owner.get());
         if mods.off(served.owner.get()) {
-            return Err(format!("{id} {version} serves it, but is off"));
+            return Err(RouteCallError::ServerOff { server: by });
         }
         let have = &served.declared;
         if want.input != have.input || want.input_size != have.input_size {
-            return Err(format!(
-                "the input differs here and at {id} {version}, in a field or in size; both mods must compile one declaration"
-            ));
+            return Err(RouteCallError::Input { server: by });
         }
         if want.output != have.output || want.output_size != have.output_size {
-            return Err(format!(
-                "the answer differs here and at {id} {version}, in its type or size; both mods must compile one declaration"
-            ));
+            return Err(RouteCallError::Output { server: by });
         }
         Ok(Server {
             owner: served.owner,
@@ -223,34 +229,103 @@ impl Registry {
 }
 
 /// Why no server of `want`'s major runs; `named` are the calls of its name.
-fn unserved(want: &Declared, named: &[&Served], mods: &impl Mods) -> String {
+fn unserved(want: &Declared, named: &[&Served], mods: &impl Mods) -> RouteCallError {
     if let Some(other) = named.first() {
-        let (id, version) = mods.name(other.owner.get());
-        let advice = if other.declared.major < want.major {
-            format!("; update {id}")
-        } else {
-            "; update this mod".to_owned()
+        return RouteCallError::Major {
+            server: Mod::of(mods, other.owner.get()),
+            served: other.declared.major,
+            asked: want.major,
         };
-        return format!(
-            "{id} {version} serves v{}, this mod asks for v{}{advice}",
-            other.declared.major, want.major
-        );
     }
     let server = want
         .name
         .split_once(':')
         .map_or(want.name.as_str(), |(id, _)| id);
     match mods.find(server) {
-        None => format!("{server} does not run"),
-        Some(index) if mods.off(index) => {
-            let (id, version) = mods.name(index);
-            format!("{id} {version} is off")
-        }
-        Some(index) => {
-            let (id, version) = mods.name(index);
-            format!("{id} {version} serves no such call; update {id}")
+        None => RouteCallError::NotRunning {
+            id: server.to_owned(),
+        },
+        Some(index) if mods.off(index) => RouteCallError::Off {
+            server: Mod::of(mods, index),
+        },
+        Some(index) => RouteCallError::NoSuchCall {
+            server: Mod::of(mods, index),
+        },
+    }
+}
+
+/// Why the loader refuses a call a mod serves or asks for.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum DeclareCallError {
+    /// The name lies outside the serving mod's namespace.
+    #[error("call {name}: a call is named `{owner}:<call>`")]
+    Namespace { name: String, owner: String },
+    /// A call of the name and major is served already.
+    #[error("call {name} v{major}: served twice")]
+    ServedTwice { name: String, major: u32 },
+    /// The mod asked for the call already, declared otherwise.
+    #[error("call {name} v{major}: asked for twice, declared differently")]
+    AskedTwice { name: String, major: u32 },
+    /// More calls asked for than an id holds.
+    #[error("too many calls")]
+    TooMany,
+}
+
+/// A mod as a reason names it: its id and version.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Mod {
+    id: String,
+    version: String,
+}
+
+impl Mod {
+    fn of(mods: &impl Mods, index: usize) -> Self {
+        let (id, version) = mods.name(index);
+        Self {
+            id: id.to_owned(),
+            version: version.to_owned(),
         }
     }
+}
+
+impl core::fmt::Display for Mod {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{} {}", self.id, self.version)
+    }
+}
+
+/// Why an asked call reaches no server.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum RouteCallError {
+    /// The server serves another major of the call.
+    #[error("{server} serves v{served}, this mod asks for v{asked}; update {}", if served < asked { server.id.as_str() } else { "this mod" })]
+    Major {
+        server: Mod,
+        served: u32,
+        asked: u32,
+    },
+    /// No mod of the call's namespace runs.
+    #[error("{id} does not run")]
+    NotRunning { id: String },
+    /// The mod of the call's namespace is off.
+    #[error("{server} is off")]
+    Off { server: Mod },
+    /// The mod of the call's namespace serves no call of the name.
+    #[error("{server} serves no such call; update {}", server.id)]
+    NoSuchCall { server: Mod },
+    /// The serving mod is off.
+    #[error("{server} serves it, but is off")]
+    ServerOff { server: Mod },
+    /// The input's declarations differ.
+    #[error(
+        "the input differs here and at {server}, in a field or in size; both mods must compile one declaration"
+    )]
+    Input { server: Mod },
+    /// The answer's declarations differ.
+    #[error(
+        "the answer differs here and at {server}, in its type or size; both mods must compile one declaration"
+    )]
+    Output { server: Mod },
 }
 
 /// The registry while mods initialise.
@@ -448,11 +523,17 @@ mod tests {
         let me = ModIndex::new(0);
         let id = "you.trading-post";
         assert!(registry.serve(me, id, price(1), answer, 0).is_ok());
-        let twice = registry.serve(me, id, price(1), answer, 0).unwrap_err();
+        let twice = registry
+            .serve(me, id, price(1), answer, 0)
+            .unwrap_err()
+            .to_string();
         assert!(twice.contains("served twice"), "{twice}");
         assert!(registry.serve(me, id, price(2), answer, 0).is_ok());
         let other = declared("you.haggling:price-of", 1, &[], 0);
-        let outside = registry.serve(me, id, other, answer, 0).unwrap_err();
+        let outside = registry
+            .serve(me, id, other, answer, 0)
+            .unwrap_err()
+            .to_string();
         assert!(
             outside.contains("named `you.trading-post:<call>`"),
             "{outside}"
@@ -497,7 +578,13 @@ mod tests {
         let (routes, offers) = registry.seal(&mods);
         let reasons: Vec<String> = routes
             .iter()
-            .map(|r| r.server.as_ref().err().cloned().unwrap_or_default())
+            .map(|r| {
+                r.server
+                    .as_ref()
+                    .err()
+                    .map(ToString::to_string)
+                    .unwrap_or_default()
+            })
             .collect();
         assert_eq!(reasons[0], "");
         assert!(reasons[1].contains("serves v2, this mod asks for v1; update this mod"));
@@ -535,7 +622,7 @@ mod tests {
         let _id = registry.find(ModIndex::new(1), declared("you.off:rent", 1, &[], 0));
         let (routes, _) = registry.seal(&mods);
         let reason = routes[0].server.as_ref().unwrap_err();
-        assert_eq!(reason, "you.off 0.1.0 serves it, but is off");
+        assert_eq!(reason.to_string(), "you.off 0.1.0 serves it, but is off");
     }
 
     #[test]
@@ -547,10 +634,16 @@ mod tests {
             .serve(ModIndex::new(0), id, price(2), answer, 0)
             .unwrap();
         assert_eq!(registry.unmatched(&price(2), &mods), None);
-        let older = registry.unmatched(&price(1), &mods).unwrap_or_default();
+        let older = registry
+            .unmatched(&price(1), &mods)
+            .map(|e| e.to_string())
+            .unwrap_or_default();
         assert!(older.contains("serves v2, this mod asks for v1"), "{older}");
         let rent = declared("you.trading-post:rent", 1, &[], 0);
-        let none = registry.unmatched(&rent, &mods).unwrap_or_default();
+        let none = registry
+            .unmatched(&rent, &mods)
+            .map(|e| e.to_string())
+            .unwrap_or_default();
         assert!(none.contains("serves no such call"), "{none}");
     }
 }

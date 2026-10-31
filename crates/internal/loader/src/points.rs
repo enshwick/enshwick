@@ -125,6 +125,23 @@ pub(crate) struct Inert {
     pub(crate) level: Level,
 }
 
+/// Why the loader refuses a point a mod defines or links.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum DeclarePointError {
+    /// The name lies outside the defining mod's namespace.
+    #[error("point {name}: a point is named `{owner}:<point>`")]
+    Namespace { name: String, owner: String },
+    /// A point of the name is defined already.
+    #[error("point {name}: defined twice")]
+    DefinedTwice { name: String },
+    /// More points than an id holds.
+    #[error("too many points")]
+    TooMany,
+    /// The mod links the point already.
+    #[error("point {name}: a mod links a point once")]
+    LinkedTwice { name: String },
+}
+
 /// The mods the seal asks about.
 pub(crate) trait Mods: Names {
     /// The index of the running or off mod `id`.
@@ -144,17 +161,18 @@ impl Registry {
         owner: ModIndex,
         owner_id: &str,
         declared: Declared,
-    ) -> Result<(u32, &'static AtomicU32), String> {
+    ) -> Result<(u32, &'static AtomicU32), DeclarePointError> {
         let name = &declared.name;
         if !enshwick::__private::rules::is_named_after(name, owner_id) {
-            return Err(format!(
-                "point {name}: a point is named `{owner_id}:<point>`"
-            ));
+            return Err(DeclarePointError::Namespace {
+                name: name.clone(),
+                owner: owner_id.to_owned(),
+            });
         }
         if self.defined.iter().any(|d| d.declared.name == *name) {
-            return Err(format!("point {name}: defined twice"));
+            return Err(DeclarePointError::DefinedTwice { name: name.clone() });
         }
-        let id = u32::try_from(self.defined.len()).map_err(|_| "too many points".to_owned())?;
+        let id = u32::try_from(self.defined.len()).map_err(|_| DeclarePointError::TooMany)?;
         let live: &'static AtomicU32 = Box::leak(Box::new(AtomicU32::new(0)));
         self.defined.push(Definition {
             owner,
@@ -169,16 +187,15 @@ impl Registry {
     /// # Errors
     ///
     /// Why it is refused: the mod linked the point already.
-    pub(crate) fn attach(&mut self, link: Pending) -> Result<(), String> {
+    pub(crate) fn attach(&mut self, link: Pending) -> Result<(), DeclarePointError> {
         if self
             .pending
             .iter()
             .any(|p| p.owner == link.owner && p.declared.name == link.declared.name)
         {
-            return Err(format!(
-                "point {}: a mod links a point once",
-                link.declared.name
-            ));
+            return Err(DeclarePointError::LinkedTwice {
+                name: link.declared.name,
+            });
         }
         self.pending.push(link);
         Ok(())

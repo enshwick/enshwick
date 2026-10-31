@@ -10,8 +10,8 @@ use enshwick::abi::Status;
 use crate::host::Loader;
 use crate::pinned;
 
-use super::STATE;
 use super::accounts::{BanFields, ban_entry};
+use super::{FindGameCodeError, STATE};
 
 /// The most entries [`holds`] reads, far past any ban list a server keeps.
 const LIST_MAX: u64 = 1 << 20;
@@ -63,11 +63,11 @@ fn ban_list(loader: &Loader) -> Option<&'static BanList> {
 }
 
 /// The add, the config's place and the entry's layout, or what is missing.
-fn find(loader: &Loader) -> Result<BanList, String> {
+fn find(loader: &Loader) -> Result<BanList, FindGameCodeError> {
     let offset = |id: pinned::Constant| {
         loader
             .offset(id)
-            .ok_or_else(|| format!("the table entry {}", id.id()))
+            .ok_or(FindGameCodeError::Entry { id: id.id() })
     };
     let config = offset(pinned::server::CONFIG)?;
     let changed = offset(pinned::server::BAN_LIST_CHANGED)?;
@@ -83,17 +83,14 @@ fn find(loader: &Loader) -> Result<BanList, String> {
         name_length: offset(pinned::server::BAN_NAME_LENGTH)?,
     };
     if entry.size > ENTRY_MAX || ban_entry(&entry, 1, 0, 0).is_none() {
-        return Err(format!("a ban entry its fields fit in ({entry:x?})"));
+        return Err(FindGameCodeError::BanEntry { entry });
     }
     let address = loader
         .address(pinned::server::BAN_ADD)
         .filter(|_| loader.code_holds(pinned::server::BAN_ADD))
         .and_then(|address| usize::try_from(address).ok())
-        .ok_or_else(|| {
-            format!(
-                "the table entry {} with code that matches it",
-                pinned::server::BAN_ADD.id()
-            )
+        .ok_or(FindGameCodeError::Code {
+            id: pinned::server::BAN_ADD.id(),
         })?;
     Ok(BanList {
         // SAFETY: the table's `server.ban_add` is the game's ban list add on

@@ -124,15 +124,28 @@ pub fn placed(placed: &[Placed]) -> String {
 ///
 /// # Errors
 ///
-/// The word that is no number.
-pub fn placed_count(args: &str) -> Result<usize, String> {
+/// [`ParseCountError`] with the word that is no number.
+pub fn placed_count(args: &str) -> Result<usize, ParseCountError> {
     let args = args.trim();
     if args.is_empty() {
         return Ok(REMEMBERED);
     }
     args.parse::<usize>()
         .map(|n| n.clamp(1, REMEMBERED))
-        .map_err(|_| args.to_owned())
+        .map_err(|source| ParseCountError {
+            word: args.to_owned(),
+            source,
+        })
+}
+
+/// Why `enshwick placed` names no count of pieces.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{word:?} is no count")]
+pub struct ParseCountError {
+    /// The word that is no number.
+    pub word: String,
+    #[source]
+    source: core::num::ParseIntError,
 }
 
 /// A loaded mod, for `enshwick mods`.
@@ -274,7 +287,7 @@ mod tests {
         assert_eq!(placed_count(" 5 "), Ok(5));
         assert_eq!(placed_count("0"), Ok(1));
         assert_eq!(placed_count("999"), Ok(REMEMBERED));
-        assert_eq!(placed_count("many"), Err("many".to_owned()));
+        assert_eq!(placed_count("many").unwrap_err().word, "many");
     }
 
     #[test]

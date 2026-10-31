@@ -252,12 +252,41 @@ fn read_names(loader: &Loader) -> Option<Names> {
 }
 
 /// Reads a recipe file; a problem when it does not read.
-fn read_file(path: &Path, shown: &str) -> Result<Option<RuleFile>, String> {
+fn read_file(path: &Path, shown: &str) -> Result<Option<RuleFile>, ReadRulesError> {
     match std::fs::read_to_string(path) {
-        Ok(text) => RuleFile::parse(shown, &text).map(Some),
+        Ok(text) => Ok(Some(RuleFile::parse(shown, &text)?)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(format!("{shown}: {e}")),
+        Err(source) => Err(ReadRulesError::Io {
+            shown: shown.to_owned(),
+            source,
+        }),
     }
+}
+
+/// Why a recipe file that is there does not read.
+#[derive(Debug, thiserror::Error)]
+enum ReadRulesError {
+    /// The system refused it.
+    #[error("{shown}: {source}")]
+    Io {
+        shown: String,
+        #[source]
+        source: std::io::Error,
+    },
+    /// It is no recipe file.
+    #[error(transparent)]
+    Parse(#[from] crate::recipes::ParseRulesError),
+}
+
+/// Why a rule was not written into a recipe file.
+#[derive(Debug, thiserror::Error)]
+enum WriteRuleError {
+    /// The file was not read or written.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    /// The file's lists did not take the rule.
+    #[error(transparent)]
+    Edit(#[from] crate::recipes::EditRulesError),
 }
 
 /// Resolves the rules in force and swaps the disabled recipes in.
@@ -673,7 +702,7 @@ fn change(
         source: Source::Mod(String::new()),
     };
     if let Err(why) = resolve(&probe, index, names) {
-        return texts::fill("recipes.unwritten", &[("why", &why)]);
+        return texts::fill("recipes.unwritten", &[("why", &why.to_string())]);
     }
     let (path, shown) = match (world_path(loader), crate::worlds::current()) {
         (Some(path), Some(key)) => (
@@ -684,9 +713,9 @@ fn change(
     };
     // A file that does not read is never replaced by one with this rule alone.
     let written = enshwick::files::read_to_string_if_present(&path)
-        .map_err(|e| e.to_string())
-        .and_then(|text| edit_file(&text.unwrap_or_default(), kind, name, disable))
-        .and_then(|text| crate::worlds::write_target(&path, &text).map_err(|e| e.to_string()));
+        .map_err(WriteRuleError::from)
+        .and_then(|text| Ok(edit_file(&text.unwrap_or_default(), kind, name, disable)?))
+        .and_then(|text| Ok(crate::worlds::write_target(&path, &text)?));
     match written {
         Ok(()) => {
             DIRTY.store(true, Ordering::Release);
@@ -699,7 +728,7 @@ fn change(
                 &[("file", &shown), ("kind", kind.key()), ("name", name)],
             )
         }
-        Err(why) => texts::fill("recipes.unwritten", &[("why", &why)]),
+        Err(why) => texts::fill("recipes.unwritten", &[("why", &why.to_string())]),
     }
 }
 

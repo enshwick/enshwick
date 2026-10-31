@@ -180,7 +180,7 @@ pub(super) fn world(read_only: bool) {
         world.message = Some(
             match crate::configure::apply(loader, index, &key, &value, "the world settings") {
                 Ok(change) => (crate::configure::changed(&id, &key, &change), true),
-                Err(reply) => (reply, false),
+                Err(why) => (why.reply(), false),
             },
         );
         world.mods = world_rows(loader);

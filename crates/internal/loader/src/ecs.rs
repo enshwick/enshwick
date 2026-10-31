@@ -49,20 +49,46 @@ pub(crate) fn components_match(
     system: &str,
     reads: &[&str],
     writes: &[&str],
-) -> Result<(), String> {
-    let found = loader
-        .reflection
-        .system(system)
-        .map_err(|e| format!("no system {system}: {e}"))?;
+) -> Result<(), MatchComponentsError> {
+    let found =
+        loader
+            .reflection
+            .system(system)
+            .map_err(|source| MatchComponentsError::NoSystem {
+                system: system.to_owned(),
+                source,
+            })?;
     if found.reads() == reads && found.writes() == writes {
         Ok(())
     } else {
-        Err(format!(
-            "{system} reads {:?} and writes {:?}, not the components its iterator layout assumes",
-            found.reads(),
-            found.writes()
-        ))
+        let owned = |names: &[&str]| names.iter().map(|&n| n.to_owned()).collect();
+        Err(MatchComponentsError::Changed {
+            system: system.to_owned(),
+            reads: owned(found.reads()),
+            writes: owned(found.writes()),
+        })
     }
+}
+
+/// Why a system no longer fits the iterator layout the loader has for it.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum MatchComponentsError {
+    /// The build's reflection has no such system.
+    #[error("no system {system}: {source}")]
+    NoSystem {
+        system: String,
+        #[source]
+        source: enshwick_gamedata::reflect::LookupError,
+    },
+    /// The system reads or writes other components.
+    #[error(
+        "{system} reads {reads:?} and writes {writes:?}, not the components its iterator layout assumes"
+    )]
+    Changed {
+        system: String,
+        reads: Vec<String>,
+        writes: Vec<String>,
+    },
 }
 
 /// The helpers on this build, resolved once; `None` when the table lacks one.

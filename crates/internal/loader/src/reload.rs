@@ -308,6 +308,41 @@ fn poll(loader: &'static Loader, mod_: &mut Watched) {
     }
 }
 
+/// Why a changed mod DLL was not reloaded.
+#[derive(Debug, thiserror::Error)]
+enum ReloadModError {
+    /// The loader has no mod of the index.
+    #[error("no such mod")]
+    NoMod,
+    /// The manifest lacks `reload: true`.
+    #[error("its manifest does not allow it (`reload: true`); restart the game")]
+    NotAllowed,
+    /// The server's join turned the mod off.
+    #[error("the server's join turned it off; restart the game")]
+    JoinHeld,
+    /// The mod holds what a reload cannot hand over.
+    #[error("it holds what a reload cannot hand over ({}); restart the game", calls.join(", "))]
+    Holds { calls: Vec<String> },
+    /// No path is left for another copy.
+    #[error("no path for the new copy")]
+    NoPath,
+    /// The new copy was not written.
+    #[error("the new copy: {0}")]
+    Copy(#[source] std::io::Error),
+    /// The new DLL did not load as a mod.
+    #[error("the new DLL did not load as a mod (see above)")]
+    NotAMod,
+    /// The new DLL is another mod.
+    #[error("the new DLL is another mod")]
+    OtherMod,
+    /// The manifest changed beyond its version.
+    #[error("its manifest changed beyond its version; restart the game")]
+    Shape,
+    /// The new copy's init failed.
+    #[error("its init returned {status}")]
+    Init { status: u32 },
+}
+
 /// What in `manifest` must stay the same across a reload, its version
 /// aside.
 fn shape(manifest: &Manifest) -> (u8, u32, usize, usize) {
@@ -319,14 +354,14 @@ fn shape(manifest: &Manifest) -> (u8, u32, usize, usize) {
     )
 }
 
-fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String> {
+fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, ReloadModError> {
     let index = mod_.index;
-    let record = loader.mods.get(index).ok_or("no such mod")?;
+    let record = loader.mods.get(index).ok_or(ReloadModError::NoMod)?;
     if !record.manifest.flags.contains(ManifestFlags::RELOAD) {
-        return Err("its manifest does not allow it (`reload: true`); restart the game".into());
+        return Err(ReloadModError::NotAllowed);
     }
     if held(&record.id) {
-        return Err("the server's join turned it off; restart the game".into());
+        return Err(ReloadModError::JoinHeld);
     }
     let calls = CALLS.relock().get(index).cloned().unwrap_or_default();
     let held: Vec<&str> = calls
@@ -335,26 +370,25 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
         .filter(|call| !RELOADABLE.contains(call))
         .collect();
     if !held.is_empty() {
-        return Err(format!(
-            "it holds what a reload cannot hand over ({}); restart the game",
-            held.join(", ")
-        ));
+        return Err(ReloadModError::Holds {
+            calls: held.into_iter().map(str::to_owned).collect(),
+        });
     }
     let copy = copy_path(&loader.mods_dir, &mod_.original, mod_.copies + 1)
-        .ok_or("no path for the new copy")?;
-    std::fs::copy(&mod_.original, &copy).map_err(|e| format!("the new copy: {e}"))?;
+        .ok_or(ReloadModError::NoPath)?;
+    std::fs::copy(&mod_.original, &copy).map_err(ReloadModError::Copy)?;
     let Some(new) = crate::start::load_copy(&copy) else {
         let _gone = std::fs::remove_file(&copy);
-        return Err("the new DLL did not load as a mod (see above)".into());
+        return Err(ReloadModError::NotAMod);
     };
     // SAFETY: `load_copy` returned the loader's copy of the manifest, whose
     // strings point into the new DLL's static data; the DLL stays loaded
     // until the `FreeLibrary` below, after the last use of `new_id`.
     let new_id = unsafe { new.manifest.id.as_str() }.unwrap_or_default();
     let refused = if new_id != record.id {
-        Some("the new DLL is another mod".to_owned())
+        Some(ReloadModError::OtherMod)
     } else if shape(new.manifest) != shape(record.manifest) {
-        Some("its manifest changed beyond its version; restart the game".to_owned())
+        Some(ReloadModError::Shape)
     } else {
         None
     };
@@ -393,7 +427,7 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
             ModIndex::new(index),
             &format!("reload: init returned {}", status.0),
         );
-        return Err(format!("its init returned {}", status.0));
+        return Err(ReloadModError::Init { status: status.0 });
     }
     // SAFETY: `load_copy` typed `new.ready` from the DLL's `ready` export,
     // which `enshwick::abi::exports` declares with this signature; it runs
