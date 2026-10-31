@@ -12,9 +12,8 @@ use enshwick::state::ModLocal;
 use enshwick::ui::{Anchor, Label};
 use enshwick::{Load, Mod, Off, PlayerKey};
 
-/// The mod's texts, in English and Ukrainian.
-const TEXTS: &str = include_str!("texts.toml");
-
+// The keys of `src/texts.toml`, in English and Ukrainian.
+enshwick::texts!();
 /// What the server tells a player's client: the whole state each time, so a
 /// message that arrives twice changes nothing.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -56,7 +55,9 @@ fn tell(player: PlayerKey, waypoint: &Waypoint) -> Result<(), SendError> {
 fn answer(request: &Request<'_>, sent: Result<(), SendError>, done: &str) -> Outcome {
     match sent {
         Ok(()) => Outcome::done(request.say(done, &[])),
-        Err(why) => Outcome::refused(request.say("not-sent", &[("why", &why.to_string())])),
+        Err(why) => {
+            Outcome::refused(request.say(texts::NOT_SENT, &[(texts::value::WHY, &why.to_string())]))
+        }
     }
 }
 
@@ -66,7 +67,7 @@ pub struct Waypoints;
 
 impl Mod for Waypoints {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let texts = load.texts(TEXTS)?;
+        let all_texts = load.texts()?;
         // Both halves open the channel; only the client takes what comes in.
         let channel = load.channel(CHANNEL_NAME, CHANNEL_VERSION, |from, waypoint| {
             if from == Peer::Server {
@@ -78,34 +79,38 @@ impl Mod for Waypoints {
         // A client draws the mark; it also runs the server half while it
         // hosts a game.
         if load.host().build().side == Side::CLIENT {
-            let hud_texts = texts.clone();
+            let hud_texts = all_texts.clone();
             load.on_hud(move |hud| {
                 if let Some(at) = SHOWN.load().as_deref() {
                     let [x, y, z] = at.map(|metres| format!("{metres:.0}"));
-                    let line =
-                        hud_texts.fill("hud", language(), &[("x", &x), ("y", &y), ("z", &z)]);
+                    let values = [
+                        (texts::value::X, x.as_str()),
+                        (texts::value::Y, &y),
+                        (texts::value::Z, &z),
+                    ];
+                    let line = hud_texts.fill(texts::HUD, language(), &values);
                     hud.text(Anchor::TopRight, Label::new(&line));
                 }
             })?;
         }
 
         let world = load.world()?;
-        let actions = load.actions(texts)?;
-        actions.add(Action::new("mark", "mark"), move |request| {
+        let actions = load.actions(all_texts)?;
+        actions.add(Action::new(texts::MARK, texts::MARK), move |request| {
             let Some(at) = world.position(request.player.entity) else {
-                return Outcome::refused(request.say("no-position", &[]));
+                return Outcome::refused(request.say(texts::NO_POSITION, &[]));
             };
             answer(
                 request,
                 tell(request.player.key, &Waypoint::Set(at)),
-                "marked",
+                texts::MARKED,
             )
         })?;
-        actions.add(Action::new("clear", "clear"), |request| {
+        actions.add(Action::new(texts::CLEAR, texts::CLEAR), |request| {
             answer(
                 request,
                 tell(request.player.key, &Waypoint::Clear),
-                "cleared",
+                texts::CLEARED,
             )
         })?;
         Ok(Self)
@@ -123,11 +128,11 @@ mod tests {
     use enshwick::test::{Drawn, FakeHost, facts};
     use enshwick::{Entity, PlayerKey};
 
-    use super::{TEXTS, Waypoint};
+    use super::{Waypoint, texts};
 
     #[test]
     fn every_text_exists_in_both_languages() {
-        let texts = Texts::parse(TEXTS).expect("the texts parse");
+        let texts = Texts::parse(texts::TOML).expect("the texts parse");
         assert!(
             texts.untranslated().is_empty(),
             "{:?}",
