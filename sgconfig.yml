@@ -1,0 +1,7 @@
+# ast-grep: the code rules clippy cannot express, run by `cargo xtask check`.
+# A deliberate exception is `// ast-grep-ignore: <rule id>` on the line
+# above, with its reason in the comment before it.
+ruleDirs:
+  - tools/ast-grep/rules
+testConfigs:
+  - testDir: tools/ast-grep/tests

@@ -261,7 +261,9 @@ mod game {
         // the bases' zones, keeps its entries pointer at the table's
         // `building.zone_list_entries` offset; read on the game thread.
         let entries: usize = unsafe { read(zones, entries_at) };
-        // SAFETY: as above, its entry count at `building.zone_list_count`.
+        // SAFETY: `zones` is the live building-zone object, whose first list
+        // keeps its entry count at the table's `building.zone_list_count`
+        // offset; read on the game thread.
         let count: usize = unsafe { read(zones, count_at) };
         if count > MAX_ZONES || (count > 0 && entries == 0) {
             return Err(Status::MISSING);
