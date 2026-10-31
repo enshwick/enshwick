@@ -84,3 +84,13 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 [`SERVER_IDLE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
 [`SERVER_ONLINE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
 [`SERVER_SLOW_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
+
+## Worked example
+
+[`enshwick-optimizer`](https://github.com/enshwick/mods/tree/main/optimizer)
+uses both:
+[`waits.rs`](https://github.com/enshwick/mods/blob/main/optimizer/src/waits.rs)
+links `on_loop_wait` and logs when the wait is not found, and
+[`lib.rs`](https://github.com/enshwick/mods/blob/main/optimizer/src/lib.rs)
+caps the task workers with `cap_task_workers`, from its setting or a
+container's CPU limit.

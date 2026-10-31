@@ -104,3 +104,11 @@ The client's survivor menu keeps one record per survivor. With several
 entities of one survivor, `load.on_survivor_status` decides what it shows: it
 gets the survivor and the status byte of each entity, and returns the byte to
 show, or `None` for the game's. Client only; one mod at a time.
+
+## Worked example
+
+[`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/tree/main/survivors-per-altar)
+answers the game's survivor lookups per altar in
+[`policy.rs`](https://github.com/enshwick/mods/blob/main/survivors-per-altar/src/policy.rs):
+`on_survivor_lookup`, fed by the altars it reads on `AltarsChanged`, and
+`Answer::Vanilla` while its setting is off.
