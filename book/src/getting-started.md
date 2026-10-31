@@ -48,9 +48,7 @@ current one by default) and `--side` is `server` (the default), `client` or
 `both`. The id is `<author>.<name>`: your name or handle, a dot, and the
 mod's name, each of `[a-z0-9-]`, at most 64 characters in all. The author part
 keeps two mods of one name apart. The name starts with a letter, since it names
-the crate too. The crate is the one the
-[mod template](https://github.com/enshwick/template-mod) makes, without the
-template's repository tools. It holds:
+the crate too. The crate holds:
 
 - `Cargo.toml`: a `cdylib` named after the id's name, `enshwick` pinned with
   `=` to the release the tool was built with, `serde`, the lints, and a

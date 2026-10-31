@@ -379,9 +379,8 @@ fn type_name(id: &str) -> String {
     name
 }
 
-// The crate's files are the mod template's, with `{id}`, `{crate}`,
-// `{type}`, `{name}`, `{side}`, `{description}` and `{enshwick}` to fill; a
-// test renders the template and compares.
+// The crate's files, with `{id}`, `{crate}`, `{type}`, `{name}`, `{side}`,
+// `{description}` and `{enshwick}` to fill.
 const CARGO_TOML: &str = include_str!("new/crate/Cargo.toml.in");
 const LIB_RS: &str = include_str!("new/crate/lib.rs.in");
 const TEXTS_TOML: &str = include_str!("new/crate/texts.toml");
