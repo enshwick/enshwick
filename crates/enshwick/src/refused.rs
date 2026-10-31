@@ -222,5 +222,26 @@
 ///
 /// const LANTERN: enshwick::content::Id = deps::lanterns::id("lantern");
 /// ```
+///
+/// A point listed in `declare_mod!` that `exports` in the crate's
+/// `Cargo.toml` leaves out:
+///
+/// ```compile_fail
+/// #[enshwick::point(name = "hidden", mode = Override, output = u32)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Hidden {
+///     pub item: u32,
+/// }
+///
+/// struct Hello;
+///
+/// impl enshwick::Mod for Hello {
+///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+///         Ok(Self)
+///     }
+/// }
+///
+/// enshwick::declare_mod!(Hello, points: [Hidden]);
+/// ```
 #[expect(dead_code, reason = "the doc comment carries the cases")]
 struct Refused;

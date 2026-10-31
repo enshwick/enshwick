@@ -209,12 +209,17 @@ pub(crate) extern "system" fn attach_point(
             .manifest
             .as_ref()
             .is_some_and(|manifest| manifest.requires_owner_of(&attached.declared.name));
-        if required
-            && !s
-                .points
-                .others
-                .iter()
-                .any(|other| other.serves(&attached.declared))
+        let unexported = s
+            .manifest
+            .as_ref()
+            .is_some_and(|manifest| manifest.unexported(&attached.declared.name, &s.host.exports));
+        if unexported
+            || (required
+                && !s
+                    .points
+                    .others
+                    .iter()
+                    .any(|other| other.serves(&attached.declared)))
         {
             return Status::REFUSED;
         }

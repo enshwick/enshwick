@@ -167,6 +167,13 @@ loader refuses the same; define a required owner's point with
 `Installed::define_point` before the mod starts. A mod links each point once: a second
 `extend_point` or `observe_point` on the same point returns `Off`.
 
+An owner that is loaded but does not export the point refuses every link to
+it, required or not: `extend_point` and `observe_point` return `Off`, and the
+log says
+`point you.trading-post:price: you.trading-post does not export price; it exports ...`
+(see [what other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use)).
+In a test, `FakeHost::exports` names what the owner exports.
+
 ## When the loader leaves a link inert
 
 The linking mod's log names the point and why, and `status.log` lists every
@@ -212,7 +219,9 @@ the input struct, the name `<owner id>:<point>`, the mode, the answer's type
 and, when links may refuse, `refusable`. List it under `points` in
 `declare_mod!` (see [the manifest](concepts/loader-and-abi.md#the-manifest)),
 as `enshwick::declare_mod!(TradingPost, points: [Price])`, so its schema ships with
-the mod and other mods can write their definitions from it. Every field's
+the mod and other mods can write their definitions from it, and add its
+local name to `exports` in the manifest, `exports = ["price"]`, so other mods
+may link it; a listed point missing from `exports` fails the build. Every field's
 type and the answer's are numbers, `bool`, `enshwick::Entity`,
 `enshwick::content::Guid`, or types of the mod's own with
 [`#[derive(Shape)]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs);

@@ -61,6 +61,7 @@ mod tests {
         r#"
         id = "you.trading-post"
         side = "server"
+        exports = ["sold"]
         "#,
         events: [Sold]
     );

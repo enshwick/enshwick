@@ -353,6 +353,22 @@ impl ManifestFacts {
         }
     }
 
+    /// Whether `name`, `<id>:<what>`, is of another mod whose exports
+    /// [`FakeHost::exports`] gave and lack `what`, which the loader refuses
+    /// the mod.
+    pub(crate) fn unexported(
+        &self,
+        name: &str,
+        exports: &std::collections::HashMap<String, Vec<String>>,
+    ) -> bool {
+        name.split_once(':').is_some_and(|(owner, what)| {
+            owner != self.id
+                && exports
+                    .get(owner)
+                    .is_some_and(|names| !names.iter().any(|n| n == what))
+        })
+    }
+
     /// Whether the mod requires the mod side of `name`, `<id>:<what>`.
     pub(crate) fn requires_owner_of(&self, name: &str) -> bool {
         name.split_once(':')

@@ -917,7 +917,8 @@ const _: () = {
     assert!(size_of::<BuildingZoneCheck>() == 8 + 16 + 48 + 8);
     assert!(core::mem::offset_of!(Manifest, name) == 80);
     assert!(core::mem::offset_of!(Manifest, points) == 80 + 16 * 4 + 16);
-    assert!(size_of::<Manifest>() == 80 + 16 * 4 + 16 + 16);
+    assert!(core::mem::offset_of!(Manifest, exports) == 80 + 16 * 4 + 16 + 16);
+    assert!(size_of::<Manifest>() == 80 + 16 * 4 + 16 + 16 + 16);
     assert!(size_of::<ResourceKey>() == 24);
 };
 

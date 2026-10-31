@@ -149,7 +149,31 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
     manifest.license = text(manifest.license);
     manifest.points = text(manifest.points);
     manifest.homepage = text(manifest.homepage);
+    manifest.exports = list(manifest.exports, manifest.export_count, text);
     manifest
+}
+
+/// The local names `manifest` exports, those that are UTF-8.
+///
+/// # Safety
+///
+/// - `exports` is null or points at `export_count` aligned strings, each
+///   readable for its length, unchanged for the call.
+#[must_use]
+pub unsafe fn exports(manifest: &Manifest) -> Vec<&str> {
+    if manifest.exports.is_null() || manifest.export_count == 0 {
+        return Vec::new();
+    }
+    // SAFETY: `exports` is non-null and the count nonzero, checked just
+    // before; the caller guarantees `export_count` aligned strings there,
+    // readable and unchanged for the call.
+    let names = unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count) };
+    names
+        .iter()
+        // SAFETY: the caller guarantees every name readable for its length
+        // and unchanged for the call.
+        .filter_map(|name| unsafe { name.as_str() })
+        .collect()
 }
 
 /// Why a pack whose `pack.toml` asks for the Enshwick releases
@@ -242,6 +266,26 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
         side: manifest.side,
         dependencies,
     })
+}
+
+/// Why the mod `asker` may not use the `kind` (call, point, service or
+/// event) `name`, `<owner>:<what>`, whose owner's manifest exports
+/// `exports`; `None` when it may: a name of its own, or one the owner
+/// exports.
+#[must_use]
+pub fn unexported(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Option<String> {
+    let (owner, what) = name.split_once(':')?;
+    if owner == asker || exports.contains(&what) {
+        return None;
+    }
+    let offered = if exports.is_empty() {
+        "it exports nothing".to_owned()
+    } else {
+        format!("it exports {}", exports.join(", "))
+    };
+    Some(format!(
+        "{kind} {name}: {owner} does not export {what}; {offered}"
+    ))
 }
 
 /// What a manifest tells players about its mod.
@@ -427,6 +471,8 @@ mod tests {
             license: Str::EMPTY,
             homepage: Str::EMPTY,
             points: Str::EMPTY,
+            exports: core::ptr::null(),
+            export_count: 0,
         }
     }
 
@@ -571,6 +617,47 @@ mod tests {
         // literals and statics, readable and never written.
         let why = unsafe { parse(&authorless) }.unwrap_err().to_string();
         assert!(why.contains("not <author>.<name>"), "{why}");
+    }
+
+    #[test]
+    fn exports_are_copied_with_the_manifest() {
+        static EXPORTS: [Str; 2] = [Str::new("price-of"), Str::new("sold")];
+        let mut exporting = manifest("you.trading-post", "0.1.0");
+        exporting.exports = EXPORTS.as_ptr();
+        exporting.export_count = EXPORTS.len();
+        // SAFETY: `exporting` is a whole local manifest, its strings and lists
+        // pointing at `'static` data.
+        let copied = unsafe { read(&raw const exporting) }.unwrap();
+        assert_ne!(copied.exports, EXPORTS.as_ptr());
+        // SAFETY: `read` copied every string and list for the process.
+        assert_eq!(unsafe { exports(copied) }, ["price-of", "sold"]);
+        let silent = manifest("you.lanterns", "0.1.0");
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
+        assert!(unsafe { exports(&silent) }.is_empty());
+    }
+
+    #[test]
+    fn another_mod_uses_only_what_the_owner_exports() {
+        let exports = ["price-of", "sold"];
+        let asker = "you.market-stalls";
+        assert_eq!(
+            unexported("call", "you.trading-post:price-of", asker, &exports),
+            None
+        );
+        assert_eq!(
+            unexported("event", "you.market-stalls:opened", asker, &[]),
+            None
+        );
+        assert_eq!(
+            unexported("point", "you.trading-post:margin", asker, &exports).as_deref(),
+            Some(
+                "point you.trading-post:margin: you.trading-post does not export margin; \
+                 it exports price-of, sold"
+            )
+        );
+        let none = unexported("service", "you.trading-post:prices", asker, &[]).unwrap();
+        assert!(none.ends_with("it exports nothing"), "{none}");
     }
 
     #[test]

@@ -80,6 +80,7 @@ mod stalls {
         r#"
         id = "you.stalls"
         side = "server"
+        exports = ["rent", "fee"]
         "#,
         calls: [super::Rent, super::Fee]
     );

@@ -38,11 +38,13 @@ pub enum PackSide {
 /// id = "you.lanterns"
 /// version = "1.0.0"
 /// name = "Lanterns"
+/// exports = ["lit"]
 ///
 /// [requires]
 /// "you.trading-post" = ">=0.5, <1.0"
 /// "#)?;
 /// assert_eq!(manifest.id, "you.lanterns");
+/// assert_eq!(manifest.exports, ["lit"]);
 /// assert_eq!(manifest.side, PackSide::Both);
 /// assert!(manifest.join);
 /// assert_eq!(manifest.requires["you.trading-post"], ">=0.5, <1.0");
@@ -89,6 +91,11 @@ pub struct PackManifest {
     /// another release skips the pack and names both.
     #[serde(default)]
     pub enshwick: String,
+    /// The local names of what other mods may use, such as the events its
+    /// scripts define: `greeted` lets them hear `<id>:greeted`. The loader
+    /// refuses them anything else of the pack's.
+    #[serde(default)]
+    pub exports: Vec<String>,
     /// The pack's settings, in the order the Mods screen shows them; a Luau
     /// mod reads them, as a Rust mod reads its `Config`.
     #[serde(default)]
@@ -182,6 +189,20 @@ impl PackManifest {
             ));
         }
         manifest.check_settings(text)?;
+        if let Some(name) = manifest
+            .exports
+            .iter()
+            .find(|name| !crate::content::is_id(&format!("{}:{name}", manifest.id)))
+        {
+            return Err(PackError::at(
+                MANIFEST_FILE,
+                text,
+                find(text, "exports"),
+                &format!(
+                    "exports: {name:?} is not a local name, 1 to 128 of [a-z0-9_./-] without the pack's id"
+                ),
+            ));
+        }
         Ok(manifest)
     }
 

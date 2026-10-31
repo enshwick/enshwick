@@ -129,6 +129,17 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 A name and major are published once: a second publisher is refused. One mod
 may publish several majors of a service side by side.
 
+Other mods reach the service and the event only when the publisher's
+[manifest](concepts/loader-and-abi.md#what-other-mods-may-use) exports
+them by their local names:
+
+```toml
+[package.metadata.enshwick]
+id = "you.trading-post"
+side = "server"
+exports = ["prices", "sold"]
+```
+
 ## Using a service
 
 [`load.service::<T>()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
@@ -201,6 +212,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 - Only the definer sends its event.
+- When the definer is loaded and does not export the event, `on_mod_event`
+  returns `Off` with the reason.
 - The loader matches subscriptions once every mod is initialised. With no
   running mod defining the event, or a definition that lacks or changed a
   field of the subscriber's, it logs why under the subscriber's id and the
@@ -258,6 +271,7 @@ lists every service and event with its publisher and subscribers.
 
 | Reason                                                   | What it means                                             |
 | -------------------------------------------------------- | --------------------------------------------------------- |
+| `<id> does not export <name>; it exports ...`            | The publisher keeps the service or event to itself        |
 | `no running mod publishes it`                            | The publisher is missing, or loads later                  |
 | `<id> <version> publishes it, but is off`                | The publisher was turned off; its log says why            |
 | `only v2 from <id> <version> is published`               | The user was built for another major                      |

@@ -61,6 +61,12 @@ pub(crate) extern "system" fn service(
         return Status::BAD_ARGS;
     };
     let answer = with(Err("no fake installed".to_owned()), |s| {
+        if s.manifest
+            .as_ref()
+            .is_some_and(|manifest| manifest.unexported(&name, &s.host.exports))
+        {
+            return Err("its mod does not export it".to_owned());
+        }
         let offered = s
             .host
             .services
@@ -130,6 +136,12 @@ pub(crate) extern "system" fn subscribe_event(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
+        if s.manifest
+            .as_ref()
+            .is_some_and(|manifest| manifest.unexported(&name, &s.host.exports))
+        {
+            return Status::REFUSED;
+        }
         s.mod_event_subscriptions.push((
             name,
             fields,

@@ -66,6 +66,7 @@ workspace = true
 id = "you.hello"
 side = "both"
 join = true
+exports = ["price", "price-of"]
 
 [package.metadata.enshwick.requires]
 lockers = { id = "you.lockers", version = ">=0.1, <1.0" }

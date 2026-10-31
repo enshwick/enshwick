@@ -91,6 +91,8 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
     let (dependencies, dependency_count) = keep_slice(dependencies);
     let authors: Vec<Str> = manifest.authors.iter().map(|a| keep(a)).collect();
     let (authors, author_count) = keep_slice(authors);
+    let exports: Vec<Str> = manifest.exports.iter().map(|name| keep(name)).collect();
+    let (exports, export_count) = keep_slice(exports);
     Box::leak(Box::new(Manifest {
         header: Header::of::<Manifest>(),
         id: keep(&manifest.id),
@@ -112,6 +114,8 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
         license: keep(&manifest.license),
         homepage: keep(&manifest.homepage),
         points: Str::EMPTY,
+        exports,
+        export_count,
     }))
 }
 

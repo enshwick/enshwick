@@ -262,6 +262,8 @@ pub struct FakeHost {
     server_world: u64,
     join_missing: Vec<ModInfo>,
     replaced: Vec<ModInfo>,
+    /// What other mods export, by id; a mod left out exports every name.
+    exports: HashMap<String, Vec<String>>,
     language: u32,
     services: Vec<FakeService>,
     refused_hooks: HashSet<u64>,
@@ -350,6 +352,7 @@ impl FakeHost {
             server_world: 0,
             join_missing: Vec::new(),
             replaced: Vec::new(),
+            exports: HashMap::new(),
             language: 0,
             services: Vec::new(),
             refused_hooks: HashSet::new(),

@@ -298,6 +298,8 @@ impl ManifestFlags {
 ///     license: Str::new("MIT"),
 ///     homepage: Str::EMPTY,
 ///     points: Str::EMPTY,
+///     exports: core::ptr::null(),
+///     export_count: 0,
 /// };
 /// assert!(manifest.flags.contains(ManifestFlags::JOIN));
 /// ```
@@ -340,6 +342,12 @@ pub struct Manifest {
     /// the DLL's `.enshpt` section, so a tool reads it without running the
     /// mod.
     pub points: Str,
+    /// The local names of what other mods may use: calls, points, services
+    /// and events named `<id>:<name>`. The loader refuses another mod a
+    /// reference to a name of this mod outside the list.
+    pub exports: *const Str,
+    /// How many names `exports` points at.
+    pub export_count: usize,
 }
 
 impl_headed!(Manifest);

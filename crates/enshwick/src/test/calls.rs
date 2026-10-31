@@ -126,7 +126,11 @@ pub(crate) extern "system" fn find_call(
             .manifest
             .as_ref()
             .is_some_and(|manifest| manifest.requires_owner_of(&declared.name));
-        if required && !s.calls.others.iter().any(|o| o.declared == declared) {
+        let unexported = s
+            .manifest
+            .as_ref()
+            .is_some_and(|manifest| manifest.unexported(&declared.name, &s.host.exports));
+        if unexported || (required && !s.calls.others.iter().any(|o| o.declared == declared)) {
             return None;
         }
         let wanted = &mut s.calls.wanted;
