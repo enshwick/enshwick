@@ -282,8 +282,8 @@ and changes to game data rather than code, are not seen.
 
 ## Faults
 
-When the loader turns a mod off, the mod's log has an error
-`off: <reason>`, and the Mods screen shows the reason under the mod, in the
+When the loader turns a mod off, `loader.log` and the mod's log say why, the
+mod's log with an error `off: <reason>`, and the Mods screen shows the reason under the mod, in the
 reader's language for an `Off::text`. The summary's list of mods turned off
 keeps the reason, and `enshwick` on the console marks the mod `(off)`. A
 hardware fault that ends the game goes to `crash.log` instead, and the next
