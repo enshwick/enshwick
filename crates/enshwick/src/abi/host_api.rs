@@ -39,8 +39,9 @@ pub struct HostApi {
     pub header: Header,
     /// The loader's own version.
     pub host_version: Str,
-    /// Writes the running game's identity, as far as the [`Header`] `out`
-    /// starts with says the caller's struct reaches.
+    /// Writes the running game's identity, its side, image base, build
+    /// fingerprint and where its build table is from, as far as the
+    /// [`Header`] `out` starts with says the caller's struct reaches.
     pub build: extern "system" fn(out: *mut BuildInfo),
     /// Resolves a symbolic id for the running build: the mod's own rows first,
     /// then the loader's table.
@@ -675,8 +676,8 @@ pub struct HostApi {
     /// [`Status::MISSING`] for a widget this game build lacks.
     pub ui_widget: extern "system" fn(me: ModHandle, frame: u64, widget: *mut UiWidget) -> Status,
     /// Queues `dialog` and calls `callback` with the answer and `user` once
-    /// the player gives it; dialogs show one at a time, in order. Any
-    /// thread. Client only ([`Status::MISSING`] on a server); when the
+    /// the player gives it, on the thread that draws the interface; dialogs
+    /// show one at a time, in order, in the game's style. Any thread. Client only ([`Status::MISSING`] on a server); when the
     /// interface could not be linked, the dialog shows as a system message
     /// box. [`Status::REFUSED`] when too many wait; [`Status::WRONG_THREAD`]
     /// for [`UiDialog::WAITING`] on the thread that draws the interface. On
@@ -784,7 +785,8 @@ pub struct HostApi {
         extern "system" fn(me: ModHandle, callback: StatChangeFn, user: *mut c_void) -> Status,
     /// Writes up to `capacity` modifiers that count toward stat `stat` on
     /// `entity`, in the order they apply, and how many there are to
-    /// `count`; every stat for `u32::MAX`. Any thread.
+    /// `count`; every stat for `u32::MAX`. On the server's game thread at a
+    /// quiet moment ([`Status::WRONG_THREAD`] inside a step).
     pub stat_sources: extern "system" fn(
         me: ModHandle,
         entity: Entity,
@@ -1075,7 +1077,8 @@ pub struct HostApi {
     /// except for a recipe output rate, whose change builds the recipe
     /// registry again.
     pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
-    /// Declares a change of a vanilla value. The loader merges the changes
+    /// Declares a change of a vanilla value, of one entry or of each item or
+    /// recipe a selection picks. The loader merges the changes
     /// of every mod once their `init` ran: a set in load order, the last
     /// winning and the overridden one reported in both mods' logs and the
     /// conflict report; then every factor, multiplied. It builds the changed
@@ -1157,7 +1160,8 @@ pub struct HostApi {
     /// in force, from `enshwick_mod_ready` on, with the zones its own
     /// grouping takes. [`Status::BAD_ARGS`] for a null `out`. Any thread.
     pub base_limit: extern "system" fn(me: ModHandle, out: *mut BaseLimitInfo) -> Status,
-    /// Reads the voxels of the server's world in the box of `size` voxels
+    /// Reads the voxels of the server's world, decoded at full detail, in the
+    /// box of `size` voxels
     /// from `min`, in voxels of half a metre from the world's corner, into
     /// `out`: x fastest, then y, then z, `size[0] * size[1] * size[2]`
     /// entries. `min` and `size` are borrowed for the call; `out` points at

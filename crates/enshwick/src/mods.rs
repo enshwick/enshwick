@@ -115,6 +115,7 @@ pub struct ModEntry {
     pub file: String,
     /// The name players read; empty when the manifest names none. In
     /// [`join_missing`], the name the server advertises.
+    /// [`ModEntry::label`] gives the name, or the id without one.
     pub name: String,
     /// One sentence on what the mod does; empty for none.
     pub description: String,
