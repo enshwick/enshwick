@@ -63,3 +63,32 @@ facts go in documents as addresses and names, with the game build they were
 found on.
 
 Security issues go through [SECURITY.md](SECURITY.md), not public issues.
+
+## Releases
+
+Until the first public release, 1.0.0, this repository has no regular
+releases. The platform's crates carry prerelease versions, `1.0.0-alpha.N`,
+and a mod depends on `enshwick = "=1.0.0-alpha.N"`.
+
+The
+[dev-build workflow](.github/workflows/dev-build.yml)
+runs on every push to `main` that changes the crates or the tools, and by
+hand. It builds the commit with `cargo xtask dist` and replaces the files
+of the one prerelease tagged `dev`, whose tag moves to that commit, so
+`dev` always carries `main`. `enshwick.zip` there holds the stub and the
+loader, and no mod: each mod ships in its own archive from its own
+repository. `cargo xtask dist` writes the same archive into `target/dist` on
+any machine with `cargo-xwin`.
+
+Versions come from [release-plz](https://release-plz.dev), set up in
+[release-plz.toml](release-plz.toml) and run by hand through the
+[release-plz workflow](.github/workflows/release-plz.yml):
+
+1. `release-pr` reads the conventional commits since each crate's last
+   release, checks the public API with cargo-semver-checks, and opens or
+   updates one release pull request with the new versions and each crate's
+   `CHANGELOG.md`.
+2. Once that pull request merges, `release` tags each released crate
+   `<package>-v<version>`, such as `enshwick-v1.0.0-alpha.3`, makes its
+   GitHub release, and publishes the public crates to crates.io. The loader
+   and the stub are tagged only; they never go to crates.io.
