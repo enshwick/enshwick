@@ -2,7 +2,10 @@
 //! `cargo metadata` without compiling: a crate whose package has no unsafe
 //! code forbids it at its root, the `test` feature is never on by default or
 //! through a normal or build dependency, only where a target asks for it,
-//! and a package that builds a DLL, such as a mod, names its version.
+//! a package that builds a DLL, such as a mod, names its version, features
+//! name what they add, `anyhow` stays in binaries, `rust-version` is the
+//! pinned toolchain's, and a published crate's path dependencies carry
+//! versions.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -36,12 +39,14 @@ pub(crate) fn check() -> Result<Vec<String>, String> {
     }
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
         .map_err(|error| format!("reading cargo metadata: {error}"))?;
+    let toolchain = toolchain(&read(&crate::workspace_root().join("rust-toolchain.toml"))?)?;
     let mut problems = Vec::new();
     for package in metadata["packages"].as_array().into_iter().flatten() {
         let name = package["name"].as_str().unwrap_or_default();
         let manifest = Path::new(package["manifest_path"].as_str().unwrap_or_default());
         let dir = manifest.parent().unwrap_or(Path::new("."));
         problems.extend(test_feature(name, package));
+        problems.extend(manifest_facts(name, package, &toolchain));
         let builds_a_dll = package["targets"]
             .as_array()
             .into_iter()
@@ -113,6 +118,91 @@ fn test_feature(name: &str, package: &serde_json::Value) -> Vec<String> {
         }
     }
     problems
+}
+
+/// The feature prefixes that say how a feature adds instead of what it adds.
+const FEATURE_PREFIXES: [&str; 4] = ["use-", "use_", "with-", "with_"];
+
+/// The problems of `package`'s manifest facts: a feature named for how it
+/// adds, `anyhow` in a package without a binary or in the API crate, a
+/// missing `rust-version` or one other than the `toolchain`'s major and
+/// minor, and a path dependency without a version in a crate that publishes.
+///
+/// `anyhow` belongs to binaries, and a package with both a library and a
+/// binary may use it in its library half too.
+fn manifest_facts(name: &str, package: &serde_json::Value, toolchain: &str) -> Vec<String> {
+    let mut problems = Vec::new();
+    for feature in package["features"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(f, _)| f)
+    {
+        if FEATURE_PREFIXES
+            .iter()
+            .any(|prefix| feature.starts_with(prefix))
+        {
+            problems.push(format!(
+                "{name}: the feature `{feature}` is named for how it adds; name what it adds"
+            ));
+        }
+    }
+    let has_binary = package["targets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|target| {
+            target["kind"]
+                .as_array()
+                .is_some_and(|k| k.iter().any(|k| k == "bin"))
+        });
+    let publishes = package["publish"]
+        .as_array()
+        .is_none_or(|to| !to.is_empty());
+    for dependency in package["dependencies"].as_array().into_iter().flatten() {
+        let kind = dependency["kind"].as_str().unwrap_or("normal");
+        let dependency_name = dependency["name"].as_str().unwrap_or_default();
+        if dependency_name == "anyhow" && kind == "normal" && (!has_binary || name == "enshwick") {
+            problems.push(format!(
+                "{name}: anyhow is for binaries; a library returns a thiserror type"
+            ));
+        }
+        if publishes
+            && kind != "dev"
+            && dependency["path"].is_string()
+            && dependency["req"].as_str() == Some("*")
+        {
+            problems.push(format!(
+                "{name}: its path dependency {dependency_name} carries no version, which publishing needs"
+            ));
+        }
+    }
+    match package["rust_version"].as_str() {
+        None => problems.push(format!(
+            "{name}: no rust-version; it names the pinned toolchain {toolchain}"
+        )),
+        Some(declared) if major_minor(declared) != toolchain => problems.push(format!(
+            "{name}: rust-version {declared} is not the pinned toolchain {toolchain}"
+        )),
+        Some(_) => {}
+    }
+    problems
+}
+
+/// The major and minor of the channel in the `rust-toolchain.toml` `text`.
+fn toolchain(text: &str) -> Result<String, String> {
+    let file: toml::Table =
+        toml::from_str(text).map_err(|e| format!("rust-toolchain.toml: {}", e.message()))?;
+    file.get("toolchain")
+        .and_then(|toolchain| toolchain.get("channel"))
+        .and_then(toml::Value::as_str)
+        .map(major_minor)
+        .ok_or_else(|| "rust-toolchain.toml names no channel".to_owned())
+}
+
+/// `version`'s major and minor: `1.99` of `1.99.1`.
+fn major_minor(version: &str) -> String {
+    version.split('.').take(2).collect::<Vec<_>>().join(".")
 }
 
 /// Whether the `Cargo.toml` `text` gives `[package]` a version of its own or
@@ -397,6 +487,73 @@ mod tests {
             ],
         });
         assert!(test_feature("a", &package).is_empty());
+    }
+
+    #[test]
+    fn features_named_for_how_anyhow_in_a_library_and_an_old_rust_version_are_problems() {
+        let library = serde_json::json!({
+            "features": { "use-serde": [], "with_std": [], "serde": [] },
+            "targets": [{ "kind": ["lib"] }],
+            "publish": null,
+            "rust_version": "1.98",
+            "dependencies": [
+                { "name": "anyhow", "kind": null, "req": "^1" },
+                { "name": "enshwick-gamedata", "kind": null, "req": "*", "path": "../gamedata" },
+                { "name": "helper", "kind": "dev", "req": "*", "path": "../helper" },
+            ],
+        });
+        assert_eq!(
+            manifest_facts("a", &library, "1.99"),
+            [
+                "a: the feature `use-serde` is named for how it adds; name what it adds",
+                "a: the feature `with_std` is named for how it adds; name what it adds",
+                "a: anyhow is for binaries; a library returns a thiserror type",
+                "a: its path dependency enshwick-gamedata carries no version, which publishing needs",
+                "a: rust-version 1.98 is not the pinned toolchain 1.99",
+            ]
+        );
+    }
+
+    #[test]
+    fn anyhow_in_a_binary_and_an_unpublished_path_dependency_pass() {
+        let binary = serde_json::json!({
+            "features": { "serde": [] },
+            "targets": [{ "kind": ["lib"] }, { "kind": ["bin"] }],
+            "publish": [],
+            "rust_version": "1.99.1",
+            "dependencies": [
+                { "name": "anyhow", "kind": null, "req": "^1" },
+                { "name": "enshwick", "kind": null, "req": "*", "path": "../enshwick" },
+            ],
+        });
+        assert!(manifest_facts("cargo-enshwick", &binary, "1.99").is_empty());
+        assert_eq!(
+            manifest_facts("enshwick", &binary, "1.99"),
+            ["enshwick: anyhow is for binaries; a library returns a thiserror type"]
+        );
+    }
+
+    #[test]
+    fn a_missing_rust_version_is_a_problem() {
+        let package = serde_json::json!({
+            "features": {},
+            "targets": [{ "kind": ["lib"] }],
+            "publish": [],
+            "dependencies": [],
+        });
+        assert_eq!(
+            manifest_facts("a", &package, "1.99"),
+            ["a: no rust-version; it names the pinned toolchain 1.99"]
+        );
+    }
+
+    #[test]
+    fn the_toolchain_is_its_channel_s_major_and_minor() {
+        assert_eq!(
+            toolchain("[toolchain]\nchannel = \"1.99.1\"\n").unwrap(),
+            "1.99"
+        );
+        assert!(toolchain("[toolchain]\n").is_err());
     }
 
     #[test]
