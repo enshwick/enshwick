@@ -1,0 +1,38 @@
+---
+source: crates/cargo-enshwick/src/points/luau.rs
+expression: text
+---
+--!strict
+-- The extension point `you.trading-post:price` of you.trading-post 0.0.0-dev.
+-- Written by `cargo enshwick deps trading_post --luau`. Write it again for a newer
+-- you.trading-post rather than edit it: the runtime links by the layout below.
+
+--- The price of an item at the trading post, in coins: the trading post's own price first. A refusal means the trading post does not deal. Asked on the thread that runs the player's action.
+export type Price = {
+	--- The item, 0 to 63.
+	item: number,
+	--- How many items the player trades.
+	count: number,
+	--- The player's account.
+	player: string,
+	--- The player's character.
+	character: number,
+	--- Whether the player buys or sells.
+	deal: number,
+}
+
+--- The price of an item at the trading post, in coins: the trading post's own price first. A refusal means the trading post does not deal. Asked on the thread that runs the player's action.
+return table.freeze({
+	name = "you.trading-post:price",
+	mode = "override",
+	refusable = true,
+	input = { size = 24, fields = {
+		{ name = "item", offset = 0, read = "u32", hash = "5938679357011966802" },
+		{ name = "count", offset = 4, read = "u32", hash = "7604414857998727637" },
+		{ name = "player", offset = 8, read = "player_key", hash = "17322428248776750865" },
+		{ name = "character", offset = 16, read = "entity", hash = "14235528068787574632" },
+		{ name = "deal", offset = 20, read = "u32", hash = "5934430442850884261" },
+	} },
+	output = { size = 4, hash = "14918346923295848190", read = "u32" },
+	Deal = table.freeze({ BUY = 0, SELL = 1 }),
+})

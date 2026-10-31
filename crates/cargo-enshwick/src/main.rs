@@ -9,12 +9,12 @@ use anyhow::Context as _;
 use clap::{Parser, Subcommand, ValueEnum};
 use enshwick::content::Guid;
 
+mod deps;
 mod install;
 mod manifest;
 mod new;
 mod pack;
 mod pin;
-mod point;
 mod types;
 
 /// Cargo runs a subcommand as `cargo-enshwick enshwick <args>`.
@@ -90,49 +90,25 @@ enum Command {
     /// Checks, describes and packages data packs.
     #[command(subcommand)]
     Pack(pack::Command),
-    /// Writes the Rust definition of another mod's extension point, or with
-    /// `--luau` its Luau module, read from the owner's DLL without running it.
-    Point {
-        /// The point, `<mod id>:<point>`.
-        name: String,
-        /// The owner's DLL, a folder (such as the game's) with its DLL in it
-        /// or in its `mods/`, or a schema file (`.toml`) the owner published.
+    /// Writes what each dependency offers, its points, calls and mod events,
+    /// as declarations in `src/deps/<alias>.rs` that `enshwick::deps!()`
+    /// makes `deps::<alias>`, read from the owners' DLLs without running
+    /// them.
+    Deps {
+        /// The dependency, by its alias in `requires`, `recommends` or
+        /// `after`; every one when omitted.
+        alias: Option<String>,
+        /// The owners' DLL, a folder (such as the game's) with their DLLs in
+        /// it or in its `mods/`, or a schema file (`.toml`) an owner
+        /// published.
         #[arg(long)]
         from: PathBuf,
-        /// The file to write; the definition is printed when omitted.
+        /// The mod's `Cargo.toml`, or with `--luau` its `pack.toml`; the one
+        /// in the current folder when omitted.
         #[arg(long)]
-        out: Option<PathBuf>,
-        /// Writes the definition as a Luau module for a Luau mod instead of
-        /// Rust.
-        #[arg(long)]
-        luau: bool,
-    },
-    /// Writes the Luau module of another mod's event, read from the owner's
-    /// DLL without running it, for a Luau mod to subscribe with.
-    Event {
-        /// The event, `<mod id>:<event>`.
-        name: String,
-        /// The owner's DLL, a folder with its DLL in it or in its `mods/`,
-        /// or a schema file (`.toml`) the owner published.
-        #[arg(long)]
-        from: PathBuf,
-        /// The file to write; the module is printed when omitted.
-        #[arg(long)]
-        out: Option<PathBuf>,
-    },
-    /// Writes the declaration of another mod's call, read from the server's
-    /// DLL without running it, for a mod that calls it.
-    Call {
-        /// The call, `<mod id>:<call>`.
-        name: String,
-        /// The server's DLL, a folder with its DLL in it or in its `mods/`,
-        /// or a schema file (`.toml`) the server published.
-        #[arg(long)]
-        from: PathBuf,
-        /// The file to write; the declaration is printed when omitted.
-        #[arg(long)]
-        out: Option<PathBuf>,
-        /// Writes the call's Luau module for a Luau mod instead.
+        manifest_path: Option<PathBuf>,
+        /// Writes a Luau module per point, call and event into
+        /// `deps/<alias>/` beside `pack.toml`, for a Luau mod, instead.
         #[arg(long)]
         luau: bool,
     },
@@ -250,21 +226,14 @@ fn main() -> ExitCode {
             expect_version,
         } => manifest::show(&dll, expect_version.as_deref()).map_err(anyhow::Error::msg),
         Command::Id { names } => ids(&names),
-        Command::Point {
-            name,
+        Command::Deps {
+            alias,
             from,
-            out,
+            manifest_path,
             luau,
-        } => point::run(&name, &from, out.as_deref(), luau),
+        } => deps::run(alias.as_deref(), &from, manifest_path.as_deref(), luau),
         Command::Pack(command) => pack::run(&command),
         Command::Luau { out } => luau_definitions(out.as_deref()),
-        Command::Event { name, from, out } => point::run_event(&name, &from, out.as_deref()),
-        Command::Call {
-            name,
-            from,
-            out,
-            luau,
-        } => point::run_call(&name, &from, out.as_deref(), luau),
         Command::Types {
             names,
             from,

@@ -1,8 +1,8 @@
 schema = 1
-mod = "you.stalls"
+mod = "you.lockers"
 version = "1.2.0"
 [[call]]
-name = "you.stalls:rent"
+name = "you.lockers:rent"
 input = "Rent"
 doc = "The rent of a stall, in coins."
 major = 2
@@ -60,7 +60,7 @@ name = "Tools"
 doc = "Tools."
 value = 2
 [[call]]
-name = "you.stalls:fee"
+name = "you.lockers:fee"
 input = "Fee"
 doc = "The fee for holding a stall, in coins."
 major = 1
