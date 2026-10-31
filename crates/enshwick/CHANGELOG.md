@@ -18,7 +18,7 @@ Each entry names the pull request that made the change.
   `#[serde(deny_unknown_fields)]` with `#[enshwick::config]` (#795).
 - **Breaking:** stat kinds and affixes take a content `Id`:
   `load.define_stat(id!("luck"), &def)`, `load.define_affix(id!("bear"), &def)`,
-  and `load.open_stat(deps::lockers::id("luck"))` for a dependency's kind.
+  and `load.open_stat(deps::lockers::id("luck")?)` for a dependency's kind.
   The `stats::builtin` kinds are `Id` constants. The text that names a kind
   or an affix is `<name>.name` in its owner's texts, and `stats::name_key`
   gives it: `StatDef::additive`, `multiplicative`, `flag` and `AffixDef::new`
@@ -28,6 +28,17 @@ Each entry names the pull request that made the change.
   an id whose `<name>.name` is longer than a content id's name may be. The
   fake host refuses the same, the exports for a mod `FakeHost::exports`
   names (#797).
+
+- **Breaking:** a mod's content is its own until its `exports` list the
+  name, or the name it is a part of: `exports = ["locker"]` lets other mods
+  name `locker` and `locker.recipe`. A required dependency's
+  `deps::<alias>::id` is no longer `const` and returns `Result<Id, Off>`,
+  `Off` for a name the dependency does not export; an optional one's returns
+  `None` for it. `Load::add_pack` returns `Off` for another mod's content id
+  a pack names outside that mod's exports. The loader logs the id with what
+  the mod exports. `HostApi` gains `use_content`, which changes
+  `ABI_VERSION`; rebuild every mod. The fake loader refuses the same for a
+  mod `FakeHost::exports` names (#798).
 
 - **Breaking:** `pack.toml` names its dependencies as
   `[package.metadata.enshwick]` does: `requires`, `after`, `recommends` and

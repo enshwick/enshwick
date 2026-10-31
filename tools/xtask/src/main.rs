@@ -316,9 +316,10 @@ fn cargo() -> String {
     std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned())
 }
 
-/// One cargo command line.
+/// One command line: cargo, or another tool of the checks.
 #[derive(Debug)]
 struct Step {
+    program: Option<&'static str>,
     args: Vec<String>,
     env: Vec<(&'static str, String)>,
 }
@@ -326,8 +327,17 @@ struct Step {
 impl Step {
     fn new(words: &[&str]) -> Self {
         Self {
+            program: None,
             args: words.iter().map(|w| (*w).to_owned()).collect(),
             env: Vec::new(),
+        }
+    }
+
+    /// A step that runs `program` instead of cargo.
+    fn tool(program: &'static str, words: &[&str]) -> Self {
+        Self {
+            program: Some(program),
+            ..Self::new(words)
         }
     }
 
@@ -347,14 +357,18 @@ impl Step {
     }
 
     fn line(&self) -> String {
-        format!("cargo {}", self.args.join(" "))
+        format!(
+            "{} {}",
+            self.program.unwrap_or("cargo"),
+            self.args.join(" ")
+        )
     }
 
     /// Runs the step with its output shown, or captured when `quiet` (for a
     /// step running beside others) and shown only when it fails.
     fn run(&self, quiet: bool) -> bool {
         let started = Instant::now();
-        let mut command = Command::new(cargo());
+        let mut command = Command::new(self.program.map_or_else(cargo, str::to_owned));
         command
             .args(&self.args)
             .envs(self.env.iter().map(|(name, value)| (name, value)));
@@ -432,12 +446,27 @@ const fn workspace_rustdoc(code: bool, full: bool) -> bool {
     code || full
 }
 
+/// The ast-grep rules' own tests, the rules over the repository, then the
+/// dependencies no crate uses.
+fn source_checks() -> [Step; 3] {
+    [
+        Step::tool("ast-grep", &["test", "--skip-snapshot-tests"]),
+        Step::tool("ast-grep", &["scan"]),
+        Step::tool("cargo-machete", &[]),
+    ]
+}
+
 /// Runs the checks of `scope`. Every build selects the whole workspace, so
 /// features unify the same way on every run and nothing builds twice; only
 /// the tests run are narrowed to the changed packages. Host steps run one
 /// after another (they share the build lock); the Windows lint runs beside
 /// them.
 fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> bool {
+    // The source checks read every file in about a second without compiling,
+    // so they run whatever changed: a change to a rule alone touches no package.
+    if parts.contains(&Part::Host) && !source_checks().iter().all(|step| step.run(false)) {
+        return false;
+    }
     let on_windows = cfg!(windows);
     let host_ok =
         |name: &String| on_windows || packages.iter().any(|p| &p.name == name && !p.windows_only);

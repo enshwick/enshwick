@@ -197,7 +197,7 @@ mod dependency {
 
     impl Mod for Reader {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let luck = load.open_stat(deps::lockers::id("luck"))?;
+            let luck = load.open_stat(deps::lockers::id("luck")?)?;
             let _first = OPENED.set((load.stats()?, luck));
             Ok(Self)
         }

@@ -13,6 +13,9 @@ inputs:
   gh:
     description: Install the GitHub CLI, for steps that publish releases.
     default: "false"
+  ast-grep:
+    description: Install ast-grep, for the code rules of sgconfig.yml that `cargo xtask check` runs.
+    default: "false"
 
 runs:
   using: composite
@@ -136,3 +139,21 @@ runs:
         tar -xzf "$archive" -C "$dir" --strip-components 1
         echo "$dir/bin" >> "$GITHUB_PATH"
         "$dir/bin/gh" --version
+
+    # install-action has no manifest for ast-grep, and building it from
+    # crates.io takes minutes: the release binary, checked against its digest.
+    - name: Install ast-grep
+      if: inputs.ast-grep == 'true'
+      shell: bash
+      env:
+        AST_GREP_VERSION: 0.51.0
+        AST_GREP_SHA256: a7eead5552d3a8daad70f5d50d935da44bd0c138e946b5b0a96b1d38169fa639
+      run: | # zizmor: ignore[github-env] fixed paths only
+        dir="$RUNNER_TEMP/ast-grep"
+        archive="$RUNNER_TEMP/ast-grep.zip"
+        curl --proto '=https' --tlsv1.2 -sSfL -o "$archive" \
+          "https://github.com/ast-grep/ast-grep/releases/download/$AST_GREP_VERSION/app-x86_64-unknown-linux-gnu.zip"
+        echo "$AST_GREP_SHA256  $archive" | sha256sum -c -
+        unzip -q -o "$archive" ast-grep -d "$dir"
+        echo "$dir" >> "$GITHUB_PATH"
+        "$dir/ast-grep" --version

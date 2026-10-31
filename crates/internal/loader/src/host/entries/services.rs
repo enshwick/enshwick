@@ -478,6 +478,30 @@ pub(crate) extern "system" fn declare_content(
     })
 }
 
+pub(crate) extern "system" fn use_content(me: ModHandle, id: Str) -> Status {
+    entry("use_content", || {
+        let (loader, _, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let Some(id) = text(id).filter(|id| enshwick::content::Guid::try_named(id).is_some())
+        else {
+            return Status::BAD_ARGS;
+        };
+        let refused = id.split_once(':').and_then(|(owner, _)| {
+            let (_, provider) = loader.find_mod(owner)?;
+            crate::manifest::unexported_content(id, &record.id, &provider.exports())
+        });
+        match refused {
+            Some(reason) => {
+                crate::log::write(Level::WARN, &record.id, &reason);
+                Status::REFUSED
+            }
+            None => Status::OK,
+        }
+    })
+}
+
 pub(crate) extern "system" fn send_event(
     me: ModHandle,
     event: u32,

@@ -9,7 +9,7 @@
 
 // The ABI version: a hash of the layout of every ABI type. A loader
 // loads only mods built for its own.
-#define ENSHWICK_ABI_VERSION 0x4b0cd33e
+#define ENSHWICK_ABI_VERSION 0x0dc85f01
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -4230,6 +4230,13 @@ typedef struct EnshwickHostApi {
                                      uint32_t entry_size,
                                      uint32_t capacity,
                                      uint32_t *count);
+  // Checks that the mod may name the content id `id`, `<mod>:<name>`:
+  // `Status::OK` for one of its own, one of a mod that is not loaded,
+  // and one whose mod's manifest exports `<name>` or the name it is a
+  // part of (`locker` for `locker.recipe`); `Status::REFUSED` for any
+  // other, with the id and the owner's exports logged;
+  // `Status::BAD_ARGS` for a malformed id. Any thread.
+  EnshwickStatus (*use_content)(EnshwickModHandle me, struct EnshwickStr id);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

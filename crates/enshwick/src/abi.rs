@@ -737,7 +737,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 123 * 8);
-    assert!(size_of::<HostApi>() == 24 + 175 * 8);
+    assert!(size_of::<HostApi>() == 24 + 176 * 8);
+    assert!(core::mem::offset_of!(HostApi, use_content) == 24 + 175 * 8);
     assert!(core::mem::offset_of!(HostApi, map_marker_types) == 24 + 174 * 8);
     assert!(size_of::<MapMarkerTypeInfo>() == 8 + 16 + 4 + 1 + 4 + 3);
     assert!(size_of::<MarkerTypeSorting>() == 1);

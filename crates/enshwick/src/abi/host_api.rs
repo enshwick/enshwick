@@ -1505,4 +1505,11 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Checks that the mod may name the content id `id`, `<mod>:<name>`:
+    /// [`Status::OK`] for one of its own, one of a mod that is not loaded,
+    /// and one whose mod's manifest exports `<name>` or the name it is a
+    /// part of (`locker` for `locker.recipe`); [`Status::REFUSED`] for any
+    /// other, with the id and the owner's exports logged;
+    /// [`Status::BAD_ARGS`] for a malformed id. Any thread.
+    pub use_content: extern "system" fn(me: ModHandle, id: Str) -> Status,
 }
