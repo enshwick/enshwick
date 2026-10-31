@@ -40,10 +40,10 @@ with
 [`Load::texts`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs):
 
 ```rust
-use enshwick::content::Id;
+use enshwick::content::{Id, id};
 
-const LOCKER_NAME: Id = Id::new("you.lockers:locker.name");
-const LOCKER_DESCRIPTION: Id = Id::new("you.lockers:locker.description");
+const LOCKER_NAME: Id = id!("locker.name");
+const LOCKER_DESCRIPTION: Id = id!("locker.description");
 
 // In a mod: const TEXTS: &str = include_str!("texts.toml");
 const TEXTS: &str = r#"

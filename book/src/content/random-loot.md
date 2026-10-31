@@ -7,12 +7,12 @@ The API is in
 [`loot/drops.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot/drops.rs).
 
 ```rust
-use enshwick::content::Id;
+use enshwick::content::{Id, id};
 use enshwick::loot::{Drop, Kinds, Source};
 
-const STAFF: Id = Id::new("my-mod:staff");
-const RING: Id = Id::new("my-mod:ring");
-const AMULET: Id = Id::new("my-mod:amulet");
+const STAFF: Id = id!("staff");
+const RING: Id = id!("ring");
+const AMULET: Id = id!("amulet");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.10, Source::bosses()))?;

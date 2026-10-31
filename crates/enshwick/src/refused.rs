@@ -168,5 +168,23 @@
 ///     pub player: u64,
 /// }
 /// ```
+///
+/// A content name with the mod's id, which `id!` puts in front itself:
+///
+/// ```compile_fail
+/// const LOCKER: enshwick::content::Id = enshwick::content::id!("you.hello:locker");
+/// ```
+///
+/// A content name in upper case:
+///
+/// ```compile_fail
+/// const LOCKER: enshwick::content::Id = enshwick::content::id!("Locker");
+/// ```
+///
+/// A derived part in upper case:
+///
+/// ```compile_fail
+/// const NAME: enshwick::content::Id = enshwick::content::id!("locker").part("Name");
+/// ```
 #[expect(dead_code, reason = "the doc comment carries the cases")]
 struct Refused;

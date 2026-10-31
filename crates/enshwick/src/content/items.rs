@@ -72,14 +72,12 @@ pub fn vanilla_name(item: Guid, language: crate::i18n::Language) -> Option<&'sta
 /// # Examples
 ///
 /// ```
-/// use enshwick::content::{Guid, Id};
+/// use enshwick::content::{Guid, id};
 /// use enshwick::content::items::NewItem;
 ///
-/// let item = NewItem::new(
-///     Id::new("you.lockers:locker"),
-///     Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-/// );
-/// assert_eq!(item.debug_name, "you.lockers:locker");
+/// let locker = id!("locker");
+/// let item = NewItem::new(locker, Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"));
+/// assert_eq!(item.debug_name, locker.to_string());
 /// assert!(item.meter.is_none() && item.stats.is_empty());
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -118,7 +116,7 @@ impl NewItem {
             like,
             name: None,
             description: None,
-            debug_name: id.name().to_owned(),
+            debug_name: id.to_string(),
             meter: None,
             stats: Vec::new(),
             icon: None,
@@ -142,10 +140,10 @@ impl NewItem {
 /// # Examples
 ///
 /// ```
-/// use enshwick::content::Id;
+/// use enshwick::content::{Id, id};
 /// use enshwick::content::items::FuelSetup;
 ///
-/// let charges = FuelSetup { template: Id::new("my-mod:charges"), max_fuel_charges: 5, start: 3 };
+/// let charges = FuelSetup { template: id!("charges"), max_fuel_charges: 5, start: 3 };
 /// assert!(charges.start <= charges.max_fuel_charges);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -165,10 +163,10 @@ impl FuelSetup {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::Id;
+    /// use enshwick::content::{Id, id};
     /// use enshwick::content::items::FuelSetup;
     ///
-    /// let meter = FuelSetup { template: Id::new("my-mod:charges"), max_fuel_charges: 4, start: 1 };
+    /// let meter = FuelSetup { template: id!("charges"), max_fuel_charges: 4, start: 1 };
     /// assert!((meter.start_fill() - 0.25).abs() < f32::EPSILON);
     /// ```
     #[must_use]
@@ -394,7 +392,7 @@ const VARIANT: usize = 12;
 /// # Examples
 ///
 /// ```
-/// use enshwick::content::{Guid, Id};
+/// use enshwick::content::{Guid, Id, id};
 /// use enshwick::content::items::{ItemLayout, NewItem, clone_item};
 ///
 /// let layout = ItemLayout {
@@ -402,7 +400,7 @@ const VARIANT: usize = 12;
 ///     ui_values: 0x88, icon_image: 0x58, ui_value: [0x28, 0, 4, 8, 0x24], refs: 0, names: 0x38,
 /// };
 /// let item = NewItem::new(
-///     Id::new("you.lockers:locker"),
+///     id!("locker"),
 ///     Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
 /// );
 /// let vanilla = [0u8; 0x90];
@@ -474,7 +472,7 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
 /// template.extend_from_slice(&8u32.to_le_bytes());
 /// template.extend_from_slice(&0x28u32.to_le_bytes());
 /// template.extend_from_slice(&[0; 0x28]);
-/// let meter = FuelSetup { template: enshwick::content::Id::new("my-mod:charges"), max_fuel_charges: 3, start: 3 };
+/// let meter = FuelSetup { template: enshwick::content::id!("charges"), max_fuel_charges: 3, start: 3 };
 /// let clone = Blob::new(&clone_meter_template(&layout, &template, &meter).ok_or("no fuel setup")?);
 /// assert_eq!(clone.read_u32(20 + 0x20), Some(3));
 /// # Ok::<(), &str>(())
@@ -621,14 +619,14 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::{Guid, Id};
+    /// use enshwick::content::{Guid, Id, id};
     /// use enshwick::content::items::{FuelSetup, NewItem};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.add_item(NewItem {
-    ///         meter: Some(FuelSetup { template: Id::new("my-mod:charges"), max_fuel_charges: 3, start: 3 }),
+    ///         meter: Some(FuelSetup { template: id!("charges"), max_fuel_charges: 3, start: 3 }),
     ///         ..NewItem::new(
-    ///             Id::new("my-mod:charged-locker"),
+    ///             id!("charged-locker"),
     ///             Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
     ///         )
     ///     })

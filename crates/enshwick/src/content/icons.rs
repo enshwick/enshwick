@@ -25,11 +25,11 @@ pub const MAX_SIDE: u32 = 2048;
 /// # Examples
 ///
 /// ```
-/// use enshwick::content::{Guid, Id};
+/// use enshwick::content::{Guid, Id, id};
 /// use enshwick::content::icons::{Icon, Pixels, Tint};
 ///
 /// let ghostly = Icon {
-///     id: Id::new("my-mod:ghostly-staff.icon"),
+///     id: id!("ghostly-staff.icon"),
 ///     like: Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78"),
 ///     pixels: Pixels::Tint(Tint { colour: [120, 170, 255], amount: 60 }),
 /// };
@@ -404,12 +404,12 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::{Guid, Id};
+    /// use enshwick::content::{Guid, Id, id};
     /// use enshwick::content::icons::{Icon, Pixels, Tint};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.add_icon(Icon {
-    ///         id: Id::new("my-mod:ghostly-staff.icon"),
+    ///         id: id!("ghostly-staff.icon"),
     ///         like: Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78"),
     ///         pixels: Pixels::Tint(Tint { colour: [120, 170, 255], amount: 60 }),
     ///     })

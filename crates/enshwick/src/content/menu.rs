@@ -121,12 +121,12 @@ pub struct MenuEntry {
 ///
 /// ```
 /// use enshwick::content::menu::{MenuEntry, MenuLayout, UI_BUNDLE, list_recipes};
-/// use enshwick::content::{Guid, Id, types};
+/// use enshwick::content::{Guid, Id, id, types};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = MenuLayout::resolve(load)?;
 ///     let entry = MenuEntry {
-///         recipe: Id::new("my-mod:locker.recipe").guid(),
+///         recipe: id!("locker.recipe").guid(),
 ///         after: Some(Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac")),
 ///         workshop: None,
 ///     };
@@ -368,11 +368,11 @@ fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize
 /// ```
 /// use enshwick::content::menu::{MenuLayout, UI_BUNDLE, list_workshop};
 /// use enshwick::content::workshops::WorkshopId;
-/// use enshwick::content::{Id, types};
+/// use enshwick::content::{Id, id, types};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = MenuLayout::resolve(load)?;
-///     let bench = WorkshopId::new(Id::new("my-mod:bench.workshop").guid());
+///     let bench = WorkshopId::new(id!("bench.workshop").guid());
 ///     let bundle = UI_BUNDLE.key(types::FB_UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base| list_workshop(&layout, base, bench))
 /// }

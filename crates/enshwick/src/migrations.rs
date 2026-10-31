@@ -277,11 +277,11 @@ impl Migration {
 /// # Examples
 ///
 /// ```
-/// use enshwick::content::{Guid, Id};
+/// use enshwick::content::{Guid, Id, id};
 /// use enshwick::migrations::Migrations;
 ///
 /// const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-/// const LOCKER: Id = Id::new("you.lockers:locker");
+/// const LOCKER: Id = id!("locker");
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     load.migrate(
@@ -465,12 +465,12 @@ fn renames(list: &[Migration]) -> impl Iterator<Item = (Guid, Guid)> + '_ {
 /// # Examples
 ///
 /// ```
-/// use enshwick::content::{Guid, Id};
+/// use enshwick::content::{Guid, Id, id};
 /// use enshwick::ItemId;
 /// use enshwick::migrations::{Migrations, current_id};
 ///
 /// const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-/// const LOCKER: Id = Id::new("you.lockers:locker");
+/// const LOCKER: Id = id!("locker");
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     load.migrate(Migrations::new().add("2", |m| m.rename_content(OLD_LOCKER, LOCKER.guid())))?;

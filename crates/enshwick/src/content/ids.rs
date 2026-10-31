@@ -185,9 +185,18 @@ impl Guid {
 
     /// The version 5 UUID of `name` in [`NAMESPACE`], in memory order.
     pub(crate) const fn hashed(name: &str) -> Self {
-        let input = const_sha1::ConstSlice::new()
+        Self::hashed_part(name, "")
+    }
+
+    /// [`Guid::hashed`] of `name`, then `.` and `part` unless `part` is
+    /// empty, without joining the two.
+    const fn hashed_part(name: &str, part: &str) -> Self {
+        let mut input = const_sha1::ConstSlice::new()
             .push_slice(&NAMESPACE_BYTES)
             .push_slice(name.as_bytes());
+        if !part.is_empty() {
+            input = input.push_slice(b".").push_slice(part.as_bytes());
+        }
         let hash = const_sha1::sha1_from_const_slice(&input).as_bytes();
         let mut raw = [0u8; 16];
         let mut i = 0;
@@ -269,14 +278,40 @@ pub const fn is_id(id: &str) -> bool {
     }
 }
 
+/// Names a piece of the mod's own content by its local name: `id!("locker")`
+/// is the constant [`Id`] `<mod>:locker`, with the mod id read at build time
+/// from the `[package.metadata.enshwick]` table of the crate's `Cargo.toml`.
+///
+/// The name is 1 to 128 of `[a-z0-9_./-]`; a malformed name, or a crate
+/// without the table, fails the build with the reason. [`Id::part`] derives
+/// further ids from one name.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::{Guid, Id, id};
+///
+/// // This crate's mod id is `you.hello`.
+/// const LOCKER: Id = id!("locker");
+/// assert_eq!(LOCKER.to_string(), "you.hello:locker");
+/// assert_eq!(LOCKER.guid(), Guid::named("you.hello:locker"));
+/// ```
+pub use enshwick_macros::id;
+
 /// A piece of content a mod defines: its id, `<mod>:<name>`, and the GUID
 /// [`Guid::named`] derives from it.
 ///
-/// Content calls such as [`Load::add_item`](crate::Load::add_item) take an `Id` for what they
-/// create and declare it to the loader, which turns the mod off when its id
-/// lies outside the mod's namespace or its game id ([`Guid::fnv1a`]) is
-/// another content id's; the log names both. References to existing
-/// content, vanilla or another mod's, stay [`Guid`]s.
+/// A mod names its own content with [`id!`](crate::content::id), which puts
+/// the mod's id in front of a local name, and derives related ids with
+/// [`Id::part`]. Content calls such as [`Load::add_item`](crate::Load::add_item)
+/// take an `Id` for what they create and declare it to the loader, which turns
+/// the mod off when its id lies outside the mod's namespace or its game id
+/// ([`Guid::fnv1a`]) is another content id's; the log names both. References
+/// to existing content, vanilla or another mod's, stay [`Guid`]s.
+///
+/// Two ids are equal when they name the same content, however they were
+/// built. Equal ids may still differ in what they allow: a derived id takes
+/// no further part, while the same id written in full with [`Id::new`] does.
 ///
 /// # Examples
 ///
@@ -284,19 +319,24 @@ pub const fn is_id(id: &str) -> bool {
 /// use enshwick::content::{Guid, Id};
 ///
 /// const LOCKER: Id = Id::new("you.lockers:locker");
-/// assert_eq!(LOCKER.name(), "you.lockers:locker");
+/// assert_eq!(LOCKER.to_string(), "you.lockers:locker");
 /// assert_eq!(LOCKER.guid(), Guid::named("you.lockers:locker"));
 /// assert_eq!(Guid::from(LOCKER), LOCKER.guid());
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug)]
 pub struct Id {
+    /// The id the parts follow, `<mod>:<name>`.
     pub(super) name: &'static str,
+    /// The derived part after `name` and a `.`; empty for none.
+    pub(super) part: &'static str,
     pub(super) guid: Guid,
 }
 
 impl Id {
-    /// The content `name`, `<mod>:<name>`; a malformed literal fails the
-    /// build when used in a constant.
+    /// The content id `name` in full, `<mod>:<name>`, for content a test or
+    /// a tool names outside its mod; a mod names its own with
+    /// [`id!`](crate::content::id). A malformed literal fails the build when
+    /// used in a constant.
     ///
     /// # Panics
     ///
@@ -309,11 +349,13 @@ impl Id {
     pub const fn new(name: &'static str) -> Self {
         Self {
             name,
+            part: "",
             guid: Guid::named(name),
         }
     }
 
-    /// [`Id::new`] for an id read at run time; `None` when malformed.
+    /// [`Id::new`] for when a malformed id should not panic; `None` when
+    /// malformed.
     ///
     /// # Examples
     ///
@@ -326,19 +368,74 @@ impl Id {
     #[must_use]
     pub const fn try_new(name: &'static str) -> Option<Self> {
         match Guid::try_named(name) {
-            Some(guid) => Some(Self { name, guid }),
+            Some(guid) => Some(Self {
+                name,
+                part: "",
+                guid,
+            }),
             None => None,
         }
     }
 
-    /// The id, `<mod>:<name>`.
+    /// The id `<id>.<part>`, such as a locker's name tag `<mod>:locker.name`,
+    /// in a constant too: what one piece of content derives from another's
+    /// name. A malformed part fails the build when used in a constant.
+    ///
+    /// # Panics
+    ///
+    /// When `part` is not 1 or more of `[a-z0-9_./-]`, the derived name is
+    /// longer than 128, or `self` is a part already.
     ///
     /// # Examples
     ///
-    /// See [`Id`].
+    /// ```
+    /// use enshwick::content::{Guid, Id};
+    ///
+    /// const LOCKER: Id = Id::new("you.lockers:locker");
+    /// const LOCKER_NAME: Id = LOCKER.part("name");
+    /// assert_eq!(LOCKER_NAME.to_string(), "you.lockers:locker.name");
+    /// assert_eq!(LOCKER_NAME, Id::new("you.lockers:locker.name"));
+    /// assert_eq!(LOCKER_NAME.guid(), Guid::named("you.lockers:locker.name"));
+    /// ```
     #[must_use]
-    pub const fn name(self) -> &'static str {
-        self.name
+    pub const fn part(self, part: &'static str) -> Self {
+        assert!(self.part.is_empty(), "a derived id takes no further part");
+        assert!(
+            fits(self.name, part),
+            "a part is 1 or more of [a-z0-9_./-], and the name with it at most 128"
+        );
+        self.join(part)
+    }
+
+    /// [`Id::part`] for when a malformed part should not panic; `None` when
+    /// the part is malformed, the name too long or `self` a part already.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Id;
+    ///
+    /// let lantern = Id::new("pack:lantern");
+    /// assert!(lantern.try_part("recipe").is_some());
+    /// assert!(lantern.try_part("Recipe").is_none());
+    /// assert!(lantern.try_part("recipe").and_then(|r| r.try_part("copy")).is_none());
+    /// ```
+    #[must_use]
+    pub const fn try_part(self, part: &'static str) -> Option<Self> {
+        if self.part.is_empty() && fits(self.name, part) {
+            Some(self.join(part))
+        } else {
+            None
+        }
+    }
+
+    /// `self` with `part` after it, both checked.
+    const fn join(self, part: &'static str) -> Self {
+        Self {
+            name: self.name,
+            part,
+            guid: Guid::hashed_part(self.name, part),
+        }
     }
 
     /// The mod side of the id.
@@ -423,17 +520,62 @@ impl From<Id> for Guid {
     }
 }
 
+impl PartialEq for Id {
+    fn eq(&self, other: &Self) -> bool {
+        self.guid == other.guid
+    }
+}
+
+impl Eq for Id {}
+
+impl core::hash::Hash for Id {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.guid.hash(state);
+    }
+}
+
 impl core::fmt::Display for Id {
     /// The id, `<mod>:<name>`.
     ///
     /// # Examples
     ///
     /// ```
-    /// assert_eq!(enshwick::content::Id::new("a:b").to_string(), "a:b");
+    /// use enshwick::content::Id;
+    ///
+    /// assert_eq!(Id::new("a:b").to_string(), "a:b");
+    /// assert_eq!(Id::new("a:b").part("c").to_string(), "a:b.c");
     /// ```
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(self.name)
+        f.write_str(self.name)?;
+        if self.part.is_empty() {
+            return Ok(());
+        }
+        write!(f, ".{}", self.part)
     }
+}
+
+/// Whether `part` after the content id `name` and a `.` makes a content id:
+/// `part` 1 or more of `[a-z0-9_./-]`, the name side at most 128 with it.
+const fn fits(name: &str, part: &str) -> bool {
+    let bytes = part.as_bytes();
+    if bytes.is_empty() {
+        return false;
+    }
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        let allowed =
+            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'/' | b'-');
+        if !allowed {
+            return false;
+        }
+        i += 1;
+    }
+    let mut colon = 0;
+    while colon < name.len() && name.as_bytes()[colon] != b':' {
+        colon += 1;
+    }
+    name.len() - colon + bytes.len() <= 128
 }
 
 impl core::fmt::Display for Guid {

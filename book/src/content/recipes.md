@@ -22,12 +22,12 @@ Unstable: needs the `unstable` feature and may change in any release
 ([Stability](../stability.md)).
 
 ```rust
-use enshwick::content::{Guid, Id};
+use enshwick::content::{Guid, Id, id};
 use enshwick::content::recipes::NewRecipe;
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-const LOCKER: Id = Id::new("you.lockers:locker");
-const LOCKER_RECIPE: Id = Id::new("you.lockers:locker.recipe");
+const LOCKER: Id = id!("locker");
+const LOCKER_RECIPE: Id = LOCKER.part("recipe");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_recipe(NewRecipe {

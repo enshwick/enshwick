@@ -6,16 +6,16 @@ and behaves like it, under a [content id](../content.md#content-ids) of its
 own, with its own name and description if you give them.
 
 ```rust
-use enshwick::content::{Guid, Id};
+use enshwick::content::{Guid, Id, id};
 use enshwick::content::items::NewItem;
 
 /// The vanilla wooden chest.
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 /// The new item.
-const LOCKER: Id = Id::new("you.lockers:locker");
+const LOCKER: Id = id!("locker");
 /// The tags of its name and description.
-const LOCKER_NAME: Id = Id::new("you.lockers:locker.name");
-const LOCKER_DESCRIPTION: Id = Id::new("you.lockers:locker.description");
+const LOCKER_NAME: Id = LOCKER.part("name");
+const LOCKER_DESCRIPTION: Id = LOCKER.part("description");
 
 const TEXTS: &str = r#"
 [en]
@@ -82,13 +82,13 @@ water: on the item's own entity, saved with the world, sent to players and
 drawn as a bar on the item's slot.
 
 ```rust
-use enshwick::content::{Guid, Id};
+use enshwick::content::{Guid, Id, id};
 use enshwick::content::items::{FuelSetup, NewItem};
 
-const STAFF: Id = Id::new("my-mod:charged-staff");
+const STAFF: Id = id!("charged-staff");
 const VANILLA_STAFF: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
 /// The staff entity's template, fixed forever.
-const STAFF_ENTITY: Id = Id::new("my-mod:charged-staff.entity");
+const STAFF_ENTITY: Id = STAFF.part("entity");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_item(NewItem {
@@ -123,12 +123,12 @@ entity already, such as a weapon with durability, cannot take a meter:
 game lists an armour's bonuses: each a [text tag](texts.md) and a number.
 
 ```rust
-use enshwick::content::{Guid, Id};
+use enshwick::content::{Guid, Id, id};
 use enshwick::content::items::{NewItem, ImpactUiValue, StatFormat};
 
-const RING: Id = Id::new("my-mod:lucky-ring");
+const RING: Id = id!("lucky-ring");
 const VANILLA_RING: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-const LUCK: Id = Id::new("my-mod:lucky-ring.luck");
+const LUCK: Id = RING.part("luck");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts("[en]\nluck = \"Luck\"\n")?;
@@ -160,14 +160,14 @@ client first shows it:
   best square, such as 256 by 256.
 
 ```rust
-use enshwick::content::{Guid, Id};
+use enshwick::content::{Guid, Id, id};
 use enshwick::content::icons::{Icon, Pixels, Tint};
 use enshwick::content::items::NewItem;
 
 /// The Blacksmith's summoning staff; its icon is a portrait.
 const VANILLA_STAFF: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
-const STAFF: Id = Id::new("my-mod:spectral-staff");
-const STAFF_ICON: Id = Id::new("my-mod:spectral-staff.icon");
+const STAFF: Id = id!("spectral-staff");
+const STAFF_ICON: Id = STAFF.part("icon");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_item(NewItem {

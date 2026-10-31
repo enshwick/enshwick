@@ -26,10 +26,10 @@ bytes of the resource `base`:
   registry with one more entry.
 
 ```rust
-use enshwick::content::{Blob, Guid, Id, types};
+use enshwick::content::{Blob, Guid, Id, id, types};
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-const LOCKER_ID: Id = Id::new("my-mod:locker");
+const LOCKER_ID: Id = id!("locker");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     const LOCKER: Guid = LOCKER_ID.guid();
@@ -196,10 +196,10 @@ number. A served item whose name field holds `tag` shows that text as its
 name.
 
 ```rust
-use enshwick::content::Id;
+use enshwick::content::{Id, id};
 use enshwick::i18n::Language;
 
-const LOCKER_NAME: Id = Id::new("my-mod:locker.name");
+const LOCKER_NAME: Id = id!("locker.name");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let tag = load.declare(LOCKER_NAME)?;

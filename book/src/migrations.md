@@ -14,12 +14,12 @@ takes a
 list during `init`, before `load.config()`:
 
 ```rust
-use enshwick::content::{Guid, Id};
+use enshwick::content::{Guid, Id, id};
 use enshwick::migrations::Migrations;
 
 /// The GUID the locker had before it got a content id.
 const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-const LOCKER: Id = Id::new("you.lockers:locker");
+const LOCKER: Id = id!("locker");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.migrate(
@@ -136,11 +136,11 @@ which turns an old id into the id it was renamed to and leaves every other
 id as it is:
 
 ```rust
-use enshwick::content::{Guid, Id};
+use enshwick::content::{Guid, Id, id};
 use enshwick::ItemId;
 use enshwick::migrations::current_id;
 
-const LOCKER: Id = Id::new("you.lockers:locker");
+const LOCKER: Id = id!("locker");
 
 fn is_locker(item: ItemId) -> bool {
     current_id(item) == ItemId::from_guid(LOCKER.guid())

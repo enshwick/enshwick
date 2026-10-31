@@ -501,20 +501,21 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::{Guid, Id};
+    /// use enshwick::content::{Id, id};
     ///
-    /// const LOCKER: Id = Id::new("my-mod:locker");
+    /// const LOCKER: Id = id!("locker");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let guid = load.declare(LOCKER)?;
-    ///     assert_eq!(guid, Guid::named("my-mod:locker"));
+    ///     assert_eq!(guid, LOCKER.guid());
     ///     Ok(())
     /// }
     /// ```
     pub fn declare(&mut self, id: Id) -> Result<Guid, Off> {
         let api = self.host().api();
         let mut out = [0u8; 16];
-        let status = (api.declare_content)(self.host().handle(), Str::new(id.name()), &raw mut out);
+        let name = id.to_string();
+        let status = (api.declare_content)(self.host().handle(), Str::new(&name), &raw mut out);
         crate::load::ok(status, Guid(out), || format!("content id {id}"))
     }
 
