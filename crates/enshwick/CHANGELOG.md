@@ -72,7 +72,7 @@ Each entry names the pull request that made the change.
   adds the station's recipe, and `NewWorkshop::new(id, like)` fills the
   rest. `StationRecipe` and the fields `item`, `template`, `workshop`,
   `name`, `description` and `station_recipe` are gone. A data pack's
-  workshop names its texts by the same tags (#PR2).
+  workshop names its texts by the same tags (#768).
 
 - **Breaking:** `Id::name` is gone: an `Id` writes its full id through
   `Display`, and two ids are equal when their GUIDs are. `Id::new` takes
