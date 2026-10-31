@@ -209,7 +209,7 @@ pub struct Registers {
 ///
 /// # Examples
 ///
-/// See [`MidHookSpec`], which holds it.
+/// The safe layer wraps it in [`Load::hook_at`](crate::Load::hook_at).
 pub type MidHookFn = unsafe extern "system" fn(registers: *mut Registers, user: *mut c_void);
 
 /// A request to run a handler at an instruction inside a game function.

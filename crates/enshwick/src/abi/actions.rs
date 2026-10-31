@@ -77,7 +77,7 @@ impl ActionCall {
 ///
 /// # Examples
 ///
-/// See [`HostApi::actions`](super::HostApi::actions), which takes it.
+/// The safe layer wraps it in `Load::actions`, behind the `unstable` feature.
 pub type ActionFn =
     unsafe extern "system" fn(call: *const ActionCall, user: *mut c_void, reply: *mut Str);
 
@@ -87,7 +87,7 @@ pub type ActionFn =
 ///
 /// # Examples
 ///
-/// See [`HostApi::status`](super::HostApi::status), which takes it.
+/// The safe layer wraps it in [`Load::add_status`](crate::Load::add_status).
 pub type StatusFn = unsafe extern "system" fn(user: *mut c_void, out: *mut Str);
 
 /// A player renaming an entity, handed to the filters registered with
@@ -138,5 +138,5 @@ impl_headed!(RenameCall);
 ///
 /// # Examples
 ///
-/// See [`HostApi::rename_filter`](super::HostApi::rename_filter), which takes it.
+/// The safe layer wraps it in `Load::on_rename`, behind the `unstable` feature.
 pub type RenameCallFn = unsafe extern "system" fn(call: *const RenameCall, user: *mut c_void) -> u8;

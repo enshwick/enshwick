@@ -35,7 +35,7 @@ pub struct ResourceKey {
 ///
 /// # Examples
 ///
-/// See [`HostApi::serve_resource`](super::HostApi::serve_resource), which takes it.
+/// The safe layer wraps it in [`Load::serve`](crate::Load::serve).
 pub type ResourcePatchFn = unsafe extern "system" fn(
     base: *const u8,
     base_len: usize,

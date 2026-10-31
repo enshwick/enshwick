@@ -56,5 +56,5 @@ impl NetMessage {
 ///
 /// # Examples
 ///
-/// See [`HostApi::net_channel`](super::HostApi::net_channel), which takes it.
+/// The safe layer wraps it in [`Load::channel`](crate::Load::channel).
 pub type NetMessageFn = unsafe extern "system" fn(message: *const NetMessage, user: *mut c_void);

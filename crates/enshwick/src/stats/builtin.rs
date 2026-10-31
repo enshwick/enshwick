@@ -75,7 +75,7 @@ const POINTS: Def = Def {
 ///
 /// # Examples
 ///
-/// See [`Def::to_def`].
+/// See [`Def::to_def`], which turns one into the [`StatDef`] a kind runs by.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Def {
     multiplicative: bool,

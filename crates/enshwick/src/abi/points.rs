@@ -199,7 +199,8 @@ impl PointVerdict {
 ///
 /// # Examples
 ///
-/// See [`HostApi::attach_point`](super::HostApi::attach_point), which takes it.
+/// The safe layer wraps it in [`Load::extend_point`](crate::Load::extend_point) and
+/// [`Load::observe_point`](crate::Load::observe_point).
 pub type PointFn = unsafe extern "system" fn(
     input: *const c_void,
     value: *mut c_void,

@@ -252,7 +252,7 @@ pub fn change_random_loot(
 /// ```
 /// use enshwick::content::loot_tables::scaled_ceiling;
 ///
-/// // A largest stack of 10 held to 20 doubles to 20, held to 40.
+/// // A ceiling of 20 for a largest stack of 10: doubled to 20, the ceiling becomes 40.
 /// assert_eq!(scaled_ceiling(20, 10, 20), 40);
 /// // The ceiling never falls below the new largest stack.
 /// assert_eq!(scaled_ceiling(5, 10, 40), 40);

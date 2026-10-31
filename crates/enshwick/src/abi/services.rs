@@ -153,7 +153,7 @@ impl_headed!(EventSpec);
 ///
 /// # Examples
 ///
-/// See [`HostApi::subscribe_event`](super::HostApi::subscribe_event), which takes it.
+/// The safe layer wraps it in [`Load::on_mod_event`](crate::Load::on_mod_event).
 pub type ModEventFn = unsafe extern "system" fn(data: *const c_void, user: *mut c_void);
 
 /// A described service, a call: one function from an input struct to an
@@ -201,7 +201,7 @@ impl_headed!(CallSpec);
 ///
 /// # Examples
 ///
-/// See [`HostApi::serve_call`](super::HostApi::serve_call), which takes it.
+/// The safe layer wraps it in `Load::serve_call`, behind the `unstable` feature.
 pub type CallFn = unsafe extern "system" fn(
     input: *const c_void,
     output: *mut c_void,

@@ -201,7 +201,7 @@ impl_headed!(StatChange);
 ///
 /// # Examples
 ///
-/// See [`HostApi::stats_changed`](super::HostApi::stats_changed), which takes it.
+/// The safe layer wraps it in [`Load::on_stats_changed`](crate::Load::on_stats_changed).
 pub type StatChangeFn = unsafe extern "system" fn(change: *const StatChange, user: *mut c_void);
 
 /// One modifier that counts toward an entity's stat, and where it comes

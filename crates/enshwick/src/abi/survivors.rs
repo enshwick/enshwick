@@ -85,7 +85,7 @@ impl SurvivorLookup {
 ///
 /// # Examples
 ///
-/// See [`HostApi::survivor_lookup`](super::HostApi::survivor_lookup), which takes it.
+/// The safe layer wraps it in [`Load::on_survivor_lookup`](crate::Load::on_survivor_lookup).
 pub type SurvivorLookupFn = unsafe extern "system" fn(
     call: *const SurvivorLookup,
     user: *mut c_void,
@@ -129,7 +129,8 @@ impl_headed!(BedCheck);
 ///
 /// # Examples
 ///
-/// See [`HostApi::survivor_bed_check`](super::HostApi::survivor_bed_check), which takes it.
+/// The safe layer wraps it in
+/// [`Load::on_survivor_bed_check`](crate::Load::on_survivor_bed_check).
 pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *mut c_void) -> u8;
 
 /// A summoning staff's use about to spawn or move a survivor, as
@@ -197,8 +198,8 @@ impl Summon {
 ///
 /// # Examples
 ///
-/// See [`HostApi::summon_filter`](super::HostApi::summon_filter) and
-/// [`HostApi::summoned`](super::HostApi::summoned), which take it.
+/// The safe layer wraps it in [`Load::on_summon`](crate::Load::on_summon) and
+/// [`Load::on_summoned`](crate::Load::on_summoned).
 pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut c_void) -> u8;
 
 /// The client's survivor menu merging the statuses of every entity of one
@@ -210,7 +211,7 @@ pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut 
 ///
 /// # Examples
 ///
-/// See [`HostApi::survivor_status`](super::HostApi::survivor_status), which takes it.
+/// The safe layer wraps it in [`Load::on_survivor_status`](crate::Load::on_survivor_status).
 pub type SurvivorStatusFn = unsafe extern "system" fn(
     survivor: NpcId,
     statuses: *const u8,

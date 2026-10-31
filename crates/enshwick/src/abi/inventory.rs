@@ -183,7 +183,8 @@ impl InventoryResult {
 ///
 /// # Examples
 ///
-/// See [`HostApi::inventory_submit`](super::HostApi::inventory_submit), which takes it.
+/// The safe layer wraps it in
+/// [`Inventories::submit`](crate::inventory::Inventories::submit).
 pub type InventoryResultFn =
     unsafe extern "system" fn(result: *const InventoryResult, user: *mut c_void);
 

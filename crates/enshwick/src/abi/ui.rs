@@ -52,8 +52,8 @@ impl UiFrame {
 ///
 /// # Examples
 ///
-/// See [`HostApi::ui_frame`](super::HostApi::ui_frame) and
-/// [`HostApi::ui_hud`](super::HostApi::ui_hud), which take it.
+/// The safe layer wraps it in [`Load::on_frame`](crate::Load::on_frame) and
+/// [`Load::on_hud`](crate::Load::on_hud).
 pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut c_void);
 
 /// One widget, drawn with [`HostApi::ui_widget`](super::HostApi::ui_widget): `kind` says which, and
@@ -420,7 +420,7 @@ impl UiDialog {
 ///
 /// # Examples
 ///
-/// See [`HostApi::ui_dialog`](super::HostApi::ui_dialog), which takes it.
+/// The safe layer wraps it in [`Ui::dialog`](crate::ui::Ui::dialog).
 pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 
 /// A mod's check of a new text of its settings file, before the loader writes
@@ -436,7 +436,7 @@ pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 ///
 /// # Examples
 ///
-/// See [`HostApi::config_check`](super::HostApi::config_check), which takes it.
+/// The safe layer wraps it in [`Load::config`](crate::Load::config).
 pub type ConfigCheckFn =
     unsafe extern "system" fn(text: Str, why: *mut Str, user: *mut c_void) -> Status;
 

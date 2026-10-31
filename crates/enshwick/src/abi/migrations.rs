@@ -91,7 +91,7 @@ pub struct Migration {
 ///
 /// # Examples
 ///
-/// See [`MigrationSet`], whose `map` has its signature.
+/// The safe layer wraps it in [`Load::migrate`](crate::Load::migrate).
 pub type MigrateFn = unsafe extern "system" fn(
     user: *mut c_void,
     migration: u32,
