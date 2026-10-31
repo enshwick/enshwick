@@ -803,7 +803,8 @@ pub(crate) extern "system" fn world_persists(
     // The fake host reads the mod's buffer, not game memory.
     // ast-grep-ignore: game-memory-through-raw
     let low = unsafe { min.read_unaligned() };
-    // SAFETY: as for `min`, `max` points at three live `f64`.
+    // SAFETY: the safe layer passes `max` pointing at three live `f64` for
+    // the call, non-null by the check before it.
     // The fake host reads the mod's buffer, not game memory.
     // ast-grep-ignore: game-memory-through-raw
     let high = unsafe { max.read_unaligned() };

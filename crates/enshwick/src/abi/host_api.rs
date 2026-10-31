@@ -1381,7 +1381,10 @@ pub struct HostApi {
     /// a corner that is not finite or a `max` below `min`;
     /// [`Status::MISSING`] while no world is loaded or on a build without
     /// the zone list. On the server's game thread at a quiet moment only:
-    /// [`Status::WRONG_THREAD`] elsewhere or inside a step.
+    /// [`Status::WRONG_THREAD`] elsewhere or inside a step. The mod passes
+    /// `min` and `max` readable for three `f64` each and `kept` writable for
+    /// one byte, all three borrowed for the call and untouched by other
+    /// threads during it; none needs alignment.
     pub world_persists: extern "system" fn(
         me: ModHandle,
         min: *const [f64; 3],
