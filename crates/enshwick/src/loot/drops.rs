@@ -901,7 +901,32 @@ impl Load<'_> {
 /// }
 /// ```
 pub fn replace_drops(drops: Vec<Drop>) -> Result<(), Off> {
-    replace_group(0, drops).map_err(Off::new)
+    replace_group(0, drops).map_err(Off::from)
+}
+
+/// Why new loot drops cannot take effect before a restart.
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum ReplaceDropsError {
+    /// A drop the game could not take.
+    #[error(transparent)]
+    Drop(Off),
+    /// The loot rolls were not linked when the game started.
+    #[error("no loot was linked at start; it takes a restart")]
+    NotLinked,
+    /// A drop needs single-item rolls, which were not linked at start.
+    #[error("single-item rolls were not linked at start; they take a restart")]
+    SingleNotLinked,
+}
+
+impl From<ReplaceDropsError> for Off {
+    fn from(error: ReplaceDropsError) -> Self {
+        match error {
+            ReplaceDropsError::Drop(off) => off,
+            other => Self::new(other.to_string()),
+        }
+    }
 }
 
 /// Replaces every drop of group `group` with `drops`, as a data pack's
@@ -911,20 +936,18 @@ pub fn replace_drops(drops: Vec<Drop>) -> Result<(), Off> {
 ///
 /// Why the drops cannot take effect before a restart: a drop that is not
 /// valid, or one of a kind of roll nothing linked at start.
-pub(crate) fn replace_group(group: u64, drops: Vec<Drop>) -> Result<(), String> {
+pub(crate) fn replace_group(group: u64, drops: Vec<Drop>) -> Result<(), ReplaceDropsError> {
     for drop in &drops {
-        drop.check().map_err(|off| off.to_string())?;
+        drop.check().map_err(ReplaceDropsError::Drop)?;
         if ENGINE.get().is_none() {
-            return Err("no loot was linked at start; it takes a restart".to_owned());
+            return Err(ReplaceDropsError::NotLinked);
         }
         if drop.from.kinds.contains(Kinds::DESTROYED)
             && !ONE_LINKED
                 .get_or_init(Default::default)
                 .load(Ordering::Acquire)
         {
-            return Err(
-                "single-item rolls were not linked at start; they take a restart".to_owned(),
-            );
+            return Err(ReplaceDropsError::SingleNotLinked);
         }
     }
     let mut all = DROPS.get_or_init(Mutex::default).relock();

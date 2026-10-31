@@ -136,13 +136,14 @@ impl StatDef {
     }
 
     /// Why the loader would refuse it, if it would.
-    pub(super) fn check(&self) -> Result<(), String> {
+    pub(super) fn check(&self) -> Result<(), DefineStatError> {
         let finite = self.default.is_finite() && self.min.is_finite() && self.max.is_finite();
         if !finite || self.min > self.max || !(self.min..=self.max).contains(&self.default) {
-            return Err(format!(
-                "default {} is not within {}..{}",
-                self.default, self.min, self.max
-            ));
+            return Err(DefineStatError {
+                default: self.default,
+                min: self.min,
+                max: self.max,
+            });
         }
         Ok(())
     }
@@ -214,6 +215,16 @@ impl StatDef {
         };
         def.check().is_ok().then_some(def)
     }
+}
+
+/// Why the loader refuses a [`StatDef`]: its default lies outside its range,
+/// or a bound is not finite.
+#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
+#[error("default {default} is not within {min}..{max}")]
+pub(crate) struct DefineStatError {
+    default: f32,
+    min: f32,
+    max: f32,
 }
 
 /// The stored name of a stat kind: [`key_of`](crate::stats::key_of) its full id.

@@ -311,7 +311,7 @@ impl Runtime {
         if self.is_off() {
             return Err(ReloadError::Off);
         }
-        let vm = inner.run_main(scripts).map_err(ReloadError::Start)?;
+        let vm = inner.run_main(scripts)?;
         let waiting: Vec<String> = {
             let subscribed = inner.subscribed.relock();
             vm.events()
@@ -340,18 +340,45 @@ impl Runtime {
 /// # Examples
 ///
 /// ```
-/// let error = enshwick_luau::ReloadError::Start("main.luau:1: boom".to_owned());
-/// assert_eq!(error.to_string(), "main.luau:1: boom");
+/// use enshwick_luau::{ReloadError, StartError};
+///
+/// let error = ReloadError::Start(StartError::Missing);
+/// assert_eq!(error.to_string(), "main.luau is missing");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ReloadError {
     /// A fault turned the mod off.
     #[error("the mod is off")]
     Off,
     /// The new `main.luau` failed at its start: the file, line and message.
-    #[error("{0}")]
-    Start(String),
+    #[error(transparent)]
+    Start(#[from] StartError),
+}
+
+/// Why a mod's `main.luau` did not start.
+///
+/// # Examples
+///
+/// See [`ReloadError`].
+#[derive(Clone, Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum StartError {
+    /// The scripts hold no `main.luau`.
+    #[error("{MAIN} is missing")]
+    Missing,
+    /// The sandbox did not build.
+    #[error("the Luau sandbox: {0}")]
+    Sandbox(#[source] mlua::Error),
+    /// The `enshwick` API did not build.
+    #[error("the Luau API: {0}")]
+    Api(#[source] mlua::Error),
+    /// The script failed: the file, the line and the message.
+    #[error("{}", describe(.0))]
+    Script(#[source] mlua::Error),
+    /// A call the script made panicked.
+    #[error("{MAIN} panicked in a call it made")]
+    Panicked,
 }
 
 /// The mod and the VM a function or a callback belongs to.
@@ -519,7 +546,9 @@ fn begin(
             }
         })?;
     }
-    let vm = inner.run_main(scripts).map_err(Off::new)?;
+    let vm = inner
+        .run_main(scripts)
+        .map_err(|error| Off::new(error.to_string()))?;
     let events = vm.events();
     inner.vm.store(Some(vm));
     inner.subscribed.relock().clone_from(&events);
@@ -757,13 +786,9 @@ impl Inner {
 
     /// A new VM with the API and `scripts`, after its `main.luau` ran;
     /// the error names the file, the line and the message.
-    fn run_main(&self, scripts: Scripts) -> Result<Arc<Vm>, String> {
-        let main = scripts
-            .get(MAIN)
-            .cloned()
-            .ok_or_else(|| format!("{MAIN} is missing"))?;
-        let lua =
-            sandbox(self.limits, &self.overruns).map_err(|e| format!("the Luau sandbox: {e}"))?;
+    fn run_main(&self, scripts: Scripts) -> Result<Arc<Vm>, StartError> {
+        let main = scripts.get(MAIN).cloned().ok_or(StartError::Missing)?;
+        let lua = sandbox(self.limits, &self.overruns).map_err(StartError::Sandbox)?;
         let vm = Arc::new(Vm {
             lua,
             scripts: scripts.clone(),
@@ -773,12 +798,8 @@ impl Inner {
             events: Mutex::new(Vec::new()),
             refuse: OnceLock::new(),
         });
-        let api = self
-            .globals(&vm, scripts)
-            .map_err(|e| format!("the Luau API: {e}"))?;
-        vm.lua
-            .sandbox(true)
-            .map_err(|e| format!("the Luau sandbox: {e}"))?;
+        let api = self.globals(&vm, scripts).map_err(StartError::Api)?;
+        vm.lua.sandbox(true).map_err(StartError::Sandbox)?;
         let started = self.enter(&vm.lua, self.limits.start, || {
             vm.lua
                 .load(&main[..])
@@ -792,8 +813,8 @@ impl Inner {
                 api.set_readonly(true);
                 Ok(vm)
             }
-            Ok(Err(error)) => Err(describe(&error)),
-            Err(()) => Err(format!("{MAIN} panicked in a call it made")),
+            Ok(Err(error)) => Err(StartError::Script(error)),
+            Err(()) => Err(StartError::Panicked),
         }
     }
 

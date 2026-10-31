@@ -17,6 +17,8 @@
 
 mod drops;
 
+#[doc(hidden)]
+pub use drops::ReplaceDropsError;
 pub(crate) use drops::replace_group;
 #[cfg(feature = "unstable")]
 pub(crate) use drops::watch_rolls;

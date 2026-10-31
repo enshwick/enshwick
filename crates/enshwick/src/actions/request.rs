@@ -144,6 +144,53 @@ pub struct Subject {
     pub label: String,
 }
 
+/// Why an action has nothing to act on for a player, from
+/// [`Action::at`](crate::actions::Action::at): the reason the player reads
+/// beside the dimmed action, in their language.
+///
+/// A `&str` or `String` turns into one with `into`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::actions::FindSubjectError;
+///
+/// let none: FindSubjectError = "No gate near you".into();
+/// assert_eq!(none.reason(), "No gate near you");
+/// assert_eq!(none.to_string(), "nothing to act on: No gate near you");
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("nothing to act on: {reason}")]
+pub struct FindSubjectError {
+    reason: String,
+}
+
+impl FindSubjectError {
+    /// What the player reads.
+    ///
+    /// # Examples
+    ///
+    /// See [`FindSubjectError`].
+    #[must_use]
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+}
+
+impl From<String> for FindSubjectError {
+    fn from(reason: String) -> Self {
+        Self { reason }
+    }
+}
+
+impl From<&str> for FindSubjectError {
+    fn from(reason: &str) -> Self {
+        Self {
+            reason: reason.to_owned(),
+        }
+    }
+}
+
 impl Subject {
     /// A subject.
     ///

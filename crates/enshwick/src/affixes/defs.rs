@@ -216,9 +216,9 @@ impl AffixDef {
     }
 
     /// Why the loader would refuse it, if it would.
-    pub(super) fn check(&self) -> Result<(), String> {
+    pub(super) fn check(&self) -> Result<(), DefineAffixError> {
         if self.ranges.is_empty() || self.weight == 0 || self.categories.0 == 0 {
-            return Err("needs a modifier, a weight and a category".to_owned());
+            return Err(DefineAffixError::Incomplete);
         }
         let bad = self.ranges.iter().any(|r| {
             !(r.min.is_finite() && r.max.is_finite() && r.step.is_finite())
@@ -226,7 +226,7 @@ impl AffixDef {
                 || r.step < 0.0
         });
         if bad {
-            return Err("a range is empty or not finite".to_owned());
+            return Err(DefineAffixError::Range);
         }
         Ok(())
     }
@@ -345,6 +345,17 @@ impl AffixDef {
             })
             .collect()
     }
+}
+
+/// Why the loader refuses an [`AffixDef`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum DefineAffixError {
+    /// No modifier, a weight of 0 or no item category.
+    #[error("needs a modifier, a weight and a category")]
+    Incomplete,
+    /// A range runs backwards, steps below 0 or is not finite.
+    #[error("a range is empty or not finite")]
+    Range,
 }
 
 /// An affix as this process numbers it, from [`Load::define_affix`](crate::Load::define_affix)

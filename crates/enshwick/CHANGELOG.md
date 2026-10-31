@@ -17,6 +17,11 @@ Each entry names the pull request that made the change.
   build fails when a key has no `en` text, a table is no language code, or
   a translation fills in other values than its `en` text. Replace
   `load.texts(include_str!("texts.toml"))` with `load.texts()` (#827).
+- **Breaking:** `Action::at` takes a closure that returns
+  `Result<Subject, FindSubjectError>`; a `String` or `&str` reason turns into
+  a `FindSubjectError` with `into`, so `Err(ask.say(..))` becomes
+  `Err(ask.say(..).into())`. The hidden `packs::reload_loot` returns
+  `loot::ReplaceDropsError` (#824).
 - **Breaking:** `#[enshwick::config]` declares a settings struct: it derives
   serde's `Deserialize` and `Serialize` through the API's serde, refuses
   unknown keys and derives `Config`, so a mod needs no serde for its
