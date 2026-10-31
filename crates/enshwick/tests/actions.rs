@@ -40,7 +40,7 @@ mod tests {
                 .help("access.help")
                 .at(|ask| {
                     if ask.player.entity.0 == 0 {
-                        Err(ask.say("none", &[]))
+                        Err(ask.say("none", &[]).into())
                     } else {
                         Ok(Subject::new(42, ask.say("locker", &[])))
                     }

@@ -98,7 +98,7 @@ pub const MAX_ID: usize = 32;
 pub const MAX_PLAYERS: usize = 32;
 
 type Allow = Box<dyn Fn(&Player) -> bool + Send + Sync>;
-type At = Box<dyn Fn(&Ask<'_>) -> Result<Subject, String> + Send + Sync>;
+type At = Box<dyn Fn(&Ask<'_>) -> Result<Subject, FindSubjectError> + Send + Sync>;
 type On = Box<dyn Fn(&Ask<'_>, Option<&Subject>) -> Vec<(PlayerKey, String)> + Send + Sync>;
 type Handler = Box<dyn Fn(&Request<'_>) -> Outcome + Send + Sync>;
 
@@ -246,8 +246,9 @@ impl Action {
     }
 
     /// What the action acts on for a player, found on the server each time
-    /// the player looks or runs it: a [`Subject`], or why there is none,
-    /// which the player reads beside the dimmed action. A mod's own
+    /// the player looks or runs it: a [`Subject`], or a [`FindSubjectError`]
+    /// with why there is none, which the player reads beside the dimmed
+    /// action. A mod's own
     /// permission rules, extension points included, belong here.
     ///
     /// # Examples
@@ -257,7 +258,7 @@ impl Action {
     ///
     /// let action = Action::new("open", "Open the gate").at(|ask| {
     ///     if ask.player.name.is_empty() {
-    ///         Err(ask.say("No gate near you", &[]))
+    ///         Err(ask.say("No gate near you", &[]).into())
     ///     } else {
     ///         Ok(Subject::new(1, ask.say("The north gate", &[])))
     ///     }
@@ -267,7 +268,7 @@ impl Action {
     #[must_use]
     pub fn at<F>(mut self, at: F) -> Self
     where
-        F: Fn(&Ask<'_>) -> Result<Subject, String> + Send + Sync + 'static,
+        F: Fn(&Ask<'_>) -> Result<Subject, FindSubjectError> + Send + Sync + 'static,
     {
         self.at = Some(Box::new(at));
         self

@@ -45,20 +45,40 @@ fn source(file: &str, line: usize, name: &str) -> String {
 /// Whether the item `name` names, `item`, takes `slots`: an item that
 /// places a container, never made smaller, where the game's data is at
 /// hand; anything without it.
-fn container(reader: &Reader<'_>, item: Guid, name: &str, slots: Value) -> Result<(), String> {
+fn container(
+    reader: &Reader<'_>,
+    item: Guid,
+    name: &str,
+    slots: Value,
+) -> Result<(), ResizeContainerError> {
     let Some(vanilla) = reader.vanilla else {
         return Ok(());
     };
     match vanilla.container_slots(item) {
-        Ok(None) => Err(format!("{name} places no container")),
+        Ok(None) => Err(ResizeContainerError::NoContainer {
+            name: name.to_owned(),
+        }),
         Ok(Some(has)) => match slots {
-            Value::Set(v) if v < f64::from(has) => Err(format!(
-                "slots {v} are fewer than the {has} {name} holds, and a container only grows"
-            )),
+            Value::Set(v) if v < f64::from(has) => Err(ResizeContainerError::Shrinks {
+                name: name.to_owned(),
+                slots: v,
+                has,
+            }),
             _ => Ok(()),
         },
         Err(_) => Ok(()),
     }
+}
+
+/// Why a change of slots does not fit the item it names.
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
+enum ResizeContainerError {
+    /// The item places no container.
+    #[error("{name} places no container")]
+    NoContainer { name: String },
+    /// The change makes the container smaller.
+    #[error("slots {slots} are fewer than the {has} {name} holds, and a container only grows")]
+    Shrinks { name: String, slots: f64, has: u8 },
 }
 
 /// The value a pack entry gives.
@@ -114,12 +134,16 @@ pub(super) fn item_changes(
                     "items {word:?} is no selection; give a list of items, \"stackable\", \"containers\" or \"backpacks\""
                 )),
             },
-            (None, Some(categories)) => category(categories).map(|mask| {
-                (
-                    Items::Category(mask),
-                    format!("category {}", categories.join(", ")),
-                )
-            }),
+            (None, Some(categories)) => {
+                category(categories)
+                    .map_err(|why| why.to_string())
+                    .map(|mask| {
+                        (
+                            Items::Category(mask),
+                            format!("category {}", categories.join(", ")),
+                        )
+                    })
+            }
             (None, None) => Err("give items or category".to_owned()),
         };
         match selected {
@@ -150,30 +174,49 @@ pub(super) fn item_changes(
 }
 
 /// The categories the game names `names`, or why not.
-fn category(names: &[String]) -> Result<ItemCategoryMask, String> {
+fn category(names: &[String]) -> Result<ItemCategoryMask, ReadCategoryError> {
     if names.is_empty() {
-        return Err("category names no item category".to_owned());
+        return Err(ReadCategoryError::Empty);
     }
     names
         .iter()
         .try_fold(ItemCategoryMask::default(), |mask, name| {
             ItemCategoryMask::named(name)
                 .map(|one| mask | one)
-                .ok_or_else(|| {
-                    let near: Vec<&str> = ItemCategoryMask::NAMES
+                .ok_or_else(|| ReadCategoryError::Unknown {
+                    name: name.clone(),
+                    near: ItemCategoryMask::NAMES
                         .iter()
                         .map(|(game, _)| *game)
                         .filter(|game| {
                             strsim::levenshtein(&game.to_lowercase(), &name.to_lowercase()) <= 2
                         })
-                        .collect();
-                    if near.is_empty() {
-                        format!("no item category {name:?}")
-                    } else {
-                        format!("no item category {name:?}; near: {}", near.join(", "))
-                    }
+                        .collect(),
                 })
         })
+}
+
+/// Why a change's `category` names no item category.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+enum ReadCategoryError {
+    /// An empty list.
+    #[error("category names no item category")]
+    Empty,
+    /// A name the game has no category for, with the names near it.
+    #[error("no item category {name:?}{}", near_names(near))]
+    Unknown {
+        name: String,
+        near: Vec<&'static str>,
+    },
+}
+
+/// `; near: ` and `near`, or nothing when it is empty.
+fn near_names(near: &[&str]) -> String {
+    if near.is_empty() {
+        String::new()
+    } else {
+        format!("; near: {}", near.join(", "))
+    }
 }
 
 /// The checked changes of each field `fields` gives through the selection

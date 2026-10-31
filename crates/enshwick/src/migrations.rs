@@ -352,13 +352,14 @@ impl Migrations {
 
     /// Checks the declaration: ids present and unique, names present,
     /// no content renamed to itself.
-    fn check(&self) -> Result<(), String> {
+    fn check(&self) -> Result<(), DeclareMigrationError> {
         for (index, migration) in self.list.iter().enumerate() {
+            let id = || migration.id.clone();
             if migration.id.is_empty() || migration.id.chars().any(char::is_control) {
-                return Err(format!("migration {index}: an id is plain text"));
+                return Err(DeclareMigrationError::Id { index });
             }
             if self.list[..index].iter().any(|m| m.id == migration.id) {
-                return Err(format!("migration {}: the id is used twice", migration.id));
+                return Err(DeclareMigrationError::Twice { id: id() });
             }
             for step in &migration.steps {
                 let renames = matches!(
@@ -373,24 +374,45 @@ impl Migrations {
                         .split_once(':')
                         .is_none_or(|(id, key)| !abi::is_valid_old_form_id(id) || key.is_empty())
                 {
-                    return Err(format!(
-                        "migration {}: a setting is taken from <mod id>:<key>, not {}",
-                        migration.id, step.from
-                    ));
+                    return Err(DeclareMigrationError::TakenFrom {
+                        id: id(),
+                        from: step.from.clone(),
+                    });
                 }
                 if step.from.is_empty() || (renames && step.to.is_empty()) {
-                    return Err(format!("migration {}: a step names nothing", migration.id));
+                    return Err(DeclareMigrationError::Nameless { id: id() });
                 }
                 if step.kind == MigrationStep::RENAME_CONTENT && step.from_guid == step.to_guid {
-                    return Err(format!(
-                        "migration {}: content {} renamed to itself",
-                        migration.id, step.from
-                    ));
+                    return Err(DeclareMigrationError::ToItself {
+                        id: id(),
+                        content: step.from.clone(),
+                    });
                 }
             }
         }
         Ok(())
     }
+}
+
+/// Why [`Load::migrate`] refuses a declaration of migrations.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+enum DeclareMigrationError {
+    /// The migration at `index` has an empty id or one with control
+    /// characters.
+    #[error("migration {index}: an id is plain text")]
+    Id { index: usize },
+    /// Two migrations share an id.
+    #[error("migration {id}: the id is used twice")]
+    Twice { id: String },
+    /// A setting is taken from something other than `<mod id>:<key>`.
+    #[error("migration {id}: a setting is taken from <mod id>:<key>, not {from}")]
+    TakenFrom { id: String, from: String },
+    /// A step names no setting, store or content.
+    #[error("migration {id}: a step names nothing")]
+    Nameless { id: String },
+    /// Content is renamed to its own GUID.
+    #[error("migration {id}: content {content} renamed to itself")]
+    ToItself { id: String, content: String },
 }
 
 /// A TOML value from its text, as the loader hands a setting over.

@@ -15,6 +15,21 @@ pub(super) struct Declared {
     pub(super) handler: Handler,
 }
 
+/// Why the words of a console line or the values from the interface name no
+/// arguments of an action.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+enum ReadArgsError {
+    /// The words do not follow the action's usage.
+    #[error("the words do not follow the action's usage")]
+    Usage,
+    /// No player online or listed has the name.
+    #[error("no player named {name}")]
+    NoPlayer { name: String },
+    /// Several players have the name.
+    #[error("several players are named {name}")]
+    SeveralPlayers { name: String },
+}
+
 pub(super) struct Registry {
     pub(super) texts: Texts,
     pub(super) host: Host,
@@ -71,6 +86,23 @@ impl Registry {
         format!("{line}: {label}")
     }
 
+    /// The reply in `language` to a run of `action` refused for `error`.
+    fn refusal(&self, error: &ReadArgsError, action: &Action, language: Language) -> String {
+        match error {
+            ReadArgsError::Usage => self.say(
+                "actions.bad",
+                language,
+                &[("usage", &self.usage(action, language))],
+            ),
+            ReadArgsError::NoPlayer { name } => {
+                self.say("actions.no_player", language, &[("name", name)])
+            }
+            ReadArgsError::SeveralPlayers { name } => {
+                self.say("actions.several", language, &[("name", name)])
+            }
+        }
+    }
+
     fn help(&self, player: &Player, language: Language) -> String {
         let declared = self.declared.relock_read();
         let mut lines = vec![self.say("actions.usage", language, &[])];
@@ -101,7 +133,7 @@ impl Registry {
         };
         match self.console_args(d, player, rest, language) {
             Ok(values) => self.run(d, player, &values, language, Via::Console),
-            Err(why) => Outcome::refused(why),
+            Err(why) => Outcome::refused(self.refusal(&why, &d.action, language)),
         }
     }
 
@@ -112,14 +144,8 @@ impl Registry {
         player: &Player,
         words: &[&str],
         language: Language,
-    ) -> Result<Vec<Value>, String> {
-        let bad = || {
-            self.say(
-                "actions.bad",
-                language,
-                &[("usage", &self.usage(&d.action, language))],
-            )
-        };
+    ) -> Result<Vec<Value>, ReadArgsError> {
+        let bad = || ReadArgsError::Usage;
         if d.action.on.is_some() {
             let (last, name) = words.split_last().ok_or_else(bad)?;
             let on = toggle_word(last, &self.texts, language).ok_or_else(bad)?;
@@ -128,7 +154,7 @@ impl Registry {
                 return Err(bad());
             }
             let listed = self.listed(d, player, language);
-            let target = self.player_named(&name, &listed, language)?;
+            let target = self.player_named(&name, &listed)?;
             return Ok(vec![target, Value::Toggle(on)]);
         }
         let mut values = Vec::with_capacity(d.action.args.len());
@@ -142,7 +168,7 @@ impl Registry {
                 }
                 let name = rest[..taken].join(" ");
                 rest = &rest[taken..];
-                self.player_named(&name, &[], language)?
+                self.player_named(&name, &[])?
             } else {
                 let (&word, tail) = rest.split_first().ok_or_else(bad)?;
                 rest = tail;
@@ -182,8 +208,7 @@ impl Registry {
         &self,
         name: &str,
         listed: &[(PlayerKey, String)],
-        language: Language,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, ReadArgsError> {
         let lower = name.to_lowercase();
         let mut found: Vec<(PlayerKey, String)> = self
             .online()
@@ -201,8 +226,12 @@ impl Registry {
                 key: *key,
                 name: name.clone(),
             }),
-            [] => Err(self.say("actions.no_player", language, &[("name", name)])),
-            _ => Err(self.say("actions.several", language, &[("name", name)])),
+            [] => Err(ReadArgsError::NoPlayer {
+                name: name.to_owned(),
+            }),
+            _ => Err(ReadArgsError::SeveralPlayers {
+                name: name.to_owned(),
+            }),
         }
     }
 
@@ -246,7 +275,7 @@ impl Registry {
         let ask = self.ask(player, language);
         let subject = match d.action.at.as_ref().map(|at| at(&ask)) {
             Some(Ok(subject)) => Some(subject),
-            Some(Err(why)) => return Outcome::refused(why),
+            Some(Err(why)) => return Outcome::refused(why.reason()),
             None => None,
         };
         let shape_fits = if d.action.on.is_some() {
@@ -288,7 +317,7 @@ impl Registry {
             let subject = d.action.at.as_ref().map(|at| at(&ask));
             let (offered, subject_text) = match &subject {
                 Some(Ok(subject)) => (true, subject.label.clone()),
-                Some(Err(why)) => (false, why.clone()),
+                Some(Err(why)) => (false, why.reason().to_owned()),
                 None => (true, String::new()),
             };
             let mut entry = Entry {
@@ -365,7 +394,7 @@ impl Registry {
                 None => Outcome::refused(self.say("actions.denied", language, &[])),
                 Some(mut values) => match self.name_players(d, player, &mut values, language) {
                     Ok(()) => self.run(d, player, &values, language, Via::Interface),
-                    Err(why) => Outcome::refused(why),
+                    Err(why) => Outcome::refused(self.refusal(&why, &d.action, language)),
                 },
             },
         };
@@ -380,7 +409,7 @@ impl Registry {
         player: &Player,
         values: &mut [Value],
         language: Language,
-    ) -> Result<(), String> {
+    ) -> Result<(), ReadArgsError> {
         if !values.iter().any(|v| matches!(v, Value::Player { .. })) {
             return Ok(());
         }
@@ -402,12 +431,8 @@ impl Registry {
                             .find(|(k, _)| k == key)
                             .map(|(_, n)| n.clone())
                     });
-                *name = known.ok_or_else(|| {
-                    self.say(
-                        "actions.no_player",
-                        language,
-                        &[("name", &format!("{key:016x}"))],
-                    )
+                *name = known.ok_or_else(|| ReadArgsError::NoPlayer {
+                    name: format!("{key:016x}"),
                 })?;
             }
         }

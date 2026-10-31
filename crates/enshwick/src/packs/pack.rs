@@ -389,7 +389,7 @@ fn aliases(errors: &mut Vec<PackError>, files: &PackFiles) -> BTreeMap<String, (
 }
 
 /// The kinds and filters of a drop's `from`.
-pub(super) fn source_of(from: &FromEntry) -> Result<Source, String> {
+pub(super) fn source_of(from: &FromEntry) -> Result<Source, ReadSourceError> {
     let kind = |name: &str| match name {
         "corpses" => Some(Kinds::CORPSES),
         "chests" => Some(Kinds::CHESTS),
@@ -397,14 +397,14 @@ pub(super) fn source_of(from: &FromEntry) -> Result<Source, String> {
         "destroyed" => Some(Kinds::DESTROYED),
         _ => None,
     };
-    let unknown = |name: &str| {
-        format!("from {name:?}: bosses, locked-chests, corpses, chests, containers or destroyed")
+    let unknown = |name: &str| ReadSourceError::Unknown {
+        name: name.to_owned(),
     };
     match from {
         FromEntry::One(name) if name == "bosses" => Ok(Source::bosses()),
         FromEntry::One(name) if name == "locked-chests" => Ok(Source::locked_chests()),
         FromEntry::One(name) => kind(name).map(Source::kinds).ok_or_else(|| unknown(name)),
-        FromEntry::Many(names) if names.is_empty() => Err("from names no kind".to_owned()),
+        FromEntry::Many(names) if names.is_empty() => Err(ReadSourceError::Empty),
         FromEntry::Many(names) => names
             .iter()
             .try_fold(Source::kinds(Kinds::default()), |s, n| {
@@ -413,6 +413,17 @@ pub(super) fn source_of(from: &FromEntry) -> Result<Source, String> {
                     .ok_or_else(|| unknown(n))
             }),
     }
+}
+
+/// Why a drop's `from` names no source of loot.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(super) enum ReadSourceError {
+    /// A name that is no kind of source.
+    #[error("from {name:?}: bosses, locked-chests, corpses, chests, containers or destroyed")]
+    Unknown { name: String },
+    /// An empty list.
+    #[error("from names no kind")]
+    Empty,
 }
 
 impl Pack {
@@ -1009,7 +1020,7 @@ pub(super) fn drops(
         let from = match source_of(&e.from) {
             Ok(from) => from,
             Err(why) => {
-                reader.error(file, text, at, why);
+                reader.error(file, text, at, why.to_string());
                 continue;
             }
         };
@@ -1062,6 +1073,9 @@ pub(crate) fn group(namespace: &str) -> u64 {
 ///
 /// Why they take a restart instead.
 #[doc(hidden)]
-pub fn reload_loot(namespace: &str, drops: Vec<Drop>) -> Result<(), String> {
+pub fn reload_loot(
+    namespace: &str,
+    drops: Vec<Drop>,
+) -> Result<(), crate::loot::ReplaceDropsError> {
     crate::loot::replace_group(group(namespace), drops)
 }

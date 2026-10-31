@@ -406,27 +406,33 @@ pub(crate) fn expand_test(args: &Args) -> syn::Result<TokenStream> {
 }
 
 impl Metadata {
-    fn read(table: &toml::Table) -> Result<Self, String> {
+    fn read(table: &toml::Table) -> syn::Result<Self> {
         if let Some(key) = table.keys().find(|k| !KEYS.contains(&k.as_str())) {
-            return Err(format!("has no key `{key}`; it takes {}", KEYS.join(", ")));
+            return Err(refuse(format!(
+                "has no key `{key}`; it takes {}",
+                KEYS.join(", ")
+            )));
         }
-        let id = string(table, "id")?.ok_or("needs the mod's `id`, `<author>.<name>`")?;
+        let id = string(table, "id")?
+            .ok_or_else(|| refuse("needs the mod's `id`, `<author>.<name>`"))?;
         if !is_id(&id) {
-            return Err(format!(
+            return Err(refuse(format!(
                 "`id = {id:?}` is not <author>.<name>, each of [a-z0-9-], at most 64 characters"
-            ));
+            )));
         }
         let side = match string(table, "side")?.as_deref() {
             Some("server") => Side::Server,
             Some("client") => Side::Client,
             Some("both") => Side::Both,
             Some(other) => {
-                return Err(format!(
+                return Err(refuse(format!(
                     "`side = {other:?}` is not \"server\", \"client\" or \"both\""
-                ));
+                )));
             }
             None => {
-                return Err("needs the mod's `side`: \"server\", \"client\" or \"both\"".to_owned());
+                return Err(refuse(
+                    "needs the mod's `side`: \"server\", \"client\" or \"both\"",
+                ));
             }
         };
         let name = string(table, "name")?.unwrap_or_default();
@@ -438,34 +444,38 @@ impl Metadata {
             };
             let entries = value
                 .as_table()
-                .ok_or_else(|| format!("`{key}` is a table of dependencies by alias"))?;
+                .ok_or_else(|| refuse(format!("`{key}` is a table of dependencies by alias")))?;
             for (alias, entry) in entries {
                 if !is_alias(alias) || syn::parse_str::<Ident>(alias).is_err() {
-                    return Err(format!(
+                    return Err(refuse(format!(
                         "`{key}.{alias}`: an alias is a Rust name in snake case, [a-z][a-z0-9_]*, and no keyword"
-                    ));
+                    )));
                 }
                 if alias == VANILLA {
-                    return Err(format!(
+                    return Err(refuse(format!(
                         "`{key}.{VANILLA}`: `deps::{VANILLA}` names the game's own content; choose another alias"
-                    ));
+                    )));
                 }
                 if !aliases.insert(alias.clone()) {
-                    return Err(format!(
+                    return Err(refuse(format!(
                         "`{key}.{alias}`: the alias names another dependency already"
-                    ));
+                    )));
                 }
                 dependencies.push(dependency(key, alias, entry, relation)?);
             }
         }
         if let Some(value) = table.get("replaces") {
-            let ids = value.as_array().ok_or("`replaces` is a list of mod ids")?;
+            let ids = value
+                .as_array()
+                .ok_or_else(|| refuse("`replaces` is a list of mod ids"))?;
             for id in ids {
-                let id = id.as_str().ok_or("`replaces` is a list of mod ids")?;
+                let id = id
+                    .as_str()
+                    .ok_or_else(|| refuse("`replaces` is a list of mod ids"))?;
                 if !is_old_or_new_id(id) {
-                    return Err(format!(
+                    return Err(refuse(format!(
                         "`replaces`: {id:?} is not <author>.<name> or [a-z0-9-]+"
-                    ));
+                    )));
                 }
                 dependencies.push(Dependency {
                     alias: String::new(),
@@ -479,7 +489,9 @@ impl Metadata {
             None => Vec::new(),
             Some(value) => value
                 .as_array()
-                .ok_or("`builds` is a list of tables, `[[package.metadata.enshwick.builds]]`")?
+                .ok_or_else(|| {
+                    refuse("`builds` is a list of tables, `[[package.metadata.enshwick.builds]]`")
+                })?
                 .iter()
                 .map(build)
                 .collect::<Result<_, _>>()?,
@@ -499,38 +511,38 @@ impl Metadata {
 }
 
 /// The text of `key`, if given.
-fn string(table: &toml::Table, key: &str) -> Result<Option<String>, String> {
+fn string(table: &toml::Table, key: &str) -> syn::Result<Option<String>> {
     table
         .get(key)
         .map(|value| {
             value
                 .as_str()
                 .map(str::to_owned)
-                .ok_or_else(|| format!("`{key}` is a string"))
+                .ok_or_else(|| refuse(format!("`{key}` is a string")))
         })
         .transpose()
 }
 
 /// The local names of `exports`, each a name once.
-fn exports_of(table: &toml::Table) -> Result<Vec<String>, String> {
+fn exports_of(table: &toml::Table) -> syn::Result<Vec<String>> {
     let Some(value) = table.get("exports") else {
         return Ok(Vec::new());
     };
     let names = value
         .as_array()
-        .ok_or("`exports` is a list of local names")?;
+        .ok_or_else(|| refuse("`exports` is a list of local names"))?;
     let mut seen = BTreeSet::new();
     names
         .iter()
         .map(|name| {
-            let name = name.as_str().ok_or("`exports` is a list of local names")?;
+            let name = name.as_str().ok_or_else(|| refuse("`exports` is a list of local names"))?;
             if !is_content_name(name) {
-                return Err(format!(
+                return Err(refuse(format!(
                     "`exports`: {name:?} is not a local name, 1 to 128 of [a-z0-9_./-] without the mod's id"
-                ));
+                )));
             }
             if !seen.insert(name) {
-                return Err(format!("`exports`: {name:?} is given twice"));
+                return Err(refuse(format!("`exports`: {name:?} is given twice")));
             }
             Ok(name.to_owned())
         })
@@ -538,11 +550,11 @@ fn exports_of(table: &toml::Table) -> Result<Vec<String>, String> {
 }
 
 /// Whether `key` is `true`; `false` when left out.
-fn flag(table: &toml::Table, key: &str) -> Result<bool, String> {
+fn flag(table: &toml::Table, key: &str) -> syn::Result<bool> {
     table.get(key).map_or(Ok(false), |value| {
         value
             .as_bool()
-            .ok_or_else(|| format!("`{key}` is `true` or `false`"))
+            .ok_or_else(|| refuse(format!("`{key}` is `true` or `false`")))
     })
 }
 
@@ -553,7 +565,7 @@ fn dependency(
     alias: &str,
     entry: &toml::Value,
     relation: &'static str,
-) -> Result<Dependency, String> {
+) -> syn::Result<Dependency> {
     let at = format!("`{key}.{alias}`");
     let (id, range) = match entry {
         toml::Value::String(id) => (id.clone(), String::new()),
@@ -562,29 +574,31 @@ fn dependency(
                 .keys()
                 .find(|f| !matches!(f.as_str(), "id" | "version"))
             {
-                return Err(format!(
+                return Err(refuse(format!(
                     "{at} has no key `{field}`; it takes `id` and `version`"
-                ));
+                )));
             }
             let id = string(fields, "id")
-                .map_err(|e| format!("{at}: {e}"))?
-                .ok_or_else(|| format!("{at} needs the mod's `id`"))?;
-            let range = string(fields, "version").map_err(|e| format!("{at}: {e}"))?;
+                .map_err(|e| refuse(format!("{at}: {e}")))?
+                .ok_or_else(|| refuse(format!("{at} needs the mod's `id`")))?;
+            let range = string(fields, "version").map_err(|e| refuse(format!("{at}: {e}")))?;
             (id, range.unwrap_or_default())
         }
         _ => {
-            return Err(format!(
+            return Err(refuse(format!(
                 "{at} is a mod id or a table with `id` and `version`"
-            ));
+            )));
         }
     };
     if !is_old_or_new_id(&id) {
-        return Err(format!("{at}: {id:?} is not <author>.<name> or [a-z0-9-]+"));
+        return Err(refuse(format!(
+            "{at}: {id:?} is not <author>.<name> or [a-z0-9-]+"
+        )));
     }
     if relation == "AFTER" && !range.is_empty() {
-        return Err(format!(
+        return Err(refuse(format!(
             "{at}: `after` orders by id alone and takes no `version`"
-        ));
+        )));
     }
     Ok(Dependency {
         alias: alias.to_owned(),
@@ -595,45 +609,49 @@ fn dependency(
 }
 
 /// One `[[package.metadata.enshwick.builds]]` row.
-fn build(value: &toml::Value) -> Result<Build, String> {
-    let row = value
-        .as_table()
-        .ok_or("`builds` is a list of tables, `[[package.metadata.enshwick.builds]]`")?;
+fn build(value: &toml::Value) -> syn::Result<Build> {
+    let row = value.as_table().ok_or_else(|| {
+        refuse("`builds` is a list of tables, `[[package.metadata.enshwick.builds]]`")
+    })?;
     if let Some(key) = row.keys().find(|k| {
         !matches!(
             k.as_str(),
             "side" | "guid" | "age" | "symbols" | "constants"
         )
     }) {
-        return Err(format!(
+        return Err(refuse(format!(
             "`builds` has no key `{key}`; a row takes side, guid, age, symbols and constants"
-        ));
+        )));
     }
     let side = match string(row, "side")
-        .map_err(|e| format!("`builds`: {e}"))?
+        .map_err(|e| refuse(format!("`builds`: {e}")))?
         .as_deref()
     {
         Some("server") => Side::Server,
         Some("client") => Side::Client,
-        _ => return Err("a `builds` row needs `side = \"server\"` or `\"client\"`".to_owned()),
+        _ => {
+            return Err(refuse(
+                "a `builds` row needs `side = \"server\"` or `\"client\"`",
+            ));
+        }
     };
     let guid = string(row, "guid")
-        .map_err(|e| format!("`builds`: {e}"))?
-        .ok_or("a `builds` row needs the build's `guid`")?;
+        .map_err(|e| refuse(format!("`builds`: {e}")))?
+        .ok_or_else(|| refuse("a `builds` row needs the build's `guid`"))?;
     if guid.len() != 32
         || !guid
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
     {
-        return Err(format!(
+        return Err(refuse(format!(
             "`builds`: `guid = {guid:?}` is not 32 lowercase hex digits"
-        ));
+        )));
     }
     let age = row
         .get("age")
         .and_then(toml::Value::as_integer)
         .and_then(|age| u32::try_from(age).ok())
-        .ok_or("a `builds` row needs the build's `age`, a whole number")?;
+        .ok_or_else(|| refuse("a `builds` row needs the build's `age`, a whole number"))?;
     Ok(Build {
         side,
         guid,
@@ -644,13 +662,13 @@ fn build(value: &toml::Value) -> Result<Build, String> {
 }
 
 /// The `"id" = value` entries of a row's table `key`.
-fn entries(row: &toml::Table, key: &str) -> Result<Vec<(String, u64)>, String> {
+fn entries(row: &toml::Table, key: &str) -> syn::Result<Vec<(String, u64)>> {
     let Some(value) = row.get(key) else {
         return Ok(Vec::new());
     };
     let table = value
         .as_table()
-        .ok_or_else(|| format!("`builds.{key}` is a table of ids to numbers"))?;
+        .ok_or_else(|| refuse(format!("`builds.{key}` is a table of ids to numbers")))?;
     table
         .iter()
         .map(|(id, value)| {
@@ -658,9 +676,15 @@ fn entries(row: &toml::Table, key: &str) -> Result<Vec<(String, u64)>, String> {
                 .as_integer()
                 .and_then(|v| u64::try_from(v).ok())
                 .map(|v| (id.clone(), v))
-                .ok_or_else(|| format!("`builds.{key}.{id:?}` is a whole number from 0 to TOML's largest, 0x7fff_ffff_ffff_ffff, such as 0x4_05cb"))
+                .ok_or_else(|| refuse(format!("`builds.{key}.{id:?}` is a whole number from 0 to TOML's largest, 0x7fff_ffff_ffff_ffff, such as 0x4_05cb")))
         })
         .collect()
+}
+
+/// An error in the `[package.metadata.enshwick]` table; the caller names the
+/// file and points at the macro call.
+fn refuse(message: impl core::fmt::Display) -> syn::Error {
+    syn::Error::new(Span::call_site(), message)
 }
 
 /// Whether `part` is 1 or more of `[a-z0-9-]`.
@@ -876,7 +900,7 @@ mod tests {
     use super::*;
 
     fn read(text: &str) -> Result<Metadata, String> {
-        Metadata::read(&toml::from_str(text).map_err(|e| e.to_string())?)
+        Metadata::read(&toml::from_str(text).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
     }
 
     #[test]
