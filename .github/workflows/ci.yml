@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   rust:
-    uses: enshwick/.github/.github/workflows/rust-ci.yml@main # zizmor: ignore[unpinned-uses]
+    uses: enshwick/.github/.github/workflows/rust-ci.yml@ci/WIK-169-drop-runner-setup # zizmor: ignore[unpinned-uses]
     permissions:
       contents: read
     with:
