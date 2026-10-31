@@ -17,7 +17,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-enshwick = { path = {api} }
+enshwick = { path = {api}, features = ["test"] }
 
 [[example]]
 name = "lanterns"
@@ -43,22 +43,26 @@ crate-type = ["cdylib"]
 "#;
 
 /// A mod as `cargo enshwick new` makes one; `{id}` and `{type}` name it.
-const MOD: &str = r#"
+/// The fixtures share one package, so each gives its table inline.
+const MOD: &str = r##"
 #[derive(Debug)]
 pub struct {type};
 
 impl enshwick::Mod for {type} {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "{id}", side: BOTH, name: "{type}")
-    }
-
     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
         Ok(Self)
     }
 }
 
-enshwick::declare_mod!({type});
-"#;
+enshwick::test::declare_mod!(
+    {type},
+    r#"
+    id = "{id}"
+    side = "both"
+    name = "{type}"
+    "#
+);
+"##;
 
 /// The interface's version alone, without the three functions beside it.
 const HALF: &str = r#"

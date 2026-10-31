@@ -37,10 +37,6 @@ mod tests {
     struct Haggler;
 
     impl Mod for Haggler {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.haggler", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             // SAFETY: every answer set is a `u32`, the point's answer type.
             unsafe {
@@ -62,7 +58,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Haggler);
+    enshwick::test::declare_mod!(
+        Haggler,
+        r#"
+        id = "you.haggler"
+        side = "server"
+        "#
+    );
 
     fn start(point: DescribedPoint) -> enshwick::test::Installed {
         // After the install, which tests take in turn: set earlier, another

@@ -21,11 +21,9 @@ the mod for each Enshwick release that changes the ABI; a loader of another
 version does not start the mod and logs
 `rebuild it for Enshwick <version>`.
 
-A mod's version is [SemVer](https://semver.org). Leave `version` out of
-[`manifest!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
-and the manifest takes the crate's version (`CARGO_PKG_VERSION`), so the
-version you release is the one the DLL reports. Set `version: "0.3.0"` only
-when the two must differ.
+A mod's version is [SemVer](https://semver.org). The manifest takes the
+crate's version from `Cargo.toml` (`CARGO_PKG_VERSION`), so the version you
+release is the one the DLL reports.
 
 The loader names the version wherever the mod comes up:
 

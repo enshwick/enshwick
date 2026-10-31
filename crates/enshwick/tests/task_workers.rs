@@ -16,10 +16,6 @@ mod tests {
     struct Workers;
 
     impl Mod for Workers {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.workers", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let caps = *CAPS.lock().map_err(|_| Off::new("poisoned"))?;
             CAPPED.store(load.cap_task_workers(caps)?, Ordering::Relaxed);
@@ -27,7 +23,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Workers);
+    enshwick::test::declare_mod!(
+        Workers,
+        r#"
+        id = "you.workers"
+        side = "server"
+        "#
+    );
 
     fn start(side: Side, caps: TaskWorkers) -> (bool, Option<(u32, u32)>) {
         let loader = enshwick::test::FakeHost::new().side(side).install();

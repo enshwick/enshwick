@@ -33,17 +33,19 @@ mod tests {
     struct Altars;
 
     impl Mod for Altars {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.altars", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _settings: Settings = load.config()?;
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Altars);
+    enshwick::test::declare_mod!(
+        Altars,
+        r#"
+        id = "you.altars"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn the_loader_checks_a_change_with_the_mods_own_check() {

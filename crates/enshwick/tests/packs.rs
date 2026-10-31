@@ -19,10 +19,6 @@ mod tests {
     struct Lanterns;
 
     impl Mod for Lanterns {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.lanterns", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let files = PackFiles::new()
                 .with(
@@ -41,7 +37,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Lanterns);
+    enshwick::test::declare_mod!(
+        Lanterns,
+        r#"
+        id = "you.lanterns"
+        side = "both"
+        "#
+    );
 
     fn host() -> FakeHost {
         let mut host = FakeHost::new()

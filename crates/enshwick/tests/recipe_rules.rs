@@ -15,10 +15,6 @@ mod tests {
     struct Rules;
 
     impl Mod for Rules {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.rules", side: BOTH)
-        }
-
         fn init(_load: &mut Load<'_>) -> Result<Self, Off> {
             disable(RecipeRule::output(DebugName("Tool_Torch01_T0")))?;
             disable(RecipeRule::recipe(LOCKER_RECIPE))?;
@@ -29,7 +25,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Rules);
+    enshwick::test::declare_mod!(
+        Rules,
+        r#"
+        id = "you.rules"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn rules_are_kept_until_taken_back_and_names_must_not_be_empty() {

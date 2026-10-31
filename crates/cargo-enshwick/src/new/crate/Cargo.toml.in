@@ -15,6 +15,21 @@ repository = "https://github.com/you/{crate}"
 homepage = "https://github.com/you/{crate}"
 publish = false
 
+# What the mod is, read when it builds: `id` names its settings and data,
+# `side` is "server", "client" or "both", `name` is what players read.
+[package.metadata.enshwick]
+id = "{id}"
+side = "{side}"
+name = "{name}"
+
+# Mods this one works better with, and mods it does not work beside, each
+# under an alias with a version range:
+# [package.metadata.enshwick.recommends]
+# other_mod = { id = "someone.other-mod", version = ">=0.2, <1.0" }
+#
+# [package.metadata.enshwick.breaks]
+# old_mod = { id = "someone.old-mod", version = "<0.3" }
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

@@ -14,10 +14,6 @@ mod tests {
     struct Wider;
 
     impl Mod for Wider {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.wider", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let sizes = load.on_altar_zone(|zone| {
                 zone.grow += 2;
@@ -28,7 +24,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Wider);
+    enshwick::test::declare_mod!(
+        Wider,
+        r#"
+        id = "you.wider"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_filter_changes_the_zone_so_far_and_may_ask_for_a_new_sizing() {

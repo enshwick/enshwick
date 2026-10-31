@@ -28,10 +28,6 @@ mod tests {
     struct Wells;
 
     impl Mod for Wells {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.wells", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let world = load.world()?;
             let _first = RESOLVED.set(Resolved {
@@ -44,7 +40,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Wells);
+    enshwick::test::declare_mod!(
+        Wells,
+        r#"
+        id = "you.wells"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_static_half_reads_its_set_up_values_and_refuses_writes() {

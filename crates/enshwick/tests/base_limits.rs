@@ -11,10 +11,6 @@ mod tests {
     struct ManyAltars;
 
     impl Mod for ManyAltars {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.many-altars", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let Err(refused) = load.request_base_limits(256, 16) else {
                 return Err(Off::new("256 altar zones taken"));
@@ -34,7 +30,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(ManyAltars);
+    enshwick::test::declare_mod!(
+        ManyAltars,
+        r#"
+        id = "you.many-altars"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn the_largest_request_holds_and_one_past_the_most_is_refused() {
@@ -72,10 +74,6 @@ mod unknown_build {
     struct ManyAltars;
 
     impl Mod for ManyAltars {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.many-altars", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             assert!(!load.request_base_limits(128, 40)?);
             assert!(!load.raise_base_limit()?);
@@ -83,7 +81,13 @@ mod unknown_build {
         }
     }
 
-    enshwick::declare_mod!(ManyAltars);
+    enshwick::test::declare_mod!(
+        ManyAltars,
+        r#"
+        id = "you.many-altars"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn an_unknown_build_keeps_the_game_s_limits() {
@@ -108,17 +112,19 @@ mod zones_only {
     struct ManyBases;
 
     impl Mod for ManyBases {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.many-bases", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             assert!(load.request_base_limits(64, 179)?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(ManyBases);
+    enshwick::test::declare_mod!(
+        ManyBases,
+        r#"
+        id = "you.many-bases"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn a_build_without_bases_past_16_raises_the_zones_and_keeps_16_bases() {

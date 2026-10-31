@@ -8,10 +8,6 @@ mod tests {
     struct Picky;
 
     impl Mod for Picky {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.picky", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on_craft(|craft| craft.crafting_station_id.is_some() || craft.recipe_amount < 10)?;
             load.on_build(|placement| {
@@ -21,7 +17,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Picky);
+    enshwick::test::declare_mod!(
+        Picky,
+        r#"
+        id = "you.picky"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn filters_see_typed_requests_and_refuse_by_returning_false() {

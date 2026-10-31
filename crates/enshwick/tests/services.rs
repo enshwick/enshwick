@@ -88,10 +88,6 @@ mod tests {
     struct Market;
 
     impl Mod for Market {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.market", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let prices: &'static Prices = load.service()?;
             assert_eq!((prices.price)(3), 30);
@@ -105,7 +101,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Market);
+    enshwick::test::declare_mod!(
+        Market,
+        r#"
+        id = "you.market"
+        side = "server"
+        "#
+    );
 
     fn start(loader: &enshwick::test::Installed) -> Status {
         // SAFETY: both functions are the exports of this file's `declare_mod!(Market)`.

@@ -24,10 +24,6 @@ mod tests {
     struct Writes;
 
     impl Mod for Writes {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.writes", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let world = load.world()?;
             let flags = WritableType::resolve(load, "keen::ecs::CombatFlags")?;
@@ -43,7 +39,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Writes);
+    enshwick::test::declare_mod!(
+        Writes,
+        r#"
+        id = "you.writes"
+        side = "server"
+        "#
+    );
 
     /// An attribute set: the id it keeps, the values' offset at 4, flags at
     /// 6, count at 7, then the values.

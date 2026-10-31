@@ -15,17 +15,19 @@ mod tests {
     struct Acting;
 
     impl Mod for Acting {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.acting", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = EFFECTS.set(load.effects());
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Acting);
+    enshwick::test::declare_mod!(
+        Acting,
+        r#"
+        id = "you.acting"
+        side = "server"
+        "#
+    );
 
     fn word<const N: usize>(bytes: &[u8], at: usize) -> [u8; N] {
         bytes[at..at + N].try_into().unwrap()

@@ -12,10 +12,6 @@ mod tests {
     struct Doubler;
 
     impl enshwick::Mod for Doubler {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.doubler", side: SERVER)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             let site = load.symbol("site")?;
             // SAFETY: the fake runs the handler on its own registers.
@@ -30,7 +26,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Doubler);
+    enshwick::test::declare_mod!(
+        Doubler,
+        r#"
+        id = "you.doubler"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_mid_function_hook_writes_registers_and_a_panic_leaves_them_whole() {

@@ -18,6 +18,16 @@ platform. A mod maker gets:
 The Enshwick loader comes with the platform and runs every mod, so players
 install one thing.
 
+A mod names itself once, in its `Cargo.toml`; the version and the rest come
+from `[package]`:
+
+```toml
+[package.metadata.enshwick]
+id = "you.hello"
+side = "both"
+join = true
+```
+
 ```rust
 /// Hello's settings.
 #[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
@@ -35,10 +45,6 @@ impl Default for Settings {
 struct Hello;
 
 impl enshwick::Mod for Hello {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.hello", side: BOTH, join: true)
-    }
-
     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
         let settings: Settings = load.config()?;
         let extra = settings.extra_altars;

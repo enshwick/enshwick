@@ -139,15 +139,12 @@ breaks the cycle by priority and logs which link's order it dropped.
 
 ## Depending on the owner
 
-Declare the owner in the manifest, with a version range:
+Declare the owner in the [manifest](concepts/loader-and-abi.md#the-manifest),
+under an alias, with a version range or none:
 
-```rust
-let manifest = enshwick::manifest!(
-    id: "you.haggling",
-    side: SERVER,
-    recommends: ["you.trading-post" => ""],
-);
-assert_eq!(manifest.dependency_count, 1);
+```toml
+[package.metadata.enshwick.recommends]
+trading_post = "you.trading-post"
 ```
 
 With `recommends`, a missing owner leaves the link inert, which is no error:
@@ -200,8 +197,9 @@ The change takes effect at the next start.
 The mod that owns a rule declares its point once with
 [`#[point]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs):
 the input struct, the name `<owner id>:<point>`, the mode, the answer's type
-and, when links may refuse, `refusable`. List it under `points` in the
-[manifest](concepts/loader-and-abi.md#the-manifest), so its schema ships with
+and, when links may refuse, `refusable`. List it under `points` in
+`declare_mod!` (see [the manifest](concepts/loader-and-abi.md#the-manifest)),
+as `enshwick::declare_mod!(TradingPost, points: [Price])`, so its schema ships with
 the mod and other mods can write their definitions from it. Every field's
 type and the answer's are numbers, `bool`, `enshwick::Entity`,
 `enshwick::content::Guid`, or types of the mod's own with
@@ -226,9 +224,6 @@ pub struct Price {
 }
 
 static PRICE: OnceLock<OwnedPoint<Price>> = OnceLock::new();
-
-let manifest = enshwick::manifest!(id: "you.trading-post", side: SERVER, points: [Price]);
-# let _ = manifest;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let _first = PRICE.set(load.define_point::<Price>()?);

@@ -16,17 +16,19 @@ static WORLD: ModLocal<World> = ModLocal::new();
 struct Bench;
 
 impl Mod for Bench {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "enshwick.bench", side: SERVER)
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let _ = WORLD.set(load.world()?);
         Ok(Self)
     }
 }
 
-enshwick::declare_mod!(Bench);
+enshwick::test::declare_mod!(
+    Bench,
+    r#"
+    id = "enshwick.bench"
+    side = "server"
+    "#
+);
 
 /// Props in the world for the scan bench, 4 metres apart on a 64-wide grid.
 const PROPS: u32 = 4096;

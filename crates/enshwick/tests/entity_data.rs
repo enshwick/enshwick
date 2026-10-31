@@ -22,10 +22,6 @@ mod tests {
     struct Chests;
 
     impl Mod for Chests {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.chests", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = OWNERS.set(load.entity_data("owner", Replication::Server)?);
             let _first = NICKNAMES
@@ -34,7 +30,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Chests);
+    enshwick::test::declare_mod!(
+        Chests,
+        r#"
+        id = "you.chests"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn values_stay_with_their_entity() {

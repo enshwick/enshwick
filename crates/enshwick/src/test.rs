@@ -40,10 +40,6 @@
 //! }
 //!
 //! impl Mod for Bonus {
-//!     fn manifest() -> &'static enshwick::abi::Manifest {
-//!         enshwick::manifest!(id: "you.bonus", side: SERVER)
-//!     }
-//!
 //!     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
 //!         let settings: Settings = load.config()?;
 //!         let reward = load.symbol("quest.reward")?;
@@ -102,6 +98,46 @@ pub use inventory::SubmittedRequest;
 pub use settings::SettingsRefused;
 pub use transactions::{FakeChange, FakeTransaction};
 pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
+
+/// Exports a mod as [`declare_mod!`](crate::declare_mod) does, with its
+/// `[package.metadata.enshwick]` table given as TOML, so one test binary may
+/// declare several mods.
+///
+/// The text takes the keys of the table, read by the same rules; the
+/// version and the rest of `[package]` still come from the crate.
+/// `points: [..]`, `events: [..]` and `calls: [..]` follow as for
+/// `declare_mod!`.
+///
+/// # Examples
+///
+/// ```rust,standalone_crate
+/// struct Lockers;
+///
+/// impl enshwick::Mod for Lockers {
+///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+///         Ok(Self)
+///     }
+/// }
+///
+/// enshwick::test::declare_mod!(
+///     Lockers,
+///     r#"
+///     id = "you.lockers"
+///     side = "server"
+///
+///     [after]
+///     lights = "you.lanterns"
+///     "#
+/// );
+///
+/// // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
+/// // `declare_mod!`, which no thread writes.
+/// let manifest = unsafe { &*enshwick_mod_query() };
+/// // SAFETY: `declare_mod!` points the id at a string literal, alive for the process.
+/// assert_eq!(unsafe { manifest.id.as_str() }, Some("you.lockers"));
+/// assert_eq!(manifest.dependency_count, 1);
+/// ```
+pub use enshwick_macros::declare_test_mod as declare_mod;
 
 /// The modding book's chapter on tests, whose examples run as doctests here.
 #[cfg(doctest)]

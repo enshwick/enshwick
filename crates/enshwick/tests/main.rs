@@ -65,6 +65,7 @@ mod live_changes;
 mod live_changes_join;
 mod loot_drops;
 mod loot_table_changes;
+mod manifest_flags;
 #[cfg(feature = "unstable")]
 mod map;
 #[cfg(feature = "unstable")]

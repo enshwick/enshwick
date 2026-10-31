@@ -21,10 +21,6 @@ mod tests {
     struct Staffs;
 
     impl Mod for Staffs {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.staffs", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.add_item(NewItem {
                 icon: Some(Icon {
@@ -41,7 +37,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Staffs);
+    enshwick::test::declare_mod!(
+        Staffs,
+        r#"
+        id = "you.staffs"
+        side = "both"
+        "#
+    );
 
     /// The fake's reflection for an item edit.
     fn host() -> FakeHost {

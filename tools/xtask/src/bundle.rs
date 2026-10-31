@@ -190,7 +190,7 @@ fn read_list(text: &str) -> Result<Vec<Listed>, String> {
 
 /// The packages of this workspace with a cdylib, as `package -> library`,
 /// and of them the mods that release: those under `mods/`, without
-/// `[package.metadata.enshwick] release = false`.
+/// `[package.metadata.xtask] release = false`.
 type Libraries = BTreeMap<String, String>;
 
 fn workspace_libraries() -> Result<(Libraries, Libraries), String> {
@@ -225,7 +225,7 @@ fn workspace_libraries() -> Result<(Libraries, Libraries), String> {
             .unwrap_or_default()
             .replace('\\', "/")
             .starts_with(&format!("{root}/mods/"));
-        if is_mod && p["metadata"]["enshwick"]["release"].as_bool() != Some(false) {
+        if is_mod && p["metadata"]["xtask"]["release"].as_bool() != Some(false) {
             mods.insert(name.to_owned(), lib.to_owned());
         }
     }

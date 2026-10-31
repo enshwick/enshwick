@@ -31,10 +31,6 @@ mod tests {
     struct Luau;
 
     impl Mod for Luau {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.luau", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let scripts = CASE.lock().unwrap().take().unwrap();
             let runtime = enshwick_luau::start(load, "you.luau", scripts, None, Limits::default())?;
@@ -43,7 +39,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Luau);
+    enshwick::test::declare_mod!(
+        Luau,
+        r#"
+        id = "you.luau"
+        side = "server"
+        "#
+    );
 
     fn run(main: &str, fee: &str) -> (Installed, Status) {
         let scripts = Scripts::new()

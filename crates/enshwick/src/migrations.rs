@@ -180,10 +180,6 @@ impl Migration {
     /// struct Rates;
     ///
     /// impl enshwick::Mod for Rates {
-    ///     fn manifest() -> &'static enshwick::abi::Manifest {
-    ///         enshwick::manifest!(id: "you.rates", side: SERVER, replaces: ["comfort"])
-    ///     }
-    ///
     ///     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
     ///         load.migrate(Migrations::new().add("2", |m| {
     ///             m.take_setting("comfort", "multiplier", "comfort.multiplier")
@@ -192,7 +188,14 @@ impl Migration {
     ///     }
     /// }
     ///
-    /// enshwick::declare_mod!(Rates);
+    /// enshwick::test::declare_mod!(
+    ///     Rates,
+    ///     r#"
+    ///     id = "you.rates"
+    ///     side = "server"
+    ///     replaces = ["comfort"]
+    ///     "#
+    /// );
     ///
     /// let loader = enshwick::test::FakeHost::new()
     ///     .other_settings("comfort", "multiplier = 2.5\n")

@@ -1,7 +1,7 @@
 //! Another mod's extension point schemas, read and written as a definition
 //! the extending mod compiles.
 //!
-//! The owner's `manifest!(points: [..])` puts a schema of each point it
+//! The owner's `declare_mod!(.., points: [..])` puts a schema of each point it
 //! defines into its manifest and into the `.enshpt` section of its DLL, so
 //! the schema is read here without running the owner's code. A schema comes
 //! from another author: every name, type and text it carries is checked
@@ -109,7 +109,7 @@ pub enum Error {
     NotText,
 }
 
-/// A mod's point schemas, as `manifest!` writes them.
+/// A mod's point schemas, as `declare_mod!` writes them.
 ///
 /// # Examples
 ///
@@ -517,7 +517,7 @@ fn is_owner(id: &str) -> bool {
     enshwick::abi::is_valid_old_form_id(id)
 }
 
-/// Whether `name` is `<mod id>:<what>`, the rule `manifest!` holds a point's
+/// Whether `name` is `<mod id>:<what>`, the rule `declare_mod!` holds a point's
 /// name to, with nothing that would break the comment line it appears on.
 fn is_point_name(name: &str) -> bool {
     name.split_once(':')

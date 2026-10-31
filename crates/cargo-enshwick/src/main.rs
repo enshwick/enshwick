@@ -169,7 +169,7 @@ enum Command {
     },
 }
 
-/// Where a mod runs, as `manifest!` spells it.
+/// Where a mod runs, as `[package.metadata.enshwick]` spells it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 enum Side {
     Server,

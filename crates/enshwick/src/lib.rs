@@ -73,6 +73,16 @@
 //!
 //! # Examples
 //!
+//! The mod names itself once, in its `Cargo.toml`; its version, description,
+//! authors, licence and homepage come from `[package]`:
+//!
+//! ```toml
+//! [package.metadata.enshwick]
+//! id = "you.hello"
+//! side = "both"
+//! join = true
+//! ```
+//!
 //! ```rust,standalone_crate
 //! /// Hello's settings.
 //! #[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
@@ -90,10 +100,6 @@
 //! struct Hello;
 //!
 //! impl enshwick::Mod for Hello {
-//!     fn manifest() -> &'static enshwick::abi::Manifest {
-//!         enshwick::manifest!(id: "you.hello", side: BOTH, join: true)
-//!     }
-//!
 //!     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
 //!         let settings: Settings = load.config()?;
 //!         let extra = settings.extra_altars;
@@ -311,6 +317,91 @@ pub use enshwick_macros::Shape;
 /// ```
 #[cfg(feature = "unstable")]
 pub use enshwick_macros::call;
+/// Exports a [`Mod`] from the DLL with its manifest, which it reads from the
+/// crate's `Cargo.toml` at compile time.
+///
+/// The five functions of [`abi::exports`] each catch panics; the type gains
+/// `instance()`, the mod's state once initialised. In a test build
+/// (`cfg(test)`) the functions keep their Rust paths instead of their C
+/// names. A mod built with `panic = "abort"` fails to compile: the loader
+/// turns a panicking mod off only while the panic unwinds.
+///
+/// The mod's identity is the `[package.metadata.enshwick]` table:
+///
+/// | Key | What |
+/// | --- | --- |
+/// | `id` | `<author>.<name>`, each of `[a-z0-9-]` (see [`abi::is_valid_id`]); names the settings file, the data folder and every name the mod declares |
+/// | `side` | `"server"`, `"client"` or `"both"` |
+/// | `name` | what players read; the id when left out |
+/// | `join` | `true`: the mod counts in the join check |
+/// | `reload` | `true`: a development server may reload it ([`ManifestFlags::RELOAD`](abi::ManifestFlags::RELOAD)) |
+/// | `developer` | `true`: a developer tool; every player reads a warning while it runs ([`ManifestFlags::DEVELOPER`](abi::ManifestFlags::DEVELOPER)) |
+/// | `replaces` | ids of mods this one takes the place of; the loader never starts them beside it |
+/// | `requires`, `after`, `recommends`, `breaks` | tables of other mods by alias, each a mod id or `{ id, version }` with a Cargo-style range; `after` takes no range |
+/// | `builds` | rows of symbols and constants the mod pins for game builds |
+///
+/// The version, description, authors, licence and homepage (else the
+/// repository) come from `[package]`. A changed `Cargo.toml` rebuilds the
+/// mod; a key, side, id or alias the table does not take fails the build
+/// with its name. The loader names the mod and its version in every message
+/// about it.
+///
+/// After the type, `points: [..]`, `events: [..]` and `calls: [..]` list the
+/// [extension points](crate::points) (each a [`#[point]`](macro@point)
+/// input), the [mod events](crate::services) (each an
+/// [`#[event]`](macro@event) type) and the calls it serves, each a `#[call]`
+/// input; their schemas go into the manifest, where `cargo enshwick point`,
+/// `event` and `call` read them.
+///
+/// A test that declares several mods in one binary gives each its table
+/// inline with `test::declare_mod!`, behind the `test` feature.
+///
+/// # Examples
+///
+/// The `Cargo.toml` of this crate's examples holds:
+///
+/// ```toml
+/// [package.metadata.enshwick]
+/// id = "you.hello"
+/// side = "both"
+/// join = true
+///
+/// [package.metadata.enshwick.requires]
+/// lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
+///
+/// [[package.metadata.enshwick.builds]]
+/// side = "server"
+/// guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
+/// age = 387
+///
+/// [package.metadata.enshwick.builds.symbols]
+/// "survivors.spawn_return" = 0x4_05cb
+/// ```
+///
+/// ```rust,standalone_crate
+/// struct Hello;
+///
+/// impl enshwick::Mod for Hello {
+///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+///         Ok(Self)
+///     }
+/// }
+///
+/// enshwick::declare_mod!(Hello);
+///
+/// assert!(Hello::instance().is_none());
+/// // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
+/// // `declare_mod!`, which no thread writes.
+/// let manifest = unsafe { &*enshwick_mod_query() };
+/// // SAFETY: `declare_mod!` points the id at a string literal, alive for the process.
+/// assert_eq!(unsafe { manifest.id.as_str() }, Some("you.hello"));
+/// assert_eq!(manifest.dependency_count, 1);
+/// assert_eq!(manifest.build_count, 1);
+/// // SAFETY: `declare_mod!` points the licence at this crate's `[package]`
+/// // licence, a literal alive for the process.
+/// assert_eq!(unsafe { manifest.license.as_str() }, Some("MIT"));
+/// ```
+pub use enshwick_macros::declare_mod;
 /// Declares a mod event other mods subscribe to: the struct becomes
 /// `repr(C)` and implements [`services::ModEvent`] with a layout hash per
 /// field.
@@ -485,22 +576,7 @@ pub mod __private {
     pub const EXPERIENCE_SOURCES: &[(crate::game_events::ExperienceSourceType, &str)] =
         &crate::game_events::ExperienceSourceType::IDS;
 
-    #[must_use]
-    pub const fn flags(join: &[bool], reload: &[bool], developer: &[bool]) -> ManifestFlags {
-        const fn set(given: &[bool], flag: ManifestFlags) -> u32 {
-            match given {
-                [true] => flag.0,
-                _ => 0,
-            }
-        }
-        ManifestFlags(
-            set(join, ManifestFlags::JOIN)
-                | set(reload, ManifestFlags::RELOAD)
-                | set(developer, ManifestFlags::DEVELOPER),
-        )
-    }
-
-    /// The schema text of `manifest!`: empty when it names no point, so a
+    /// The schema text of `declare_mod!`: empty when it names no point, so a
     /// mod without points carries nothing.
     #[must_use]
     pub const fn point_schemas(text: &'static str) -> &'static str {
@@ -546,24 +622,10 @@ pub mod __private {
         ""
     }
 
-    /// The authors `authors:` names, else Cargo's `authors`, separated by
-    /// `:`, trimmed and without empty names.
-    const fn author_names<const N: usize>(
-        given: &[&'static str],
-        cargo: &'static str,
-    ) -> ([crate::abi::Str; N], usize) {
+    /// Cargo's `authors`, separated by `:`, trimmed and without empty names.
+    const fn author_names<const N: usize>(cargo: &'static str) -> ([crate::abi::Str; N], usize) {
         let mut out = [crate::abi::Str::EMPTY; N];
         let mut count = 0;
-        if !given.is_empty() {
-            while count < given.len() {
-                assert!(!given[count].is_empty(), "an author's name is empty");
-                if count < N {
-                    out[count] = crate::abi::Str::new(given[count]);
-                }
-                count += 1;
-            }
-            return (out, count);
-        }
         let mut rest = cargo.as_bytes();
         while !rest.is_empty() {
             let mut cut = 0;
@@ -590,17 +652,14 @@ pub mod __private {
 
     /// How many authors [`authors`] finds.
     #[must_use]
-    pub const fn author_count(given: &[&'static str], cargo: &'static str) -> usize {
-        author_names::<0>(given, cargo).1
+    pub const fn author_count(cargo: &'static str) -> usize {
+        author_names::<0>(cargo).1
     }
 
     /// The authors' names for the manifest.
     #[must_use]
-    pub const fn authors<const N: usize>(
-        given: &[&'static str],
-        cargo: &'static str,
-    ) -> [crate::abi::Str; N] {
-        author_names::<N>(given, cargo).0
+    pub const fn authors<const N: usize>(cargo: &'static str) -> [crate::abi::Str; N] {
+        author_names::<N>(cargo).0
     }
 
     /// Compiles only for a `Copy` hook argument.
@@ -762,7 +821,12 @@ pub mod __private {
     ///   header states.
     /// - That table stays valid and unchanged for the rest of the process,
     ///   as the loader's process-wide table does.
-    pub unsafe fn init<M: Mod>(api: *const HostApi, me: ModHandle, slot: &Slot<M>) -> Status {
+    pub unsafe fn init<M: Mod>(
+        api: *const HostApi,
+        me: ModHandle,
+        manifest: &'static crate::abi::Manifest,
+        slot: &Slot<M>,
+    ) -> Status {
         // SAFETY: `Host::new` needs `api` null or a table readable for its
         // header's size that outlives the process; this function's `# Safety`
         // bullets guarantee both.
@@ -778,7 +842,6 @@ pub mod __private {
             core::ptr::null_mut(),
         );
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let manifest = M::manifest();
             #[cfg(feature = "test")]
             crate::test::table::note_manifest(api, manifest);
             M::init(&mut Load::of(
@@ -805,13 +868,6 @@ pub mod __private {
                 Status::FAULTED
             }
         }
-    }
-
-    /// The mod's manifest, null when `manifest` panics, which the loader
-    /// takes as a refusal.
-    #[must_use]
-    pub fn query<M: Mod>() -> *const crate::abi::Manifest {
-        std::panic::catch_unwind(M::manifest).map_or(core::ptr::null(), core::ptr::from_ref)
     }
 
     /// Runs `init` with a [`Load`] for the data pack `me`, as the loader

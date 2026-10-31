@@ -20,10 +20,6 @@ mod tests {
     struct Talker;
 
     impl Mod for Talker {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.talker", side: BOTH, join: true)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let channel = load.channel::<Sync, _>("sync", 2, |from, message| {
                 HEARD.lock().unwrap().push((from, message));
@@ -33,7 +29,14 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Talker);
+    enshwick::test::declare_mod!(
+        Talker,
+        r#"
+        id = "you.talker"
+        side = "both"
+        join = true
+        "#
+    );
 
     #[test]
     fn messages_encode_out_decode_in_and_wait_for_ready_peers() {

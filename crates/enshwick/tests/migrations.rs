@@ -21,10 +21,6 @@ mod tests {
     struct Lockers;
 
     impl Mod for Lockers {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.lockers", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.migrate(
                 Migrations::new()
@@ -50,7 +46,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Lockers);
+    enshwick::test::declare_mod!(
+        Lockers,
+        r#"
+        id = "you.lockers"
+        side = "server"
+        "#
+    );
 
     fn host() -> FakeHost {
         let mut host = FakeHost::new()

@@ -11,10 +11,6 @@ mod tests {
     struct Labelled;
 
     impl Mod for Labelled {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.labelled", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _texts = load.texts(TEXTS)?;
             // As a pack's texts arrive after the mod's own.
@@ -27,7 +23,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Labelled);
+    enshwick::test::declare_mod!(
+        Labelled,
+        r#"
+        id = "you.labelled"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn the_loader_keeps_the_mods_texts() {

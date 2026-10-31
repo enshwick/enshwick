@@ -16,10 +16,6 @@ mod tests {
     struct Keys;
 
     impl Mod for Keys {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.keys", side: BOTH)
-        }
-
         fn init(_load: &mut Load<'_>) -> Result<Self, Off> {
             let item = CHEST.key(types::ITEM_INFO)?;
             let image = CHEST
@@ -30,7 +26,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Keys);
+    enshwick::test::declare_mod!(
+        Keys,
+        r#"
+        id = "you.keys"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn a_key_carries_the_hash_the_loader_gives_its_type_id() {

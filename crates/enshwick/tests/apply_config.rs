@@ -22,10 +22,6 @@ mod tests {
     struct Limit;
 
     impl Mod for Limit {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.limit", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let settings = load.apply_config(|settings: &Settings| {
                 APPLIED.store(settings.limit, Ordering::Relaxed);
@@ -36,7 +32,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Limit);
+    enshwick::test::declare_mod!(
+        Limit,
+        r#"
+        id = "you.limit"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn settings_apply_at_init_and_after_each_change_and_come_back() {

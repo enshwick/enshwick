@@ -28,10 +28,6 @@ mod tests {
     struct Queries;
 
     impl Mod for Queries {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.queries", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let world = load.world()?;
             let _first = BEDS.set(ComponentType::resolve(load, "keen::ecs::NpcBed")?);
@@ -41,7 +37,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Queries);
+    enshwick::test::declare_mod!(
+        Queries,
+        r#"
+        id = "you.queries"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn queries_destroys_saves_and_stores_follow_the_world() {

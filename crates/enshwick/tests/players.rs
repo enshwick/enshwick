@@ -13,17 +13,19 @@ mod tests {
     struct Lookups;
 
     impl Mod for Lookups {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.lookups", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLD.set(load.world()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Lookups);
+    enshwick::test::declare_mod!(
+        Lookups,
+        r#"
+        id = "you.lookups"
+        side = "server"
+        "#
+    );
 
     fn player(entity: u32, key: u64, name: &str) -> PlayerInfo {
         let mut bytes = [0u8; 64];

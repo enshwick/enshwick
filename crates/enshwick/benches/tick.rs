@@ -25,10 +25,6 @@ static PERIODIC: AtomicBool = AtomicBool::new(false);
 struct Bench;
 
 impl Mod for Bench {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "enshwick.bench", side: SERVER)
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let count = |tick: &TickData| {
             TICKS.fetch_add(tick.step, Ordering::Relaxed);
@@ -46,7 +42,13 @@ impl Mod for Bench {
     }
 }
 
-enshwick::declare_mod!(Bench);
+enshwick::test::declare_mod!(
+    Bench,
+    r#"
+    id = "enshwick.bench"
+    side = "server"
+    "#
+);
 
 fn tick(c: &mut Criterion) {
     let mut group = c.benchmark_group("tick");

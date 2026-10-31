@@ -17,17 +17,19 @@ mod tests {
     struct Blessing;
 
     impl Mod for Blessing {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.blessing", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = BUFFS.set(load.buffs());
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Blessing);
+    enshwick::test::declare_mod!(
+        Blessing,
+        r#"
+        id = "you.blessing"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn buffs_are_listed_given_renewed_and_removed() {

@@ -30,10 +30,6 @@ mod tests {
     struct Lockers;
 
     impl Mod for Lockers {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.lockers", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let actions = load.actions(Texts::parse(TEXTS)?)?;
             actions.add(
@@ -93,7 +89,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Lockers);
+    enshwick::test::declare_mod!(
+        Lockers,
+        r#"
+        id = "you.lockers"
+        side = "server"
+        "#
+    );
 
     fn player(entity: u32, key: u64, name: &str, admin: bool) -> PlayerInfo {
         let mut info = PlayerInfo {

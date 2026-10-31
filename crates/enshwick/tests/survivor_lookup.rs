@@ -13,10 +13,6 @@ mod tests {
     struct Housing;
 
     impl Mod for Housing {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.housing", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on_survivor_lookup(|lookup| match (lookup.survivor, lookup.purpose) {
                 (HOMELESS, _) => Answer::Nobody,
@@ -27,7 +23,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Housing);
+    enshwick::test::declare_mod!(
+        Housing,
+        r#"
+        id = "you.housing"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_lookup_answers_nobody_an_entity_or_the_game_s_own() {

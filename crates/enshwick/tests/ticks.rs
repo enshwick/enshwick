@@ -31,10 +31,6 @@ mod tests {
     struct Ticking;
 
     impl Mod for Ticking {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.ticking", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on::<Ticked>(record("default"))?;
             load.on_every_step(record("every"))?;
@@ -50,7 +46,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Ticking);
+    enshwick::test::declare_mod!(
+        Ticking,
+        r#"
+        id = "you.ticking"
+        side = "server"
+        "#
+    );
 
     extern "system" fn nothing(_: Event, _: *const core::ffi::c_void, _: *mut core::ffi::c_void) {}
 

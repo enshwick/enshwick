@@ -16,10 +16,6 @@ mod tests {
     struct Rainmaker;
 
     impl Mod for Rainmaker {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.rainmaker", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WEATHER.set(load.weather());
             load.on::<ChunkLoaded>(|chunk| {
@@ -29,7 +25,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Rainmaker);
+    enshwick::test::declare_mod!(
+        Rainmaker,
+        r#"
+        id = "you.rainmaker"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn weather_reads_and_starts_and_chunks_arrive() {

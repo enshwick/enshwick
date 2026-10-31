@@ -12,10 +12,6 @@ mod tests {
     struct Both;
 
     impl Mod for Both {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.both", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let mut reasons = REASONS.lock().unwrap();
             if let Err(off) = load.ui() {
@@ -28,7 +24,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Both);
+    enshwick::test::declare_mod!(
+        Both,
+        r#"
+        id = "you.both"
+        side = "both"
+        "#
+    );
 
     #[test]
     fn a_server_part_is_told_the_interface_is_for_clients() {

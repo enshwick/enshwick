@@ -38,10 +38,6 @@ mod tests {
     struct Kinds;
 
     impl Mod for Kinds {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.kinds", side: BOTH, join: true)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.derive_recipes("you.kinds", |recipe| {
                 recipe.kind().map(|kind| Derived {
@@ -64,7 +60,14 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Kinds);
+    enshwick::test::declare_mod!(
+        Kinds,
+        r#"
+        id = "you.kinds"
+        side = "both"
+        join = true
+        "#
+    );
 
     /// A registry of one recipe per item in `outputs`, each making one.
     fn registry(outputs: &[Guid]) -> Vec<u8> {

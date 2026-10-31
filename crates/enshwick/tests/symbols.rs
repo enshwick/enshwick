@@ -8,10 +8,6 @@ mod tests {
     struct Pinned;
 
     impl Mod for Pinned {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.pinned", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             assert_eq!(load.symbol("game.present")?, 0x1_4000_1000);
             let null = load.symbol("game.null").unwrap_err();
@@ -23,7 +19,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Pinned);
+    enshwick::test::declare_mod!(
+        Pinned,
+        r#"
+        id = "you.pinned"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_null_symbol_is_refused() {

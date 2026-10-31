@@ -13,10 +13,10 @@ several functions stays the way for Rust mods that share a crate.
 
 The server declares the input with
 [`#[call]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/services/calls.rs)
-and the answer's type with `output`. Listed in the manifest's `calls`, the
-schema goes into the server's DLL:
+and the answer's type with `output`. Listed in `declare_mod!` under `calls`,
+the schema goes into the server's DLL:
 
-```rust
+```rust,standalone_crate
 /// What the trading post pays for an item.
 #[enshwick::call(name = "you.trading-post:price-of", output = u32, version = 1)]
 #[derive(Clone, Copy, Debug)]
@@ -27,9 +27,15 @@ pub struct PriceOf {
     pub count: u32,
 }
 
-fn manifest() -> &'static enshwick::abi::Manifest {
-    enshwick::manifest!(id: "you.trading-post", side: SERVER, calls: [PriceOf])
+struct TradingPost;
+
+impl enshwick::Mod for TradingPost {
+    fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+        Ok(Self)
+    }
 }
+
+enshwick::declare_mod!(TradingPost, calls: [PriceOf]);
 ```
 
 - Name it after the serving mod, `<id>:<call>`. The loader refuses other names.

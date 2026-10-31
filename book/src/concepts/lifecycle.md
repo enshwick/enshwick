@@ -62,9 +62,6 @@ before the state exists, or whose mod failed at init, forwards to `next`:
 ```rust,standalone_crate
 # struct MyMod { altars: u8 }
 # impl enshwick::Mod for MyMod {
-#     fn manifest() -> &'static enshwick::abi::Manifest {
-#         enshwick::manifest!(id: "you.my-mod", side: SERVER)
-#     }
 #     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
 #         Ok(Self { altars: 16 })
 #     }

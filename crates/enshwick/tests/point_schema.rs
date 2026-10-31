@@ -35,19 +35,78 @@ pub struct Price {
 #[path = "../../cargo-enshwick/tests/fixtures/stalls_price.rs"]
 pub mod generated;
 
+/// The mod that defines the point.
+mod stalls {
+    #[expect(
+        dead_code,
+        reason = "the test reads its manifest alone; the mod never starts"
+    )]
+    pub(super) struct Stalls;
+
+    impl enshwick::Mod for Stalls {
+        fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        Stalls,
+        r#"
+        id = "you.stalls"
+        side = "server"
+        "#,
+        points: [super::Price]
+    );
+}
+
+/// A mod that defines no point.
+mod quiet {
+    #[expect(
+        dead_code,
+        reason = "the test reads its manifest alone; the mod never starts"
+    )]
+    pub(super) struct Quiet;
+
+    impl enshwick::Mod for Quiet {
+        fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        Quiet,
+        r#"
+        id = "you.quiet"
+        side = "server"
+        "#
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use enshwick::points::Point;
 
     use super::{Deal, Price, generated};
 
+    /// The schema text of a manifest's points, with the API crate's version,
+    /// which the mod takes, written as the fixtures have it.
+    fn points(manifest: *const enshwick::abi::Manifest) -> String {
+        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
+        // `declare_mod!`, which no thread writes.
+        let manifest = unsafe { &*manifest };
+        // SAFETY: `declare_mod!` points the schema at static text.
+        let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
+        text.replacen(
+            &format!("version = \"{}\"", enshwick::VERSION),
+            "version = \"1.2.0\"",
+            1,
+        )
+    }
+
     #[test]
     fn the_manifest_carries_the_schema_of_every_point_it_defines() {
-        let manifest =
-            enshwick::manifest!(id: "you.stalls", side: SERVER, version: "1.2.0", points: [Price]);
-        // SAFETY: the manifest's static text.
-        let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
-        let schema: toml::Table = toml::from_str(text).unwrap();
+        let text = points(super::stalls::enshwick_mod_query());
+        let schema: toml::Table = toml::from_str(&text).unwrap();
         assert_eq!(schema["mod"].as_str(), Some("you.stalls"));
         assert_eq!(schema["version"].as_str(), Some("1.2.0"));
         let point = &schema["point"][0];
@@ -94,17 +153,12 @@ mod tests {
 
     #[test]
     fn a_mod_without_points_carries_no_schema() {
-        let manifest = enshwick::manifest!(id: "you.quiet", side: SERVER);
-        // SAFETY: the manifest's static text.
-        assert_eq!(unsafe { manifest.points.as_str() }, Some(""));
+        assert_eq!(points(super::quiet::enshwick_mod_query()), "");
     }
 
     #[test]
     fn the_schema_is_the_one_cargo_enshwick_is_tested_with() {
-        let manifest =
-            enshwick::manifest!(id: "you.stalls", side: SERVER, version: "1.2.0", points: [Price]);
-        // SAFETY: the manifest's static text.
-        let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
+        let text = points(super::stalls::enshwick_mod_query());
         assert_eq!(
             text,
             include_str!("../../cargo-enshwick/tests/fixtures/stalls.points.toml")

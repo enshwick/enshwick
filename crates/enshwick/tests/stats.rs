@@ -15,17 +15,19 @@ mod tests {
     struct Stats;
 
     impl Mod for Stats {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.stats", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLD.set(load.world()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Stats);
+    enshwick::test::declare_mod!(
+        Stats,
+        r#"
+        id = "you.stats"
+        side = "server"
+        "#
+    );
 
     /// An attribute set: the id it keeps, the values' offset at 4, flags at
     /// 6, count at 7, then the values.

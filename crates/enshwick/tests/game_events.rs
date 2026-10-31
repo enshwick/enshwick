@@ -19,10 +19,6 @@ mod tests {
     struct Watcher;
 
     impl Mod for Watcher {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.watcher", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let listed = load.game_event_types()?;
             *LISTED.lock().unwrap() = listed
@@ -43,7 +39,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Watcher);
+    enshwick::test::declare_mod!(
+        Watcher,
+        r#"
+        id = "you.watcher"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn handlers_get_their_type_and_every_handler_gets_all() {

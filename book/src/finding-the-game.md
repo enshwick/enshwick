@@ -65,50 +65,49 @@ off. Ids a single mod uses go in that mod's rows.
 
 ## Build rows in the manifest
 
-A mod pins its own ids with `builds:` in [`manifest!`](getting-started.md):
+A mod pins its own ids with build rows in its
+[manifest](concepts/loader-and-abi.md#the-manifest), the `Cargo.toml`:
 
-```rust
-let manifest = enshwick::manifest!(
-    id: "you.my-mod",
-    side: BOTH,
-    builds: [
-        {
-            side: SERVER,
-            guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
-            age: 387,
-            symbols: ["my-mod.spawn_return" => 0x4_05cb],
-            constants: ["my-mod.bed_offset" => 0x48],
-        },
-        {
-            side: CLIENT,
-            guid: "69f0e9573b32c24a8838d3fff550824c",
-            age: 410,
-            symbols: ["my-mod.spawn_return" => 0x22_368b],
-        },
-    ],
-);
-assert_eq!(manifest.build_count, 2);
+```toml
+[[package.metadata.enshwick.builds]]
+side = "server"
+guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
+age = 387
+
+[package.metadata.enshwick.builds.symbols]
+"my-mod.spawn_return" = 0x4_05cb
+
+[package.metadata.enshwick.builds.constants]
+"my-mod.bed_offset" = 0x48
+
+[[package.metadata.enshwick.builds]]
+side = "client"
+guid = "69f0e9573b32c24a8838d3fff550824c"
+age = 410
+
+[package.metadata.enshwick.builds.symbols]
+"my-mod.spawn_return" = 0x22_368b
 ```
 
-- `side` is the binary the row is for: `SERVER` for the dedicated server,
-  `CLIENT` for the game. The game's binary holds twins of the server's
+- `side` is the binary the row is for: `"server"` for the dedicated server,
+  `"client"` for the game. The game's binary holds twins of the server's
   functions, which run while it hosts a game, so a mod with server hooks pins
-  them in a `CLIENT` row as well (see
+  them in a `"client"` row as well (see
   [Sides and hosting](concepts/sides-and-hosting.md)).
 - `guid` and `age` identify the build: the GUID, as 32 lowercase hex digits,
   and the age of the CodeView record in the executable. The game's version
   string repeats across builds; this pair does not. The loader logs both when
   it meets a build it does not know.
 - `symbols` map an id to an offset from the image base; `constants` map an id
-  to a value. `constants` may be left out.
+  to a value. Either table may be left out.
 
 A row applies only when its side and both parts of its fingerprint match the
 running binary. Rows for other builds are ignored, so a mod can carry rows for
 several builds at once.
 
 [`enshwick-research`](https://github.com/enshwick/devtools-mods/blob/main/enshwick-research/src/lib.rs)
-pins the client functions it studies in a `CLIENT` row and two server
-functions in a `SERVER` row.
+pins the client functions it studies in a `"client"` row and two server
+functions in a `"server"` row.
 
 When the game updates, the new build's table and rows come from
 [`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin):

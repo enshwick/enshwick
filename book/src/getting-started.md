@@ -54,9 +54,12 @@ the crate too. The crate holds:
   `=` to the release the tool was built with, `serde`, the lints, and a
   release profile with `panic = "unwind"`, which every hook needs to catch
   panics;
+- `Cargo.toml` also holds the mod's
+  [manifest](concepts/loader-and-abi.md#the-manifest), its id, side and name,
+  in `[package.metadata.enshwick]`;
 - `src/lib.rs`: a settings type with one field, `enabled`, a mod type named
-  after the id's name (`my-mod` becomes `MyMod`), its manifest,
-  `declare_mod!` and two tests: every text exists in every language, and the
+  after the id's name (`my-mod` becomes `MyMod`), `declare_mod!` and two
+  tests: every text exists in every language, and the
   mod starts on the [fake loader](testing.md);
 - `src/texts.toml`: the mod's name, description and setting labels;
 - `rust-toolchain.toml`, with the Windows target, and `.cargo/config.toml`,
@@ -111,7 +114,16 @@ call for exactly that, so the mod only answers with a number from its
 settings.
 
 Without settings, the whole mod fits in a few lines. This one always allows
-16 altars:
+16 altars. Its `Cargo.toml` names it:
+
+```toml
+[package.metadata.enshwick]
+id = "you.my-altar-count"
+side = "both"
+join = true
+```
+
+Its code:
 
 <!-- smallest-mod -->
 ```rust,standalone_crate
@@ -120,14 +132,6 @@ use enshwick::{Load, Mod, Off};
 struct AltarCount;
 
 impl Mod for AltarCount {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(
-            id: "you.my-altar-count",
-            side: BOTH,
-            join: true,
-        )
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         load.on_altar_limit(|limit| limit.allowed = 16)?;
         Ok(Self)
@@ -169,10 +173,6 @@ fn apply(settings: &Settings) {
 struct AltarCount;
 
 impl Mod for AltarCount {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.my-altar-count", side: BOTH, join: true)
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.apply_config(apply)?;
         load.on_altar_limit(|limit| limit.allowed = ALTARS.load(Ordering::Relaxed))?;
@@ -189,8 +189,8 @@ What each piece does:
 - `Settings` derives [`Config`](settings.md): the file
   `mod-configs/you.my-altar-count.toml` is written from its doc comments and
   `Default` on first start, and `load.apply_config(apply)` reads it.
-- `manifest!` names the mod and where it runs. `side: BOTH` and
-  `join: true` because the client's interface asks the same limit, so
+- `[package.metadata.enshwick]` names the mod and where it runs. `side = "both"`
+  and `join = true` because the client's interface asks the same limit, so
   players and their server must agree. See
   [The loader and the ABI](concepts/loader-and-abi.md).
 - `init` reads the settings and adds its answer to the game's limit with
@@ -240,10 +240,6 @@ fn max_altars(next: Next<'_, unsafe extern "system" fn(u64, u32) -> u8>, balanci
 }
 
 impl Mod for AltarCount {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.my-altar-count", side: BOTH, join: true)
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let max_altars = load.symbol("building.max_altars")?;
         // SAFETY: the game's altar limit has the type `MAX_ALTARS` declares.

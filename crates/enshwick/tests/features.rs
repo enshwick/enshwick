@@ -10,10 +10,6 @@ mod tests {
     struct Lanterns;
 
     impl Mod for Lanterns {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.lanterns", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _texts = load.texts(TEXTS)?;
             let glow = load.feature("glow", |load| load.symbol("lantern.glow"));
@@ -32,7 +28,13 @@ mod tests {
     const TEXTS: &str = "[en]\n\"flicker.off\" = \"No flicker: {symbol} is missing.\"\n\
                          [uk]\n\"flicker.off\" = \"Без мерехтіння: бракує {symbol}.\"\n";
 
-    enshwick::declare_mod!(Lanterns);
+    enshwick::test::declare_mod!(
+        Lanterns,
+        r#"
+        id = "you.lanterns"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_feature_that_turns_off_leaves_the_mod_running_and_says_why() {

@@ -32,17 +32,19 @@ mod tests {
     struct Surveyor;
 
     impl Mod for Surveyor {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.surveyor", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             *WORLD.lock().unwrap() = Some(load.world()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Surveyor);
+    enshwick::test::declare_mod!(
+        Surveyor,
+        r#"
+        id = "you.surveyor"
+        side = "server"
+        "#
+    );
 
     /// The template a player places from `item`.
     fn template_of(item: u32) -> [u8; 16] {

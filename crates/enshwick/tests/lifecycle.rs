@@ -62,10 +62,6 @@ mod tests {
     }
 
     impl enshwick::Mod for Test {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.test-mod", side: BOTH, join: true, requires: ["other" => "^1"])
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             let settings: Settings = load.config()?;
             assert_eq!(load.symbol("npc.lookup")?, 0x1_4020_2e80);
@@ -87,14 +83,24 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Test);
+    enshwick::test::declare_mod!(
+        Test,
+        r#"
+        id = "you.test-mod"
+        side = "both"
+        join = true
+
+        [requires]
+        other = { id = "other", version = "^1" }
+        "#
+    );
 
     #[test]
     fn a_mod_lives_its_whole_life() {
         // SAFETY: `enshwick_mod_query` returns null or the `'static` manifest
-        // of `manifest!`, which no thread writes.
+        // of `declare_mod!`, which no thread writes.
         let manifest = unsafe { enshwick_mod_query().as_ref() }.expect("the manifest is queried");
-        // SAFETY: the id points at a `'static` string literal of `manifest!`.
+        // SAFETY: the id points at a `'static` string literal of `declare_mod!`.
         assert_eq!(unsafe { manifest.id.as_str() }, Some("you.test-mod"));
         assert_eq!(manifest.dependency_count, 1);
         assert_eq!(enshwick_mod_abi(), enshwick::abi::ABI_VERSION);

@@ -10,10 +10,6 @@ mod tests {
     struct Soft;
 
     impl Mod for Soft {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.soft", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on_damage(|damage| match damage.cause() {
                 DamageCause::FallDamage => damage.scale(0.5),
@@ -30,7 +26,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Soft);
+    enshwick::test::declare_mod!(
+        Soft,
+        r#"
+        id = "you.soft"
+        side = "server"
+        "#
+    );
 
     fn check(cause: u32, target: u32, source: u32) -> DamageCheck {
         DamageCheck {

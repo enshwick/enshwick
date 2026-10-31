@@ -22,14 +22,6 @@ pub fn earned() -> u64 {
 pub struct MarketStalls;
 
 impl Mod for MarketStalls {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(
-            id: "you.market-stalls",
-            side: SERVER,
-            requires: ["you.trading-post" => ">=0.1, <1.0"],
-        )
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let prices: &'static Prices = load.service()?;
         for item in RARE..RARE * 2 {

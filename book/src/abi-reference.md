@@ -80,8 +80,8 @@ and unloaded.
 ## The manifest
 
 [`Manifest`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
-is what [`manifest!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
-builds:
+is what [`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
+builds from the crate's `Cargo.toml`:
 
 | Field          | What it holds                                                                                     |
 | -------------- | ------------------------------------------------------------------------------------------------- |
