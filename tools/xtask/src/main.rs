@@ -17,10 +17,13 @@
 //! C header, which the check holds to the ABI module and its golden layout
 //! ([`header`]).
 
+#![forbid(unsafe_code)]
+
 mod affected;
 mod book;
 #[cfg(feature = "compat")]
 mod compat;
+mod crate_rules;
 mod dist;
 mod header;
 mod ranges;
@@ -105,6 +108,11 @@ fn run(args: &[String]) -> Result<bool, String> {
         book::check(&root)
             .into_iter()
             .map(|problem| format!("book: {problem}")),
+    );
+    problems.extend(
+        crate_rules::check()?
+            .into_iter()
+            .map(|problem| format!("crate rule: {problem}")),
     );
     if parts.contains(&Part::Host) && !list {
         for problem in &problems {
