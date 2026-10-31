@@ -21,6 +21,9 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `cargo enshwick new` declares the settings with `#[enshwick::config]`, and
+  the new crate no longer depends on serde (#795).
+
 - `cargo enshwick new` writes `exports` and `requires` into the new mod's
   `Cargo.toml` as comments, beside `recommends` and `breaks` (#792).
 

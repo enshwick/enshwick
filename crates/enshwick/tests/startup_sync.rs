@@ -9,7 +9,8 @@ mod tests {
     use enshwick::{Load, Mod, Off, events};
 
     /// World rules.
-    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    #[enshwick::config]
+    #[derive(Default)]
     struct Settings {
         /// The world's rule, the same for its players.
         #[config(startup, sync)]

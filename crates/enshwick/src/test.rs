@@ -24,7 +24,8 @@
 //! use enshwick::{Load, Mod, Next, Off, events, hook};
 //!
 //! /// The bonus settings.
-//! #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+//! #[enshwick::config]
+//! #[derive(Default)]
 //! struct Settings {
 //!     /// What each reward gains.
 //!     bonus: u32,

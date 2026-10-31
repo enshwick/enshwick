@@ -17,8 +17,8 @@ pub mod price;
 use price::{Deal, Price};
 
 /// Haggling settings.
-#[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(deny_unknown_fields)]
+#[enshwick::config]
+#[derive(Debug, Default)]
 struct Settings {
     /// Account keys, 16 hex digits, of regular customers.
     #[config(runtime)]

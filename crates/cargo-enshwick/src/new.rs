@@ -572,7 +572,7 @@ mod tests {
             cargo["dependencies"]["enshwick"]["workspace"].as_bool(),
             Some(true)
         );
-        assert!(cargo["dependencies"]["serde"]["version"].is_str());
+        assert!(cargo["dependencies"].get("serde").is_none());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `#[config]`, which declares a settings struct: serde's derives through the
+  API's serde, unknown keys refused and `Config` (#795).
+
+- **Breaking:** `#[derive(Config)]` refuses a struct without
+  `#[serde(deny_unknown_fields)]` (#795).
+
 - `exports` in `[package.metadata.enshwick]`, the local names other mods may
   use, which `declare_mod!` puts into the manifest; a listed point, event or
   call missing from it fails the build (#783).

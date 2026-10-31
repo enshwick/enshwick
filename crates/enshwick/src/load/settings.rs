@@ -24,7 +24,8 @@ impl Load<'_> {
     ///
     /// ```
     /// /// Altar settings.
-    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    /// #[enshwick::config]
+    /// #[derive(Default)]
     /// struct Settings {
     ///     /// Altars allowed at each Flame level.
     ///     altars: Vec<u8>,
@@ -59,7 +60,8 @@ impl Load<'_> {
     /// use std::sync::atomic::{AtomicU32, Ordering};
     ///
     /// /// Comfort settings.
-    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    /// #[enshwick::config]
+    /// #[derive(Default)]
     /// struct Settings {
     ///     /// Comfort per piece of furniture, times this factor.
     ///     multiplier: f32,
@@ -109,7 +111,8 @@ impl Load<'_> {
     /// use std::sync::atomic::{AtomicU32, Ordering};
     ///
     /// /// Comfort settings.
-    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    /// #[enshwick::config]
+    /// #[derive(Default)]
     /// struct Settings {
     ///     /// Comfort per piece of furniture, times this factor.
     ///     multiplier: f32,
