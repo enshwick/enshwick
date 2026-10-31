@@ -77,6 +77,9 @@ Each entry names the pull request that made the change.
   takes any `EngineFacts`, as the other layouts do (#806).
 
 - `FakeHost::world` sets the current transform and used item types `World`
+  needs, so world tests read those hashes from the builder (#809).
+
+- `FakeHost::world` sets the current transform and used item types `World`
   needs, so a world test copies no type hash of its own (#809).
 
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`
