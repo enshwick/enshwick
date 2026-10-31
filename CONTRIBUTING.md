@@ -3,8 +3,10 @@
 Enshwick is a Rust workspace. You need Rust (`rust-toolchain.toml` installs the
 pinned version through rustup), [Bun](https://bun.sh) for the repository tools,
 [committed](https://github.com/crate-ci/committed),
-[typos](https://github.com/crate-ci/typos) and cargo-deny for the git hooks,
-and on Windows the MSVC build tools.
+[typos](https://github.com/crate-ci/typos), cargo-deny,
+[actionlint](https://github.com/rhysd/actionlint) and
+[zizmor](https://docs.zizmor.sh) for the git hooks, and on Windows the MSVC
+build tools.
 
 ```bash
 bun install                                 # repository tools and the git hooks
@@ -18,7 +20,8 @@ plain `bunx markdownlint-cli2` before `bun install` fetches the newest
 release instead, whose formatter fails to load.
 
 The hooks check formatting, spelling, Markdown and commit messages before a
-commit, and again before a push, with cargo-deny when a manifest changed; none
+commit, and again before a push, with cargo-deny when a manifest changed and
+actionlint and zizmor when a workflow changed; none
 of them compiles, so they take seconds. Before asking for review, run
 `cargo xtask check`: clippy and the doctests, and the tests of the packages the
 change touches and of the packages that depend on them. Off Windows it also
