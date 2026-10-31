@@ -55,7 +55,9 @@ global `enshwick`.
    With the game's types, add `--definitions:@game=types/game.d.luau`.
 4. Copy the folder into the game's `mods/` folder as `mods/you.greeter/`.
 
-The repository's `examples/you.welcome` is a Luau mod to start from.
+The repository's
+[`examples/you.welcome`](https://github.com/enshwick/enshwick/tree/main/examples/you.welcome)
+is a Luau mod to start from.
 `cargo enshwick luau --out types/enshwick.d.luau` writes the definitions
 again for the loader the tool was built with, after an update, and
 `cargo enshwick types --from <game folder> --luau types/game.d.luau` the

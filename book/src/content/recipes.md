@@ -224,3 +224,9 @@ The vanilla workshops are shared by every mod. A mod that adds many recipes
 should give them a [workshop of its own](workshops.md) or an NPC of its own
 rather than crowd the vanilla ones; that also keeps it working where the
 limit holds.
+
+## Worked example
+
+[`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
+adds the Safe's recipe with `add_recipe_with`, its cost from a setting, in
+[`lib.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/lib.rs).

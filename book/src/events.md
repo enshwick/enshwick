@@ -266,3 +266,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 - A unit test makes its own with `StepClock::new()` and moves it with
   `advance(elapsed, steps)`, or ticks the fake host with
   `loader.tick(elapsed)` ([testing](testing.md)).
+
+## Worked examples
+
+- [`enshwick-optimizer`](https://github.com/enshwick/mods/tree/main/optimizer)
+  and [`enshwick-shared-experience`](https://github.com/enshwick/mods/tree/main/shared-experience)
+  run work on every step with `on_every_step`, in
+  [`optimizer/src/lib.rs`](https://github.com/enshwick/mods/blob/main/optimizer/src/lib.rs)
+  and [`shared-experience/src/lib.rs`](https://github.com/enshwick/mods/blob/main/shared-experience/src/lib.rs).
+- [`enshwick-area-loot`](https://github.com/enshwick/mods/tree/main/area-loot)
+  keeps its step clock and resets per-game state on `ShutdownStarted` in
+  [`take.rs`](https://github.com/enshwick/mods/blob/main/area-loot/src/take.rs).
