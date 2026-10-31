@@ -74,12 +74,9 @@ The data:
 [Settings](settings.md). The loader re-reads log levels on
 `LoaderSettingsChanged` for every mod by itself.
 
-`JoinRefused` is raised on the client, once the player closed the loader's
-dialog about mods the server runs and the client lacks or runs in another
-version.
-[`mods::join_missing()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
-lists them with the server's versions and homepages. The handler runs on the
-game thread.
+When and how `JoinRefused` is raised, and `mods::join_missing()`, which lists
+the mods the player lacks, are in
+[A server's pages and the join check](releasing.md#a-servers-pages-and-the-join-check).
 
 ## Ticks
 
@@ -185,10 +182,9 @@ game thread. Keep handlers short: the game waits for them. Leave slow work,
 such as file or network access, to a thread of your own.
 
 On a client they come from the built-in server while the client hosts a game,
-solo play included, and from nothing otherwise. Each hosted game starts with
-`WorldLoaded` and ends with `ShutdownStarted`. The next game has a new server and new
-entities, so reset state tied to one game, such as entity ids, on `ShutdownStarted`.
-See [Sides and hosting](concepts/sides-and-hosting.md).
+solo play included, and from nothing otherwise. Where a hosted game starts and
+ends, and the state to reset between games, is in
+[Hosting](concepts/sides-and-hosting.md#hosting).
 
 A killed process raises no `ShutdownStarted`.
 

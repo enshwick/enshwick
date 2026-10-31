@@ -212,8 +212,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 - Only the definer sends its event.
-- When the definer is loaded and does not export the event, `on_mod_event`
-  returns `Off` with the reason.
+- When the definer is loaded and does not export the event, the subscription
+  is refused; see
+  [What other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use).
 - The loader matches subscriptions once every mod is initialised. With no
   running mod defining the event, or a definition that lacks or changed a
   field of the subscriber's, it logs why under the subscriber's id and the

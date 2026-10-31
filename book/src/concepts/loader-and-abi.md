@@ -256,6 +256,9 @@ is refused, and the log says
   `content id you.lockers:key: you.lockers does not export key; it exports locker`.
 - A data pack's reference to another mod's content, `<alias>:<name>` or
   `<mod>:<name>`, is checked the same way when the pack is added.
+- In a test, `FakeHost::exports` names what another mod exports. Without it
+  the fake lets every name through, so a test that uses another mod passes
+  that mod's exports.
 - The mod's own names need no export.
 - A mod that is not loaded is not checked; its names stay unmatched.
 - A GUID the mod writes itself, such as `Guid::named("you.lockers:key")`, is

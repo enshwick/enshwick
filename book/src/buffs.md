@@ -82,6 +82,5 @@ Clients see buffs given and removed as the game's own, with their icons and
 times. The game saves the types it saves with a character, buffs from mods
 among them; other types end when the player leaves.
 
-Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
-client, while it hosts a game.
+Where each call works is in
+[What may be called where](concepts/threads.md#what-may-be-called-where).
