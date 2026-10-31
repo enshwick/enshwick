@@ -55,7 +55,7 @@ use entries::mods::{
 use entries::net::{net_channel, net_ready, net_send};
 use entries::services::{
     attach_point, declare_content, define_event, define_point, publish, run_point, send_event,
-    service, set_tick_every, subscribe, subscribe_event, subscribe_tick,
+    service, set_tick_every, subscribe, subscribe_event, subscribe_tick, use_content,
 };
 use entries::transactions::{
     transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
@@ -853,6 +853,7 @@ pub(crate) static API: HostApi = HostApi {
     map_frame,
     request_base_limits,
     map_marker_types,
+    use_content,
 };
 
 /// The loader and the calling mod, when the mod is on.

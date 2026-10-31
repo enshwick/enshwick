@@ -17,6 +17,17 @@ Each entry names the pull request that made the change.
   `#[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]` and
   `#[serde(deny_unknown_fields)]` with `#[enshwick::config]` (#795).
 
+- **Breaking:** a mod's content is its own until its `exports` list the
+  name, or the name it is a part of: `exports = ["locker"]` lets other mods
+  name `locker` and `locker.recipe`. A required dependency's
+  `deps::<alias>::id` is no longer `const` and returns `Result<Id, Off>`,
+  `Off` for a name the dependency does not export; an optional one's returns
+  `None` for it. `Load::add_pack` returns `Off` for another mod's content id
+  a pack names outside that mod's exports. The loader logs the id with what
+  the mod exports. `HostApi` gains `use_content`, which changes
+  `ABI_VERSION`; rebuild every mod. The fake loader refuses the same for a
+  mod `FakeHost::exports` names (#798).
+
 - **Breaking:** `pack.toml` names its dependencies as
   `[package.metadata.enshwick]` does: `requires`, `after`, `recommends` and
   `breaks` are tables keyed by alias, each a mod id or `{ id, version }`, and

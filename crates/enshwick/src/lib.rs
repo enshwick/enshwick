@@ -451,11 +451,12 @@ pub use enshwick_macros::declare_mod;
 /// `requires`, `after` and `recommends`.
 ///
 /// Each module holds `ID`, the dependency's mod id, and `id("<name>")`, its
-/// content id `<dependency>:<name>`. A required dependency's ids are
-/// constants: the loader starts this mod only beside it. An optional one's,
-/// from `after` or `recommends`, are `None` while it does not run; ask once,
-/// at init, and keep the id. A malformed name panics, running or not; in a
-/// constant it fails the build, with the error at the call that wrote it. A call,
+/// content id `<dependency>:<name>`, once the loader lets this mod name it:
+/// the dependency's `exports` list `<name>` or the name it is a part of. A
+/// required dependency's `id` returns [`Off`] for a name it does not export.
+/// An optional one's, from `after` or `recommends`, is `None` while it does
+/// not run or does not export the name. Ask once, at init, and keep the id.
+/// A malformed name panics, running or not. A call,
 /// point or event of a dependency is declared with its own name and
 /// `of = <alias>`: `#[point(of = lockers, name = "price", ..)]` is
 /// `you.lockers:price`. Without `of`, a local name is this mod's own. An
@@ -477,8 +478,8 @@ pub use enshwick_macros::declare_mod;
 ///
 /// enshwick::deps!();
 ///
-/// const LOCKER: Id = deps::lockers::id("locker");
-/// assert_eq!(LOCKER.to_string(), "you.lockers:locker");
+/// let locker: Id = deps::lockers::id("locker")?;
+/// assert_eq!(locker.to_string(), "you.lockers:locker");
 /// assert_eq!(deps::lanterns::ID, "you.lanterns");
 /// // Outside the game no other mod runs, and no game data reads.
 /// assert_eq!(deps::lanterns::id("lantern"), None);
@@ -491,6 +492,7 @@ pub use enshwick_macros::declare_mod;
 /// }
 ///
 /// assert_eq!(Opened::NAME, "you.lockers:opened");
+/// # Ok::<(), enshwick::Off>(())
 /// ```
 pub use enshwick_macros::deps;
 /// Declares a mod event other mods subscribe to: the struct becomes
@@ -712,6 +714,17 @@ pub mod __private {
             i += 1;
         }
         ""
+    }
+
+    /// `id`, a dependency's content id, once the loader lets this mod name
+    /// it, for `deps!`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`](crate::Off) when the loader refuses the id, as one the
+    /// dependency does not export.
+    pub fn dependency_id(id: crate::content::Id) -> Result<crate::content::Id, crate::Off> {
+        crate::content::named(id)
     }
 
     /// Whether `name` is `<id>:<what>`, a name of the mod `id` itself.
