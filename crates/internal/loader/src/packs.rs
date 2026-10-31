@@ -269,9 +269,8 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
     let manifest = std::fs::read_to_string(dir.join(MANIFEST_FILE))
         .ok()
         .and_then(|text| PackManifest::parse(&text).ok().map(|m| (m, text)));
-    let settings = manifest.as_ref().and_then(|(m, _)| m.settings_schema());
-    if let Some((manifest, text)) = manifest
-        && let Err(problem) = manifest.check(&text, &pack)
+    if let Some((manifest, text)) = &manifest
+        && let Err(problem) = manifest.check(text, &pack)
     {
         crate::log::write(Level::ERROR, &id, &problem.to_string());
         return Status::REFUSED;
@@ -289,15 +288,16 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
     let status = unsafe {
         enshwick::__private::init_pack(api, me, |load| {
             load.add_pack(&pack)?;
-            if let Some(scripts) = scripts {
-                runtime = Some(enshwick_luau::start(
-                    load,
-                    &id,
-                    scripts,
-                    settings,
-                    enshwick_luau::Limits::default(),
-                )?);
-            }
+            let limits = enshwick_luau::Limits::default();
+            runtime = match (scripts, &manifest) {
+                (None, _) => None,
+                (Some(scripts), Some((manifest, _))) => {
+                    Some(enshwick_luau::start_pack(load, manifest, scripts, limits)?)
+                }
+                (Some(scripts), None) => {
+                    Some(enshwick_luau::start(load, &id, scripts, None, limits)?)
+                }
+            };
             Ok(())
         })
     };

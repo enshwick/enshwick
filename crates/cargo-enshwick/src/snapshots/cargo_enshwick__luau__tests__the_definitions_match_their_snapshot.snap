@@ -367,8 +367,10 @@ declare enshwick: {
 	on_mod_event: (event: { name: string }, handler: (data: any) -> ()) -> (),
 	--- The function that runs another mod's call, as `cargo enshwick call <call> --luau` describes it: it takes the input and returns the answer, or nil and why not (`unmatched` also before the start is over, `off` or `failed`). Ask at the top level of main.luau. Unstable: may change in any release.
 	caller: (call: { name: string }) -> (input: any) -> (any, string?),
-	--- Defines a mod event of this mod for others to hear, at the top level of main.luau; `send` hands every subscriber the data.
+	--- Defines a mod event of this mod for others to hear, at the top level of main.luau, by its local name (`greeted` for `<mod id>:greeted`); `send` hands every subscriber the data.
 	define_event: (event: { name: string }) -> { send: (data: any) -> () },
+	--- The mods `pack.toml` names in `requires`, `after` and `recommends`, by alias: each mod's id, and whether it runs now.
+	deps: { [string]: { id: string, running: () -> boolean } },
 	--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.
 	settings: () -> { [string]: any },
 	--- The mod's log file, one line per call.

@@ -76,6 +76,7 @@ end)
 | `enshwick.extend(point, handler)` | a link into another mod's [extension point](#extending-another-mod) |
 | `enshwick.on_mod_event(event, handler)`, `enshwick.define_event(event)` | [mod events](#mod-events), heard and sent |
 | `enshwick.caller(call)` | a function that runs [another mod's call](#calling-another-mod); unstable |
+| `enshwick.deps` | the mods `pack.toml` names in `requires`, `after` and `recommends`, [by alias](#other-mods-by-alias) |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md); unstable |
 | `enshwick.inventory` | slots and counts of [inventories](inventories.md), and items given, taken and moved, on the server |
@@ -171,6 +172,26 @@ end)
 Game events run on the server's game thread before the step's systems, as
 for a Rust mod; on a client, only while it hosts a game.
 
+## Other mods by alias
+
+`pack.toml` names the mods a Luau mod depends on under aliases, as a
+[data pack](content/packs.md#packtoml) does. `enshwick.deps` holds a table
+per alias of `requires`, `after` and `recommends`, as `deps!` does for a Rust
+mod: `id` is the mod's id, and `running()` says whether it runs now. A mod of
+`requires` always runs beside this one. Read `running()` for one of `after`
+or `recommends`:
+
+```toml
+[recommends]
+lanterns = "you.lanterns"
+```
+
+```luau
+if enshwick.deps.lanterns.running() then
+    enshwick.log.info(`{enshwick.deps.lanterns.id} lights the way`)
+end
+```
+
 ## Extending another mod
 
 A Luau mod links into another mod's [extension point](extending.md) as a
@@ -215,7 +236,7 @@ each field with a `name` and how it reads, `u8` to `i64`, `f32`, `f64`,
 `#[repr(C)]` struct of those fields:
 
 ```luau
-local greeted = enshwick.define_event({ name = "you.greeter:greeted", fields = {
+local greeted = enshwick.define_event({ name = "greeted", fields = {
     { name = "player", read = "entity" },
     { name = "times", read = "u16" },
 } })
@@ -227,8 +248,9 @@ end)
 
 The loader matches a subscription by its layout hashes, as for a Rust mod,
 and leaves it idle, with the reason in the log, when the defining mod's
-event differs or is smaller. An event a script defines has primitive fields
-only. `define_event` raises an error for a new event, or for changed
+event differs or is smaller. `define_event` takes the event's local name:
+`greeted` is `you.greeter:greeted`, as `#[event(name = "greeted")]` is for a
+Rust mod. An event a script defines has primitive fields only. `define_event` raises an error for a new event, or for changed
 fields, after the start: either takes the next start. A `send` before
 `main.luau` has finished reaches no one. Other mods hear the event only when
 `pack.toml` exports it, as `exports = ["greeted"]`.
