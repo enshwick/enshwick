@@ -440,7 +440,6 @@ mod tests {
         let lib = text(&files, "src/lib.rs");
         assert!(lib.contains("id: \"you.street-lanterns\",\n            side: BOTH,"));
         assert!(lib.contains("name: \"Street Lanterns\","));
-        assert!(lib.contains("// was: [\"you.old-name\"]"));
         assert!(lib.contains("declare_mod!(StreetLanterns)"));
         assert!(text(&files, "src/texts.toml").contains("\"mod.name\" = \"Street Lanterns\""));
         for (path, text) in &files {

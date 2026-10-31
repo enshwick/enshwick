@@ -284,8 +284,7 @@ pub enum MigrationError {
 /// mod's id; `None` when it has none.
 pub type SourceFn<'a> = &'a dyn Fn(&str) -> std::io::Result<Option<String>>;
 
-/// What ran, for the settings files and per world: mod id to migration ids;
-/// and the former ids whose files each renamed mod took over.
+/// What ran, for the settings files and per world: mod id to migration ids.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Record {
@@ -294,8 +293,6 @@ pub struct Record {
     /// Migrations that ran on each world, by world key, from before each
     /// world kept its own record: read until the world has one.
     pub worlds: BTreeMap<String, BTreeMap<String, Vec<String>>>,
-    /// The former ids each mod carried its files over from.
-    pub carried: BTreeMap<String, Vec<String>>,
 }
 
 impl Record {
@@ -346,32 +343,10 @@ impl Record {
         let path = data_dir.join(RECORD);
         let body = toml::to_string(self).map_err(std::io::Error::other)?;
         let text = format!(
-            "# Mod migrations that ran on each mod's settings file (each world keeps its own);\n\
-             # and the former ids whose files each renamed mod took over.\n\
+            "# Mod migrations that ran on each mod's settings file (each world keeps its own).\n\
              # The loader keeps this file; nothing listed here runs again.\n\n{body}"
         );
         enshwick::files::write_atomically(&path, text)
-    }
-
-    /// Counts every migration that ran under the former id `old` as run
-    /// under `id` too, and records `old` as carried over to `id`.
-    pub fn take_over(&mut self, id: &str, old: &str) {
-        let lists = std::iter::once(&mut self.settings).chain(self.worlds.values_mut());
-        for list in lists {
-            let Some(ran) = list.get(old).cloned() else {
-                continue;
-            };
-            let now = list.entry(id.to_owned()).or_default();
-            for migration in ran {
-                if !now.contains(&migration) {
-                    now.push(migration);
-                }
-            }
-        }
-        let carried = self.carried.entry(id.to_owned()).or_default();
-        if !carried.iter().any(|o| o == old) {
-            carried.push(old.to_owned());
-        }
     }
 
     /// The list of migrations that ran for mod `id` on the settings file,

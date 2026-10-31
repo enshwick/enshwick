@@ -649,9 +649,10 @@ pub fn script(args: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Whether `id` is a mod id, `<author>.<name>`, or an id a renamed mod had
-/// before ids carried an author, of `[a-z0-9-]`; at most 64 characters. The
-/// API's `abi::is_valid_former_id`, which this crate cannot depend on.
+/// Whether `id` is a mod id, `<author>.<name>`, or an id of the old form
+/// without an author that `replaces` still takes, of `[a-z0-9-]`; at most 64
+/// characters. The API's `abi::is_valid_old_form_id`, which this crate cannot
+/// depend on.
 fn is_mod_id(id: &str) -> bool {
     let part = |p: &str| {
         !p.is_empty()
@@ -685,7 +686,7 @@ fn expand_declaration(
     if !valid {
         return Err(syn::Error::new_spanned(
             &name,
-            "the name is `<mod id>:<what>`, the mod id `<author>.<name>` or a former id, of `[a-z0-9-]`",
+            "the name is `<mod id>:<what>`, the mod id `<author>.<name>` or an id of the old form `[a-z0-9-]+`",
         ));
     }
     if !item.generics.params.is_empty() {

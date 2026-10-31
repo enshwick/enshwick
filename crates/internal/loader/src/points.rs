@@ -127,29 +127,26 @@ pub(crate) struct Inert {
 
 /// The mods the seal asks about.
 pub(crate) trait Mods: Names {
-    /// The index of the running or off mod `id`, or of the mod that had
-    /// `id` before a rename.
+    /// The index of the running or off mod `id`.
     fn find(&self, id: &str) -> Option<usize>;
 }
 
 impl Registry {
-    /// Defines a point named after its definer, whose names are its id and
-    /// then its former ids, and returns its id and the count of its live
-    /// links.
+    /// Defines a point named after its definer, the mod `owner_id`, and
+    /// returns its id and the count of its live links.
     ///
     /// # Errors
     ///
-    /// Why it is refused: a name outside the definer's names, or defined
+    /// Why it is refused: a name outside the definer's namespace, or defined
     /// twice.
     pub(crate) fn define(
         &mut self,
         owner: ModIndex,
-        names: &[&str],
+        owner_id: &str,
         declared: Declared,
     ) -> Result<(u32, &'static AtomicU32), String> {
         let name = &declared.name;
-        if !enshwick::__private::rules::is_named_after(name, names) {
-            let owner_id = names.first().copied().unwrap_or_default();
+        if !enshwick::__private::rules::is_named_after(name, owner_id) {
             return Err(format!(
                 "point {name}: a point is named `{owner_id}:<point>`"
             ));
@@ -210,7 +207,7 @@ impl Registry {
                     .enumerate()
                     .find(|(_, d)| d.declared.name == name)
             };
-            let found = find(&point).or_else(|| renamed(&point, mods).and_then(|p| find(&p)));
+            let found = find(&point);
             let Some((id, definition)) = found else {
                 inert.push(missing(&link, mods));
                 continue;
@@ -308,14 +305,6 @@ fn chain(
             undid_whom: AtomicUsize::new(usize::MAX),
         })
         .collect()
-}
-
-/// The point `point` under its owner's id now, when the owner had the id
-/// the point names before a rename: `old:what` as `new:what`.
-fn renamed(point: &str, mods: &impl Mods) -> Option<String> {
-    let (owner, what) = point.split_once(':')?;
-    let (id, _) = mods.name(mods.find(owner)?);
-    (id != owner).then(|| format!("{id}:{what}"))
 }
 
 /// Why a link whose point no running mod defines stays inert.

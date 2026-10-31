@@ -68,26 +68,18 @@ fn combat_kinds() -> Sealed {
 
 #[test]
 fn ids_take_the_mod_s_namespace_and_say_whose_they_are() {
-    assert_eq!(full_id(&["rpg"], "crit"), Some(("rpg:crit".into(), true)));
+    assert_eq!(full_id("rpg", "crit"), Some(("rpg:crit".into(), true)));
     assert_eq!(
-        full_id(&["me.rpg", "rpg"], "crit"),
-        Some(("rpg:crit".into(), true)),
-        "a renamed mod's bare names stay where its data lives"
+        full_id("me.rpg", "rpg:luck"),
+        Some(("rpg:luck".into(), false))
     );
+    assert_eq!(full_id("rpg", "rpg:crit"), Some(("rpg:crit".into(), true)));
     assert_eq!(
-        full_id(&["me.rpg", "rpg"], "me.rpg:luck"),
-        Some(("me.rpg:luck".into(), true))
-    );
-    assert_eq!(
-        full_id(&["rpg"], "rpg:crit"),
-        Some(("rpg:crit".into(), true))
-    );
-    assert_eq!(
-        full_id(&["rpg"], "enshwick:damage"),
+        full_id("rpg", "enshwick:damage"),
         Some(("enshwick:damage".into(), false))
     );
-    assert_eq!(full_id(&["rpg"], "Crit"), None);
-    assert_eq!(full_id(&["rpg"], "a:b:c"), None);
+    assert_eq!(full_id("rpg", "Crit"), None);
+    assert_eq!(full_id("rpg", "a:b:c"), None);
 }
 
 #[test]

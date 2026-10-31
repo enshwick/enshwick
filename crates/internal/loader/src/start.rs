@@ -82,7 +82,7 @@ fn enforce_holds(loader: &Loader) {
         .mods
         .iter()
         .filter(|m| !m.off.load(Ordering::Acquire))
-        .flat_map(ModRecord::names)
+        .map(|m| m.id.as_str())
         .chain([crate::settings::LOADER_ID])
         .collect();
     crate::holds::enforce(&loader.data_dir, &running, false, Some(loader));
@@ -185,7 +185,6 @@ pub(crate) fn start(
     if let Some(w) = watching.as_mut() {
         w.check("", Stage::Skip);
     }
-    carry_former_ids(&mods_dir, &data_dir, &candidates, &plan);
     let frame = *FRAME.get_or_init(FrameSlot::allocate);
     let side = game.side;
     let loader = Loader {
@@ -278,31 +277,6 @@ fn serve(loader: &'static Loader) {
         );
     }
     crate::console::start(loader);
-}
-
-/// Copies each loading mod's settings and data from the ids it had, once.
-fn carry_former_ids(
-    mods_dir: &std::path::Path,
-    data_dir: &std::path::Path,
-    candidates: &[Candidate],
-    plan: &resolve::Plan,
-) {
-    let mods: Vec<(&str, Vec<&str>)> = plan
-        .order
-        .iter()
-        .map(|&i| {
-            let candidate = &candidates[i];
-            (candidate.id.as_str(), candidate.former_ids().collect())
-        })
-        .collect();
-    let configs = mods_dir.with_file_name("mod-configs");
-    let dirs = crate::carry::Dirs {
-        configs: &configs,
-        data: data_dir,
-    };
-    for line in crate::carry::carry_all(dirs, &mods, crate::migrations::dry_run()) {
-        crate::log::write(line.level, &line.id, &line.text);
-    }
 }
 
 /// Lets the dedicated server's own code run once the hooks are armed, and
@@ -400,7 +374,6 @@ fn records(
             // strings and lists readable and never written; a string `read`
             // left in the DLL is read while the planned mod's DLL is loaded.
             meta: unsafe { crate::manifest::meta(libraries[i].manifest) },
-            former: candidates[i].former_ids().map(str::to_owned).collect(),
             notes: notes
                 .iter()
                 .filter(|(index, _)| *index == i)

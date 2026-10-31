@@ -30,9 +30,6 @@ mod unwind;
 /// - `replaces: ["id", ...]`: mods this one takes the place of, such as
 ///   mods it folds in; while this mod is present the loader never starts
 ///   them;
-/// - `was: ["id", ...]`: ids this mod had before a rename; it replaces them,
-///   answers requirements and points named by them, and on its first start
-///   takes over their settings and data;
 /// - `points: [Type, ...]`: the [extension points](crate::points) the mod
 ///   defines, each a [`#[point]`](macro@crate::point) input; their schemas
 ///   go into the manifest, where `cargo enshwick point` reads them to write
@@ -63,7 +60,6 @@ mod unwind;
 ///     requires: ["you.lockers" => ">=0.1, <1.0"],
 ///     breaks: ["old-survivors" => "<0.3"],
 ///     replaces: ["survivors"],
-///     was: ["survivor-copies"],
 ///     builds: [{
 ///         side: SERVER,
 ///         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -72,7 +68,7 @@ mod unwind;
 ///         constants: ["survivors.bed_id" => 0x48],
 ///     }],
 /// );
-/// assert_eq!(manifest.dependency_count, 4);
+/// assert_eq!(manifest.dependency_count, 3);
 /// assert_eq!(manifest.build_count, 1);
 /// assert_eq!(manifest.author_count, 1);
 /// // SAFETY: `manifest!` points the name at a string literal, alive for the process.
@@ -104,7 +100,6 @@ macro_rules! manifest {
         $(, recommends: [$($rec:literal => $rec_range:literal),* $(,)?])?
         $(, breaks: [$($breaks:literal => $breaks_range:literal),* $(,)?])?
         $(, replaces: [$($replaces:literal),* $(,)?])?
-        $(, was: [$($was:literal),* $(,)?])?
         $(, points: [$($point:ty),* $(,)?])?
         $(, events: [$($event:ty),* $(,)?])?
         $(, calls: [$($call:ty),* $(,)?])?
@@ -122,8 +117,7 @@ macro_rules! manifest {
             <$event as $crate::services::ModEvent>::DESCRIBED,
             "an event's schema cannot describe a field's type: derive `Shape` for it",
         );)*)?
-        $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($replaces), "a replaced mod id is <author>.<name> or [a-z0-9-]+");)*)?
-        $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($was), "a former mod id is <author>.<name> or [a-z0-9-]+");)*)?
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_old_form_id($replaces), "a replaced mod id is <author>.<name> or [a-z0-9-]+");)*)?
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
             $($($crate::abi::Dependency {
                 id: $crate::abi::Str::new($req),
@@ -149,11 +143,6 @@ macro_rules! manifest {
                 id: $crate::abi::Str::new($replaces),
                 range: $crate::abi::Str::EMPTY,
                 relation: $crate::abi::Relation::REPLACES,
-            },)*)?
-            $($($crate::abi::Dependency {
-                id: $crate::abi::Str::new($was),
-                range: $crate::abi::Str::EMPTY,
-                relation: $crate::abi::Relation::WAS,
             },)*)?
         ];
         const AUTHOR_COUNT: usize = $crate::__private::author_count(

@@ -100,7 +100,6 @@ let manifest = enshwick::manifest!(
     recommends: ["caravans" => ">=0.3, <1.0"],
     breaks: ["old-market" => "<0.5"],
     replaces: ["barter"],           // a mod this one folds in
-    was: ["trade-post"],            // ids this mod had before a rename
     builds: [{
         side: SERVER,
         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -109,7 +108,7 @@ let manifest = enshwick::manifest!(
         constants: ["survivors.bed_id" => 0x48],
     }],
 );
-# assert_eq!(manifest.dependency_count, 6);
+# assert_eq!(manifest.dependency_count, 5);
 # assert_eq!(manifest.author_count, 1);
 ```
 
@@ -153,18 +152,6 @@ let manifest = enshwick::manifest!(
   console and the status summary repeat and the lock lists under
   `[[replaced]]`. Their settings stay where they are; take the ones this mod
   keeps with a [migration](../migrations.md#settings-from-another-mod).
-- `was` names the ids this mod had before a rename. It replaces them as
-  `replaces` does, a `requires` or an [extension point](../extending.md)
-  named by an old id finds this mod, and on the first start the loader copies
-  `mod-configs/<old>.toml`, its texts file and everything in `mod-data/<old>/`
-  (each world's settings and stores, a hold) to the new id, where the new id
-  has no such file yet, and counts the migrations that ran under the old id as
-  run. The old files stay, for a player who goes back. `migrations.toml`
-  records the copy under `[carried]`, so it happens once. The mod may keep
-  its content, stats, item data, points, services and events under the old
-  id, `<old>:<name>`, so the ids and GUIDs saved worlds hold stay; a bare stat
-  or item-data name takes the first id under `was`. The console, the Mods
-  screen and other mods' links find the mod by an old id too.
 - `points` lists the [extension points](../extending.md#defining-a-point) the
   mod defines, by their input types. Their schemas go into the manifest and
   into the DLL's `.enshpt` section, where `cargo enshwick point` reads them

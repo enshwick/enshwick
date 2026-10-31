@@ -119,7 +119,6 @@ mod tests {
             ("point of another mod", define("other.mod:limit")),
             ("point without a name", define("you.refusals:")),
             ("own point", define("you.refusals:limit")),
-            ("point under a former id", define("you.before:limit")),
         ];
         [answers, ask_rates(api, me)].concat()
     }
@@ -141,11 +140,7 @@ mod tests {
 
     impl Mod for Refusals {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(
-                id: "you.refusals",
-                side: SERVER,
-                was: ["you.before"],
-            )
+            enshwick::manifest!(id: "you.refusals", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -235,16 +230,12 @@ mod tests {
     }
 
     #[test]
-    fn a_point_is_named_after_the_mod_or_a_former_id() {
+    fn a_point_is_named_after_the_mod() {
         let loader = started();
         assert_eq!(answer("point of another mod"), Status::REFUSED);
         assert_eq!(answer("point without a name"), Status::REFUSED);
         assert_eq!(answer("own point"), Status::OK);
-        assert_eq!(answer("point under a former id"), Status::OK);
-        assert_eq!(
-            loader.defined_points(),
-            ["you.refusals:limit", "you.before:limit"]
-        );
+        assert_eq!(loader.defined_points(), ["you.refusals:limit"]);
     }
 
     #[test]

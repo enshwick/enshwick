@@ -883,11 +883,6 @@ typedef uint8_t EnshwickRelation;
 // (any version; the range stays empty): while this one is present, the
 // loader never starts the other and names its DLL to delete.
 #define EnshwickRelation_REPLACES 4
-// The other id is one this mod had before a rename: it replaces that
-// mod as `REPLACES` does, a requirement or a point
-// named by the old id finds this mod, and on the first start the loader
-// copies the old id's settings and data to this one.
-#define EnshwickRelation_WAS 5
 
 // A relation to another mod, by id and SemVer range.
 typedef struct EnshwickDependency {
@@ -4044,11 +4039,10 @@ typedef struct EnshwickHostApi {
                              uint8_t *out,
                              uint32_t capacity);
   // Serves the call `spec` describes with `callback` and `user`, named
-  // `<id>:<call>` after the serving mod or one of its former ids;
-  // `Status::REFUSED` for another name, or a name and major served
-  // twice, `Status::BAD_ARGS` for a spec that does not read. Allowed
-  // during `enshwick_mod_init` only: `Status::TOO_LATE` once every mod
-  // is initialised.
+  // `<id>:<call>` after the serving mod; `Status::REFUSED` for another
+  // name, or a name and major served twice, `Status::BAD_ARGS` for a
+  // spec that does not read. Allowed during `enshwick_mod_init` only:
+  // `Status::TOO_LATE` once every mod is initialised.
   EnshwickStatus (*serve_call)(EnshwickModHandle me,
                                const struct EnshwickCallSpec *spec,
                                EnshwickCallFn callback,
