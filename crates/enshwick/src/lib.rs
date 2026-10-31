@@ -632,14 +632,14 @@ pub use enshwick_macros::service;
 /// per key.
 ///
 /// A key's constant is the key in upper case with `.` and `-` as `_`, such
-/// as `texts::SAFE_NAME` for `"safe.name"`; its doc shows the English text
-/// and the values it fills in. `texts::value` holds a constant per value
-/// name, such as `value::OWNER` for `{owner}`; `texts::ALL` lists every
-/// key; `texts::TOML` is the file. The build fails when a key has no `en`
-/// text, a key lacks a text in a language of
-/// [`Language::REQUIRED`](i18n::Language::REQUIRED), a table is no language
-/// code of [`i18n::Language`], or a translation fills in other values than
-/// its `en` text.
+/// as `texts::SAFE_NAME` for `"safe.name"`; its doc shows its text in each
+/// language and the values it fills in. `texts::value` holds a constant per
+/// value name, such as `value::OWNER` for `{owner}`; `texts::ALL` lists
+/// every key; `texts::TOML` is the file. The build fails when a text is
+/// empty; when a key lacks a text in a language of
+/// [`Language::REQUIRED`](i18n::Language::REQUIRED), and names those
+/// languages; when a table is no language code of [`i18n::Language`]; or
+/// when two texts of a key fill in different values.
 /// [`declare_mod!`] embeds the same file, which [`Load::texts`] serves.
 ///
 /// `texts!("<path>")` reads another file from the crate's root, for tests.
@@ -811,29 +811,82 @@ pub mod __private {
         false
     }
 
-    /// Whether `codes`, the languages a key has a text in, hold every
-    /// language of [`Language::REQUIRED`](crate::i18n::Language::REQUIRED),
-    /// for `texts!`.
+    /// Language codes joined by `], [`, built in a constant, for the
+    /// messages of `texts!`.
+    #[derive(Clone, Copy, Debug)]
+    pub struct Codes {
+        bytes: [u8; Self::CAPACITY],
+        len: usize,
+    }
+
+    impl Codes {
+        /// Room for every code of [`Language::ALL`](crate::i18n::Language::ALL)
+        /// with its separator.
+        const CAPACITY: usize = 512;
+
+        /// The codes as text, empty for none.
+        #[must_use]
+        pub const fn as_str(&self) -> &str {
+            match core::str::from_utf8(self.bytes.split_at(self.len).0) {
+                Ok(text) => text,
+                Err(_) => "",
+            }
+        }
+
+        /// `code` added after the others.
+        ///
+        /// # Panics
+        ///
+        /// When the codes outgrow [`Codes::CAPACITY`], at compile time.
+        const fn with(mut self, code: &str) -> Self {
+            let code = code.as_bytes();
+            let separator: &[u8] = if self.len == 0 { b"" } else { b"], [" };
+            assert!(
+                self.len + separator.len() + code.len() <= Self::CAPACITY,
+                "the language codes outgrow their buffer"
+            );
+            let mut i = 0;
+            while i < separator.len() {
+                self.bytes[self.len] = separator[i];
+                self.len += 1;
+                i += 1;
+            }
+            let mut i = 0;
+            while i < code.len() {
+                self.bytes[self.len] = code[i];
+                self.len += 1;
+                i += 1;
+            }
+            self
+        }
+    }
+
+    /// The languages of [`Language::REQUIRED`](crate::i18n::Language::REQUIRED)
+    /// that `codes`, the languages a key has a text in, lack, for `texts!`.
     #[must_use]
-    pub const fn has_required_languages(codes: &[&str]) -> bool {
+    pub const fn missing_languages(codes: &[&str]) -> Codes {
         let required = crate::i18n::Language::REQUIRED;
+        let mut missing = Codes {
+            bytes: [0; Codes::CAPACITY],
+            len: 0,
+        };
         let mut i = 0;
         while i < required.len() {
-            let wanted = required[i].code().as_bytes();
+            let wanted = required[i].code();
             let mut found = false;
             let mut j = 0;
             while j < codes.len() {
-                if same(codes[j].as_bytes(), wanted) {
+                if same(codes[j].as_bytes(), wanted.as_bytes()) {
                     found = true;
                 }
                 j += 1;
             }
             if !found {
-                return false;
+                missing = missing.with(wanted);
             }
             i += 1;
         }
-        true
+        missing
     }
 
     /// Whether two byte strings are equal, in a constant.
