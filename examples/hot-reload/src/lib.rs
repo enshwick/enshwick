@@ -29,10 +29,6 @@ pub struct HotReload {
 }
 
 impl Mod for HotReload {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.hot-reload", side: SERVER, reload: true)
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         load.on::<events::WorldSaved>(|()| enshwick::info!("saved: {GREETING}"))?;
         Ok(Self::default())
@@ -81,7 +77,10 @@ mod tests {
 
     #[test]
     fn the_mod_allows_reloads_and_stops_its_ticker() {
-        assert!(HotReload::manifest().flags.contains(ManifestFlags::RELOAD));
+        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
+        // `declare_mod!`, which no thread writes.
+        let manifest = unsafe { &*enshwick_mod_query() };
+        assert!(manifest.flags.contains(ManifestFlags::RELOAD));
         let loader = FakeHost::new().install();
         // SAFETY: both functions are the exports of this crate's `declare_mod!(HotReload)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };

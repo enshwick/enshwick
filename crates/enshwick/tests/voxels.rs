@@ -14,17 +14,19 @@ mod tests {
     struct Surveyor;
 
     impl Mod for Surveyor {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.surveyor", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = VOXELS.set(load.voxels());
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Surveyor);
+    enshwick::test::declare_mod!(
+        Surveyor,
+        r#"
+        id = "you.surveyor"
+        side = "server"
+        "#
+    );
 
     const ROCK: Voxel = Voxel::new(VoxelMaterial::Terrain(9), 255);
     const WALL: Voxel = Voxel::new(VoxelMaterial::Building(0x83), 0);

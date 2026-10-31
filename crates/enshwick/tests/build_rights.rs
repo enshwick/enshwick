@@ -15,17 +15,19 @@ mod tests {
     struct Builder;
 
     impl Mod for Builder {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.builder", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLD.set(load.world()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Builder);
+    enshwick::test::declare_mod!(
+        Builder,
+        r#"
+        id = "you.builder"
+        side = "server"
+        "#
+    );
 
     const WORLDER: u32 = 2;
     const BUILDER: u32 = 3;

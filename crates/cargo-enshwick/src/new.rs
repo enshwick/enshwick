@@ -213,9 +213,9 @@ fn files(
 ) -> anyhow::Result<Vec<(PathBuf, String)>> {
     let name = crate_name(id)?;
     let side = match side {
-        Side::Server => "SERVER",
-        Side::Client => "CLIENT",
-        Side::Both => "BOTH",
+        Side::Server => "server",
+        Side::Client => "client",
+        Side::Both => "both",
     };
     let shown = display_name(name);
     let description = format!("What {shown} does, in one sentence");
@@ -437,9 +437,12 @@ mod tests {
             "[workspace.dependencies]\nenshwick = \"={}\"\n",
             enshwick::VERSION
         )));
+        let table: toml::Table = cargo.parse().unwrap();
+        let metadata = &table["package"]["metadata"]["enshwick"];
+        assert_eq!(metadata["id"].as_str(), Some("you.street-lanterns"));
+        assert_eq!(metadata["side"].as_str(), Some("both"));
+        assert_eq!(metadata["name"].as_str(), Some("Street Lanterns"));
         let lib = text(&files, "src/lib.rs");
-        assert!(lib.contains("id: \"you.street-lanterns\",\n            side: BOTH,"));
-        assert!(lib.contains("name: \"Street Lanterns\","));
         assert!(lib.contains("declare_mod!(StreetLanterns)"));
         assert!(text(&files, "src/texts.toml").contains("\"mod.name\" = \"Street Lanterns\""));
         for (path, text) in &files {

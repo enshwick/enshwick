@@ -22,10 +22,6 @@ mod tests {
     struct Scholar;
 
     impl Mod for Scholar {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.scholar", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = KNOWLEDGE.set(load.knowledge());
             load.on::<KnowledgeChanged>(|changed| {
@@ -35,7 +31,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Scholar);
+    enshwick::test::declare_mod!(
+        Scholar,
+        r#"
+        id = "you.scholar"
+        side = "server"
+        "#
+    );
 
     fn info(id: KnowledgeId, kind: u8, scope: u8, value: u32, flags: u32) -> KnowledgeInfo {
         KnowledgeInfo {

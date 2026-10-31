@@ -31,10 +31,6 @@ mod tests {
     struct Cartographer;
 
     impl Mod for Cartographer {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.cartographer", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             *MAP.lock().unwrap() = Some(load.map()?);
             *ALTARS.lock().unwrap() = Some(load.altars()?);
@@ -42,7 +38,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Cartographer);
+    enshwick::test::declare_mod!(
+        Cartographer,
+        r#"
+        id = "you.cartographer"
+        side = "server"
+        "#
+    );
 
     /// A marker of the scene at `position`, as the loader reads it.
     fn marker(

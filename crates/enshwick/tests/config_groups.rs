@@ -100,10 +100,6 @@ mod moved {
     struct Mover;
 
     impl enshwick::Mod for Mover {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.mover", side: SERVER)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             load.migrate(
                 Migrations::new().add("2", |m| m.rename_setting("per_level", "count.per_level")),
@@ -112,7 +108,13 @@ mod moved {
         }
     }
 
-    enshwick::declare_mod!(Mover);
+    enshwick::test::declare_mod!(
+        Mover,
+        r#"
+        id = "you.mover"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_flat_setting_renames_into_a_group() {

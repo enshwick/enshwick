@@ -54,10 +54,6 @@ fn reward(next: Next<'_, extern "system" fn(u32) -> u32>, base: u32) -> u32 {
 }
 
 impl Mod for Bonus {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.bonus", side: SERVER)
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
         BONUS.store(settings.bonus, Ordering::Relaxed);
@@ -126,10 +122,6 @@ use enshwick::{Load, Mod, Off};
 struct Picky;
 
 impl Mod for Picky {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.picky", side: SERVER)
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         load.symbol("quest.reward")?;
         Ok(Self)
@@ -330,7 +322,8 @@ its mod without a restart:
 4. it runs the new copy's `init` with the same handle, links its hooks into
    the armed chains, and runs its `ready`.
 
-A mod opts in with `reload: true` in its `manifest!` and keeps a contract:
+A mod opts in with `reload = true` in its
+[manifest](concepts/loader-and-abi.md#the-manifest) and keeps a contract:
 
 - **Only what a reload can unlink.** Hooks on functions it hooked at start,
   events, lookups (symbols, constants, systems, fields, types), settings,

@@ -16,6 +16,11 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `cargo enshwick new` writes the mod's id, side and name into
+  `[package.metadata.enshwick]` of its `Cargo.toml`, and `pin` reads and
+  writes mods' build rows there, `[[package.metadata.enshwick.builds]]`,
+  instead of in `manifest!` (#759).
+
 - The `body` pick of `pin --patterns` writes a short window that finds the
   function and a hash of its whole code, never the code itself; a window
   over more than half of the function asks for `body:<rva>` (#710).

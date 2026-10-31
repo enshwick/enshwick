@@ -15,10 +15,6 @@ mod tests {
     struct Stacks;
 
     impl enshwick::Mod for Stacks {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.stacks", side: BOTH, join: true)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             let stacks = load.declare_change(
                 Target::Items(Items::Stackable),
@@ -37,7 +33,14 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Stacks);
+    enshwick::test::declare_mod!(
+        Stacks,
+        r#"
+        id = "you.stacks"
+        side = "both"
+        join = true
+        "#
+    );
 
     #[test]
     fn a_change_holds_no_value_until_set_and_takes_each_set_and_reset() {

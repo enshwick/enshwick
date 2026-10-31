@@ -9,10 +9,6 @@ mod tests {
     struct Alone;
 
     impl enshwick::Mod for Alone {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.alone", side: SERVER)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             let roofs = Rate::RecipeOutput(enshwick::content::recipes::RecipeKind::Roof);
             if load.rate(roofs).is_ok() {
@@ -23,7 +19,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Alone);
+    enshwick::test::declare_mod!(
+        Alone,
+        r#"
+        id = "you.alone"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_rate_clients_count_needs_a_mod_that_joins() {

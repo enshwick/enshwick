@@ -14,10 +14,6 @@ mod tests {
     struct Cheap;
 
     impl enshwick::Mod for Cheap {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.cheap", side: BOTH, join: true)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             load.change_recipes(
                 &RecipesChange::new(
@@ -56,7 +52,14 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Cheap);
+    enshwick::test::declare_mod!(
+        Cheap,
+        r#"
+        id = "you.cheap"
+        side = "both"
+        join = true
+        "#
+    );
 
     #[test]
     fn recipe_selections_reach_the_loader_in_order_with_their_sources() {

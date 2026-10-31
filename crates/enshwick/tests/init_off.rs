@@ -9,10 +9,6 @@ mod tests {
     struct Lanterns;
 
     impl Mod for Lanterns {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.lanterns", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _texts = load.texts(TEXTS)?;
             Err(Off::text("lanterns.off", &[("lit", "20")]))
@@ -22,7 +18,13 @@ mod tests {
     const TEXTS: &str = "[en]\n\"lanterns.off\" = \"{lit} lanterns are lit, too many.\"\n\
                          [uk]\n\"lanterns.off\" = \"Горить {lit} ліхтарів, забагато.\"\n";
 
-    enshwick::declare_mod!(Lanterns);
+    enshwick::test::declare_mod!(
+        Lanterns,
+        r#"
+        id = "you.lanterns"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn an_init_that_turns_the_mod_off_tells_the_loader_why_in_its_texts() {

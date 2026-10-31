@@ -232,22 +232,18 @@ beside it while users of it remain.
 ## Load order
 
 The publisher's `init` must run before the user's. Declare the publisher in
-the user's manifest:
+the user's [manifest](concepts/loader-and-abi.md#the-manifest):
 
-```rust
-let manifest = enshwick::manifest!(
-    id: "you.market-stalls",
-    side: SERVER,
-    requires: ["trading-post" => ">=0.1, <1.0"],
-);
-assert_eq!(manifest.dependency_count, 1);
+```toml
+[package.metadata.enshwick.requires]
+trading_post = { id = "you.trading-post", version = ">=0.1, <1.0" }
 ```
 
 `requires` loads the publisher first, and skips the user with a reason when
 the publisher is missing or its version is out of range. Before 1.0 every
 minor release may bump `0.x`, and `^0.1` refuses 0.2.0: name the whole series
-that publishes the fields the user needs, such as `>=0.1, <1.0`. `after:
-["id"]` orders without requiring: use it with `optional_service` or an event
+that publishes the fields the user needs, such as `>=0.1, <1.0`. `after`
+orders without requiring: use it with `optional_service` or an event
 the mod can do without.
 
 ## When the loader refuses

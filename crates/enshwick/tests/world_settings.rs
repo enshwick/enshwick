@@ -28,10 +28,6 @@ mod tests {
     struct Limits;
 
     impl Mod for Limits {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.limits", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let settings: Settings = load.config()?;
             LIMIT.store(settings.limit, Ordering::Relaxed);
@@ -44,7 +40,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Limits);
+    enshwick::test::declare_mod!(
+        Limits,
+        r#"
+        id = "you.limits"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn startup_settings_wait_for_the_next_world() {

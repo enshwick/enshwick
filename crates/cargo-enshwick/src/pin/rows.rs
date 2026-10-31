@@ -1,9 +1,10 @@
 //! Build rows: the loader's tables (read by [`super::table`]) and the
-//! `builds:` rows of each mod's `manifest!` as the sources spell them.
+//! `[[package.metadata.enshwick.builds]]` rows of each mod's `Cargo.toml`
+//! as the files spell them.
 //!
-//! The parser keeps the span of every value in a mod's source, so a new row
-//! is the old row's text with values replaced: comments and layout carry
-//! over.
+//! The parser keeps the span of every value in a mod's `Cargo.toml`, so a
+//! new row is the old row's text with values replaced: comments and layout
+//! carry over.
 
 use std::fmt::Write as _;
 use std::ops::Range;
@@ -24,7 +25,7 @@ pub(crate) enum Side {
 pub(crate) enum Table {
     /// A loader build table.
     Loader,
-    /// A mod's `manifest!` `builds:`.
+    /// A mod's `[[package.metadata.enshwick.builds]]`.
     Mod,
 }
 
@@ -59,6 +60,7 @@ pub(crate) struct Row {
     pub(crate) name: Option<String>,
     /// The row, from its first token to its closing brace.
     pub(crate) span: Range<usize>,
+    side_span: Range<usize>,
     guid_span: Range<usize>,
     age_span: Range<usize>,
     name_span: Option<Range<usize>>,
@@ -83,49 +85,195 @@ pub(crate) enum Edit {
     Note(String),
 }
 
-/// Every `builds:` row in a mod source.
+/// The key of a mod's build rows.
+const BUILDS: &str = "package.metadata.enshwick.builds";
+/// The header of a mod's build row, without whitespace.
+const ROW: &str = "[[package.metadata.enshwick.builds]]";
+/// The header of a row's symbols.
+const SYMBOLS: &str = "[package.metadata.enshwick.builds.symbols]";
+/// The header of a row's constants.
+const CONSTANTS: &str = "[package.metadata.enshwick.builds.constants]";
+
+/// Which part of a row a line belongs to.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Part {
+    Fields,
+    Symbols,
+    Constants,
+}
+
+/// Every build row in a mod's `Cargo.toml`, each a
+/// `[[package.metadata.enshwick.builds]]` table with its `side`, `guid` and
+/// `age`, then its `.symbols` and `.constants` tables of `"id" = value`
+/// lines.
 pub(crate) fn parse(src: &str) -> anyhow::Result<Vec<Row>> {
-    match find_code(src, 0, src.len(), "builds: [") {
-        Some(builds) => mod_rows(src, builds + "builds: ".len()),
-        None => Ok(Vec::new()),
+    let _toml: toml::Table = toml::from_str(src).context("not TOML")?;
+    let mut rows: Vec<Row> = Vec::new();
+    let mut open: Option<(Row, Part)> = None;
+    let mut at = 0;
+    for (index, line) in src.split_inclusive('\n').enumerate() {
+        let start = at;
+        at += line.len();
+        let body = line.trim_end_matches(['\n', '\r']);
+        let code = code_of(body);
+        let indent = body.len() - body.trim_start().len();
+        if code.starts_with('[') {
+            let header: String = code.chars().filter(|c| !c.is_whitespace()).collect();
+            let part = match header.as_str() {
+                ROW => {
+                    rows.extend(finished(open.take(), index)?);
+                    open = Some((mod_row(start + indent), Part::Fields));
+                    continue;
+                }
+                SYMBOLS => Part::Symbols,
+                CONSTANTS => Part::Constants,
+                other if other.trim_start_matches('[').starts_with(BUILDS) => {
+                    bail!("line {}: pin does not read the table `{code}`", index + 1)
+                }
+                _ => {
+                    rows.extend(finished(open.take(), index)?);
+                    continue;
+                }
+            };
+            match open.as_mut() {
+                Some((row, now)) => {
+                    *now = part;
+                    row.span.end = start + body.len();
+                }
+                None => bail!("line {}: `{code}` outside a build row", index + 1),
+            }
+            continue;
+        }
+        let Some((row, part)) = open.as_mut() else {
+            continue;
+        };
+        if code.is_empty() {
+            continue;
+        }
+        let at_line = |what: &str| format!("line {}: {what}", index + 1);
+        let equals = code
+            .find('=')
+            .with_context(|| at_line("a `key = value` expected"))?;
+        let key = code[..equals].trim();
+        let value_text = code[equals + 1..].trim();
+        let value_start = start
+            + indent
+            + equals
+            + 1
+            + (code[equals + 1..].len() - code[equals + 1..].trim_start().len());
+        let value_span = value_start..value_start + value_text.len();
+        match part {
+            Part::Fields => field(row, key, value_text, value_span)
+                .map_err(|why| anyhow!("line {}: {why}", index + 1))?,
+            Part::Symbols | Part::Constants => {
+                let id = key
+                    .strip_prefix('"')
+                    .and_then(|k| k.strip_suffix('"'))
+                    .with_context(|| at_line("an entry's id is quoted"))?;
+                let entry = Entry {
+                    id: id.to_owned(),
+                    value: number(value_text).with_context(|| at_line(id))?,
+                    value_span: value_span.clone(),
+                    span: start + indent..value_span.end,
+                    line: start..start + body.len(),
+                };
+                if *part == Part::Symbols {
+                    row.symbols.push(entry);
+                } else {
+                    row.constants.push(entry);
+                }
+            }
+        }
+        row.span.end = start + body.len();
+    }
+    rows.extend(finished(open, usize::MAX)?);
+    Ok(rows)
+}
+
+/// Reads the row field `key` with its value `value` at `span` into `row`.
+fn field(row: &mut Row, key: &str, value: &str, span: Range<usize>) -> anyhow::Result<()> {
+    match key {
+        "side" => {
+            row.side = match value {
+                "\"server\"" => Side::Server,
+                "\"client\"" => Side::Client,
+                _ => bail!("`side` is \"server\" or \"client\""),
+            };
+            row.side_span = span;
+        }
+        "guid" => {
+            let inner = value
+                .strip_prefix('"')
+                .and_then(|v| v.strip_suffix('"'))
+                .context("`guid` is a string")?;
+            inner.clone_into(&mut row.guid);
+            row.guid_span = span.start + 1..span.end - 1;
+        }
+        "age" => {
+            row.age = number(value).context("`age`")?;
+            row.age_span = span;
+        }
+        other => match other.split_once('.').map_or(other, |(head, _)| head) {
+            table @ ("symbols" | "constants") => bail!(
+                "pin reads `{table}` only as a `[package.metadata.enshwick.builds.{table}]` table"
+            ),
+            _ => bail!("a build row has no `{other}`"),
+        },
+    }
+    Ok(())
+}
+
+/// A mod row starting at `start`, its fields still to read.
+fn mod_row(start: usize) -> Row {
+    Row {
+        table: Table::Mod,
+        side: Side::Server,
+        guid: String::new(),
+        age: 0,
+        name: None,
+        span: start..start,
+        side_span: 0..0,
+        guid_span: 0..0,
+        age_span: 0..0,
+        name_span: None,
+        checks: Vec::new(),
+        symbols: Vec::new(),
+        constants: Vec::new(),
     }
 }
 
-fn mod_rows(src: &str, open: usize) -> anyhow::Result<Vec<Row>> {
-    let close = matching(src, open).context("an unclosed builds list")?;
-    let mut rows = Vec::new();
-    let mut at = skip_trivia(src, open + 1);
-    while at < close {
-        if src.as_bytes().get(at) == Some(&b',') {
-            at = skip_trivia(src, at + 1);
-            continue;
-        }
-        if src.as_bytes().get(at) != Some(&b'{') {
-            bail!("a build row expected at byte {at}");
-        }
-        let end = matching(src, at).context("an unclosed build row")?;
-        let side_at = field(src, at, end, "side: ")?;
-        let guid_at = field(src, at, end, "guid: \"")?;
-        let guid_span = guid_at..string_end(src, guid_at)?;
-        let age_at = field(src, at, end, "age: ")?;
-        let age_span = age_at..age_at + digits(src, age_at);
-        rows.push(Row {
-            table: Table::Mod,
-            side: side(src, side_at, "")?,
-            guid: src[guid_span.clone()].to_owned(),
-            age: number(&src[age_span.clone()])?,
-            name: None,
-            span: at..end + 1,
-            guid_span,
-            age_span,
-            name_span: None,
-            checks: Vec::new(),
-            symbols: optional_list(src, at, end, "symbols: [")?,
-            constants: optional_list(src, at, end, "constants: [")?,
-        });
-        at = skip_trivia(src, end + 1);
+/// The row that ends before the line at `index`, once it has its fields.
+fn finished(open: Option<(Row, Part)>, index: usize) -> anyhow::Result<Option<Row>> {
+    let Some((row, _)) = open else {
+        return Ok(None);
+    };
+    if row.side_span.is_empty() || row.guid_span.is_empty() || row.age_span.is_empty() {
+        let at = if index == usize::MAX {
+            "the end".to_owned()
+        } else {
+            format!("line {}", index + 1)
+        };
+        bail!("the build row before {at} needs `side`, `guid` and `age`");
     }
-    Ok(rows)
+    Ok(Some(row))
+}
+
+/// The line without its comment, trimmed; a `#` inside a basic or literal
+/// string stays, and `\"` does not end a basic string.
+fn code_of(line: &str) -> &str {
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for (at, c) in line.char_indices() {
+        match (quote, c) {
+            (Some('"'), _) if escaped => escaped = false,
+            (Some('"'), '\\') => escaped = true,
+            (Some(open), c) if c == open => quote = None,
+            (None, '"' | '\'') => quote = Some(c),
+            (None, '#') => return line[..at].trim(),
+            _ => {}
+        }
+    }
+    line.trim()
 }
 
 impl Row {
@@ -146,6 +294,7 @@ impl Row {
             age,
             name: Some(name),
             span: 0..0,
+            side_span: 0..0,
             guid_span: 0..0,
             age_span: 0..0,
             name_span: None,
@@ -183,19 +332,11 @@ impl Row {
                     }
                 }
                 Edit::Drop(note) => {
-                    let mut own = entry.span.clone();
-                    if src.as_bytes().get(own.end) == Some(&b',') {
-                        own.end += 1;
-                    }
-                    if src[entry.line.clone()].trim() == src[own.clone()].trim() {
-                        changes.push((entry.line.clone(), format!("{indent}// pin: {note}")));
-                    } else {
-                        changes.push((own, format!("/* pin: {note} */")));
-                    }
+                    changes.push((entry.line.clone(), format!("{indent}# pin: {note}")));
                 }
                 Edit::Note(note) => {
                     let at = entry.line.start;
-                    changes.push((at..at, format!("{indent}// pin: {note}\n")));
+                    changes.push((at..at, format!("{indent}# pin: {note}\n")));
                 }
             }
         }
@@ -210,21 +351,13 @@ impl Row {
         text
     }
 
-    /// Where a row placed after this one goes in the source, and what goes
-    /// before it there: a comma when this row has none, a line break and
-    /// the indentation of the line this row starts on.
+    /// Where a row placed after this one goes in the file, and what goes
+    /// before it there: a blank line and the indentation of the line this
+    /// row starts on.
     pub(crate) fn insertion(&self, src: &str) -> (usize, String) {
         let line_start = src[..self.span.start].rfind('\n').map_or(0, |i| i + 1);
-        let line = &src[line_start..self.span.start];
-        let indent = &line[..line.len() - line.trim_start().len()];
-        let mut at = self.span.end;
-        let comma = if src.as_bytes().get(at) == Some(&b',') {
-            at += 1;
-            ""
-        } else {
-            ","
-        };
-        (at, format!("{comma}\n{indent}"))
+        let indent = &src[line_start..self.span.start];
+        (self.span.end, format!("\n\n{indent}"))
     }
 }
 
@@ -249,85 +382,6 @@ pub(crate) fn guid_hex(guid: [u8; 16]) -> String {
     })
 }
 
-fn optional_list(src: &str, from: usize, to: usize, name: &str) -> anyhow::Result<Vec<Entry>> {
-    if find_code(src, from, to, name).is_some() {
-        list(src, from, to, name)
-    } else {
-        Ok(Vec::new())
-    }
-}
-
-fn list(src: &str, from: usize, to: usize, name: &str) -> anyhow::Result<Vec<Entry>> {
-    let open = field(src, from, to, name)? - 1;
-    let close = matching(src, open).with_context(|| format!("an unclosed {name}"))?;
-    let mut entries = Vec::new();
-    let mut at = skip_trivia(src, open + 1);
-    while at < close {
-        let bytes = src.as_bytes();
-        let entry_start = at;
-        if bytes.get(at) != Some(&b'"') {
-            bail!("{name}: an id expected at byte {at}");
-        }
-        let id_end = string_end(src, at + 1)?;
-        let id = src[at + 1..id_end].to_owned();
-        at = skip_trivia(src, id_end + 1);
-        let separator = "=>";
-        if !src[at..].starts_with(separator) {
-            bail!("{name}: {id} has no value");
-        }
-        let value_start = skip_trivia(src, at + separator.len());
-        let mut end = value_start;
-        let mut depth = 0usize;
-        while end < close {
-            match bytes.get(end) {
-                Some(b'/') if matches!(bytes.get(end + 1), Some(b'/' | b'*')) => break,
-                Some(b'(') => depth += 1,
-                Some(b')' | b',') if depth == 0 => break,
-                Some(b')') => depth -= 1,
-                _ => {}
-            }
-            end += 1;
-        }
-        let value_span = value_start..value_start + src[value_start..end].trim_end().len();
-        let value = evaluate(&src[value_span.clone()]).with_context(|| id.clone())?;
-        let line_start = src[..entry_start].rfind('\n').map_or(0, |i| i + 1);
-        let line_end = src[end..].find('\n').map_or(src.len(), |i| end + i);
-        entries.push(Entry {
-            id,
-            value,
-            value_span,
-            span: entry_start..end,
-            line: line_start..line_end,
-        });
-        at = end;
-        if bytes.get(skip_trivia(src, at)) == Some(&b',') {
-            at = skip_trivia(src, at) + 1;
-        }
-        at = skip_trivia(src, at);
-    }
-    Ok(entries)
-}
-
-/// Evaluates the constant expressions the rows use: literals, `<<` and `|`.
-fn evaluate(expr: &str) -> anyhow::Result<u64> {
-    let expr = expr.trim();
-    let expr = expr
-        .strip_prefix('(')
-        .and_then(|e| e.strip_suffix(')'))
-        .unwrap_or(expr);
-    expr.split('|').try_fold(0u64, |acc, part| {
-        let mut terms = part.split("<<");
-        let first: u64 = number(terms.next().unwrap_or_default())?;
-        let shifted = terms.try_fold(first, |value, shift| {
-            let by: u32 = number(shift)?;
-            value
-                .checked_shl(by)
-                .with_context(|| format!("a shift by {by} overflows"))
-        })?;
-        Ok(acc | shifted)
-    })
-}
-
 fn number<T: TryFrom<u64>>(text: &str) -> anyhow::Result<T> {
     let clean: String = text.trim().chars().filter(|&c| c != '_').collect();
     let value = match clean.strip_prefix("0x") {
@@ -338,214 +392,143 @@ fn number<T: TryFrom<u64>>(text: &str) -> anyhow::Result<T> {
     T::try_from(value).map_err(|_| anyhow!("`{}` is out of range", text.trim()))
 }
 
-fn side(src: &str, at: usize, prefix: &str) -> anyhow::Result<Side> {
-    let rest = &src[at..];
-    if rest.starts_with("SERVER") {
-        Ok(Side::Server)
-    } else if rest.starts_with("CLIENT") {
-        Ok(Side::Client)
-    } else {
-        Err(anyhow!("an unknown side after `{prefix}` at byte {at}"))
-    }
-}
-
-/// Where the text after `name` starts, inside `from..to`.
-fn field(src: &str, from: usize, to: usize, name: &str) -> anyhow::Result<usize> {
-    find_code(src, from, to, name)
-        .map(|at| at + name.len())
-        .with_context(|| format!("no `{name}` in the row at byte {from}"))
-}
-
-fn digits(src: &str, at: usize) -> usize {
-    src[at..].bytes().take_while(u8::is_ascii_digit).count()
-}
-
-fn string_end(src: &str, from: usize) -> anyhow::Result<usize> {
-    let bytes = src.as_bytes();
-    let mut at = from;
-    while let Some(&c) = bytes.get(at) {
-        match c {
-            b'\\' => at += 2,
-            b'"' => return Ok(at),
-            _ => at += 1,
-        }
-    }
-    Err(anyhow!("an unclosed string at byte {from}"))
-}
-
-/// Skips whitespace and comments, `//` and `/* */`.
-fn skip_trivia(src: &str, mut at: usize) -> usize {
-    loop {
-        let rest = &src[at.min(src.len())..];
-        let trimmed = rest.trim_start();
-        at += rest.len() - trimmed.len();
-        if trimmed.starts_with("//") || trimmed.starts_with("/*") {
-            at += comment_len(trimmed);
-        } else {
-            return at;
-        }
-    }
-}
-
-/// The length of the comment `text` starts with, to the end of its line
-/// for `//`, past its `*/` for `/* */`.
-fn comment_len(text: &str) -> usize {
-    if text.starts_with("/*") {
-        text.find("*/").map_or(text.len(), |end| end + 2)
-    } else {
-        text.find('\n').unwrap_or(text.len())
-    }
-}
-
-/// The first `needle` in `from..to` outside comments and strings.
-fn find_code(src: &str, from: usize, to: usize, needle: &str) -> Option<usize> {
-    let bytes = src.as_bytes();
-    let mut at = from;
-    while at < to {
-        if src[at..].starts_with(needle) {
-            return Some(at);
-        }
-        match bytes.get(at) {
-            Some(b'/') if matches!(bytes.get(at + 1), Some(b'/' | b'*')) => {
-                at += comment_len(&src[at..]);
-            }
-            Some(b'"') => at = string_end(src, at + 1).ok()? + 1,
-            _ => at += src[at..].chars().next().map_or(1, char::len_utf8),
-        }
-    }
-    None
-}
-
-/// The bracket that closes the one at `open`.
-fn matching(src: &str, open: usize) -> Option<usize> {
-    let bytes = src.as_bytes();
-    let mut depth = 0usize;
-    let mut at = open;
-    while let Some(&c) = bytes.get(at) {
-        match c {
-            b'(' | b'[' | b'{' => depth += 1,
-            b')' | b']' | b'}' => {
-                depth = depth.checked_sub(1)?;
-                if depth == 0 {
-                    return Some(at);
-                }
-            }
-            b'/' if matches!(bytes.get(at + 1), Some(b'/' | b'*')) => {
-                at += comment_len(&src[at..]);
-                continue;
-            }
-            b'"' => {
-                at = string_end(src, at + 1).ok()? + 1;
-                continue;
-            }
-            _ => {}
-        }
-        at += 1;
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const MOD: &str = r#"
-        enshwick::manifest!(
-            id: "you.trading-post",
-            side: BOTH,
-            builds: [
-                {
-                    side: SERVER,
-                    guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
-                    age: 387,
-                    symbols: [
-                        "trading-post.offer_test" => 0x9_e270,
-                        "trading-post.sort" => 0x19_8cf0,
-                    ],
-                    constants: ["trading-post.state_input" => 0x10],
-                },
-                {
-                    // The client's twin.
-                    side: CLIENT,
-                    guid: "69f0e9573b32c24a8838d3fff550824c",
-                    age: 410,
-                    symbols: ["trading-post.offer_test" => 0x2d_8295],
-                },
-            ],
-        )
+    const MOD: &str = r#"[package]
+name = "trading-post"
+
+[package.metadata.enshwick]
+id = "you.trading-post"
+side = "both"
+
+[[package.metadata.enshwick.builds]]
+side = "server"
+guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
+age = 387
+
+[package.metadata.enshwick.builds.symbols]
+"trading-post.offer_test" = 0x9_e270
+"trading-post.sort" = 0x19_8cf0 # the sort
+
+[package.metadata.enshwick.builds.constants]
+"trading-post.state_input" = 0x10
+
+# The client's twin.
+[[package.metadata.enshwick.builds]]
+side = "client"
+guid = "69f0e9573b32c24a8838d3fff550824c"
+age = 410
+
+[package.metadata.enshwick.builds.symbols]
+"trading-post.offer_test" = 0x2d_8295
+
+[lints]
+workspace = true
 "#;
 
     #[test]
     fn mod_rows_parse_with_and_without_constants() {
         let rows = parse(MOD).unwrap();
         assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].guid, "1c129660cd6efc4f9f0b21652d5ff2bf");
+        assert_eq!(rows[0].age, 387);
         assert_eq!(rows[0].symbols[1].value, 0x19_8cf0);
+        assert_eq!(&MOD[rows[0].symbols[1].value_span.clone()], "0x19_8cf0");
         assert_eq!(rows[0].constants[0].value, 0x10);
         assert_eq!(rows[1].side, Side::Client);
         assert!(rows[1].constants.is_empty());
         assert_eq!(rows[1].symbols[0].value, 0x2d_8295);
+        assert!(MOD[rows[1].span.clone()].ends_with("0x2d_8295"));
     }
 
     #[test]
-    fn an_entry_sharing_its_line_is_dropped_in_place() {
-        let row = &parse(MOD).unwrap()[1];
-        let edits = [(&row.symbols[0], Edit::Drop("gone".into()))];
+    fn a_dropped_entry_leaves_a_note_in_its_place() {
+        let row = &parse(MOD).unwrap()[0];
+        let edits = [(&row.symbols[1], Edit::Drop("gone".into()))];
         let text = row.render(MOD, &row.guid, row.age, None, &edits);
-        assert!(text.contains("symbols: [/* pin: gone */],"));
+        assert!(text.contains("\n# pin: gone\n"), "{text}");
+        let dropped = MOD.replace(&MOD[row.span.clone()], &text);
+        assert_eq!(parse(&dropped).unwrap()[0].symbols.len(), 1);
     }
 
     #[test]
-    fn a_row_goes_after_the_last_one_with_its_indentation() {
-        let rows = parse(MOD).unwrap();
-        let (at, lead) = rows[1].insertion(MOD);
-        assert_eq!(&MOD[at - 2..at], "},");
-        assert_eq!(lead, format!("\n{}", " ".repeat(16)));
-    }
-
-    /// Rows written `builds: [{ .. }, { .. }]`, the last without a comma.
-    const PACKED: &str = r#"
-        manifest!(
-            id: "you.my-mod",
-            builds: [{
-                side: CLIENT,
-                guid: "69f0e9573b32c24a8838d3fff550824c",
-                age: 410,
-                symbols: ["a.b" => 0x10],
-            }, {
-                side: SERVER,
-                guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
-                age: 387,
-                symbols: ["a.b" => 0x20],
-            }],
-        )
-"#;
-
-    #[test]
-    fn a_row_inserted_into_packed_rows_parses_back() {
+    fn a_row_inserted_after_another_parses_back() {
         for which in 0..2 {
-            let rows = parse(PACKED).unwrap();
+            let rows = parse(MOD).unwrap();
             let row = &rows[which];
-            let text = row.render(PACKED, &"ab".repeat(16), 1, None, &[]);
-            let (at, lead) = row.insertion(PACKED);
-            let mut out = PACKED.to_owned();
-            out.insert_str(at, &format!("{lead}{text},"));
+            let text = row.render(MOD, &"ab".repeat(16), 1, None, &[]);
+            let (at, lead) = row.insertion(MOD);
+            let mut out = MOD.to_owned();
+            out.insert_str(at, &format!("{lead}{text}"));
             let again = parse(&out).unwrap_or_else(|e| panic!("{e}\n{out}"));
             assert_eq!(again.len(), 3, "{out}");
             assert_eq!(again[which + 1].age, 1);
+            assert_eq!(again[which + 1].guid, "ab".repeat(16));
+            let ids = |row: &Row| row.symbols.iter().map(|s| s.id.clone()).collect::<Vec<_>>();
+            assert_eq!(ids(&again[which + 1]), ids(row));
         }
     }
 
     #[test]
-    fn notes_and_trailing_comments_parse_back() {
-        let src = "manifest!(builds: [{ side: SERVER, guid: \"00\", age: 1, symbols: [\n    \"x\" => 0x10 // the lookup\n], constants: [/* pin: gone */] }])";
-        let rows = parse(src).unwrap();
-        assert_eq!(rows[0].symbols[0].value, 0x10);
-        assert!(rows[0].constants.is_empty());
-        let row = &parse(MOD).unwrap()[1];
-        let edits = [(&row.symbols[0], Edit::Drop("gone".into()))];
-        let text = row.render(MOD, &row.guid, row.age, None, &edits);
-        let dropped = MOD.replace(&MOD[row.span.clone()], &text);
-        assert!(parse(&dropped).unwrap()[1].symbols.is_empty());
+    fn a_row_without_its_fields_is_an_error() {
+        let src = "[[package.metadata.enshwick.builds]]\nside = \"server\"\nage = 1\n";
+        assert!(parse(src).is_err());
+        let src = "[[package.metadata.enshwick.builds]]\nside = \"both\"\n";
+        assert!(parse(src).is_err());
+    }
+
+    #[test]
+    fn a_row_without_a_side_is_an_error_never_a_server_row() {
+        let src = "[[package.metadata.enshwick.builds]]\nguid = \"ab\"\nage = 1\n";
+        let why = parse(src).unwrap_err().to_string();
+        assert!(why.contains("needs `side`"), "{why}");
+    }
+
+    #[test]
+    fn inline_symbols_are_refused_with_the_table_form_named() {
+        for symbols in ["symbols = { \"a.b\" = 0x10 }", "symbols.\"a.b\" = 0x10"] {
+            let src = format!(
+                "[[package.metadata.enshwick.builds]]\nside = \"server\"\nguid = \"ab\"\nage = 1\n{symbols}\n"
+            );
+            let why = parse(&src).unwrap_err().to_string();
+            assert!(
+                why.contains("[package.metadata.enshwick.builds.symbols]"),
+                "{why}"
+            );
+        }
+    }
+
+    #[test]
+    fn headers_with_spaces_read_as_the_plain_headers() {
+        let spaced = MOD
+            .replace(
+                "[[package.metadata.enshwick.builds]]",
+                "[[ package.metadata.enshwick.builds ]]",
+            )
+            .replace(
+                "[package.metadata.enshwick.builds.symbols]",
+                "[ package.metadata.enshwick.builds.symbols ]",
+            );
+        let rows = parse(&spaced).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].symbols.len(), 2);
+        assert_eq!(rows[1].symbols[0].value, 0x2d_8295);
+    }
+
+    #[test]
+    fn an_unknown_table_under_the_build_rows_is_an_error() {
+        let src = "[[package.metadata.enshwick.builds]]\nside = \"server\"\nguid = \"ab\"\nage = 1\n\n[package.metadata.enshwick.builds.checks]\n\"a.b\" = 1\n";
+        let why = parse(src).unwrap_err().to_string();
+        assert!(why.contains("does not read the table"), "{why}");
+    }
+
+    #[test]
+    fn a_hash_in_a_string_is_no_comment() {
+        assert_eq!(code_of(r##"guid = "a\"#b" # note"##), r##"guid = "a\"#b""##);
+        assert_eq!(code_of(r"name = 'a\' # note"), r"name = 'a\'");
+        assert_eq!(code_of("name = 'a#b' # note"), "name = 'a#b'");
     }
 
     #[test]
@@ -558,18 +541,14 @@ mod tests {
     }
 
     #[test]
-    fn expressions_evaluate_and_bad_ones_are_errors() {
-        assert_eq!(evaluate("0x10 << 32 | 0xd8").ok(), Some(0x10_0000_00d8));
-        assert_eq!(
-            evaluate("0x7095_8d48_b065_8b4c").ok(),
-            Some(0x7095_8d48_b065_8b4c)
-        );
-        assert_eq!(evaluate("32").ok(), Some(32));
-        assert!(evaluate("SIZE * 2").is_err());
+    fn numbers_read_in_hex_or_decimal_with_separators() {
+        assert_eq!(number::<u64>("0x10_0000_00d8").ok(), Some(0x10_0000_00d8));
+        assert_eq!(number::<u64>("32").ok(), Some(32));
+        assert!(number::<u64>("SIZE").is_err());
     }
 
     #[test]
-    fn sources_without_rows_have_none() {
-        assert_eq!(parse("fn main() {}").ok(), Some(Vec::new()));
+    fn a_manifest_without_rows_has_none() {
+        assert_eq!(parse("[package]\nname = \"a\"\n").ok(), Some(Vec::new()));
     }
 }

@@ -31,10 +31,6 @@ mod tests {
     }
 
     impl Mod for Holders {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.holders", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             Ok(Self {
                 world: load.world()?,
@@ -42,7 +38,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Holders);
+    enshwick::test::declare_mod!(
+        Holders,
+        r#"
+        id = "you.holders"
+        side = "server"
+        "#
+    );
 
     fn world() -> FakeHost {
         FakeHost::new()

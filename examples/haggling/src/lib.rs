@@ -88,14 +88,6 @@ fn rules() -> &'static ArcSwap<Rules> {
 pub struct Haggling;
 
 impl Mod for Haggling {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(
-            id: "you.haggling",
-            side: SERVER,
-            recommends: ["you.trading-post" => ""],
-        )
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
         rules().store(Arc::new(Rules::from_settings(&settings)));

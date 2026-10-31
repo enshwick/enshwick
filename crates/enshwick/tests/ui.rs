@@ -18,10 +18,6 @@ mod tests {
     struct Panel;
 
     impl Mod for Panel {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.panel", side: CLIENT)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = UI.set(load.ui()?);
             let mut open = true;
@@ -54,7 +50,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Panel);
+    enshwick::test::declare_mod!(
+        Panel,
+        r#"
+        id = "you.panel"
+        side = "client"
+        "#
+    );
 
     #[test]
     fn a_window_draws_each_frame_takes_inputs_and_closes() {

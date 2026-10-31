@@ -13,17 +13,19 @@ mod tests {
     struct Shared;
 
     impl Mod for Shared {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.shared", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLDS.set(Worlds::resolve(load)?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Shared);
+    enshwick::test::declare_mod!(
+        Shared,
+        r#"
+        id = "you.shared"
+        side = "server"
+        "#
+    );
 
     /// A system context whose descriptor names `world` at 0x30.
     fn context(world: u64) -> (Box<[u64; 8]>, Box<[u64; 1]>) {

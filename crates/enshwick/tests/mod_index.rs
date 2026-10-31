@@ -9,16 +9,18 @@ mod tests {
     struct Finder;
 
     impl Mod for Finder {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.finder", side: SERVER)
-        }
-
         fn init(_load: &mut Load<'_>) -> Result<Self, Off> {
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Finder);
+    enshwick::test::declare_mod!(
+        Finder,
+        r#"
+        id = "you.finder"
+        side = "server"
+        "#
+    );
 
     fn info(id: &'static str) -> ModInfo {
         ModInfo {

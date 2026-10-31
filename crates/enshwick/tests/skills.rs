@@ -11,10 +11,6 @@ mod tests {
     struct Flyer;
 
     impl Mod for Flyer {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.flyer", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on_skill(Skill::AirborneArchitect, |check| {
                 (check.gate == SkillGate::FlyMode).then_some(true)
@@ -23,7 +19,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Flyer);
+    enshwick::test::declare_mod!(
+        Flyer,
+        r#"
+        id = "you.flyer"
+        side = "both"
+        "#
+    );
 
     fn check(node: u32) -> SkillCheck {
         SkillCheck {

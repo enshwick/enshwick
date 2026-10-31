@@ -19,10 +19,6 @@ mod tests {
     }
 
     impl Mod for Rates {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.rates", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let settings: Settings = load.config()?;
             Ok(Self {
@@ -31,7 +27,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Rates);
+    enshwick::test::declare_mod!(
+        Rates,
+        r#"
+        id = "you.rates"
+        side = "server"
+        "#
+    );
 
     fn started_with(settings: &str) -> Option<u32> {
         let loader = FakeHost::new().settings(settings).install();

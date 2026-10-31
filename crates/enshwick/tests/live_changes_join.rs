@@ -11,10 +11,6 @@ mod tests {
     struct Alone;
 
     impl enshwick::Mod for Alone {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.alone", side: SERVER)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             let target = Target::Items(Items::Stackable);
             if load
@@ -29,7 +25,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Alone);
+    enshwick::test::declare_mod!(
+        Alone,
+        r#"
+        id = "you.alone"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn a_change_players_read_needs_a_mod_that_joins_and_loot_does_not() {

@@ -93,17 +93,19 @@ mod tests {
     struct Tuning;
 
     impl Mod for Tuning {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.tuning", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = SETTINGS.set(load.game_settings()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Tuning);
+    enshwick::test::declare_mod!(
+        Tuning,
+        r#"
+        id = "you.tuning"
+        side = "server"
+        "#
+    );
 
     fn defaults() -> Vec<u8> {
         let mut bytes = vec![0u8; 144];

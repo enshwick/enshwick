@@ -176,10 +176,6 @@ use enshwick::migrations::Migrations;
 struct Lockers;
 
 impl enshwick::Mod for Lockers {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.lockers", side: SERVER)
-    }
-
     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
         load.migrate(Migrations::new().add("2", |m| m.rename_setting("cost", "cost_multiplier")))?;
         Ok(Self)

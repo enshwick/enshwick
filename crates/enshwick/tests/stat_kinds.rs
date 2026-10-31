@@ -30,10 +30,6 @@ mod tests {
     struct Rpg;
 
     impl Mod for Rpg {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "test.fake", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let luck = load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
             let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
@@ -65,7 +61,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Rpg);
+    enshwick::test::declare_mod!(
+        Rpg,
+        r#"
+        id = "test.fake"
+        side = "server"
+        "#
+    );
 
     fn close(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-5

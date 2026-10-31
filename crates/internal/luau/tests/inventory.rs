@@ -23,10 +23,6 @@ mod tests {
     struct Luau;
 
     impl Mod for Luau {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.luau", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let scripts = CASE.lock().unwrap().take().unwrap();
             let _runtime =
@@ -35,7 +31,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Luau);
+    enshwick::test::declare_mod!(
+        Luau,
+        r#"
+        id = "you.luau"
+        side = "server"
+        "#
+    );
 
     /// A chest with one sub-inventory of two stacks.
     fn world() -> FakeHost {

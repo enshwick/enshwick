@@ -33,10 +33,6 @@ mod tests {
     struct Greeter;
 
     impl Mod for Greeter {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.greeter", side: BOTH, join: true)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let (settings, values) = load.table_config(schema())?;
             *VALUES.lock().unwrap() = Some(values);
@@ -45,7 +41,14 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Greeter);
+    enshwick::test::declare_mod!(
+        Greeter,
+        r#"
+        id = "you.greeter"
+        side = "both"
+        join = true
+        "#
+    );
 
     fn value(key: &str) -> toml::Value {
         VALUES.lock().unwrap().as_ref().unwrap()[key].clone()

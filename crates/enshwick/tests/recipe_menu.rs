@@ -23,10 +23,6 @@ mod tests {
     struct Menu;
 
     impl Mod for Menu {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.menu", side: BOTH)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let bench = load.add_workshop(NewWorkshop {
                 like: stations::WORKBENCH,
@@ -66,7 +62,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Menu);
+    enshwick::test::declare_mod!(
+        Menu,
+        r#"
+        id = "you.menu"
+        side = "both"
+        "#
+    );
 
     /// The vanilla registry: the chest's recipe and a block's, both at the
     /// Carpenter.

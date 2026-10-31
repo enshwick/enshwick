@@ -15,10 +15,6 @@ mod tests {
     struct Quiet;
 
     impl Mod for Quiet {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.quiet", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let waits =
                 load.on_loop_wait(|wait| WAITS.lock().unwrap().push((wait.ms, wait.left_ns)))?;
@@ -33,7 +29,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Quiet);
+    enshwick::test::declare_mod!(
+        Quiet,
+        r#"
+        id = "you.quiet"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn the_loader_runs_the_handlers_at_every_place_the_build_has() {

@@ -18,17 +18,19 @@ mod tests {
     struct Mason;
 
     impl Mod for Mason {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.mason", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLD.set(load.world()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Mason);
+    enshwick::test::declare_mod!(
+        Mason,
+        r#"
+        id = "you.mason"
+        side = "server"
+        "#
+    );
 
     const SHAPE: ItemId = ItemId::new(10);
     const STONE: ItemId = ItemId::new(20);

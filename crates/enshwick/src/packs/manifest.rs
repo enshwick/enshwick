@@ -27,7 +27,7 @@ pub enum PackSide {
 }
 
 /// A pack folder's `pack.toml`: what the loader reads before it runs the
-/// pack, as a mod's [`manifest!`](crate::manifest) says it for a DLL.
+/// pack, as a mod's `[package.metadata.enshwick]` says it for a DLL.
 ///
 /// # Examples
 ///

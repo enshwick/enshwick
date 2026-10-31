@@ -77,10 +77,6 @@ mod clamping {
     struct Clamped;
 
     impl enshwick::Mod for Clamped {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.clamped", side: SERVER)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             let rules: Rules = load.config()?;
             *READ
@@ -90,7 +86,13 @@ mod clamping {
         }
     }
 
-    enshwick::declare_mod!(Clamped);
+    enshwick::test::declare_mod!(
+        Clamped,
+        r#"
+        id = "you.clamped"
+        side = "server"
+        "#
+    );
 
     #[test]
     fn values_outside_their_range_are_held_to_it_with_a_warning() {

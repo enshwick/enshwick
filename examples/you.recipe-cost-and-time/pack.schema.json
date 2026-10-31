@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PackManifest",
-  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's [`manifest!`](crate::manifest) says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\n\n[requires]\n\"you.trading-post\" = \">=0.5, <1.0\"\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.side, PackSide::Both);\nassert!(manifest.join);\nassert_eq!(manifest.requires[\"you.trading-post\"], \">=0.5, <1.0\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
+  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's `[package.metadata.enshwick]` says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\n\n[requires]\n\"you.trading-post\" = \">=0.5, <1.0\"\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.side, PackSide::Both);\nassert!(manifest.join);\nassert_eq!(manifest.requires[\"you.trading-post\"], \">=0.5, <1.0\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
   "type": "object",
   "properties": {
     "authors": {

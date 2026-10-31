@@ -10,10 +10,6 @@ mod tests {
     struct Stacks;
 
     impl enshwick::Mod for Stacks {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.stacks", side: BOTH, join: true)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             let materials = Items::Category(ItemCategoryMask::MATERIALS);
             load.change_items(
@@ -38,7 +34,14 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Stacks);
+    enshwick::test::declare_mod!(
+        Stacks,
+        r#"
+        id = "you.stacks"
+        side = "both"
+        join = true
+        "#
+    );
 
     #[test]
     fn the_selections_reach_the_loader_in_order_with_their_sources() {

@@ -21,10 +21,6 @@ mod tests {
     struct Rules;
 
     impl Mod for Rules {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.rules", side: BOTH, join: true)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let settings: Settings = load.config()?;
             RULE.store(settings.rule, Ordering::Relaxed);
@@ -35,7 +31,14 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Rules);
+    enshwick::test::declare_mod!(
+        Rules,
+        r#"
+        id = "you.rules"
+        side = "both"
+        join = true
+        "#
+    );
 
     fn rule() -> bool {
         RULE.load(Ordering::Relaxed)

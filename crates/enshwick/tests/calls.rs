@@ -69,10 +69,6 @@ mod tests {
     struct Post;
 
     impl Mod for Post {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.trading-post", side: SERVER, calls: [PriceOf])
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.serve_call(|input: &PriceOf| {
                 assert!(input.item != 13, "an unlucky item");
@@ -100,7 +96,14 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Post);
+    enshwick::test::declare_mod!(
+        Post,
+        r#"
+        id = "you.trading-post"
+        side = "server"
+        "#,
+        calls: [PriceOf]
+    );
 
     fn start() -> enshwick::test::Installed {
         let loader = enshwick::test::FakeHost::new().install();
@@ -200,8 +203,11 @@ mod tests {
 
     #[test]
     fn the_manifest_carries_the_served_call_s_schema() {
-        // SAFETY: `manifest!` keeps its schema text for the process.
-        let text = unsafe { Post::manifest().points.as_str() }.unwrap_or("");
+        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
+        // `declare_mod!`, which no thread writes.
+        let manifest = unsafe { &*enshwick_mod_query() };
+        // SAFETY: `declare_mod!` points the schema at static text.
+        let text = unsafe { manifest.points.as_str() }.unwrap_or("");
         let table: toml::Table = toml::from_str(text).unwrap();
         let call = &table["call"][0];
         assert_eq!(call["name"].as_str(), Some("you.trading-post:price-of"));

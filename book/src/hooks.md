@@ -194,10 +194,6 @@ fn max_altars(next: Next<'_, unsafe extern "system" fn(u64, u32) -> u8>, balanci
 }
 
 impl Mod for MyMod {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "you.my-mod", side: BOTH, join: true)
-    }
-
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let max_altars = load.symbol("building.max_altars")?;
         // SAFETY: the game's altar limit has the type `MAX_ALTARS` declares.

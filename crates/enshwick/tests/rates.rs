@@ -14,10 +14,6 @@ mod tests {
     struct Rates;
 
     impl enshwick::Mod for Rates {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.rates", side: BOTH, join: true)
-        }
-
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             let combat = load.rate(COMBAT)?;
             if combat.set(250.0) != Err(RateError::OutOfRange(250.0)) {
@@ -33,7 +29,14 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Rates);
+    enshwick::test::declare_mod!(
+        Rates,
+        r#"
+        id = "you.rates"
+        side = "both"
+        join = true
+        "#
+    );
 
     #[test]
     fn rates_take_their_factors_and_a_missing_one_stays_off_alone() {

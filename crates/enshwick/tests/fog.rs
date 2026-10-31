@@ -15,17 +15,19 @@ mod tests {
     struct Minimap;
 
     impl Mod for Minimap {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.minimap", side: CLIENT)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             *FOG.lock().unwrap() = Some(load.fog_of_war()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Minimap);
+    enshwick::test::declare_mod!(
+        Minimap,
+        r#"
+        id = "you.minimap"
+        side = "client"
+        "#
+    );
 
     /// A fog of 4 × 3 pixels of 8 m, its pixel at (x, y) holding
     /// `10 * y + x`.

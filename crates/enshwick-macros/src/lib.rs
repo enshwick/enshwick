@@ -13,9 +13,32 @@ use syn::{
     PathArguments, Type, parse_macro_input,
 };
 
+mod declare;
+
 use crate::config::expand_config;
 use crate::shape::expand_layout;
 use crate::shape::{expand_shape, toml_string};
+
+/// Exports a mod type from its DLL, with the manifest built from the
+/// `[package.metadata.enshwick]` table of the crate's `Cargo.toml`. Examples
+/// are on `enshwick::declare_mod`.
+#[proc_macro]
+pub fn declare_mod(input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(input as declare::Args);
+    declare::expand(&args)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Exports a mod type with its metadata given as TOML, so a test binary may
+/// declare several mods. Examples are on `enshwick::test::declare_mod`.
+#[proc_macro]
+pub fn declare_test_mod(input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(input as declare::Args);
+    declare::expand_test(&args)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
 
 /// Implements `enshwick::config::Config` for a struct with named fields.
 ///
@@ -243,7 +266,7 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
 
 /// The `SCHEMA` of a mod event: its `[[event]]` table with the layout
 /// hashes, then the `[[type]]` tables of its data. A field whose type a
-/// schema cannot describe fails the build only where `manifest!` lists the
+/// schema cannot describe fails the build only where `declare_mod!` lists the
 /// event, since the text is built there.
 fn event_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -> proc_macro2::TokenStream {
     let shape = quote!(::enshwick::Shape);

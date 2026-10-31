@@ -19,17 +19,19 @@ mod tests {
     struct Pins;
 
     impl Mod for Pins {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.pins", side: CLIENT)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = UI.set(load.ui()?);
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Pins);
+    enshwick::test::declare_mod!(
+        Pins,
+        r#"
+        id = "you.pins"
+        side = "client"
+        "#
+    );
 
     const DUNGEON: u32 = 0x1d2c_3b4a;
     const ALTAR: u32 = 0x0a0b_0c0d;

@@ -139,10 +139,6 @@ mod tests {
     struct Refusals;
 
     impl Mod for Refusals {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.refusals", side: SERVER)
-        }
-
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let host = load.host();
             let answers = ask(host.api(), host.handle());
@@ -151,7 +147,13 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Refusals);
+    enshwick::test::declare_mod!(
+        Refusals,
+        r#"
+        id = "you.refusals"
+        side = "server"
+        "#
+    );
 
     fn started() -> Installed {
         let loader = FakeHost::new().code(&CODE).install();

@@ -13,7 +13,7 @@
 //! `mods/enshwick/mods.toml` switch one off. With no live link, asking a
 //! point is one atomic load.
 //!
-//! The owner lists its points in [`manifest!`](crate::manifest), which puts
+//! The owner lists its points in [`declare_mod!`](crate::declare_mod), which puts
 //! their schemas into the manifest; another mod writes its definition of a
 //! point from there with `cargo enshwick point <owner id>:<point>`.
 

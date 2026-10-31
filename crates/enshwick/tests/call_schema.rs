@@ -61,17 +61,49 @@ pub struct Fee {
 #[path = "../../cargo-enshwick/tests/fixtures/stalls_rent.rs"]
 pub mod generated;
 
+/// The mod that serves the calls.
+mod stalls {
+    #[expect(
+        dead_code,
+        reason = "the test reads its manifest alone; the mod never starts"
+    )]
+    pub(super) struct Stalls;
+
+    impl enshwick::Mod for Stalls {
+        fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        Stalls,
+        r#"
+        id = "you.stalls"
+        side = "server"
+        "#,
+        calls: [super::Rent, super::Fee]
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use enshwick::services::Call;
 
-    use super::{Deal, Fee, Rent, Stall, generated};
+    use super::{Deal, Rent, Stall, generated};
 
     #[test]
     fn the_schema_is_the_one_cargo_enshwick_is_tested_with() {
-        let manifest = enshwick::manifest!(id: "you.stalls", side: SERVER, version: "1.2.0", calls: [Rent, Fee]);
-        // SAFETY: the manifest's static text.
-        let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
+        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
+        // `declare_mod!`, which no thread writes.
+        let manifest = unsafe { &*super::stalls::enshwick_mod_query() };
+        // SAFETY: `declare_mod!` points the schema at static text.
+        let text = unsafe { manifest.points.as_str() }
+            .unwrap_or_default()
+            .replacen(
+                &format!("version = \"{}\"", enshwick::VERSION),
+                "version = \"1.2.0\"",
+                1,
+            );
         assert_eq!(
             text,
             include_str!("../../cargo-enshwick/tests/fixtures/stalls.calls.toml")
