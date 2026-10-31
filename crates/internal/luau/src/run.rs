@@ -369,13 +369,13 @@ pub enum StartError {
     Missing,
     /// The sandbox did not build.
     #[error("the Luau sandbox: {0}")]
-    Sandbox(#[source] mlua::Error),
+    Sandbox(mlua::Error),
     /// The `enshwick` API did not build.
     #[error("the Luau API: {0}")]
-    Api(#[source] mlua::Error),
+    Api(mlua::Error),
     /// The script failed: the file, the line and the message.
     #[error("{}", describe(.0))]
-    Script(#[source] mlua::Error),
+    Script(mlua::Error),
     /// A call the script made panicked.
     #[error("{MAIN} panicked in a call it made")]
     Panicked,
