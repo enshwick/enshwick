@@ -2,5 +2,6 @@
 //! into one binary.
 
 mod calls;
+mod deps;
 mod inventory;
 mod scripts;

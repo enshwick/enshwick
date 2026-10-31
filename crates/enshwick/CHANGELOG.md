@@ -23,6 +23,11 @@ Each entry names the pull request that made the change.
   does in a Rust mod; the alias of a mod the pack does not require is a
   problem at its line. A full content id still works (#785).
 
+- A Luau mod's `enshwick.define_event` takes a local name, `greeted` for
+  `<id>:greeted`, and `enshwick.deps` gives each mod of `requires`, `after`
+  and `recommends` in `pack.toml` by its alias, with its `id` and
+  `running()` (#788).
+
 - **Breaking:** a mod's calls, points, services and events are its own until
   `exports` in `[package.metadata.enshwick]`, or in a pack's `pack.toml`,
   lists their local names. The loader refuses another mod everything else of

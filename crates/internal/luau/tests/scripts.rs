@@ -884,6 +884,27 @@ mod tests {
     }
 
     #[test]
+    fn a_script_defines_its_event_by_a_local_name() {
+        let (loader, status) = run_full(
+            r#"local greeted = enshwick.define_event({ name = "greeted", fields = { { name = "n", read = "u32" } } })
+            local ok, err = pcall(enshwick.define_event, { name = "Waved!", fields = {} })
+            print(`bad name {ok} {err}`)
+            enshwick.on("WorldSaved", function()
+                greeted.send({ n = 3 })
+            end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let _handled = loader.raise::<WorldSaved>(&());
+        assert_eq!(loader.sent_events(), ["you.luau:greeted"]);
+        assert!(logged(&loader, "bad name false"), "{:?}", loader.logs());
+        assert!(logged(&loader, "is no local name"), "{:?}", loader.logs());
+    }
+
+    #[test]
     fn a_reload_keeps_a_defined_event_and_a_new_one_waits() {
         let (loader, status) = run_full(
             r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "u32" } } })"#,

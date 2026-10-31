@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use arc_swap::{ArcSwap, ArcSwapOption};
 use enshwick::__private::Relock as _;
-use enshwick::abi::{Event, Level};
+use enshwick::abi::{Event, Level, Relation};
 use enshwick::events::Ticked;
 use enshwick::script::{self, EventKind, Opened, Signature, Value};
 use enshwick::{Host, Load, Off};
@@ -161,6 +161,8 @@ pub(crate) struct Inner {
     /// This mod's own pointer, for the functions and callbacks it hands out.
     me: Weak<Inner>,
     id: String,
+    /// The mods `enshwick.deps` names, each an alias and a mod id.
+    deps: Vec<(String, String)>,
     host: Host,
     limits: Limits,
     /// Every namespace the game build offers, opened for this mod.
@@ -410,6 +412,62 @@ pub fn start(
     settings: Option<enshwick::config::Schema>,
     limits: Limits,
 ) -> Result<Runtime, Off> {
+    begin(load, id, scripts, settings, Vec::new(), limits)
+}
+
+/// Starts the scripts of the pack `manifest` describes, as [`start`] does,
+/// with the settings it declares and its dependencies of `requires`,
+/// `after` and `recommends` in `enshwick.deps`, by alias.
+///
+/// # Errors
+///
+/// As [`start`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::packs::PackManifest;
+/// use enshwick_luau::{Limits, Scripts};
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     let manifest = PackManifest::parse("id = \"you.hello\"\nversion = \"1.0.0\"\n[after]\nlockers = \"you.lockers\"\n")
+///         .map_err(|e| enshwick::Off::new(e.to_string()))?;
+///     let main = "assert(enshwick.deps.lockers.id == 'you.lockers')";
+///     enshwick_luau::start_pack(load, &manifest, Scripts::new().with("main.luau", main), Limits::default())?;
+///     Ok(())
+/// }
+/// ```
+pub fn start_pack(
+    load: &mut Load<'_>,
+    manifest: &enshwick::packs::PackManifest,
+    scripts: Scripts,
+    limits: Limits,
+) -> Result<Runtime, Off> {
+    let deps = manifest
+        .dependencies()
+        .filter(|(relation, _, _)| *relation != Relation::BREAKS)
+        .map(|(_, alias, dependency)| (alias.to_owned(), dependency.id.clone()))
+        .collect();
+    begin(
+        load,
+        &manifest.id,
+        scripts,
+        manifest.settings_schema(),
+        deps,
+        limits,
+    )
+}
+
+/// What [`start`] and [`start_pack`] do, with the dependencies `deps`, each
+/// an alias and a mod id.
+fn begin(
+    load: &mut Load<'_>,
+    id: &str,
+    scripts: Scripts,
+    settings: Option<enshwick::config::Schema>,
+    deps: Vec<(String, String)>,
+    limits: Limits,
+) -> Result<Runtime, Off> {
     let host = load.host();
     let mut namespaces = Vec::new();
     for namespace in script::NAMESPACES {
@@ -431,6 +489,7 @@ pub fn start(
     let inner = Arc::new_cyclic(|me| Inner {
         me: Weak::clone(me),
         id: id.to_owned(),
+        deps,
         host,
         limits,
         namespaces,
@@ -738,6 +797,25 @@ impl Inner {
         }
     }
 
+    /// `enshwick.deps`: a read-only table per dependency alias, with the
+    /// mod's `id` and `running()`, whether it runs now.
+    fn deps_table(&self, lua: &Lua) -> mlua::Result<Table> {
+        let deps = lua.create_table_with_capacity(0, self.deps.len())?;
+        for (alias, id) in &self.deps {
+            let dep = lua.create_table_with_capacity(0, 2)?;
+            dep.raw_set("id", id.as_str())?;
+            let id = id.clone();
+            dep.raw_set(
+                "running",
+                lua.create_function(move |_, ()| Ok(enshwick::mods::is_running(&id)))?,
+            )?;
+            dep.set_readonly(true);
+            deps.raw_set(alias.as_str(), dep)?;
+        }
+        deps.set_readonly(true);
+        Ok(deps)
+    }
+
     /// Puts `define_event` and `caller` into `api`: what the scripts offer
     /// other mods and ask of them, settled at start.
     fn mod_functions(&self, lua: &Lua, api: &Table) -> mlua::Result<()> {
@@ -896,6 +974,7 @@ impl Inner {
                 crate::bridge::toml_to_lua(lua, &toml::Value::Table((**values).clone()))
             })?,
         )?;
+        api.raw_set("deps", self.deps_table(lua)?)?;
         self.subscription_functions(vm, &api)?;
         self.mod_functions(lua, &api)?;
         let globals = lua.globals();
@@ -1019,7 +1098,17 @@ impl Inner {
     /// the loader once `main.luau` ran at start, or the one defined then
     /// for a reload.
     fn define_event(&self, lua: &Lua, event: &Table) -> mlua::Result<Table> {
-        let desc = EventDesc::parse_definition(event)?;
+        let mut desc = EventDesc::parse_definition(event)?;
+        if !desc.event.name.contains(':') {
+            let full = format!("{}:{}", self.id, desc.event.name);
+            if !enshwick::content::is_id(&full) {
+                return Err(mlua::Error::runtime(format!(
+                    "enshwick.define_event: {:?} is no local name, 1 to 128 of [a-z0-9_./-]",
+                    desc.event.name
+                )));
+            }
+            desc.event.name = full;
+        }
         let emitter = {
             let mut defined = self.defined.relock();
             match defined

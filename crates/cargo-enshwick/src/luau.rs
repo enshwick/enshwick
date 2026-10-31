@@ -210,7 +210,8 @@ pub fn definitions() -> String {
     );
     out.push_str("\t--- Calls `handler` with the data of another mod's event, as `cargo enshwick event <event>` describes it or a description of the script's own (fields with `name` and `read`, laid out as Rust lays them out). Subscribe at the top level of main.luau.\n\ton_mod_event: (event: { name: string }, handler: (data: any) -> ()) -> (),\n");
     out.push_str("\t--- The function that runs another mod's call, as `cargo enshwick call <call> --luau` describes it: it takes the input and returns the answer, or nil and why not (`unmatched` also before the start is over, `off` or `failed`). Ask at the top level of main.luau. Unstable: may change in any release.\n\tcaller: (call: { name: string }) -> (input: any) -> (any, string?),\n");
-    out.push_str("\t--- Defines a mod event of this mod for others to hear, at the top level of main.luau; `send` hands every subscriber the data.\n\tdefine_event: (event: { name: string }) -> { send: (data: any) -> () },\n");
+    out.push_str("\t--- Defines a mod event of this mod for others to hear, at the top level of main.luau, by its local name (`greeted` for `<mod id>:greeted`); `send` hands every subscriber the data.\n\tdefine_event: (event: { name: string }) -> { send: (data: any) -> () },\n");
+    out.push_str("\t--- The mods `pack.toml` names in `requires`, `after` and `recommends`, by alias: each mod's id, and whether it runs now.\n\tdeps: { [string]: { id: string, running: () -> boolean } },\n");
     out.push_str("\t--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.\n\tsettings: () -> { [string]: any },\n");
     for namespace in script::NAMESPACES {
         comment(namespace.doc(), "\t", &mut out);

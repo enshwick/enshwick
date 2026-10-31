@@ -16,6 +16,9 @@ Each entry names the pull request that made the change.
 
 - `cargo enshwick manifest` lists what the mod exports (#783).
 
+- `cargo enshwick luau` declares `enshwick.deps`, and says that
+  `define_event` takes a local name (#788).
+
 ### Changed
 
 - **Breaking:** `cargo enshwick new` writes the mod's id, side and name into
