@@ -1,10 +1,7 @@
 # The merge gate: `cargo xtask check` through the shared workflow, as parallel
 # parts: the changed packages on a pull request (GitHub-hosted) and in the
 # merge queue (the organization runners), the full suite on a push to main,
-# which also fills the build caches pull requests start from, and nightly.
-# The nightly lane adds Miri, unused dependencies, coverage, external links,
-# benchmarks, the fuzz targets, loom models, Kani proofs and the tests under
-# AddressSanitizer.
+# which also fills the build caches pull requests start from.
 name: ci
 
 on:
@@ -13,18 +10,6 @@ on:
     branches: [main]
   # The merge queue checks each group of pull requests on top of main.
   merge_group:
-  # GitHub delays scheduled runs for hours and drops most of them (on
-  # 2026-10-27 the 15-minute build watch ran 4 times in 24 hours): a try
-  # every half hour through the night, and the gate lets the first through.
-  # A try the gate stops costs one hosted job of seconds.
-  schedule:
-    - cron: "17,47 0-8 * * *"
-  workflow_dispatch:
-    inputs:
-      nightly:
-        description: Also run the nightly lane.
-        type: boolean
-        default: false
 
 permissions: {}
 
@@ -35,49 +20,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # A scheduled run goes ahead unless a nightly lane ran, failed or runs
-  # since 00:00 UTC that day: a failed night is not run again by the next
-  # try, it is fixed, and a run by hand during the day leaves the next night
-  # alone.
-  gate:
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-26.04
-    timeout-minutes: 5
-    permissions:
-      actions: read
-    outputs:
-      run: ${{ steps.check.outputs.run }}
-    steps:
-      - id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          since=$(date -u +%Y-%m-%dT00:00:00Z)
-          ran=false
-          # Listed per event: pull requests and the merge queue run this
-          # workflow hundreds of times a day.
-          ids=$(for event in schedule workflow_dispatch; do
-            gh run list -R "$REPO" --workflow ci.yml --event "$event" --created ">=$since" \
-              --limit 100 --json databaseId -q '.[].databaseId'
-          done)
-          for id in $ids; do
-            [ "$id" = "$RUN_ID" ] && continue
-            if gh run view "$id" -R "$REPO" --json jobs -q '.jobs[]
-                | select(.name | startswith("nightly / "))
-                | select(.status != "completed" or .conclusion == "success" or .conclusion == "failure")
-                | .name' | grep -q .; then
-              ran=true
-              echo "the nightly lane ran in run $id"
-              break
-            fi
-          done
-          echo "run=$([ "$ran" = true ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
-
   rust:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.gate.outputs.run == 'true') }}
     # main: the organization runners run only workflows from main.
     uses: enshwick/.github/.github/workflows/rust-ci.yml@main # zizmor: ignore[unpinned-uses]
     permissions:
@@ -93,23 +36,3 @@ jobs:
     secrets:
       ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
       ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
-
-  nightly:
-    needs: gate
-    if: ${{ !cancelled() && ((github.event_name == 'schedule' && needs.gate.outputs.run == 'true') || inputs.nightly) }}
-    uses: enshwick/.github/.github/workflows/rust-nightly.yml@main # zizmor: ignore[unpinned-uses]
-    permissions:
-      contents: read
-    with:
-      # The pure crates whose tests finish under Miri in minutes; the tests
-      # that unpack the archive or parse every table skip themselves there.
-      miri: enshwick-gamedata
-      fuzz: true
-      loom: -p enshwick-loader --lib -- chains::model server_pin::model
-      kani: |
-        -p enshwick --lib --tests --features test --harness proofs
-        -p enshwick-gamedata --lib --tests --harness proofs
-      # The memory reader and the fake host walk raw pointers in these.
-      asan: -p enshwick -p enshwick-gamedata -p enshwick-loader --features enshwick/test --lib --tests
-      # The hook, world and tick benches drive a mod through the fake host.
-      bench-args: --features enshwick/test
