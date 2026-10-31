@@ -207,14 +207,18 @@ pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
         } else {
             quote! {
                 /// The dependency's content id `<dependency>:<name>`; `None`
-                /// while the dependency does not run.
+                /// while the dependency does not run. Each call asks the
+                /// loader which mods run: call it once, at init, and keep
+                /// the id.
                 ///
                 /// # Panics
                 ///
-                /// When `name` is not 1 to 128 of `[a-z0-9_./-]`.
+                /// When `name` is not 1 to 128 of `[a-z0-9_./-]`, whether
+                /// the dependency runs or not.
                 #[must_use]
                 pub fn id(name: &'static str) -> ::core::option::Option<::enshwick::content::Id> {
-                    ::enshwick::mods::is_running(ID).then(|| ::enshwick::content::Id::of(ID, name))
+                    let id = ::enshwick::content::Id::of(ID, name);
+                    ::enshwick::mods::is_running(ID).then_some(id)
                 }
             }
         };
@@ -262,21 +266,24 @@ pub(crate) fn full_name(
         None => metadata.id.clone(),
         Some(of) => {
             let alias = of.to_string();
-            let named: Vec<&str> = metadata
-                .dependencies
-                .iter()
-                .filter(|d| matches!(d.relation, "REQUIRES" | "RECOMMENDS" | "AFTER"))
-                .map(|d| d.alias.as_str())
-                .collect();
+            let names_code =
+                |d: &&Dependency| matches!(d.relation, "REQUIRES" | "RECOMMENDS" | "AFTER");
             let found = metadata
                 .dependencies
                 .iter()
-                .find(|d| d.alias == alias && named.contains(&d.alias.as_str()))
+                .filter(names_code)
+                .find(|d| d.alias == alias)
                 .ok_or_else(|| {
-                    let known = if named.is_empty() {
+                    let names: Vec<&str> = metadata
+                        .dependencies
+                        .iter()
+                        .filter(names_code)
+                        .map(|d| d.alias.as_str())
+                        .collect();
+                    let known = if names.is_empty() {
                         "it names none".to_owned()
                     } else {
-                        format!("it names {}", named.join(", "))
+                        format!("it names {}", names.join(", "))
                     };
                     syn::Error::new(
                         of.span(),

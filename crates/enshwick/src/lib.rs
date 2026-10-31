@@ -412,7 +412,9 @@ pub use enshwick_macros::declare_mod;
 /// Each module holds `ID`, the dependency's mod id, and `id("<name>")`, its
 /// content id `<dependency>:<name>`. A required dependency's ids are
 /// constants: the loader starts this mod only beside it. An optional one's,
-/// from `after` or `recommends`, are `None` while it does not run. A call,
+/// from `after` or `recommends`, are `None` while it does not run; ask once,
+/// at init, and keep the id. A malformed name panics, running or not; in a
+/// constant it fails the build, with the error at the call that wrote it. A call,
 /// point or event of a dependency is declared with its own name and
 /// `of = <alias>`: `#[point(of = lockers, name = "price", ..)]` is
 /// `you.lockers:price`. Without `of`, a local name is this mod's own. An

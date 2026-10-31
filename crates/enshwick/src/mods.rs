@@ -212,7 +212,9 @@ pub fn all() -> Vec<ModEntry> {
 /// Whether the mod `id` is loaded and runs: what an optional dependency's
 /// [`deps!`](crate::deps) module asks before it names the mod's content.
 ///
-/// `false` before the loader initialises this mod.
+/// `false` before the loader initialises this mod. Each call reads the
+/// loader's listing into a new list, as [`all`] does: ask once, at init, and
+/// keep the answer.
 ///
 /// # Examples
 ///

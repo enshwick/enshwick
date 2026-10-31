@@ -30,9 +30,11 @@ pub struct Lit {
 
 #[cfg(test)]
 mod tests {
+    use enshwick::abi::{ModInfo, Status, Str};
     use enshwick::content::{Guid, Id};
     use enshwick::points::Point;
     use enshwick::services::ModEvent;
+    use enshwick::{Load, Mod, Off};
 
     use super::{Lit, Price, Rang, deps};
 
@@ -50,6 +52,50 @@ mod tests {
     fn an_optional_dependency_names_nothing_while_it_does_not_run() {
         assert_eq!(deps::lanterns::ID, "you.lanterns");
         assert_eq!(deps::lanterns::id("lantern"), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "a content id is <mod>:<name>")]
+    fn an_optional_dependency_refuses_a_malformed_name_while_it_does_not_run() {
+        let _ = deps::lanterns::id("Lantern");
+    }
+
+    #[test]
+    fn an_optional_dependency_names_its_content_while_it_runs() {
+        struct Hello;
+
+        impl Mod for Hello {
+            fn init(_load: &mut Load<'_>) -> Result<Self, Off> {
+                Ok(Self)
+            }
+        }
+
+        enshwick::test::declare_mod!(
+            Hello,
+            r#"
+            id = "you.hello"
+            side = "server"
+            "#
+        );
+
+        let loader = enshwick::test::FakeHost::new()
+            .loaded(ModInfo {
+                id: Str::new("you.hello"),
+                ..ModInfo::EMPTY
+            })
+            .loaded(ModInfo {
+                id: Str::new("you.lanterns"),
+                ..ModInfo::EMPTY
+            })
+            .install();
+        // SAFETY: both functions are the exports of this test's `declare_mod!(Hello)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+
+        assert_eq!(
+            deps::lanterns::id("lantern"),
+            Some(Id::new("you.lanterns:lantern"))
+        );
     }
 
     #[test]
