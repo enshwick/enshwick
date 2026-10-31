@@ -21,7 +21,7 @@ Each entry names the pull request that made the change.
 - A pack's files name a required mod's content by the alias `pack.toml`
   gives it, `lockers:locker` for `you.lockers:locker`, as `deps::lockers::id`
   does in a Rust mod; the alias of a mod the pack does not require is a
-  problem at its line. A full content id still works.
+  problem at its line. A full content id still works (#785).
 
 - **Breaking:** a mod's calls, points, services and events are its own until
   `exports` in `[package.metadata.enshwick]`, or in a pack's `pack.toml`,
