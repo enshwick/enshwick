@@ -1,8 +1,9 @@
 # Findings of the ast-grep rules in code written before the rule, one a line:
 # `<rule> <file> <first line of the matched code>`. `cargo xtask check`
 # fails on a finding not listed here and on an entry nothing matches, so an
-# entry leaves when its code moves to what the rule asks. Nothing new goes
-# here: a deliberate exception is `// ast-grep-ignore` with its reason.
+# entry leaves when its code moves to what the rule asks. A deliberate
+# exception is `// ast-grep-ignore` with its reason; only one in generated
+# code, which a regeneration would strip of its comment, goes here.
 
 # The meter templates a mod serves, collected during its init; they move
 # into the content domain's state struct beside the items they serve.
