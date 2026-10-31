@@ -94,7 +94,7 @@ Each entry names the pull request that made the change.
 - `Relock`, `RelockRw` and `RelockWait` take a `Mutex`, an `RwLock` and a
   `Condvar` wait under the API's poison policy: the state a panicking thread
   left is kept, the poison cleared and the place logged, so a mod needs no
-  lock helper of its own (#PR).
+  lock helper of its own (#821).
 - `FakeHost::items`, `recipes`, `workshops`, `crafting_menu` and `ui_images`
   set every engine fact one area's layouts resolve, and `FakeHost` answers
   `EngineFacts`, so a test lays out its game data by `ItemLayout` and the
@@ -238,7 +238,7 @@ Each entry names the pull request that made the change.
 ### Fixed
 
 - A poisoned lock's warning names the line that took the lock, not a line
-  inside the API (#PR).
+  inside the API (#821).
 - `Load::world_store` refuses the names `settings` and `save`, whose files
   the loader keeps in the same world folder, so a store no longer writes
   over the world's settings (#680).
