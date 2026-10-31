@@ -1,0 +1,11 @@
+id: safety-names-its-source
+valid:
+  - "// SAFETY: `ptr` is the live weather system found on the game thread."
+  - "// SAFETY: as the check before says, `len` bytes are mapped."
+  - "// Same as above, a plain comment."
+invalid:
+  - "// SAFETY: as above."
+  - "// SAFETY: As above, its entry count at `building.zone_list_count`."
+  - "// SAFETY: see above"
+  - "// SAFETY: same as before; the NUL ends the loop."
+  - "// SAFETY: ditto"

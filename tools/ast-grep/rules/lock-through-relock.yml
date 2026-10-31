@@ -1,0 +1,52 @@
+id: lock-through-relock
+language: rust
+severity: error
+message: take a std lock through `relock()`, the one poison policy
+note: >-
+  `Relock` and `RelockRw` in the crate's `locks.rs` keep the state of a lock
+  a panicking thread held, clear the poison and log the place. Handling the
+  `LockResult` here drops that policy.
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/benches/**"
+utils:
+  taken:
+    kind: call_expression
+    pattern: $LOCK.$TAKE()
+  in-test:
+    any:
+      - kind: mod_item
+        follows:
+          kind: attribute_item
+          regex: '^#\[cfg\(.*\btest\b'
+      - kind: function_item
+        follows:
+          kind: attribute_item
+          regex: '^#\[(test|cfg\(.*\btest\b)'
+rule:
+  any:
+    - pattern: $LOCK.$TAKE().$HANDLE($$$)
+    - pattern: $LOCK.$TAKE()?
+    - kind: let_condition
+      has:
+        field: value
+        matches: taken
+    - kind: match_expression
+      has:
+        field: value
+        matches: taken
+  not:
+    inside:
+      stopBy: end
+      any:
+        - matches: in-test
+        - kind: function_item
+          has:
+            field: name
+            regex: '^(try_)?relock'
+constraints:
+  TAKE:
+    regex: '^(try_)?(lock|read|write)$'
+  HANDLE:
+    regex: '^(unwrap|expect|ok|err|unwrap_or|unwrap_or_else|unwrap_or_default|map|map_err|and_then|or_else|is_ok|is_err|inspect|inspect_err)$'

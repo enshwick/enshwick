@@ -23,7 +23,6 @@ mod levels;
 use core::ffi::c_void;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
-use std::sync::TryLockError;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -720,13 +719,10 @@ fn merge(
     built: &mut Vec<(u32, [f32; 3])>,
     levels: &mut Vec<(u32, Sizes)>,
 ) {
-    let mut state = match STATE.try_lock() {
-        Ok(state) => state,
-        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
-        Err(TryLockError::WouldBlock) if placed.len() + built.len() + levels.len() < HELD_BACK => {
-            return;
-        }
-        Err(TryLockError::WouldBlock) => STATE.relock(),
+    let mut state = match STATE.try_relock() {
+        Some(state) => state,
+        None if placed.len() + built.len() + levels.len() < HELD_BACK => return,
+        None => STATE.relock(),
     };
     let now = now();
     let mut changed = false;

@@ -1,0 +1,28 @@
+id: lock-through-relock
+valid:
+  - "fn f(m: &Mutex<u8>) { let g = m.relock(); }"
+  - "fn f(m: &RwLock<u8>) { let g = m.relock_read(); }"
+  - "fn f() { let out = std::io::stdout().lock(); }"
+  - "fn f(file: &mut File, buf: &mut [u8]) { let n = file.read(buf).unwrap_or(0); }"
+  - |
+    impl<T> Relock<T> for Mutex<T> {
+        fn relock(&self) -> MutexGuard<'_, T> {
+            self.lock().unwrap_or_else(PoisonError::into_inner)
+        }
+    }
+  - |
+    #[cfg(test)]
+    mod tests {
+        fn f(m: &Mutex<u8>) { let g = m.lock().unwrap(); }
+    }
+  - |
+    #[test]
+    fn locks() { let g = M.lock().unwrap(); }
+invalid:
+  - "fn f(m: &Mutex<u8>) { let g = m.lock().unwrap(); }"
+  - "fn f(m: &Mutex<u8>) { let g = m.lock().ok(); }"
+  - "fn f(m: &Mutex<u8>) { let g = m.lock().unwrap_or_else(PoisonError::into_inner); }"
+  - "fn f(m: &RwLock<u8>) { let g = m.write().expect(\"poisoned\"); }"
+  - "fn f(m: &Mutex<u8>) { if let Ok(g) = m.lock() { drop(g); } }"
+  - "fn f(m: &Mutex<u8>) { match m.try_lock() { Ok(g) => drop(g), Err(_) => {} } }"
+  - "fn f(m: &Mutex<u8>) -> Result<(), E> { let g = m.lock()?; Ok(()) }"

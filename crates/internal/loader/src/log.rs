@@ -283,6 +283,8 @@ static CAPTURED: Mutex<Option<Vec<(Level, String, String)>>> = Mutex::new(None);
 
 /// Keeps every line from now on in memory, for [`captured`].
 pub fn capture() {
+    // Off the poison policy, as `CAPTURED` says.
+    // ast-grep-ignore: lock-through-relock
     if let Ok(mut lines) = CAPTURED.lock() {
         *lines = Some(Vec::new());
     }
@@ -292,6 +294,8 @@ pub fn capture() {
 /// The lines kept since [`capture`]: level, source and message.
 #[must_use]
 pub fn captured() -> Vec<(Level, String, String)> {
+    // Off the poison policy, as `CAPTURED` says.
+    // ast-grep-ignore: lock-through-relock
     CAPTURED
         .lock()
         .ok()
@@ -311,6 +315,8 @@ pub(crate) fn end_capture() {
 /// Writes one line under `source`, the loader or a mod id.
 pub fn write(level: Level, source: &str, message: &str) {
     if CAPTURING.load(Ordering::Acquire) {
+        // Off the poison policy, as `CAPTURED` says.
+        // ast-grep-ignore: lock-through-relock
         if let Ok(mut lines) = CAPTURED.lock()
             && let Some(lines) = lines.as_mut()
         {
