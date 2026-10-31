@@ -47,8 +47,8 @@ pub struct Plan {
 }
 
 /// Why a mod made for the other side of the game is skipped, which is
-/// expected rather than a fault: `enshwick.zip` carries client mods to
-/// servers too.
+/// expected rather than a fault: a player's or a server's folder may hold
+/// mods for the other side.
 pub const OTHER_SIDE: &str = "not for this side of the game";
 
 /// Whether a mod for `mod_side` loads in the game binary `process`.
