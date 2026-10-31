@@ -5,8 +5,8 @@ mod tests {
     use enshwick::config::{Config, Field, Stage};
 
     /// Altar rules.
-    #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize, enshwick::Config)]
-    #[serde(default)]
+    #[enshwick::config(default)]
+    #[derive(Debug, PartialEq)]
     struct Altars {
         /// Altars allowed at each Flame level.
         #[config(startup, range = 1..=32)]
@@ -52,8 +52,8 @@ mod clamping {
     use enshwick::abi::Status;
 
     /// Rules with ranges.
-    #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize, enshwick::Config)]
-    #[serde(default)]
+    #[enshwick::config(default)]
+    #[derive(Debug, PartialEq)]
     struct Rules {
         /// Altars allowed at each Flame level.
         #[config(startup, range = 1..=32)]

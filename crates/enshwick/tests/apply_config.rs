@@ -13,7 +13,8 @@ mod tests {
     static RETURNED: AtomicU32 = AtomicU32::new(0);
 
     /// The limit's settings.
-    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    #[enshwick::config]
+    #[derive(Default)]
     struct Settings {
         /// The limit.
         limit: u32,

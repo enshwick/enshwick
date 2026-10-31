@@ -453,7 +453,6 @@ version = "0.0.0-dev"
 dependencies = [
  "arc-swap",
  "enshwick",
- "serde",
 ]
 
 [[package]]

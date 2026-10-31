@@ -2,19 +2,21 @@
 
 A mod's settings live in `mod-configs/<id>.toml` beside the game. The loader
 writes the file from the mod's defaults on first start, and the mod reads it
-during `init`. There are two ways to read it: a typed settings struct with
-`#[derive(enshwick::Config)]`, or plain serde over a defaults string.
+during `init`. There are two ways to read it: a typed settings struct under
+`#[enshwick::config]`, or plain serde over a defaults string.
 
 ## Typed settings
 
-Derive `enshwick::Config` on a struct with named fields that also derives
-serde's `Deserialize` and `Serialize` and implements `Default`, and call
-[`load.config()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs):
+Put `#[enshwick::config]` on a struct with named fields that implements
+`Default`, and call
+[`load.config()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs).
+The attribute derives serde's `Deserialize` and `Serialize` through the API,
+so the mod needs no serde of its own, and derives `enshwick::Config`:
 
 ```rust
 /// Furniture comfort settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(deny_unknown_fields)]
+#[enshwick::config]
+#[derive(Debug)]
 struct Settings {
     /// Comfort each piece of furniture gives inside a base, times this factor.
     #[config(runtime, range = 0.0..=100.0)]
@@ -53,8 +55,12 @@ multiplier = 2.0
 `Settings::template()` returns that text, so a unit test can check that the
 defaults parse.
 
+A key the struct does not name is refused with its name, so a misspelt
+setting never passes unread. `#[enshwick::config(default)]` fills the keys a
+file leaves out from `Default`.
+
 Every read checks each field's `range` and `choices` (below), then
-`#[config(validate = path)]`, a `fn(&Self) -> Result<(), E>` for checks of
+`#[enshwick::config(validate = path)]`, a `fn(&Self) -> Result<(), E>` for checks of
 your own, `E` any `Display` such as a `String`. A refusal is a `ConfigError`:
 `Parse` for text that does not fit the type, `Value` for a field out of its
 range or choices, `Invalid` for your own check. At init it turns the mod off
@@ -86,7 +92,7 @@ the value in the mod's log; the console and the Mods screen refuse it.
 
 A field takes one stage, or the pair `startup, sync`; any other two fail the
 build. On the struct,
-`#[config(text = "key")]` names the key of the set's title, `config` by
+`#[enshwick::config(text = "key")]` names the key of the set's title, `config` by
 default. The field's doc comment is its English description wherever no
 translation exists.
 
@@ -94,7 +100,7 @@ translation exists.
 use enshwick::config::{Config, Stage};
 
 /// Locker settings.
-#[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
+#[enshwick::config]
 struct Settings {
     /// The locker costs the wooden chest's ingredients times this.
     #[config(startup, range = 1..=100)]
@@ -131,8 +137,8 @@ by default. The group's own title is `config.comfort`.
 use enshwick::config::Config;
 
 /// Comfort rules.
-#[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(default)]
+#[enshwick::config(default)]
+#[derive(Default)]
 struct Comfort {
     /// Comfort per piece of furniture, times this factor.
     #[config(range = 0.0..=10.0)]
@@ -140,8 +146,8 @@ struct Comfort {
 }
 
 /// Rates of the game.
-#[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(default)]
+#[enshwick::config(default)]
+#[derive(Default)]
 struct Rates {
     /// Recipes cost this many times their price.
     #[config(startup, range = 1..=5)]
@@ -286,10 +292,9 @@ When a new version renames or changes a setting, declare a
 [migration](migrations.md): the loader carries old files and every world's
 settings over once.
 
-A file that does not parse turns the mod off at init with serde's message. Add
-`#[serde(deny_unknown_fields)]` so a misspelt key does the same instead of
-being ignored. Add `#[serde(default)]` if a file written by an older version of
-the mod, without a newer key, should still load.
+A file that does not parse turns the mod off at init with serde's message; so
+does a misspelt key. Use `#[enshwick::config(default)]` if a file written by
+an older version of the mod, without a newer key, should still load.
 
 [`enshwick-game-rates`](https://github.com/enshwick/mods/tree/main/game-rates)
 reads this setting as `multiplier` in its `[comfort]` group, beside its recipe rates.
@@ -321,7 +326,8 @@ so keep what hooks read in atomics, or swapped whole in an
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Comfort settings.
-#[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+#[enshwick::config]
+#[derive(Default)]
 struct Settings {
     /// Comfort per piece of furniture, times this factor.
     multiplier: f32,
@@ -355,7 +361,8 @@ client's interface also reads. Mark such a field `#[config(sync)]`:
 use enshwick::config::Config;
 
 /// Altar settings.
-#[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+#[enshwick::config]
+#[derive(Default)]
 struct Settings {
     /// Altars allowed at each Flame level. A joined player runs with the
     /// server's table.

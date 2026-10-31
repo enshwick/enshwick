@@ -14,8 +14,8 @@ speed keeps at least 0.01 and a loot stack at least 1.
 ```rust
 use enshwick::rates::{ExperienceGroup, Rate};
 
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(default)]
+#[enshwick::config(default)]
+#[derive(Debug)]
 struct Settings {
     /// Experience from defeated enemies, times this.
     #[config(runtime, range = 0.0..=100.0)]
