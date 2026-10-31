@@ -108,7 +108,7 @@ let manifest = enshwick::manifest!(
         constants: ["survivors.bed_id" => 0x48],
     }],
 );
-# assert_eq!(manifest.dependency_count, 6);
+# assert_eq!(manifest.dependency_count, 5);
 # assert_eq!(manifest.author_count, 1);
 ```
 
