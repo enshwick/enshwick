@@ -25,14 +25,13 @@ change touches and of the packages that depend on them. Off Windows it also
 lints the workspace for Windows through
 [cargo-xwin](https://github.com/rust-cross/cargo-xwin). Most of the loader runs
 only on Windows: off Windows its portable modules are tested on the host, and
-`cargo xtask check --windows` runs the rest of its tests under Wine in Docker, in an image built from
-[tools/wine/Dockerfile](tools/wine/Dockerfile) on first use, or under Wine
-directly on an amd64 Linux host that has it. There, use the Wine of
+`cargo xtask check --windows` runs the rest of its tests under Wine on an
+amd64 Linux host that has it. There, use the Wine of
 [GE-Proton](https://github.com/GloriousEggroll/proton-ge-custom), as CI does:
-unpack a release and put its `files/bin` first on `PATH`. On Apple silicon
-the container runs through Rosetta, which cannot run the tests of crashes,
-detours, patches and threads, so those are skipped there. `cargo xtask check
---all` runs the whole suite, the Wine tests included when Docker runs. The
+unpack a release and put its `files/bin` first on `PATH`. Elsewhere those
+tests run on Windows, and CI runs them on every pull request that touches
+them. `cargo xtask check --all` runs the whole suite, the Wine tests included
+where Wine runs. The
 rules the hooks enforce, and the ones they cannot, are in this file:
 
 - a change to a hot path names its numbers before and after, from the
