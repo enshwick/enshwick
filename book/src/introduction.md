@@ -35,8 +35,8 @@ from.
 
 The examples in
 [`examples/`](https://github.com/enshwick/enshwick/tree/main/examples) and our
-mods, each in its own `mod-<name>` repository of the
-[enshwick organization](https://github.com/enshwick), are full working mods.
+mods, one folder each in the [mods repository](https://github.com/enshwick/mods),
+are full working mods.
 
 ## Building the book
 

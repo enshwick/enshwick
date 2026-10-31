@@ -40,9 +40,9 @@ join = true
 
 `join = true` puts the mod in the mod set the server advertises, so a player
 without it is warned before joining; see [The join check](concepts/join-check.md).
-[`enshwick-personal-safes`](https://github.com/enshwick/mod-personal-safes)
+[`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
 and
-[`enshwick-game-rates`](https://github.com/enshwick/mod-game-rates)
+[`enshwick-game-rates`](https://github.com/enshwick/mods/tree/main/game-rates)
 are content mods of this kind.
 
 Every content call is made during `init`. The loader seals what mods

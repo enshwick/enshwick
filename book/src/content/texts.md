@@ -174,7 +174,7 @@ settings the player changes; elsewhere on a server it is
 `Language::FALLBACK`. The loader's own answers to a player follow the
 player's language the same way; its console follows the loader's
 `language` setting ([logging](../logging.md)), English by default.
-[`enshwick-personal-safes`](https://github.com/enshwick/mod-personal-safes)
+[`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
 names a Safe's owner on its label in one language from its settings, falling
 back to `Language::FALLBACK`.
 
@@ -205,7 +205,7 @@ assert!(!name.is_empty() && chest_name.is_none_or(|n| !n.is_empty()));
 `items::vanilla_name(item, language)` reads a vanilla item's name tag from
 its data and returns its text; `WorkshopSurvivor::name(language)` is the
 survivor's name, which the game gives its summoning staff.
-[`enshwick-survivors-per-altar`](https://github.com/enshwick/mod-survivors-per-altar)
+[`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/tree/main/survivors-per-altar)
 names its copy staffs this way: it registers each staff's name during
 `init` for every language it translates, with the survivor's name in that
 language.

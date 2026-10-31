@@ -55,16 +55,16 @@ remove a mod, delete its DLL from `mods/`. To remove Enshwick, delete
 
 ### Mods
 
-| Mod                                                                        | What it does                                                       |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Better Altars](https://github.com/enshwick/mod-better-altars)             | twice the altars per Flame level; touching zones grow together     |
-| [Survivors per Altar](https://github.com/enshwick/mod-survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
-| [Personal Safes](https://github.com/enshwick/mod-personal-safes)           | a craftable chest only the player who placed it can use            |
-| [Game Rates](https://github.com/enshwick/mod-game-rates)                   | building recipe output and furniture comfort, twice by default     |
-| [Build Camera](https://github.com/enshwick/mod-build-camera)               | the building fly mode for every player, without the skill          |
-| [Shared Experience](https://github.com/enshwick/mod-shared-experience)     | every character keeps up with the one furthest ahead in experience |
-| [Area Loot](https://github.com/enshwick/mod-area-loot)                     | emptying one enemy corpse takes the loot of the others around it   |
-| [Optimizer](https://github.com/enshwick/mod-optimizer)                     | less CPU on Windows and under Wine and Proton, for servers         |
+| Mod                                                                                   | What it does                                                       |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [Better Altars](https://github.com/enshwick/mods/tree/main/better-altars)             | twice the altars per Flame level; touching zones grow together     |
+| [Survivors per Altar](https://github.com/enshwick/mods/tree/main/survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
+| [Personal Safes](https://github.com/enshwick/mods/tree/main/personal-safes)           | a craftable chest only the player who placed it can use            |
+| [Game Rates](https://github.com/enshwick/mods/tree/main/game-rates)                   | building recipe output and furniture comfort, twice by default     |
+| [Build Camera](https://github.com/enshwick/mods/tree/main/build-camera)               | the building fly mode for every player, without the skill          |
+| [Shared Experience](https://github.com/enshwick/mods/tree/main/shared-experience)     | every character keeps up with the one furthest ahead in experience |
+| [Area Loot](https://github.com/enshwick/mods/tree/main/area-loot)                     | emptying one enemy corpse takes the loot of the others around it   |
+| [Optimizer](https://github.com/enshwick/mods/tree/main/optimizer)                     | less CPU on Windows and under Wine and Proton, for servers         |
 
 ### Playing on a server
 

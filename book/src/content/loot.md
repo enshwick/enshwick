@@ -103,7 +103,7 @@ mods too, for the games it hosts.
 A mod that empties the loot around a container a player just emptied into
 the same player puts the pieces of this chapter together. The steps follow
 one such mod's
-[`take.rs`](https://github.com/enshwick/mod-area-loot/blob/main/src/take.rs):
+[`take.rs`](https://github.com/enshwick/mods/blob/main/area-loot/src/take.rs):
 
 1. At `init` it resolves `Containers`, `Inventories` and `Worlds`, and hooks
    `loot::SYSTEM`.

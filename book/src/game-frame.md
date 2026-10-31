@@ -12,7 +12,7 @@ In the common case a hook does not allocate, lock, format or log.
 
 - **No allocation.** No `Vec`, `String`, `Box` or `format!` per call. Use stack
   arrays, or a `thread_local!` value reused between calls, as
-  [`enshwick-survivors-per-altar`](https://github.com/enshwick/mod-survivors-per-altar/blob/main/src/policy.rs)
+  [`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/blob/main/survivors-per-altar/src/policy.rs)
   does for its plan.
 - **No locks** on the fast path. A lock held by another thread stalls the
   frame; a lock the hook already holds, entered again through a nested hooked
@@ -60,7 +60,7 @@ or swapped whole:
   such as settings applied by `on_config_change`: readers load it without a
   lock, the writer stores a new one.
 
-[`enshwick-better-altars`](https://github.com/enshwick/mod-better-altars/blob/main/src/count.rs)
+[`enshwick-better-altars`](https://github.com/enshwick/mods/blob/main/better-altars/src/count.rs)
 keeps its altar table in an `ArcSwap`.
 
 ## Work that can wait
@@ -68,7 +68,7 @@ keeps its altar table in an `ArcSwap`.
 Work that can wait goes elsewhere: to a thread of the mod's own, started in
 `Mod::ready`, or to the server's game thread through the
 [scheduler](events.md). File writes in particular never happen in a hook.
-[`enshwick-shared-experience`](https://github.com/enshwick/mod-shared-experience/blob/main/src/lib.rs)
+[`enshwick-shared-experience`](https://github.com/enshwick/mods/blob/main/shared-experience/src/lib.rs)
 writes its save on a thread it spawns from the `WorldSaved` handler.
 
 ## Unsafe code
