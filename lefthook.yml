@@ -43,7 +43,7 @@ pre-push:
         - 'Cargo.lock'
         - 'deny.toml'
       # Advisories need the network and change without any commit: CI's
-      # full suite checks them every night.
+      # full suite checks them on every push to main.
       run: cargo deny check bans licenses sources
     workflows:
       glob: '.github/**'
