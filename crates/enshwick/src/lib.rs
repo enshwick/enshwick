@@ -43,7 +43,7 @@
 //!
 //! | Area | Modules |
 //! | --- | --- |
-//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`](mod@config), [`i18n`], [`status`], [`state`], [`files`], [`migrations`] |
+//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`](mod@config), [`i18n`], [`status`], [`state`], [`files`], [`migrations`], [`Relock`] |
 //! | Hooks and game memory | [`detour!`], [`hook`](macro@hook), [`code`], [`ecs`], [`raw`], [`pacing`] |
 //! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
 //! | The server's world | [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
@@ -658,6 +658,7 @@ pub(crate) use enshwick_macros::{Script, script};
 pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};
+pub use locks::{Relock, RelockRw, RelockWait};
 pub use shape::Shape;
 pub use world_error::WorldError;
 
@@ -667,7 +668,6 @@ pub mod __private {
     pub use serde;
 
     pub use crate::hook::Frame;
-    pub use crate::locks::Relock;
     pub use crate::script::convert::{argument, record_fields};
 
     use std::sync::OnceLock;

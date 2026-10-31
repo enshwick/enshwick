@@ -63,6 +63,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+A panic turns off only the feature it hit, so a lock that a panicking thread
+held stays poisoned while the rest of the mod runs. Take a `std` lock through
+[`Relock`](https://docs.rs/enshwick/latest/enshwick/trait.Relock.html),
+[`RelockRw`](https://docs.rs/enshwick/latest/enshwick/trait.RelockRw.html) and
+[`RelockWait`](https://docs.rs/enshwick/latest/enshwick/trait.RelockWait.html)
+(`relock()`, `relock_read()`, `relock_wait(guard)`, ...): they keep the state
+the panicking thread left, clear the poison and log the line that took the
+lock.
+
 Hooks run often and on hot threads: keep them free of locks, allocation and
 logging in the common case. [Code in the game's frame](../game-frame.md) has
 the rules.
