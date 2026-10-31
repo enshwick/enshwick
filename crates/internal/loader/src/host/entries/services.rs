@@ -153,7 +153,7 @@ pub(crate) extern "system" fn service(
             .record(me)
             .and_then(|(_, record)| unexported(loader, record, "service", name));
         let found = match refused {
-            Some(reason) => Err((Status::REFUSED, reason)),
+            Some(reason) => Err(crate::services::FindServiceError::Unexported { reason }),
             None => crate::services::registry().find(name, wanted.major, &fields, loader),
         };
         let mut answer = api_frame::ServiceFound::EMPTY;
@@ -166,9 +166,9 @@ pub(crate) extern "system" fn service(
                 answer.owner_version = Str::new(keep(version));
                 Status::OK
             }
-            Err((status, reason)) => {
-                answer.reason = Str::new(keep(&reason));
-                status
+            Err(refused) => {
+                answer.reason = Str::new(keep(&refused.to_string()));
+                refused.status()
             }
         };
         // SAFETY: `HostApi::service` has the mod pass `out` null or pointing at

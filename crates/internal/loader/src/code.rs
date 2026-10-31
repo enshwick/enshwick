@@ -446,45 +446,82 @@ fn stop_replacement(stop: usize, next: usize, len: usize) -> Option<Box<[u8]>> {
 /// The lift of the workshop limit, as the log and the Mods screen name it.
 const LIFT_FEATURE: &str = "workshop recipe limit";
 
-/// Why the lift is off: the table entry and the reason.
-type Off = (String, String);
+/// Why the lift is off, by the table entry it names.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+enum LiftError {
+    /// The entry is not in this build's table.
+    #[error("is not in this build")]
+    NotInBuild { entry: String },
+    /// The game's code at the entry is not the table's.
+    #[error("does not hold the table's code")]
+    CodeDiffers { entry: String },
+    /// The entry's address does not fit a pointer.
+    #[error("{reason}")]
+    Address {
+        entry: String,
+        reason: core::num::TryFromIntError,
+    },
+    /// The table carries no body for the entry.
+    #[error("carries no body")]
+    NoBody { entry: String },
+    /// The stop block is too short for the jump the lift writes.
+    #[error("of {len} bytes cannot jump to {next:#x}")]
+    TooShort {
+        entry: String,
+        len: usize,
+        next: usize,
+    },
+    /// The lookup the lift needs is not linked.
+    #[error("is not linked")]
+    NotLinked { entry: String },
+}
+
+impl LiftError {
+    /// The table entry, as the log and the Mods screen name it.
+    fn entry(&self) -> &str {
+        match self {
+            Self::NotInBuild { entry }
+            | Self::CodeDiffers { entry }
+            | Self::Address { entry, .. }
+            | Self::NoBody { entry }
+            | Self::TooShort { entry, .. }
+            | Self::NotLinked { entry } => entry,
+        }
+    }
+}
 
 /// The table's symbol `id` in the running game when its code holds, or
 /// why not.
-fn checked(loader: &Loader, id: pinned::Symbol) -> Result<usize, Off> {
+fn checked(loader: &Loader, id: pinned::Symbol) -> Result<usize, LiftError> {
+    let entry = || id.id().to_owned();
     let address = loader
         .address(id)
-        .ok_or_else(|| (id.id().to_owned(), "is not in this build".to_owned()))?;
+        .ok_or_else(|| LiftError::NotInBuild { entry: entry() })?;
     if !loader.code_holds(id) {
-        return Err((
-            id.id().to_owned(),
-            "does not hold the table's code".to_owned(),
-        ));
+        return Err(LiftError::CodeDiffers { entry: entry() });
     }
-    usize::try_from(address).map_err(|e| (id.id().to_owned(), e.to_string()))
+    usize::try_from(address).map_err(|reason| LiftError::Address {
+        entry: entry(),
+        reason,
+    })
 }
 
 /// The stop block's patch from the build table: the check's code holds, and
 /// the block it jumps to holds its whole code, which the patch replaces.
-fn limit_patch(loader: &Loader) -> Result<CodePatch, Off> {
+fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftError> {
     let _check = checked(loader, pinned::recipe::LIMIT_CHECK)?;
     let stop = checked(loader, pinned::recipe::LIMIT_STOP)?;
     let next = checked(loader, pinned::recipe::LIMIT_NEXT)?;
+    let entry = || pinned::recipe::LIMIT_STOP.id().to_owned();
     let len = loader
         .build
         .body(pinned::recipe::LIMIT_STOP.id())
         .map(enshwick_gamedata::Body::len)
-        .ok_or_else(|| {
-            (
-                pinned::recipe::LIMIT_STOP.id().to_owned(),
-                "carries no body".to_owned(),
-            )
-        })?;
-    let replacement = stop_replacement(stop, next, len).ok_or_else(|| {
-        (
-            pinned::recipe::LIMIT_STOP.id().to_owned(),
-            format!("of {len} bytes cannot jump to {next:#x}"),
-        )
+        .ok_or_else(|| LiftError::NoBody { entry: entry() })?;
+    let replacement = stop_replacement(stop, next, len).ok_or_else(|| LiftError::TooShort {
+        entry: entry(),
+        len,
+        next,
     })?;
     let mut expected = vec![0u8; len];
     // SAFETY: `stop` is the table's `recipe.limit_stop`, whose whole `len`
@@ -506,7 +543,9 @@ fn limit_patch(loader: &Loader) -> Result<CodePatch, Off> {
 pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
     let found = (|| {
         use crate::catalogue::ids;
-        let missing = |id: &str| (id.to_owned(), "is not in this build".to_owned());
+        let missing = |id: &str| LiftError::NotInBuild {
+            entry: id.to_owned(),
+        };
         let offset = |id: &str| crate::catalogue::offset(loader, id).ok_or_else(|| missing(id));
         let layout = Layout {
             recipes: offset(ids::RECIPE_REGISTRY_RECIPES)?,
@@ -515,18 +554,15 @@ pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
             workshop: offset(ids::RECIPE_WORKSHOP)?,
         };
         let patch = limit_patch(loader)?;
-        let lookup = lookup_address(loader).ok_or_else(|| {
-            (
-                pinned::recipe::LIST_LOOKUP.id().to_owned(),
-                "is not linked".to_owned(),
-            )
+        let lookup = lookup_address(loader).ok_or_else(|| LiftError::NotLinked {
+            entry: pinned::recipe::LIST_LOOKUP.id().to_owned(),
         })?;
-        Ok::<_, Off>((layout, patch, lookup))
+        Ok::<_, LiftError>((layout, patch, lookup))
     })();
     let (layout, patch, lookup) = match found {
         Ok(found) => found,
-        Err((id, reason)) => {
-            let _off = loader.feature_off(LIFT_FEATURE, &id, &reason);
+        Err(off) => {
+            let _off = loader.feature_off(LIFT_FEATURE, off.entry(), &off.to_string());
             return;
         }
     };
@@ -564,8 +600,9 @@ fn lookup_address(loader: &'static Loader) -> Option<u64> {
     *LOOKUP_LINK.get_or_init(|| {
         let lookup = match checked(loader, pinned::recipe::LIST_LOOKUP) {
             Ok(at) => at as u64,
-            Err((id, why)) => {
-                crate::log!(WARN, "the recipe list lookup is not found: {id} {why}");
+            Err(off) => {
+                let id = off.entry();
+                crate::log!(WARN, "the recipe list lookup is not found: {id} {off}");
                 return None;
             }
         };

@@ -192,8 +192,28 @@ struct ReadRecordError {
     source: super::RecordError,
 }
 
+/// Why a mod's migrations did not run through on a place: the run stopped,
+/// or the shared record they are counted in does not read.
+#[derive(Debug, thiserror::Error)]
+enum RunOnError {
+    #[error(transparent)]
+    Run(#[from] super::RunMigrationsError),
+    #[error(transparent)]
+    Record(#[from] ReadRecordError),
+}
+
+impl RunOnError {
+    /// The plan line of what was pending; empty when nothing ran.
+    fn plan(&self) -> &str {
+        match self {
+            Self::Run(stopped) => stopped.plan(),
+            Self::Record(_) => "",
+        }
+    }
+}
+
 /// Logs a run's outcome under mod `id`.
-fn report(id: &str, place: &str, outcome: &Result<Option<String>, (String, String)>) {
+fn report(id: &str, place: &str, outcome: &Result<Option<String>, RunOnError>) {
     let line = |level, text: String| crate::log::write(level, id, &text);
     match outcome {
         Ok(None) => {}
@@ -202,13 +222,16 @@ fn report(id: &str, place: &str, outcome: &Result<Option<String>, (String, Strin
             format!("migrations on {place}, dry run, nothing changed: {plan}"),
         ),
         Ok(Some(plan)) => line(Level::INFO, format!("migrations on {place}: {plan}")),
-        Err((plan, reason)) if plan.is_empty() => line(
+        Err(stopped) if stopped.plan().is_empty() => line(
             Level::ERROR,
-            format!("migrations on {place} did not run: {reason}"),
+            format!("migrations on {place} did not run: {stopped}"),
         ),
-        Err((plan, reason)) => line(
+        Err(stopped) => line(
             Level::ERROR,
-            format!("migrations on {place} failed: {reason}; planned: {plan}"),
+            format!(
+                "migrations on {place} failed: {stopped}; planned: {}",
+                stopped.plan()
+            ),
         ),
     }
 }
@@ -268,7 +291,8 @@ fn run_settings(loader: &Loader, reg: &Registered, born: bool) -> bool {
             dry_run(),
         )
     })
-    .unwrap_or_else(|reason| Err((String::new(), reason.to_string())));
+    .map_err(RunOnError::from)
+    .and_then(|ran| ran.map_err(RunOnError::from));
     report(&record.id, "the settings file", &outcome);
     if matches!(outcome, Ok(Some(_))) {
         crate::watch::wrote(&path);
@@ -318,9 +342,10 @@ pub(crate) fn world_loaded(loader: &Loader, key: &str) {
                 dry_run(),
             )
         })
-        .unwrap_or_else(|reason| Err((String::new(), reason.to_string())));
+        .map_err(RunOnError::from)
+        .and_then(|ran| ran.map_err(RunOnError::from));
         report(&record.id, &format!("world {key}"), &outcome);
-        if let Err((_, reason)) = outcome {
+        if let Err(reason) = outcome {
             loader.turn_off(
                 reg.owner,
                 &format!("migration failed on world {key}: {reason}"),

@@ -73,7 +73,7 @@ impl Load<'_> {
     /// ```
     pub fn service<T: Service>(&self) -> Result<&'static T, Off> {
         self.find_service::<T>()
-            .map_err(|(_, reason)| Off::new(reason))
+            .map_err(|refused| Off::new(refused.to_string()))
     }
 
     /// The service `T` declares when a running mod publishes a table that
@@ -100,38 +100,65 @@ impl Load<'_> {
     pub fn optional_service<T: Service>(&self) -> Option<&'static T> {
         match self.find_service::<T>() {
             Ok(table) => Some(table),
-            Err((status, reason)) => {
-                let level = if status == Status::MISSING {
+            Err(refused) => {
+                let level = if refused.status() == Status::MISSING {
                     crate::abi::Level::DEBUG
                 } else {
                     crate::abi::Level::WARN
                 };
-                self.host.log(level, &reason);
+                self.host.log(level, &refused.to_string());
                 None
             }
         }
     }
 
-    pub(super) fn find_service<T: Service>(&self) -> Result<&'static T, (Status, String)> {
+    fn find_service<T: Service>(&self) -> Result<&'static T, FindServiceError> {
         let spec = service_spec::<T>(core::ptr::null());
         let mut found = crate::abi::ServiceFound::EMPTY;
         let status = (self.api().service)(self.host.handle(), &raw const spec, &raw mut found);
-        let what = format!("service {} v{}", T::NAME, T::MAJOR);
         if !status.is_ok() {
             // SAFETY: the loader keeps the reason for the process.
             let reason = unsafe { found.reason.as_str() }.unwrap_or_default();
-            return Err((
+            return Err(FindServiceError::Refused {
+                name: T::NAME,
+                major: T::MAJOR,
                 status,
-                if reason.is_empty() {
-                    format!("{what}: not found")
-                } else {
-                    format!("{what}: {reason}")
-                },
-            ));
+                reason: reason.to_owned(),
+            });
         }
         // SAFETY: the loader checked the published layout starts with
         // every field of `T`, and tables are `'static`.
-        unsafe { found.table.cast::<T>().as_ref() }
-            .ok_or_else(|| (Status::MISSING, format!("{what}: null table")))
+        unsafe { found.table.cast::<T>().as_ref() }.ok_or(FindServiceError::NullTable {
+            name: T::NAME,
+            major: T::MAJOR,
+        })
+    }
+}
+
+/// Why a lookup of a service found no table: the loader's status and
+/// reason, or a table the loader handed over as null.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+enum FindServiceError {
+    /// The loader refused the lookup with `status`; `reason` is empty when
+    /// it gave none.
+    #[error("service {name} v{major}: {}", if reason.is_empty() { "not found" } else { reason.as_str() })]
+    Refused {
+        name: &'static str,
+        major: u32,
+        status: Status,
+        reason: String,
+    },
+    /// The loader found the service but handed over no table.
+    #[error("service {name} v{major}: null table")]
+    NullTable { name: &'static str, major: u32 },
+}
+
+impl FindServiceError {
+    /// The status of the lookup: the loader's, or missing for a null table.
+    const fn status(&self) -> Status {
+        match self {
+            Self::Refused { status, .. } => *status,
+            Self::NullTable { .. } => Status::MISSING,
+        }
     }
 }

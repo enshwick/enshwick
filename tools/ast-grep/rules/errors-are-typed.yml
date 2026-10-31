@@ -5,7 +5,9 @@ message: return a `thiserror` type named `Error` or `VerbObjectError`, not a `St
 note: >-
   A typed error lets the caller match on what failed, carries its source and
   converts with `?` into the API's `Off`; a string can only be shown. The
-  rule refuses `Result<_, String>` in library and domain code; the
+  rule refuses `Result<_, String>` and a tuple holding a `String` in the
+  error's place, such as `(Status, String)`, in library and domain code; a
+  type alias hides one from it. The
   `cargo-enshwick` binary, build scripts, the repository tools and tests may
   keep strings.
 ignores:
@@ -17,6 +19,11 @@ ignores:
   - "**/*_tests.rs"
   - "**/benches/**"
 utils:
+  string:
+    any:
+      - kind: type_identifier
+      - kind: scoped_type_identifier
+    regex: '(^|::)String$'
   in-test:
     any:
       - kind: mod_item
@@ -47,9 +54,10 @@ rule:
         field: type_arguments
         has:
           any:
-            - kind: type_identifier
-            - kind: scoped_type_identifier
-          regex: '(^|::)String$'
+            - matches: string
+            - kind: tuple_type
+              has:
+                matches: string
           nthChild:
             position: 2
           all:
