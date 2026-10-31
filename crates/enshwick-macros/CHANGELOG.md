@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `exports` in `[package.metadata.enshwick]`, the local names other mods may
+  use, which `declare_mod!` puts into the manifest; a listed point, event or
+  call missing from it fails the build (#783).
+
 - `declare_mod!` and `declare_test_mod!`, which build a mod's manifest from
   its `[package.metadata.enshwick]` table (#759).
 
