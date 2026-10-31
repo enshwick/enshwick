@@ -1,9 +1,10 @@
 //! Rolling affixes onto items: by hand, on random loot and on crafted
 //! items. Unstable, since what an item rolled is kept as item data.
 
-use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::Entity;
 use crate::abi::{AffixRoll, Header, Status};
@@ -166,7 +167,7 @@ impl AffixCraft {
 
 /// The crafters waiting for their items: when they asked, and the items
 /// they held then.
-type Crafts = Mutex<HashMap<Entity, (Instant, HashSet<ItemInstance>)>>;
+type Crafts = Mutex<FxHashMap<Entity, (Instant, FxHashSet<ItemInstance>)>>;
 
 /// How long after a craft request the crafter's new items count as crafted.
 const CRAFT_WINDOW: Duration = Duration::from_secs(1);
@@ -257,7 +258,7 @@ impl Load<'_> {
         let pending: Arc<Crafts> = Arc::default();
         let requests = Arc::clone(&pending);
         self.on::<CraftRecipeEvent>(move |craft| {
-            let held: HashSet<ItemInstance> =
+            let held: FxHashSet<ItemInstance> =
                 instances(&inventories.read().slots(craft.crafting_operator_id)).collect();
             requests
                 .relock()
@@ -265,7 +266,7 @@ impl Load<'_> {
                 .or_insert((Instant::now(), held));
         })?;
         scheduler.every(SWEEP, move || {
-            let due: Vec<(Entity, HashSet<ItemInstance>)> = {
+            let due: Vec<(Entity, FxHashSet<ItemInstance>)> = {
                 let mut pending = pending.relock();
                 let now = Instant::now();
                 let ready: Vec<Entity> = pending

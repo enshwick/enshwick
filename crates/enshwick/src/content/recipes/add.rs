@@ -261,9 +261,9 @@ pub(super) fn retarget(
 pub(super) fn workshop_counts(
     layout: &RecipeLayout,
     blob: &Blob,
-) -> Option<std::collections::HashMap<u32, usize>> {
+) -> Option<rustc_hash::FxHashMap<u32, usize>> {
     let (start, count) = blob.array(layout.recipes)?;
-    let mut counts = std::collections::HashMap::new();
+    let mut counts = rustc_hash::FxHashMap::default();
     for i in 0..usize::try_from(count).ok()? {
         let workshop = blob.read_u32(start + i * layout.recipe + layout.workshop)?;
         *counts.entry(workshop).or_insert(0) += 1;

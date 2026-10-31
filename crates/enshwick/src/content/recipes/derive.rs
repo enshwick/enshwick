@@ -29,7 +29,7 @@ pub(super) fn vanilla_registry() -> Option<Vec<u8>> {
 pub(super) fn recipe_guids(
     layout: &RecipeLayout,
     registry: &[u8],
-) -> Option<std::collections::HashSet<Guid>> {
+) -> Option<rustc_hash::FxHashSet<Guid>> {
     let blob = Blob::new(registry);
     let (start, count) = blob.array(layout.recipes)?;
     Some(

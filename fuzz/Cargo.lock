@@ -123,6 +123,7 @@ dependencies = [
  "enshwick-gamedata",
  "iced-x86",
  "memchr",
+ "rustc-hash",
  "semver",
  "serde",
  "serde_json",

@@ -1,11 +1,13 @@
 //! The pages of the process: what Windows says about the region an address
-//! lies in, and changes of a range's protection.
+//! lies in, fresh pages, and changes of a range's protection.
+
+use core::ptr::NonNull;
 
 use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
 use windows_sys::Win32::System::Memory::{
-    MEM_COMMIT, MEM_FREE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
-    PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE,
-    PAGE_WRITECOPY, VirtualProtect, VirtualQuery,
+    MEM_COMMIT, MEM_FREE, MEM_RESERVE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
+    PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY,
+    PAGE_READWRITE, PAGE_WRITECOPY, VirtualAlloc, VirtualProtect, VirtualQuery,
 };
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
@@ -91,6 +93,19 @@ pub(crate) fn query(address: usize) -> Option<Region> {
         state: info.State,
         protect: info.Protect,
     })
+}
+
+/// Reserves and commits `len` bytes of fresh read-write pages, at `address`
+/// rounded down to the 64 KiB allocation granularity when one is given and
+/// where Windows picks otherwise; `None` when Windows refused or the range
+/// is taken.
+pub(crate) fn allocate(address: Option<usize>, len: usize) -> Option<NonNull<u8>> {
+    let at = address.map_or(core::ptr::null(), core::ptr::with_exposed_provenance);
+    // SAFETY: the `VirtualAlloc` documentation says `MEM_RESERVE` fails on
+    // a range any allocation already reserved, so the call touches no
+    // existing memory; it returns null then, and when no memory is left.
+    let block = unsafe { VirtualAlloc(at, len, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) };
+    NonNull::new(block.cast::<u8>())
 }
 
 /// Sets the protection of the pages that hold `len` bytes at `address`;

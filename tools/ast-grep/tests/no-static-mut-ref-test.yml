@@ -1,0 +1,16 @@
+id: no-static-mut-ref
+valid:
+  - "fn f(x: &'static str) {}"
+  - "fn f<'a>(x: &'a mut Entity) {}"
+  - "fn f(x: &mut Entity) {}"
+  - "fn f(p: *mut Entity) {}"
+  - |
+    #[cfg(test)]
+    mod tests {
+        fn leak() -> &'static mut u8 { Box::leak(Box::new(0)) }
+    }
+invalid:
+  - "fn world() -> &'static mut World { todo!() }"
+  - "static mut SLOT: Option<&'static mut Entity> = None;"
+  - "fn f(p: *mut Entity) { let e: &'static mut Entity = unsafe { &mut *p }; }"
+  - "struct Walk { at: &'static mut [u8] }"

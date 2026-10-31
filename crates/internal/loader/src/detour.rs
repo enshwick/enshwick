@@ -28,9 +28,7 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
 };
-use windows_sys::Win32::System::Memory::{
-    MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE, VirtualAlloc,
-};
+use windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE;
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetThreadId, OpenThread,
     ResumeThread, SuspendThread, THREAD_GET_CONTEXT, THREAD_QUERY_LIMITED_INFORMATION,
@@ -309,18 +307,7 @@ fn allocate_near(target: usize) -> Option<usize> {
             if !pages::query(address).is_some_and(|found| found.is_free()) {
                 return None;
             }
-            // SAFETY: `VirtualAlloc` at a region `query` found free reserves
-            // fresh pages or returns null when another thread took it
-            // meanwhile; it touches no existing memory.
-            let block = unsafe {
-                VirtualAlloc(
-                    address as *const _,
-                    BLOCK,
-                    MEM_RESERVE | MEM_COMMIT,
-                    PAGE_READWRITE,
-                )
-            };
-            (!block.is_null()).then(|| block.addr())
+            pages::allocate(Some(address), BLOCK).map(|block| block.as_ptr().addr())
         })
 }
 

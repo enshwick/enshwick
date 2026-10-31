@@ -1,0 +1,51 @@
+id: no-get-prefix
+language: rust
+severity: error
+message: name a public getter for what it returns, without `get_`
+note: >-
+  A getter is named for its value (`name`, not `get_name`); a conversion is
+  `as_`, `to_` or `into_`, and a constructor `new`, `with_*` or `from_*`. The
+  rule refuses a `pub fn get_*`, a free function or a method. The names std
+  gives a cell or a collection (`get_mut`, `get_unchecked`, `get_or_init`,
+  `get_or_insert_with`) pass, and so do a crate-visible or private function
+  and a trait method, which the trait names.
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/benches/**"
+utils:
+  in-test:
+    any:
+      - kind: mod_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[cfg\(.*\btest\b'
+      - kind: function_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[(test|cfg\(.*\btest\b)'
+rule:
+  kind: function_item
+  all:
+    - has:
+        field: name
+        regex: '^get_'
+        not:
+          regex: '^get_(mut|unchecked|unchecked_mut|or_\w+)$'
+    - has:
+        kind: visibility_modifier
+        regex: '^pub$'
+  not:
+    inside:
+      stopBy: end
+      matches: in-test

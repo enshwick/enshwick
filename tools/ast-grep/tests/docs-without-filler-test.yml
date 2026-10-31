@@ -1,0 +1,39 @@
+id: docs-without-filler
+valid:
+  - |
+    /// Reads the slot the loader set.
+    fn f() {}
+  - |
+    // This function simply waits; a plain comment is not a doc.
+    fn f() {}
+  - |
+    //// Note that four slashes make a plain comment.
+    fn f() {}
+  - |
+    /// Notes that the player saw.
+    fn f() {}
+  - |
+    /// Tells a player who got a note that a late hello matched.
+    fn f() {}
+  - |
+    /// Writes the note before any change, and the
+    /// note that names them stays.
+    fn f() {}
+invalid:
+  - |
+    /// Reads the slot; note that it may be empty.
+    fn f() {}
+  - |
+    /// Note that the slot may be empty.
+    fn f() {}
+  - |
+    /// Simply reads the slot.
+    fn f() {}
+  - |
+    //! The loader basically forwards each call.
+  - |
+    /// Reads the slot. Note that it may be empty.
+    fn f() {}
+  - |
+    /// This function reads the slot.
+    fn f() {}

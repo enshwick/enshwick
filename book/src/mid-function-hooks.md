@@ -57,7 +57,7 @@ the vector registers is chosen per processor when the hooks are armed:
 
 Per call of a hooked 3-instruction function with an empty handler, release
 build, Ryzen 9 9950X3D (`cargo test -p enshwick-loader --release --lib
-stub_cost -- --ignored --nocapture`, which also runs the paths of other
+measures_the_stub_cost -- --ignored --nocapture`, which also runs the paths of other
 processors):
 
 | Path                  | Upper halves clear | `ymm` in use | `zmm` in use |

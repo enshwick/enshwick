@@ -5,4 +5,8 @@ allow-print-in-tests = true
 # Before 1.0 the API may change; cargo-semver-checks guards releases.
 avoid-breaking-exported-api = false
 upper-case-acronyms-aggressive = true
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "use `rustc_hash::FxHashMap`; SipHash only for keys an untrusted peer sends" },
+    { path = "std::collections::HashSet", reason = "use `rustc_hash::FxHashSet`; SipHash only for keys an untrusted peer sends" },
+]
 doc-valid-idents = ["Enshrouded", "Enshwick", "MinHook", "CodeView", "SemVer", "UE4SS", "SKSE", ".."]

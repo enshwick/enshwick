@@ -25,7 +25,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use windows_sys::Win32::System::Diagnostics::Debug::{
     IMAGE_RUNTIME_FUNCTION_ENTRY, RtlAddFunctionTable,
 };
-use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc};
 use windows_sys::Win32::System::Threading::{TlsAlloc, TlsGetValue};
 
 use crate::mod_index::ModIndex;
@@ -244,13 +243,12 @@ pub(crate) fn arm(
     let counters_len = (count + hops) * size_of::<Counter>();
     let functions_len = (count + hops) * size_of::<RuntimeFunction>();
     let data_len = (slots_len + counters_len + functions_len + UNWIND.len()).div_ceil(PAGE) * PAGE;
-    let block = reserve(code_len + data_len);
-    if block.is_null() {
+    let Some(block) = crate::pages::allocate(None, code_len + data_len) else {
         return unarmed(chains, mids, patches, "no memory for thunks");
-    }
-    // SAFETY: `block` is non-null, checked by the guard before it, and
-    // `reserve` committed `code_len + data_len` bytes there, so `code_len`
-    // stays inside.
+    };
+    let block = block.as_ptr();
+    // SAFETY: `allocate` committed `code_len + data_len` bytes at `block`,
+    // so `code_len` stays inside.
     let data_start = unsafe { block.add(code_len) };
     #[expect(
         clippy::cast_ptr_alignment,
@@ -365,7 +363,7 @@ pub(crate) fn arm(
         let _first = ARMED_AT.set((rdtsc(), std::time::Instant::now()));
     }
 
-    // SAFETY: `block` and `code_len` are the code pages `reserve` gave this
+    // SAFETY: `block` and `code_len` are the code pages `allocate` gave this
     // batch, written in full; no thread runs them before `hook` links them.
     if !unsafe { crate::pages::seal(block.expose_provenance(), code_len) } {
         return unarmed(chains, mids, patches, "thunk pages not executable");
@@ -373,21 +371,6 @@ pub(crate) fn arm(
 
     let code = hook(chains, mids, &thunks, off, patches, &mut failures);
     Armed { failures, code }
-}
-
-/// `len` bytes of fresh read-write memory; null when there is none.
-fn reserve(len: usize) -> *mut u8 {
-    // SAFETY: `VirtualAlloc` with a null address reserves fresh pages and
-    // touches no memory of ours; null on failure, which callers check.
-    unsafe {
-        VirtualAlloc(
-            core::ptr::null(),
-            len,
-            MEM_RESERVE | MEM_COMMIT,
-            PAGE_READWRITE,
-        )
-    }
-    .cast::<u8>()
 }
 
 /// The function table of the timed calls, filled as thunks are written.

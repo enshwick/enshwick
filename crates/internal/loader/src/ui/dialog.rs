@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn tags_are_distinct_from_each_other_and_the_notices() {
-        let ids: std::collections::HashSet<u32> = (0..TAGS.len()).map(tag_id).collect();
+        let ids: rustc_hash::FxHashSet<u32> = (0..TAGS.len()).map(tag_id).collect();
         assert_eq!(ids.len(), TAGS.len());
     }
 

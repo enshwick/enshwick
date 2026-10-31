@@ -1,6 +1,6 @@
 //! Reading a pack's changes of vanilla values.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::content::Guid;
 use crate::content::categories::ItemCategoryMask;
@@ -115,7 +115,7 @@ pub(super) fn item_changes(
 ) -> (Vec<(Change, String)>, Selections) {
     let mut by_name: Vec<ChangeEntry<'_>> = Vec::new();
     let mut selections = Vec::new();
-    let mut seen: HashMap<(Items, Field), usize> = HashMap::new();
+    let mut seen: FxHashMap<(Items, Field), usize> = FxHashMap::default();
     for (index, entry) in items_file.change.iter().enumerate() {
         let e = entry.get_ref();
         let at = entry.span().start;
@@ -278,7 +278,7 @@ pub(super) fn loot_changes(
         })
         .collect();
     let mut out = changes_of(reader, LOOT_FILE, Entry::Loot, &entries, text);
-    let mut seen: HashMap<(Guid, Guid, Field), usize> = HashMap::new();
+    let mut seen: FxHashMap<(Guid, Guid, Field), usize> = FxHashMap::default();
     for (index, entry) in loot_file.change.iter().enumerate() {
         let e = entry.get_ref();
         if e.table.is_empty() {
@@ -395,7 +395,7 @@ fn changes_of(
     text: &str,
 ) -> Vec<(Change, String)> {
     let mut out = Vec::new();
-    let mut seen: HashMap<(Guid, Field), usize> = HashMap::new();
+    let mut seen: FxHashMap<(Guid, Field), usize> = FxHashMap::default();
     for (index, (at, items, given)) in entries.iter().enumerate() {
         let at = *at;
         let line = PackError::at(file, text, at, "").line;
@@ -532,8 +532,8 @@ pub(super) fn recipe_changes(
     let file = RECIPES_FILE;
     let mut out = Vec::new();
     let mut selections = Vec::new();
-    let mut seen: HashMap<(Guid, Field, Option<Guid>), usize> = HashMap::new();
-    let mut seen_selected: HashMap<(Recipes, Field), usize> = HashMap::new();
+    let mut seen: FxHashMap<(Guid, Field, Option<Guid>), usize> = FxHashMap::default();
+    let mut seen_selected: FxHashMap<(Recipes, Field), usize> = FxHashMap::default();
     for (index, entry) in recipes_file.change.iter().enumerate() {
         let at = entry.span().start;
         let line = PackError::at(file, text, at, "").line;
@@ -671,7 +671,7 @@ fn selected_recipes(
     text: &str,
     (at, line, number): (usize, usize, usize),
     e: &RecipeChangeEntry,
-    seen: &mut HashMap<(Recipes, Field), usize>,
+    seen: &mut FxHashMap<(Recipes, Field), usize>,
     selections: &mut RecipeSelections,
 ) -> bool {
     let file = RECIPES_FILE;

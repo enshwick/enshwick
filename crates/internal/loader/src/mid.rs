@@ -17,7 +17,6 @@ use std::sync::OnceLock;
 
 use enshwick::abi::{HookFlags, MidHookFn, Registers, Status};
 use rustc_hash::FxHashMap;
-use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc};
 
 use crate::mod_index::ModIndex;
 
@@ -296,20 +295,7 @@ impl Stubs {
     /// keeping the vector state as `vectors` says; `None` without memory.
     pub(crate) fn write(sites: &[(usize, usize)], vectors: Vectors) -> Option<Self> {
         let len = sites.len().max(1) * STUB;
-        // SAFETY: `VirtualAlloc` with a null address reserves fresh pages and
-        // touches no memory of ours; null on failure, checked below.
-        let base = unsafe {
-            VirtualAlloc(
-                core::ptr::null(),
-                len,
-                MEM_RESERVE | MEM_COMMIT,
-                PAGE_READWRITE,
-            )
-        }
-        .cast::<u8>();
-        if base.is_null() {
-            return None;
-        }
+        let base = crate::pages::allocate(None, len)?.as_ptr();
         for (i, &(callback, context)) in sites.iter().enumerate() {
             let code = stub(callback, context, vectors);
             // SAFETY: `i < sites.len()` and `len` is `sites.len() * STUB` at

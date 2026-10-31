@@ -1,6 +1,8 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
-use windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE;
+use windows_sys::Win32::System::Memory::{
+    MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, VirtualAlloc,
+};
 
 use crate::detour::{self, Request};
 
@@ -663,8 +665,8 @@ fn per_call(function: Unary) -> f64 {
 }
 
 #[test]
-#[ignore = "a measurement: cargo test -p enshwick-loader --release --lib stub_cost -- --ignored --nocapture"]
-fn stub_cost() {
+#[ignore = "a measurement: cargo test -p enshwick-loader --release --lib measures_the_stub_cost -- --ignored --nocapture"]
+fn measures_the_stub_cost() {
     let callback = (nothing as *const ()).addr();
     println!("chosen here: {:?}", Vectors::current());
     let mut cases: Vec<(&str, Unary)> = vec![("clear", plain_clear)];

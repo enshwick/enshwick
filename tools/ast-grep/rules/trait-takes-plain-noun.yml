@@ -1,0 +1,43 @@
+id: trait-takes-plain-noun
+language: rust
+severity: error
+message: name a trait with the plain noun, without `I`, `Trait`, `Base` or `Impl`
+note: >-
+  A trait is the contract and takes the plain noun; a concrete type puts a
+  qualifier in front of it, and a role is a suffix such as `Error`, `Builder`
+  or `Guard`. The rule reads only the trait's own name, so a type named
+  `FooImpl` or a module named `base` passes.
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/benches/**"
+utils:
+  in-test:
+    any:
+      - kind: mod_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[cfg\(.*\btest\b'
+      - kind: function_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[(test|cfg\(.*\btest\b)'
+rule:
+  kind: trait_item
+  has:
+    field: name
+    regex: '^I[A-Z]|.(Trait|Base|Impl)$'
+  not:
+    inside:
+      stopBy: end
+      matches: in-test

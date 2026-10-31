@@ -1,0 +1,45 @@
+id: memory-calls-through-pages
+language: rust
+severity: error
+message: query, protect and allocate pages through the loader's `pages` helpers
+note: >-
+  `VirtualQuery`, `VirtualProtect` and `VirtualAlloc` each have one helper in
+  `crates/internal/loader/src/pages.rs`, which holds their error handling and
+  the W^X order. The rule refuses a call anywhere else; the proxy stub links
+  no loader code and carries an ignore comment with its reason. A call made
+  through a function pointer or another crate's wrapper is not seen.
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/benches/**"
+  - "crates/internal/loader/src/pages.rs"
+utils:
+  in-test:
+    any:
+      - kind: mod_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[cfg\(.*\btest\b'
+      - kind: function_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[(test|cfg\(.*\btest\b)'
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '(^|::)Virtual(Query|Protect|Alloc)(Ex)?$'
+  not:
+    inside:
+      stopBy: end
+      matches: in-test

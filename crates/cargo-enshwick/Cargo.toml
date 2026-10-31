@@ -19,6 +19,7 @@ enshwick = { workspace = true, features = ["schema", "unstable"] }
 enshwick-gamedata.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true
+rustc-hash.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true

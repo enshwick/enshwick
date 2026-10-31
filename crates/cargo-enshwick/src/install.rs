@@ -334,7 +334,7 @@ mod tests {
     }
 
     #[test]
-    fn metadata_parses() {
+    fn metadata_reads_the_crate_types() {
         let json = r#"{"packages":[{"name":"trading-post","manifest_path":"/w/trading-post/Cargo.toml",
             "targets":[{"name":"trading_post","crate_types":["cdylib"],"kind":["cdylib"]}],"version":"0.1.0"}],
             "target_directory":"/w/target","workspace_root":"/w"}"#;

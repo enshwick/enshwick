@@ -2,10 +2,9 @@
 //! [`DIR`], read into rows and written for a new build with the code
 //! patterns that find each entry on a build without a table.
 
-use std::collections::HashMap;
-
 use anyhow::{Context as _, anyhow, bail};
 use enshwick_gamedata::Locate;
+use rustc_hash::FxHashMap;
 use toml_edit::{DocumentMut, Item, Table as TomlTable, Value};
 
 use super::anchor::{self, Anchor};
@@ -134,7 +133,7 @@ pub(crate) fn render(
     identity: &Identity<'_>,
     edits: &[(&Entry, Edit)],
     exe: Option<&Exe<'_>>,
-    anchors: &HashMap<String, Anchor>,
+    anchors: &FxHashMap<String, Anchor>,
 ) -> anyhow::Result<(String, Patterned)> {
     let mut doc: DocumentMut = src.parse()?;
     doc["name"] = toml_edit::value(identity.name);
@@ -229,7 +228,7 @@ type Written = anyhow::Result<Option<String>>;
 fn patterns_into(
     doc: &mut DocumentMut,
     exe: &Exe<'_>,
-    anchors: &HashMap<String, Anchor>,
+    anchors: &FxHashMap<String, Anchor>,
 ) -> anyhow::Result<Patterned> {
     let present = enshwick_gamedata::Table::parse(&doc.to_string())?;
     let pinned = |id: &str| {
@@ -243,7 +242,7 @@ fn patterns_into(
     anchors_here.extend(anchors.iter().map(|(id, a)| (id.clone(), a.clone())));
     let (code, _) = exe.text();
     let written = pattern_texts(doc, "constants");
-    let confirmed: HashMap<&str, String> = present
+    let confirmed: FxHashMap<&str, String> = present
         .constants()
         .iter()
         .filter(|c| c.operand().is_none())
@@ -254,7 +253,7 @@ fn patterns_into(
         .collect();
     let symbols = values(doc, "symbols");
     let constants = values(doc, "constants");
-    let kept: HashMap<&str, &enshwick_gamedata::Constant> = present
+    let kept: FxHashMap<&str, &enshwick_gamedata::Constant> = present
         .constants()
         .iter()
         .filter(|c| {
@@ -445,7 +444,7 @@ fn write_section(
     plain: fn(u64) -> String,
     problems: &mut Vec<String>,
 ) -> anyhow::Result<(usize, usize)> {
-    let found: HashMap<&str, _> = entries
+    let found: FxHashMap<&str, _> = entries
         .iter()
         .zip(texts)
         .map(|((id, value), text)| (id.as_str(), (*value, text)))
@@ -537,7 +536,7 @@ fn constant_text(value: u64, pattern: &ConstantPattern, plus: i64) -> String {
 }
 
 /// The pattern texts written in a section, by id.
-fn pattern_texts(doc: &DocumentMut, section: &str) -> HashMap<String, String> {
+fn pattern_texts(doc: &DocumentMut, section: &str) -> FxHashMap<String, String> {
     doc.get(section)
         .and_then(Item::as_table)
         .map(|t| {
@@ -661,7 +660,8 @@ revision = 3
             game_version: None,
             new_build: true,
         };
-        let (text, _) = render(TABLE, &row, &identity, &edits, None, &HashMap::new()).unwrap();
+        let (text, _) =
+            render(TABLE, &row, &identity, &edits, None, &FxHashMap::default()).unwrap();
         assert!(text.contains(
             "name = \"1.0 server (2)\"
 "
@@ -708,7 +708,7 @@ revision = 1
             new_build: true,
         };
         let text = |src: &str, identity| {
-            render(src, &row, &identity, &[], None, &HashMap::new())
+            render(src, &row, &identity, &[], None, &FxHashMap::default())
                 .unwrap()
                 .0
         };

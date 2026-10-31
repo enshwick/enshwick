@@ -1,0 +1,17 @@
+id: trait-takes-plain-noun
+valid:
+  - "pub trait Headed: Zeroable {}"
+  - "pub trait Relock<T> { fn relock(&self); }"
+  - "pub trait Io {}"
+  - "pub trait Impulse {}"
+  - "pub struct ReaderImpl;"
+  - |
+    #[cfg(test)]
+    mod tests {
+        trait FakeBase {}
+    }
+invalid:
+  - "pub trait IReader {}"
+  - "trait ReaderTrait {}"
+  - "pub(crate) trait HookBase {}"
+  - "pub unsafe trait HeadedImpl {}"

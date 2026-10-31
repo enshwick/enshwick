@@ -840,7 +840,7 @@ workers = 2"
         #[derive(Default)]
         struct Mixed {
             /// Keyed by number, which TOML cannot write.
-            names: std::collections::HashMap<u32, String>,
+            names: rustc_hash::FxHashMap<u32, String>,
             /// Checked.
             #[config(range = 1..=16)]
             limit: u32,
@@ -852,7 +852,7 @@ workers = 2"
             seed: u64,
         }
         let mut mixed = Mixed {
-            names: [(1, "one".to_owned())].into(),
+            names: [(1, "one".to_owned())].into_iter().collect(),
             limit: 99,
             seed: 1,
             ..Mixed::default()

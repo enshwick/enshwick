@@ -318,7 +318,7 @@ mod tests {
     use super::Shape;
 
     #[test]
-    fn primitives_differ() {
+    fn each_primitive_has_its_own_shape() {
         let shapes = [
             u8::SHAPE,
             i8::SHAPE,

@@ -133,6 +133,7 @@ dependencies = [
  "iced-x86",
  "insta",
  "memchr",
+ "rustc-hash",
  "semver",
  "serde",
  "serde_json",

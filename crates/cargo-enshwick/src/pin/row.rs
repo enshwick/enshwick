@@ -1,10 +1,10 @@
 //! Ports one build row: its checks through reflection, its symbols through
 //! signatures, and its constants through the code that uses them.
 
-use std::collections::HashMap;
 use std::fmt;
 
 use enshwick_gamedata::{Symbol, Table};
+use rustc_hash::FxHashMap;
 
 use super::anchor::{self, Anchor};
 use super::exe::Exe;
@@ -336,7 +336,7 @@ pub(crate) fn port_anchors<'r>(
     table: &Table,
     old: &Exe<'_>,
     new: &Exe<'_>,
-) -> HashMap<String, Anchor> {
+) -> FxHashMap<String, Anchor> {
     let finder = Porter::new(old, new);
     // The entry's own pattern finds its instruction on the new build while
     // the code around it holds; else the instruction is ported.
@@ -355,7 +355,7 @@ pub(crate) fn port_anchors<'r>(
             .and_then(|l| l.new)
     };
     let in_new = anchor::of_table(table, new, ported_to);
-    let mut out = HashMap::new();
+    let mut out = FxHashMap::default();
     for (id, anchor) in anchor::of_table(table, old, pinned) {
         let by_port = || {
             let site = anchor.site().and_then(|s| finder.symbol(s).outcome.rva())?;

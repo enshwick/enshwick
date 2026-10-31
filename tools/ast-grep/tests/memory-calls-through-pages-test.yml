@@ -1,0 +1,15 @@
+id: memory-calls-through-pages
+valid:
+  - "fn f(at: usize) { let info = pages::query(at); }"
+  - "fn f(at: usize) { let guard = pages::writable(at, 5); }"
+  - "fn f() { VirtualFree(p, 0, MEM_RELEASE); }"
+  - |
+    #[cfg(test)]
+    mod tests {
+        fn alloc() { unsafe { VirtualAlloc(None, 4096, MEM_COMMIT, PAGE_READWRITE) }; }
+    }
+invalid:
+  - "fn f() { unsafe { VirtualQuery(Some(p), &mut info, size) }; }"
+  - "fn f() { unsafe { VirtualProtect(p, 5, PAGE_EXECUTE_READWRITE, &mut old) }; }"
+  - "fn f() { unsafe { windows::Win32::System::Memory::VirtualAlloc(None, 4096, MEM_COMMIT, PAGE_READWRITE) }; }"
+  - "fn f() { unsafe { VirtualAllocEx(process, None, 4096, MEM_COMMIT, PAGE_READWRITE) }; }"
