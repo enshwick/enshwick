@@ -15,7 +15,8 @@ Each entry names the pull request that made the change.
   holds `PackDependency` values, and `PackManifest::dependencies` lists every
   table with its `Relation`. An alias is `[a-z][a-z0-9_]*`, unique across the
   tables, and neither `vanilla` nor a Luau keyword; `after` takes no version.
-  Write `"you.lockers" = ">=0.1"` as `lockers = { id = "you.lockers", version = ">=0.1" }`.
+  Write `"you.lockers" = ">=0.1"` as
+  `lockers = { id = "you.lockers", version = ">=0.1" }` (#784).
 
 - **Breaking:** a mod's calls, points, services and events are its own until
   `exports` in `[package.metadata.enshwick]`, or in a pack's `pack.toml`,
