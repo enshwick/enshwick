@@ -13,6 +13,10 @@ pre-commit:
       run: bunx --no-install markdownlint-cli2 --no-globs {staged_files}
     typos:
       run: typos --force-exclude {staged_files}
+    # zizmor offline: its online audits need a GitHub token and the network.
+    workflows:
+      glob: '.github/**'
+      run: actionlint && zizmor --offline --quiet .
 
 # committed checks the header against committed.toml. Messages git writes
 # itself (merges, reverts, fixups) pass as they are. A subject starts in
@@ -62,3 +66,6 @@ pre-push:
       # Advisories need the network and change without any commit: CI's
       # full suite checks them every night.
       run: cargo deny check bans licenses sources
+    workflows:
+      glob: '.github/**'
+      run: actionlint && zizmor --offline --quiet .
