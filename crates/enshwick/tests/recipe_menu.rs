@@ -24,16 +24,10 @@ mod tests {
 
     impl Mod for Menu {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let bench = load.add_workshop(NewWorkshop {
-                like: stations::WORKBENCH,
-                item: Id::new("you.menu:bench"),
-                template: Id::new("you.menu:bench.template"),
-                workshop: BENCH,
-                name: None,
-                description: None,
-                station_recipe: None,
-                debug_name: "Bench".into(),
-            })?;
+            let bench = load.add_workshop(NewWorkshop::new(
+                Id::new("you.menu:bench"),
+                stations::WORKBENCH,
+            ))?;
             load.add_recipe(NewRecipe {
                 id: SAFE_RECIPE,
                 like: CHEST,

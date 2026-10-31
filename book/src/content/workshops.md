@@ -11,35 +11,28 @@ for your recipes.
 ```rust
 use enshwick::content::{Id, id};
 use enshwick::content::recipes::Derived;
-use enshwick::content::workshops::{NewWorkshop, StationRecipe, stations};
+use enshwick::content::workshops::{NewWorkshop, stations};
 
 const BENCH: Id = id!("bulk-bench");
-const BENCH_TEMPLATE: Id = id!("bulk-bench.template");
-const BENCH_WORKSHOP: Id = id!("bulk-bench.workshop");
-const BENCH_RECIPE: Id = id!("bulk-bench.recipe");
-const BENCH_NAME: Id = id!("bulk-bench.name");
-const BENCH_DESCRIPTION: Id = id!("bulk-bench.description");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let new = NewWorkshop {
+        named: true,
+        described: true,
+        recipe_cost: Some(1),
+        debug_name: "Craftingstation_BulkWorkbench".into(),
+        ..NewWorkshop::new(BENCH, stations::WORKBENCH)
+    };
     let texts = load.texts(r#"
 [en]
 "bench.name" = "Bulk Workbench"
 "bench.description" = "A workbench for building in bulk."
 "#)?;
     load.add_texts(&texts, &[
-        ("bench.name", BENCH_NAME),
-        ("bench.description", BENCH_DESCRIPTION),
+        ("bench.name", new.name()),
+        ("bench.description", new.description()),
     ])?;
-    let bench = load.add_workshop(NewWorkshop {
-        like: stations::WORKBENCH,
-        item: BENCH,
-        template: BENCH_TEMPLATE,
-        workshop: BENCH_WORKSHOP,
-        name: Some(BENCH_NAME.guid()),
-        description: Some(BENCH_DESCRIPTION.guid()),
-        station_recipe: Some(StationRecipe { id: BENCH_RECIPE, cost: 1 }),
-        debug_name: "Craftingstation_BulkWorkbench".into(),
-    })?;
+    let bench = load.add_workshop(new)?;
     load.derive_recipes("my-mod", move |recipe| {
         recipe
             .debug_name()
@@ -49,10 +42,22 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+The mod writes one name. The station item is `BENCH`, and every other id
+the station needs derives from it:
+
+| Id | What it names |
+| --- | --- |
+| `<mod>:bulk-bench` | the station item |
+| `<mod>:bulk-bench.template` | the station's template, `new.template()` |
+| `<mod>:bulk-bench.workshop` | the workshop, `new.workshop()` |
+| `<mod>:bulk-bench.recipe` | the recipe that makes the station, `new.recipe()` |
+| `<mod>:bulk-bench.name` | the tag of the station's name, `new.name()` |
+| `<mod>:bulk-bench.description` | the tag of the item's description, `new.description()` |
+
 ## What it adds
 
 `add_workshop` serves five resources, a sixth on the client, and with
-`station_recipe` adds a recipe:
+`recipe_cost` adds a recipe:
 
 1. the station's template, a copy of the vanilla one whose crafting
    components (`Crafting`, `CraftingInteraction`,
@@ -62,13 +67,13 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
    template;
 4. the item registry with the new item listed;
 5. the workshop registry with a copy of the vanilla station's entry, naming
-   the new workshop, the new item and, with `name`, the new name;
+   the new workshop, the new item and, with `named`, the new name;
 6. on the client, the UI bundle with a crafting menu for the new workshop:
    one group with one empty set, where its recipes go
    ([The crafting menu](recipes.md#the-crafting-menu));
-7. with `station_recipe`, a copy of the vanilla station's recipe that makes
+7. with `recipe_cost`, a copy of the vanilla station's recipe that makes
    the new station, at the workshop where the vanilla station is crafted,
-   its ingredient counts times `cost`.
+   its ingredient counts times the cost.
 
 The new workshop starts with no recipes. Only recipes you send there are
 made at it.
@@ -78,13 +83,16 @@ made at it.
 | Field | Meaning |
 | --- | --- |
 | `like` | The vanilla station cloned, a [`Station`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs): its item and the template the item places. |
-| `item` | The new station item's content id. |
-| `template` | The new station's template's content id. |
-| `workshop` | The new workshop's content id. |
-| `name` | The tag of the station's name, which also names the workshop; `None` keeps the vanilla names. |
-| `description` | The tag of the station item's description; `None` keeps the vanilla one. |
-| `station_recipe` | How the station is crafted, a [`StationRecipe`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs) with the recipe's content id and a cost factor; `None` adds no recipe. |
-| `debug_name` | The item's name in the registry's debug list. |
+| `id` | The new station item's content id, which every other id derives from. |
+| `named` | Whether the station takes the name `<id>.name`, which also names the workshop; `false` keeps the vanilla names. |
+| `described` | Whether the station item takes the description `<id>.description`; `false` keeps the vanilla one. |
+| `recipe_cost` | With a cost, the recipe `<id>.recipe` makes the station from the vanilla station's ingredients times the cost; `None` adds no recipe. |
+| `debug_name` | The item's name in the registry's debug list; the id unless set. |
+
+`NewWorkshop::new(id, like)` makes one with the vanilla names and no
+recipe; set the other fields with struct update syntax. Give the name and
+description their texts with [`add_texts`](texts.md) and the tags
+`new.name()` and `new.description()`.
 
 [`stations::WORKBENCH`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
 is the Workbench. Any other crafting station comes from the game's data:
@@ -112,7 +120,8 @@ Kiln, Smelter, Loom, Alchemy Station, Oven and Kitchen among them.
 Every [content id](../content.md#content-ids) is the mod's own and fixed for
 good: saves keep the template GUID of each placed station and the item id of
 each stack. `add_workshop` declares the item's, the template's and the
-workshop's ids.
+workshop's ids. An id that is a part already, or too long to take
+`.description`, turns the mod off.
 
 ## Recipes at the new workshop
 

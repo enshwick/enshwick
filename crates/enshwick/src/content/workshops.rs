@@ -94,47 +94,164 @@ impl WorkshopId {
     }
 }
 
-/// How the new station is crafted: a copy of the vanilla station's recipe.
+/// A new workshop for [`Load::add_workshop`], named by one id.
+///
+/// The station item is `id`; the station's other ids derive from it with
+/// [`Id::part`]: its template `<id>.template`, its workshop `<id>.workshop`,
+/// its recipe `<id>.recipe`, and the tags of its name and description,
+/// `<id>.name` and `<id>.description`. So `id` is a plain id, never one
+/// derived with [`Id::part`], even when the same id written in full would
+/// fit. Every id is the mod's own and never
+/// changes: saves keep the template GUID of each placed station and the item
+/// id of each stack.
 ///
 /// # Examples
 ///
-/// See [`Load::add_workshop`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct StationRecipe {
-    /// The recipe's id.
-    pub id: Id,
-    /// The vanilla recipe's ingredient counts times this.
-    pub cost: u32,
-}
-
-/// A new workshop for [`Load::add_workshop`].
+/// ```
+/// use enshwick::content::{Id, id};
+/// use enshwick::content::workshops::{NewWorkshop, stations};
 ///
-/// Every id is the mod's own and never changes: saves keep the template
-/// GUID of each placed station and the item id of each stack.
+/// const BENCH: Id = id!("bulk-bench");
 ///
-/// # Examples
-///
-/// See [`Load::add_workshop`].
+/// let bench = NewWorkshop::new(BENCH, stations::WORKBENCH);
+/// assert_eq!(bench.debug_name, BENCH.to_string());
+/// assert_eq!(bench.workshop(), BENCH.part("workshop"));
+/// assert_eq!(bench.name(), BENCH.part("name"));
+/// assert!(!bench.named && bench.recipe_cost.is_none());
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewWorkshop {
     /// The vanilla station cloned: what the new one looks like and does.
     pub like: Station,
-    /// The new station item.
-    pub item: Id,
-    /// The new station's template.
-    pub template: Id,
-    /// The new workshop.
-    pub workshop: Id,
-    /// The tag of the station's name, which also names the workshop; `None`
-    /// keeps the vanilla names.
-    pub name: Option<Guid>,
-    /// The tag of the station item's description; `None` keeps the vanilla one.
-    pub description: Option<Guid>,
-    /// How the station is crafted; `None` adds no recipe.
-    pub station_recipe: Option<StationRecipe>,
-    /// The item's name in the registry's debug list.
+    /// The new station item, whose id the station's other ids derive from.
+    pub id: Id,
+    /// Whether the station takes the name [`NewWorkshop::name`], which also
+    /// names the workshop; `false` keeps the vanilla names. Give the tag its
+    /// text with [`Load::add_texts`].
+    pub named: bool,
+    /// Whether the station item takes the description
+    /// [`NewWorkshop::description`]; `false` keeps the vanilla one.
+    pub described: bool,
+    /// With a cost, the station is crafted by the recipe
+    /// [`NewWorkshop::recipe`], a copy of the vanilla station's whose
+    /// ingredient counts are times this; `None` adds no recipe.
+    pub recipe_cost: Option<u32>,
+    /// The item's name in the registry's debug list; the id unless set.
     pub debug_name: String,
 }
+
+impl NewWorkshop {
+    /// The station `id` cloned from `like`, with the vanilla names and no
+    /// recipe.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewWorkshop`].
+    #[must_use]
+    pub fn new(id: Id, like: Station) -> Self {
+        Self {
+            like,
+            id,
+            named: false,
+            described: false,
+            recipe_cost: None,
+            debug_name: id.to_string(),
+        }
+    }
+
+    /// The new station's template, `<id>.template`.
+    ///
+    /// # Panics
+    ///
+    /// When `id` is a part already or too long to take the part; see
+    /// [`Id::part`]. [`Load::add_workshop`] refuses such an id first.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewWorkshop`].
+    #[must_use]
+    pub const fn template(&self) -> Id {
+        self.id.part(TEMPLATE)
+    }
+
+    /// The new workshop, `<id>.workshop`, which recipes target.
+    ///
+    /// # Panics
+    ///
+    /// As [`NewWorkshop::template`].
+    ///
+    /// # Examples
+    ///
+    /// See [`NewWorkshop`].
+    #[must_use]
+    pub const fn workshop(&self) -> Id {
+        self.id.part(WORKSHOP)
+    }
+
+    /// The recipe that makes the station, `<id>.recipe`.
+    ///
+    /// # Panics
+    ///
+    /// As [`NewWorkshop::template`].
+    ///
+    /// # Examples
+    ///
+    /// See [`NewWorkshop`].
+    #[must_use]
+    pub const fn recipe(&self) -> Id {
+        self.id.part(RECIPE)
+    }
+
+    /// The tag of the station's name, `<id>.name`.
+    ///
+    /// # Panics
+    ///
+    /// As [`NewWorkshop::template`].
+    ///
+    /// # Examples
+    ///
+    /// See [`NewWorkshop`].
+    #[must_use]
+    pub const fn name(&self) -> Id {
+        self.id.part(NAME)
+    }
+
+    /// The tag of the station item's description, `<id>.description`.
+    ///
+    /// # Panics
+    ///
+    /// As [`NewWorkshop::template`].
+    ///
+    /// # Examples
+    ///
+    /// See [`NewWorkshop`].
+    #[must_use]
+    pub const fn description(&self) -> Id {
+        self.id.part(DESCRIPTION)
+    }
+
+    /// Whether every derived id fits; the reason when one does not.
+    pub(crate) fn check(&self) -> Result<(), Off> {
+        for part in [TEMPLATE, WORKSHOP, RECIPE, NAME, DESCRIPTION] {
+            if self.id.try_part(part).is_none() {
+                return Err(Off::new(format!(
+                    "workshop {}: the id takes no part `.{part}`; name the station by a plain id \
+                     of at most {} characters after the mod's",
+                    self.id,
+                    128 - 1 - DESCRIPTION.len(),
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The parts of a station's derived ids.
+const TEMPLATE: &str = "template";
+const WORKSHOP: &str = "workshop";
+const RECIPE: &str = "recipe";
+const NAME: &str = "name";
+const DESCRIPTION: &str = "description";
 
 /// Where the fields a workshop edit touches sit on the running build,
 /// resolved by the loader.
@@ -254,7 +371,7 @@ const REFERENCE: usize = 16;
 ///     new: NewWorkshop,
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
-///     let (template, like, workshop) = (new.template, new.like.template, new.workshop.guid());
+///     let (template, like, workshop) = (new.template(), new.like.template, new.workshop().guid());
 ///     load.serve(template.key(types::TEMPLATE_RESOURCE)?, like.key(types::TEMPLATE_RESOURCE)?, move |base| {
 ///         clone_template(&layout, base, workshop)
 ///     })
@@ -308,7 +425,7 @@ pub fn clone_template(layout: &WorkshopLayout, template: &[u8], workshop: Guid) 
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let items = ItemLayout::resolve(load)?;
-///     let (item, like) = (new.item.key(types::ITEM_INFO)?, new.like.item.key(types::ITEM_INFO)?);
+///     let (item, like) = (new.id.key(types::ITEM_INFO)?, new.like.item.key(types::ITEM_INFO)?);
 ///     load.serve(item, like, move |base| clone_station(&items, &layout, base, &new))
 /// }
 /// ```
@@ -326,10 +443,10 @@ pub fn clone_station(
     let mut item = Blob::new(&items::clone_item(
         items,
         like,
-        &item_of(new),
-        new.item.guid(),
+        &item_of(new)?,
+        new.id.guid(),
     )?);
-    item.write(layout.placed_entity, &new.template.guid().0)
+    item.write(layout.placed_entity, &new.id.try_part(TEMPLATE)?.guid().0)
         .then(|| item.into_bytes())
 }
 
@@ -349,7 +466,7 @@ pub fn clone_station(
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION_RESOURCE)?;
-///     load.serve(collection, collection, move |base| list_template(&layout, base, new.template.guid()))
+///     load.serve(collection, collection, move |base| list_template(&layout, base, new.template().guid()))
 /// }
 /// ```
 #[must_use]
@@ -407,30 +524,38 @@ pub fn list_workshop(
             .get_mut(at..at + bytes.len())
             .map(|target| target.copy_from_slice(bytes))
     };
-    put(layout.entry_guid, &new.workshop.guid().0)?;
-    put(layout.entry_id, &new.workshop.guid().fnv1a().to_le_bytes())?;
+    let workshop = new.id.try_part(WORKSHOP)?.guid();
+    put(layout.entry_guid, &workshop.0)?;
+    put(layout.entry_id, &workshop.fnv1a().to_le_bytes())?;
     put(
         layout.entry_item,
-        &crate::ItemId::from_guid(new.item.guid())
-            .get()
-            .to_le_bytes(),
+        &crate::ItemId::from_guid(new.id.guid()).get().to_le_bytes(),
     )?;
-    put(layout.entry_item_ref, &new.item.guid().0)?;
-    if let Some(name) = new.name {
+    put(layout.entry_item_ref, &new.id.guid().0)?;
+    if new.named {
+        let name = new.id.try_part(NAME)?.guid();
         put(layout.entry_name, &name.fnv1a().to_le_bytes())?;
     }
     blob.grow_array(layout.workshops, layout.entry, 4, &[], &[(entry, None)])?;
     Some(blob.into_bytes())
 }
 
-/// The station item as a plain new item.
-fn item_of(new: &NewWorkshop) -> NewItem {
-    NewItem {
-        name: new.name,
-        description: new.description,
+/// The station item as a plain new item; `None` when its tags do not fit.
+fn item_of(new: &NewWorkshop) -> Option<NewItem> {
+    let tag = |on: bool, part| {
+        if on {
+            new.id.try_part(part).map(|tag| Some(tag.guid()))
+        } else {
+            Some(None)
+        }
+    };
+    let (name, description) = (tag(new.named, NAME)?, tag(new.described, DESCRIPTION)?);
+    Some(NewItem {
+        name,
+        description,
         debug_name: new.debug_name.clone(),
-        ..NewItem::new(new.item, new.like.item)
-    }
+        ..NewItem::new(new.id, new.like.item)
+    })
 }
 
 impl Load<'_> {
@@ -448,40 +573,38 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when a layout is not reflected or the loader refuses one of
-    /// its ids (see [`Load::declare`]); a station whose
-    /// components or item do not match turns the mod off when the game first
-    /// reads them.
+    /// [`Off`] when a layout is not reflected, the id takes no derived part
+    /// (see [`Id::try_part`]) or the loader refuses one of the ids (see
+    /// [`Load::declare`]); a station whose components or item do not match
+    /// turns the mod off when the game first reads them.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::{Guid, Id};
-    /// use enshwick::content::workshops::{NewWorkshop, StationRecipe, stations};
+    /// use enshwick::content::{Id, id};
+    /// use enshwick::content::workshops::{NewWorkshop, stations};
+    ///
+    /// const BENCH: Id = id!("bench");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let bench = load.add_workshop(NewWorkshop {
-    ///         like: stations::WORKBENCH,
-    ///         item: Id::new("my-mod:bench"),
-    ///         template: Id::new("my-mod:bench.template"),
-    ///         workshop: Id::new("my-mod:bench.workshop"),
-    ///         name: None,
-    ///         description: None,
-    ///         station_recipe: Some(StationRecipe { id: Id::new("my-mod:bench.recipe"), cost: 1 }),
-    ///         debug_name: "Bulk Workbench".into(),
+    ///         recipe_cost: Some(1),
+    ///         ..NewWorkshop::new(BENCH, stations::WORKBENCH)
     ///     })?;
-    ///     assert_eq!(bench.guid(), Guid::named("my-mod:bench.workshop"));
+    ///     assert_eq!(bench.guid(), BENCH.part("workshop").guid());
     ///     Ok(())
     /// }
     /// ```
     pub fn add_workshop(&mut self, new: NewWorkshop) -> Result<WorkshopId, Off> {
-        for id in [new.item, new.template, new.workshop] {
+        new.check()?;
+        let (template, recipe) = (new.template(), new.recipe());
+        for id in [new.id, template, new.workshop()] {
             self.declare(id)?;
         }
         let layout = WorkshopLayout::resolve(self)?;
         let item_layout = ItemLayout::resolve(self)?;
-        let workshop = WorkshopId::new(new.workshop.guid());
-        let (like, template) = (new.like, new.template);
+        let workshop = WorkshopId::new(new.workshop().guid());
+        let like = new.like;
         self.serve(
             template.key(types::TEMPLATE_RESOURCE)?,
             like.template.key(types::TEMPLATE_RESOURCE)?,
@@ -493,16 +616,16 @@ impl Load<'_> {
         })?;
         let station = new.clone();
         self.serve(
-            new.item.key(types::ITEM_INFO)?,
+            new.id.key(types::ITEM_INFO)?,
             like.item.key(types::ITEM_INFO)?,
             move |base| clone_station(&item_layout, &layout, base, &station),
         )?;
-        let (item, debug_name) = (new.item.guid(), new.debug_name.clone());
+        let (item, debug_name) = (new.id.guid(), new.debug_name.clone());
         let registry = items::ITEM_REGISTRY.key(types::ITEM_REGISTRY_RESOURCE)?;
         self.serve(registry, registry, move |base| {
             items::list_item(&item_layout, base, item, &debug_name)
         })?;
-        let recipe = new.station_recipe;
+        let cost = new.recipe_cost;
         let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY_RESOURCE)?;
         self.serve(registry, registry, move |base| {
             list_workshop(&layout, base, &new)
@@ -510,13 +633,13 @@ impl Load<'_> {
         super::menu::serve(self, move |menu, bundle| {
             super::menu::list_workshop(menu, bundle, workshop)
         })?;
-        if let Some(recipe) = recipe {
+        if let Some(cost) = cost {
             self.push_recipe(NewRecipe {
-                id: recipe.id,
+                id: recipe,
                 like: like.item,
                 output: item,
                 output_count: 1,
-                cost: recipe.cost,
+                cost,
                 workshop: None,
             })?;
         }
@@ -561,26 +684,40 @@ pub(crate) mod tests {
     pub(crate) const CRAFTING: u32 = 0xc1;
     pub(crate) const INTERACTION: u32 = 0xc2;
     pub(crate) const CLIENT: u32 = 0xc3;
-    const WORKSHOP_ID: Id = Id::new("test:bench.workshop");
     const ITEM_ID: Id = Id::new("test:bench");
-    const TEMPLATE_ID: Id = Id::new("test:bench.template");
-    const WORKSHOP: Guid = WORKSHOP_ID.guid();
+    const WORKSHOP: Guid = Guid::named("test:bench.workshop");
     const ITEM: Guid = ITEM_ID.guid();
-    const TEMPLATE: Guid = TEMPLATE_ID.guid();
-    const NAME: Guid = Guid::parse("41b222ea-cefa-4774-a040-c43aa9f0b227");
+    const TEMPLATE: Guid = Guid::named("test:bench.template");
+    const NAME: Guid = Guid::named("test:bench.name");
     const OLD: Guid = Guid::parse("965d3192-0287-49a2-ad51-a716139571a6");
 
     fn new() -> NewWorkshop {
         NewWorkshop {
-            like: stations::WORKBENCH,
-            item: ITEM_ID,
-            template: TEMPLATE_ID,
-            workshop: WORKSHOP_ID,
-            name: Some(NAME),
-            description: None,
-            station_recipe: None,
+            named: true,
             debug_name: "Bench".into(),
+            ..NewWorkshop::new(ITEM_ID, stations::WORKBENCH)
         }
+    }
+
+    #[test]
+    fn a_workshop_derives_its_ids_from_the_station_s() {
+        let new = new();
+        assert_eq!(new.template().guid(), TEMPLATE);
+        assert_eq!(new.workshop().guid(), WORKSHOP);
+        assert_eq!(new.recipe(), Id::new("test:bench.recipe"));
+        assert_eq!(new.name().guid(), NAME);
+        assert_eq!(new.description(), Id::new("test:bench.description"));
+        assert!(new.check().is_ok());
+    }
+
+    #[test]
+    fn a_station_id_without_room_for_its_parts_is_refused() {
+        let derived = NewWorkshop::new(ITEM_ID.part("old"), stations::WORKBENCH);
+        assert!(derived.check().is_err());
+        let long: &'static str = Box::leak(format!("test:{}", "b".repeat(120)).into_boxed_str());
+        let too_long = NewWorkshop::new(Id::new(long), stations::WORKBENCH);
+        assert!(too_long.check().is_err());
+        assert!(list_workshop(&LAYOUT, &[0; 64], &too_long).is_none());
     }
 
     fn u32_at(bytes: &[u8], at: usize) -> u32 {

@@ -37,7 +37,7 @@ use crate::content::Guid;
 use crate::content::icons::{Icon, Pixels};
 use crate::content::items::{FuelSetup, ImpactUiValue, NewItem};
 use crate::content::recipes::NewRecipe;
-use crate::content::workshops::{NewWorkshop, StationRecipe, WorkshopId};
+use crate::content::workshops::{NewWorkshop, WorkshopId};
 use crate::{Load, Off};
 
 /// The manifest file of a pack folder.
@@ -121,28 +121,23 @@ impl Load<'_> {
                 .transpose()
         };
         for workshop in &pack.workshops {
-            let base = &workshop.id;
-            let name = tag(self, &workshop.name)?;
-            let description = tag(self, &workshop.description)?;
-            let station_recipe = workshop
-                .cost
-                .map(|cost| -> Result<StationRecipe, Off> {
-                    Ok(StationRecipe {
-                        id: id(&format!("{base}.recipe"))?,
-                        cost,
-                    })
-                })
-                .transpose()?;
-            self.add_workshop(NewWorkshop {
-                like: workshop.like,
-                item: id(base)?,
-                template: id(&format!("{base}.template"))?,
-                workshop: id(&format!("{base}.workshop"))?,
-                name,
-                description,
-                station_recipe,
+            let new = NewWorkshop {
+                named: workshop.name.is_some(),
+                described: workshop.description.is_some(),
+                recipe_cost: workshop.cost,
                 debug_name: workshop.debug_name.clone(),
-            })?;
+                ..NewWorkshop::new(id(&workshop.id)?, workshop.like)
+            };
+            new.check()?;
+            for (key, tag) in [
+                (&workshop.name, new.name()),
+                (&workshop.description, new.description()),
+            ] {
+                if let Some(key) = key {
+                    self.add_texts(&texts, &[(key, tag)])?;
+                }
+            }
+            self.add_workshop(new)?;
         }
         for item in &pack.items {
             let own = id(&item.id)?;

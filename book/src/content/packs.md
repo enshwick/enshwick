@@ -69,7 +69,7 @@ homepage = "https://example.com/lanterns"
 
 Every name a pack defines lives in its namespace: the item `lantern` of the
 pack `you.lanterns` is the [content id](../content.md#content-ids)
-`you.lockers:locker`, with the GUID `Guid::named` derives. Names are 1 to 128
+`you.lanterns:lantern`, with the GUID `Guid::named` derives. Names are 1 to 128
 of `[a-z0-9_./-]` and unique across the pack's files. A reference is one of:
 
 - a name of the pack: `lantern`;
@@ -360,7 +360,9 @@ recipe = { cost = 2 }
 A station with a workshop of its own, as [`add_workshop`](workshops.md) makes
 it: the station item is `<id>`, its template `<id>.template`, its workshop
 `<id>.workshop`, and with `recipe` it is crafted like the vanilla station for
-`cost` times its ingredients. `like` names the vanilla station cloned:
+`cost` times its ingredients. The texts of `name` and `description` take
+the tags `<id>.name` and `<id>.description`, while an item's texts keep the
+tag `<pack>:text/<key>` of their key. `like` names the vanilla station cloned:
 `workbench`, or any crafting station by its item's debug name or GUID, such
 as `Prop_Production_T1_Forge`, `Prop_Production_T2_Kiln` or
 `Prop_Production_T3_Alchemy_Station`. The loader checks that the game lists
