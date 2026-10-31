@@ -555,8 +555,9 @@ pub use enshwick_macros::hook;
 ///
 /// `#[point(name = "<point>", mode = Observe | Advise | Override, output =
 /// <type>, refusable)]`, with `of = <alias>` for a dependency's point
-/// ([`deps!`]); `refusable` lets a link refuse, which stops the chain. The input grows by appending fields; a changed field or
-/// answer type needs a new name. Every type in it has a [`trait@Shape`], so
+/// ([`deps!`]); `refusable` lets a link refuse, which stops the chain. The
+/// input grows by appending fields; a changed field or answer type needs a
+/// new name. Every type in it has a [`trait@Shape`], so
 /// a change deep inside a field refuses the link too.
 ///
 /// # Examples
@@ -601,8 +602,8 @@ pub use enshwick_macros::script;
 /// the loader checks when a mod asks for the service.
 ///
 /// `#[service(name = "<what>", version = <major>)]`, with `of = <alias>`
-/// for a dependency's service ([`deps!`]); the version is 1 when left out. Fields are `extern "system" fn` pointers or
-/// plain data. Append fields to grow the table: users built against the
+/// for a dependency's service ([`deps!`]); the version is 1 when left out.
+/// Fields are `extern "system" fn` pointers or plain data. Append fields to grow the table: users built against the
 /// shorter table keep working. Change a published field only with a new
 /// major. Every type in it has a [`trait@Shape`], so a change deep inside a
 /// field refuses the user too.
