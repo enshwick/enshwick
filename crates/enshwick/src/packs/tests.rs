@@ -1,3 +1,4 @@
+use crate::abi::Relation;
 use crate::content::Guid;
 use crate::content::changes::{Change, Field, Value};
 use crate::content::vanilla::Vanilla;
@@ -868,6 +869,77 @@ fn an_export_that_is_not_a_local_name_or_given_twice_is_a_problem() {
         assert!(error.contains(problem), "{error}");
         assert!(error.starts_with("pack.toml:3"), "{error}");
     }
+}
+
+#[test]
+fn dependencies_read_by_alias_with_their_relations() {
+    let manifest = PackManifest::parse(
+        "id = \"you.stalls\"\nversion = \"1.0.0\"\nreplaces = [\"stalls\"]\n\
+         [requires]\nlockers = { id = \"you.lockers\", version = \">=0.1\" }\n\
+         [after]\nlights = \"you.lanterns\"\n\
+         [recommends]\nbags = \"ann.bags\"\n\
+         [breaks]\nold = { id = \"old-stalls\", version = \"<0.3\" }\n",
+    )
+    .unwrap();
+    let read: Vec<_> = manifest
+        .dependencies()
+        .map(|(relation, alias, d)| (relation, alias, d.id.as_str(), d.version.as_str()))
+        .collect();
+    assert_eq!(
+        read,
+        [
+            (Relation::REQUIRES, "lockers", "you.lockers", ">=0.1"),
+            (Relation::AFTER, "lights", "you.lanterns", ""),
+            (Relation::RECOMMENDS, "bags", "ann.bags", ""),
+            (Relation::BREAKS, "old", "old-stalls", "<0.3"),
+        ]
+    );
+    assert_eq!(manifest.replaces, ["stalls"]);
+}
+
+#[test]
+fn a_wrong_alias_id_or_version_of_a_dependency_is_a_problem_at_its_line() {
+    let head = "id = \"you.stalls\"\nversion = \"1.0.0\"\n";
+    let cases = [
+        (
+            "[requires]\nLockers = \"you.lockers\"\n",
+            "`requires.Lockers`: an alias",
+        ),
+        ("[requires]\nend = \"you.lockers\"\n", "no Luau keyword"),
+        (
+            "[recommends]\nvanilla = \"you.lockers\"\n",
+            "the game's own content",
+        ),
+        (
+            "[requires]\nb = \"you.b\"\n[breaks]\nb = \"you.c\"\n",
+            "another dependency",
+        ),
+        ("[requires]\nb = \"You B\"\n", "is not <author>.<name>"),
+        (
+            "[after]\nb = { id = \"you.b\", version = \"1\" }\n",
+            "takes no `version`",
+        ),
+        (
+            "[requires]\nb = { id = \"you.b\", range = \"1\" }\n",
+            "a mod id, or a table",
+        ),
+    ];
+    for (dependencies, problem) in cases {
+        let text = format!("{head}{dependencies}");
+        let error = PackManifest::parse(&text).unwrap_err().to_string();
+        assert!(error.contains(problem), "{error}");
+        assert!(
+            error.starts_with("pack.toml:4") || error.starts_with("pack.toml:6"),
+            "{error}"
+        );
+    }
+    let error = PackManifest::parse(&format!("{head}replaces = [\"You B\"]\n"))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.starts_with("pack.toml:3") && error.contains("`replaces`"),
+        "{error}"
+    );
 }
 
 #[test]

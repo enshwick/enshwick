@@ -79,15 +79,19 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
         PackSide::Client => Side::CLIENT,
         _ => Side::BOTH,
     };
-    let dependencies: Vec<Dependency> = manifest
-        .requires
-        .iter()
-        .map(|(id, range)| Dependency {
-            id: keep(id),
-            range: keep(range),
-            relation: Relation::REQUIRES,
+    let mut dependencies: Vec<Dependency> = manifest
+        .dependencies()
+        .map(|(relation, _, dependency)| Dependency {
+            id: keep(&dependency.id),
+            range: keep(&dependency.version),
+            relation,
         })
         .collect();
+    dependencies.extend(manifest.replaces.iter().map(|id| Dependency {
+        id: keep(id),
+        range: Str::EMPTY,
+        relation: Relation::REPLACES,
+    }));
     let (dependencies, dependency_count) = keep_slice(dependencies);
     let authors: Vec<Str> = manifest.authors.iter().map(|a| keep(a)).collect();
     let (authors, author_count) = keep_slice(authors);
@@ -517,7 +521,7 @@ mod tests {
     #[test]
     fn a_pack_manifest_reads_as_a_mod_s() {
         let manifest = PackManifest::parse(
-            "id = \"you.lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"\n[requires]\n\"you.trading-post\" = \">=0.5\"\n",
+            "id = \"you.lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"\nreplaces = [\"lamps\"]\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5\" }\n[after]\nlockers = \"you.lockers\"\n[recommends]\nbags = \"ann.bags\"\n[breaks]\nold = \"old.lanterns\"\n",
         )
         .unwrap();
         let manifest = manifest_of(&manifest);
@@ -527,7 +531,31 @@ mod tests {
         assert_eq!(candidate.id, "you.lanterns");
         assert_eq!(candidate.version.to_string(), "1.2.0");
         assert_eq!(candidate.side, Side::BOTH);
-        assert_eq!(candidate.dependencies.len(), 1);
+        let relations: Vec<_> = candidate
+            .dependencies
+            .iter()
+            .map(|d| {
+                (
+                    d.id.as_str(),
+                    d.range.as_ref().map(ToString::to_string),
+                    d.relation,
+                )
+            })
+            .collect();
+        assert_eq!(
+            relations,
+            [
+                (
+                    "you.trading-post",
+                    Some(">=0.5".to_owned()),
+                    Relation::REQUIRES
+                ),
+                ("you.lockers", None, Relation::AFTER),
+                ("ann.bags", None, Relation::RECOMMENDS),
+                ("old.lanterns", None, Relation::BREAKS),
+                ("lamps", None, Relation::REPLACES),
+            ]
+        );
         assert!(manifest.flags.contains(ManifestFlags::JOIN));
         // SAFETY: `manifest_of` leaks the manifest and every string and slice
         // in it, so all its pointers are valid for the process.

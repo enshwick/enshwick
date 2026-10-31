@@ -227,6 +227,10 @@ pub struct Opened {
 assert_eq!(Opened::NAME, "you.lockers:opened");
 ```
 
+A [data pack or Luau mod](../content/packs.md#packtoml) names its
+dependencies in the same tables of its `pack.toml`, with `replaces` beside
+them.
+
 ### What other mods may use
 
 A mod's calls, points, services and events are its own until it exports

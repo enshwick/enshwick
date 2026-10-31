@@ -1,15 +1,29 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PackManifest",
-  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's `[package.metadata.enshwick]` says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\nexports = [\"lit\"]\n\n[requires]\n\"you.trading-post\" = \">=0.5, <1.0\"\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.exports, [\"lit\"]);\nassert_eq!(manifest.side, PackSide::Both);\nassert!(manifest.join);\nassert_eq!(manifest.requires[\"you.trading-post\"], \">=0.5, <1.0\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
+  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's `[package.metadata.enshwick]` says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\nexports = [\"lit\"]\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.exports, [\"lit\"]);\nassert_eq!(manifest.side, PackSide::Both);\nassert!(manifest.join);\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
   "type": "object",
   "properties": {
+    "after": {
+      "description": "Mods it loads after when they run, by alias; they take no version.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      }
+    },
     "authors": {
       "description": "The authors' names.",
       "type": "array",
       "default": [],
       "items": {
         "type": "string"
+      }
+    },
+    "breaks": {
+      "description": "Mods it cannot run beside, by alias; with a `version`, only those\nversions.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
       }
     },
     "description": {
@@ -54,13 +68,27 @@
       "type": "string",
       "default": ""
     },
-    "requires": {
-      "description": "Mods and packs it needs, by id, each with a Cargo-style version\nrequirement (empty for any).",
+    "recommends": {
+      "description": "Mods it works with when they run, by alias, loaded first.",
       "type": "object",
       "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      }
+    },
+    "replaces": {
+      "description": "The ids of mods it takes the place of; the loader runs only this\none.",
+      "type": "array",
+      "default": [],
+      "items": {
         "type": "string"
-      },
-      "default": {}
+      }
+    },
+    "requires": {
+      "description": "Mods and packs it needs, by the aliases its files and scripts know\nthem by; the loader runs them first and leaves the pack off without\nthem.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      }
     },
     "setting": {
       "description": "The pack's settings, in the order the Mods screen shows them; a Luau\nmod reads them, as a Rust mod reads its `Config`.",
@@ -84,6 +112,38 @@
     "version"
   ],
   "$defs": {
+    "DependencyTable": {
+      "description": "The table form of a [`DependencyEntry`].",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The mod's id.",
+          "type": "string"
+        },
+        "version": {
+          "description": "A Cargo-style version requirement; empty for any.",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    },
+    "PackDependency": {
+      "description": "One dependency of a pack, the value under its alias in `requires`,\n`after`, `recommends` or `breaks`: a mod id, or a table with the `id`\nand a `version` requirement.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\nlockers = \"you.lockers\"\n\"#)?;\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\nassert_eq!(manifest.requires[\"market\"].version, \">=0.5, <1.0\");\nassert_eq!(manifest.requires[\"lockers\"].version, \"\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
+      "anyOf": [
+        {
+          "description": "The mod's id alone, for any version.",
+          "type": "string"
+        },
+        {
+          "description": "The mod's id with a version requirement.",
+          "$ref": "#/$defs/DependencyTable"
+        }
+      ]
+    },
     "PackSetting": {
       "description": "One setting of a pack, a `[[setting]]` table of `pack.toml`.\n\n# Examples\n\n```\nuse enshwick::config::Stage;\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.greeter\"\nversion = \"1.0.0\"\n\n[[setting]]\nkey = \"greeting\"\ndefault = \"Welcome\"\ndoc = \"What a player who joins reads.\"\n\n[[setting]]\nkey = \"every\"\ndefault = 30\nmin = 1\nstage = \"startup\"\n\"#)?;\nlet schema = manifest.settings_schema().ok_or(\"no settings\")?;\nassert_eq!(schema.fields[1].stage, Stage::Startup);\nassert_eq!(schema.fields[1].min, Some(1.0));\n# Ok::<(), Box<dyn std::error::Error>>(())\n```",
       "type": "object",

@@ -51,7 +51,10 @@ license = "MIT"
 homepage = "https://example.com/lanterns"
 
 [requires]
-"you.trading-post" = ">=0.5, <1.0"
+market = { id = "you.trading-post", version = ">=0.5, <1.0" }
+
+[after]
+lockers = "you.lockers"
 ```
 
 | Field | Meaning |
@@ -61,7 +64,8 @@ homepage = "https://example.com/lanterns"
 | `name`, `description`, `authors`, `license`, `homepage` | what players read, as a mod's [manifest](../releasing.md) says it |
 | `side` | `both` (the default), `server` or `client` |
 | `join` | whether server and players must run the same pack to play together; on unless `false`, and required for a pack that adds or changes anything players' games read (everything but loot) |
-| `requires` | mods and packs it needs, with a version requirement each |
+| `requires`, `after`, `recommends`, `breaks` | the mods and packs it relates to, as a Rust mod's [manifest](../concepts/loader-and-abi.md#the-manifest) names them: tables keyed by an alias of `[a-z][a-z0-9_]*`, each a mod id or `{ id, version }`; `after` takes no version. An alias is unique across the four tables, and neither `vanilla` nor a Luau keyword |
+| `replaces` | the ids of mods the pack takes the place of |
 | `exports` | the local names of the events and other names its scripts offer other mods, such as `["greeted"]` for `<id>:greeted`; the loader refuses other mods the rest (see [what other mods may use](../concepts/loader-and-abi.md#what-other-mods-may-use)) |
 | `enshwick` | the Enshwick releases the pack is made for, as a version requirement such as `"=1.0.0-alpha.12"`; a loader of another release skips the pack and logs both versions. Empty for any |
 | `[[setting]]` | a setting of a [Luau mod](../luau.md#settings), one table each |
