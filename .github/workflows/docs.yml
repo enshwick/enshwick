@@ -1,7 +1,6 @@
 # Starts the docs site's build when what the site reads from this repository
 # changes on main: the book, the changelog, the API's version and id rules,
-# the build tables, the error codes and the list of our mods. The site
-# otherwise picks them up in its nightly run.
+# the build tables, the error codes and the list of our mods.
 name: docs
 
 on:
