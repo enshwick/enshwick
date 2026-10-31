@@ -15,7 +15,7 @@ Each entry names the pull request that made the change.
   `#[point]`, `#[service]` and `#[event]` take a local name, the mod's own,
   or one of a dependency with `of = <alias>`. `Id::of` and `Id::try_of` build
   an id from its two sides in a constant, and `mods::is_running` says whether
-  a mod runs (#PR).
+  a mod runs (#773).
 
 - `content::id!("locker")` names the mod's own content by its local name:
   a constant `Id` whose mod side, `<mod>:`, comes from the
