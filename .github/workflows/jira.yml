@@ -1,0 +1,116 @@
+# Keeps the board in step with pull requests and a red main, as enshwick-ci.
+name: jira
+
+# Any pull request may name a ticket, so no path filter.
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, closed]
+  # Every workflow that runs on a push to main: a failed run is a red main.
+  # Runs the copy on main and reads nothing from the run it follows.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [ci, dev-build, docs]
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: jira-${{ github.event.pull_request.number || github.event.workflow_run.id }}
+  cancel-in-progress: true
+
+jobs:
+  move:
+    if: >-
+      (github.event_name == 'pull_request'
+        && (github.event.action != 'closed' || github.event.pull_request.merged))
+      || (github.event_name == 'workflow_run'
+        && github.event.workflow_run.event == 'push'
+        && contains(fromJSON('["failure","timed_out"]'), github.event.workflow_run.conclusion))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Move the ticket
+        env:
+          JIRA_SITE: ${{ secrets.ATLASSIAN_CI_SITE }}
+          JIRA_EMAIL: ${{ secrets.ATLASSIAN_CI_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.ATLASSIAN_CI_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          ACTION: ${{ github.event.action }}
+          MERGED: ${{ github.event.pull_request.merged }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+
+          # A pull request from a fork gets no secrets.
+          if [[ -z $JIRA_TOKEN ]]; then
+            echo "::notice::no Jira credentials in this run, skipped"
+            exit 0
+          fi
+
+          if [[ $GITHUB_EVENT_NAME == workflow_run ]]; then
+            branch=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RUN_SHA/pulls" --jq '.[0].head.ref // ""')
+          else
+            branch=$HEAD_REF
+          fi
+
+          if [[ ! $branch =~ (^|/)(WIK-[0-9]+)(-|/|$) ]]; then
+            echo "::notice::branch '$branch' names no ticket, skipped"
+            exit 0
+          fi
+          key=${BASH_REMATCH[2]}
+
+          api() {
+            curl -sS --fail-with-body -u "$JIRA_EMAIL:$JIRA_TOKEN" \
+              -H 'Accept: application/json' -H 'Content-Type: application/json' \
+              -X "$1" "https://api.atlassian.com/ex/jira/$JIRA_SITE/rest/api/3$2" \
+              ${3:+--data "$3"}
+          }
+
+          move() {
+            local status id
+            status=$(api GET "/issue/$1?fields=status" | jq -r .fields.status.name)
+            if [[ $status == "$2" ]]; then
+              echo "$1 is already $2"
+              return
+            fi
+            id=$(api GET "/issue/$1/transitions" \
+              | jq -r --arg to "$2" 'first(.transitions[] | select(.to.name == $to) | .id) // empty')
+            if [[ -z $id ]]; then
+              echo "::error::$1 has no transition from $status to $2"
+              return 1
+            fi
+            api POST "/issue/$1/transitions" "$(jq -nc --arg id "$id" '{transition: {id: $id}}')" > /dev/null
+            echo "$1: $status -> $2"
+          }
+
+          if [[ $GITHUB_EVENT_NAME == workflow_run ]]; then
+            move "$key" "In Progress"
+            api POST "/issue/$key/comment" "$(jq -nc --arg name "$RUN_NAME" --arg url "$RUN_URL" '{body: {
+              type: "doc", version: 1, content: [{type: "paragraph", content: [
+                {type: "text", text: "main is red after this ticket'"'"'s pull request merged: "},
+                {type: "text", text: "\($name) run", marks: [{type: "link", attrs: {href: $url}}]}
+              ]}]}}')" > /dev/null
+          elif [[ $ACTION == closed && $MERGED == true ]]; then
+            move "$key" Done
+            # The search index may still show the child just moved as open.
+            child=$key
+            while parent=$(api GET "/issue/$child?fields=parent" | jq -r '.fields.parent.key // empty') && [[ -n $parent ]]; do
+              open=$(api POST /search/jql "$(jq -nc --arg p "$parent" --arg c "$child" \
+                '{jql: "parent = \($p) AND key != \($c) AND statusCategory != Done", maxResults: 1, fields: ["status"]}')" \
+                | jq '.issues | length')
+              if (( open > 0 )); then
+                echo "$parent has open children"
+                break
+              fi
+              move "$parent" Done
+              child=$parent
+            done
+          else
+            move "$key" "In Progress"
+          fi
