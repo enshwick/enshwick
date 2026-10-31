@@ -56,50 +56,52 @@ pub enum Fact {
 /// position, orientation, lowest and highest corner, material feedback,
 /// tracking item and owner.
 pub const BUILDING_PLACE_EVENT_FIELDS: [&str; 7] = [
-    "building_place_event.position",
-    "building_place_event.orientation",
-    "building_place_event.volume_min",
-    "building_place_event.volume_max",
-    "building_place_event.material",
-    "building_place_event.tracking_item_id",
-    "building_place_event.owner_id",
+    ids::BUILDING_PLACE_EVENT_POSITION,
+    ids::BUILDING_PLACE_EVENT_ORIENTATION,
+    ids::BUILDING_PLACE_EVENT_VOLUME_MIN,
+    ids::BUILDING_PLACE_EVENT_VOLUME_MAX,
+    ids::BUILDING_PLACE_EVENT_MATERIAL,
+    ids::BUILDING_PLACE_EVENT_TRACKING_ITEM_ID,
+    ids::BUILDING_PLACE_EVENT_OWNER_ID,
 ];
 /// The ids of a torn-down piece's fields, as the tear-down event holds
 /// them: position, orientation, lowest and highest corner, material
 /// feedback and owner.
 pub const BUILDING_TEAR_DOWN_EVENT_FIELDS: [&str; 6] = [
-    "building_tear_down_event.position",
-    "building_tear_down_event.orientation",
-    "building_tear_down_event.volume_min",
-    "building_tear_down_event.volume_max",
-    "building_tear_down_event.material",
-    "building_tear_down_event.owner_id",
+    ids::BUILDING_TEAR_DOWN_EVENT_POSITION,
+    ids::BUILDING_TEAR_DOWN_EVENT_ORIENTATION,
+    ids::BUILDING_TEAR_DOWN_EVENT_VOLUME_MIN,
+    ids::BUILDING_TEAR_DOWN_EVENT_VOLUME_MAX,
+    ids::BUILDING_TEAR_DOWN_EVENT_MATERIAL,
+    ids::BUILDING_TEAR_DOWN_EVENT_OWNER_ID,
 ];
 
 /// The ids of that event's fields: who placed it, then the prop.
 pub const LOGIC_ENTITY_PLACED_FIELDS: [&str; 2] = [
-    "logic_entity_placed_event.placed_by_player_id",
-    "logic_entity_placed_event.placed_logic_entity_id",
+    ids::LOGIC_ENTITY_PLACED_EVENT_PLACED_BY_PLAYER_ID,
+    ids::LOGIC_ENTITY_PLACED_EVENT_PLACED_LOGIC_ENTITY_ID,
 ];
 /// The ids of an item's placement box, before it turns: the lowest and
 /// the highest corner, `f32` on each axis.
-pub const ITEM_PLACEMENT_BOX: [&str; 2] =
-    ["item_info.placement_box_min", "item_info.placement_box_max"];
+pub const ITEM_PLACEMENT_BOX: [&str; 2] = [
+    ids::ITEM_INFO_PLACEMENT_BOX_MIN,
+    ids::ITEM_INFO_PLACEMENT_BOX_MAX,
+];
 /// The ids of the bools that make a prop's `Fuel` refill on its own: over
 /// time, as a well does, and from rain, as a water barrel does.
 pub const FUEL_REFILLS: [&str; 2] = [
-    "fuel_setup.automatic_refill_enabled",
-    "fuel_setup.rain_refill_enabled",
+    ids::FUEL_SETUP_AUTOMATIC_REFILL_ENABLED,
+    ids::FUEL_SETUP_RAIN_REFILL_ENABLED,
 ];
 /// The ids of a packed transform's position halves, low then high word of
 /// x, y and z, each a `u16`.
 pub const SCENE_TRANSFORM_POSITION: [&str; 6] = [
-    "scene_transform.position_x0",
-    "scene_transform.position_x1",
-    "scene_transform.position_y0",
-    "scene_transform.position_y1",
-    "scene_transform.position_z0",
-    "scene_transform.position_z1",
+    ids::SCENE_TRANSFORM_POSITION_X0,
+    ids::SCENE_TRANSFORM_POSITION_X1,
+    ids::SCENE_TRANSFORM_POSITION_Y0,
+    ids::SCENE_TRANSFORM_POSITION_Y1,
+    ids::SCENE_TRANSFORM_POSITION_Z0,
+    ids::SCENE_TRANSFORM_POSITION_Z1,
 ];
 
 /// The kind of the recipes that make an item, by the name of the constant
@@ -233,6 +235,47 @@ pub const fn fact(id: &str) -> Option<Fact> {
         i += 1;
     }
     None
+}
+
+/// Fails the build unless [`FACTS`] holds one row for each id of [`ids`].
+///
+/// Both sides sum a mixed 64-bit hash of each id, so a missing, repeated or
+/// stray row moves one sum, in linear time where a pairwise check overruns
+/// const evaluation; two different sets agree only by a 64-bit collision.
+/// The test `the_catalogue_holds_one_fact_for_each_id_the_api_asks_for`
+/// names the row.
+const _: () = {
+    let mut ours = 0u64;
+    let mut i = 0;
+    while i < FACTS.len() {
+        ours = ours.wrapping_add(id_hash(FACTS[i].0));
+        i += 1;
+    }
+    let mut asked = 0u64;
+    let mut i = 0;
+    while i < ids::ALL.len() {
+        asked = asked.wrapping_add(id_hash(ids::ALL[i]));
+        i += 1;
+    }
+    assert!(
+        FACTS.len() == ids::ALL.len() && ours == asked,
+        "FACTS lacks, repeats or adds a row against the API's ids"
+    );
+};
+
+/// FNV-1a over `id`, spread by the splitmix64 finaliser so that sums of
+/// hashes of similar ids do not cancel.
+const fn id_hash(id: &str) -> u64 {
+    let bytes = id.as_bytes();
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    let mut i = 0;
+    while i < bytes.len() {
+        hash = (hash ^ bytes[i] as u64).wrapping_mul(0x0100_0000_01b3);
+        i += 1;
+    }
+    hash = (hash ^ (hash >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    hash = (hash ^ (hash >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    hash ^ (hash >> 31)
 }
 
 const fn same(a: &str, b: &str) -> bool {
@@ -390,18 +433,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_id_is_listed_once() {
-        let mut ids: Vec<&str> = FACTS.iter().map(|&(id, _)| id).collect();
-        ids.sort_unstable();
-        let before = ids.len();
-        ids.dedup();
-        assert_eq!(ids.len(), before);
+    fn the_catalogue_holds_one_fact_for_each_id_the_api_asks_for() {
+        let mut ours: Vec<&str> = FACTS.iter().map(|&(id, _)| id).collect();
+        let mut asked = ids::ALL.to_vec();
+        ours.sort_unstable();
+        asked.sort_unstable();
+        assert_eq!(ours, asked);
+        asked.dedup();
+        assert_eq!(asked.len(), ids::ALL.len());
     }
 
     #[test]
-    fn the_catalogue_lists_exactly_the_ids_the_api_asks_for_in_its_order() {
-        let ours: Vec<&str> = FACTS.iter().map(|&(id, _)| id).collect();
-        assert_eq!(enshwick::__private::ENGINE_IDS, ours.as_slice());
+    fn a_row_repeated_in_place_of_another_moves_the_id_sum() {
+        let sum = |ids: &[&str]| {
+            ids.iter()
+                .fold(0u64, |sum, id| sum.wrapping_add(id_hash(id)))
+        };
+        let mut rows = ids::ALL.to_vec();
+        let whole = sum(&rows);
+        for i in 1..rows.len() {
+            let dropped = rows[i];
+            rows[i] = rows[i - 1];
+            assert_ne!(sum(&rows), whole, "{dropped}");
+            rows[i] = dropped;
+        }
     }
 
     /// `name` in lower case without underscores, to compare an id with the
