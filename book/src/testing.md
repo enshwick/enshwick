@@ -141,6 +141,38 @@ assert_eq!(
 );
 ```
 
+## Engine facts by area
+
+A preset sets every type hash, size and offset one area of the API resolves,
+such as `items()` for items and the item registry. Its values agree with each
+other and claim nothing about a game build. `FakeHost` answers them through
+`EngineFacts`, so a test lays out its game data by the layout the mod resolves,
+never by offsets of its own:
+
+```rust
+use enshwick::content::items::ItemLayout;
+use enshwick::content::{EngineFacts, types};
+
+let host = enshwick::test::FakeHost::new().items();
+let layout = ItemLayout::resolve(&host)?;
+let mut chest = vec![0u8; host.size(types::ITEM_INFO.id())?];
+chest[layout.id..layout.id + 4].copy_from_slice(&7u32.to_le_bytes());
+let item_hash = host.hash(types::ITEM_INFO.id())?;
+# let _ = item_hash;
+# Ok::<(), enshwick::Off>(())
+```
+
+| Preset            | What it sets                                                                 |
+| ----------------- | ---------------------------------------------------------------------------- |
+| `items()`         | `ItemLayout`, with the item and item registry types.                         |
+| `recipes()`       | `RecipeLayout`, with the recipe registry type.                               |
+| `workshops()`     | `WorkshopLayout` beside `items()`: workshops, templates, crafting components. |
+| `crafting_menu()` | `MenuLayout`, with the UI bundle type.                                       |
+| `ui_images()`     | `ImageLayout`, with the UI image type.                                       |
+
+A test may still set one fact by hand where it tests that fact, such as a
+build without one layout.
+
 ## Builder methods
 
 [`FakeHost`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs)
