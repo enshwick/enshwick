@@ -64,6 +64,16 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `NewWorkshop` takes one `id`, the station item, and derives
+  the rest from it: the template `<id>.template`, the workshop
+  `<id>.workshop`, the recipe `<id>.recipe` and the tags `<id>.name` and
+  `<id>.description`, each also a method. `named` and `described` choose
+  whether the station takes its own name and description, `recipe_cost`
+  adds the station's recipe, and `NewWorkshop::new(id, like)` fills the
+  rest. `StationRecipe` and the fields `item`, `template`, `workshop`,
+  `name`, `description` and `station_recipe` are gone. A data pack's
+  workshop names its texts by the same tags (#PR2).
+
 - **Breaking:** `Id::name` is gone: an `Id` writes its full id through
   `Display`, and two ids are equal when their GUIDs are. `Id::new` takes
   an id in full, for tests and tools, as do `BuffTypeId::named` and the
