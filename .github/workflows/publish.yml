@@ -16,13 +16,55 @@ concurrency:
 
 jobs:
   publish:
+    # A fresh machine: what ships is built and published without the
+    # caches that branch builds write to.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
     permissions:
       contents: read
       # crates.io trusted publishing.
       id-token: write
-    # The shared workflows are used from the organization's main branch.
-    uses: enshwick/.github/.github/workflows/publish-crates.yml@main # zizmor: ignore[unpinned-uses]
-    with:
-      packages: enshwick-macros enshwick enshwick-gamedata cargo-enshwick
-    secrets:
-      CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+    env:
+      HAS_TOKEN: ${{ secrets.CRATES_IO_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The C toolchain the build scripts link with comes with setup-rust.
+      - uses: ./.github/actions/setup-rust
+
+      - name: Trusted publishing
+        id: auth
+        if: env.HAS_TOKEN != 'true'
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN || steps.auth.outputs.token }}
+          # Each after the ones it depends on.
+          PACKAGES: enshwick-macros enshwick enshwick-gamedata cargo-enshwick
+        run: |
+          # The sparse index path of a crate name: 1/, 2/, 3/<first>/ or
+          # <first two>/<next two>/, lower case.
+          index_path() {
+            local name=${1,,}
+            case ${#name} in
+              1) echo "1/$name" ;;
+              2) echo "2/$name" ;;
+              3) echo "3/${name:0:1}/$name" ;;
+              *) echo "${name:0:2}/${name:2:2}/$name" ;;
+            esac
+          }
+          read -r -a packages <<< "$PACKAGES"
+          for package in "${packages[@]}"; do
+            # `cargo pkgid` ends in `#<name>@<version>`, or `#<version>`.
+            version=$(cargo pkgid --locked -p "$package")
+            version=${version##*[#@]}
+            if curl -fsS "https://index.crates.io/$(index_path "$package")" 2>/dev/null |
+              grep -qF "\"vers\":\"$version\""; then
+              echo "$package $version is on crates.io already"
+              continue
+            fi
+            cargo publish --locked -p "$package"
+          done

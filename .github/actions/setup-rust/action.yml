@@ -1,0 +1,138 @@
+name: Set up Rust
+description: >-
+  Rust from rust-toolchain.toml and cargo-xwin for the Windows target, in
+  the tool cache that the calling workflow caches.
+
+inputs:
+  tools:
+    description: More tools for taiki-e/install-action, comma-separated (cargo-nextest,cargo-deny).
+    default: ""
+  sanitizers:
+    description: Install clang's sanitizer headers, for C and C++ that dependencies build under a sanitizer.
+    default: "false"
+  gh:
+    description: Install the GitHub CLI, for steps that publish releases.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Point caches at the tool cache
+      shell: bash
+      run: | # zizmor: ignore[github-env] fixed paths only
+        cache="${RUNNER_TOOL_CACHE:-$HOME/.cache}"
+        {
+          echo "RUSTUP_HOME=$cache/rustup"
+          echo "CARGO_HOME=$cache/cargo"
+          echo "XWIN_CACHE_DIR=$cache/xwin"
+          echo "CARGO_INCREMENTAL=0"
+          echo "CARGO_TERM_COLOR=always"
+        } >> "$GITHUB_ENV"
+        echo "$cache/cargo/bin" >> "$GITHUB_PATH"
+
+    - name: Install the toolchain
+      shell: bash
+      run: |
+        if ! command -v rustup > /dev/null; then
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain none --no-modify-path
+        fi
+        rustup toolchain install
+        rustc --version
+
+    # clang of the Rust toolchain's own LLVM major, from apt.llvm.org, for
+    # the C and C++ that dependencies build: cargo-xwin calls it as
+    # clang-cl, the MSVC headers refuse an old one, and one LLVM keeps
+    # objects, sanitizer runtime and linker in step. The packages are kept
+    # in the tool cache. With `sanitizers`, also its sanitizer runtime and
+    # headers.
+    - name: clang of the toolchain's LLVM
+      shell: bash
+      env:
+        SANITIZERS: ${{ inputs.sanitizers }}
+        # The key apt.llvm.org signs with (6084F3CF814B57C1CF12EFD515CF4D18AF4F7421).
+        LLVM_KEY_SHA256: 8b2a587ffd672c4687e7581dad4b2f6c1bb2ad6b480cd9771ba2ff48e0b8c75d
+      run: | # zizmor: ignore[github-env] fixed paths only
+        major=$(rustc -vV | sed -n 's/^LLVM version: \([0-9]*\).*/\1/p')
+        test -n "$major"
+        llvm="/usr/lib/llvm-$major"
+        packages=()
+        [ -x "$llvm/bin/clang" ] || packages+=("clang-$major")
+        if [ "$SANITIZERS" = true ] && ! compgen -G "$llvm/lib/clang/*/include/sanitizer/asan_interface.h" > /dev/null; then
+          packages+=("libclang-rt-$major-dev")
+        fi
+        if [ ${#packages[@]} -gt 0 ]; then
+          codename=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)
+          key=/etc/apt/keyrings/apt-llvm.asc
+          if [ ! -f "$key" ]; then
+            curl --proto '=https' --tlsv1.2 -sSfL -o "$RUNNER_TEMP/llvm.asc" https://apt.llvm.org/llvm-snapshot.gpg.key
+            echo "$LLVM_KEY_SHA256  $RUNNER_TEMP/llvm.asc" | sha256sum -c -
+            sudo install -D -m 0644 "$RUNNER_TEMP/llvm.asc" "$key"
+          fi
+          echo "deb [signed-by=$key] https://apt.llvm.org/$codename/ llvm-toolchain-$codename-$major main" |
+            sudo tee "/etc/apt/sources.list.d/llvm-$major.list" > /dev/null
+          shared="${RUNNER_TOOL_CACHE:-$HOME/.cache}/apt-archives"
+          archives="$RUNNER_TEMP/apt"
+          mkdir -p "$shared" "$archives/partial"
+          cp -n "$shared"/*.deb "$archives"/ 2> /dev/null || true
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dir::Cache::archives="$archives" \
+            install -y -qq --no-install-recommends "${packages[@]}"
+          cp -n "$archives"/*.deb "$shared"/ 2> /dev/null || true
+        fi
+        # Ahead of the distribution's clang. Ubuntu's packages carry no
+        # clang-cl; clang called by that name works as one.
+        mkdir -p "$RUNNER_TEMP/llvm"
+        ln -sf "$llvm/bin/clang" "$RUNNER_TEMP/llvm/clang"
+        ln -sf "$llvm/bin/clang" "$RUNNER_TEMP/llvm/clang-cl"
+        ln -sf "$llvm/bin/clang++" "$RUNNER_TEMP/llvm/clang++"
+        # Build scripts link with cc. A runner without one takes this clang
+        # as cc and c++.
+        if ! command -v cc > /dev/null; then
+          ln -sf "$llvm/bin/clang" "$RUNNER_TEMP/llvm/cc"
+          ln -sf "$llvm/bin/clang++" "$RUNNER_TEMP/llvm/c++"
+        fi
+        echo "$RUNNER_TEMP/llvm" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/llvm/clang-cl" --version | sed -n 1p
+
+    # Windows binaries link with the toolchain's own lld (rust-lld, LLVM of
+    # the pinned Rust) under the name lld-link, ahead of the distribution's
+    # older lld-link: LLVM 18's segfaulted now and then writing a large PDB.
+    # The toolchain's llvm-ar serves as llvm-lib, which cc needs for C code
+    # built for Windows and GitHub's runner image does not carry.
+    - name: Link with the toolchain's lld
+      shell: bash
+      run: | # zizmor: ignore[github-env] fixed paths only
+        lld="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/rust-lld"
+        test -x "$lld"
+        mkdir -p "$RUNNER_TEMP/lld"
+        ln -sf "$lld" "$RUNNER_TEMP/lld/lld-link"
+        rustup component add llvm-tools > /dev/null
+        ln -sf "$(dirname "$lld")/llvm-ar" "$RUNNER_TEMP/lld/llvm-lib"
+        echo "$RUNNER_TEMP/lld" >> "$GITHUB_PATH"
+        "$lld" -flavor link --version
+
+    # Every version here must be in install-action's manifests at this SHA:
+    # a version it lacks falls back to cargo-binstall.
+    - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
+      with:
+        tool: cargo-xwin@0.23.1${{ inputs.tools != '' && format(',{0}', inputs.tools) || '' }}
+
+    - name: Install gh
+      if: inputs.gh == 'true'
+      shell: bash
+      env:
+        GH_TAG: v2.103.3
+        GH_SHA256: 4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
+      run: | # zizmor: ignore[github-env] fixed paths only
+        # The pin names the release tag, which Renovate looks releases up by.
+        GH_VERSION="${GH_TAG#v}"
+        dir="$RUNNER_TEMP/gh"
+        archive="$RUNNER_TEMP/gh.tar.gz"
+        curl --proto '=https' --tlsv1.2 -sSfL -o "$archive" \
+          "https://github.com/cli/cli/releases/download/v$GH_VERSION/gh_${GH_VERSION}_linux_amd64.tar.gz"
+        echo "$GH_SHA256  $archive" | sha256sum -c -
+        mkdir -p "$dir"
+        tar -xzf "$archive" -C "$dir" --strip-components 1
+        echo "$dir/bin" >> "$GITHUB_PATH"
+        "$dir/bin/gh" --version

@@ -20,7 +20,7 @@ permissions: {}
 
 jobs:
   site:
-    uses: enshwick/.github/.github/workflows/docs-rebuild.yml@main # zizmor: ignore[unpinned-uses]
+    uses: ./.github/workflows/docs-rebuild.yml
     secrets:
       ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
       ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}

@@ -17,6 +17,7 @@ on:
       - rust-toolchain.toml
       - LICENSE
       - .github/workflows/dev-build.yml
+      - ".github/actions/**"
   workflow_dispatch:
     inputs:
       publish:
@@ -34,14 +35,88 @@ concurrency:
 
 jobs:
   bundle:
+    # A fresh machine: what ships is built and published without the
+    # caches that branch builds write to.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
     permissions:
       contents: write
       # The build provenance attestations of the archives.
       id-token: write
       attestations: write
-    uses: enshwick/.github/.github/workflows/dev-bundle.yml@main # zizmor: ignore[unpinned-uses]
-    with:
-      publish: ${{ github.event_name == 'push' || inputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The Windows SDK and CRT that cargo-xwin downloads, 7 to 9 minutes
+      # from Microsoft on a hosted runner. Microsoft's files only, no build
+      # output, under a key of their own that only a release build of main
+      # saves: a run on main restores no cache a branch wrote.
+      - name: Restore the Windows SDK
+        id: xwin
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/xwin
+          key: xwin-release-${{ runner.os }}-0.23.1-v1
+      - uses: ./.github/actions/setup-rust
+        with:
+          gh: true
+          tools: cargo-cyclonedx@0.5.9,cargo-auditable@0.7.7
+
+      # The archives, and the PDB and SBOM of every DLL. The token reads
+      # release assets, such as the mods' own dev prereleases.
+      - uses: ./.github/actions/release-files
+        with:
+          task: bundle
+          out: ${{ runner.temp }}/dev
+          token: ${{ github.token }}
+
+      - name: Save the Windows SDK
+        if: github.ref == 'refs/heads/main' && steps.xwin.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/xwin
+          key: xwin-release-${{ runner.os }}-0.23.1-v1
+
+      - name: Build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/dev/*
+
+      - name: Publish
+        if: github.event_name == 'push' || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ runner.temp }}/dev
+        run: |
+          short=$(git -C "$GITHUB_WORKSPACE" rev-parse --short=7 HEAD)
+          title="Enshwick dev $short"
+          notes="Development build of $GITHUB_SHA: $(git -C "$GITHUB_WORKSPACE" log -1 --format=%s).
+
+          Until the first public release, 1.0.0, this prerelease is the only build to download; every run replaces it. Extract enshwick.zip into the folder that holds enshrouded.exe or enshrouded_server.exe."
+          assets=(*.zip *.pdb *.cdx.json)
+          if gh release view dev --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
+            gh release edit dev --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes" --prerelease --latest=false
+            gh release upload dev "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+            # Files of an earlier build that this one no longer has, such as
+            # the archive of a mod that now releases from its own repository, go.
+            gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' |
+              while read -r name; do
+                case " ${assets[*]} " in
+                  *" $name "*) ;;
+                  *) gh release delete-asset dev "$name" --yes --repo "$GITHUB_REPOSITORY" ;;
+                esac
+              done
+          else
+            # A tag left without its release moves too; gh would build on it as it is.
+            if gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" > /dev/null 2>&1; then
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
+            fi
+            gh release create dev "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "$title" --notes "$notes" --prerelease --latest=false
+          fi
 
   # The site lists the mods of the dev bundle; start its build once a run by
   # hand changed the prerelease. A push changes the mods only through
@@ -49,7 +124,7 @@ jobs:
   docs:
     needs: bundle
     if: inputs.publish
-    uses: enshwick/.github/.github/workflows/docs-rebuild.yml@main # zizmor: ignore[unpinned-uses]
+    uses: ./.github/workflows/docs-rebuild.yml
     secrets:
       ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
       ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
