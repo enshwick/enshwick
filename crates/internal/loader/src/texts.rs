@@ -232,10 +232,17 @@ mod tests {
             .map(|file| file.parse::<toml::Table>().unwrap())
             .find_map(|mut table| table.remove(Language::FALLBACK.code()))
             .unwrap();
+        // A built-in stat kind's name is `<kind>.name`; its first part is
+        // a kind, not a namespace of texts the code asks for.
+        let stat_names: Vec<String> = enshwick::stats::builtin::ALL
+            .iter()
+            .filter_map(|(id, _)| enshwick::stats::name_key(&id.to_string()))
+            .collect();
         let namespaces: Vec<String> = fallback
             .as_table()
             .unwrap()
             .keys()
+            .filter(|key| !stat_names.contains(key))
             .filter_map(|key| key.split_once('.').map(|(first, _)| first.to_owned()))
             .collect();
         let key_shaped = |literal: &&str| {
@@ -316,6 +323,21 @@ mod tests {
     #[test]
     fn every_text_exists_in_all_languages() {
         assert_eq!(shipped().untranslated(), []);
+    }
+
+    #[test]
+    fn every_built_in_stat_kind_has_a_name_in_every_language() {
+        let texts = shipped();
+        for (id, _) in enshwick::stats::builtin::ALL {
+            let key = enshwick::stats::name_key(&id.to_string()).unwrap();
+            let named: Vec<Language> = texts
+                .translations(&key)
+                .map(|(language, _)| language)
+                .collect();
+            for &language in Language::OFFERED {
+                assert!(named.contains(&language), "{key} in {}", language.code());
+            }
+        }
     }
 
     #[test]
