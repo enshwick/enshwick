@@ -43,7 +43,7 @@
 //!
 //! | Area | Modules |
 //! | --- | --- |
-//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`], [`i18n`], [`status`], [`state`], [`files`], [`migrations`] |
+//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`](mod@config), [`i18n`], [`status`], [`state`], [`files`], [`migrations`] |
 //! | Hooks and game memory | [`detour!`], [`hook`](macro@hook), [`code`], [`ecs`], [`raw`], [`pacing`] |
 //! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
 //! | The server's world | [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
@@ -85,7 +85,7 @@
 //!
 //! ```rust,standalone_crate
 //! /// Hello's settings.
-//! #[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
+//! #[enshwick::config]
 //! struct Settings {
 //!     /// Altars added at every Flame level.
 //!     extra_altars: u8,
@@ -317,6 +317,47 @@ pub use enshwick_macros::Shape;
 /// ```
 #[cfg(feature = "unstable")]
 pub use enshwick_macros::call;
+/// Declares a mod's settings struct: serde's `Deserialize` and `Serialize`,
+/// unknown keys refused and [`trait@config::Config`], so the mod needs no
+/// serde of its own.
+///
+/// `#[enshwick::config(default)]` fills the keys a file leaves out from
+/// `Default`. `validate = path` and `text = "key"` are the struct
+/// attributes of [`trait@config::Config`]; field attributes stay
+/// `#[config(..)]` and `#[serde(..)]`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::config::Config;
+///
+/// /// Locker settings.
+/// #[enshwick::config(default)]
+/// #[derive(Default)]
+/// struct Settings {
+///     /// How many lockers one player may own.
+///     #[config(startup, range = 1..=16)]
+///     limit: u32,
+/// }
+///
+/// assert!(Settings::template().contains("limit = 0"));
+/// ```
+///
+/// A misspelt key is refused with its name, not read past:
+///
+/// ```
+/// /// Locker settings.
+/// #[enshwick::config]
+/// #[derive(Debug, Default)]
+/// struct Settings {
+///     /// How many lockers one player may own.
+///     limit: u32,
+/// }
+///
+/// let error = toml::from_str::<Settings>("limits = 4").map_err(|e| e.to_string());
+/// assert!(error.is_err_and(|e| e.contains("unknown field `limits`")));
+/// ```
+pub use enshwick_macros::config;
 /// Exports a [`Mod`] from the DLL with its manifest, which it reads from the
 /// crate's `Cargo.toml` at compile time.
 ///
@@ -587,6 +628,7 @@ pub use world_error::WorldError;
 #[doc(hidden)]
 pub mod __private {
     pub use const_format::concatcp;
+    pub use serde;
 
     pub use crate::hook::Frame;
     pub use crate::locks::Relock;
