@@ -278,8 +278,9 @@ pub(crate) fn send(key: u64, channel: u32, payload: &[u8]) -> Result<(), Status>
     failed
 }
 
-/// [`send`] to each of `keys`, sealed once under one lock; `failed` hears
-/// each key it did not go to, with why.
+/// [`send`] to each of `keys`, sealed once and sent under one lock per
+/// side the keys are on; `failed` hears each key it did not go to, with
+/// why.
 ///
 /// # Errors
 ///
@@ -302,22 +303,41 @@ pub(crate) fn send_many(
             failed(key, status);
         }
     }
-    let mut wired = keys.iter().copied().filter(|&key| !looped(key)).peekable();
-    let Some(&first) = wired.peek() else {
-        return Ok(());
+    let wired = |to_server: bool| {
+        keys.iter()
+            .copied()
+            .filter(move |&key| !looped(key) && (key == SERVER) == to_server)
     };
+    if keys.iter().all(|&key| looped(key)) {
+        return Ok(());
+    }
     let mut sealed = [0u8; MAX_SEALED];
     let size = seal(&mut sealed, channel, payload).ok_or(Status::BAD_ARGS)?;
-    let half = if first == SERVER {
-        &CARRIER.client
-    } else {
-        &CARRIER.server
-    };
+    // The server's key goes on the client half's link, every other key on
+    // the server half's.
+    for (to_server, half) in [(true, &CARRIER.client), (false, &CARRIER.server)] {
+        let mut group = wired(to_server).peekable();
+        if group.peek().is_none() {
+            continue;
+        }
+        send_sealed(half, group, &sealed[..size], &mut failed);
+    }
+    Ok(())
+}
+
+/// Sends a sealed message to each of `keys` on one half's links under one
+/// lock; `failed` hears each key it did not go to.
+fn send_sealed(
+    half: &Mutex<Option<State>>,
+    keys: impl Iterator<Item = u64>,
+    sealed: &[u8],
+    failed: &mut impl FnMut(u64, Status),
+) {
     let mut guard = half.relock();
-    for key in wired {
+    for key in keys {
         let sent = match guard.as_mut().and_then(|state| state.peers.get_mut(&key)) {
             Some(peer) if key == SERVER || peer.heard => {
-                peer.link.send(&sealed[..size]).map_err(|_| Status::REFUSED)
+                peer.link.send(sealed).map_err(|_| Status::REFUSED)
             }
             _ => Err(Status::MISSING),
         };
@@ -325,7 +345,6 @@ pub(crate) fn send_many(
             failed(key, status);
         }
     }
-    Ok(())
 }
 
 /// Whether this client runs the game's server itself, in single player or
