@@ -65,7 +65,7 @@ fn hook(target: usize) -> Result<usize, PrepareError> {
         inside: false,
     }]);
     let ready: Vec<&Pending> = pending.iter().filter_map(|p| p.as_ref().ok()).collect();
-    assert_eq!(commit(&ready, &[]), Commit::Written);
+    assert_eq!(commit(&ready, &[], || {}), Commit::Written);
     pending.into_iter().next().unwrap().map(|p| p.original)
 }
 
@@ -122,7 +122,7 @@ fn code_patches_are_written_in_the_batch_with_the_hooks() {
         address: patched + 1,
         bytes: &[0x02],
     }];
-    assert_eq!(commit(&ready, &code), Commit::Written);
+    assert_eq!(commit(&ready, &code, || {}), Commit::Written);
     assert_eq!(callable(patched)(0), 2);
     assert_eq!(callable(hooked)(1), 101);
 }
@@ -207,7 +207,7 @@ fn a_code_patch_waits_for_a_thread_that_returns_into_it() {
         // mov eax, 2; nop; nop
         bytes: &[0xb8, 0x02, 0x00, 0x00, 0x00, 0x90, 0x90],
     }];
-    assert_eq!(commit(&[], &patch), Commit::Written);
+    assert_eq!(commit(&[], &patch, || {}), Commit::Written);
     assert_eq!(thread.join().unwrap(), 1);
     release.join().unwrap();
     assert_eq!(callable(target)(0), 2);
@@ -216,6 +216,7 @@ fn a_code_patch_waits_for_a_thread_that_returns_into_it() {
 #[test]
 fn a_code_patch_is_not_written_while_a_thread_stays_inside_it() {
     static FLAGS: [AtomicU32; 2] = [AtomicU32::new(0), AtomicU32::new(0)];
+    static DISARMED: AtomicU32 = AtomicU32::new(0);
     let original = [
         0xff, 0xd2, // call rdx <- returns inside the patch
         0xb8, 0x01, 0x00, 0x00, 0x00, // mov eax, 1
@@ -235,14 +236,16 @@ fn a_code_patch_is_not_written_while_a_thread_stays_inside_it() {
             bytes: &[0xb8, 0x02, 0x00, 0x00, 0x00, 0x90, 0x90],
         },
     ];
-    assert_eq!(commit(&[], &patches), Commit::Busy(vec![1]));
+    let disarm = || DISARMED.store(1, Ordering::Relaxed);
+    assert_eq!(commit(&[], &patches, disarm), Commit::Busy(vec![1]));
+    assert_eq!(DISARMED.load(Ordering::Relaxed), 1);
     // SAFETY: the 10 bytes `function` wrote at `busy`, never freed.
     let now = unsafe { core::slice::from_raw_parts(busy as *const u8, original.len()) };
     assert_eq!(now, original);
     assert_eq!(callable(free)(0), 1);
     FLAGS[0].store(1, Ordering::Release);
     assert_eq!(thread.join().unwrap(), 1);
-    assert_eq!(commit(&[], &patches[..1]), Commit::Written);
+    assert_eq!(commit(&[], &patches[..1], || {}), Commit::Written);
     assert_eq!(callable(free)(0), 2);
 }
 

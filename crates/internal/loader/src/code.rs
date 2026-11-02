@@ -656,6 +656,15 @@ pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
     crate::bases::arming(patches, verdicts, hooked);
 }
 
+/// Turns off every feature that rests on a code patch, with plain stores
+/// that neither allocate, lock nor log, so it runs while the other threads
+/// stand still: a round that leaves a patch out must not let them resume
+/// with its feature on. The next round's [`arming`] settles them again.
+pub(crate) fn disarm() {
+    LIFTED.store(false, Ordering::Release);
+    crate::bases::disarm();
+}
+
 /// Whether the workshop limit is lifted.
 pub(crate) fn lifted() -> bool {
     LIFTED.load(Ordering::Acquire)

@@ -407,6 +407,12 @@ pub(super) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
     SETTLED.store(true, Ordering::Release);
 }
 
+/// Turns off bases past 16 with a plain store, while the other threads may
+/// stand still: see [`crate::code::disarm`].
+pub(super) fn disarm() {
+    ARMED.store(false, Ordering::Release);
+}
+
 /// Fills the window of an object a create has just made.
 ///
 /// # Safety
