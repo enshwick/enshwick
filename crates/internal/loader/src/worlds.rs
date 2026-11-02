@@ -15,24 +15,43 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::config::{Schema, Scope, Stage};
 use toml_edit::DocumentMut;
 
 use crate::locks::Relock;
 
-/// The key of the world this process runs, while one runs.
-static CURRENT: Mutex<Option<String>> = Mutex::new(None);
+/// The world this process runs.
+struct Current {
+    /// Its key, while one runs.
+    key: Mutex<Option<String>>,
+    /// Whether one runs, for readers in every frame.
+    running: AtomicBool,
+}
+
+static CURRENT: Current = Current {
+    key: Mutex::new(None),
+    running: AtomicBool::new(false),
+};
 
 /// The key of the world this process runs, while one runs.
 #[must_use]
 pub fn current() -> Option<String> {
-    CURRENT.relock().clone()
+    CURRENT.key.relock().clone()
+}
+
+/// Whether this process runs a world, without a lock.
+#[must_use]
+pub fn running() -> bool {
+    CURRENT.running.load(Ordering::Acquire)
 }
 
 /// Sets the world this process runs, or none.
 pub fn set_current(key: Option<String>) {
-    *CURRENT.relock() = key;
+    let mut current = CURRENT.key.relock();
+    CURRENT.running.store(key.is_some(), Ordering::Release);
+    *current = key;
 }
 
 /// Where a world's settings of mod `id` live.
@@ -378,6 +397,14 @@ mod live {
             }
             if next.is_some() {
                 let _gone = std::fs::remove_file(&next_path);
+                crate::log::write(
+                    enshwick::abi::Level::INFO,
+                    &record.id,
+                    &format!(
+                        "world settings: the changes waiting in {} went into world {key}",
+                        next_path.display()
+                    ),
+                );
             }
         }
         crate::log!(INFO, "world settings: world {key}");

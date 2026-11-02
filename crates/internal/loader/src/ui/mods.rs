@@ -91,7 +91,7 @@ enum Page {
         first: usize,
         rows: Vec<Row>,
         entries: Entries,
-        place: Place,
+        place: mods_screen::Place,
         server: Option<String>,
     },
     /// The joined server's mods with settings, from `first` while they page.
@@ -510,6 +510,18 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             place,
             server,
         } => {
+            let joined = if FRAME.load(Ordering::Relaxed).is_multiple_of(JOINED_EVERY) {
+                joined_elsewhere()
+            } else {
+                place.joined
+            };
+            let now = self::place(from, joined);
+            if now != *place {
+                *place = now;
+                *rows = page_rows(loader, *index, now);
+                *server = server_id(loader, *index, now);
+                *entries = Entries::default();
+            }
             if let Some(id) = server
                 && paint.button(texts::text("mods.server").as_bytes(), true)
             {
@@ -517,7 +529,7 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             }
             match settings(loader, paint, *index, first, rows, entries, place.world) {
                 Some(message) => {
-                    *rows = page_rows(loader, *index, place.away);
+                    *rows = page_rows(loader, *index, *place);
                     Next::Message(message)
                 }
                 None => Next::Stay,
@@ -540,49 +552,47 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
     }
 }
 
-/// Where the screen shows a mod's settings, fixed as its page opens.
-#[derive(Clone, Copy)]
-struct Place {
-    /// This process runs a world: its settings are that world's.
-    world: bool,
-    /// The player is in another's world, which keeps the world's settings.
-    away: bool,
+/// Opens mod `index`'s settings page; `from` is the menu under the screen.
+fn settings_page(loader: &Loader, from: u8, index: usize) -> Next {
+    if loader.mods.get(index).is_none() {
+        return Next::Stay;
+    }
+    let place = place(from, joined_elsewhere());
+    Next::Page(
+        Page::Settings {
+            index,
+            first: 0,
+            rows: page_rows(loader, index, place),
+            entries: Entries::default(),
+            place,
+            server: server_id(loader, index, place),
+        },
+        None,
+    )
 }
 
-/// Opens mod `index`'s settings page, or the joined server's settings of a
-/// mod with none of the player's own; `from` is the menu under the screen.
-fn settings_page(loader: &Loader, from: u8, index: usize) -> Next {
-    let Some(record) = loader.mods.get(index) else {
-        return Next::Stay;
-    };
-    let world = crate::worlds::current().is_some();
-    let place = Place {
-        world,
-        away: joined_elsewhere() || (from == FROM_PAUSE && !world),
-    };
-    let server = (joined_elsewhere()
+/// Where the screen opened over menu `from` stands now, joined to a server
+/// that takes messages (`joined`) or not.
+fn place(from: u8, joined: bool) -> mods_screen::Place {
+    mods_screen::Place::new(from == FROM_PAUSE, crate::worlds::running(), joined)
+}
+
+/// The id of mod `index` when the joined server at `place` keeps its world
+/// settings on a page of its own.
+fn server_id(loader: &Loader, index: usize, place: mods_screen::Place) -> Option<String> {
+    let record = loader.mods.get(index)?;
+    (place.joined
         && record
             .schema
             .relock()
             .as_ref()
             .is_some_and(mods_screen::has_world_settings))
-    .then(|| record.id.clone());
-    let rows = page_rows(loader, index, place.away);
-    match server {
-        Some(id) if rows.is_empty() => server_page(id),
-        _ => Next::Page(
-            Page::Settings {
-                index,
-                first: 0,
-                rows,
-                entries: Entries::default(),
-                place,
-                server,
-            },
-            None,
-        ),
-    }
+    .then(|| record.id.clone())
 }
+
+/// Frames between two looks at whether the joined server takes messages,
+/// which needs a lock; a world starting or stopping is seen at once.
+const JOINED_EVERY: u64 = 60;
 
 /// Asks the joined server for its settings of mod `id` and opens their page.
 fn server_page(id: String) -> Next {

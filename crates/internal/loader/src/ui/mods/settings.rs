@@ -13,9 +13,9 @@ use crate::mods_screen;
 use crate::texts;
 use crate::ui::Painter;
 
-/// The rows of mod `index`'s settings page, for a player in another's
-/// world (`away`) or not.
-pub(super) fn page_rows(loader: &Loader, index: usize, away: bool) -> Vec<Row> {
+/// The rows of mod `index`'s settings page at `place`: in another's world,
+/// its world rows hold the server's join values, read-only.
+pub(super) fn page_rows(loader: &Loader, index: usize, place: mods_screen::Place) -> Vec<Row> {
     let Some(record) = loader.mods.get(index) else {
         return Vec::new();
     };
@@ -23,7 +23,7 @@ pub(super) fn page_rows(loader: &Loader, index: usize, away: bool) -> Vec<Row> {
         .schema
         .relock()
         .clone()
-        .and_then(|schema| mods_screen::page_settings(schema, away))
+        .and_then(|schema| mods_screen::page_settings(schema, place.away))
     else {
         return Vec::new();
     };
@@ -33,7 +33,17 @@ pub(super) fn page_rows(loader: &Loader, index: usize, away: bool) -> Vec<Row> {
         texts,
         language: texts::language(),
     });
-    rows::rows(&schema, &file, None, words)
+    if !place.away {
+        return rows::rows(&schema, &file, None, words);
+    }
+    let server = record
+        .server_synced
+        .relock()
+        .clone()
+        .and_then(|values| mods_screen::server_table(&values));
+    let mut rows = rows::rows(&schema, &file, server.as_ref(), words);
+    mods_screen::lock_world_rows(&schema, &mut rows);
+    rows
 }
 
 /// Draws a page of mod `index`'s settings, the world's those of the world
