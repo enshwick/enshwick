@@ -27,6 +27,8 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `cargo enshwick pin` takes a symbol the old table's own pattern finds once
+  on the new build, and reads its code bytes again there (#914).
 - `cargo enshwick new --enshwick-rev <commit>` builds the new mod on a
   commit of the platform's `main` branch from git (#696).
 
@@ -67,6 +69,8 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `cargo enshwick pin` drops a constant read through a symbol it drops, with
+  a note, instead of failing on the table it writes (#914).
 - `cargo enshwick manifest` fails with the reason for a DLL whose
   declarations do not read, which the loader keeps off; before, it showed
   the mod as if it worked (#906).
