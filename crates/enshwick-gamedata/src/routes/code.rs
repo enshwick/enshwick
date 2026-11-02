@@ -136,8 +136,11 @@ impl<'i, 'a> Code<'i, 'a> {
         else {
             return found;
         };
-        for (at, window) in code.windows(6).enumerate() {
-            if window[0] != LEA || window[1] & MODRM_RIP.0 != MODRM_RIP.1 {
+        for at in memchr::memchr_iter(LEA, code) {
+            let Some(window) = code.get(at..at + 6) else {
+                break;
+            };
+            if window[1] & MODRM_RIP.0 != MODRM_RIP.1 {
                 continue;
             }
             let disp = i32::from_le_bytes([window[2], window[3], window[4], window[5]]);
@@ -168,22 +171,27 @@ impl<'i, 'a> Code<'i, 'a> {
         found
     }
 
-    /// The `.rdata` addresses where `text` lies as a whole NUL-terminated
-    /// string.
-    pub(crate) fn strings(&self, text: &str) -> Vec<u64> {
+    /// For each of `texts`, the `.rdata` addresses where it lies as a whole
+    /// NUL-terminated string, from one pass over the strings there.
+    pub(crate) fn strings(&self, texts: &[&str]) -> Vec<Vec<u64>> {
+        let mut found = vec![Vec::new(); texts.len()];
         let Some(rdata) = self.image.section(".rdata").map(|s| self.image.range(s)) else {
-            return Vec::new();
+            return found;
         };
         let Some(bytes) = self.image.read(rdata.start, rdata.end - rdata.start) else {
-            return Vec::new();
+            return found;
         };
-        let needle: Vec<u8> = text.bytes().chain([0]).collect();
-        bytes
-            .windows(needle.len())
-            .enumerate()
-            .filter(|&(at, window)| window == needle && (at == 0 || bytes[at - 1] == 0))
-            .map(|(at, _)| rdata.start + at as u64)
-            .collect()
+        let mut at = 0;
+        for end in memchr::memchr_iter(0, bytes) {
+            let string = &bytes[at..end];
+            if !string.is_empty()
+                && let Some(t) = texts.iter().position(|t| t.as_bytes() == string)
+            {
+                found[t].push(rdata.start + at as u64);
+            }
+            at = end + 1;
+        }
+        found
     }
 }
 

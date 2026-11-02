@@ -481,6 +481,7 @@ dependencies = [
  "criterion",
  "enshwick",
  "iced-x86",
+ "memchr",
  "proptest",
  "rustc-hash",
  "ruzstd",

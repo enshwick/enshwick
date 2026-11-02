@@ -308,10 +308,14 @@ fn loaders(code: &Code<'_, '_>, routes: &[&Route]) -> FxHashMap<String, FxHashSe
         })
         .flatten()
         .collect();
-    let addresses: Vec<(usize, u64)> = texts
-        .iter()
+    if texts.is_empty() {
+        return FxHashMap::default();
+    }
+    let addresses: Vec<(usize, u64)> = code
+        .strings(&texts)
+        .into_iter()
         .enumerate()
-        .flat_map(|(t, text)| code.strings(text).into_iter().map(move |va| (t, va)))
+        .flat_map(|(t, found)| found.into_iter().map(move |va| (t, va)))
         .collect();
     let targets: Vec<u64> = addresses.iter().map(|&(_, va)| va).collect();
     let mut by_text: FxHashMap<String, FxHashSet<u32>> = texts
