@@ -64,11 +64,17 @@ mod tests {
             "key 0 would reach every client"
         );
         assert_eq!(
-            channel.broadcast(&Sync::Text("x".repeat(5000))),
+            channel.broadcast(&Sync::Text("x".repeat(9000))),
             Err(SendError::TooLarge)
         );
+        channel
+            .send(
+                Peer::Player(enshwick::PlayerKey::new(7)),
+                &Sync::Text("x".repeat(8000)),
+            )
+            .unwrap();
         let sent = loader.net_sent();
-        assert_eq!(sent.len(), 1);
+        assert_eq!(sent.len(), 2);
         assert_eq!(
             (sent[0].0.as_str(), sent[0].1),
             ("sync@2", enshwick::PlayerKey::new(7))

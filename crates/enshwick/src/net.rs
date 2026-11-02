@@ -47,7 +47,7 @@ use crate::abi::{NetMessage, Status, Str};
 use crate::{Host, Load, Off, PlayerKey};
 
 /// The largest message a channel carries, encoded, in bytes.
-pub const MAX_MESSAGE: usize = 4096;
+pub const MAX_MESSAGE: usize = 8192;
 
 /// Starts of executable code besides a PE: ELF, Mach-O (both byte orders,
 /// 32 and 64 bit, and fat), WebAssembly and Lua bytecode, four bytes each,
@@ -194,8 +194,13 @@ impl<M: serde::Serialize> Channel<M> {
         if to == Peer::Player(PlayerKey::new(0)) {
             return Err(SendError::NotReady);
         }
-        let bytes = postcard::to_allocvec(message).map_err(|e| SendError::Encode(e.to_string()))?;
-        send_raw(self.host, self.id, to.to_raw(), &bytes)
+        let mut buffer = [0u8; MAX_MESSAGE];
+        send_raw(
+            self.host,
+            self.id,
+            to.to_raw(),
+            encode(message, &mut buffer)?,
+        )
     }
 
     /// Sends `message` from the server to every client that runs Enshwick.
@@ -213,8 +218,13 @@ impl<M: serde::Serialize> Channel<M> {
     /// }
     /// ```
     pub fn broadcast(&self, message: &M) -> Result<(), SendError> {
-        let bytes = postcard::to_allocvec(message).map_err(|e| SendError::Encode(e.to_string()))?;
-        send_raw(self.host, self.id, PlayerKey::new(0), &bytes)
+        let mut buffer = [0u8; MAX_MESSAGE];
+        send_raw(
+            self.host,
+            self.id,
+            PlayerKey::new(0),
+            encode(message, &mut buffer)?,
+        )
     }
 }
 
@@ -233,6 +243,18 @@ impl<M> Channel<M> {
         }
         let api = self.host.api();
         (api.net_ready)(self.host.handle(), peer.to_raw()).is_ok()
+    }
+}
+
+/// `message` encoded into `buffer`, without an allocation.
+fn encode<'b, M: serde::Serialize>(
+    message: &M,
+    buffer: &'b mut [u8; MAX_MESSAGE],
+) -> Result<&'b [u8], SendError> {
+    match postcard::to_slice(message, buffer) {
+        Ok(bytes) => Ok(bytes),
+        Err(postcard::Error::SerializeBufferFull) => Err(SendError::TooLarge),
+        Err(error) => Err(SendError::Encode(error.to_string())),
     }
 }
 

@@ -440,7 +440,7 @@ pub struct HostApi {
         user: *mut c_void,
         out: *mut u32,
     ) -> Status,
-    /// Sends `size` bytes at `data`, at most 4096, on the mod's `channel`:
+    /// Sends `size` bytes at `data`, at most 8192, on the mod's `channel`:
     /// to the server for [`NetMessage::SERVER`](super::NetMessage::SERVER), else from the server to the
     /// client of the player with account key `peer`, or to every client
     /// that runs Enshwick for 0. Any thread. [`Status::MISSING`] while the

@@ -3245,7 +3245,7 @@ typedef struct EnshwickHostApi {
                                 EnshwickNetMessageFn callback,
                                 void *user,
                                 uint32_t *out);
-  // Sends `size` bytes at `data`, at most 4096, on the mod's `channel`:
+  // Sends `size` bytes at `data`, at most 8192, on the mod's `channel`:
   // to the server for `NetMessage::SERVER`, else from the server to the
   // client of the player with account key `peer`, or to every client
   // that runs Enshwick for 0. Any thread. `Status::MISSING` while the
