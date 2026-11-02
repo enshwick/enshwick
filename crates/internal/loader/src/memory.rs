@@ -47,6 +47,18 @@ pub(crate) unsafe fn read_bytes(base: usize, offset: usize, out: &mut [u8]) {
     unsafe { enshwick::raw::read_bytes_at(at(base, offset), 0, out) };
 }
 
+/// Copies `bytes` to `base + offset`.
+///
+/// # Safety
+///
+/// - `base + offset` is writable for `bytes.len()` bytes.
+/// - Nothing else reads or writes those bytes during the copy.
+pub(crate) unsafe fn write_bytes(base: usize, offset: usize, bytes: &[u8]) {
+    // SAFETY: the caller's guarantee for `base + offset` is the one
+    // `write_bytes_at` asks for at offset 0.
+    unsafe { enshwick::raw::write_bytes_at(at(base, offset), 0, bytes) };
+}
+
 /// Writes `value` at `base + offset`.
 ///
 /// # Safety

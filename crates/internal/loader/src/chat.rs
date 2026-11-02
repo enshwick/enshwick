@@ -387,6 +387,8 @@ fn link_client(loader: &'static Loader) {
 
 /// The switch of the chat lines and mod messages.
 static CHAT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat lines and mod messages");
+/// The switch of the own channel on a client.
+static CARRIER_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("the own channel");
 
 /// The loader's link on the client's chat send: queues the client's frame
 /// lines before the game sends.
@@ -401,6 +403,11 @@ unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
         // client, on the thread that sends its chat, by this function's
         // `# Safety`.
         unsafe { queue_frames(client) };
+    });
+    let _carried = CARRIER_FUSE.run("the own channel", || {
+        // SAFETY: `client` is the game's own argument, null or the game
+        // client, on the thread that sends its chat.
+        unsafe { crate::carrier::client_frame(client, std::time::Instant::now()) };
     });
     // SAFETY: `CLIENT_SEND_NEXT` holds the rest of `chat.client_send`'s chain
     // while this detour runs, and `client` is the game's own argument, passed

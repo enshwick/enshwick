@@ -56,6 +56,15 @@ pub const NOTICE: u8 = 3;
 pub const ITEM_DATA: u8 = 4;
 /// A control message from the server: open the interface demo.
 pub const UI_DEMO: u8 = 5;
+/// A control message of the developer tools' channel check: a numbered
+/// payload with its hash, sent [`PROBES`] times each way.
+pub const PROBE: u8 = 6;
+/// Probes each side sends.
+pub const PROBES: u8 = 100;
+/// The bytes of one probe message, more than one chat line ever held.
+pub const PROBE_SIZE: usize = 6000;
+/// A probe's kind, version, number and hash, before its filler.
+const PROBE_HEAD: usize = 2 + 1 + 8;
 /// Messages each peer may send per second.
 pub const RATE: f64 = 20.0;
 /// Messages each peer may send in one burst.
@@ -245,6 +254,51 @@ pub fn demo_position(bytes: &[u8]) -> Option<[i64; 3]> {
     }
 }
 
+/// Probe number `id`: [`PROBE_SIZE`] bytes of filler that depends on the
+/// number, after the hash of that filler.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{PROBE_SIZE, probe, read_probe};
+///
+/// let message = probe(7);
+/// assert_eq!(message.len(), PROBE_SIZE);
+/// assert_eq!(read_probe(&message), Some((7, true)));
+/// ```
+#[must_use]
+pub fn probe(id: u8) -> Vec<u8> {
+    let filler: Vec<u8> = (0..PROBE_SIZE - PROBE_HEAD)
+        .map(|i| u8::try_from((i * 31 + usize::from(id)) % 251).unwrap_or(0))
+        .collect();
+    let mut data = control(PROBE);
+    data.push(id);
+    data.extend_from_slice(&probe_hash(&filler).to_le_bytes());
+    data.extend_from_slice(&filler);
+    data
+}
+
+/// The number of a probe message and whether its filler matches its hash;
+/// `None` for any other message.
+///
+/// # Examples
+///
+/// See [`probe`].
+#[must_use]
+pub fn read_probe(data: &[u8]) -> Option<(u8, bool)> {
+    let rest = data.strip_prefix(control(PROBE).as_slice())?;
+    let (&id, rest) = rest.split_first()?;
+    let (hash, filler) = rest.split_first_chunk::<8>()?;
+    Some((id, u64::from_le_bytes(*hash) == probe_hash(filler)))
+}
+
+/// FNV-1a over `bytes`: enough to tell a damaged probe.
+fn probe_hash(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
+        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
 /// Whether `text` is a frame line, which no chat shows.
 ///
 /// # Examples
@@ -307,6 +361,18 @@ mod tests {
             cut.mods.split(',').all(|entry| entry.ends_with("@1.0.0")),
             "cut at an entry"
         );
+    }
+
+    #[test]
+    fn a_damaged_probe_reads_as_a_mismatch_and_another_message_as_none() {
+        let mut message = probe(3);
+        assert_eq!(read_probe(&message), Some((3, true)));
+        message[PROBE_SIZE - 1] ^= 1;
+        assert_eq!(read_probe(&message), Some((3, false)));
+        assert_eq!(read_probe(&control(WELCOME)), None);
+        assert_eq!(read_probe(&message[..PROBE_HEAD - 1]), None);
+        let sealed = sealed_size(CONTROL, PROBE_SIZE);
+        assert!(sealed <= MAX_SEALED && !is_executable(&probe(0)));
     }
 
     #[test]

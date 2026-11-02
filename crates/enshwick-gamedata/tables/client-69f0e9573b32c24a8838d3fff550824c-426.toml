@@ -322,8 +322,23 @@ revision = 1
 "bases.slot_init" = { rva = 0x46_72a0, pattern = "49 8B D6 48 8B CF E8 ?? ?? ?? ?? 48 83 C7 58 48 83 EE 01 75 E2", rel = 7 }
 "bases.slot_free" = { rva = 0x46_6080, pattern = "4C 8B 36 48 8B CB E8 ?? ?? ?? ?? 0F 1F 00 48 83 EB 58 48 8B CB", rel = 7 }
 "bases.count_getter" = { rva = 0x46_9240, pattern = "48 8B 4C 24 ?? 4C 89 AC 24 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 4C 24 ?? 4C 8B F8", rel = 14 }
+"net.socket_create" = { rva = 0xa5_b460, pattern = "48 89 5C 24 ?? 48 89 7C 24 ?? 55 48 8B EC 48 83 EC 70 8B 41 ??", body = { len = 0x343, open = [0x38, 0x3f, 0x54, 0x5e, 0xb7, 0xbc, 0xcf, 0xd8, 0xe1, 0xea, 0x10b, 0x11c, 0x130, 0x152, 0x164, 0x184, 0x195, 0x1a9, 0x1cb, 0x1e2, 0x201, 0x212, 0x226, 0x248, 0x274, 0x285, 0x299, 0x2bb, 0x32d], hash = "f3adeeee32a12ca214476f767dfb629d" } }
+"net.socket_destroy" = { rva = 0xa5_dbd0, pattern = "48 81 C1 ?? ?? ?? ?? 45 33 C0 E9 01 00 00 00 CC 48 89 5C 24 ?? 48 89 7C 24 ?? 55 48 8D AC 24 ?? ?? ?? ??" }
+"net.message_open" = { rva = 0xa6_26f0, pattern = "40 55 53 57 41 56 48 8D 6C 24 ?? 48 81 EC C8 00 00 00 49 8B F9" }
+"net.message_commit" = { rva = 0xa5_92b0, pattern = "48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 20 44 8B 42 ??", body = { len = 0xc8, open = [0x6b, 0x74, 0x7c, 0xc4], hash = "52c7088a07cee2a29c90578610bbfe22" } }
+"net.message_abort" = { rva = 0xa5_e330, pattern = "48 8B 12 48 81 C1 ?? ?? ?? ?? 45 33 C0 E9 ?? ?? ?? ?? CC CC CC CC CC CC CC CC CC CC CC CC CC CC 48 8B 12 48 81 C1" }
+"net.message_receive" = { rva = 0xa6_2560, pattern = "48 89 5C 24 ?? 57 48 83 EC 40 0F 10 05 ?? ?? ?? ?? 33 FF 48 8B D9", body = { len = 0xab, open = [0xd, 0x57, 0x88], hash = "f1daf82fe503ab831707c1b671f23299" } }
+"net.message_release" = { rva = 0xa5_9250, pattern = "48 8B 12 45 33 C0 F6 42 ?? 10 74 0C 48 81 C1 18 6B 01 00" }
+"net.session_limit" = { rva = 0xa6_0e50, pattern = "40 57 48 83 EC 20 0F B6 C2 48 8B F9 A8 02 74 0C" }
 
 [constants]
+"net.session_manager" = { value = 0x4dd0, pattern = "41 83 C1 21 C6 44 24 ?? 01 48 8D 8F ?? ?? ?? ?? 44 88 5C 24 ?? 48 2B DF", at = 12, size = 4 }
+"net.channel_base" = { value = 0xa, pattern = "45 8B 42 ?? 41 0F B6 12 41 83 C0 ?? 89 44 24 ?? 49 8B 42 ??", at = 11, size = 1 }
+"net.socket_channel" = { value = 0x4, pattern = "48 8B 85 ?? ?? ?? ?? 48 89 83 ?? ?? ?? ?? 44 89 73 ?? 44 89 63 ?? 4C 89 6B ?? 44 38 AD ?? ?? ?? ??", at = 17, size = 1 }
+"net.socket_peer" = { value = 0x8, pattern = "48 89 83 ?? ?? ?? ?? 44 89 73 ?? 44 89 63 ?? 4C 89 6B ?? 44 38 AD ?? ?? ?? ?? 74 04", at = 14, size = 1 }
+"net.socket_kind_machine" = { value = 0x4, pattern = "4C 89 6D ?? 44 89 6D ?? C6 45 ?? ?? 48 39 5F ?? 76 47 49 8B C5", at = 11, size = 1 }
+"net.socket_kind_local_machine" = { value = 0x2, pattern = "4C 89 6C 24 ?? 44 89 6C 24 ?? C6 44 24 ?? ?? 89 5C 24 ?? E8 ?? ?? ?? ?? 48 8B 4F ??", at = 14, size = 1 }
+"net.client" = { value = 0x180, pattern = "48 2B C1 48 83 C0 20 48 8B 8E ?? ?? ?? ?? 48 8D 54 24 ?? 48 C1 E8 03 89 44 24 ??", at = 10, size = 4 }
 # The first eight bytes of the survivor functions the loader hooks, which
 # their call-site patterns reach without a head of their own.
 "npc.lookup.bytes" = "0x8d48_20ec_8348_5340"
