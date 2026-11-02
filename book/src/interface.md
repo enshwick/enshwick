@@ -264,7 +264,9 @@ a game a client hosts for others. Without the file the loader turns a
 developer mod off before its `init`, with the reason in the log and on the
 Mods screen, and leaves `dev_reload` off. A game players join never runs
 them unless its owner made the file. A mod author creates the file once on
-their own machine.
+their own machine: on a client, in the game's folder, the same folder that
+holds `mods/`; on a dedicated server, in the server's folder. A tester's
+client that runs the probe or the research mod needs the file too.
 
 While the file exists or a developer mod runs, every player reads
 `DEVELOPER TOOLS ARE ON` in upper-case letters: in chat at join, in red at
