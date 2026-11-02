@@ -816,6 +816,37 @@ age = 1
     }
 
     /// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
+    /// skipped without it), the newest table of their side carried to their
+    /// code reads back from its save equal to the search.
+    #[test]
+    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
+    fn a_carried_table_reads_back_equal_on_a_real_build() {
+        let tables = tables();
+        for (var, side) in [
+            ("ENSH_SERVER_EXE", Side::Server),
+            ("ENSH_CLIENT_EXE", Side::Client),
+        ] {
+            let Ok(path) = std::env::var(var) else {
+                continue;
+            };
+            let bytes = std::fs::read(path).unwrap();
+            let image = reflect::Image::parse(&bytes, reflect::Layout::File, None).unwrap();
+            let table = newest(&tables, side).unwrap();
+            let range = image.range(image.section(".text").unwrap());
+            let code = image.read(range.start, range.end - range.start).unwrap();
+            let code_rva = range.start - image.base();
+            let key = table.carry_key(code, code_rva, 0..0);
+            let carried = table.fall_back(code, code_rva, |_| None);
+            let saved = carried.to_saved(key).unwrap();
+            assert_eq!(
+                table.restore(&saved, key, code, code_rva, |_| None),
+                Some(carried),
+                "{var}"
+            );
+        }
+    }
+
+    /// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
     /// skipped without it), the patterns of their own table find every
     /// patterned entry where the table pins it.
     #[test]

@@ -44,7 +44,7 @@ fn fall_back(c: &mut Criterion) {
         group.bench_function(format!("{name}_saved"), |b| {
             b.iter(|| {
                 let key = table.carry_key(black_box(code), code_rva, 0..0);
-                table.restore(black_box(&saved), key)
+                table.restore(black_box(&saved), key, code, code_rva, |_| None)
             });
         });
     }

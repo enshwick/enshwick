@@ -240,15 +240,20 @@ fn carry(
     path: &Path,
 ) -> Resolved {
     let key = base.carry_key(code, code_rva, hold);
-    if let Some(table) = std::fs::read_to_string(path)
-        .ok()
-        .and_then(|text| base.restore(&text, key))
-    {
-        return table;
+    let saved = std::fs::read_to_string(path).ok();
+    if let Some(text) = &saved {
+        if let Some(table) = base.restore(text, key, code, code_rva, &cell) {
+            return table;
+        }
+        crate::log!(
+            INFO,
+            "the carried build table saved in {} is not for this code or does not match it, so it is searched again",
+            path.display()
+        );
     }
     let table = base.fall_back(code, code_rva, cell);
     if let Some(text) = table.to_saved(key)
-        && let Err(e) = save(path, &text)
+        && let Err(e) = enshwick::files::write_atomically(path, &text)
     {
         crate::log!(
             WARN,
@@ -257,15 +262,6 @@ fn carry(
         );
     }
     table
-}
-
-fn save(path: &Path, text: &str) -> std::io::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let staged = path.with_extension("tmp");
-    std::fs::write(&staged, text)?;
-    std::fs::rename(&staged, path)
 }
 
 /// The newest table of `running`'s side carried over by patterns in `code`

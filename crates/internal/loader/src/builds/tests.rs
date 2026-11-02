@@ -471,8 +471,8 @@ fn a_carried_table_is_saved_and_read_back_while_the_code_stays() {
         Some(&dir),
     )
     .unwrap();
+    let backup = enshwick::files::backup_path(&saved);
     let text = std::fs::read_to_string(&saved).unwrap();
-    assert!(text.contains("missing npc.lookup\n"), "{text}");
     let again = select(
         &tables,
         Side::SERVER,
@@ -484,11 +484,11 @@ fn a_carried_table_is_saved_and_read_back_while_the_code_stays() {
     )
     .unwrap();
     assert_eq!(again.table, first.table);
-    std::fs::write(
-        &saved,
-        text.replace("missing npc.lookup\n", "symbol npc.lookup 1234\n"),
-    )
-    .unwrap();
+    assert!(
+        !backup.exists(),
+        "read from the save, not searched and saved again"
+    );
+    std::fs::write(&saved, format!("{text}none\n")).unwrap();
     let edited = select(
         &tables,
         Side::SERVER,
@@ -499,11 +499,9 @@ fn a_carried_table_is_saved_and_read_back_while_the_code_stays() {
         Some(&dir),
     )
     .unwrap();
-    assert_eq!(
-        edited.symbol("npc.lookup"),
-        Some(0x1234),
-        "read from the save, not searched"
-    );
+    assert_eq!(edited.table, first.table, "searched again");
+    assert_eq!(std::fs::read_to_string(&saved).unwrap(), text);
+    assert!(backup.exists(), "the edited save was replaced");
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -518,7 +516,7 @@ fn a_carried_table_is_read_back_when_only_the_entry_hold_differs() {
     let hold = 1000..1014;
     let mut code = patterned_code();
     code[hold.clone()].fill(0x11);
-    let _first = select(
+    let first = select(
         &tables,
         Side::SERVER,
         unknown,
@@ -526,12 +524,6 @@ fn a_carried_table_is_read_back_when_only_the_entry_hold_differs() {
         hold.clone(),
         |_| None,
         Some(&dir),
-    )
-    .unwrap();
-    let text = std::fs::read_to_string(&saved).unwrap();
-    std::fs::write(
-        &saved,
-        text.replace("missing npc.lookup\n", "symbol npc.lookup 1234\n"),
     )
     .unwrap();
     code[hold.clone()].fill(0x22);
@@ -545,10 +537,10 @@ fn a_carried_table_is_read_back_when_only_the_entry_hold_differs() {
         Some(&dir),
     )
     .unwrap();
-    assert_eq!(
-        again.symbol("npc.lookup"),
-        Some(0x1234),
-        "read from the save, not searched"
+    assert_eq!(again.table, first.table);
+    assert!(
+        !enshwick::files::backup_path(&saved).exists(),
+        "read from the save, not searched and saved again"
     );
     std::fs::remove_dir_all(dir).unwrap();
 }
