@@ -308,6 +308,12 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- A mid-function hook is refused when the loader cannot move its first bytes
+  cleanly: a branch of its own function lands inside them, or the encoder
+  would split one of them into several. Relays and trampolines now carry
+  unwind data, so a stack walk or exception passes a frame stopped in one; a
+  function whose unwind data cannot be read is still hooked, without it, and
+  the loader logs why (#872, #873).
 - Dev reload counts every call a mod makes since it loaded, by its own
   handle: a mod that registers actions, channels, filters or other state
   in `ready` or a callback is refused a reload with those calls named,
