@@ -348,7 +348,7 @@ fn send_sealed(
 /// Whether this client runs the game's server itself, in single player or
 /// a game it hosts: its two halves then talk in process. A dedicated
 /// server runs a server too, but no client half.
-fn client_hosts() -> bool {
+pub(crate) fn client_hosts() -> bool {
     crate::world::hosting()
         && crate::host::loader().is_some_and(|loader| loader.side == enshwick::abi::Side::CLIENT)
 }
@@ -459,7 +459,7 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
     }
     for item in &inbox.items {
         let (start, end) = item.span;
-        crate::net::server_carried(item.from, item.channel, &inbox.bytes[start..end], false);
+        crate::net::server_carried(item.from, item.channel, &inbox.bytes[start..end]);
     }
     give_back(&CARRIER.server, session, inbox);
     for key in gone {
@@ -484,7 +484,7 @@ fn hosted_step(loader: &Loader) {
         return;
     }
     for message in take_looped(true) {
-        crate::net::server_carried(host, message.channel, &message.data, true);
+        crate::net::server_carried(host, message.channel, &message.data);
     }
 }
 

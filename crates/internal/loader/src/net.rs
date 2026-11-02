@@ -519,13 +519,20 @@ fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
         if !s.peers.contains_key(&server) {
             return Err(Status::MISSING);
         }
-        if !s.sending.entry(server).or_insert_with(Peer::new).admit() {
+        if !admit_sending(s, server, crate::carrier::client_hosts()) {
             dropped();
             return Err(Status::REFUSED);
         }
         Ok(())
     })?;
     crate::carrier::send(server, channel, data).inspect_err(|_| refund(&[server]))
+}
+
+/// Takes one message to `key` from its sending rate, but for one `looped`
+/// to a hosting client's own server half, whose receive counts every
+/// message once.
+fn admit_sending(s: &mut State, key: u64, looped: bool) -> bool {
+    looped || s.sending.entry(key).or_default().admit()
 }
 
 /// Gives the rate tokens of a send that did not go back to `keys`.
