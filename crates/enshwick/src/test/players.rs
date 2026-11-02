@@ -193,11 +193,8 @@ impl FakeHost {
         reason = "a test that hands the fake a bare name fails as the loader refuses it"
     )]
     pub fn exports(mut self, id: &str, names: &[&str]) -> Self {
-        if let Some(bare) = names
-            .iter()
-            .find(|name| crate::schema_section::Kind::of_export(name).is_none())
-        {
-            panic!("the export {bare:?} lacks its kind: write <kind>:<name>");
+        if let Some(bare) = crate::rules::bad_export(names) {
+            panic!("the export {bare:?} lacks its kind or its local name: write <kind>:<name>");
         }
         self.exports.insert(
             id.to_owned(),

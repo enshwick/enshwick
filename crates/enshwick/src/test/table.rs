@@ -397,10 +397,32 @@ pub(crate) fn warn_unexported(s: &mut State, kind: crate::schema_section::Kind, 
 
 /// Notes the manifest of the mod whose init runs on `api`, when `api` is the
 /// fake's table, so the fake refuses by the mod's names and join flag.
-pub(crate) fn note_manifest(api: *const HostApi, manifest: &crate::abi::Manifest) {
-    if core::ptr::eq(api, &raw const TABLE) {
-        with((), |s| s.manifest = Some(ManifestFacts::of(manifest)));
+/// Why the fake refuses the manifest, as the loader refuses one with an
+/// export that lacks its kind or its local name; `None` when it takes it.
+pub(crate) fn note_manifest(
+    api: *const HostApi,
+    manifest: &crate::abi::Manifest,
+) -> Option<String> {
+    if !core::ptr::eq(api, &raw const TABLE) {
+        return None;
     }
+    let exports: Vec<String> = if manifest.exports.is_null() {
+        Vec::new()
+    } else {
+        // SAFETY: a manifest points at `export_count` names that live as
+        // long as it, which outlives the mod's init.
+        unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count) }
+            .iter()
+            .map(|name| text(*name))
+            .collect()
+    };
+    if let Some(bad) = crate::rules::bad_export(&exports) {
+        return Some(format!(
+            "the export {bad:?} lacks its kind or its local name: write <kind>:<name>"
+        ));
+    }
+    with((), |s| s.manifest = Some(ManifestFacts::of(manifest)));
+    None
 }
 
 /// The base limits the mod asked for, and whether the hooks are armed.

@@ -34,9 +34,9 @@ pub enum ManifestError {
     #[error("the id {0:?} is not <author>.<name>, each of [a-z0-9-]")]
     BadId(String),
     /// An export names no kind the loader knows, as one of a mod built
-    /// before exports named their kind.
+    /// before exports named their kind, or no local name.
     #[error(
-        "the export {0:?} lacks its kind: write <kind>:<name>, the kind one of {kinds}",
+        "the export {0:?} lacks its kind or its local name: write <kind>:<name>, the kind one of {kinds}, the name 1 to 128 of [a-z0-9_./-]",
         kinds = Kind::words()
     )]
     ExportWithoutKind(String),
@@ -244,10 +244,8 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     }
     // SAFETY: the caller guarantees the manifest's lists and strings
     // readable and unchanged for the call.
-    let bare = unsafe { exports(manifest) }
-        .into_iter()
-        .find(|name| Kind::of_export(name).is_none());
-    if let Some(bare) = bare {
+    let listed = unsafe { exports(manifest) };
+    if let Some(bare) = enshwick::__private::rules::bad_export(&listed) {
         return Err(ManifestError::ExportWithoutKind(bare.to_owned()));
     }
     // SAFETY: the caller guarantees the manifest's strings readable and

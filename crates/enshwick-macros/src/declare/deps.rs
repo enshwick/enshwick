@@ -90,6 +90,19 @@ pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
 
                 #content
 
+                /// The dependency's stat kind `<dependency>:<name>`, for
+                /// `Load::open_stat`, which refuses it unless the
+                /// dependency's `exports` list `stat:<name>` or the name it
+                /// is a part of.
+                ///
+                /// # Panics
+                ///
+                /// When `name` is not 1 to 128 of `[a-z0-9_./-]`.
+                #[must_use]
+                pub fn stat(name: &'static str) -> ::enshwick::content::Id {
+                    ::enshwick::content::Id::of(ID, name)
+                }
+
                 #declared
             }
         })

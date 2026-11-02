@@ -19,8 +19,8 @@ Each entry names the pull request that made the change.
   only then; `exports` in `[package.metadata.enshwick]` takes
   `content:<name>` and `stat:<name>` alone. `export` with `of`, or on a full
   name of another mod's id outside a test, fails the build. A dependency's
-  stat kind is named `Id::of(deps::<alias>::ID, "<name>")`, since
-  `deps::<alias>::id` checks a content export. Since this changes what
+  stat kind is named `deps::<alias>::stat("<name>")`, which `open_stat`
+  checks as a stat; `deps::<alias>::id` checks a content export. Since this changes what
   `Manifest::exports` means, the ABI is 6.0: the loader refuses a mod built
   for 5.x with "rebuild it for Enshwick" and its version. Write each export
   with its kind, move declarations onto `export`, and rebuild every mod

@@ -44,6 +44,26 @@ pub fn may_declare_rate(rate: RateId, joins: bool) -> bool {
     joins || !Rate::from_id(rate).is_some_and(Rate::seen_by_clients)
 }
 
+/// The first of `exports` that is not `<kind>:<local name>`, the kind one
+/// of [`Kind::ALL`](crate::schema_section::Kind::ALL) and the local name 1
+/// to 128 of `[a-z0-9_./-]`, with no mod id; `None` when every one is.
+///
+/// The loader refuses a manifest with such an export, and the fake does too.
+#[must_use]
+pub fn bad_export<S: AsRef<str>>(exports: &[S]) -> Option<&str> {
+    let local_ok = |local: &str| {
+        (1..=128).contains(&local.len())
+            && local.bytes().all(|b| {
+                b.is_ascii_lowercase()
+                    || b.is_ascii_digit()
+                    || matches!(b, b'_' | b'.' | b'/' | b'-')
+            })
+    };
+    exports.iter().map(AsRef::as_ref).find(|export| {
+        crate::schema_section::Kind::of_export(export).is_none_or(|(_, local)| !local_ok(local))
+    })
+}
+
 /// Why a mod may not use the `kind` `name`, `<owner>:<what>`, whose owner
 /// exports `exports`: the loader's and the fake's one message, naming the
 /// missing export with its kind.
@@ -164,6 +184,22 @@ mod tests {
         assert!(!content("lockers"));
         assert!(!content("locker-key"));
         assert!(!exports_name::<&str>(&[], Kind::Content, "locker"));
+    }
+
+    #[test]
+    fn an_export_without_a_known_kind_or_a_local_name_is_bad() {
+        assert_eq!(bad_export(&["point:price", "content:a.b/c-d_e"]), None);
+        for bad in [
+            "price",
+            "greeting:hi",
+            "point:",
+            "point:you.a:price",
+            "content:Big",
+        ] {
+            assert_eq!(bad_export(&["event:sold", bad]), Some(bad), "{bad}");
+        }
+        let long = format!("content:{}", "a".repeat(129));
+        assert_eq!(bad_export(&[long.as_str()]), Some(long.as_str()));
     }
 
     #[test]

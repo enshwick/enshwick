@@ -195,20 +195,19 @@ impl Manifested {
     fn build(&self) -> Option<Built> {
         let section = crate::schema_section::Section::parse(section()).ok()?;
         let text = section.schema(self.head, self.id).into_boxed_str();
-        let declared: Box<[Box<str>]> = section
-            .exports(self.id)
-            .into_iter()
-            .map(String::into_boxed_str)
-            .collect();
-        let listed = crate::schema_section::Head {
+        let head = crate::schema_section::Head {
             text: self.head,
             id: self.id,
-        }
-        .exports();
-        let exports: Box<[crate::abi::Str]> = listed
+        };
+        let names: Box<[Box<str>]> = head
+            .exports()
             .into_iter()
-            .chain(declared.iter().map(|name| &**name))
-            .map(crate::abi::Str::new)
+            .chain(section.exports(self.id))
+            .map(String::into_boxed_str)
+            .collect();
+        let exports: Box<[crate::abi::Str]> = names
+            .iter()
+            .map(|name| crate::abi::Str::new(name))
             .collect();
         let manifest = Box::new(crate::abi::Manifest {
             points: crate::abi::Str::new(&text),
@@ -220,7 +219,7 @@ impl Manifested {
             manifest,
             _text: text,
             _exports: exports,
-            _names: declared,
+            _names: names,
         })
     }
 }
@@ -589,9 +588,12 @@ pub unsafe fn init<M: Mod>(
         refresh_level,
         core::ptr::null_mut(),
     );
+    #[cfg(feature = "test")]
+    if let Some(refused) = crate::test::table::note_manifest(api, manifest) {
+        host.fault(&refused);
+        return Status::REFUSED;
+    }
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        #[cfg(feature = "test")]
-        crate::test::table::note_manifest(api, manifest);
         M::init(&mut Load::of(
             host,
             manifest.flags.contains(ManifestFlags::JOIN),
