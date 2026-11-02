@@ -119,8 +119,9 @@ fn code_patches_are_written_in_the_batch_with_the_hooks() {
     let ready: Vec<&Pending> = pending.iter().filter_map(|p| p.as_ref().ok()).collect();
     assert_eq!(ready[0].span(), (hooked, 5));
     let code = [Bytes {
+        id: 0,
         address: patched + 1,
-        bytes: &[0x02],
+        replacement: &[0x02],
     }];
     assert_eq!(commit(&ready, &code, || {}), Commit::Written);
     assert_eq!(callable(patched)(0), 2);
@@ -203,9 +204,10 @@ fn a_code_patch_waits_for_a_thread_that_returns_into_it() {
         FLAGS[0].store(1, Ordering::Release);
     });
     let patch = [Bytes {
+        id: 0,
         address: target,
         // mov eax, 2; nop; nop
-        bytes: &[0xb8, 0x02, 0x00, 0x00, 0x00, 0x90, 0x90],
+        replacement: &[0xb8, 0x02, 0x00, 0x00, 0x00, 0x90, 0x90],
     }];
     assert_eq!(commit(&[], &patch, || {}), Commit::Written);
     assert_eq!(thread.join().unwrap(), 1);
@@ -228,12 +230,14 @@ fn a_code_patch_is_not_written_while_a_thread_stays_inside_it() {
     let thread = waiting_in(busy, &FLAGS);
     let patches = [
         Bytes {
+            id: 0,
             address: free + 1,
-            bytes: &[0x02],
+            replacement: &[0x02],
         },
         Bytes {
+            id: 1,
             address: busy,
-            bytes: &[0xb8, 0x02, 0x00, 0x00, 0x00, 0x90, 0x90],
+            replacement: &[0xb8, 0x02, 0x00, 0x00, 0x00, 0x90, 0x90],
         },
     ];
     let disarm = || DISARMED.store(1, Ordering::Relaxed);
@@ -267,8 +271,9 @@ fn only_instructions_after_the_first_move_and_only_returns_after_calls_count() {
     let code = function(&[0xff, 0xd2, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3]);
     let bytes = [0; 7];
     let patch = [Bytes {
+        id: 0,
         address: code,
-        bytes: &bytes,
+        replacement: &bytes,
     }];
     assert_eq!(patch_returns(&patch), [(code + 2, 0)]);
 }
