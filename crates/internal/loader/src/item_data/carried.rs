@@ -7,21 +7,21 @@ use enshwick::Entity;
 use rustc_hash::FxHashSet;
 
 use super::{
-    KEPT, SERVER, Scope, Server, game, insert_found, kind, messages_for, scope, send, serves,
-    wanted,
+    KEPT, SERVER, Scope, Server, UNREAD, game, insert_found, kind, messages_for, scope, send,
+    serves, wanted,
 };
 use crate::host::Loader;
 use crate::item_records::anchor::{self, Anchor, CharacterId, Pending};
 use crate::locks::Relock;
 
-/// Steps between two looks of a joined character for its carried items,
-/// about half a second.
+/// Server steps between two looks of a joined character for its carried
+/// items.
 pub(super) const JOIN_LOOK_EVERY: u64 = 30;
 /// Looks a joined character's records take once its inventories are
-/// filled, about ten seconds; past them the rest wait for its next join.
+/// filled; past them the rest wait for its next join.
 pub(super) const JOIN_LOOKS: u32 = 20;
-/// Looks a joined character may take to fill its inventories at all, about
-/// two minutes; past them its records wait for its next join.
+/// Looks a joined character may take to fill its inventories at all, twelve
+/// times [`JOIN_LOOKS`]; past them its records wait for its next join.
 pub(super) const JOIN_LOOKS_CAP: u32 = 240;
 
 /// A joined character whose carried records look for their items.
@@ -47,7 +47,8 @@ impl Joining {
 /// A player's character `entity` joined: when records it carried wait, they
 /// look for its items once its inventories fill.
 pub(crate) fn player_joined(loader: &Loader, entity: Entity) {
-    if !wanted() || !serves() {
+    // A world whose things did not read attaches nothing this session.
+    if !wanted() || !serves() || UNREAD.load(Ordering::Relaxed) {
         return;
     }
     let Some(character) = crate::world::character_of(loader, entity) else {
@@ -83,13 +84,16 @@ pub(crate) fn player_left(loader: &Loader, entity: Entity) {
         return;
     };
     server.joining.retain(|joining| joining.entity != entity);
-    if let Some(character) = character_of(entity) {
-        // The inventory reads exactly now: what an earlier join could not
-        // find takes its item back or is gone, so no slot waits stale.
-        let _back = take_back_carried(server, character, |link, slot| {
-            game::in_slot(loader, entity.0, link, slot)
+    if let Some(character) = character_of(entity)
+        && !UNREAD.load(Ordering::Relaxed)
+        && game::ready(loader, entity.0)
+    {
+        // Filled inventories read exactly now: a record whose slot no
+        // longer holds its item will not find it at a later join either.
+        let gone = set_aside_waiting(&mut server.pending, character, |link, slot| {
+            game::in_slot(loader, entity.0, link, slot).map(|(_, item)| item)
         });
-        server.changed |= set_aside_waiting(&mut server.pending, character) > 0;
+        server.changed |= gone > 0;
     }
     let (waiting, aside) = keep_carried(server, entity, |pide| {
         game::held(loader, pide, character_of)
@@ -175,25 +179,38 @@ pub(super) fn set_aside_older(
     older
 }
 
-/// Sets aside every record of `pending` still waiting for `character`, as
-/// it leaves with its slots read: their items are gone from those slots.
-/// Logs how many; the number.
-pub(super) fn set_aside_waiting(pending: &mut [Pending], character: CharacterId) -> usize {
-    let mut stale = 0usize;
-    for record in pending.iter_mut().filter(|record| {
-        !record.aside
-            && matches!(record.anchor, Anchor::Carried { character: c, .. } if c == character)
-    }) {
-        record.aside = true;
-        stale += 1;
+/// Sets aside each record of `pending` still waiting for `character` whose
+/// slot, as `item_in(link, slot)` reads it when the character leaves with
+/// filled inventories, no longer holds its item. One whose slot holds an
+/// item of its id keeps waiting: the slot cannot tell the item from
+/// another of the same id. Logs how many; the number.
+pub(super) fn set_aside_waiting(
+    pending: &mut [Pending],
+    character: CharacterId,
+    item_in: impl Fn(u8, u8) -> Option<u32>,
+) -> usize {
+    let mut gone = 0usize;
+    for record in pending.iter_mut().filter(|record| !record.aside) {
+        let Anchor::Carried {
+            character: c,
+            link,
+            slot,
+        } = record.anchor
+        else {
+            continue;
+        };
+        if c == character && item_in(link, slot) != Some(record.check) {
+            record.aside = true;
+            gone += 1;
+        }
     }
-    if stale > 0 {
+    if gone > 0 {
         crate::log!(
             INFO,
-            "mod data: {stale} carried values set aside in the world's file: a leaving player's slots no longer hold their items"
+            "mod data: {gone} carried values set aside in the world's file: a leaving player's slots no longer hold their items"
         );
     }
-    stale
+    gone
 }
 
 /// Looks for the items the joined characters carried, every
@@ -279,13 +296,13 @@ pub(super) fn look(
         };
     };
     let back = take_back_carried(server, character, |link, slot| in_slot(entity, link, slot));
-    if !back.found.is_empty() || back.replaced + back.older > 0 {
+    if !back.found.is_empty() || back.replaced + back.ambiguous > 0 {
         crate::log!(
             INFO,
             "mod data: a joined player's items took {} values back; {} set aside, their items holding a newer value, and {} that named one slot twice",
             back.found.len(),
             back.replaced,
-            back.older
+            back.ambiguous
         );
     }
     found.extend(back.found);
@@ -317,11 +334,11 @@ pub(super) fn take_back_carried(
     let back = TakenBack {
         found: insert_found(&mut server.values, outcome.found),
         replaced: outcome.replaced,
-        older: outcome.ambiguous,
+        ambiguous: outcome.ambiguous,
         waiting: outcome.waiting,
     };
     server.pending = outcome.left;
-    server.changed |= !back.found.is_empty() || back.replaced + back.older > 0;
+    server.changed |= !back.found.is_empty() || back.replaced + back.ambiguous > 0;
     back
 }
 
@@ -333,7 +350,7 @@ pub(super) struct TakenBack {
     /// Records aside: their item already had a newer value.
     pub(super) replaced: usize,
     /// Records aside: two records named the same slot.
-    pub(super) older: usize,
+    pub(super) ambiguous: usize,
     /// Records of the character that still wait.
     pub(super) waiting: usize,
 }
