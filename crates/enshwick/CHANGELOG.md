@@ -145,6 +145,8 @@ Each entry names the pull request that made the change.
   such as "Lanterns reloaded." or why the change waits for a restart, and
   while developer tools are on the Mods screen shows the last result under
   the mod (#894).
+- The Mods screen has an Interface demo button while developer tools are
+  on in that game, so the demo opens without the console (#897).
 - `World::set_muted` and `World::muted` mute a player in chat and lift the
   mute, on a dedicated server or in a game a client hosts. The server drops
   every line a muted player types before another player reads it and tells
