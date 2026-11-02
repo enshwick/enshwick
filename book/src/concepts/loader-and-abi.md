@@ -277,8 +277,8 @@ refused, and the log says
 - A GUID the mod writes itself, such as `Guid::named("you.lockers:key")`, is
   not checked: inside the game's data the loader does not see whose it is.
 
-A [data pack or Luau mod](../content/packs.md) lists all its exports, of
-every kind, as `exports` in its `pack.toml`, such as
+A [data pack or Luau mod](../content/packs.md) lists its exports, its
+scripts' events and its content, as `exports` in its `pack.toml`, such as
 `exports = ["event:greeted", "content:lantern"]`.
 
 ### Schemas for other mods

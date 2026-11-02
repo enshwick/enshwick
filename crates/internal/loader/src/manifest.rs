@@ -33,6 +33,12 @@ pub enum ManifestError {
     /// The id is not of the form mods take.
     #[error("the id {0:?} is not <author>.<name>, each of [a-z0-9-]")]
     BadId(String),
+    /// An export names no kind the loader knows, as one of a mod built
+    /// before exports named their kind.
+    #[error(
+        "the export {0:?} lacks its kind: write <kind>:<name>, the kind one of point, event, call, service, content, stat"
+    )]
+    ExportWithoutKind(String),
     /// The version does not parse.
     #[error("version {version:?}: {reason}")]
     BadVersion {
@@ -234,6 +240,15 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     }
     if !enshwick::abi::is_valid_id(id) {
         return Err(ManifestError::BadId(id.to_owned()));
+    }
+    // SAFETY: the caller guarantees the manifest's lists and strings
+    // readable and unchanged for the call.
+    let bare = unsafe { exports(manifest) }.into_iter().find(|name| {
+        name.split_once(':')
+            .is_none_or(|(kind, _)| Kind::of_word(kind).is_none())
+    });
+    if let Some(bare) = bare {
+        return Err(ManifestError::ExportWithoutKind(bare.to_owned()));
     }
     // SAFETY: the caller guarantees the manifest's strings readable and
     // unchanged for the call.
@@ -613,6 +628,17 @@ mod tests {
             bad.starts_with("enshwick = \"one\" is no version requirement"),
             "{bad}"
         );
+    }
+    #[test]
+    fn an_export_without_its_kind_refuses_the_mod_and_names_the_export() {
+        static EXPORTS: [Str; 2] = [Str::new("call:price-of"), Str::new("sold")];
+        let mut bare = manifest("you.trading-post", "0.1.0");
+        bare.exports = EXPORTS.as_ptr();
+        bare.export_count = EXPORTS.len();
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
+        let why = unsafe { parse(&bare) }.unwrap_err().to_string();
+        assert!(why.contains("\"sold\" lacks its kind"), "{why}");
     }
 
     #[test]

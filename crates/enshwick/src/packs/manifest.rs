@@ -107,10 +107,10 @@ pub struct PackManifest {
     /// another release skips the pack and names both.
     #[serde(default)]
     pub enshwick: String,
-    /// What other mods may use, each `<kind>:<local name>` with a kind of
-    /// `point`, `event`, `call`, `service`, `content` or `stat`, such as the
-    /// events its scripts define: `event:greeted` lets them hear
-    /// `<id>:greeted`. The loader refuses them anything else of the pack's.
+    /// What other mods may use, each `event:<name>` for an event its scripts
+    /// define or `content:<name>` for its content: `event:greeted` lets them
+    /// hear `<id>:greeted`. The loader refuses them anything else of the
+    /// pack's.
     #[serde(default)]
     pub exports: Vec<String>,
     /// The pack's settings, in the order the Mods screen shows them; a Luau
@@ -404,21 +404,27 @@ impl PackManifest {
         ))
     }
 
-    /// Refuses an export that is not `<kind>:<local name>` or given twice,
+    /// The kinds a pack declares and so may export: its scripts' events and
+    /// its content.
+    const EXPORT_KINDS: [crate::schema_section::Kind; 2] = [
+        crate::schema_section::Kind::Event,
+        crate::schema_section::Kind::Content,
+    ];
+
+    /// Refuses an export that is not `<kind>:<local name>` of a kind in
+    /// [`EXPORT_KINDS`](Self::EXPORT_KINDS), or given twice,
     /// as `declare_mod!` refuses one in `[package.metadata.enshwick]`.
     fn check_exports(&self, text: &str) -> Result<(), PackError> {
         let mut seen = std::collections::BTreeSet::new();
         for name in &self.exports {
             let parts = name.split_once(':');
-            let problem = if parts
-                .is_none_or(|(kind, _)| crate::schema_section::Kind::of_word(kind).is_none())
-            {
-                let kinds: Vec<&str> = crate::schema_section::Kind::ALL
-                    .iter()
-                    .map(|kind| kind.word())
-                    .collect();
+            let problem = if parts.is_none_or(|(kind, _)| {
+                crate::schema_section::Kind::of_word(kind)
+                    .is_none_or(|kind| !Self::EXPORT_KINDS.contains(&kind))
+            }) {
+                let kinds: Vec<&str> = Self::EXPORT_KINDS.iter().map(|kind| kind.word()).collect();
                 format!(
-                    "exports: {name:?} is not `<kind>:<name>`, the kind one of {}",
+                    "exports: {name:?} is not `<kind>:<name>`, the kind one a pack declares: {}",
                     kinds.join(", ")
                 )
             } else if !parts
