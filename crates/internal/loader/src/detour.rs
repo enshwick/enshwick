@@ -163,9 +163,23 @@ impl Pending {
     }
 }
 
+/// What [`commit`] did with a batch.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Commit {
+    /// Every jump and code patch is written.
+    Written,
+    /// Nothing is written: a target could not be made writable, or a
+    /// thread's context could not be read to check and move it.
+    Failed,
+    /// Nothing is written: a thread stood or returned inside these code
+    /// patches, by index, through every wait. A code patch has no
+    /// trampoline to move it to, so the batch goes again without them.
+    Busy(Vec<usize>),
+}
+
 /// Writes the jumps over the targets of `pending` and the `code` patches,
-/// all or none; false when none could be written.
-pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>]) -> bool {
+/// all or none.
+pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>]) -> Commit {
     write_all(pending, code)
 }
 
@@ -313,23 +327,23 @@ fn allocate_near(target: usize) -> Option<usize> {
         })
 }
 
-/// Writes every hook jump and code patch with the other threads suspended;
-/// false when any target could not be made writable, or a thread's context
-/// could not be read to check and move it, in which case none is written.
+/// Writes every hook jump and code patch with the other threads suspended,
+/// or none of them.
 ///
 /// A suspended thread may stand inside the bytes a hook replaces, or have
 /// called out of them, with a return address into them on its stack; both
 /// move to the same instruction in the trampoline. A code patch has no
 /// trampoline, so the writes wait, a few times, until no thread stands or
-/// returns inside one.
-fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
+/// returns inside one; a patch a thread never leaves is never written over
+/// it, since the thread would resume in the middle of other instructions.
+fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> Commit {
     let writes: Vec<(usize, &[u8])> = prepared
         .iter()
         .map(|&p| (p.target, &p.patch[..]))
         .chain(code.iter().map(|c| (c.address, c.bytes)))
         .collect();
     if writes.is_empty() {
-        return true;
+        return Commit::Written;
     }
     let moved = moved_instructions(prepared);
     let patched: Vec<(usize, usize)> = code
@@ -337,16 +351,24 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
         .map(|c| (c.address, c.address + c.bytes.len()))
         .collect();
     let returns = patch_returns(code);
+    // Each patch's own return addresses, a range of `returns`.
+    let returns_in: Vec<core::ops::Range<usize>> = patched
+        .iter()
+        .map(|&(start, end)| {
+            returns.partition_point(|&at| at <= start)..returns.partition_point(|&at| at < end)
+        })
+        .collect();
     // Nothing below allocates while the other threads stand still: one of
     // them may hold the heap's lock.
     let mut protections = Vec::with_capacity(writes.len());
+    let mut stuck = vec![false; code.len()];
     let mut threads = Threads::new();
     let mut tries = 0;
     let checked = !moved.is_empty() || !patched.is_empty();
     let (unsettled, blind) = loop {
         if !threads.suspend() {
             threads.resume();
-            return false;
+            return Commit::Failed;
         }
         // A thread whose context Windows does not hand over can be neither
         // checked nor moved: the writes wait for it, then give up.
@@ -379,7 +401,27 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
                 "hooks not written: the context of thread {thread} could not be read to move it out of the code"
             ),
         );
-        return false;
+        return Commit::Failed;
+    }
+    if unsettled {
+        for ((stuck, &(start, end)), near) in stuck.iter_mut().zip(&patched).zip(&returns_in) {
+            let near = &returns[near.clone()];
+            *stuck = threads.iter().any(|thread| {
+                // SAFETY: every other thread of the process stays suspended
+                // until `resume`, and `iter` yields each of them.
+                unsafe { in_flight(thread, &[(start, end)], near) }
+            });
+        }
+        if stuck.contains(&true) {
+            threads.resume();
+            return Commit::Busy(
+                stuck
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &s)| s.then_some(i))
+                    .collect(),
+            );
+        }
     }
     let mut writable = true;
     for &(address, bytes) in &writes {
@@ -415,14 +457,11 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
         }
     }
     threads.resume();
-    if unsettled {
-        crate::log::write(
-            Level::WARN,
-            LOADER_ID,
-            "code patched while a thread still stood in or returned into it",
-        );
+    if writable {
+        Commit::Written
+    } else {
+        Commit::Failed
     }
-    writable
 }
 
 /// Where each instruction a hook moves stands in the target and in the
