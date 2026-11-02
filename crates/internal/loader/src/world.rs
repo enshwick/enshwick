@@ -20,6 +20,7 @@ use enshwick::abi::{Header, HookFlags, PlayerInfo, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
+use crate::item_records::anchor::CharacterId;
 use crate::memory::read;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
@@ -595,11 +596,30 @@ pub(crate) fn player_entities(loader: &Loader) -> Result<ArrayVec<u32, MAX_PLAYE
         .collect())
 }
 
-/// The character GUID of each player slot that names a character entity,
-/// a leaving player's included until its slot clears: one account may have
-/// several characters on a server. Empty when the build table does not pin
-/// where a slot holds the GUID, or off the game thread.
-pub(crate) fn characters(loader: &Loader) -> ArrayVec<(u32, [u8; 16]), MAX_PLAYERS> {
+/// The character entity of every player slot that names one, in any state:
+/// a leaving player's counts until its slot clears.
+pub(crate) fn character_entities(loader: &Loader) -> Result<ArrayVec<u32, MAX_PLAYERS>, Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let server = reader()?;
+    // SAFETY: `reader` returned the live server on its game thread, which
+    // alone writes it; the table places its slots.
+    Ok(unsafe { occupied(layout.player_slots(), server) }
+        .map(|(_, _, _, entity)| entity)
+        .take(MAX_PLAYERS)
+        .collect())
+}
+
+/// The character `entity` plays, as [`characters`] reads it.
+pub(crate) fn character_of(loader: &Loader, entity: Entity) -> Option<CharacterId> {
+    characters(loader)
+        .into_iter()
+        .find_map(|(e, character)| (e == entity).then_some(character))
+}
+
+/// The character of each player slot that names a character entity, a
+/// leaving player's included until its slot clears. Empty when the build
+/// table does not pin where a slot holds the GUID, or off the game thread.
+pub(crate) fn characters(loader: &Loader) -> ArrayVec<(Entity, CharacterId), MAX_PLAYERS> {
     let Some(layout) = layout(loader) else {
         return ArrayVec::new();
     };
@@ -616,6 +636,7 @@ pub(crate) fn characters(loader: &Loader) -> ArrayVec<(u32, [u8; 16]), MAX_PLAYE
     // `server.player_slot_character` offset holds the GUID inside a slot
     // (`at + 16 <= slot_size`, checked above).
     unsafe { guids(layout.player_slots(), server, at) }
+        .map(|(entity, guid)| (Entity(entity), CharacterId(guid)))
         .take(MAX_PLAYERS)
         .collect()
 }

@@ -6,6 +6,11 @@
 
 use rustc_hash::FxHashMap;
 
+/// The GUID of a player's character, `keen::CharacterId` (server 399): one
+/// account may have several characters on a server.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub(crate) struct CharacterId(pub(crate) [u8; 16]);
+
 /// The save keeps each 32.32 fixed-point axis as a 128 m sector, the axis
 /// shifted right by `SECTOR_SHIFT` and clamped to `0..=MAX_SECTOR`, and a
 /// 21-bit offset in 2^-14 m steps, the axis shifted right by `GRAIN_SHIFT`;
@@ -89,7 +94,7 @@ pub(crate) enum Anchor {
     /// its inventories in order and its items in their slots, and rebuilds
     /// them when it joins (server 399).
     Carried {
-        character: [u8; 16],
+        character: CharacterId,
         link: u8,
         slot: u8,
     },
@@ -122,7 +127,7 @@ impl Anchor {
                 slot,
             } => {
                 out.push(CARRIED);
-                out.extend_from_slice(character);
+                out.extend_from_slice(&character.0);
                 out.extend_from_slice(&[*link, *slot]);
             }
         }
@@ -147,7 +152,7 @@ impl Anchor {
                 let (&[link, slot], rest) = rest.split_first_chunk::<2>()?;
                 Some((
                     Self::Carried {
-                        character: *character,
+                        character: CharacterId(*character),
                         link,
                         slot,
                     },
@@ -258,27 +263,42 @@ pub(crate) fn resolve(
 /// item lies in the same slot. One whose slot holds another item or none
 /// keeps waiting: the inventories may still fill, and a guess never sets a
 /// carried value aside. One whose item already has a value of the kind is
-/// aside, replaced. Every other record passes through untouched.
+/// aside, replaced; of two records on one slot the later, newer one counts
+/// and the earlier is aside, ambiguous. Every other record passes through
+/// untouched.
 pub(crate) fn resolve_carried(
     pending: Vec<Pending>,
-    character: [u8; 16],
+    character: CharacterId,
     held: impl Fn(u8, u8) -> Option<(u32, u32)>,
     taken: impl Fn(u32, u32) -> bool,
 ) -> Outcome {
+    let mine = |record: &Pending| match record.anchor {
+        Anchor::Carried {
+            character: c,
+            link,
+            slot,
+        } if c == character && !record.aside => Some((link, slot)),
+        _ => None,
+    };
+    let mut newest: FxHashMap<(u32, Anchor), usize> = FxHashMap::default();
+    for (at, record) in pending.iter().enumerate() {
+        if mine(record).is_some() {
+            newest.insert((record.kind, record.anchor), at);
+        }
+    }
     let mut outcome = Outcome::default();
-    for mut record in pending {
-        let place = match record.anchor {
-            Anchor::Carried {
-                character: c,
-                link,
-                slot,
-            } if c == character && !record.aside => (link, slot),
-            _ => {
-                outcome.left.push(record);
-                continue;
-            }
+    for (at, mut record) in pending.into_iter().enumerate() {
+        let Some((link, slot)) = mine(&record) else {
+            outcome.left.push(record);
+            continue;
         };
-        match held(place.0, place.1).filter(|&(_, item)| item == record.check) {
+        if newest[&(record.kind, record.anchor)] != at {
+            outcome.ambiguous += 1;
+            record.aside = true;
+            outcome.left.push(record);
+            continue;
+        }
+        match held(link, slot).filter(|&(_, item)| item == record.check) {
             Some((pide, _)) if !taken(record.kind, pide) => {
                 outcome.found.push((record.kind, pide, record));
             }
@@ -595,10 +615,10 @@ mod tests {
         assert_eq!((outcome.left.len(), outcome.replaced), (1, 1));
     }
 
-    const ANN: [u8; 16] = [0xa1; 16];
-    const ANN_SECOND: [u8; 16] = [0xa2; 16];
+    const ANN: CharacterId = CharacterId([0xa1; 16]);
+    const ANN_SECOND: CharacterId = CharacterId([0xa2; 16]);
 
-    fn carried(character: [u8; 16], link: u8, slot: u8, check: u32, value: u8) -> Pending {
+    fn carried(character: CharacterId, link: u8, slot: u8, check: u32, value: u8) -> Pending {
         pending(
             0,
             Anchor::Carried {
@@ -678,5 +698,16 @@ mod tests {
         assert!(outcome.found.is_empty());
         assert_eq!(outcome.replaced, 1);
         assert!(outcome.left[0].aside);
+    }
+
+    #[test]
+    fn of_two_records_on_one_carried_slot_the_newer_attaches_and_the_older_goes_aside() {
+        let records = vec![carried(ANN, 0, 1, 77, 1), carried(ANN, 0, 1, 77, 2)];
+        let outcome = resolve_carried(records, ANN, |_, _| Some((2001, 77)), |_, _| false);
+        let found: Vec<u8> = outcome.found.iter().map(|(_, _, r)| r.value[0]).collect();
+        assert_eq!(found, [2]);
+        assert_eq!(outcome.ambiguous, 1);
+        assert_eq!(outcome.left.len(), 1);
+        assert!(outcome.left[0].aside && outcome.left[0].value[0] == 1);
     }
 }

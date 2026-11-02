@@ -43,7 +43,7 @@ fn layout(loader: &Loader) -> Option<Layout> {
             inventory: catalogue::component_hash(loader, ids::INVENTORY)?,
             links: catalogue::offset(loader, ids::INVENTORY_SETUP_LINKS)?,
             categories: catalogue::offset(loader, ids::INVENTORY_SETUP_CATEGORIES)?,
-            initialized: catalogue::offset(loader, ids::INVENTORY_SETUP_INITIALIZED)?,
+            initialized: catalogue::setup_initialized_at(loader)?,
             stack: catalogue::size(loader, ids::ITEM_STACK)?,
             count,
             pide: count + size_of::<u32>(),

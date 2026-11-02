@@ -8,8 +8,8 @@ use enshwick::abi::Event;
 use rustc_hash::FxHashSet;
 
 use super::{
-    FILE, FINDING, JOINS, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game, kind_of,
-    scope, serves, take_destroyed, template_id, wanted,
+    FILE, FINDING, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game, kind_of, scope,
+    serves, set_aside_older, take_destroyed, template_id, wanted,
 };
 use crate::host::Loader;
 use crate::item_records::anchor::{Anchor, Pending};
@@ -165,7 +165,6 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             );
             KEPT.store(false, Ordering::Relaxed);
             UNREAD.store(false, Ordering::Relaxed);
-            JOINS.store(false, Ordering::Relaxed);
             FINDING.store(!pending.is_empty(), Ordering::Relaxed);
             let _earlier_world = take_destroyed();
             *SERVER.relock() = Some(Server {
@@ -198,6 +197,11 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
         .and_then(|ty| crate::entities::with_component(loader, ty).ok())
         .map(|places| places.iter().map(|p| p.entity.0).collect());
     let characters = crate::world::characters(loader);
+    let character_of = |root: Entity| {
+        characters
+            .iter()
+            .find_map(|&(e, character)| (e == root).then_some(character))
+    };
     let before = server.values.len();
     let mut anchorless = 0;
     let mut gone = Vec::new();
@@ -205,7 +209,7 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
         // `Some(None)`: the world no longer holds the entity.
         let now = match scope(kind, record.anchor) {
             Some(Scope::Item) => {
-                Some(game::held(loader, entity, &characters).map(|held| (held.item, held.anchor)))
+                Some(game::held(loader, entity, character_of).map(|held| (held.item, held.anchor)))
             }
             Some(Scope::Entity) => match &placed {
                 Some(placed) if !placed.contains(&entity) => Some(None),
@@ -269,6 +273,13 @@ fn save(loader: &Loader, after_game_save: bool) {
         } else {
             refresh(loader, server)
         };
+        // A carried value set on a slot a record from an earlier leave still
+        // waits on counts: written so, the next load would name it twice.
+        let newer = server
+            .values
+            .iter()
+            .filter_map(|(&(kind, _), record)| record.anchor.map(|anchor| (kind, anchor)));
+        server.changed |= set_aside_older(&mut server.pending, newer) > 0;
         if !server.changed {
             return;
         }
