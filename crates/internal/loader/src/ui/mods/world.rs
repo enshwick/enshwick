@@ -10,7 +10,8 @@ use crate::mods_screen;
 use crate::texts;
 use crate::ui::{ENGINE, Painter};
 
-use super::{FRAME, LAST_TAB, WORLD, draw_row, joined_elsewhere};
+use super::settings::draw_row;
+use super::{FRAME, LAST_TAB, WORLD, joined_elsewhere};
 
 /// The mods' rows in the world settings, kept while the view shows.
 pub(super) struct WorldRows {
