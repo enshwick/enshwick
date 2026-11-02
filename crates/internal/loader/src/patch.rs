@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use windows_sys::Win32::System::Diagnostics::Debug::{
     IMAGE_RUNTIME_FUNCTION_ENTRY, RtlAddFunctionTable,
 };
-use windows_sys::Win32::System::Threading::{TlsAlloc, TlsGetValue};
+use windows_sys::Win32::System::Threading::{TlsAlloc, TlsFree, TlsGetValue};
 
 use crate::mod_index::ModIndex;
 
@@ -78,18 +78,30 @@ pub(crate) struct FrameSlot([u32; 9]);
 
 impl FrameSlot {
     /// Allocates the indices; `None` when not all of them are ones the thunk
-    /// can address.
+    /// can address, with the ones taken given back.
     #[must_use]
     pub(crate) fn allocate() -> Option<Self> {
         let mut indices = [0u32; 9];
-        for index in &mut indices {
+        for taken in 0..indices.len() {
             // SAFETY: `TlsAlloc` takes no arguments; a failure returns
             // `TLS_OUT_OF_INDEXES`, checked below.
             let allocated = unsafe { TlsAlloc() };
             if allocated == TLS_OUT_OF_INDEXES || allocated >= TLS_INLINE_SLOTS {
+                crate::log!(
+                    WARN,
+                    "no TLS slot for the caller frame: index {allocated} is past the {TLS_INLINE_SLOTS} a thunk can address"
+                );
+                let given = indices[..taken]
+                    .iter()
+                    .chain((allocated != TLS_OUT_OF_INDEXES).then_some(&allocated));
+                for &index in given {
+                    // SAFETY: `index` came from `TlsAlloc` in this call and is
+                    // freed once; nothing has stored a value in it.
+                    unsafe { TlsFree(index) };
+                }
                 return None;
             }
-            *index = allocated;
+            indices[taken] = allocated;
         }
         Some(Self(indices))
     }

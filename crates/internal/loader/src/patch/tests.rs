@@ -21,6 +21,31 @@ fn a_thunk_jumps_through_its_slot() {
 }
 
 #[test]
+fn a_frame_slot_that_cannot_be_had_gives_back_the_indices_it_took() {
+    let free = TLS_INLINE_SLOTS - 4;
+    let mut held = Vec::new();
+    loop {
+        // SAFETY: `TlsAlloc` takes no arguments; a failure is checked below.
+        let index = unsafe { TlsAlloc() };
+        assert_ne!(index, TLS_OUT_OF_INDEXES);
+        if index == free {
+            // SAFETY: `index` came from `TlsAlloc` above and is freed once.
+            unsafe { TlsFree(index) };
+            break;
+        }
+        held.push(index);
+    }
+    assert!(FrameSlot::allocate().is_none());
+    // SAFETY: `TlsAlloc` takes no arguments; the index is checked and freed below.
+    let next = unsafe { TlsAlloc() };
+    assert_eq!(next, free, "the failed allocation kept indices");
+    for index in held.into_iter().chain([next]) {
+        // SAFETY: each index came from `TlsAlloc` in this test and is freed once.
+        unsafe { TlsFree(index) };
+    }
+}
+
+#[test]
 fn a_frame_thunk_saves_the_stack_pointer_first() {
     let slot = AtomicUsize::new(0);
     let mut code = [0u8; THUNK];

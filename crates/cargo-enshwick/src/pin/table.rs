@@ -180,18 +180,58 @@ pub(crate) fn render(
                 }
             }
         }
-        if !dropped.is_empty() {
-            let decor = table.decor_mut();
-            let before = decor.prefix().and_then(|p| p.as_str()).unwrap_or("");
-            let prefix = format!("{before}{}", dropped.concat());
-            decor.set_prefix(prefix);
-        }
+        note_dropped(table, &dropped);
     }
+    drop_orphans(&mut doc);
     let patterned = match exe {
         Some(exe) => patterns_into(&mut doc, exe, anchors)?,
         None => Patterned::default(),
     };
     Ok((doc.to_string(), patterned))
+}
+
+/// Puts the `pin:` notes of the entries dropped from `table` above it.
+fn note_dropped(table: &mut TomlTable, dropped: &[String]) {
+    if dropped.is_empty() {
+        return;
+    }
+    let decor = table.decor_mut();
+    let before = decor.prefix().and_then(|p| p.as_str()).unwrap_or("");
+    let prefix = format!("{before}{}", dropped.concat());
+    decor.set_prefix(prefix);
+}
+
+/// Drops each constant whose `cell` or `via` names a symbol `doc` no longer
+/// has, with a note, since the table would not read with it.
+fn drop_orphans(doc: &mut DocumentMut) {
+    let symbols: Vec<String> = doc
+        .get("symbols")
+        .and_then(Item::as_table)
+        .map(|t| t.iter().map(|(id, _)| id.to_owned()).collect())
+        .unwrap_or_default();
+    let Some(constants) = doc.get_mut("constants").and_then(Item::as_table_mut) else {
+        return;
+    };
+    let orphans: Vec<(String, String)> = constants
+        .iter()
+        .filter_map(|(id, item)| {
+            let inline = item.as_inline_table()?;
+            ["cell", "via"].into_iter().find_map(|key| {
+                let named = inline.get(key)?.as_str()?;
+                (!symbols.iter().any(|s| s == named)).then(|| {
+                    (
+                        id.to_owned(),
+                        format!("# pin: {id} dropped: its {key} {named} is gone\n"),
+                    )
+                })
+            })
+        })
+        .collect();
+    for (id, _) in &orphans {
+        constants.remove(id);
+    }
+    let notes: Vec<String> = orphans.into_iter().map(|(_, note)| note).collect();
+    note_dropped(constants, &notes);
 }
 
 /// Sets entry `id` of `table` to `value`, keeping its pattern fields.
@@ -694,6 +734,28 @@ revision = 1
         let reread = parse(&text).unwrap();
         assert_eq!(reread.age, 400);
         assert_eq!(reread.symbols.len(), 1);
+    }
+
+    #[test]
+    fn a_dropped_symbol_drops_the_constants_read_through_it_with_a_note() {
+        let src = TABLE.replace(
+            "\"inventory.copy_a8\"",
+            "\"skill.cell\" = { value = 5, cell = \"npc.move\" }\n\"inventory.copy_a8\"",
+        );
+        let row = parse(&src).unwrap();
+        let edits = [(&row.symbols[1], Edit::Drop("npc.move missing: gone".into()))];
+        let identity = Identity {
+            guid: &"ab".repeat(16),
+            age: 400,
+            name: "1.0 server (2)",
+            steam_build: Some(2),
+            game_version: None,
+            new_build: true,
+        };
+        let (text, _) = render(&src, &row, &identity, &edits, None, &FxHashMap::default()).unwrap();
+        assert!(!text.contains("\"skill.cell\""), "{text}");
+        assert!(text.contains("# pin: skill.cell dropped: its cell npc.move is gone\n"));
+        enshwick_gamedata::Table::parse(&text).unwrap();
     }
 
     #[test]

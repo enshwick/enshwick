@@ -167,6 +167,7 @@ fn port_tables(
         let source =
             enshwick_gamedata::Table::parse(&src).with_context(|| path.display().to_string())?;
         let anchors = row::port_anchors(&row, &mut ported, &source, old, new);
+        row::confirm_symbols_by_patterns(&mut ported, &source, new);
         row::confirm_by_patterns(&mut ported, &source, new);
         row::confirm_cells(&mut ported, &source, new);
         let name = new_name(

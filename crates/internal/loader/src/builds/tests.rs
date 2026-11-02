@@ -71,9 +71,32 @@ fn the_slider_extent_reads_on_each_client() {
     if std::env::var("ENSH_CLIENT_EXE").is_ok() {
         assert!(clients.len() >= 2, "{rows:?}");
     }
-    for (table, values) in clients {
-        assert_eq!(values, &[Some(0xa0)], "{table}");
+    assert!(misreads(&rows).is_empty(), "{rows:?}");
+    for (table, values) in clients.iter().filter(|(t, _)| t.ends_with(": own")) {
+        // 0xb0 from client 26320373, where the slider grew 16 bytes.
+        assert!(
+            matches!(values[..], [Some(0xa0 | 0xb0)]),
+            "{table}: {values:x?}"
+        );
     }
+}
+
+/// The rows of `rows` where a carried table reads another value than its
+/// executable's own table; a carried table that finds nothing is no misread.
+fn misreads(rows: &[(String, Vec<Option<u64>>)]) -> Vec<&str> {
+    rows.iter()
+        .filter(|(table, values)| {
+            let (var, _) = table.split_once(": ").unwrap_or_default();
+            let own = rows.iter().find(|(t, _)| *t == format!("{var}: own"));
+            own.is_some_and(|(_, own)| {
+                values
+                    .iter()
+                    .zip(own)
+                    .any(|(value, own)| value.is_some() && value != own)
+            })
+        })
+        .map(|(table, _)| table.as_str())
+        .collect()
 }
 
 /// On each executable, every table that pins the block rows reads where
@@ -89,10 +112,11 @@ fn the_block_box_and_undo_record_rows_read_on_each_executable() {
     ]);
     let unread = executables_without_rows(&rows, &named_executables());
     assert!(unread.is_empty(), "{unread:?}: {rows:?}");
-    for (table, values) in rows {
+    assert!(misreads(&rows).is_empty(), "{rows:?}");
+    for (table, values) in rows.iter().filter(|(t, _)| t.ends_with(": own")) {
         assert_eq!(
             values,
-            [Some(0x20), Some(0x2c), Some(0x50), Some(0x28)],
+            &[Some(0x20), Some(0x2c), Some(0x50), Some(0x28)],
             "{table}"
         );
     }
@@ -371,7 +395,7 @@ fn a_known_build_resolves_its_symbols() {
         .fingerprint();
     let found = select(&tables, Side::SERVER, fingerprint, None, |_| None).unwrap();
     assert_eq!(found.kind, Kind::Exact);
-    assert_eq!(found.symbol("npc.lookup"), Some(0x20_3d30));
+    assert_eq!(found.symbol("npc.lookup"), Some(0x20_9840));
     assert_eq!(found.symbol("npc.nope"), None);
     assert!(!found.checks().is_empty());
     assert!(select(&tables, Side::CLIENT, fingerprint, None, |_| None,).is_none());
@@ -472,27 +496,29 @@ fn checked_symbols_read_their_bytes_in_the_client() {
     }
     assert!(checked >= 42);
     let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
-    for (ty, field, offset) in [
-        ("keen::FbUiBundle", "namedStyles", 0x10a0c),
-        ("keen::FbUiBundle", "sounds", 0x12060),
+    // The offsets of client 26320373.
+    let moved = [
+        ("keen::FbUiBundle", "namedStyles", 0x10bbc),
+        ("keen::FbUiBundle", "sounds", 0x12210),
         ("keen::FbUiBundle", "locatags", 0x10),
-        ("keen::FbUiBundle", "fontSizes", 0x109e0),
+        ("keen::FbUiBundle", "fontSizes", 0x10b90),
         ("keen::FbUiCharacterStyles", "menu", 0x1130),
         ("keen::FbUiCharacterStyles", "greenText", 0x210),
         ("keen::FbUiMenuCharacterStyles", "header1", 0x58),
         ("keen::FbUiSounds", "menu", 0x1e0),
         ("keen::FbUiSoundsMenuGeneric", "entryTrigger", 0xf0),
-        ("keen::FbUiLocaLinks", "menuStrings", 0x54b0),
-        ("keen::FbUiLocaMenus", "settings", 0x1c10),
+        ("keen::FbUiLocaLinks", "menuStrings", 0x5510),
+        ("keen::FbUiLocaMenus", "settings", 0x1c40),
         ("keen::FbUiLocaMenuSettings", "settingOff", 0xb0),
         ("keen::FbUiFontSizes", "caps_large", 0x24),
-    ] {
-        assert_eq!(
-            reflection.field_offset(ty, field),
-            Ok(offset),
-            "{ty}.{field}"
-        );
-    }
+    ]
+    .into_iter()
+    .filter_map(|(ty, field, offset)| {
+        let found = reflection.field_offset(ty, field);
+        (found != Ok(offset)).then(|| format!("{ty}.{field}: {found:x?}, not {offset:#x}"))
+    })
+    .collect::<Vec<_>>();
+    assert!(moved.is_empty(), "{moved:#?}");
 }
 
 /// On the server `ENSH_SERVER_EXE` names (skipped without it), finding

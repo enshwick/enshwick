@@ -207,6 +207,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- Build tables for client 26320373 and dedicated server 26319703, the game
+  update of 2026-11-02, so neither carries the previous table by patterns
+  (#914).
 - The Mods screen has an Interface demo button while developer tools are
   on in that game, so the demo opens without the console (#897).
 - `World::set_muted` and `World::muted` mute a player in chat and lift the
@@ -392,6 +395,9 @@ Each entry names the pull request that made the change.
 - A dedicated server where no mod subscribes to `WorldLoaded`,
   `ShutdownStarted` or data that needs them now loads each world's settings
   and record and raises `WorldLoaded` again (#916).
+- Hooks that read the caller frame are armed on a client whose own start
+  uses most TLS slots: the loader takes its slots first, and gives back the
+  ones it took when it cannot have all of them (#914).
 - A mid-function hook is refused when the loader cannot move its first bytes
   cleanly: a branch of its own function lands inside them, or the encoder
   would split one of them into several. Relays and trampolines now carry
