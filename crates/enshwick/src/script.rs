@@ -32,6 +32,13 @@ mod namespaces;
 #[cfg(feature = "unstable")]
 mod tests;
 
+#[cfg_attr(
+    not(feature = "unstable"),
+    expect(
+        unused_imports,
+        reason = "the script binding is public only with `unstable`"
+    )
+)]
 pub use namespaces::{Declared, Log, NAMESPACES, Namespace, Opened};
 
 /// A value's type as a script language sees it.
