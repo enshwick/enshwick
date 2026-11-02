@@ -3,7 +3,7 @@
 use enshwick::code::Pattern;
 
 use crate::reflect::Fingerprint;
-use crate::{Body, Side, Table};
+use crate::{Body, Routed, Side, Table};
 
 /// How a [`Resolved`] table came about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,6 +27,30 @@ pub struct Resolved {
     pub(crate) attributes: Vec<(String, String)>,
     pub(crate) heads: Vec<(String, Pattern, u64)>,
     pub(crate) bodies: Vec<(String, Body)>,
+    pub(crate) routed: Vec<String>,
+}
+
+/// What an engine route did to an entry of a [`Resolved`] table.
+///
+/// # Examples
+///
+/// See [`Resolved::route`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Routing {
+    /// The route found what the table holds.
+    Agrees,
+    /// The route found an entry the table lacks or its patterns missed.
+    Supplied,
+    /// The route and the table disagree, so the entry is off.
+    Conflict {
+        /// What the table holds.
+        table: u64,
+        /// What the route found.
+        engine: u64,
+    },
+    /// The route found nothing, so the table's entry, if any, stands.
+    Unresolved,
 }
 
 impl Resolved {
@@ -154,6 +178,86 @@ impl Resolved {
                 None
             }
         }
+    }
+}
+
+impl Resolved {
+    /// Takes what an engine route found for entry `id`: an entry the
+    /// table lacks or missed is supplied, one it holds must agree or goes
+    /// off as [`Self::missing`], and nothing found leaves the table's
+    /// entry. A found symbol also stands for its `<id>.bytes` check, which
+    /// the route's own match replaces.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::{Routed, Routing, Table};
+    ///
+    /// let table = Table::parse(
+    ///     r#"
+    ///     name = "1.0 server (1)"
+    ///     side = "server"
+    ///     guid = "00000000000000000000000000000001"
+    ///     age = 2
+    ///     [symbols]
+    ///     "f.held" = 0x1000
+    ///     "#,
+    /// )?;
+    /// let mut resolved = table.resolve();
+    /// assert_eq!(resolved.route("f.held", Some(Routed::Symbol(0x1000))), Routing::Agrees);
+    /// assert_eq!(resolved.route("f.new", Some(Routed::Constant(8))), Routing::Supplied);
+    /// assert_eq!(resolved.constant("f.new"), Some(8));
+    /// assert!(resolved.routed("f.new"));
+    /// assert_eq!(
+    ///     resolved.route("f.held", Some(Routed::Symbol(0x2000))),
+    ///     Routing::Conflict { table: 0x1000, engine: 0x2000 }
+    /// );
+    /// assert_eq!(resolved.symbol("f.held"), None);
+    /// assert_eq!(resolved.route("f.none", None), Routing::Unresolved);
+    /// # Ok::<(), enshwick_gamedata::TableError>(())
+    /// ```
+    pub fn route(&mut self, id: &str, found: Option<Routed>) -> Routing {
+        let Some(found) = found else {
+            return Routing::Unresolved;
+        };
+        let (entries, engine) = match found {
+            Routed::Symbol(rva) => (&mut self.symbols, rva),
+            Routed::Constant(value) => (&mut self.constants, value),
+        };
+        let routing = match entries.binary_search_by(|(have, _)| have.as_str().cmp(id)) {
+            Ok(i) if entries[i].1 == engine => Routing::Agrees,
+            Ok(i) => {
+                let table = entries.remove(i).1;
+                self.routed.retain(|have| have != id);
+                if let Err(at) = self.missing.binary_search_by(|have| have.as_str().cmp(id)) {
+                    self.missing.insert(at, id.to_owned());
+                }
+                return Routing::Conflict { table, engine };
+            }
+            Err(i) => {
+                entries.insert(i, (id.to_owned(), engine));
+                Routing::Supplied
+            }
+        };
+        let check = format!("{id}.bytes");
+        self.missing.retain(|have| have != id && *have != check);
+        if let Err(at) = self.routed.binary_search_by(|have| have.as_str().cmp(id)) {
+            self.routed.insert(at, id.to_owned());
+        }
+        routing
+    }
+
+    /// Whether an engine route found entry `id`, whose code the route's own
+    /// match then checks.
+    ///
+    /// # Examples
+    ///
+    /// See [`Resolved::route`].
+    #[must_use]
+    pub fn routed(&self, id: &str) -> bool {
+        self.routed
+            .binary_search_by(|have| have.as_str().cmp(id))
+            .is_ok()
     }
 }
 

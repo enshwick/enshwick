@@ -504,6 +504,7 @@ impl Table {
             attributes: self.attributes(),
             heads: self.heads(),
             bodies: self.bodies(),
+            routed: Vec::new(),
         }
     }
 
@@ -675,6 +676,7 @@ impl Table {
             attributes: self.attributes(),
             heads: self.heads(),
             bodies: self.bodies(),
+            routed: Vec::new(),
         }
     }
 
