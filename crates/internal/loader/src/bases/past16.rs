@@ -494,9 +494,21 @@ mod tests {
     /// Every site is where the table of each game executable that
     /// `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name puts it, each size patch
     /// finds its one `mov edx, size` in its create, and the client's count
-    /// getter is in the client only; skipped without them.
+    /// getter is in the client only; on a build pinned before the window,
+    /// whose table holds none of its functions, the window turns off on an
+    /// entry the table lacks. Skipped without them.
     #[test]
     fn every_site_is_found_in_the_game_s_executables() {
+        let window = [
+            bases::SERVER_CREATE,
+            bases::CLIENT_CREATE,
+            bases::SERVER_DESTROY,
+            bases::CLIENT_DESTROY,
+            bases::CTOR,
+            bases::TEARDOWN,
+            bases::SLOT_INIT,
+            bases::SLOT_FREE,
+        ];
         let tables = crate::builds::load();
         for (variable, side) in [
             ("ENSH_SERVER_EXE", TableSide::Server),
@@ -511,13 +523,25 @@ mod tests {
             let text = image.section(".text").unwrap();
             let range = image.range(text);
             let code = image.read(range.start, range.end - range.start).unwrap();
+            let resolved = table.resolve();
             let pins = Pins {
-                table: &table.resolve(),
+                table: &resolved,
                 code_rva: range.start - image.base(),
             };
+            let pinned = window.iter().any(|id| resolved.symbol(id.id()).is_some());
             let client = side == TableSide::Client;
-            let sites = find(code, 0, client, FIELDS, &pins)
-                .unwrap_or_else(|why| panic!("{variable}: {why}"));
+            let sites = match find(code, 0, client, FIELDS, &pins) {
+                Ok(sites) if pinned => sites,
+                Err(SiteError::Missing(id))
+                    if !pinned
+                        && resolved.symbol(id).is_none()
+                        && resolved.constant(id).is_none() =>
+                {
+                    continue;
+                }
+                Ok(_) => panic!("{variable}: found on a table without the window's functions"),
+                Err(why) => panic!("{variable}: {} {why}", why.entry()),
+            };
             assert_eq!(sites.patches.len(), 2 + usize::from(client), "{variable}");
             assert_eq!(sites.targets().count(), 14, "{variable}");
             assert!(
