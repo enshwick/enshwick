@@ -15,7 +15,7 @@ use super::entries::{
     RecipesFile, ValueEntry,
 };
 use super::files::PackError;
-use super::pack::{Dropped, Reader};
+use super::reader::{Dropped, Reader};
 use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE};
 
 /// A field a recipe change sets, with its ingredient and the name the pack

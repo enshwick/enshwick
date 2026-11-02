@@ -231,6 +231,7 @@ mod entries;
 mod files;
 mod manifest;
 mod pack;
+mod reader;
 #[cfg(test)]
 mod tests;
 
