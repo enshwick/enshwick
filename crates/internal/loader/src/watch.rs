@@ -230,7 +230,7 @@ fn changed(loader: &Loader, owner: Option<usize>) {
     }
     let path = loader.configs_dir.join(format!("{LOADER_ID}.toml"));
     let (settings, problems) = Settings::read(&path, crate::allowlist::listed(&loader.data_dir));
-    if problems.is_empty() {
+    if problems.lines.is_empty() {
         crate::diag::configure(&settings);
         crate::greeting::configure(&settings.motd);
         crate::log::set_levels(settings);
@@ -238,7 +238,7 @@ fn changed(loader: &Loader, owner: Option<usize>) {
         loader.emit(Event::LOADER_SETTINGS_CHANGED, None, core::ptr::null());
         return;
     }
-    for problem in problems {
+    for problem in problems.lines {
         crate::log!(
             ERROR,
             "loader settings change skipped: {problem} ({})",
