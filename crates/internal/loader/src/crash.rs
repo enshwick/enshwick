@@ -492,8 +492,9 @@ unsafe extern "system" fn dump(
     }
 }
 
-/// Links the report on the game's crash dumps: `MiniDumpWriteDump` of
-/// `dbghelp.dll`, loaded now if the game has not yet.
+/// Links the report on the game's crash dumps: `MiniDumpWriteDump` of the
+/// system's `dbghelp.dll`, which a `dbghelp.dll` proxy in the game's folder
+/// forwards to.
 pub(crate) fn link(loader: &Loader) {
     let found =
         crate::module::Module::system("dbghelp.dll").and_then(|m| m.export("MiniDumpWriteDump"));

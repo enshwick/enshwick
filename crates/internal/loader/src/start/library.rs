@@ -54,9 +54,9 @@ pub(crate) struct Loaded {
     pub(crate) ready: ReadyFn,
 }
 
-/// Loads the mod DLL at `path` for a dev reload; `None`, logged, when it is
-/// no mod of this ABI.
-pub(crate) fn load_copy(path: &Path) -> Option<Loaded> {
+/// Loads the mod DLL at `path`, a dev reload copy of `original`; `None`,
+/// logged, when it is no mod of this ABI.
+pub(crate) fn load_copy(path: &Path, original: &Path) -> Option<Loaded> {
     if crate::others::is_mod_file(path) == Some(false) {
         crate::log!(
             WARN,
@@ -65,7 +65,7 @@ pub(crate) fn load_copy(path: &Path) -> Option<Loaded> {
         );
         return None;
     }
-    let library = load_from(path, None)?;
+    let library = load_from(path, Some(original))?;
     Some(Loaded {
         module: library.module,
         manifest: library.manifest,
@@ -343,7 +343,7 @@ pub(super) enum Run {
 /// file name, or `None`, logged, when it does not load.
 fn load_native(path: &Path) -> Option<String> {
     let file = path.file_name()?.to_string_lossy().into_owned();
-    if let Err(error) = crate::module::load_library(path) {
+    if let Err(error) = crate::module::load_library(path, None) {
         crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
         return None;
     }
@@ -356,22 +356,22 @@ fn load(path: &Path) -> Option<Library> {
     if crate::reload::copies() {
         let mods_dir = path.parent()?;
         let copy = crate::reload::first_copy(mods_dir, path)?;
-        let file = path.file_name()?.to_string_lossy().into_owned();
-        let mut library = load_from(&copy, Some(&file))?;
+        let mut library = load_from(&copy, Some(path))?;
         library.copied = Some((path.to_path_buf(), copy));
         return Some(library);
     }
     load_from(path, None)
 }
 
-/// Loads the DLL at `path`, named `file` in messages (its own name when
-/// `None`).
-fn load_from(path: &Path, named: Option<&str>) -> Option<Library> {
-    let file = match named {
-        Some(file) => file.to_owned(),
-        None => path.file_name()?.to_string_lossy().into_owned(),
-    };
-    let module = match crate::module::load_library(path) {
+/// Loads the DLL at `path`, a dev reload copy of `original` when given, which
+/// then names it in messages and whose folder its imports also resolve from.
+fn load_from(path: &Path, original: Option<&Path>) -> Option<Library> {
+    let file = original
+        .unwrap_or(path)
+        .file_name()?
+        .to_string_lossy()
+        .into_owned();
+    let module = match crate::module::load_library(path, original.and_then(Path::parent)) {
         Ok(module) => module,
         Err(error) => {
             crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));

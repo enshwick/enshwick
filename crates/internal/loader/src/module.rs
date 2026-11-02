@@ -1,46 +1,66 @@
 //! Modules of the process and their exports, found by name.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 
 use windows_sys::Win32::Foundation::HMODULE;
 use windows_sys::Win32::System::LibraryLoader::{
-    GET_MODULE_HANDLE_EX_FLAG_PIN, GetModuleHandleExW, GetProcAddress,
+    AddDllDirectory, GET_MODULE_HANDLE_EX_FLAG_PIN, GetModuleHandleExW, GetProcAddress,
     LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LoadLibraryExW,
+    RemoveDllDirectory,
 };
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 
 /// Loads the DLL at `path` and keeps it, with its imports resolved only from
-/// its own folder, the game's folder and the system folder, never from the
-/// current directory or `PATH`.
+/// its own folder, `beside` (the original's folder of a dev reload copy), the
+/// game's folder and the system folder, never from the current directory or
+/// `PATH`.
 ///
 /// # Errors
 ///
-/// When `path` has no absolute form, or the DLL or one of its imports does
-/// not load; the error is the system's.
-pub(crate) fn load_library(path: &Path) -> std::io::Result<HMODULE> {
+/// When `path` or `beside` has no absolute form, or the DLL or one of its
+/// imports does not load; the error is the system's.
+pub(crate) fn load_library(path: &Path, beside: Option<&Path>) -> std::io::Result<HMODULE> {
     // The folder flag takes only a full path; `absolute` also turns `/` into
     // `\`, which the system loader needs.
-    let path = std::path::absolute(path)?;
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
-    // SAFETY: `wide` is a live NUL-terminated UTF-16 string; the DLL runs its
+    let path = wide(std::path::absolute(path)?.as_os_str());
+    let added = match beside {
+        Some(dir) => {
+            let dir = wide(std::path::absolute(dir)?.as_os_str());
+            // SAFETY: `dir` is a live NUL-terminated absolute path; the cookie
+            // is removed below once the load is done.
+            let cookie = unsafe { AddDllDirectory(dir.as_ptr()) };
+            if cookie.is_null() {
+                return Err(std::io::Error::last_os_error());
+            }
+            Some(cookie)
+        }
+        None => None,
+    };
+    // SAFETY: `path` is a live NUL-terminated UTF-16 string; the DLL runs its
     // `DllMain` as it would from any loader.
     let module = unsafe {
         LoadLibraryExW(
-            wide.as_ptr(),
+            path.as_ptr(),
             core::ptr::null_mut(),
             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
         )
     };
-    if module.is_null() {
-        return Err(std::io::Error::last_os_error());
+    let loaded = if module.is_null() {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(module)
+    };
+    if let Some(cookie) = added {
+        // SAFETY: `cookie` came from `AddDllDirectory` above and is removed once.
+        unsafe { RemoveDllDirectory(cookie) };
     }
-    Ok(module)
+    loaded
 }
 
-/// The system folder, `System32` on 64-bit Windows.
-fn system_dir() -> Option<PathBuf> {
+/// The system folder, `System32` for the 64-bit game.
+pub(crate) fn system_dir() -> Option<PathBuf> {
     let mut buffer = [0u16; 512];
     // SAFETY: the call writes at most the 512 units of the local `buffer`.
     let len = unsafe { GetSystemDirectoryW(buffer.as_mut_ptr(), 512) };
@@ -81,7 +101,7 @@ impl Module {
     /// path, so a DLL of that name in the game's folder is never taken for
     /// it; kept for the process.
     pub(crate) fn system(name: &str) -> Option<Self> {
-        load_library(&system_dir()?.join(name)).ok().map(Self)
+        load_library(&system_dir()?.join(name), None).ok().map(Self)
     }
 
     /// The module behind `handle`.
@@ -112,8 +132,8 @@ impl Module {
 }
 
 /// `text` as a NUL-terminated UTF-16 string.
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain([0]).collect()
+fn wide(text: impl AsRef<OsStr>) -> Vec<u16> {
+    text.as_ref().encode_wide().chain([0]).collect()
 }
 
 #[cfg(test)]
@@ -137,24 +157,8 @@ mod tests {
     fn a_system_library_loads_from_the_system_folder() {
         let dbghelp = Module::system("dbghelp.dll").expect("dbghelp loads");
         assert!(dbghelp.export("MiniDumpWriteDump").is_some());
-        let mut buffer = [0u16; 512];
-        // SAFETY: the call writes at most the 512 units of the local `buffer`.
-        let len = unsafe {
-            windows_sys::Win32::System::LibraryLoader::GetModuleFileNameW(
-                dbghelp.0,
-                buffer.as_mut_ptr(),
-                512,
-            )
-        };
-        let file = PathBuf::from(OsString::from_wide(&buffer[..len as usize]));
-        let system = system_dir().unwrap();
-        assert!(
-            file.parent()
-                .is_some_and(|dir| dir.as_os_str().eq_ignore_ascii_case(system.as_os_str())),
-            "{} is not in {}",
-            file.display(),
-            system.display()
-        );
+        let path = system_dir().unwrap().join("dbghelp.dll");
+        assert_eq!(Module::loaded(path.to_str().unwrap()), Some(dbghelp));
     }
 
     #[test]

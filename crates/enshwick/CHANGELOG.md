@@ -275,6 +275,12 @@ Each entry names the pull request that made the change.
 - `Load::world_store` refuses the names `settings` and `save`, whose files
   the loader keeps in the same world folder, so a store no longer writes
   over the world's settings (#680).
+- The loader and its stub load mods, native DLLs, chained proxies and the
+  loader itself so that their imports resolve only from the DLL's own
+  folder, the game's folder and the system folder, never from the current
+  directory or `PATH`; a mod ships every DLL it imports beside itself. The
+  crash report hooks the system's `dbghelp.dll`, never a proxy of that name
+  (#869).
 
 - Migrations run once per world, all or nothing: each world keeps its own
   record, `.migrations.toml`, and a copy of the files each migration

@@ -138,7 +138,7 @@ fn query(dll: &Path) -> Result<Manifest, String> {
     use std::os::windows::ffi::OsStrExt as _;
 
     use windows_sys::Win32::System::LibraryLoader::{
-        GetProcAddress, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR,
+        GetProcAddress, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32,
         LoadLibraryExW,
     };
 
@@ -148,12 +148,13 @@ fn query(dll: &Path) -> Result<Manifest, String> {
     let wide: Vec<u16> = dll.as_os_str().encode_wide().chain([0]).collect();
     // SAFETY: `wide` ends in the NUL chained onto it and lives across the
     // call. The flags resolve the DLL's imports from its folder and the
-    // system's, never from the current directory or `PATH`.
+    // system's, never from the current directory, `PATH` or this tool's own
+    // folder, which the game's search would not see.
     let module = unsafe {
         LoadLibraryExW(
             wide.as_ptr(),
             core::ptr::null_mut(),
-            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32,
         )
     };
     if module.is_null() {

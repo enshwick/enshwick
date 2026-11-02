@@ -396,6 +396,12 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// The variable that hands [`imports_load_in_this_process`] the mod to load.
+const IMPORTS_MOD: &str = "ENSHWICK_TEST_IMPORTS_MOD";
+
+/// What [`imports_load_in_this_process`] prints after its load.
+const LOADED: &str = "imports loaded: ";
+
 #[test]
 fn a_mods_import_never_resolves_from_the_current_directory() {
     let dir = std::env::temp_dir().join(format!("enshwick-search-{}", std::process::id()));
@@ -411,30 +417,45 @@ fn a_mods_import_never_resolves_from_the_current_directory() {
     let current = dir.join("current");
     std::fs::create_dir_all(&mods).unwrap();
     std::fs::create_dir_all(&current).unwrap();
-    std::fs::copy(built.join("imports.dll"), mods.join("imports.dll")).unwrap();
-    let system = Path::new(&std::env::var_os("SystemRoot").unwrap()).join("System32");
-    std::fs::copy(
-        system.join("version.dll"),
-        current.join(format!("{DEPENDENCY}.dll")),
-    )
-    .unwrap();
+    let imports = mods.join("imports.dll");
+    std::fs::copy(built.join("imports.dll"), &imports).unwrap();
+    let dependency = format!("{DEPENDENCY}.dll");
+    let system = crate::module::system_dir().unwrap();
+    std::fs::copy(system.join("version.dll"), current.join(&dependency)).unwrap();
 
-    let was = std::env::current_dir().unwrap();
-    std::env::set_current_dir(&current).unwrap();
-    let library = super::load_from(&mods.join("imports.dll"), None);
-    std::env::set_current_dir(was).unwrap();
+    // The current directory is the process's, so the load runs in a child.
+    let child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "start::library::tests::imports_load_in_this_process",
+            "--ignored",
+            "--nocapture",
+        ])
+        .current_dir(&current)
+        .env(IMPORTS_MOD, &imports)
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&child.stdout);
+    assert!(child.status.success(), "{out}");
+    assert!(
+        out.contains(&format!("{LOADED}false")),
+        "the import came from the current directory: {out}"
+    );
 
-    assert!(
-        library.is_none(),
-        "the import came from the current directory"
-    );
-    std::fs::rename(
-        current.join(format!("{DEPENDENCY}.dll")),
-        mods.join(format!("{DEPENDENCY}.dll")),
-    )
-    .unwrap();
-    assert!(
-        super::load_from(&mods.join("imports.dll"), None).is_some(),
-        "an import beside the mod resolves"
-    );
+    std::fs::rename(current.join(&dependency), mods.join(&dependency)).unwrap();
+    let library = super::load_from(&imports, None).expect("an import beside the mod resolves");
+    super::unload(&library);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Loads the mod [`IMPORTS_MOD`] names and prints whether it loaded, for
+/// [`a_mods_import_never_resolves_from_the_current_directory`].
+#[test]
+#[ignore = "runs only as that test's child, in its current directory"]
+fn imports_load_in_this_process() {
+    let Some(path) = std::env::var_os(IMPORTS_MOD) else {
+        return;
+    };
+    let library = super::load_from(Path::new(&path), None);
+    println!("{LOADED}{}", library.is_some());
 }
