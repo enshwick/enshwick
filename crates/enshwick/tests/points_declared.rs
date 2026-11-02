@@ -20,6 +20,31 @@ pub(crate) struct Hidden {
 
 /// The mod that owns the point.
 mod owner {
+    #[expect(
+        dead_code,
+        reason = "the tests read its manifest alone; the mod never starts"
+    )]
+    pub(super) struct Hello;
+
+    impl enshwick::Mod for Hello {
+        fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        Hello,
+        r#"
+        id = "you.hello"
+        side = "server"
+        exports = ["price"]
+        "#
+    );
+}
+
+/// The owner again, for the test that frees its manifest while other tests
+/// read the first one's.
+mod restarted {
     pub(super) struct Hello;
 
     impl enshwick::Mod for Hello {
@@ -70,13 +95,13 @@ mod tests {
     use enshwick::abi::Status;
     use enshwick::points::Decision;
 
-    use super::{Price, extender, owner};
+    use super::{Price, extender, owner, restarted};
 
     /// The schema text of a manifest.
     fn points(manifest: *const enshwick::abi::Manifest) -> String {
         // SAFETY: `enshwick_mod_query` returns the manifest of
-        // `declare_mod!`, valid until its shutdown, which runs only after
-        // this call.
+        // `declare_mod!`, valid until its shutdown; only one test shuts a
+        // mod down, `restarted`, and after this call.
         let manifest = unsafe { &*manifest };
         // SAFETY: the manifest's schema text lives as long as the manifest.
         unsafe { manifest.points.as_str() }
@@ -101,9 +126,9 @@ mod tests {
 
     #[test]
     fn a_shutdown_frees_the_manifest_and_the_next_query_builds_it_again() {
-        let before = points(owner::enshwick_mod_query());
-        owner::enshwick_mod_shutdown();
-        assert_eq!(points(owner::enshwick_mod_query()), before);
+        let before = points(restarted::enshwick_mod_query());
+        restarted::enshwick_mod_shutdown();
+        assert_eq!(points(restarted::enshwick_mod_query()), before);
     }
 
     #[test]

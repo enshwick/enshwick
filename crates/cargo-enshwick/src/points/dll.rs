@@ -44,7 +44,10 @@ fn from_section(raw: &[u8]) -> Result<Option<String>, Error> {
     let Some(&head) = section.heads().first() else {
         return Ok(None);
     };
-    let id = head_id(head).ok_or_else(|| Error::Toml("the head names no `mod`".to_owned()))?;
+    // `Section::parse` refuses a head without its mod's id.
+    let Some(id) = head_id(head) else {
+        return Ok(None);
+    };
     let text = section.schema(head, id, None);
     Ok((!text.is_empty()).then_some(text))
 }

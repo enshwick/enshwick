@@ -168,7 +168,7 @@ mod tests {
         // SAFETY: `enshwick_mod_query` returns the manifest of
         // `declare_mod!`, valid until its shutdown.
         let manifest = unsafe { &*super::enshwick_mod_query() };
-        // SAFETY: the manifest's static text.
+        // SAFETY: the schema text lives as long as the manifest, until a shutdown no test runs.
         let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
         assert_eq!(text, include_str!("../points.toml"));
     }

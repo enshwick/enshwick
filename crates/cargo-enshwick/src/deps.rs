@@ -19,8 +19,14 @@ fn schemas(from: &Path) -> anyhow::Result<Vec<(PathBuf, String)>> {
     }
     let mut found = Vec::new();
     for dll in dlls(from)? {
-        if let Ok(Some(text)) = from_dll(&read(&dll)?) {
-            found.push((dll, text));
+        match from_dll(&read(&dll)?) {
+            Ok(Some(text)) => found.push((dll, text)),
+            // A mod DLL whose section does not read: its owner must rebuild.
+            Err(e @ cargo_enshwick::points::Error::Section(_)) => {
+                return Err(e).with_context(|| dll.display().to_string());
+            }
+            // A DLL that is no mod's, such as the game's own, carries none.
+            Ok(None) | Err(_) => {}
         }
     }
     Ok(found)
