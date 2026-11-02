@@ -1,4 +1,5 @@
-//! Another mod's point schemas, from its DLL or as text, written as the
+//! Another mod's point schemas, from its DLL, its section's bytes or as
+//! text, written as the
 //! definitions an extending mod compiles: whatever the schema holds, the
 //! definition is Rust that declares types, named values and layout checks,
 //! with docs of plain prose that open no code block rustdoc would run.
@@ -10,6 +11,7 @@
 )]
 
 use cargo_enshwick::points::{Schema, from_dll, rust_deps};
+use enshwick::schema_section::Section;
 use libfuzzer_sys::fuzz_target;
 
 /// The attributes a definition carries.
@@ -120,6 +122,20 @@ fn written(text: &str) {
 fuzz_target!(|data: &[u8]| {
     if let Ok(text) = core::str::from_utf8(data) {
         written(text);
+    }
+    if let Ok(section) = Section::parse(data) {
+        for head in section.heads() {
+            let text = section.schema(head.text, head.id);
+            assert!(
+                text.is_empty() || text.starts_with(head.text),
+                "a schema text starts with its head"
+            );
+            assert!(
+                section.exports(head.id).iter().all(|e| e.contains(':')),
+                "every export names its kind"
+            );
+            written(&text);
+        }
     }
     if let Ok(Some(text)) = from_dll(data) {
         written(&text);

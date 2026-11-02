@@ -26,7 +26,8 @@ Each entry names the pull request that made the change.
   lists. Each exported `#[point]`, `#[event]` and `#[call]` writes its schema into the DLL's
   `.enshpt` section; the manifest collects them from there at the loader's
   first query, and `cargo enshwick deps` from the DLL file. An exported
-  event, point or call a schema cannot describe fails the build.
+  event a schema cannot describe fails the build, as a point or call does
+  whether exported or not.
   `enshwick_mod_query` builds the manifest at its first call, returns null
   when that panics, and the manifest lives until `enshwick_mod_shutdown`,
   which frees it. Remove the lists (#868).
