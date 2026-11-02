@@ -72,10 +72,19 @@ impl<'a> Entry<'a> {
     }
 }
 
+/// The head one `declare_mod!` wrote.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Head<'a> {
+    /// Its text, the start of the mod's schema text.
+    pub text: &'a str,
+    /// The mod id it names.
+    pub id: &'a str,
+}
+
 /// The section, split into heads and entries once.
 #[derive(Clone, Debug, Default)]
 pub struct Section<'a> {
-    heads: Vec<&'a str>,
+    heads: Vec<Head<'a>>,
     entries: Vec<Entry<'a>>,
 }
 
@@ -112,7 +121,7 @@ impl<'a> Section<'a> {
     /// let section = Section::parse(
     ///     b"\0schema = 1\nmod = \"you.a\"\n\0\0[[event]]\nname = \"you.a:sold\"\n\0[[future]]\nname = \"you.a:x\"\n",
     /// )?;
-    /// assert_eq!(section.heads(), ["schema = 1\nmod = \"you.a\"\n"]);
+    /// assert_eq!(section.heads()[0].id, "you.a");
     /// assert_eq!(section.entries().len(), 1);
     /// assert_eq!(section.entries()[0].kind, Kind::Event);
     /// assert!(Section::parse(b"[[type]]\n").is_err());
@@ -132,10 +141,8 @@ impl<'a> Section<'a> {
                 if text.contains("\n[[") {
                     return Err(ReadSectionError::Outdated);
                 }
-                if head_id(text).is_none() {
-                    return Err(ReadSectionError::Damaged(start));
-                }
-                section.heads.push(text);
+                let id = head_id(text).ok_or(ReadSectionError::Damaged(start))?;
+                section.heads.push(Head { text, id });
                 continue;
             }
             let name = value(text, "name")
@@ -167,7 +174,7 @@ impl<'a> Section<'a> {
 
     /// The heads, one per `declare_mod!` of the binary.
     #[must_use]
-    pub fn heads(&self) -> &[&'a str] {
+    pub fn heads(&self) -> &[Head<'a>] {
         &self.heads
     }
 

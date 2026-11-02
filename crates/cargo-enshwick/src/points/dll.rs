@@ -1,7 +1,7 @@
 //! The schemas a mod DLL carries in its `.enshpt` section, read from the
 //! file without running it.
 
-use enshwick::schema_section::{Section, head_id};
+use enshwick::schema_section::{Head, Section};
 use enshwick_gamedata::reflect::{Image, Layout};
 
 use super::Error;
@@ -41,11 +41,7 @@ pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, Error> {
 /// head `declare_mod!` wrote, then the mod's own declarations.
 fn from_section(raw: &[u8]) -> Result<Option<String>, Error> {
     let section = Section::parse(raw)?;
-    let Some(&head) = section.heads().first() else {
-        return Ok(None);
-    };
-    // `Section::parse` refuses a head without its mod's id.
-    let Some(id) = head_id(head) else {
+    let Some(&Head { text: head, id }) = section.heads().first() else {
         return Ok(None);
     };
     // The content names of the owner's `exports` are not in the file: a
