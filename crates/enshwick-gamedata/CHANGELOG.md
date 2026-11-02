@@ -26,7 +26,7 @@ Each entry names the pull request that made the change.
   `Table::fall_back` takes, and checks every entry against the code as the
   search does: the save keeps where each pattern matched, not the values,
   and a pattern that does not match there turns the save away. A save of
-  the earlier format is not read and is searched again.
+  the earlier format is not read and is searched again (#882).
 - Breaking: `Table::carry_key` takes a range of the code it leaves out of
   the key, for bytes that change from start to start (#864).
 
