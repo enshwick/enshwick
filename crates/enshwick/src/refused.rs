@@ -212,46 +212,15 @@
 /// }
 /// ```
 ///
-/// A point listed in `declare_mod!` that `exports` in the crate's
-/// `Cargo.toml` leaves out:
+/// An exported event with a field a schema cannot describe, here an array;
+/// `exports` in the crate's `Cargo.toml` lists `price`:
 ///
 /// ```compile_fail
-/// #[enshwick::point(name = "hidden", mode = Override, output = u32)]
-/// #[derive(Clone, Copy, Debug)]
-/// pub struct Hidden {
-///     pub item: u32,
-/// }
-///
-/// struct Hello;
-///
-/// impl enshwick::Mod for Hello {
-///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-///         Ok(Self)
-///     }
-/// }
-///
-/// enshwick::declare_mod!(Hello, points: [Hidden]);
-/// ```
-///
-/// Another mod's point listed in `declare_mod!`, which lists only the mod's
-/// own:
-///
-/// ```compile_fail
-/// #[enshwick::point(of = lockers, name = "price", mode = Override, output = u32)]
+/// #[enshwick::event(name = "price")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
-///     pub item: u32,
+///     pub items: [u16; 2],
 /// }
-///
-/// struct Hello;
-///
-/// impl enshwick::Mod for Hello {
-///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-///         Ok(Self)
-///     }
-/// }
-///
-/// enshwick::declare_mod!(Hello, points: [Price]);
 /// ```
 ///
 /// A key with a Ukrainian text and no English one:

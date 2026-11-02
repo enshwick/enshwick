@@ -270,15 +270,16 @@ as `exports` in its `pack.toml`.
 
 ### Schemas for other mods
 
-What the mod defines in Rust goes to `declare_mod!` after its type:
-`points: [..]` lists the [extension points](../extending.md#defining-a-point)
-the mod defines, by their input types, and `events: [..]` and `calls: [..]`
-its [events](../services.md) and [calls](../calls.md). Their schemas go into
-the manifest and into the DLL's `.enshpt` section, where `cargo enshwick
-point`, `event` and `call` read them to write other mods' definitions. A
-listed point, event or call is for other mods, so a name missing from
-`exports` fails the build. With `exports = ["price"]` in the mod's
-`Cargo.toml`:
+Each [extension point](../extending.md#defining-a-point),
+[event](../services.md) and [call](../calls.md) the mod declares without
+`of` and lists in `exports` puts its schema into the DLL's `.enshpt`
+section; one left out of `exports` stays the mod's own and ships nothing.
+`declare_mod!` takes nothing but the mod's type: when the loader first asks
+for the manifest, it collects the schemas from that section into the
+manifest. `cargo enshwick deps` reads the same section from the DLL file,
+without running the mod, to write other mods' declarations. An exported
+event or point whose fields a schema cannot describe fails the build. With
+`exports = ["price"]` in the mod's `Cargo.toml`:
 
 ```rust,standalone_crate
 #[enshwick::point(name = "price", mode = Override, output = u32)]
@@ -296,7 +297,7 @@ impl enshwick::Mod for Hello {
     }
 }
 
-enshwick::declare_mod!(Hello, points: [Price]);
+enshwick::declare_mod!(Hello);
 ```
 
 ## The mod

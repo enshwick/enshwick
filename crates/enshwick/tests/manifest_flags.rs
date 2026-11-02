@@ -53,14 +53,14 @@ mod tests {
 
     #[test]
     fn a_developer_tool_carries_its_flag_and_other_mods_do_not() {
-        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-        // `declare_mod!`, which no thread writes.
+        // SAFETY: `enshwick_mod_query` returns the manifest of
+        // `declare_mod!`, valid until its shutdown.
         let tool = unsafe { &*tool::enshwick_mod_query() };
         assert!(tool.flags.contains(ManifestFlags::DEVELOPER));
         assert!(tool.flags.contains(ManifestFlags::RELOAD));
         assert!(!tool.flags.contains(ManifestFlags::JOIN));
-        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-        // `declare_mod!`, which no thread writes.
+        // SAFETY: `enshwick_mod_query` returns the manifest of
+        // `declare_mod!`, valid until its shutdown.
         let plain = unsafe { &*plain::enshwick_mod_query() };
         assert!(plain.flags.contains(ManifestFlags::JOIN));
         assert!(!plain.flags.contains(ManifestFlags::DEVELOPER));

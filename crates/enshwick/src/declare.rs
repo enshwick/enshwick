@@ -2,8 +2,31 @@
 
 mod unwind;
 
-/// The exports of `declare_mod!`: `$manifest` is the block that builds the
-/// mod's static manifest, `$texts` the mod's embedded texts, if any.
+/// Writes `$schema`, the schema text of a point, event or call or the head
+/// of `declare_mod!`, into the binary's `.enshpt` section, where the
+/// manifest and `cargo enshwick` find it.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __schema_entry {
+    ($schema:expr) => {
+        const _: () = {
+            #[used]
+            #[cfg_attr(windows, unsafe(link_section = ".enshpt$m"))]
+            #[cfg_attr(
+                target_vendor = "apple",
+                unsafe(link_section = "__DATA,__enshpt,regular,no_dead_strip")
+            )]
+            #[cfg_attr(
+                not(any(windows, target_vendor = "apple")),
+                unsafe(link_section = "enshpt")
+            )]
+            static ENTRY: [u8; $schema.len() + 1] = $crate::__private::entry($schema);
+        };
+    };
+}
+
+/// The exports of `declare_mod!`: `$manifest` builds the mod's
+/// `__private::Manifested`, `$texts` the mod's embedded texts, if any.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __declare_exports {
@@ -12,7 +35,7 @@ macro_rules! __declare_exports {
 
         static __ENSHWICK_INSTANCE: $crate::__private::Slot<$ty> = $crate::__private::Slot::new();
 
-        static __ENSHWICK_MANIFEST: &$crate::abi::Manifest = $manifest;
+        static __ENSHWICK_MANIFEST: $crate::__private::Manifested = $manifest;
 
         static __ENSHWICK_TEXTS: ::core::option::Option<&str> = $texts;
 
@@ -29,10 +52,15 @@ macro_rules! __declare_exports {
             ::core::primitive::u32::from($crate::abi::ABI_MAJOR)
         }
 
-        /// The mod's static manifest.
+        /// The mod's manifest, or null when it does not build.
+        ///
+        /// Any thread may call it, again and again. The first call reads
+        /// the binary's schema section and allocates the schema text; a
+        /// panic there is caught and returns null. The manifest stays
+        /// valid until `enshwick_mod_shutdown`, which frees it.
         #[cfg_attr(not(test), unsafe(no_mangle))]
         pub extern "system" fn enshwick_mod_query() -> *const $crate::abi::Manifest {
-            __ENSHWICK_MANIFEST
+            __ENSHWICK_MANIFEST.query()
         }
 
         /// Initialises the mod.
@@ -48,12 +76,14 @@ macro_rules! __declare_exports {
             me: $crate::abi::ModHandle,
         ) -> $crate::abi::Status {
             // SAFETY: the caller guarantees `api` is the loader's table, alive
-            // for the process, which is the contract of `init`.
+            // for the process, which is the contract of `init`; `query`
+            // returns null or a manifest valid until the shutdown, which
+            // never runs during the init.
             unsafe {
                 $crate::__private::init::<$ty>(
                     api,
                     me,
-                    __ENSHWICK_MANIFEST,
+                    __ENSHWICK_MANIFEST.query(),
                     __ENSHWICK_TEXTS,
                     &__ENSHWICK_INSTANCE,
                 )
@@ -77,6 +107,7 @@ macro_rules! __declare_exports {
         #[cfg_attr(not(test), unsafe(no_mangle))]
         pub extern "system" fn enshwick_mod_shutdown() {
             $crate::__private::shutdown::<$ty>(&__ENSHWICK_INSTANCE);
+            __ENSHWICK_MANIFEST.release();
         }
     };
 }

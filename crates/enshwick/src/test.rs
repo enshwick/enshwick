@@ -107,9 +107,9 @@ pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 /// declare several mods.
 ///
 /// The text takes the keys of the table, read by the same rules; the
-/// version and the rest of `[package]` still come from the crate.
-/// `points: [..]`, `events: [..]` and `calls: [..]` follow as for
-/// `declare_mod!`.
+/// version and the rest of `[package]` still come from the crate. Each
+/// mod's manifest carries the schemas of the binary's points, events and
+/// calls named with its id whose local names its `exports` lists.
 ///
 /// # Examples
 ///
@@ -133,8 +133,8 @@ pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 ///     "#
 /// );
 ///
-/// // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-/// // `declare_mod!`, which no thread writes.
+/// // SAFETY: `enshwick_mod_query` returns the manifest of
+/// // `declare_mod!`, valid until its shutdown.
 /// let manifest = unsafe { &*enshwick_mod_query() };
 /// // SAFETY: `declare_mod!` points the id at a string literal, alive for the process.
 /// assert_eq!(unsafe { manifest.id.as_str() }, Some("you.lockers"));

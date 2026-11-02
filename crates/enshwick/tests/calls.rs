@@ -102,8 +102,7 @@ mod tests {
         id = "you.trading-post"
         side = "server"
         exports = ["price-of"]
-        "#,
-        calls: [PriceOf]
+        "#
     );
 
     fn start() -> enshwick::test::Installed {
@@ -204,10 +203,10 @@ mod tests {
 
     #[test]
     fn the_manifest_carries_the_served_call_s_schema() {
-        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-        // `declare_mod!`, which no thread writes.
+        // SAFETY: `enshwick_mod_query` returns the manifest of
+        // `declare_mod!`, valid until its shutdown.
         let manifest = unsafe { &*enshwick_mod_query() };
-        // SAFETY: `declare_mod!` points the schema at static text.
+        // SAFETY: the schema text lives as long as the manifest, until a shutdown no test runs.
         let text = unsafe { manifest.points.as_str() }.unwrap_or("");
         let table: toml::Table = toml::from_str(text).unwrap();
         let call = &table["call"][0];

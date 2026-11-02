@@ -1,28 +1,28 @@
 //! What another mod offers, read from its schemas and written as the
 //! declarations a mod that depends on it compiles.
 //!
-//! The owner's `declare_mod!(.., points: [..], calls: [..], events: [..])`
-//! puts a schema of each point, call and event it lists into its manifest
-//! and into the `.enshpt` section of its DLL, so the schema is read here
-//! without running the owner's code. A schema comes from another author:
+//! Each of the owner's own points, calls and events puts its schema into
+//! the `.enshpt` section of the owner's DLL, beside the head its
+//! `declare_mod!` writes, so the schema is read here without running the
+//! owner's code. A schema comes from another author:
 //! every name, type and text it carries is checked before it enters
 //! generated code. The declarations name every type they reach and check
 //! their own layout against the hashes the owner's build wrote.
 
 mod calls;
+mod dll;
 mod luau;
 mod rust;
 
 use std::fmt::Write as _;
 
-use enshwick_gamedata::reflect::{Image, ImageError, Layout};
+use enshwick::schema_section::ReadSectionError;
+use enshwick_gamedata::reflect::ImageError;
 use serde::Deserialize;
 
+pub use dll::{SECTION, from_dll};
 pub use luau::{LuauDeps, luau_deps};
 pub use rust::rust_deps;
-
-/// The section of a mod DLL that holds its point schemas.
-pub const SECTION: &str = ".enshpt";
 
 /// The schema format this tool reads.
 const FORMAT: u32 = 1;
@@ -114,9 +114,10 @@ pub enum Error {
     /// The point section ends before its header says.
     #[error("the point section is cut short")]
     CutShort,
-    /// The point section is no UTF-8 text.
-    #[error("the point section is no text")]
-    NotText,
+    /// A part of the point section is damaged, or the owner was built with
+    /// an older enshwick.
+    #[error(transparent)]
+    Section(#[from] ReadSectionError),
 }
 
 /// A mod's point schemas, as `declare_mod!` writes them.
@@ -544,33 +545,6 @@ fn local_name<'a>(schema: &Schema, name: &'a str) -> Result<&'a str, Error> {
             what: "name of its owner",
             value: name.to_owned(),
         })
-}
-
-/// The point schemas in the DLL `bytes`; `None` for a DLL without points.
-///
-/// # Errors
-///
-/// [`Error`] when the bytes are no x64 DLL, or the section is no text.
-///
-/// # Examples
-///
-/// ```
-/// use cargo_enshwick::points::from_dll;
-///
-/// assert!(from_dll(b"MZ").is_err());
-/// ```
-pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, Error> {
-    let image = Image::parse(bytes, Layout::File, None)?;
-    let Some(section) = image.section(SECTION) else {
-        return Ok(None);
-    };
-    let range = image.range(section);
-    let raw = image
-        .read(range.start, range.end - range.start)
-        .ok_or(Error::CutShort)?;
-    let end = raw.iter().rposition(|&b| b != 0).map_or(0, |at| at + 1);
-    let text = std::str::from_utf8(&raw[..end]).map_err(|_| Error::NotText)?;
-    Ok((!text.is_empty()).then(|| text.to_owned()))
 }
 
 /// The Rust path of a schema type name.

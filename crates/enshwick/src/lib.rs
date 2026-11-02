@@ -388,12 +388,13 @@ pub use enshwick_macros::config;
 /// with its name. The loader names the mod and its version in every message
 /// about it.
 ///
-/// After the type, `points: [..]`, `events: [..]` and `calls: [..]` list the
-/// [extension points](crate::points) (each a [`#[point]`](macro@point)
-/// input), the [mod events](crate::services) (each an
-/// [`#[event]`](macro@event) type) and the calls it serves, each a `#[call]`
-/// input; their schemas go into the manifest, where `cargo enshwick deps`,
-/// `event` and `call` read them.
+/// The mod's own [extension points](crate::points), [mod
+/// events](crate::services) and calls, each a [`#[point]`](macro@point),
+/// [`#[event]`](macro@event) or `#[call]` declared without `of`, whose
+/// local name `exports` lists, put their schemas into the DLL's `.enshpt`
+/// section; the others stay the mod's own. The manifest collects the
+/// schemas from there at the loader's first query, and `cargo enshwick
+/// deps` reads them from the DLL file.
 ///
 /// A test that declares several mods in one binary gives each its table
 /// inline with `test::declare_mod!`, behind the `test` feature.
@@ -436,8 +437,8 @@ pub use enshwick_macros::config;
 /// enshwick::declare_mod!(Hello);
 ///
 /// assert!(Hello::instance().is_none());
-/// // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-/// // `declare_mod!`, which no thread writes.
+/// // SAFETY: `enshwick_mod_query` returns the manifest of
+/// // `declare_mod!`, valid until its shutdown.
 /// let manifest = unsafe { &*enshwick_mod_query() };
 /// // SAFETY: `declare_mod!` points the id at a string literal, alive for the process.
 /// assert_eq!(unsafe { manifest.id.as_str() }, Some("you.hello"));
@@ -674,3 +675,5 @@ pub use world_error::WorldError;
 
 #[doc(hidden)]
 pub mod __private;
+#[doc(hidden)]
+pub mod schema_section;

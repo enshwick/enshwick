@@ -82,8 +82,7 @@ mod lockers {
         id = "you.lockers"
         side = "server"
         exports = ["rent", "fee"]
-        "#,
-        calls: [super::Rent, super::Fee]
+        "#
     );
 }
 
@@ -95,10 +94,10 @@ mod tests {
 
     #[test]
     fn the_schema_is_the_one_cargo_enshwick_is_tested_with() {
-        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-        // `declare_mod!`, which no thread writes.
+        // SAFETY: `enshwick_mod_query` returns the manifest of
+        // `declare_mod!`, valid until its shutdown, which no test runs.
         let manifest = unsafe { &*super::lockers::enshwick_mod_query() };
-        // SAFETY: `declare_mod!` points the schema at static text.
+        // SAFETY: the manifest's schema text lives as long as the manifest.
         let text = unsafe { manifest.points.as_str() }
             .unwrap_or_default()
             .replacen(

@@ -1,10 +1,9 @@
 //! Described services, calls: one function from an input struct to an
 //! answer, which one mod serves and others call, from Rust or a script.
 //!
-//! A call is declared once with [`#[call]`](macro@crate::call). Its schema
-//! goes into the server's manifest beside its points' when the manifest
-//! lists it (`declare_mod!(.., calls: [..])`), and `cargo enshwick deps` writes the
-//! declaration for another mod from it. The loader matches a caller with
+//! A call is declared once with [`#[call]`](macro@crate::call). An
+//! exported call's schema goes into the server's manifest beside its
+//! points', and `cargo enshwick deps` writes the
 //! the server by name and major once every mod is initialised: the input
 //! and the answer must agree field by field and in size. A changed call is
 //! a new major, which a server may serve beside the old one.
