@@ -29,6 +29,69 @@ fn the_join_target_copies_read_on_each_client() {
     }
 }
 
+/// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
+/// skipped without it), their own table with every routed row and its
+/// `.bytes` check taken out gets each entry back from the engine routes,
+/// with the value the full table pins, and nothing goes missing.
+#[test]
+fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
+    let routes = tables::Routes::embedded().unwrap();
+    for (var, side, running) in [
+        ("ENSH_SERVER_EXE", tables::Side::Server, Side::SERVER),
+        ("ENSH_CLIENT_EXE", tables::Side::Client, Side::CLIENT),
+    ] {
+        let Ok(path) = std::env::var(var) else {
+            continue;
+        };
+        let bytes = std::fs::read(path).unwrap();
+        let image = enshwick_gamedata::reflect::Image::parse(
+            &bytes,
+            enshwick_gamedata::reflect::Layout::File,
+            None,
+        )
+        .unwrap();
+        let full = tables::exact(&load(), side, image.fingerprint().unwrap())
+            .unwrap()
+            .clone();
+        let text = tables::embedded()
+            .iter()
+            .find(|(file, _)| *file == full.file_name())
+            .unwrap()
+            .1;
+        let mut doc: toml_edit::DocumentMut = text.parse().unwrap();
+        let routed: Vec<&str> = routes.ids().filter(|id| routes.routes(id, side)).collect();
+        for section in ["symbols", "constants"] {
+            let rows = doc[section].as_table_mut().unwrap();
+            for id in &routed {
+                rows.remove(id);
+                rows.remove(&format!("{id}.bytes"));
+            }
+        }
+        let stripped = Table::parse(&doc.to_string()).unwrap();
+        let mut build = KnownBuild {
+            name: stripped.name().to_owned(),
+            kind: Kind::Exact,
+            table: stripped.resolve(),
+            lacking: OnceLock::new(),
+        };
+        let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
+        assert_eq!(
+            build.route(&routes, &image, &reflection, running),
+            routed.len()
+        );
+        let pinned = full.resolve();
+        for id in routed {
+            assert!(build.routed(id), "{var}: {id}");
+            let (have, want) = match pinned.symbol(id) {
+                Some(rva) => (build.symbol(id), Some(rva)),
+                None => (build.constant(id), pinned.constant(id)),
+            };
+            assert_eq!(have, want, "{var}: {id}");
+        }
+        assert!(build.missing().is_empty(), "{var}: {:?}", build.missing());
+    }
+}
+
 /// On each client executable, every client table reads the size of a
 /// texture ring's completion record and where it holds its context.
 #[test]

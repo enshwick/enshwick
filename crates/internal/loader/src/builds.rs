@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::abi::Side;
 use enshwick_gamedata::reflect::Fingerprint;
-use enshwick_gamedata::{self as tables, Part, PartState, Resolved, Table};
+use enshwick_gamedata::{self as tables, Part, PartState, Resolved, Routing, Table};
 
 pub use enshwick_gamedata::Kind;
 
@@ -153,6 +153,51 @@ impl KnownBuild {
     #[must_use]
     pub fn entries(&self) -> usize {
         self.table.symbols().len() + self.table.constants().len()
+    }
+
+    /// Whether an engine route found entry `id`, so the route's own match
+    /// checked its code.
+    #[must_use]
+    pub fn routed(&self, id: &str) -> bool {
+        self.table.routed(id)
+    }
+
+    /// Takes into the table what `routes` find in `image` for the running
+    /// `side`: each entry a route finds is the engine's, and one the table
+    /// pins elsewhere goes off with a warning; the entries no route finds
+    /// keep their table row. The number of entries routed.
+    pub fn route(
+        &mut self,
+        routes: &tables::Routes,
+        image: &enshwick_gamedata::reflect::Image<'_>,
+        reflection: &enshwick_gamedata::reflect::Reflection<'_>,
+        running: Side,
+    ) -> usize {
+        let Some(side) = side(running) else {
+            return 0;
+        };
+        let mut count = 0;
+        let mut unfound = Vec::new();
+        for (id, found) in routes.find(image, reflection, side, &self.table) {
+            match self.table.route(id, found) {
+                Routing::Agrees | Routing::Supplied => count += 1,
+                Routing::Conflict { table, engine } => crate::log!(
+                    WARN,
+                    "{id} off on {}: its engine route finds {engine:#x}, the build table {table:#x} ({})",
+                    self.name,
+                    crate::errors::TABLE_MISMATCH
+                ),
+                _ => unfound.push(id),
+            }
+        }
+        if !unfound.is_empty() {
+            crate::log!(
+                DEBUG,
+                "not found by their engine route, so taken from the build table: {}",
+                unfound.join(", ")
+            );
+        }
+        count
     }
 }
 

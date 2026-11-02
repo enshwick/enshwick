@@ -653,9 +653,13 @@ fn looks(loader: &Loader) -> Option<Looks> {
 }
 
 /// The address of game function `name`, once its first eight bytes read as
-/// its `<name>.bytes` constant says.
+/// its `<name>.bytes` constant says, or an engine route found it, whose own
+/// match checked it.
 fn verify(loader: &Loader, name: Symbol) -> Result<usize, Missing> {
     let address = loader.address(name).ok_or(Missing::Entry(name.id()))?;
+    if loader.build.routed(name.id()) {
+        return usize::try_from(address).map_err(|_| Missing::Entry(name.id()));
+    }
     let expected = loader
         .build
         .constant(&format!("{name}.bytes"))
