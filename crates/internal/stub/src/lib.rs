@@ -19,9 +19,7 @@ use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt as _;
 use std::path::PathBuf;
 
-use windows_sys::Win32::System::LibraryLoader::{
-    GetModuleFileNameW, GetProcAddress, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
-};
+use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetProcAddress};
 use windows_sys::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 
 /// `enshwick_start(stub_abi, missing_forwards, release)`, exported by the
@@ -93,16 +91,7 @@ fn start(missing: u32) {
         return;
     };
     chain::load(&game_dir);
-    let path = chain::wide(game_dir.join(chain::LOADER).as_os_str());
-    // SAFETY: `path` is NUL-terminated; the altered search path lets the
-    // loader's own dependencies resolve next to it.
-    let module = unsafe {
-        LoadLibraryExW(
-            path.as_ptr(),
-            core::ptr::null_mut(),
-            LOAD_WITH_ALTERED_SEARCH_PATH,
-        )
-    };
+    let module = chain::load_library(&game_dir.join(chain::LOADER));
     if module.is_null() {
         note::note(&format!(
             "{} could not be loaded ({}); the game runs without mods",

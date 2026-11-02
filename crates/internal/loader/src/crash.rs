@@ -496,7 +496,7 @@ unsafe extern "system" fn dump(
 /// `dbghelp.dll`, loaded now if the game has not yet.
 pub(crate) fn link(loader: &Loader) {
     let found =
-        crate::module::Module::load("dbghelp.dll").and_then(|m| m.export("MiniDumpWriteDump"));
+        crate::module::Module::system("dbghelp.dll").and_then(|m| m.export("MiniDumpWriteDump"));
     let target = Target::Found(
         "dbghelp.MiniDumpWriteDump",
         found.map(|f| f as *const () as u64),

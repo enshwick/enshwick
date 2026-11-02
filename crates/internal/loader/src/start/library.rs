@@ -5,9 +5,7 @@ use std::path::{Path, PathBuf};
 
 use enshwick::abi::{ABI_MINOR, HostApi, Manifest, ModHandle, Status, check_abi, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
-use windows_sys::Win32::System::LibraryLoader::{
-    GetModuleHandleW, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
-};
+use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 
 use crate::discovery::{self, ListRead, Skip};
 use crate::modlist;
@@ -345,18 +343,7 @@ pub(super) enum Run {
 /// file name, or `None`, logged, when it does not load.
 fn load_native(path: &Path) -> Option<String> {
     let file = path.file_name()?.to_string_lossy().into_owned();
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
-    // SAFETY: `wide` is NUL-terminated; the DLL runs its `DllMain` as it
-    // would from any loader and stays loaded for the process.
-    let module = unsafe {
-        LoadLibraryExW(
-            wide.as_ptr(),
-            core::ptr::null_mut(),
-            LOAD_WITH_ALTERED_SEARCH_PATH,
-        )
-    };
-    if module.is_null() {
-        let error = std::io::Error::last_os_error();
+    if let Err(error) = crate::module::load_library(path) {
         crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
         return None;
     }
@@ -384,28 +371,16 @@ fn load_from(path: &Path, named: Option<&str>) -> Option<Library> {
         Some(file) => file.to_owned(),
         None => path.file_name()?.to_string_lossy().into_owned(),
     };
-    let wide: Vec<u16> = path
-        .as_os_str()
-        .to_string_lossy()
-        .encode_utf16()
-        .chain([0])
-        .collect();
-    // SAFETY: `wide` is NUL-terminated.
-    let module = unsafe {
-        LoadLibraryExW(
-            wide.as_ptr(),
-            core::ptr::null_mut(),
-            LOAD_WITH_ALTERED_SEARCH_PATH,
-        )
+    let module = match crate::module::load_library(path) {
+        Ok(module) => module,
+        Err(error) => {
+            crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
+            return None;
+        }
     };
-    if module.is_null() {
-        let error = std::io::Error::last_os_error();
-        crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
-        return None;
-    }
     let library = exports_of(module, &file);
     if library.is_none() {
-        // SAFETY: `module` was loaded by `LoadLibraryExW` in this function, and
+        // SAFETY: `module` was loaded by `load_library` in this function, and
         // `exports_of` returned `None` without calling into it, so nothing of
         // it is in use.
         unsafe { FreeLibrary(module) };

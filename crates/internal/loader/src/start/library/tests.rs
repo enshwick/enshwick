@@ -39,6 +39,10 @@ crate-type = ["cdylib"]
 name = "no_manifest"
 crate-type = ["cdylib"]
 
+[[example]]
+name = "imports"
+crate-type = ["cdylib"]
+
 [workspace]
 "#;
 
@@ -99,6 +103,39 @@ pub unsafe extern "system" fn enshwick_mod_init(_: *const HostApi, _: ModHandle)
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn enshwick_mod_ready(_: *const HostApi, _: ModHandle) {}
 "#;
+
+/// The DLL the `imports` fixture links against, by name only; the tests
+/// place it where the search must not look.
+const DEPENDENCY: &str = "enshwick-fixture-dependency";
+
+/// A mod that imports a function of [`DEPENDENCY`], a copy of the system's
+/// `version.dll`, which it does not ship beside itself.
+const IMPORTS: &str = r##"
+#[link(name = "{dependency}", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GetFileVersionInfoSizeW(file: *const u16, handle: *mut u32) -> u32;
+}
+
+#[derive(Debug)]
+pub struct Imports;
+
+impl enshwick::Mod for Imports {
+    fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+        // SAFETY: a null file name is refused with an error, never read.
+        let _size = unsafe { GetFileVersionInfoSizeW(core::ptr::null(), core::ptr::null_mut()) };
+        Ok(Self)
+    }
+}
+
+enshwick::test::declare_mod!(
+    Imports,
+    r#"
+    id = "fixture.imports"
+    side = "both"
+    name = "Imports"
+    "#
+);
+"##;
 
 /// The mod list: `lockers.dll` is off by its id under an older file name,
 /// `turned-off.dll` by its file.
@@ -168,6 +205,7 @@ fn build_fixtures(dir: &Path) -> Option<PathBuf> {
             RAW.replace("{abi}", "u32::from(enshwick::abi::ABI_MAJOR)")
                 .replace("{query}", "core::ptr::null()"),
         ),
+        ("imports", IMPORTS.replace("{dependency}", DEPENDENCY)),
     ];
     for (name, source) in sources {
         std::fs::write(examples.join(format!("{name}.rs")), source).unwrap();
@@ -356,4 +394,47 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         super::unload(library);
     }
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_mods_import_never_resolves_from_the_current_directory() {
+    let dir = std::env::temp_dir().join(format!("enshwick-search-{}", std::process::id()));
+    let _old = std::fs::remove_dir_all(&dir);
+    let Some(built) = build_fixtures(&dir.join("fixtures")) else {
+        eprintln!("skipped: this process cannot run cargo, as under Wine");
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir).unwrap();
+        }
+        return;
+    };
+    let mods = dir.join("mods");
+    let current = dir.join("current");
+    std::fs::create_dir_all(&mods).unwrap();
+    std::fs::create_dir_all(&current).unwrap();
+    std::fs::copy(built.join("imports.dll"), mods.join("imports.dll")).unwrap();
+    let system = Path::new(&std::env::var_os("SystemRoot").unwrap()).join("System32");
+    std::fs::copy(
+        system.join("version.dll"),
+        current.join(format!("{DEPENDENCY}.dll")),
+    )
+    .unwrap();
+
+    let was = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&current).unwrap();
+    let library = super::load_from(&mods.join("imports.dll"), None);
+    std::env::set_current_dir(was).unwrap();
+
+    assert!(
+        library.is_none(),
+        "the import came from the current directory"
+    );
+    std::fs::rename(
+        current.join(format!("{DEPENDENCY}.dll")),
+        mods.join(format!("{DEPENDENCY}.dll")),
+    )
+    .unwrap();
+    assert!(
+        super::load_from(&mods.join("imports.dll"), None).is_some(),
+        "an import beside the mod resolves"
+    );
 }

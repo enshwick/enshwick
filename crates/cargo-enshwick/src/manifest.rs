@@ -137,16 +137,31 @@ unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
 fn query(dll: &Path) -> Result<Manifest, String> {
     use std::os::windows::ffi::OsStrExt as _;
 
-    use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+    use windows_sys::Win32::System::LibraryLoader::{
+        GetProcAddress, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR,
+        LoadLibraryExW,
+    };
 
     // A bare name would go through the DLL search order, and could load a
-    // system DLL of that name instead.
+    // system DLL of that name instead; the folder flag also needs a full path.
     let dll = std::path::absolute(dll).map_err(|e| format!("{}: {e}", dll.display()))?;
     let wide: Vec<u16> = dll.as_os_str().encode_wide().chain([0]).collect();
-    // SAFETY: `wide` ends in the NUL chained onto it and lives across the call.
-    let module = unsafe { LoadLibraryW(wide.as_ptr()) };
+    // SAFETY: `wide` ends in the NUL chained onto it and lives across the
+    // call. The flags resolve the DLL's imports from its folder and the
+    // system's, never from the current directory or `PATH`.
+    let module = unsafe {
+        LoadLibraryExW(
+            wide.as_ptr(),
+            core::ptr::null_mut(),
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+        )
+    };
     if module.is_null() {
-        return Err(format!("{} could not be loaded", dll.display()));
+        return Err(format!(
+            "{} could not be loaded: {}",
+            dll.display(),
+            std::io::Error::last_os_error()
+        ));
     }
     let export = |name: &str| {
         let name = format!("{name}\0");

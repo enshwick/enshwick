@@ -44,6 +44,10 @@ clang --target=x86_64-pc-windows-msvc -std=c11 -O2 -shared -fuse-ld=lld \
 calls the C runtime links it as usual: with Visual Studio's `cl /LD`, `clang-cl`
 or [cargo-xwin](https://github.com/rust-cross/cargo-xwin)'s SDK off Windows.
 
+A DLL your mod imports loads only from your mod's folder, the game's folder
+or the Windows system folder, never from the current directory or `PATH`.
+Ship every DLL it needs beside it, or link the C runtime statically (`/MT`).
+
 ## Check it
 
 Run `cargo enshwick manifest hello_c.dll` on Windows. It loads the DLL, asks it
