@@ -584,9 +584,7 @@ pub(crate) fn client_lines() -> Vec<String> {
         let due = s
             .hello_at
             .is_none_or(|at| at.elapsed().as_secs_f64() >= HELLO_EVERY);
-        let modded = SERVER_RUNS_ENSHWICK.load(Ordering::Acquire)
-            || crate::lobby::host_runs_enshwick()
-            || crate::world::hosting();
+        let modded = server_runs_enshwick() || crate::world::hosting();
         if !answered && due && modded {
             s.hello_at = Some(Instant::now());
             let mods = crate::advertise::mod_list(&crate::host::join_mods());

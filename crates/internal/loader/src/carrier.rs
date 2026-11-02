@@ -5,17 +5,18 @@
 //! The server opens a socket for each player's machine in game and sends
 //! nothing on it until that client was heard, so a vanilla client never
 //! gets a message. A client opens its socket only on a server that
-//! advertises Enshwick. Both sides pump their sockets on their own game
-//! thread: the server after each step, a client where it sends its chat.
-//! The game's per-peer socket lists never hold these sockets, so the
-//! game's receive loops never see them.
+//! advertises Enshwick, and greets the server on it at once. Both sides
+//! pump their sockets on their own game thread: the server after each step,
+//! a client where it sends its chat; a client that hosts does both, with a
+//! state of each. The game's per-peer socket lists never hold these
+//! sockets, so the game's receive loops never see them.
 //!
 //! With the developer tools on, each side checks the channel: [`PROBES`]
 //! probe messages each way, each logged with its number and whether it
 //! arrived whole, and the server sends one packet to a client it never heard
 //! from, which a vanilla client drops with one warning of its own.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -64,11 +65,15 @@ const PACKET_BURST: f64 = 1024.0;
 /// The largest packet taken from the game, and the largest sent: the
 /// session's own packet limit wins when smaller.
 const LARGEST_PACKET: usize = 1400;
-/// How long a client waits before it tries again to open its socket.
+/// How long a side waits before it tries again to open a socket.
 const OPEN_AGAIN: Duration = Duration::from_secs(5);
+/// Server steps between looks at who is in game.
+const MEMBERS_EVERY: u32 = 30;
 /// How long the server waits for a client before the developer tools' one
 /// packet to it.
 const UNHEARD_FOR: Duration = Duration::from_secs(30);
+/// The step between the epochs of two links: room for the restarts of one.
+const EPOCH_STEP: u32 = 0x1_0000;
 
 /// One peer's socket and link.
 #[derive(Debug)]
@@ -96,29 +101,48 @@ struct Probe {
     sent: u8,
     received: u8,
     whole: u8,
-    in_order: bool,
+    out_of_order: bool,
 }
 
-/// What the carrier keeps for one session.
+/// What one side of the carrier keeps for one session.
 #[derive(Debug)]
 struct State {
     session: usize,
     peers: FxHashMap<u64, Peer>,
-    /// When a client last tried to open its socket.
-    tried: Option<Instant>,
+    /// Peers whose socket did not open, with when it was last tried.
+    tried: FxHashMap<u64, Instant>,
+    steps: u32,
 }
 
-static GAME: OnceLock<Game> = OnceLock::new();
-static STATE: Mutex<Option<State>> = Mutex::new(None);
-/// Packets dropped: unreadable, over a bound or a rate.
-static DROPPED: AtomicU64 = AtomicU64::new(0);
+/// The carrier's state: the game's calls, and each side's peers.
+struct Carrier {
+    game: OnceLock<Game>,
+    server: Mutex<Option<State>>,
+    client: Mutex<Option<State>>,
+    /// Set while the client side holds a socket, so a client frame on a
+    /// server without Enshwick takes no lock.
+    client_open: AtomicBool,
+    /// The epoch the next link starts at.
+    epochs: AtomicU32,
+    /// Packets dropped: unreadable, over a bound or a rate.
+    dropped: AtomicU64,
+}
+
+static CARRIER: Carrier = Carrier {
+    game: OnceLock::new(),
+    server: Mutex::new(None),
+    client: Mutex::new(None),
+    client_open: AtomicBool::new(false),
+    epochs: AtomicU32::new(EPOCH_STEP),
+    dropped: AtomicU64::new(0),
+};
 
 /// Resolves and checks the game's socket calls; without them the own
 /// channel stays off and the log says which part is missing.
 pub(crate) fn link(loader: &Loader) {
     match Game::resolve(loader) {
         Ok(game) => {
-            let _first = GAME.set(game);
+            let _first = CARRIER.game.set(game);
             crate::log!(INFO, "own channel ready on game channel {}", game.channel());
         }
         Err(missing) => crate::log!(WARN, "own channel off: this build has no {missing}"),
@@ -129,7 +153,7 @@ pub(crate) fn link(loader: &Loader) {
 /// for each player that joined, closes those of players who left, takes
 /// what came and sends what is due.
 pub(crate) fn after_step(loader: &Loader, now: Instant) {
-    let Some(game) = GAME.get() else {
+    let Some(game) = CARRIER.game.get() else {
         return;
     };
     let Ok(server) = crate::world::server() else {
@@ -138,59 +162,65 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
     let Some(session) = game.server_session(server) else {
         return;
     };
-    let Ok(machines) = crate::world::machines(loader) else {
-        return;
-    };
-    let host = game.host_machine(session);
-    let Some(mut guard) = STATE.try_relock() else {
+    let Some(mut guard) = CARRIER.server.try_relock() else {
         return;
     };
     let state = fresh(&mut guard, session);
+    state.steps = state.steps.wrapping_add(1);
+    if state.steps % MEMBERS_EVERY == 1 {
+        let Ok(machines) = crate::world::machines(loader) else {
+            return;
+        };
+        members(game, session, state, &machines, now);
+    }
+    let developer = loader.developer_tools;
     state.peers.retain(|&key, peer| {
-        let live = machines.iter().any(|&(k, m)| k == key && m == peer.machine);
-        if live && !game.holds(peer.socket, peer.slot) {
+        if !game.holds(peer.socket, peer.slot) {
             crate::log!(WARN, "own channel: the socket of {key:016x} went");
             return false;
         }
-        if !live {
+        receive(game, session, key, peer, now);
+        if developer {
+            probe_step(peer);
+            nudge(game, session, key, peer, now);
+        }
+        !peer.heard || send(game, session, key, peer, now)
+    });
+}
+
+/// Opens a socket for each machine in game without one, and closes those
+/// of machines that left.
+fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32)], now: Instant) {
+    let host = game.host_machine(session);
+    state.peers.retain(|&key, peer| {
+        let live = machines.iter().any(|&(k, m)| k == key && m == peer.machine);
+        if !live && game.holds(peer.socket, peer.slot) {
             game.close(session, peer.socket);
         }
         live
     });
-    for &(key, machine) in &machines {
-        if Some(machine) == host || machine == 0 || state.peers.contains_key(&key) {
+    state
+        .tried
+        .retain(|key, _| machines.iter().any(|&(k, _)| k == *key));
+    for &(key, machine) in machines {
+        let due = state
+            .tried
+            .get(&key)
+            .is_none_or(|&at| now.saturating_duration_since(at) >= OPEN_AGAIN);
+        if machine == 0 || machine == host || state.peers.contains_key(&key) || !due {
             continue;
         }
-        if let Some(peer) = game.open_peer(session, game.machine_kind(), machine, now) {
-            crate::log!(INFO, "own channel: socket open for {key:016x}");
-            state.peers.insert(key, peer);
-        }
-    }
-    let developer = loader.developer_tools;
-    state.peers.retain(|&key, peer| {
-        receive(game, session, key, peer, now);
-        if developer {
-            probe_step(peer);
-            if !peer.heard
-                && !peer.nudged
-                && now.saturating_duration_since(peer.opened) >= UNHEARD_FOR
-            {
-                peer.nudged = true;
-                crate::log!(
-                    INFO,
-                    "own channel check: one packet to {key:016x}, which never spoke"
-                );
-                let socket = peer.socket;
-                peer.link.nudge(|packet| {
-                    game.transmit(session, socket, packet);
-                });
+        match game.open_peer(session, game.machine_kind(), machine, next_epoch(), now) {
+            Some(peer) => {
+                crate::log!(INFO, "own channel: socket open for {key:016x}");
+                state.tried.remove(&key);
+                state.peers.insert(key, peer);
+            }
+            None => {
+                state.tried.insert(key, now);
             }
         }
-        if !peer.heard {
-            return true;
-        }
-        send(game, session, key, peer, now)
-    });
+    }
 }
 
 /// Pumps a client's socket, where it sends its chat: opens it once the
@@ -200,7 +230,11 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
 ///
 /// - `client` is null or the game client, on the thread that sends its chat.
 pub(crate) unsafe fn client_frame(client: *mut u8, now: Instant) {
-    let (Some(game), Some(loader)) = (GAME.get(), crate::host::loader()) else {
+    let modded = crate::net::server_runs_enshwick() && !crate::world::hosting();
+    if !modded && !CARRIER.client_open.load(Ordering::Acquire) {
+        return;
+    }
+    let (Some(game), Some(loader)) = (CARRIER.game.get(), crate::host::loader()) else {
         return;
     };
     if client.is_null() {
@@ -211,16 +245,20 @@ pub(crate) unsafe fn client_frame(client: *mut u8, now: Instant) {
     let Some(session) = (unsafe { game.client_session(client) }) else {
         return;
     };
-    let modded = crate::net::server_runs_enshwick() && !crate::world::hosting();
-    let Some(mut guard) = STATE.try_relock() else {
+    let Some(mut guard) = CARRIER.client.try_relock() else {
         return;
     };
     if !modded {
-        if guard.as_ref().is_some_and(|s| s.session == session) {
-            for peer in guard.take().into_iter().flat_map(|s| s.peers.into_values()) {
-                game.close(session, peer.socket);
+        if let Some(state) = guard.take()
+            && state.session == session
+        {
+            for peer in state.peers.into_values() {
+                if game.holds(peer.socket, peer.slot) {
+                    game.close(session, peer.socket);
+                }
             }
         }
+        CARRIER.client_open.store(false, Ordering::Release);
         return;
     }
     let state = fresh(&mut guard, session);
@@ -230,17 +268,19 @@ pub(crate) unsafe fn client_frame(client: *mut u8, now: Instant) {
         crate::log!(WARN, "own channel: the socket to the server went");
         state.peers.remove(&SERVER);
     }
-    if !state.peers.contains_key(&SERVER)
-        && state
-            .tried
-            .is_none_or(|at| now.saturating_duration_since(at) >= OPEN_AGAIN)
-    {
-        state.tried = Some(now);
+    let due = state
+        .tried
+        .get(&SERVER)
+        .is_none_or(|&at| now.saturating_duration_since(at) >= OPEN_AGAIN);
+    if !state.peers.contains_key(&SERVER) && due {
+        state.tried.insert(SERVER, now);
         if let Some(kind) = game.local_machine_kind()
-            && let Some(peer) = game.open_peer(session, kind, 0, now)
+            && let Some(mut peer) = game.open_peer(session, kind, 0, next_epoch(), now)
         {
             crate::log!(INFO, "own channel: socket open to the server");
+            greet(&mut peer);
             state.peers.insert(SERVER, peer);
+            CARRIER.client_open.store(true, Ordering::Release);
         }
     }
     let Some(peer) = state.peers.get_mut(&SERVER) else {
@@ -255,10 +295,19 @@ pub(crate) unsafe fn client_frame(client: *mut u8, now: Instant) {
     }
 }
 
-/// Forgets every socket, when the client leaves its server: they went with
-/// its session.
+/// Forgets the client's socket, when it leaves its server: the socket went
+/// with its session.
 pub(crate) fn forget() {
-    *STATE.relock() = None;
+    *CARRIER.client.relock() = None;
+    CARRIER.client_open.store(false, Ordering::Release);
+}
+
+/// The epoch a new link starts at, past every earlier link's restarts.
+fn next_epoch() -> u32 {
+    CARRIER
+        .epochs
+        .fetch_add(EPOCH_STEP, Ordering::Relaxed)
+        .max(1)
 }
 
 /// The state for `session`, anew when the session changed: the sockets of
@@ -270,8 +319,18 @@ fn fresh(guard: &mut Option<State>, session: usize) -> &mut State {
     guard.get_or_insert_with(|| State {
         session,
         peers: FxHashMap::default(),
-        tried: None,
+        tried: FxHashMap::default(),
+        steps: 0,
     })
+}
+
+/// Queues a client's first message, an empty control message, so the
+/// server hears it and starts to answer.
+fn greet(peer: &mut Peer) {
+    let mut sealed = [0u8; MAX_SEALED];
+    if let Some(size) = seal(&mut sealed, CONTROL, &[]) {
+        let _queued = peer.link.send(&sealed[..size]);
+    }
 }
 
 /// Takes the packets that came on `peer`'s socket and hands on the
@@ -313,13 +372,32 @@ fn receive(game: &Game, session: usize, key: u64, peer: &mut Peer, now: Instant)
 fn send(game: &Game, session: usize, key: u64, peer: &mut Peer, now: Instant) -> bool {
     let socket = peer.socket;
     let alive = peer.link.poll(now, SENDS_PER_STEP, |packet| {
-        game.transmit(session, socket, packet);
+        game.transmit(session, socket, packet)
     });
     if !alive {
         crate::log!(WARN, "own channel: {key:016x} stopped answering");
-        game.close(session, socket);
+        if game.holds(socket, peer.slot) {
+            game.close(session, socket);
+        }
     }
     alive
+}
+
+/// The developer tools' one packet to a client the server never heard
+/// from, once it had time to speak.
+fn nudge(game: &Game, session: usize, key: u64, peer: &mut Peer, now: Instant) {
+    if peer.heard || peer.nudged || now.saturating_duration_since(peer.opened) < UNHEARD_FOR {
+        return;
+    }
+    peer.nudged = true;
+    crate::log!(
+        INFO,
+        "own channel check: one packet to {key:016x}, which never spoke"
+    );
+    let socket = peer.socket;
+    peer.link.nudge(|packet| {
+        game.transmit(session, socket, packet);
+    });
 }
 
 /// A message from `key` came whole.
@@ -328,30 +406,32 @@ fn delivered(key: u64, message: &[u8], probe: &mut Probe) {
         dropped();
         return;
     };
-    if channel == CONTROL
-        && let Some((id, whole)) = read_probe(payload)
-    {
-        probe.in_order = (probe.received == 0 || probe.in_order) && id == probe.received;
-        probe.received = probe.received.saturating_add(1);
-        probe.whole += u8::from(whole);
+    if channel != CONTROL || probe.received >= PROBES {
+        return;
+    }
+    let Some((id, whole)) = read_probe(payload) else {
+        return;
+    };
+    probe.out_of_order |= id != probe.received;
+    probe.received += 1;
+    probe.whole += u8::from(whole);
+    crate::log!(
+        INFO,
+        "own channel check from {key:016x}: probe {id}, {} bytes, {}",
+        payload.len(),
+        if whole { "whole" } else { "damaged" }
+    );
+    if probe.received == PROBES {
         crate::log!(
             INFO,
-            "own channel check from {key:016x}: probe {id}, {} bytes, {}",
-            payload.len(),
-            if whole { "whole" } else { "damaged" }
+            "own channel check from {key:016x}: {} of {PROBES} whole, {}",
+            probe.whole,
+            if probe.out_of_order {
+                "out of order"
+            } else {
+                "in order"
+            }
         );
-        if probe.received == PROBES {
-            crate::log!(
-                INFO,
-                "own channel check from {key:016x}: {} of {PROBES} whole, {}",
-                probe.whole,
-                if probe.in_order {
-                    "in order"
-                } else {
-                    "out of order"
-                }
-            );
-        }
     }
 }
 
@@ -377,7 +457,7 @@ fn probe_step(peer: &mut Peer) {
 /// thousandth.
 #[cold]
 fn dropped() {
-    let count = DROPPED.fetch_add(1, Ordering::Relaxed) + 1;
+    let count = CARRIER.dropped.fetch_add(1, Ordering::Relaxed) + 1;
     if count == 1 || count.is_multiple_of(1000) {
         crate::log!(
             WARN,

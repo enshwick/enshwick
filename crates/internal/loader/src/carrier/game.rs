@@ -138,8 +138,8 @@ pub(super) struct Game {
     local_kind: Option<u8>,
     /// The game client's net object, whose first word is its session.
     client_net: Option<usize>,
-    server_session: Option<usize>,
-    host_machine: Option<usize>,
+    server_session: usize,
+    host_machine: usize,
 }
 
 /// The entry of game function `F` at `address`.
@@ -217,8 +217,8 @@ impl Game {
             } else {
                 None
             },
-            server_session: loader.offset(pinned::server::SESSION),
-            host_machine: loader.offset(pinned::session::HOST_MACHINE),
+            server_session: offset(pinned::server::SESSION)?,
+            host_machine: offset(pinned::session::HOST_MACHINE)?,
         })
     }
 
@@ -236,20 +236,18 @@ impl Game {
 
     /// The session of the live `server`; `None` while it has none.
     pub(super) fn server_session(&self, server: usize) -> Option<usize> {
-        let offset = self.server_session?;
         // SAFETY: `server` is the live server on its game thread between
         // steps (`world::server`); its session pointer, null while it has
         // none, sits at the table's `server.session`.
-        let session: usize = unsafe { memory::read(server, offset) };
+        let session: usize = unsafe { memory::read(server, self.server_session) };
         (session != 0).then_some(session)
     }
 
     /// The machine handle of the session's host.
-    pub(super) fn host_machine(&self, session: usize) -> Option<u32> {
-        let offset = self.host_machine?;
+    pub(super) fn host_machine(&self, session: usize) -> u32 {
         // SAFETY: `session` is the live session, whose host machine handle
         // sits at the table's `session.host_machine`.
-        Some(unsafe { memory::read(session, offset) })
+        unsafe { memory::read(session, self.host_machine) }
     }
 
     /// The session of the game client `client`; `None` without one.
@@ -286,12 +284,14 @@ impl Game {
     }
 
     /// Opens a socket of `kind` on the own channel, for `machine` on the
-    /// server, with its link sized to the session's packets.
+    /// server, with its link sized to the session's packets and numbered
+    /// from `epoch`.
     pub(super) fn open_peer(
         &self,
         session: usize,
         kind: u8,
         machine: u32,
+        epoch: u32,
         now: Instant,
     ) -> Option<Peer> {
         let descriptor = Descriptor {
@@ -322,7 +322,7 @@ impl Game {
             limits[2]
         );
         let packet = usize::try_from(limits[0]).ok()?.min(LARGEST_PACKET);
-        let Some(link) = Link::new(packet) else {
+        let Some(link) = Link::new(packet, epoch) else {
             crate::log!(
                 WARN,
                 "own channel off: packets of {packet} bytes hold no message"

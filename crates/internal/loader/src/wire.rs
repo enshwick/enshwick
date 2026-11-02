@@ -286,7 +286,7 @@ pub fn probe(id: u8) -> Vec<u8> {
 /// See [`probe`].
 #[must_use]
 pub fn read_probe(data: &[u8]) -> Option<(u8, bool)> {
-    let rest = data.strip_prefix(control(PROBE).as_slice())?;
+    let rest = data.strip_prefix(&[PROBE, PROTOCOL])?;
     let (&id, rest) = rest.split_first()?;
     let (hash, filler) = rest.split_first_chunk::<8>()?;
     Some((id, u64::from_le_bytes(*hash) == probe_hash(filler)))
