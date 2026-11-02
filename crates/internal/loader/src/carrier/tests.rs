@@ -88,6 +88,37 @@ fn each_key_without_a_link_is_named_and_the_rest_still_go() {
     assert_eq!(failed, [(7, Status::MISSING), (8, Status::MISSING)]);
 }
 
+fn peer(heard: bool) -> Peer {
+    Peer {
+        machine: 0,
+        socket: 0,
+        slot: 0,
+        link: Link::new(1200, 1).expect("a packet that holds a message"),
+        heard,
+        rate: crate::wire::Peer::new(),
+        opened: Instant::now(),
+        nudged: false,
+        probe: Probe::default(),
+    }
+}
+
+#[test]
+fn keys_of_both_sides_in_one_send_each_go_on_their_own_side() {
+    let _alone = alone();
+    // The server sends nothing first, so its link is never heard before.
+    for (half, key, heard) in [(&CARRIER.server, 7, true), (&CARRIER.client, SERVER, false)] {
+        let mut guard = half.relock();
+        fresh(&mut guard, 1).peers.insert(key, peer(heard));
+    }
+    for keys in [[SERVER, 7], [7, SERVER]] {
+        let mut failed = Vec::new();
+        let sent = send_many(&keys, 5, b"fine", |key, status| {
+            failed.push((key, status));
+        });
+        assert_eq!((sent, failed), (Ok(()), Vec::new()), "{keys:?}");
+    }
+}
+
 #[test]
 fn an_inbox_goes_back_emptied_only_to_its_own_session() {
     let _alone = alone();
