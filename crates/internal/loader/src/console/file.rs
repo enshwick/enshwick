@@ -3,11 +3,12 @@
 //!
 //! The file is read again whenever its length or modified time changes.
 //! Only complete lines run, so a line still being written waits for its line
-//! break. Lines already in the file when the server starts are skipped, or,
-//! for a file that does not read then, the lines it holds when it first reads.
-//! A file that is gone or does not read is read again on the next look and
-//! changes nothing meanwhile, so a lock or a delete and re-create never runs a
-//! line again.
+//! break. Lines already in the file when the server starts are skipped, also
+//! for a file that does not read then, by the length it had. A file that does
+//! not read is read again on the next look and changes nothing meanwhile, so a
+//! lock never runs a line again. A file that is gone and comes back goes on
+//! where it was if it still starts with what ran, and runs from its start as a
+//! new file otherwise.
 //!
 //! The file is append-only. A file whose part already read changed counts
 //! once it reads the same twice in a row, so an editor's save caught half
@@ -77,14 +78,19 @@ impl Tail {
         core::mem::replace(&mut self.edited, false)
     }
 
+    /// Whether `content` still starts with the part already read.
+    #[must_use]
+    pub fn continues(&self, content: &[u8]) -> bool {
+        content
+            .get(..self.offset)
+            .is_some_and(|read| hash(read) == self.read)
+    }
+
     /// The console lines `content`, the whole file now, holds past the last
     /// read; moves past them.
     #[must_use]
     pub fn feed(&mut self, content: &[u8]) -> Vec<String> {
-        if content
-            .get(..self.offset)
-            .is_none_or(|read| hash(read) != self.read)
-        {
+        if !self.continues(content) {
             let whole = hash(content);
             if self.changed != Some(whole) {
                 self.changed = Some(whole);
@@ -160,9 +166,14 @@ fn stamp(path: &Path) -> Stamp {
 pub struct Watched {
     path: PathBuf,
     seen: Stamp,
-    /// `None` until the file first reads, so the lines it holds then are
-    /// skipped.
+    /// `None` until the file first reads; the lines in its first `skip`
+    /// bytes then count as there at start.
     tail: Option<Tail>,
+    /// The file's length at start, as its stamp gave it, for a file that did
+    /// not read then.
+    skip: usize,
+    /// Whether the file was gone at the last look that found it.
+    gone: bool,
     /// Whether the last look failed, so a failure is reported once.
     failing: bool,
 }
@@ -171,13 +182,16 @@ impl Watched {
     /// Starts watching `path` past what it holds now.
     #[must_use]
     pub fn new(path: PathBuf) -> Self {
+        let seen = stamp(&path);
         let tail = enshwick::files::read_if_present(&path)
             .ok()
             .map(|content| Tail::at(&content.unwrap_or_default()));
         Self {
-            seen: stamp(&path),
+            skip: seen.map_or(0, |(_, len)| usize::try_from(len).unwrap_or(usize::MAX)),
+            seen,
             tail,
             path,
+            gone: false,
             failing: false,
         }
     }
@@ -188,8 +202,9 @@ impl Watched {
         &self.path
     }
 
-    /// The lines added since the last look. A file that is gone counts as
-    /// unchanged, since only emptying it starts it over.
+    /// The lines added since the last look. A file that is gone changes
+    /// nothing; when it comes back, it goes on where it was if it still
+    /// starts with what ran, and counts as a new file otherwise.
     ///
     /// # Errors
     ///
@@ -203,13 +218,19 @@ impl Watched {
         let content = enshwick::files::read_if_present(&self.path)?;
         self.seen = now;
         let Some(content) = content else {
+            self.gone = true;
             return Ok(Vec::new());
         };
-        if let Some(tail) = &mut self.tail {
-            return Ok(tail.feed(&content));
+        let tail = match &mut self.tail {
+            Some(tail) => tail,
+            None => self
+                .tail
+                .insert(Tail::at(&content[..self.skip.min(content.len())])),
+        };
+        if core::mem::replace(&mut self.gone, false) && !tail.continues(&content) {
+            *tail = Tail::at(b"");
         }
-        self.tail = Some(Tail::at(&content));
-        Ok(Vec::new())
+        Ok(tail.feed(&content))
     }
 }
 
@@ -402,18 +423,42 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
     #[cfg_attr(miri, ignore = "Miri isolates the file system")]
-    fn a_file_that_does_not_read_at_start_skips_its_lines() {
+    fn a_file_locked_at_start_skips_only_the_lines_it_held_then() {
+        use std::io::Write as _;
+        use std::os::windows::fs::OpenOptionsExt as _;
         let dir = dir("commands-start");
         let path = dir.join(FILE);
-        std::fs::create_dir(&path).unwrap();
+        std::fs::write(&path, "give 7 1 Ann\n").unwrap();
+        // A writer that shares the file with no one, as some panels do.
+        let mut writer = std::fs::File::options()
+            .append(true)
+            .share_mode(0)
+            .open(&path)
+            .unwrap();
         let mut watched = Watched::new(path.clone());
         assert!(watched.look().is_err());
-        std::fs::remove_dir(&path).unwrap();
-        std::fs::write(&path, "give 7 1 Ann\n").unwrap();
-        assert!(watched.look().unwrap().is_empty());
-        std::fs::write(&path, "give 7 1 Ann\nkick Cy\n").unwrap();
+        writer.write_all(b"kick Cy\n").unwrap();
+        drop(writer);
         assert_eq!(watched.look().unwrap(), ["kick Cy"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
+    fn a_file_made_anew_after_it_was_gone_runs_from_its_start() {
+        let dir = dir("commands-rotated");
+        let path = dir.join(FILE);
+        let mut watched = Watched::new(path.clone());
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\n").unwrap();
+        assert_eq!(watched.look().unwrap(), ["give 7 1 Ann", "ban Bob"]);
+        std::fs::remove_file(&path).unwrap();
+        assert!(watched.look().unwrap().is_empty());
+        std::fs::write(&path, "kick Cy\n").unwrap();
+        assert_eq!(watched.look().unwrap(), ["kick Cy"]);
+        std::fs::write(&path, "kick Cy\nkick Di\n").unwrap();
+        assert_eq!(watched.look().unwrap(), ["kick Di"]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
