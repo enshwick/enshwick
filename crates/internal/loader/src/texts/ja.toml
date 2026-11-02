@@ -18,9 +18,6 @@
 "mods.points" = "拡張ポイント：{points}"
 "mods.feature.off" = "{feature} はオフです：{reason}"
 "mods.part.off" = "エラーのためオフになった Enshwick の部分：{part}（{reason}）"
-"mods.waiting" = "{name} {version}（待機中）"
-"mods.waiting.why" = "このModが変更するコードからゲームが抜けるのを待っています。まもなく再試行し、その後1分おきにあと3回試します。それでもだめならオフになります。"
-"mods.part.waiting" = "コードからゲームが抜けるのを待っている Enshwick の部分：{part}"
 "mods.others.native" = "Enshwick を使わずに動作中：{files}"
 "mods.others.chain" = "mods/chain から読み込み済み：{files}"
 "mods.others.beside" = "ゲームと同じ場所にあるほかの MOD のファイル：{files}"
@@ -322,5 +319,4 @@
 "mods.developer.off" = "開発者ツールです。ファイル mod-data/enshwick/developer-tools がある間だけ動作します"
 
 "mods.waiting" = "{name} {version}（待機中）"
-"mods.waiting.why" = "このModが変更するコードからゲームが抜けるのを待っています。ワールドの読み込み時に再試行し、その後は1分ごとに再試行します。"
-"mods.part.waiting" = "コードからゲームが抜けるのを待っている Enshwick の部分：{part}"
+"mods.waiting.why" = "このModが変更するコードからゲームが抜けるのを待っています。まもなく再試行し、その後1分おきにあと3回試します。それでもだめならオフになります。"

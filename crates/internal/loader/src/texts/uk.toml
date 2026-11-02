@@ -18,9 +18,6 @@
 "mods.points" = "Точки розширення: {points}"
 "mods.feature.off" = "{feature} вимкнено: {reason}"
 "mods.part.off" = "Частину Enshwick вимкнено через помилку: {part} ({reason})"
-"mods.waiting" = "{name} {version} (очікує)"
-"mods.waiting.why" = "Очікує, поки гра вийде з коду, який змінює цей мод. Невдовзі спробує знову, потім ще тричі щохвилини. Після цього мод вимкнеться."
-"mods.part.waiting" = "Частина Enshwick очікує, поки гра вийде з її коду: {part}"
 "mods.others.native" = "Також працюють, без Enshwick: {files}"
 "mods.others.chain" = "Завантажено з mods/chain: {files}"
 "mods.others.beside" = "Файли інших модів поруч із грою: {files}"
@@ -322,5 +319,4 @@
 "mods.developer.off" = "інструмент розробника: працює лише тоді, коли існує файл mod-data/enshwick/developer-tools"
 
 "mods.waiting" = "{name} {version} (очікує)"
-"mods.waiting.why" = "Очікує, поки гра вийде з коду, який змінює цей мод. Спроба повториться, коли завантажиться світ, а потім щохвилини."
-"mods.part.waiting" = "Частина Enshwick очікує, поки гра вийде з її коду: {part}"
+"mods.waiting.why" = "Очікує, поки гра вийде з коду, який змінює цей мод. Невдовзі спробує знову, потім ще тричі щохвилини. Після цього мод вимкнеться."

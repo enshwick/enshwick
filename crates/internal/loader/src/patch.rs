@@ -731,8 +731,15 @@ fn wait_out(patches: &[CodePatch], verdicts: &mut [Verdict], stuck: &[usize]) ->
     for &id in stuck {
         // Every id comes from this batch's own patches: a miss is a bug.
         debug_assert!(id < verdicts.len(), "a stuck patch {id} outside the batch");
-        if let Some(verdict) = verdicts.get_mut(id) {
-            *verdict = Verdict::Wait;
+        if let (Some(verdict), Some(patch)) = (verdicts.get_mut(id), patches.get(id)) {
+            // The loader's own patches go in with state that a late write
+            // would miss (objects already created at the old size, recipe
+            // lists already built), so they never wait.
+            *verdict = if patch.owner.is_loader() {
+                Verdict::Skip("a thread stayed inside it".into())
+            } else {
+                Verdict::Wait
+            };
         }
     }
     crate::code::skip_with_feature(patches, verdicts);

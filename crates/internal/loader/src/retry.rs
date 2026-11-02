@@ -1,7 +1,9 @@
-//! Code patches a thread kept out at arming, tried again from the game step:
-//! at the first step after arming, which follows the world's load, then up to
-//! three more times a minute apart. Their owners wait meanwhile, with their
-//! hooks bypassed; after the last try they are turned off.
+//! Mods' code patches a thread kept out at arming, tried again from the game
+//! step and, on a client that never steps, from the interface frame: at the
+//! first chance after arming, then up to three more times a minute apart.
+//! Their owners wait meanwhile, with their hooks bypassed; after the last try
+//! they are turned off. The loader's own patches never wait (see
+//! `patch::wait_out`).
 
 use std::time::{Duration, Instant};
 

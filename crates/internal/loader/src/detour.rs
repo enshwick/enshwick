@@ -222,13 +222,20 @@ pub(crate) enum Commit {
     /// patches, by their [`Bytes::id`], through every wait. A code patch has
     /// no trampoline to move it to, so the batch goes again without them.
     Busy(Vec<usize>),
+    /// Nothing is written: a thread could not be suspended or its context
+    /// read, which a later try may get past. Only [`commit_once`] answers
+    /// it; [`commit`] waits and answers [`Commit::Failed`] instead.
+    Unchecked,
 }
 
 /// Writes the jumps over the targets of `pending` and the `code` patches,
 /// all or none. On [`Commit::Busy`], `disarm` runs while the other threads
 /// still stand still, so it must neither allocate, lock nor log.
 pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit {
-    write_all(pending, code, disarm, SETTLE_TRIES)
+    match write_all(pending, code, disarm, SETTLE_TRIES) {
+        Commit::Unchecked => Commit::Failed,
+        done => done,
+    }
 }
 
 /// Writes the `code` patches after one check and no wait, for a thread that
@@ -595,7 +602,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn(), settle_tri
     let blind = loop {
         if !threads.suspend() {
             threads.resume();
-            return Commit::Failed;
+            return Commit::Unchecked;
         }
         stuck.fill(false);
         let last = tries == settle_tries;
@@ -638,7 +645,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn(), settle_tri
                 "hooks not written: the context of thread {thread} could not be read to move it out of the code"
             ),
         );
-        return Commit::Failed;
+        return Commit::Unchecked;
     }
     if stuck.contains(&true) {
         disarm();

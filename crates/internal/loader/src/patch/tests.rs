@@ -283,6 +283,28 @@ fn a_patch_a_thread_stays_in_waits_with_its_feature_and_names_its_owner() {
 }
 
 #[test]
+fn a_loader_patch_a_thread_stays_in_is_skipped_and_never_waits() {
+    use crate::code::Verdict;
+    use crate::mod_index::ModIndex;
+
+    let mut patches = four_patches();
+    patches[3].owner = ModIndex::LOADER;
+    let mut verdicts = [
+        Verdict::Write,
+        Verdict::Write,
+        Verdict::Write,
+        Verdict::Write,
+    ];
+    let owners = wait_out(&patches, &mut verdicts, &[3]);
+    assert!(matches!(verdicts[3], Verdict::Skip(_)));
+    assert_eq!(
+        verdicts[..3],
+        [Verdict::Write, Verdict::Write, Verdict::Write]
+    );
+    assert!(owners.is_empty());
+}
+
+#[test]
 #[should_panic(expected = "outside the batch")]
 fn a_stuck_patch_id_outside_the_batch_is_a_bug() {
     use crate::code::Verdict;

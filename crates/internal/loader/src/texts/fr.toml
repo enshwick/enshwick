@@ -18,9 +18,6 @@
 "mods.points" = "Points d'extension : {points}"
 "mods.feature.off" = "{feature} est désactivé : {reason}"
 "mods.part.off" = "Partie d'Enshwick désactivée après une erreur : {part} ({reason})"
-"mods.waiting" = "{name} {version} (en attente)"
-"mods.waiting.why" = "Attend que le jeu quitte le code que ce mod modifie. Nouvel essai bientôt, puis trois fois encore, une par minute. Ensuite il se désactive."
-"mods.part.waiting" = "Partie d'Enshwick en attente que le jeu quitte son code : {part}"
 "mods.others.native" = "Également en cours, sans Enshwick : {files}"
 "mods.others.chain" = "Chargés depuis mods/chain : {files}"
 "mods.others.beside" = "Fichiers d'autres mods à côté du jeu : {files}"
@@ -322,5 +319,4 @@
 "mods.developer.off" = "un outil de développement : il ne fonctionne que tant que le fichier mod-data/enshwick/developer-tools existe"
 
 "mods.waiting" = "{name} {version} (en attente)"
-"mods.waiting.why" = "Attend que le jeu quitte le code que ce mod modifie. Nouvel essai au chargement d'un monde, puis chaque minute."
-"mods.part.waiting" = "Partie d'Enshwick en attente que le jeu quitte son code : {part}"
+"mods.waiting.why" = "Attend que le jeu quitte le code que ce mod modifie. Nouvel essai bientôt, puis trois fois encore, une par minute. Ensuite il se désactive."

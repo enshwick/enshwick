@@ -18,9 +18,6 @@
 "mods.points" = "Genişletme noktaları: {points}"
 "mods.feature.off" = "{feature} kapalı: {reason}"
 "mods.part.off" = "Hatadan sonra kapanan Enshwick parçası: {part} ({reason})"
-"mods.waiting" = "{name} {version} (bekliyor)"
-"mods.waiting.why" = "Oyunun bu modun değiştirdiği koddan çıkmasını bekliyor. Birazdan yeniden dener, sonra dakikada bir üç kez daha dener. Ardından kapanır."
-"mods.part.waiting" = "Oyunun kodundan çıkmasını bekleyen Enshwick parçası: {part}"
 "mods.others.native" = "Enshwick olmadan çalışan diğerleri: {files}"
 "mods.others.chain" = "mods/chain klasöründen yüklenenler: {files}"
 "mods.others.beside" = "Oyunun yanındaki diğer mod dosyaları: {files}"
@@ -322,5 +319,4 @@
 "mods.developer.off" = "bir geliştirici aracı: yalnızca mod-data/enshwick/developer-tools dosyası varken çalışır"
 
 "mods.waiting" = "{name} {version} (bekliyor)"
-"mods.waiting.why" = "Oyunun bu modun değiştirdiği koddan çıkmasını bekliyor. Bir dünya yüklenince, sonra her dakika yeniden dener."
-"mods.part.waiting" = "Oyunun kodundan çıkmasını bekleyen Enshwick parçası: {part}"
+"mods.waiting.why" = "Oyunun bu modun değiştirdiği koddan çıkmasını bekliyor. Birazdan yeniden dener, sonra dakikada bir üç kez daha dener. Ardından kapanır."

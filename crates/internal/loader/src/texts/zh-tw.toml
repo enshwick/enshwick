@@ -18,9 +18,6 @@
 "mods.points" = "擴充點：{points}"
 "mods.feature.off" = "{feature} 已關閉：{reason}"
 "mods.part.off" = "出錯後關閉的 Enshwick 部分：{part}（{reason}）"
-"mods.waiting" = "{name} {version}（等待中）"
-"mods.waiting.why" = "正在等待遊戲離開此模組變更的程式碼。稍後會重試，之後每隔一分鐘再試三次。仍不成功則關閉。"
-"mods.part.waiting" = "等待遊戲離開其程式碼的 Enshwick 部分：{part}"
 "mods.others.native" = "同時執行、未使用 Enshwick：{files}"
 "mods.others.chain" = "從 mods/chain 載入：{files}"
 "mods.others.beside" = "遊戲旁的其他模組檔案：{files}"
@@ -322,5 +319,4 @@
 "mods.developer.off" = "開發者工具：僅在檔案 mod-data/enshwick/developer-tools 存在時執行"
 
 "mods.waiting" = "{name} {version}（等待中）"
-"mods.waiting.why" = "正在等待遊戲離開此模組變更的程式碼。載入世界時會重試，之後每分鐘重試一次。"
-"mods.part.waiting" = "等待遊戲離開其程式碼的 Enshwick 部分：{part}"
+"mods.waiting.why" = "正在等待遊戲離開此模組變更的程式碼。稍後會重試，之後每隔一分鐘再試三次。仍不成功則關閉。"

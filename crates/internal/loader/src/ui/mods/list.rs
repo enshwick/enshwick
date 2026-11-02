@@ -68,12 +68,6 @@ fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
     parts_off(paint);
-    if loader.retry.any() {
-        for part in loader.retry.features() {
-            let line = texts::fill("mods.part.waiting", &[("part", part)]);
-            paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
-        }
-    }
     for (shown, key) in [
         (!loader.settings_problems.is_empty(), "mods.settings.broken"),
         (!crate::lobby::discovery_on(), "mods.discovery.off"),

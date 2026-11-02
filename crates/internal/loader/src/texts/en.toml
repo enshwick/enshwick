@@ -18,9 +18,6 @@
 "mods.points" = "Extension points: {points}"
 "mods.feature.off" = "{feature} is off: {reason}"
 "mods.part.off" = "Enshwick part off after an error: {part} ({reason})"
-"mods.waiting" = "{name} {version} (waiting)"
-"mods.waiting.why" = "Waiting for the game to leave the code this mod changes. It tries again soon, then three more times a minute apart. Then it turns off."
-"mods.part.waiting" = "Enshwick part waiting for the game to leave its code: {part}"
 "mods.others.native" = "Also running, without Enshwick: {files}"
 "mods.others.chain" = "Loaded from mods/chain: {files}"
 "mods.others.beside" = "Other mods' files beside the game: {files}"
@@ -324,5 +321,4 @@
 "mods.developer.off" = "a developer tool: it runs only while the file mod-data/enshwick/developer-tools exists"
 
 "mods.waiting" = "{name} {version} (waiting)"
-"mods.waiting.why" = "Waiting for the game to leave the code this mod changes. It tries again when a world loads, then each minute."
-"mods.part.waiting" = "Enshwick part waiting for the game to leave its code: {part}"
+"mods.waiting.why" = "Waiting for the game to leave the code this mod changes. It tries again soon, then three more times a minute apart. Then it turns off."

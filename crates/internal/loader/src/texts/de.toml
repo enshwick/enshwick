@@ -18,9 +18,6 @@
 "mods.points" = "Erweiterungspunkte: {points}"
 "mods.feature.off" = "{feature} ist aus: {reason}"
 "mods.part.off" = "Enshwick-Teil nach einem Fehler aus: {part} ({reason})"
-"mods.waiting" = "{name} {version} (wartet)"
-"mods.waiting.why" = "Wartet, bis das Spiel den Code verlässt, den diese Mod ändert. Gleich neuer Versuch, dann noch dreimal im Minutenabstand. Danach schaltet sie sich aus."
-"mods.part.waiting" = "Enshwick-Teil wartet, bis das Spiel seinen Code verlässt: {part}"
 "mods.others.native" = "Läuft auch, ohne Enshwick: {files}"
 "mods.others.chain" = "Aus mods/chain geladen: {files}"
 "mods.others.beside" = "Dateien anderer Mods neben dem Spiel: {files}"
@@ -322,5 +319,4 @@
 "mods.developer.off" = "ein Entwicklerwerkzeug: es läuft nur, solange die Datei mod-data/enshwick/developer-tools existiert"
 
 "mods.waiting" = "{name} {version} (wartet)"
-"mods.waiting.why" = "Wartet, bis das Spiel den Code verlässt, den diese Mod ändert. Neuer Versuch beim Laden einer Welt, dann jede Minute."
-"mods.part.waiting" = "Enshwick-Teil wartet, bis das Spiel seinen Code verlässt: {part}"
+"mods.waiting.why" = "Wartet, bis das Spiel den Code verlässt, den diese Mod ändert. Gleich neuer Versuch, dann noch dreimal im Minutenabstand. Danach schaltet sie sich aus."

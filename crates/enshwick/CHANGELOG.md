@@ -377,11 +377,13 @@ Each entry names the pull request that made the change.
   wait at arming is not written under it: the patch waits, and its mod
   waits with it, its hooks and mid-function hooks passed by while the rest
   of it runs; the Mods screen, the status report and the log show it
-  waiting. The patch is tried again on the game thread after the first step
-  of the running world, then up to three more times a minute apart. When it goes in, the hooks
-  come on; after the last try the log names the patch with "a thread stayed
-  inside it through every wait" and the mod is turned off. A loader patch
-  waits and turns off only the feature it serves (#860, #903).
+  waiting. The patch is tried again after the first step of the running
+  world, or the first interface frame on a client that does not host, then
+  up to three more times a minute apart; a thread that cannot be checked
+  counts as one inside. When it goes in, the hooks come on; after the last
+  try the log names the patch with "a thread stayed inside it through every
+  wait" and the mod is turned off. A loader patch does not wait: it is
+  skipped and turns off only the feature it serves (#860, #903).
 - A poisoned lock's warning names the line that took the lock, not a line
   inside the API (#821).
 - The command file runs no line again when it does not read for a while,

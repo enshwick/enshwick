@@ -58,27 +58,6 @@ impl Retry {
             .map_or(IDLE, |at| self.millis(at));
         self.due.store(due, Ordering::Release);
     }
-
-    /// Whether any code patch waits, without the lock.
-    pub(crate) fn any(&self) -> bool {
-        self.due.load(Ordering::Acquire) != IDLE
-    }
-
-    /// The loader features whose patches wait, each once.
-    pub(crate) fn features(&self) -> Vec<&'static str> {
-        let mut features: Vec<&'static str> = Vec::new();
-        if let Some(held) = self.held.relock().as_ref() {
-            for (patch, verdict) in held.patches.iter().zip(&held.verdicts) {
-                if *verdict == Verdict::Wait
-                    && patch.owner.is_loader()
-                    && !features.contains(&patch.feature)
-                {
-                    features.push(patch.feature);
-                }
-            }
-        }
-        features
-    }
 }
 
 /// Holds the patches arming left waiting, if any, for the tries.
@@ -162,6 +141,9 @@ fn check(loader: &Loader, now: Instant) {
     let chains = loader.chains.relock();
     // Nothing waiting is armed yet, so a busy round has nothing to disarm.
     match crate::detour::commit_once(&writes, || {}, (&raw const marker).addr()) {
+        // The threads already run the patch while its owner's hooks are
+        // still bypassed until `rewire`; a bypassed hook forwards to the
+        // original, so those few calls act as vanilla, never half-hooked.
         Commit::Written => {
             for (patch, verdict) in held.patches.iter().zip(&mut held.verdicts) {
                 if *verdict != Verdict::Wait {
@@ -182,14 +164,13 @@ fn check(loader: &Loader, now: Instant) {
             chains.rewire(host::bypassed);
             drop(chains);
             crate::code::arming(&held.patches, &held.verdicts, &held.hooked);
-            if crate::code::lifted() {
-                crate::log!(INFO, "workshop recipe limit lifted");
-            }
             crate::diag::record_patches(crate::code::tally(&held.verdicts));
             *slot = None;
             loader.retry.publish(None);
         }
-        Commit::Busy(_) => {
+        // A thread that could not be suspended or read is as good as one
+        // inside: a later check may get past it.
+        Commit::Busy(_) | Commit::Unchecked => {
             drop(chains);
             if held.schedule.missed(now) {
                 let held = slot.take();
