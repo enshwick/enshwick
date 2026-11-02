@@ -22,19 +22,25 @@ item on the refused list.
 
 A mod that extends a point compiles a definition of it: the input struct, the
 answer's type and every type they reach. The owner's build writes a schema of
-each point it lists in its manifest, and `cargo enshwick point` writes the
-definition from it:
+each point, call and mod event it lists in its manifest. `cargo enshwick deps`
+writes the definitions of everything a dependency offers from it, into
+`src/deps/<alias>.rs`:
 
 ```bash
-cargo enshwick point you.trading-post:price --from <game folder> --out src/price.rs
+cargo enshwick deps trading_post --from <game folder>
 ```
 
-`--from` is the owner's DLL, a folder with it in it or in its `mods/`, such as
-the game's, or a schema file the owner published. The tool reads the schema
-from the DLL without running it. Declare the written module `pub` (`pub mod
-price;`), so its types count as the mod's own API. The file ends with checks
-that hold it to the owner's layout; write it again when the owner adds fields
-or points, rather than editing it. A definition older than the owner keeps
+The alias is the one the mod's `Cargo.toml` gives the owner in
+`[package.metadata.enshwick.requires]`, `recommends` or `after`; without an
+alias the tool writes a file for every dependency. Each definition names the
+point by its local name and the alias, as
+`#[enshwick::point(name = "price", of = trading_post, ..)]`. `--from` is the
+owner's DLL, a folder with it in it or in its `mods/`, such as the game's, or a
+schema file the owner published. The tool reads the schema from the DLL without
+running it. `enshwick::deps!()` at the crate root makes each file the public
+module `deps::<alias>`, so its types count as the mod's own API. The file ends
+with checks that hold it to the owner's layout; write it again when the owner
+adds fields or points, rather than editing it. A definition older than the owner keeps
 working, since points grow by appending fields, and one that no longer matches
 the owner leaves the link inert with the reason in the log.
 

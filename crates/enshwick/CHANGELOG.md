@@ -99,6 +99,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `enshwick::deps!()` makes `src/deps/<alias>.rs`, which
+  `cargo enshwick deps` writes, the public module `deps::<alias>` when the
+  file exists (#803).
 - The built-in stat kinds have names in the loader's texts, in every
   language the game offers: the `<kind>.name` key of each kind's
   `StatInfo::text`, such as "Max health" for `health_max.name` (#831).

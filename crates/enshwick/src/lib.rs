@@ -392,7 +392,7 @@ pub use enshwick_macros::config;
 /// [extension points](crate::points) (each a [`#[point]`](macro@point)
 /// input), the [mod events](crate::services) (each an
 /// [`#[event]`](macro@event) type) and the calls it serves, each a `#[call]`
-/// input; their schemas go into the manifest, where `cargo enshwick point`,
+/// input; their schemas go into the manifest, where `cargo enshwick deps`,
 /// `event` and `call` read them.
 ///
 /// A test that declares several mods in one binary gives each its table

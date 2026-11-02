@@ -3,7 +3,7 @@
 //!
 //! A call is declared once with [`#[call]`](macro@crate::call). Its schema
 //! goes into the server's manifest beside its points' when the manifest
-//! lists it (`declare_mod!(.., calls: [..])`), and `cargo enshwick call` writes the
+//! lists it (`declare_mod!(.., calls: [..])`), and `cargo enshwick deps` writes the
 //! declaration for another mod from it. The loader matches a caller with
 //! the server by name and major once every mod is initialised: the input
 //! and the answer must agree field by field and in size. A changed call is
@@ -56,7 +56,7 @@ pub unsafe trait Call: Copy + 'static {
     const LAYOUT: &'static [LayoutField];
     /// The answer's type, as one field.
     const OUTPUT: &'static [LayoutField];
-    /// The call's schema as `cargo enshwick call` reads it from the server's
+    /// The call's schema as `cargo enshwick deps` reads it from the server's
     /// manifest: its `[[call]]` table with the layout hashes, then the
     /// `[[type]]` tables of its input and answer.
     const SCHEMA: &'static str;

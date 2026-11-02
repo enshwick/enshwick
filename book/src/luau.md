@@ -203,9 +203,11 @@ end
 ## Extending another mod
 
 A Luau mod links into another mod's [extension point](extending.md) as a
-Rust mod does. `cargo enshwick point <owner>:<point> --from <owner's DLL>
---luau --out points/<point>.luau` writes the point's module: the types it
-reaches, its named values, and each field's place with the layout hash the
+Rust mod does. `cargo enshwick deps <alias> --from <owner's DLL> --luau`
+writes a module for each point, call and event of the dependency that
+`pack.toml` names `<alias>` in `[requires]`, `[recommends]` or `[after]`, as
+`deps/<alias>/<name>.luau` with the owner's local name. A point's module holds
+the types it reaches, its named values, and each field's place with the layout hash the
 owner's build wrote. The loader links only when every hash matches the
 owner's, the input the module reads is no larger than the owner's and the
 answer has the owner's size. A script changes an answer only of a number,
@@ -216,7 +218,7 @@ far, and returns a new answer, `nil` to keep it, or `enshwick.refuse` on a
 refusable point:
 
 ```luau
-local price = require("./points/price")
+local price = require("./deps/trading_post/price")
 
 enshwick.extend(price, function(input: price.Price, answer: number)
     if input.deal == price.Deal.SELL then
@@ -235,9 +237,8 @@ written again.
 ## Mod events
 
 A Luau mod hears another mod's [events](services.md) and sends its own.
-`cargo enshwick event <owner>:<event> --from <owner's DLL> --out
-events/<event>.luau` writes the description of an event the owner lists in
-its `declare_mod!(.., events: [..])`. A description may also be written by hand:
+`cargo enshwick deps <alias> --luau` writes the description of each event the
+owner lists in its `declare_mod!(.., events: [..])`, beside its points. A description may also be written by hand:
 each field with a `name` and how it reads, `u8` to `i64`, `f32`, `f64`,
 `bool`, `guid`, or an id: `entity`, `item_id`, `recipe_id`,
 `knowledge_id`, `skill_node`, `player_key`, `buff_type_id` or `npc_id`, laid out and hashed as Rust lays out a
@@ -249,7 +250,7 @@ local greeted = enshwick.define_event({ name = "greeted", fields = {
     { name = "times", read = "u16" },
 } })
 
-enshwick.on_mod_event(require("./events/sold"), function(sold)
+enshwick.on_mod_event(require("./deps/trading_post/sold"), function(sold)
     greeted.send({ player = sold.character, times = 1 })
 end)
 ```
@@ -268,18 +269,18 @@ fields, after the start: either takes the next start. A `send` before
 Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
-A Luau mod calls another mod's [call](calls.md) through the module this
-command writes:
+A Luau mod calls another mod's [call](calls.md) through the module
+`cargo enshwick deps <alias> --luau` writes for it, as for a point:
 
 ```bash
-cargo enshwick call <server>:<call> --from <server DLL> --luau --out calls/<call>.luau
+cargo enshwick deps trading_post --from <server DLL> --luau
 ```
 
 `enshwick.caller` at the top level of `main.luau` returns the function that
 runs it once the start is over:
 
 ```luau
-local price_of = enshwick.caller(require("./calls/price_of"))
+local price_of = enshwick.caller(require("./deps/trading_post/price-of"))
 
 enshwick.on("WorldSaved", function()
     local coins, why = price_of({ item = 7, count = 1 })
@@ -301,7 +302,7 @@ The input's fields are numbers, booleans, entities and GUIDs. The runtime works
 out each field's layout hash from its name, type and offset and refuses a
 module whose hashes do not match, so a module edited by hand no longer reaches
 the server. A call whose input holds a value type or an enum is for Rust mods
-only: `cargo enshwick call --luau` refuses it, since a script could forge such a
+only: `cargo enshwick deps --luau` leaves it out and says why, since a script could forge such a
 field's description and send the server a value its type forbids. The answer
 may be of any type.
 

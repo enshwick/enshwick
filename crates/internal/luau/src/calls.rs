@@ -13,7 +13,7 @@ use crate::points::{Read, decode, encode, read_of, size_of_read};
 /// Why a call's description does not read.
 fn bad(why: impl core::fmt::Display) -> mlua::Error {
     mlua::Error::runtime(format!(
-        "enshwick.caller: the call's description: {why}; write it again with cargo enshwick call --luau"
+        "enshwick.caller: the call's description: {why}; write it again with cargo enshwick deps --luau"
     ))
 }
 
@@ -27,7 +27,7 @@ pub(crate) struct CallDesc {
 }
 
 impl CallDesc {
-    /// The description `cargo enshwick call --luau` writes, read from the
+    /// The description `cargo enshwick deps <alias> --luau` writes, read from the
     /// table a script passes.
     ///
     /// Every input field reads a primitive and its hash is the one worked

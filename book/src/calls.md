@@ -92,16 +92,20 @@ mods that call it, and the profile counts the handler's time against the server.
 
 ## Calling
 
-A caller compiles the server's declaration. `cargo enshwick call` writes it from
-the schema in the server's DLL without running it:
+A caller compiles the server's declaration.
+[`cargo enshwick deps`](extending.md#getting-a-points-definition) writes it,
+with the server's points and events, from the schema in the server's DLL
+without running it:
 
 ```bash
-cargo enshwick call you.trading-post:price-of --from <game folder> --out src/price_of.rs
+cargo enshwick deps trading_post --from <game folder>
 ```
 
-`--from` is the server's DLL, a folder with it in it or in its `mods/`, or a
-schema file the server published. The file ends with checks that hold it to the
-server's layout.
+`trading_post` is the server's alias in the mod's `Cargo.toml`, and the call is
+declared as `#[enshwick::call(name = "price-of", of = trading_post, ..)]` in
+`src/deps/trading_post.rs`. `--from` is the server's DLL, a folder with it in it
+or in its `mods/`, or a schema file the server published. The file ends with
+checks that hold it to the server's layout.
 [`load.caller::<C>()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/services/calls.rs)
 then gives a `Caller`, which is `Copy` and runs the call from any thread:
 

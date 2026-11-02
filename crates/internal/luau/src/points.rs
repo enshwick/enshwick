@@ -1,5 +1,5 @@
 //! Another mod's extension point as a script links it: the description
-//! `cargo enshwick point --luau` writes, read into the layout the loader
+//! `cargo enshwick deps <alias> --luau` writes, read into the layout the loader
 //! checks, and the input and answer between bytes and Luau values.
 
 use core::fmt::Write as _;
@@ -100,7 +100,7 @@ pub(crate) struct PointDesc {
 
 fn bad(why: impl core::fmt::Display) -> mlua::Error {
     mlua::Error::runtime(format!(
-        "enshwick.extend: the point's description: {why}; write it again with cargo enshwick point --luau"
+        "enshwick.extend: the point's description: {why}; write it again with cargo enshwick deps --luau"
     ))
 }
 
@@ -165,7 +165,7 @@ pub(crate) fn size_of_read(read: &Read) -> usize {
 }
 
 impl PointDesc {
-    /// The description `cargo enshwick point --luau` writes, read from the
+    /// The description `cargo enshwick deps <alias> --luau` writes, read from the
     /// table a script passes.
     pub(crate) fn parse(table: &Table) -> mlua::Result<Self> {
         let name: String = table.get("name")?;
@@ -707,7 +707,7 @@ pub(crate) struct EventDesc {
 }
 
 impl EventDesc {
-    /// The description `cargo enshwick event` writes, or one a script writes
+    /// The description `cargo enshwick deps <alias> --luau` writes, or one a script writes
     /// for its own event: fields without `offset` and `hash` are laid out
     /// as `repr(C)` and hashed as Rust does for primitives.
     ///
@@ -733,7 +733,7 @@ impl EventDesc {
         Ok(desc)
     }
 
-    /// The description `cargo enshwick event` writes, or one a script writes
+    /// The description `cargo enshwick deps <alias> --luau` writes, or one a script writes
     /// for its own event, read as [`EventDesc::parse_definition`] says.
     pub(crate) fn parse(table: &Table) -> mlua::Result<Self> {
         let name: String = table.get("name")?;
