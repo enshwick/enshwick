@@ -74,7 +74,7 @@ fn line(loader: &Loader) -> super::engine::UiText {
                     MenuNote::Lacking,
                 ),
                 (!loader.settings_problems.is_empty(), MenuNote::BadSettings),
-                (crate::developer_tools::warned(loader), MenuNote::Developer),
+                (loader.developer_tools, MenuNote::Developer),
             ];
             let notes: Vec<MenuNote> = notes
                 .into_iter()

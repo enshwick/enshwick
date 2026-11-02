@@ -316,3 +316,4 @@
 "resistance_shroud.name" = "Miasma-Beständigkeit"
 "resistance_lightning.name" = "Schockbeständigkeit"
 "resistance_poison.name" = "Giftresistenz"
+"mods.developer.off" = "ein Entwicklerwerkzeug: es läuft nur, solange die Datei mod-data/enshwick/developer-tools existiert"

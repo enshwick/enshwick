@@ -88,21 +88,6 @@ fn enforce_holds(loader: &Loader) {
     crate::holds::enforce(&loader.data_dir, &running, false, Some(loader));
 }
 
-/// Whether developer tools are on, by their marker file; warns when they
-/// are.
-fn developer_tools(data_dir: &std::path::Path) -> bool {
-    let on = crate::developer_tools::marked(data_dir);
-    if on {
-        crate::log!(
-            WARN,
-            "developer tools are on: mod-data/{}/{} exists; never on a server players use",
-            crate::settings::LOADER_ID,
-            crate::developer_tools::MARKER
-        );
-    }
-    on
-}
-
 /// Seals the registries mods filled during init, in the order they depend
 /// on each other.
 fn seal(loader: &'static Loader) {
@@ -161,6 +146,7 @@ pub(crate) fn start(
         mods_dir,
         report: first_report,
         settings_problems,
+        developer_tools,
     }) = begin(stub_abi, missing_forwards)
     else {
         return;
@@ -195,7 +181,7 @@ pub(crate) fn start(
         build: game.build,
         reflection: game.reflection,
         configs_dir: mods_dir.with_file_name("mod-configs"),
-        developer_tools: developer_tools(&data_dir),
+        developer_tools,
         data_dir,
         mods_dir,
         stub: stub_abi,
@@ -453,6 +439,11 @@ fn arm_watched(loader: &Loader, frame: Option<FrameSlot>, watching: Option<&mut 
 fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching>) {
     for (index, library) in order.iter().enumerate() {
         let record = &loader.mods[index];
+        if crate::developer_tools::refused(loader.developer_tools, record.manifest.flags).is_some()
+        {
+            loader.turn_off(ModIndex::new(index), crate::developer_tools::off_reason());
+            continue;
+        }
         // SAFETY: `library.init` is the mod's `INIT` export, typed `InitFn`
         // as `enshwick::abi::exports` documents, called with the static host
         // table and the mod's own handle.
