@@ -246,9 +246,9 @@ fn the_owners_of_a_failed_mid_function_hook_count_as_failed() {
     );
 }
 
-#[test]
-fn a_patch_a_thread_stays_in_is_left_out_by_its_place_among_those_written() {
-    use crate::code::{CodePatch, Verdict, WHOLE_MOD};
+/// Four patches: one of a mod that is off, two of one mod, one of another.
+fn four_patches() -> [CodePatch; 4] {
+    use crate::code::WHOLE_MOD;
     use crate::mod_index::ModIndex;
 
     let patch = |owner: usize, address: usize| CodePatch {
@@ -259,19 +259,36 @@ fn a_patch_a_thread_stays_in_is_left_out_by_its_place_among_those_written() {
         replacement: Box::new([0xcc]),
         needs: Box::default(),
     };
-    let patches = [
+    [
         patch(0, 0x10),
         patch(1, 0x20),
         patch(1, 0x30),
         patch(2, 0x40),
-    ];
+    ]
+}
+
+#[test]
+fn a_patch_a_thread_stays_in_is_left_out_by_its_own_index() {
+    use crate::code::Verdict;
+
+    let patches = four_patches();
     let mut verdicts = [Verdict::Off, Verdict::Write, Verdict::Write, Verdict::Write];
-    // The round wrote patches 1 to 3, and a thread stayed in its first.
-    leave_out(&patches, &mut verdicts, &[1, 2, 3], &[0]);
+    // A thread stayed in patch 1, after the patch of the mod that is off.
+    leave_out(&patches, &mut verdicts, &[1]);
     assert_eq!(verdicts[0], Verdict::Off);
     assert!(matches!(&verdicts[1], Verdict::Skip(why) if why.contains("thread")));
     assert!(matches!(&verdicts[2], Verdict::Skip(why) if why.contains("another patch")));
     assert_eq!(verdicts[3], Verdict::Write);
+}
+
+#[test]
+#[should_panic(expected = "outside the batch")]
+fn a_stuck_patch_id_outside_the_batch_is_a_bug() {
+    use crate::code::Verdict;
+
+    let patches = four_patches();
+    let mut verdicts = [Verdict::Off, Verdict::Write, Verdict::Write, Verdict::Write];
+    leave_out(&patches, &mut verdicts, &[9]);
 }
 
 #[test]

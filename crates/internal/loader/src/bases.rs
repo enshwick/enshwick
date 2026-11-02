@@ -650,6 +650,12 @@ pub(crate) fn disarm() {
     past16::disarm();
 }
 
+/// Tells once, after the hooks are armed, which base features are off,
+/// apart from those a skipped patch already reported among `already`.
+pub(crate) fn report(loader: &Loader, already: &[&str]) {
+    past16::report(loader, already);
+}
+
 fn raised() -> bool {
     RAISED.load(Ordering::Acquire)
 }
