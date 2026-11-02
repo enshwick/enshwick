@@ -333,10 +333,7 @@ pub(crate) fn send_many(
 /// server runs a server too, but no client half.
 fn client_hosts() -> bool {
     crate::world::hosting()
-        && CARRIER
-            .game
-            .get()
-            .is_some_and(|game| game.local_machine_kind().is_some())
+        && crate::host::loader().is_some_and(|loader| loader.side == enshwick::abi::Side::CLIENT)
 }
 
 /// Notes the account key of the player of a client that hosts; a new one
@@ -389,12 +386,13 @@ fn take_looped(to_server: bool) -> Vec<Looped> {
 /// that joined, closes those of players who left, takes what came and sends
 /// what is due, then hands on what came and forgets the peers that went.
 pub(crate) fn after_step(loader: &Loader, now: Instant) {
-    let Some(game) = CARRIER.game.get() else {
-        return;
-    };
+    // In process, so even without the game's socket calls.
     if client_hosts() {
         hosted_step(loader);
     }
+    let Some(game) = CARRIER.game.get() else {
+        return;
+    };
     let Ok(server) = crate::world::server() else {
         return;
     };
@@ -677,10 +675,10 @@ fn give_back(side: &Mutex<Option<State>>, session: usize, mut inbox: Inbox) {
 pub(crate) fn forget() {
     *CARRIER.client.relock() = None;
     CARRIER.client_open.store(false, Ordering::Release);
-    CARRIER.to_server.relock().clear();
-    CARRIER.to_client.relock().clear();
     CARRIER.server_waiting.store(false, Ordering::Release);
     CARRIER.client_waiting.store(false, Ordering::Release);
+    CARRIER.to_server.relock().clear();
+    CARRIER.to_client.relock().clear();
     CARRIER.host_key.store(0, Ordering::Release);
     CARRIER.hosted_hello.store(false, Ordering::Release);
 }

@@ -255,7 +255,7 @@ pub(crate) fn item_data(key: u64, records: &[u8]) -> bool {
     data.extend_from_slice(records);
     if data.len() > MAX_CONTROL {
         crate::log!(WARN, "mod messages: item data records too long to send");
-        return true;
+        return false;
     }
     let peers: Vec<u64> = if key == 0 {
         state(|s| s.peers.keys().copied().collect())
