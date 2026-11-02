@@ -454,12 +454,9 @@ enum ReloadModError {
     Init { status: u32 },
 }
 
-/// What a reload's manifest must keep, its version aside.
-type Shape = (u8, u32, usize, usize);
-
 /// What in `manifest` must stay the same across a reload, its version
 /// aside.
-fn shape(manifest: &Manifest) -> Shape {
+fn shape(manifest: &Manifest) -> (u8, u32, usize, usize) {
     (
         manifest.side.0,
         manifest.flags.0,
