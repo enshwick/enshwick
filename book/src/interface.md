@@ -231,7 +231,7 @@ and leaves the page open; the next Back steps back.
 The list of mods, a mod's settings and the server's settings scroll in the
 game's own scroll area, with its scrollbar, as the game's world settings do.
 On a game build where the loader cannot draw that scroll area, the screen
-shows a few at a time with "Next page" and "Previous page" buttons, and the
+shows a few at a time with "Next Page" and "Previous Page" buttons, and the
 log says why.
 
 In a game, the screen also shows the [player actions](actions.md) the
