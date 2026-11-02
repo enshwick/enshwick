@@ -58,6 +58,11 @@ unstable = []
 name = "main"
 required-features = ["test"]
 
+# Its mod, `you.lockers`, would share the binary with `point_schema`'s.
+[[test]]
+name = "call_schema"
+required-features = ["test", "unstable"]
+
 [lints]
 workspace = true
 
@@ -66,7 +71,6 @@ workspace = true
 id = "you.hello"
 side = "both"
 join = true
-exports = ["price", "price-of"]
 
 [package.metadata.enshwick.requires]
 lockers = { id = "you.lockers", version = ">=0.1, <1.0" }

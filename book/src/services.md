@@ -115,7 +115,7 @@ two mods that read the same bytes differently never link.
 publishes a `'static` table during `init`:
 
 ```rust
-#[enshwick::service(name = "prices")]
+#[enshwick::service(name = "prices", export)]
 pub struct Prices {
     pub price: extern "system" fn(item: u32) -> u32,
 }
@@ -134,16 +134,11 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 A name and major are published once: a second publisher is refused. One mod
 may publish several majors of a service side by side.
 
-Other mods reach the service and the event only when the publisher's
-[manifest](concepts/loader-and-abi.md#what-other-mods-may-use) exports
-them by their local names:
-
-```toml
-[package.metadata.enshwick]
-id = "you.trading-post"
-side = "server"
-exports = ["prices", "sold"]
-```
+Other mods reach the service and the event only when the publisher
+[exports](concepts/loader-and-abi.md#what-other-mods-may-use) them, with
+`export` on their declarations, as in
+`#[enshwick::service(name = "prices", export)]` and
+`#[enshwick::event(name = "sold", export)]`.
 
 ## Using a service
 
@@ -181,7 +176,7 @@ it gets back; sending calls every subscriber's handler on the sending
 thread, with no queue and no allocation:
 
 ```rust
-#[enshwick::event(name = "sold")]
+#[enshwick::event(name = "sold", export)]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,

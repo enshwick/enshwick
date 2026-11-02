@@ -12,7 +12,7 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     /// A sale at the trading post.
-    #[enshwick::event(name = "you.trading-post:sold")]
+    #[enshwick::event(name = "you.trading-post:sold", export)]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Sold {
         /// The item.
@@ -61,7 +61,6 @@ mod tests {
         r#"
         id = "you.trading-post"
         side = "server"
-        exports = ["sold"]
         "#
     );
 

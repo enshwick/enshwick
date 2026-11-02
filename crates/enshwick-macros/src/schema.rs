@@ -9,55 +9,83 @@ use syn::{Ident, Type};
 use crate::shape::toml_string;
 use crate::{declare, schema_doc};
 
-/// The `.enshpt` entry of a declaration's schema, `declared` being
-/// `<Type as Trait>`: none with `of`. The mod's own exported declaration
-/// ships it, an exported event that a schema cannot describe failing the
-/// build; an internal one ships nothing. Another mod's ships it in a test
-/// build only, where a test binary declares mods of other ids; there an
-/// event a schema cannot describe ships nothing.
+/// The `.enshpt` entry of a declaration marked `export`, `declared` being
+/// `<Type as Trait>`; none without the flag. The mod's own ships its
+/// schema, or a service its name, an event that a schema cannot describe
+/// failing the build. Another mod's, a full name of another id, fails the
+/// build, except in a test build, where a test binary declares mods of
+/// other ids and an event a schema cannot describe ships nothing.
+///
+/// # Errors
+///
+/// When `export` comes with `of`, which names a dependency's declaration.
 pub(crate) fn schema_entry(
     name: Option<&syn::LitStr>,
     of: Option<&Ident>,
+    export: Option<&Ident>,
     declared: &TokenStream,
-    event: bool,
-) -> TokenStream {
-    let Some(name) = name.filter(|_| of.is_none()) else {
-        return TokenStream::new();
+    kind: Kind,
+) -> syn::Result<TokenStream> {
+    let (Some(name), Some(export)) = (name, export) else {
+        return Ok(TokenStream::new());
     };
-    let (shipping, cargo) = declare::shipping(&name.value());
+    if of.is_some() {
+        return Err(syn::Error::new_spanned(
+            export,
+            "`export` marks the mod's own declaration; one with `of` is a dependency's",
+        ));
+    }
+    let full = name.value();
+    let (own, cargo) = declare::is_own(&full);
     let tracked = cargo.map(|path| {
         quote!(
             const _: &[u8] = ::core::include_bytes!(#path);
         )
     });
-    match shipping {
-        declare::Shipping::Exported => {
-            let check = event.then(|| {
-                quote! {
-                    const _: () = ::core::assert!(
-                        #declared::DESCRIBED,
-                        "an exported event's schema cannot describe a field's type: derive `Shape` for it",
-                    );
-                }
-            });
-            quote!(#tracked #check ::enshwick::__schema_entry!(#declared::SCHEMA);)
+    let schema = match kind {
+        Kind::Service => {
+            let text = format!("[[service]]\nname = {}\n", toml_string(&full));
+            quote!(#text)
         }
-        declare::Shipping::Internal => quote!(#tracked),
-        declare::Shipping::Foreign => {
-            let schema = if event {
-                quote!(if #declared::DESCRIBED { #declared::SCHEMA } else { "" })
-            } else {
-                quote!(#declared::SCHEMA)
+        Kind::Event if !own => quote!(if #declared::DESCRIBED { #declared::SCHEMA } else { "" }),
+        Kind::Point | Kind::Call | Kind::Event => quote!(#declared::SCHEMA),
+    };
+    if !own {
+        let message = format!(
+            "`export` on `{full}`: the crate's mod exports only its own names; name it locally"
+        );
+        return Ok(quote! {
+            #tracked
+            #[cfg(not(test))]
+            ::core::compile_error!(#message);
+            #[cfg(test)]
+            const _: () = {
+                ::enshwick::__schema_entry!(#schema);
             };
-            quote! {
-                #tracked
-                #[cfg(test)]
-                const _: () = {
-                    ::enshwick::__schema_entry!(#schema);
-                };
-            }
-        }
+        });
     }
+    let check = matches!(kind, Kind::Event).then(|| {
+        quote! {
+            const _: () = ::core::assert!(
+                #declared::DESCRIBED,
+                "an exported event's schema cannot describe a field's type: derive `Shape` for it",
+            );
+        }
+    });
+    Ok(quote!(#tracked #check ::enshwick::__schema_entry!(#schema);))
+}
+
+/// What a declaration is, for its entry.
+#[derive(Clone, Copy)]
+pub(crate) enum Kind {
+    /// An extension point.
+    Point,
+    /// A call.
+    Call,
+    /// A mod event.
+    Event,
+    /// A service table, whose entry is its name alone.
+    Service,
 }
 
 /// The `SCHEMA` of a mod event: its `[[event]]` table with the layout

@@ -1,10 +1,12 @@
-//! The `.enshpt` section of a mod binary, where each shipped point, event
-//! and call writes its schema and `declare_mod!` its head, for the
-//! manifest and for `cargo enshwick`, which read it alike.
+//! The `.enshpt` section of a mod binary, where each exported point, event
+//! and call writes its schema, each exported service its name, and
+//! `declare_mod!` its head, for the manifest and for `cargo enshwick`,
+//! which read it alike.
 //!
 //! Entries are UTF-8 text separated by NULs, and a linker may pad between
 //! them with more NULs. A head starts with `schema = `; an entry with its
-//! `[[point]]`, `[[event]]` or `[[call]]` table and its `name`.
+//! `[[point]]`, `[[event]]`, `[[call]]` or `[[service]]` table and its
+//! `name`.
 
 use crate::__private::is_own;
 
@@ -17,14 +19,17 @@ pub enum Kind {
     Event,
     /// A call.
     Call,
+    /// A service table, whose entry names it and carries no schema.
+    Service,
 }
 
 impl Kind {
     /// Each kind with the table its entry starts with.
-    const TABLES: [(Self, &'static str); 3] = [
+    const TABLES: [(Self, &'static str); 4] = [
         (Self::Point, "[[point]]\n"),
         (Self::Event, "[[event]]\n"),
         (Self::Call, "[[call]]\n"),
+        (Self::Service, "[[service]]\n"),
     ];
 }
 
@@ -130,9 +135,32 @@ impl<'a> Section<'a> {
         &self.entries
     }
 
-    /// The schema text of the mod `id`: `head`, then its entries, those
-    /// whose local name `exports` lists when it is given, by kind and
-    /// name; empty when none is left.
+    /// The local names of the mod `id`'s entries, what it exports.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::schema_section::Section;
+    ///
+    /// let section = Section::parse(b"[[service]]\nname = \"you.a:prices\"\n\0[[point]]\nname = \"you.b:price\"\n")?;
+    /// assert_eq!(section.exports("you.a"), ["prices"]);
+    /// # Ok::<(), enshwick::schema_section::ReadSectionError>(())
+    /// ```
+    #[must_use]
+    pub fn exports(&self, id: &str) -> Vec<&'a str> {
+        let mut names: Vec<&'a str> = self
+            .entries
+            .iter()
+            .filter(|e| is_own(id, e.name))
+            .filter_map(|e| e.name.split_once(':').map(|(_, local)| local))
+            .collect();
+        names.sort_unstable();
+        names.dedup();
+        names
+    }
+
+    /// The schema text of the mod `id`: `head`, then its points, events and
+    /// calls by kind and name; empty when it has none.
     ///
     /// # Examples
     ///
@@ -140,27 +168,21 @@ impl<'a> Section<'a> {
     /// use enshwick::schema_section::Section;
     ///
     /// let section = Section::parse(
-    ///     b"[[event]]\nname = \"you.a:sold\"\n\0[[point]]\nname = \"you.a:price\"\n\0[[point]]\nname = \"you.b:price\"\n",
+    ///     b"[[event]]\nname = \"you.a:sold\"\n\0[[service]]\nname = \"you.a:prices\"\n\0[[point]]\nname = \"you.b:price\"\n",
     /// )?;
     /// assert_eq!(
-    ///     section.schema("schema = 1\n", "you.a", Some(&["sold"])),
+    ///     section.schema("schema = 1\n", "you.a"),
     ///     "schema = 1\n[[event]]\nname = \"you.a:sold\"\n",
     /// );
-    /// assert_eq!(section.schema("schema = 1\n", "you.c", None), "");
+    /// assert_eq!(section.schema("schema = 1\n", "you.c"), "");
     /// # Ok::<(), enshwick::schema_section::ReadSectionError>(())
     /// ```
     #[must_use]
-    pub fn schema(&self, head: &str, id: &str, exports: Option<&[&str]>) -> String {
-        let exported = |name: &str| {
-            exports.is_none_or(|exports| {
-                name.split_once(':')
-                    .is_some_and(|(_, local)| exports.contains(&local))
-            })
-        };
+    pub fn schema(&self, head: &str, id: &str) -> String {
         let mut own: Vec<&Entry<'a>> = self
             .entries
             .iter()
-            .filter(|e| is_own(id, e.name) && exported(e.name))
+            .filter(|e| e.kind != Kind::Service && is_own(id, e.name))
             .collect();
         if own.is_empty() {
             return String::new();

@@ -301,7 +301,8 @@ pub use enshwick_macros::Shape;
 /// `#[call(name = "<call>", output = <type>, version = <major>)]`, with
 /// `of = <alias>` for a dependency's call ([`deps!`]); `version` is 1 when
 /// left out. A changed field or answer is a new major. Every type in it has
-/// a [`trait@Shape`].
+/// a [`trait@Shape`]. `export` lets other mods call it and ships its schema
+/// with the mod; without it the call is the mod's own.
 ///
 /// # Examples
 ///
@@ -390,10 +391,12 @@ pub use enshwick_macros::config;
 ///
 /// The mod's own [extension points](crate::points), [mod
 /// events](crate::services) and calls, each a [`#[point]`](macro@point),
-/// [`#[event]`](macro@event) or `#[call]` declared without `of`, whose
-/// local name `exports` lists, put their schemas into the DLL's `.enshpt`
-/// section; the others stay the mod's own. The manifest collects the
-/// schemas from there at the loader's first query, and `cargo enshwick
+/// [`#[event]`](macro@event) or `#[call]` declared without `of` and marked
+/// `export`, put their schemas into the DLL's `.enshpt` section, and an
+/// exported [`#[service]`](macro@service) its name; the others stay the
+/// mod's own. The manifest collects the schemas and the exported names from
+/// there at the loader's first query, beside the content names `exports`
+/// lists, and `cargo enshwick
 /// deps` reads them from the DLL file.
 ///
 /// A test that declares several mods in one binary gives each its table
@@ -505,7 +508,9 @@ pub use enshwick_macros::deps;
 /// `#[event(name = "<what>")]` for this mod's event, `#[event(of = <alias>,
 /// name = "<what>")]` for a dependency's ([`deps!`]); the struct is `Copy`
 /// plain data and grows by appending fields, as a
-/// [`#[service]`](macro@service) table does.
+/// [`#[service]`](macro@service) table does. `export` lets other mods hear
+/// it and ships its schema with the mod, which needs a [`trait@Shape`] for
+/// every field; without it the event is the mod's own.
 ///
 /// # Examples
 ///
@@ -559,7 +564,9 @@ pub use enshwick_macros::hook;
 /// ([`deps!`]); `refusable` lets a link refuse, which stops the chain. The
 /// input grows by appending fields; a changed field or answer type needs a
 /// new name. Every type in it has a [`trait@Shape`], so
-/// a change deep inside a field refuses the link too.
+/// a change deep inside a field refuses the link too. `export` lets other
+/// mods link it and ships its schema with the mod; without it the point is
+/// the mod's own.
 ///
 /// # Examples
 ///
@@ -607,7 +614,8 @@ pub use enshwick_macros::script;
 /// Fields are `extern "system" fn` pointers or plain data. Append fields to grow the table: users built against the
 /// shorter table keep working. Change a published field only with a new
 /// major. Every type in it has a [`trait@Shape`], so a change deep inside a
-/// field refuses the user too.
+/// field refuses the user too. `export` lets other mods use it; without it
+/// the table is the mod's own.
 ///
 /// # Examples
 ///
