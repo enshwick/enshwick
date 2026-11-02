@@ -222,6 +222,17 @@ pub(crate) fn filled(loader: &Loader, root: Entity) -> Option<bool> {
     Some(unsafe { crate::transactions::props::setup_initialized(setup, initialized) })
 }
 
+/// Whether a joining character `root` may be looked at for its carried
+/// items: its inventories are [`filled`]; on a build without the field,
+/// always, since a look only takes back what it finds.
+pub(crate) fn ready(loader: &Loader, root: Entity) -> bool {
+    match layout(loader) {
+        Some(layout) if layout.initialized.is_none() => true,
+        Some(_) => filled(loader, root) == Some(true),
+        None => false,
+    }
+}
+
 /// The item entity in slot `slot` of the inventory at `link` of `root`, and
 /// the item it holds.
 pub(crate) fn in_slot(loader: &Loader, root: u32, link: u8, slot: u8) -> Option<(u32, u32)> {
