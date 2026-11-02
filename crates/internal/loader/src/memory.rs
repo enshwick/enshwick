@@ -53,6 +53,7 @@ pub(crate) unsafe fn read_bytes(base: usize, offset: usize, out: &mut [u8]) {
 ///
 /// - `base + offset` is writable for `bytes.len()` bytes.
 /// - Nothing else reads or writes those bytes during the copy.
+#[cfg(windows)]
 pub(crate) unsafe fn write_bytes(base: usize, offset: usize, bytes: &[u8]) {
     // SAFETY: the caller's guarantee for `base + offset` is the one
     // `write_bytes_at` asks for at offset 0.
