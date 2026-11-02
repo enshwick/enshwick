@@ -413,21 +413,32 @@ fn a_mod_list_that_does_not_read_stays_byte_for_byte() {
         .join(crate::settings::LOADER_ID)
         .join(crate::modlist::LIST_FILE);
     std::fs::create_dir_all(list.parent().unwrap()).unwrap();
-    let saved_as_ansi = b"[\"you.lanterns\"]\nenabled = false\n# \xef\xbf\n";
-    std::fs::write(&list, saved_as_ansi).unwrap();
+    // "5 €" as Notepad's ANSI saves it on a western Windows: € is 0x80.
+    let saved_as_windows_1252 = b"[\"you.lanterns\"]\nenabled = false\n# 5 \x80\n";
+    std::fs::write(&list, saved_as_windows_1252).unwrap();
     let ids = || {
         let (_, candidates, _) = libraries(&mods, Run::Dry, &mut |_| {});
         candidates.into_iter().map(|c| c.id).collect::<Vec<_>>()
     };
-    assert_eq!(ids(), ["you.lanterns"], "found, so the list would gain it");
-    assert_eq!(std::fs::read(&list).unwrap(), saved_as_ansi);
+    crate::log::capture();
+    let found = ids();
+    let lines = loader_lines();
+    crate::log::end_capture();
+    assert_eq!(found, ["you.lanterns"], "found, so the list would gain it");
+    assert!(
+        lines.iter().any(|(level, text)| *level == Level::WARN
+            && text.starts_with("mods/enshwick/mods.toml is not read, every mod is on: ")
+            && text.ends_with(&format!("({})", errors::BAD_MOD_LIST))),
+        "{lines:#?}"
+    );
+    assert_eq!(std::fs::read(&list).unwrap(), saved_as_windows_1252);
     std::fs::write(
         enshwick::files::backup_path(&list),
         "[\"you.lanterns\"]\nenabled = false\n",
     )
     .unwrap();
     assert!(ids().is_empty(), "off in the backup, so off");
-    assert_eq!(std::fs::read(&list).unwrap(), saved_as_ansi);
+    assert_eq!(std::fs::read(&list).unwrap(), saved_as_windows_1252);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
