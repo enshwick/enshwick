@@ -9,7 +9,8 @@ use std::path::Path;
 use enshwick::abi::ManifestFlags;
 
 /// Why a mod with `flags` does not run where developer tools are `on` or
-/// not; `None` when it runs. Every path that runs a mod's `init` asks it.
+/// not; `None` when it runs. The start asks it before each `init`; a reload needs developer tools
+/// on to run at all.
 #[must_use]
 pub(crate) fn refused(on: bool, flags: ManifestFlags) -> Option<&'static str> {
     (!on && flags.contains(ManifestFlags::DEVELOPER)).then_some(enshwick::mods::DEVELOPER_TOOL_OFF)
