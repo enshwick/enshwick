@@ -136,7 +136,9 @@ pub struct Schema {
     #[serde(rename = "schema")]
     format: u32,
     /// The content and stat kinds the owner's `exports` lists, each
-    /// `<kind>:<name>`; its exported declarations are the tables below.
+    /// `<kind>:<name>`, read and kept so a schema of the owner's DLL parses
+    /// whole; no declaration is written from them, since its exported
+    /// declarations are the tables below.
     #[serde(default)]
     exports: Vec<String>,
     /// The owner's id.

@@ -3,6 +3,7 @@
 use enshwick::abi::{
     CheckAbiError, Dependency, Manifest, Relation, Side, Str, check_abi, read_headed,
 };
+pub use enshwick::schema_section::Kind;
 use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
@@ -272,18 +273,13 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
 /// Why the mod `asker` may not use the `kind` `name`, `<owner>:<what>`,
 /// whose owner's manifest exports `exports`, each `<kind>:<local name>`.
 ///
-/// A kind is a call, point, service, event, content id or stat. `None` when
-/// it may: a name of its own, or one the owner exports as that kind; a
-/// content id or stat also when the owner exports the name it is a part of.
+/// `None` when it may: a name of its own, or one the owner exports as that
+/// kind; a content id or stat also when the owner exports the name it is a
+/// part of.
 #[must_use]
-pub fn unexported(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Option<String> {
+pub fn unexported(kind: Kind, name: &str, asker: &str, exports: &[&str]) -> Option<String> {
     let (owner, what) = name.split_once(':')?;
-    let word = if kind == "content id" {
-        "content"
-    } else {
-        kind
-    };
-    if owner == asker || enshwick::__private::rules::exports_name(exports, word, what) {
+    if owner == asker || enshwick::__private::rules::exports_name(exports, kind, what) {
         return None;
     }
     let offered = if exports.is_empty() {
@@ -292,7 +288,8 @@ pub fn unexported(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Opti
         format!("it exports {}", exports.join(", "))
     };
     Some(format!(
-        "{kind} {name}: {owner} does not export {what}; {offered}"
+        "{} {name}: {owner} does not export {what}; {offered}",
+        kind.label()
     ))
 }
 
@@ -629,7 +626,7 @@ mod tests {
 
     #[test]
     fn exports_are_copied_with_the_manifest() {
-        static EXPORTS: [Str; 2] = [Str::new("price-of"), Str::new("sold")];
+        static EXPORTS: [Str; 2] = [Str::new("call:price-of"), Str::new("event:sold")];
         let mut exporting = manifest("you.trading-post", "0.1.0");
         exporting.exports = EXPORTS.as_ptr();
         exporting.export_count = EXPORTS.len();
@@ -638,7 +635,7 @@ mod tests {
         let copied = unsafe { read(&raw const exporting) }.unwrap();
         assert_ne!(copied.exports, EXPORTS.as_ptr());
         // SAFETY: `read` copied every string and list for the process.
-        assert_eq!(unsafe { exports(copied) }, ["price-of", "sold"]);
+        assert_eq!(unsafe { exports(copied) }, ["call:price-of", "event:sold"]);
         let silent = manifest("you.lanterns", "0.1.0");
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
@@ -650,21 +647,21 @@ mod tests {
         let exports = ["call:price-of", "event:sold"];
         let asker = "you.market-stalls";
         assert_eq!(
-            unexported("call", "you.trading-post:price-of", asker, &exports),
+            unexported(Kind::Call, "you.trading-post:price-of", asker, &exports),
             None
         );
         assert_eq!(
-            unexported("event", "you.market-stalls:opened", asker, &[]),
+            unexported(Kind::Event, "you.market-stalls:opened", asker, &[]),
             None
         );
         assert_eq!(
-            unexported("point", "you.trading-post:margin", asker, &exports).as_deref(),
+            unexported(Kind::Point, "you.trading-post:margin", asker, &exports).as_deref(),
             Some(
                 "point you.trading-post:margin: you.trading-post does not export margin; \
                  it exports call:price-of, event:sold"
             )
         );
-        let none = unexported("service", "you.trading-post:prices", asker, &[]).unwrap();
+        let none = unexported(Kind::Service, "you.trading-post:prices", asker, &[]).unwrap();
         assert!(none.ends_with("it exports nothing"), "{none}");
     }
 
@@ -672,16 +669,16 @@ mod tests {
     fn an_export_opens_its_own_kind_alone() {
         let exports = ["point:price", "event:sold"];
         let asker = "you.market-stalls";
-        assert!(unexported("point", "you.lockers:price", asker, &exports).is_none());
+        assert!(unexported(Kind::Point, "you.lockers:price", asker, &exports).is_none());
         for (kind, name) in [
-            ("content id", "you.lockers:price"),
-            ("stat", "you.lockers:price"),
-            ("event", "you.lockers:price"),
-            ("call", "you.lockers:sold"),
+            (Kind::Content, "you.lockers:price"),
+            (Kind::Stat, "you.lockers:price"),
+            (Kind::Event, "you.lockers:price"),
+            (Kind::Call, "you.lockers:sold"),
         ] {
             assert!(
                 unexported(kind, name, asker, &exports).is_some(),
-                "{kind} {name}"
+                "{kind:?} {name}"
             );
         }
     }
@@ -691,25 +688,25 @@ mod tests {
         let exports = ["content:locker", "stat:charm"];
         let asker = "you.market-stalls";
         for exported in ["you.lockers:locker", "you.lockers:locker.recipe"] {
-            assert_eq!(unexported("content id", exported, asker, &exports), None);
+            assert_eq!(unexported(Kind::Content, exported, asker, &exports), None);
         }
         assert_eq!(
-            unexported("stat", "you.lockers:charm.fire", asker, &exports),
+            unexported(Kind::Stat, "you.lockers:charm.fire", asker, &exports),
             None
         );
         assert_eq!(
-            unexported("content id", "you.market-stalls:stall", asker, &[]),
+            unexported(Kind::Content, "you.market-stalls:stall", asker, &[]),
             None
         );
         assert_eq!(
-            unexported("content id", "you.lockers:key", asker, &exports).as_deref(),
+            unexported(Kind::Content, "you.lockers:key", asker, &exports).as_deref(),
             Some(
                 "content id you.lockers:key: you.lockers does not export key; \
                  it exports content:locker, stat:charm"
             )
         );
-        assert!(unexported("stat", "you.lockers:locker", asker, &exports).is_some());
-        assert!(unexported("content id", "you.lockers:charm", asker, &exports).is_some());
+        assert!(unexported(Kind::Stat, "you.lockers:locker", asker, &exports).is_some());
+        assert!(unexported(Kind::Content, "you.lockers:charm", asker, &exports).is_some());
     }
 
     #[test]

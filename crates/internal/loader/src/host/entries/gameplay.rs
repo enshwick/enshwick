@@ -178,7 +178,7 @@ pub(crate) extern "system" fn stat_open(
             Err(status) => return status,
         };
         if def.is_none()
-            && let Some(reason) = unexported(loader, record, "stat", id)
+            && let Some(reason) = unexported(loader, record, crate::manifest::Kind::Stat, id)
         {
             crate::log::write(Level::WARN, &record.id, &reason);
             return Status::REFUSED;

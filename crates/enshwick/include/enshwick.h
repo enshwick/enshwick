@@ -13,7 +13,7 @@
 // Any change to the layout other than an append is a new major, with
 // `ABI_MINOR` back at 0; the layout tests of this crate hold the pair to
 // the committed layout.
-#define ENSHWICK_ABI_MAJOR 5
+#define ENSHWICK_ABI_MAJOR 6
 
 // The minor version of this interface: one more for each append to the
 // layout of this `ABI_MAJOR`, a field at the end of a struct that starts
@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 1
+#define ENSHWICK_ABI_MINOR 0
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.

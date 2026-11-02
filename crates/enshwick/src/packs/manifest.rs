@@ -410,12 +410,16 @@ impl PackManifest {
         let mut seen = std::collections::BTreeSet::new();
         for name in &self.exports {
             let parts = name.split_once(':');
-            let problem = if !parts
-                .is_some_and(|(kind, _)| crate::rules::EXPORT_KINDS.contains(&kind))
+            let problem = if parts
+                .is_none_or(|(kind, _)| crate::schema_section::Kind::of_word(kind).is_none())
             {
+                let kinds: Vec<&str> = crate::schema_section::Kind::ALL
+                    .iter()
+                    .map(|kind| kind.word())
+                    .collect();
                 format!(
                     "exports: {name:?} is not `<kind>:<name>`, the kind one of {}",
-                    crate::rules::EXPORT_KINDS.join(", ")
+                    kinds.join(", ")
                 )
             } else if !parts
                 .is_some_and(|(_, local)| crate::content::is_id(&format!("{}:{local}", self.id)))
