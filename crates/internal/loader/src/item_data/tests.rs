@@ -195,7 +195,8 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
             root,
         })
     };
-    assert_eq!(keep_carried(&mut world, Entity(ANN), held), (0, 2));
+    let kept = keep_carried(&mut world, Entity(ANN), held);
+    assert_eq!((kept.waiting, kept.aside), (0, 2));
     let mut kept: Vec<(u32, u32)> = world.values.keys().copied().collect();
     kept.sort_unstable();
     assert_eq!(kept, [(0, 2003), (0, 2004), (1, ANN)]);
@@ -252,7 +253,8 @@ fn a_leaving_character_s_items_wait_for_its_join_and_come_back_in_their_slots() 
             root: ANN,
         })
     };
-    assert_eq!(keep_carried(&mut world, Entity(ANN), left), (2, 1));
+    let kept = keep_carried(&mut world, Entity(ANN), left);
+    assert_eq!((kept.waiting, kept.aside), (2, 1));
     assert!(world.values.is_empty());
     assert!(world.changed);
     world.changed = false;
@@ -311,10 +313,12 @@ fn a_second_leave_keeps_one_waiting_record_per_slot_with_the_newer_value() {
         value: Box::new([byte]),
     };
     world.values.insert((0, 2001), value(1));
-    assert_eq!(keep_carried(&mut world, Entity(ANN), in_slot), (1, 0));
+    let kept = keep_carried(&mut world, Entity(ANN), in_slot);
+    assert_eq!((kept.waiting, kept.aside), (1, 0));
     // Rejoined, nothing taken back in time, a new value set, left again.
     world.values.insert((0, 3001), value(2));
-    assert_eq!(keep_carried(&mut world, Entity(ANN), in_slot), (1, 0));
+    let kept = keep_carried(&mut world, Entity(ANN), in_slot);
+    assert_eq!((kept.waiting, kept.aside), (1, 0));
     let pending: Vec<(u8, bool)> = world
         .pending
         .iter()
