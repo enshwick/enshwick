@@ -8,6 +8,26 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** the ABI version is a major and a minor, `abi::ABI_MAJOR`
+  and `abi::ABI_MINOR`, starting at 5.0, instead of the layout hash
+  `ABI_VERSION`. A field appended to a struct that starts with a `Header`, a
+  function appended to `HostApi` or a new type is the next minor; any other
+  layout change is a new major, and the layout tests fail without the bump
+  the change needs. The loader loads a mod of its major built for its minor
+  or an older one, and refuses another major or a newer minor with the
+  versions and what to do, through `abi::check_abi` and its
+  `CheckAbiError`. `Header` holds `abi_major` and `abi_minor` in place of
+  `abi_version`, `enshwick_mod_abi` returns the major, `abi::OTHER_ABI` is
+  gone, and the C header defines `ENSHWICK_ABI_MAJOR` and
+  `ENSHWICK_ABI_MINOR`. Rebuild every mod once (#852).
+- **Breaking:** `abi::Headed` has the constant `BORN`, the end of the fields
+  every writer of the ABI major knows, which the loader requires of a mod's
+  struct; `impl_headed!(T, born = N)` sets it once a minor appends to `T`.
+  `abi::check_major` checks the value of `enshwick_mod_abi`, and
+  `check_abi` takes the manifest header's `u16` major. `CheckAbiError`
+  gains `BeforeMajors` for a DLL built before ABI majors, and its
+  `OtherMajor` holds a `u16`. The ABI major moves only to the next one
+  (#865).
 - **Breaking:** a mod does not build when a key of its texts lacks a text
   in a language of the new `Language::REQUIRED`, `en` and `uk`; add the
   missing Ukrainian texts (#838).
@@ -99,6 +119,14 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `World::set_muted` and `World::muted` mute a player in chat and lift the
+  mute, on a dedicated server or in a game a client hosts. The server drops
+  every line a muted player types before another player reads it and tells
+  that player with a notice at most every 30 seconds; lines mods send pass.
+  The loader keeps the mutes in `mod-data/enshwick/muted.txt` and never
+  mutes an administrator online or the host. `HostApi` gains
+  `chat_mute_set` and `chat_mute_has` as ABI 5.1; the fake keeps the list
+  (`Installed::muted`) (#881).
 - `enshwick::deps!()` makes `src/deps/<alias>.rs`, which
   `cargo enshwick deps` writes, the public module `deps::<alias>` when the
   file exists (#803).
@@ -123,6 +151,24 @@ Each entry names the pull request that made the change.
   meters by. `test::facts` names each fact a test lays its blobs out by, and
   `FakeHost::without_fact` drops one, so a world or inventory test copies no
   type hash or offset of its own (#809).
+
+- `FakeHost::game_events` sets the hit, death and equipment change events,
+  the hit history and experience credit a death reads its killer from, and
+  damage bits, an attack category and an equipment slot numbered unlike the
+  API's; `FakeHost::map_waypoints` sets each player's waypoint;
+  `FakeHost::effect_events` sets the NPC command, threat and ping events
+  `Effects` raises; `FakeHost::loot` sets the components loot from destroyed
+  things checks. `test::facts` names their facts, and the loot slot's, so a
+  test of these areas lays out and reads its events by them (#871).
+
+- `FakeHost::vanilla_items` lists items in the game's item registry by
+  their debug names, so a mod's test finds them with
+  `content::vanilla::item` as in the game (#880).
+
+- `FakeHost::meters` sets what `MeterLayout` resolves, and
+  `FakeHost::container_kinds` the markers `ContainerKinds` tells holders
+  apart by, which `test::facts` names, so a mod's test of item meters or
+  containers copies no type hash or offset of its own (#877).
 
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`
   name the running game's content by its debug names, so a mod's code holds
@@ -268,12 +314,22 @@ Each entry names the pull request that made the change.
 - `Load::world_store` refuses the names `settings` and `save`, whose files
   the loader keeps in the same world folder, so a store no longer writes
   over the world's settings (#680).
+- The loader and its stub load mods, native DLLs, chained proxies and the
+  loader itself so that their imports resolve only from the DLL's own
+  folder, the game's folder and the system folder, never from the current
+  directory or `PATH`; a mod ships every DLL it imports beside itself. The
+  crash report hooks the system's `dbghelp.dll`, never a proxy of that name
+  (#869).
 
 - Migrations run once per world, all or nothing: each world keeps its own
   record, `.migrations.toml`, and a copy of the files each migration
   changed under `.backup/`, put back when a write fails or the game stops
   part way. A record or store that does not read turns the mod off with
   the reason instead of being skipped or read as empty (#670).
+- The loader's log files roll over during a run as they do at start, once
+  `all.log` would pass 32 MiB or `loader.log` or a mod's file 8 MiB, so
+  a server that runs for weeks no longer fills its disk with logs; the new
+  file's first line says where the earlier lines went (#876).
 
 - `Store` and `WorldStore` fill every key a file lacks from `T::default()`,
   so a store whose type gained a field still reads (#672).

@@ -50,10 +50,12 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
 - The loader hands each mod one `HostApi` table of `extern "system"` functions;
   a mod exports `enshwick_mod_abi`, `enshwick_mod_query`, `enshwick_mod_init`
   and `enshwick_mod_ready`, which `declare_mod!` writes.
-- The ABI version is a hash of the committed layout file
-  `crates/enshwick/src/abi/layout.txt`, which lists every field's offset,
-  size and type, function pointers with their signature; a mod built for any other version is
-  refused with the release to rebuild it for.
+- The ABI version is a major and a minor, the first line of the committed
+  layout file `crates/enshwick/src/abi/layout.txt`, which lists every
+  field's offset, size and type, function pointers with their signature.
+  An append is the next minor, any other change a new major, and the layout
+  tests refuse a change without its bump. A mod of another major, or of a
+  newer minor than the loader's, is refused with what to do.
 - Strings are borrowed for the call, and memory is never freed across the
   boundary.
 - Nothing unwinds across it: the loader catches every panic in a mod's call or

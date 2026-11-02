@@ -131,7 +131,11 @@ changed does not.
   takes the newest table of the same side and finds each entry by the code
   pattern the table keeps for it (the
   [build tables](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/README.md#patterns)
-  describe them). What no
+  describe them). It saves where each pattern matched in
+  `mod-data/enshwick/carried-<side>.txt`, so the next start on the same code
+  checks every entry there instead of searching again; a save that does not
+  match the code is searched again and replaced, the old one kept as
+  `carried-<side>.txt.bak`. What no
   pattern finds is missing, so only the loader features and the mods that
   need it turn off, and the log names the build. With `build_patterns =
   false` in `mod-configs/enshwick.toml` such a build stays vanilla instead,

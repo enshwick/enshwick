@@ -2,53 +2,10 @@
 //!
 //! Everything here is `repr(C)` and crosses DLL boundaries, so the layout is
 //! the contract: structs start with a [`Header`], enums are integers, strings
-//! are borrowed for the call, and no function unwinds. A loader loads only
-//! mods built for its own [`ABI_VERSION`]. Mods normally use the safe layer
-//! of this crate instead of these types.
-
-/// The version of this interface: a hash of the size, alignment and field
-/// offsets of every ABI type. A loader loads only mods built for its own.
-///
-/// Any change to the layout is another version, so a mod built against one
-/// release of this crate loads in the loader of every release with the same
-/// layout and in no other.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::abi::{ABI_VERSION, Header, Manifest};
-///
-/// assert_eq!(Header::of::<Manifest>().abi_version, ABI_VERSION);
-/// ```
-pub const ABI_VERSION: u32 = layout_version(include_bytes!("abi/layout.txt"));
-
-/// Why a loader or its tools refuse a mod built for another [`ABI_VERSION`],
-/// naming the release to rebuild it for.
-///
-/// # Examples
-///
-/// ```
-/// assert!(enshwick::abi::OTHER_ABI.ends_with(enshwick::VERSION));
-/// ```
-pub const OTHER_ABI: &str = concat!(
-    "built for another Enshwick: rebuild it for Enshwick ",
-    env!("CARGO_PKG_VERSION")
-);
-
-/// The ABI version of a golden layout file: 32-bit FNV-1a over its bytes
-/// without carriage returns, so a checkout with Windows line endings builds
-/// the same version.
-const fn layout_version(layout: &[u8]) -> u32 {
-    let mut hash: u32 = 0x811c_9dc5;
-    let mut i = 0;
-    while i < layout.len() {
-        if layout[i] != b'\r' {
-            hash = (hash ^ layout[i] as u32).wrapping_mul(0x0100_0193);
-        }
-        i += 1;
-    }
-    hash
-}
+//! are borrowed for the call, and no function unwinds. A loader loads the
+//! mods built for its own [`ABI_MAJOR`] and its [`ABI_MINOR`] or an older
+//! one ([`check_abi`]). Mods normally use the safe layer of this crate
+//! instead of these types.
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -130,18 +87,20 @@ pub const fn is_valid_old_form_id(id: &str) -> bool {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, Manifest};
+/// use enshwick::abi::{ABI_MAJOR, ABI_MINOR, Header, Manifest};
 ///
 /// let header = Header::of::<Manifest>();
-/// assert_eq!(header.abi_version, enshwick::abi::ABI_VERSION);
+/// assert_eq!((header.abi_major, header.abi_minor), (ABI_MAJOR, ABI_MINOR));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct Header {
     /// The size of the whole struct as its writer knew it.
     pub size: u32,
-    /// [`ABI_VERSION`] of the writer.
-    pub abi_version: u32,
+    /// [`ABI_MAJOR`] of the writer.
+    pub abi_major: u16,
+    /// [`ABI_MINOR`] of the writer.
+    pub abi_minor: u16,
 }
 
 impl Header {
@@ -164,7 +123,8 @@ impl Header {
         )]
         Self {
             size: size as u32,
-            abi_version: ABI_VERSION,
+            abi_major: ABI_MAJOR,
+            abi_minor: ABI_MINOR,
         }
     }
 
@@ -209,18 +169,32 @@ impl Header {
 /// }
 /// assert_eq!(size_of_headed::<TickData>(), Header::of::<TickData>().size as usize);
 /// ```
-pub unsafe trait Headed: bytemuck::Zeroable + Copy {}
+pub unsafe trait Headed: bytemuck::Zeroable + Copy {
+    /// Where the fields every writer of this [`ABI_MAJOR`] knows end: the
+    /// struct's size at minor 0 of the major. A reader of a struct the other
+    /// side wrote requires this much, and reads a later field only where
+    /// [`Header::covers`] it; the layout tests hold it to the golden file.
+    const BORN: usize;
+}
 
 /// Implements [`Headed`] for an ABI struct beside its definition and checks at
-/// compile time that its [`Header`] sits at offset 0.
+/// compile time that its [`Header`] sits at offset 0. `born` is the struct's
+/// size at minor 0 of this major, once a minor appended a field to it.
 macro_rules! impl_headed {
     ($ty:ty) => {
+        impl_headed!($ty, born = size_of::<$ty>());
+    };
+    ($ty:ty, born = $born:expr) => {
         // SAFETY: the struct is `repr(C)`, its first field is the `Header`
         // checked at offset 0 below, and its other fields are integers,
         // pointers and `Option`s of function pointers, valid for any bytes
         // the other side writes.
-        unsafe impl $crate::abi::Headed for $ty {}
+        unsafe impl $crate::abi::Headed for $ty {
+            const BORN: usize = $born;
+        }
         const _: () = assert!(core::mem::offset_of!($ty, header) == 0);
+        const _: () =
+            assert!($born >= size_of::<$crate::abi::Header>() && $born <= size_of::<$ty>());
     };
 }
 
@@ -358,6 +332,7 @@ mod stats;
 mod survivors;
 mod transactions;
 mod ui;
+mod version;
 mod world;
 
 pub use actions::*;
@@ -382,6 +357,7 @@ pub use stats::*;
 pub use survivors::*;
 pub use transactions::*;
 pub use ui::*;
+pub use version::*;
 pub use world::*;
 
 /// A UTF-8 string borrowed for the duration of a call, or for as long as its
@@ -677,8 +653,8 @@ pub struct ParseLevelError;
 /// assert_eq!(enshwick::abi::exports::INIT, "enshwick_mod_init");
 /// ```
 pub mod exports {
-    /// `extern "system" fn() -> u32`: the [`ABI_VERSION`](super::ABI_VERSION)
-    /// the mod was built for.
+    /// `extern "system" fn() -> u32`: the [`ABI_MAJOR`](super::ABI_MAJOR)
+    /// the mod was built for; its manifest's header holds the minor.
     pub const ABI: &str = "enshwick_mod_abi";
     /// `extern "system" fn() -> *const Manifest`: static, no side effects.
     pub const QUERY: &str = "enshwick_mod_query";
@@ -745,7 +721,9 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 123 * 8);
-    assert!(size_of::<HostApi>() == 24 + 176 * 8);
+    assert!(size_of::<HostApi>() == 24 + 178 * 8);
+    assert!(core::mem::offset_of!(HostApi, chat_mute_has) == 24 + 177 * 8);
+    assert!(core::mem::offset_of!(HostApi, chat_mute_set) == 24 + 176 * 8);
     assert!(core::mem::offset_of!(HostApi, use_content) == 24 + 175 * 8);
     assert!(core::mem::offset_of!(HostApi, map_marker_types) == 24 + 174 * 8);
     assert!(size_of::<MapMarkerTypeInfo>() == 8 + 16 + 4 + 1 + 4 + 3);

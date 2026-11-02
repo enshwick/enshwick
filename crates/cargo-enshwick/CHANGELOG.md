@@ -52,6 +52,9 @@ Each entry names the pull request that made the change.
   report that cannot be written leaves every file as it was (#694).
 - `cargo enshwick install` builds a Windows DLL on every host, through
   `cargo xwin` off Windows, and names the missing target or tool (#695).
+- `cargo enshwick manifest` resolves the mod's imports only from its own
+  folder and the system folder, never from the current directory or `PATH`,
+  and names the system's error when the mod does not load (#869).
 
 ## [1.0.0-alpha.11] - 2026-10-28
 

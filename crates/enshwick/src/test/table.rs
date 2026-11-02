@@ -18,6 +18,8 @@ use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
 mod build;
 mod content;
 pub(crate) mod gameplay;
+#[cfg(test)]
+mod headed_tests;
 mod hooks;
 mod inventory;
 mod mods;
@@ -66,13 +68,14 @@ use ui::{
     fog_open, fog_read, map_marker_types, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget,
 };
 use world::{
-    account_action, actions, allowlist_has, allowlist_set, build_rights, chat, component,
-    component_write, destroy, emit, entities, entity_template, event_types, feature,
-    forget_game_settings, game_event, game_settings, hosting, keep_game_settings, map_frame,
-    map_markers, notify, player, players, rename_filter, run_console, save_world, server_world,
-    set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather, spawn, status,
-    teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control, voxel_read,
-    weather_at, weather_fronts, world_key, world_persists, world_quiet,
+    account_action, actions, allowlist_has, allowlist_set, build_rights, chat, chat_mute_has,
+    chat_mute_set, component, component_write, destroy, emit, entities, entity_template,
+    event_types, feature, forget_game_settings, game_event, game_settings, hosting,
+    keep_game_settings, map_frame, map_markers, notify, player, players, rename_filter,
+    run_console, save_world, server_world, set_game_settings, set_label, set_time_of_day,
+    set_time_speed, set_weather, spawn, status, teleport, terrain_edit, terrain_materials,
+    time_of_day, time_speed_control, voxel_read, weather_at, weather_fronts, world_key,
+    world_persists, world_quiet,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -151,6 +154,8 @@ pub(crate) struct State {
     pub(crate) removed: Vec<u64>,
     /// The accounts on the fake server's allowlist, in the order listed.
     pub(crate) allowlisted: Vec<crate::PlayerKey>,
+    /// The accounts muted in the fake server's chat, in the order muted.
+    pub(crate) muted: Vec<crate::PlayerKey>,
     /// The components the mod asked to write, `(entity, type hash)`.
     pub(crate) writes: Vec<(u32, u32)>,
     /// The game events the mod raised: type hash and bytes.
@@ -543,6 +548,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         banned: Vec::new(),
         removed: Vec::new(),
         allowlisted: Vec::new(),
+        muted: Vec::new(),
         writes: Vec::new(),
         emits: Vec::new(),
         teleports: Vec::new(),
@@ -670,6 +676,89 @@ pub(crate) fn put_list<T: Copy>(
     // it pointing at a writable, aligned `u32` for the call.
     unsafe { count.write(u32::try_from(items.len()).unwrap_or(u32::MAX)) };
     Status::OK
+}
+
+/// A mod's struct that starts with a header, read as the loader reads it: it
+/// needs only [`Headed::BORN`](crate::abi::Headed::BORN), and the fields past
+/// what the mod wrote read zero, so a mod of an older minor works here as in
+/// the game.
+pub(crate) fn get_headed<T: crate::abi::Headed>(raw: *const T) -> Option<T> {
+    // SAFETY: the safe layer passes null or its version of `T`, readable for
+    // the size its header states, with no other writer during the call.
+    unsafe { crate::abi::read_headed(raw, T::BORN) }
+}
+
+/// Writes `value` to a mod's struct that starts with a header, as the loader
+/// does: only as far as the mod's header says, with that size written back.
+pub(crate) fn put_headed<T: crate::abi::Headed>(out: *mut T, value: T) -> Status {
+    // SAFETY: the safe layer passes null or its version of `T`, its header
+    // stating the size it may be written for, untouched by others during the
+    // call.
+    if unsafe { crate::abi::write_headed(out, value) } {
+        Status::OK
+    } else {
+        Status::BAD_ARGS
+    }
+}
+
+/// [`found`] for a struct that starts with a header, written as
+/// [`put_headed`] writes it.
+pub(crate) fn found_headed<T: crate::abi::Headed>(value: Option<T>, out: *mut T) -> Status {
+    value.map_or(Status::MISSING, |value| put_headed(out, value))
+}
+
+/// A mod's list of `count` headed entries, read as the loader reads it: the
+/// entries are as far apart as the first one's header says, every one states
+/// that size, and each is read as [`get_headed`] reads one. `None` for a
+/// null list with entries, or entries of different sizes.
+pub(crate) fn get_headed_list<T: crate::abi::Headed>(raw: *const T, count: u32) -> Option<Vec<T>> {
+    if count == 0 {
+        return Some(Vec::new());
+    }
+    if raw.is_null() {
+        return None;
+    }
+    // SAFETY: a non-null list from the safe layer starts with an entry's
+    // header, readable for its eight bytes.
+    // The mod's headed list, not game memory.
+    // ast-grep-ignore: game-memory-through-raw
+    let stride = unsafe { raw.cast::<Header>().read_unaligned() }.size as usize;
+    if stride < size_of::<Header>() {
+        return None;
+    }
+    (0..count as usize)
+        .map(|index| {
+            let entry = raw.cast::<u8>().wrapping_add(index * stride).cast::<T>();
+            // SAFETY: the safe layer passes `count` entries of `stride` bytes,
+            // so `entry` starts one of them, its header readable.
+            // The mod's headed list, not game memory.
+            // ast-grep-ignore: game-memory-through-raw
+            let size = unsafe { entry.cast::<Header>().read_unaligned() }.size as usize;
+            (size == stride).then(|| get_headed(entry))?
+        })
+        .collect()
+}
+
+/// Writes up to `capacity` of `items` to a mod's list of headed entries, as
+/// the loader does: entries are as far apart as the first one's header says,
+/// and each gets only what both sides know.
+pub(crate) fn put_headed_list<T: crate::abi::Headed>(
+    items: &[T],
+    out: *mut T,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    if out.is_null() || capacity == 0 {
+        return mods::list(items, core::ptr::null_mut(), 0, 0, count);
+    }
+    let stride = {
+        // SAFETY: a non-null list with room for an entry, checked above,
+        // starts with that entry's header, readable for its eight bytes.
+        // The mod's headed list, not game memory.
+        // ast-grep-ignore: game-memory-through-raw
+        unsafe { out.cast::<Header>().read_unaligned() }.size
+    };
+    mods::list(items, out, stride, capacity, count)
 }
 
 /// The table every installed fake answers through.
@@ -852,4 +941,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     request_base_limits,
     map_marker_types,
     use_content,
+    chat_mute_set,
+    chat_mute_has,
 };

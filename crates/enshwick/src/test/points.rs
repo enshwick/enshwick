@@ -94,8 +94,7 @@ pub(crate) struct FakePoints {
 
 /// The declaration a spec carries; `None` for a bad one.
 fn declared(spec: *const PointSpec) -> Option<Declared> {
-    // SAFETY: the safe layer passes a valid spec.
-    let spec = unsafe { spec.as_ref() }?;
+    let spec = super::table::get_headed(spec)?;
     // SAFETY: the safe layer passes the spec's name borrowed and unchanged
     // for the call.
     let name = unsafe { spec.name.as_str() }?.to_owned();
@@ -164,7 +163,7 @@ pub(crate) extern "system" fn define_point(
         Ok((id, live))
     });
     match defined {
-        Ok((id, live)) => put(
+        Ok((id, live)) => super::table::put_headed(
             out,
             PointHandle {
                 header: crate::abi::Header::of::<PointHandle>(),
@@ -185,8 +184,7 @@ pub(crate) extern "system" fn attach_point(
     if with(false, |s| s.registration == Registration::Closed) {
         return Status::TOO_LATE;
     }
-    // SAFETY: the safe layer passes a valid link.
-    let Some(link) = (unsafe { link.as_ref() }) else {
+    let Some(link) = super::table::get_headed(link) else {
         return Status::BAD_ARGS;
     };
     let Some(declared) = declared(link.point) else {

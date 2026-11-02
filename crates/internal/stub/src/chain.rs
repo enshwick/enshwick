@@ -11,8 +11,10 @@ use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
-use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError};
-use windows_sys::Win32::System::LibraryLoader::{LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW};
+use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HMODULE};
+use windows_sys::Win32::System::LibraryLoader::{
+    LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LoadLibraryExW,
+};
 use windows_sys::Win32::System::Threading::{CreateMutexW, GetCurrentProcessId};
 
 /// The folder, under the game's, that holds the DLLs to chainload.
@@ -67,19 +69,26 @@ pub(crate) fn files(folder: &Path) -> Vec<PathBuf> {
 /// is skipped.
 pub(crate) fn load(game_dir: &Path) {
     for path in files(&game_dir.join(FOLDER)) {
-        let path = wide(path.as_os_str());
-        // SAFETY: an absolute, NUL-terminated path, as the altered search
-        // path needs to resolve the DLL's own dependencies beside it. This
-        // thread holds no loader lock, since the stub's `DllMain` returned
-        // before it started, so the DLL's `DllMain` takes the lock without
-        // deadlocking.
-        let _module = unsafe {
-            LoadLibraryExW(
-                path.as_ptr(),
-                core::ptr::null_mut(),
-                LOAD_WITH_ALTERED_SEARCH_PATH,
-            )
-        };
+        let _module = load_library(&path);
+    }
+}
+
+/// Loads the DLL at `path`, an absolute path with `\` separators, with its
+/// imports resolved only from its own folder, the game's folder and the
+/// system folder, never from the current directory or `PATH`; null when it
+/// does not load, with the error in `GetLastError`.
+pub(crate) fn load_library(path: &Path) -> HMODULE {
+    let path = wide(path.as_os_str());
+    // SAFETY: `path` is NUL-terminated and lives across the call. This
+    // thread holds no loader lock, since the stub's `DllMain` returned
+    // before it started, so the DLL's `DllMain` takes the lock without
+    // deadlocking.
+    unsafe {
+        LoadLibraryExW(
+            path.as_ptr(),
+            core::ptr::null_mut(),
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+        )
     }
 }
 

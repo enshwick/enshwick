@@ -37,14 +37,14 @@ fn fall_back(c: &mut Criterion) {
         group.bench_function(format!("{name}_search"), |b| {
             b.iter(|| table.fall_back(black_box(code), code_rva, |_| None));
         });
-        let key = table.carry_key(code, code_rva);
+        let key = table.carry_key(code, code_rva, 0..0);
         let Some(saved) = table.fall_back(code, code_rva, |_| None).to_saved(key) else {
             continue;
         };
         group.bench_function(format!("{name}_saved"), |b| {
             b.iter(|| {
-                let key = table.carry_key(black_box(code), code_rva);
-                table.restore(black_box(&saved), key)
+                let key = table.carry_key(black_box(code), code_rva, 0..0);
+                table.restore(black_box(&saved), key, code, code_rva, |_| None)
             });
         });
     }

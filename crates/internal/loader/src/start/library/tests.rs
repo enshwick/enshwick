@@ -39,6 +39,10 @@ crate-type = ["cdylib"]
 name = "no_manifest"
 crate-type = ["cdylib"]
 
+[[example]]
+name = "imports"
+crate-type = ["cdylib"]
+
 [workspace]
 "#;
 
@@ -68,9 +72,13 @@ enshwick::test::declare_mod!(
 const HALF: &str = r#"
 #[unsafe(no_mangle)]
 pub extern "system" fn enshwick_mod_abi() -> u32 {
-    enshwick::abi::ABI_VERSION
+    u32::from(enshwick::abi::ABI_MAJOR)
 }
 "#;
+
+/// What `enshwick_mod_abi` returned before ABI majors: a hash of the
+/// layout, here the last one.
+const HASHED_ABI: u32 = 0x0dc8_5f01;
 
 /// All four exports; `{abi}` is the version it says and `{query}` its
 /// manifest.
@@ -95,6 +103,39 @@ pub unsafe extern "system" fn enshwick_mod_init(_: *const HostApi, _: ModHandle)
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn enshwick_mod_ready(_: *const HostApi, _: ModHandle) {}
 "#;
+
+/// The DLL the `imports` fixture links against, by name only; the tests
+/// place it where the search must not look.
+const DEPENDENCY: &str = "enshwick-fixture-dependency";
+
+/// A mod that imports a function of [`DEPENDENCY`], a copy of the system's
+/// `version.dll`, which it does not ship beside itself.
+const IMPORTS: &str = r##"
+#[link(name = "{dependency}", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GetFileVersionInfoSizeW(file: *const u16, handle: *mut u32) -> u32;
+}
+
+#[derive(Debug)]
+pub struct Imports;
+
+impl enshwick::Mod for Imports {
+    fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+        // SAFETY: a null file name is refused with an error, never read.
+        let _size = unsafe { GetFileVersionInfoSizeW(core::ptr::null(), core::ptr::null_mut()) };
+        Ok(Self)
+    }
+}
+
+enshwick::test::declare_mod!(
+    Imports,
+    r#"
+    id = "fixture.imports"
+    side = "both"
+    name = "Imports"
+    "#
+);
+"##;
 
 /// The mod list: `lockers.dll` is off by its id under an older file name,
 /// `turned-off.dll` by its file.
@@ -156,14 +197,15 @@ fn build_fixtures(dir: &Path) -> Option<PathBuf> {
         ("half", HALF.to_owned()),
         (
             "old_abi",
-            RAW.replace("{abi}", "enshwick::abi::ABI_VERSION.wrapping_add(1)")
+            RAW.replace("{abi}", &HASHED_ABI.to_string())
                 .replace("{query}", "core::ptr::null()"),
         ),
         (
             "no_manifest",
-            RAW.replace("{abi}", "enshwick::abi::ABI_VERSION")
+            RAW.replace("{abi}", "u32::from(enshwick::abi::ABI_MAJOR)")
                 .replace("{query}", "core::ptr::null()"),
         ),
+        ("imports", IMPORTS.replace("{dependency}", DEPENDENCY)),
     ];
     for (name, source) in sources {
         std::fs::write(examples.join(format!("{name}.rs")), source).unwrap();
@@ -309,7 +351,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         Level::WARN,
         &format!(
             "old-abi.dll skipped: {} ({})",
-            enshwick::abi::OTHER_ABI,
+            enshwick::abi::check_major(HASHED_ABI).unwrap_err(),
             errors::OTHER_ABI
         ),
     );
@@ -352,4 +394,68 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         super::unload(library);
     }
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The variable that hands [`imports_load_in_this_process`] the mod to load.
+const IMPORTS_MOD: &str = "ENSHWICK_TEST_IMPORTS_MOD";
+
+/// What [`imports_load_in_this_process`] prints after its load.
+const LOADED: &str = "imports loaded: ";
+
+#[test]
+fn a_mods_import_never_resolves_from_the_current_directory() {
+    let dir = std::env::temp_dir().join(format!("enshwick-search-{}", std::process::id()));
+    let _old = std::fs::remove_dir_all(&dir);
+    let Some(built) = build_fixtures(&dir.join("fixtures")) else {
+        eprintln!("skipped: this process cannot run cargo, as under Wine");
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir).unwrap();
+        }
+        return;
+    };
+    let mods = dir.join("mods");
+    let current = dir.join("current");
+    std::fs::create_dir_all(&mods).unwrap();
+    std::fs::create_dir_all(&current).unwrap();
+    let imports = mods.join("imports.dll");
+    std::fs::copy(built.join("imports.dll"), &imports).unwrap();
+    let dependency = format!("{DEPENDENCY}.dll");
+    let system = crate::module::system_dir().unwrap();
+    std::fs::copy(system.join("version.dll"), current.join(&dependency)).unwrap();
+
+    // The current directory is the process's, so the load runs in a child.
+    let child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "start::library::tests::imports_load_in_this_process",
+            "--ignored",
+            "--nocapture",
+        ])
+        .current_dir(&current)
+        .env(IMPORTS_MOD, &imports)
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&child.stdout);
+    assert!(child.status.success(), "{out}");
+    assert!(
+        out.contains(&format!("{LOADED}false")),
+        "the import came from the current directory: {out}"
+    );
+
+    std::fs::rename(current.join(&dependency), mods.join(&dependency)).unwrap();
+    let library = super::load_from(&imports, None).expect("an import beside the mod resolves");
+    super::unload(&library);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Loads the mod [`IMPORTS_MOD`] names and prints whether it loaded, for
+/// [`a_mods_import_never_resolves_from_the_current_directory`].
+#[test]
+#[ignore = "runs only as that test's child, in its current directory"]
+fn imports_load_in_this_process() {
+    let Some(path) = std::env::var_os(IMPORTS_MOD) else {
+        return;
+    };
+    let library = super::load_from(Path::new(&path), None);
+    println!("{LOADED}{}", library.is_some());
 }

@@ -281,6 +281,217 @@ impl FakeHost {
         )
     }
 
+    /// The hit, death and equipment change game events, with the hit
+    /// history and experience credit a death reads its killer from, and
+    /// damage bits, an attack category and an equipment slot numbered unlike
+    /// the API's own.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().game_events();
+    /// let target = host.offset(facts::HIT_EVENT_TARGET_ID.id())?;
+    /// assert!(target + 4 <= host.size(facts::HIT_EVENT.id())?);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn game_events(self) -> Self {
+        const HIT: u64 = 64;
+        self.preset(
+            &[
+                ids::HIT_EVENT,
+                ids::ENTITY_DIED_EVENT,
+                ids::HIT_HISTORY,
+                ids::EXPERIENCE_CREDIT,
+                ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT,
+            ],
+            &[
+                (ids::HIT_EVENT, 64),
+                (ids::ENTITY_DIED_EVENT, 16),
+                (ids::HIT_HISTORY, 152),
+                (ids::EXPERIENCE_CREDIT, 8),
+                (ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT, 16),
+            ],
+            &[
+                (ids::HIT_EVENT_ROOT_SOURCE_ID, 8),
+                (ids::HIT_EVENT_TARGET_ID, 12),
+                (ids::HIT_EVENT_SOURCE_ID, 16),
+                (ids::HIT_EVENT_ROOT_TARGET_ID, 20),
+                (ids::HIT_EVENT_WEAPON_PIDE_ID, 24),
+                (ids::HIT_HEALTH_CHANGE, 28),
+                (ids::HIT_STAMINA_CHANGE, 32),
+                (ids::HIT_DAMAGE_TYPES, 36),
+                (ids::HIT_EVENT_ATTACK_CATEGORY, 38),
+                (ids::HIT_TARGET_FACTION, 39),
+                (ids::ENTITY_DIED_EVENT_DEAD_ENTITY_ID, 8),
+                (ids::HIT_HISTORY_LAST_INDEX, 0),
+                (ids::HIT_HISTORY_ENTRIES, 8),
+                (ids::HIT_HISTORY_END, 8 + 2 * HIT),
+                (ids::EXPERIENCE_CREDIT_LAST_PLAYER, 4),
+                (ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT_EQUIPMENT_SLOT, 12),
+                (ids::DAMAGE_TYPE_MAGICAL_FIRE, 0),
+                (ids::DAMAGE_TYPE_PHYSICAL_CUT, 5),
+                (ids::ATTACK_CATEGORY_MELEE, 2),
+                (ids::EQUIPMENT_SLOT_SHIELD, 40),
+            ],
+        )
+    }
+
+    /// Each player's map waypoint: what `Map::waypoint` reads beside the
+    /// markers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().map_waypoints();
+    /// let position = host.offset(facts::PLAYER_WAYPOINT_POSITION.id())?;
+    /// assert!(position + 24 <= host.size(facts::PLAYER_WAYPOINT.id())?);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn map_waypoints(self) -> Self {
+        self.preset(
+            &[ids::PLAYER_WAYPOINT],
+            &[(ids::PLAYER_WAYPOINT, 32)],
+            &[
+                (ids::PLAYER_WAYPOINT_ENABLED, 0),
+                (ids::PLAYER_WAYPOINT_POSITION, 8),
+            ],
+        )
+    }
+
+    /// The events [`Effects`](crate::effects::Effects) raises for an NPC
+    /// command, a threat and a ping; the toggle event stays off.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().effect_events();
+    /// let position = host.offset(facts::UI_PING_EVENT_POSITION.id())?;
+    /// assert!(position + 24 <= host.size(facts::UI_PING_EVENT.id())?);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn effect_events(self) -> Self {
+        self.preset(
+            &[
+                ids::NPC_COMMAND_EVENT,
+                ids::ADD_THREAT_TARGET_EVENT,
+                ids::UI_PING_EVENT,
+            ],
+            &[
+                (ids::NPC_COMMAND_EVENT, 72),
+                (ids::ADD_THREAT_TARGET_EVENT, 24),
+                (ids::UI_PING_EVENT, 40),
+            ],
+            &[
+                (ids::NPC_COMMAND_EVENT_TYPE, 8),
+                (ids::NPC_COMMAND_EVENT_NPC_ID, 12),
+                (ids::NPC_COMMAND_EVENT_TARGET_TRANSFORM, 16),
+                (ids::ADD_THREAT_TARGET_EVENT_ATTACKER_ID, 8),
+                (ids::ADD_THREAT_TARGET_EVENT_TARGET_ID, 12),
+                (ids::ADD_THREAT_TARGET_EVENT_THREAT_VALUE, 16),
+                (ids::UI_PING_EVENT_SENDER_ENTITY_ID, 8),
+                (ids::UI_PING_POSITION, 16),
+            ],
+        )
+    }
+
+    /// The components loot from destroyed things checks: destroyed on loot,
+    /// boss and the interaction lock with its item. The loot slot stays the
+    /// test's own, as the single roll links only where a build names it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().loot();
+    /// assert!(host.size(facts::LOOT_SLOT.id()).is_err());
+    /// ```
+    #[must_use]
+    pub fn loot(self) -> Self {
+        self.preset(
+            &[ids::DESTROY_ON_LOOT, ids::BOSS, ids::INTERACTION_LOCK],
+            &[],
+            &[(ids::INTERACTION_LOCK_ITEM, 0)],
+        )
+    }
+
+    /// Item meters: what [`MeterLayout`](crate::content::items::MeterLayout)
+    /// resolves, the meter's own component and the templates it is cloned
+    /// into.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::items::MeterLayout;
+    ///
+    /// let host = enshwick::test::FakeHost::new().meters();
+    /// let layout = MeterLayout::resolve(&host)?;
+    /// assert!(layout.fuel_setup[2] + 4 <= layout.fuel_setup[0]);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn meters(self) -> Self {
+        self.preset(
+            &[ids::FUEL_SETUP, ids::TEMPLATE, ids::TEMPLATE_COLLECTION],
+            &[(ids::FUEL_SETUP, 8)],
+            &[
+                (ids::FUEL_SETUP_MAX, 0),
+                (ids::FUEL_SETUP_START, 4),
+                (ids::TEMPLATE_COMPONENTS, 0x10),
+                (ids::TEMPLATE_COLLECTION_TEMPLATES, 0),
+            ],
+        )
+    }
+
+    /// The markers `ContainerKinds` tells holders apart by: characters, NPCs, animals, drops, loot chests and
+    /// plants. Placed things carry [`FakeHost::world`]'s used item, and every
+    /// holder [`FakeHost::inventory`]'s setup.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().inventory().container_kinds();
+    /// let setup = host.hash(facts::INVENTORY_SETUP.id())?;
+    /// let loot = host.hash(facts::LOOT_FILL.id())?;
+    /// let loader = host
+    ///     .placed(setup, enshwick::Entity(9), [0.0; 3])
+    ///     .component(enshwick::Entity(9), loot, &[])
+    ///     .install();
+    /// # let _ = loader;
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn container_kinds(self) -> Self {
+        self.preset(
+            &[
+                ids::PLAYER_INPUT,
+                ids::NPC,
+                ids::ANIMAL,
+                ids::DESTROY_ON_LOOT,
+                ids::LOOT_FILL,
+                ids::RESOURCE_NODE,
+            ],
+            &[],
+            &[],
+        )
+    }
+
     /// Plays a build that lacks `fact`, whichever preset set it, so a test
     /// of what turns off without it starts from the preset.
     ///

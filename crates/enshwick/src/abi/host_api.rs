@@ -24,11 +24,10 @@ use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, Reci
 
 /// The table of services the loader offers a mod.
 ///
-/// Until 1.0 any change to its layout is a new
-/// [`ABI_VERSION`](crate::abi::ABI_VERSION), and a loader loads only mods
-/// built for its own. From 1.0 fields are only appended, and a mod checks
-/// [`Header::covers`] before it calls a field added after the release it was
-/// built against.
+/// A function appended at its end is a new
+/// [`ABI_MINOR`](crate::abi::ABI_MINOR), any other change a new
+/// [`ABI_MAJOR`](crate::abi::ABI_MAJOR). A mod starts only on a table of its
+/// major and its minor or a newer one, which [`Header::covers`] whole.
 ///
 /// # Examples
 ///
@@ -1524,4 +1523,27 @@ pub struct HostApi {
     /// other, with the id and the owner's exports logged;
     /// [`Status::BAD_ARGS`] for a malformed id. Any thread.
     pub use_content: extern "system" fn(me: ModHandle, id: Str) -> Status,
+    /// Mutes `account` in chat when `muted` is 1, or lifts its mute when 0.
+    /// The server drops every line the account's player types before any
+    /// other player reads it, and tells that player with one of the game's
+    /// notices at most every 30 seconds; lines mods send and mod messages
+    /// pass. The mutes are the file `mod-data/enshwick/muted.txt`, written
+    /// at once and read again at every start. `Status::OK` also when the
+    /// list already says so; [`Status::BAD_ARGS`] for account 0 or `muted`
+    /// above 1; [`Status::REFUSED`] for a mute of an administrator online
+    /// or of a hosted game's host, whose lines pass even when muted before,
+    /// and when the file is not written;
+    /// [`Status::MISSING`] outside a server, the dedicated one or the one a
+    /// client hosts. Any thread, also while another call changes the list:
+    /// changes take turns and the file is replaced whole. A panic in the
+    /// loader returns [`Status::REFUSED`].
+    pub chat_mute_set: extern "system" fn(me: ModHandle, account: PlayerKey, muted: u8) -> Status,
+    /// Writes 1 to `muted` when `account` is muted in chat, 0 when not.
+    /// `muted` is the caller's, writable for one byte for the call, and
+    /// written only on [`Status::OK`]. [`Status::BAD_ARGS`] for account 0
+    /// or a null `muted`; [`Status::MISSING`] outside a server, the
+    /// dedicated one or the one a client hosts. Any thread. A panic in the
+    /// loader returns [`Status::REFUSED`].
+    pub chat_mute_has:
+        extern "system" fn(me: ModHandle, account: PlayerKey, muted: *mut u8) -> Status,
 }

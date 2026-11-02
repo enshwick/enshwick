@@ -345,6 +345,7 @@ fn a_build_names_the_loader_features_it_lacks_once() {
         Side::SERVER,
         unknown,
         Some((&code, 0x1000)),
+        0..0,
         |_| None,
         None,
     )
@@ -370,12 +371,32 @@ fn a_known_build_resolves_its_symbols() {
         .find(|t| t.name() == server.name)
         .unwrap()
         .fingerprint();
-    let found = select(&tables, Side::SERVER, fingerprint, None, |_| None, None).unwrap();
+    let found = select(
+        &tables,
+        Side::SERVER,
+        fingerprint,
+        None,
+        0..0,
+        |_| None,
+        None,
+    )
+    .unwrap();
     assert_eq!(found.kind, Kind::Exact);
     assert_eq!(found.symbol("npc.lookup"), Some(0x20_3d30));
     assert_eq!(found.symbol("npc.nope"), None);
     assert!(!found.checks().is_empty());
-    assert!(select(&tables, Side::CLIENT, fingerprint, None, |_| None, None).is_none());
+    assert!(
+        select(
+            &tables,
+            Side::CLIENT,
+            fingerprint,
+            None,
+            0..0,
+            |_| None,
+            None
+        )
+        .is_none()
+    );
 }
 
 #[test]
@@ -388,6 +409,7 @@ fn an_unknown_build_falls_back_only_when_allowed_and_given_code() {
         Side::SERVER,
         unknown,
         Some((&code, 0x1000)),
+        0..0,
         |_| None,
         None,
     )
@@ -396,13 +418,14 @@ fn an_unknown_build_falls_back_only_when_allowed_and_given_code() {
     assert_eq!(found.symbol("npc.lookup"), None);
     assert!(found.checks().is_empty());
     assert!(!found.missing().is_empty());
-    assert!(select(&tables, Side::SERVER, unknown, None, |_| None, None).is_none());
+    assert!(select(&tables, Side::SERVER, unknown, None, 0..0, |_| None, None).is_none());
     assert!(
         select(
             &tables,
             Side::BOTH,
             unknown,
             Some((&code, 0x1000)),
+            0..0,
             |_| None,
             None
         )
@@ -443,40 +466,81 @@ fn a_carried_table_is_saved_and_read_back_while_the_code_stays() {
         Side::SERVER,
         unknown,
         Some((&code, 0x1000)),
+        0..0,
         |_| None,
         Some(&dir),
     )
     .unwrap();
+    let backup = enshwick::files::backup_path(&saved);
     let text = std::fs::read_to_string(&saved).unwrap();
-    assert!(text.contains("missing npc.lookup\n"), "{text}");
     let again = select(
         &tables,
         Side::SERVER,
         unknown,
         Some((&code, 0x1000)),
+        0..0,
         |_| None,
         Some(&dir),
     )
     .unwrap();
     assert_eq!(again.table, first.table);
-    std::fs::write(
-        &saved,
-        text.replace("missing npc.lookup\n", "symbol npc.lookup 1234\n"),
-    )
-    .unwrap();
+    assert!(
+        !backup.exists(),
+        "read from the save, not searched and saved again"
+    );
+    std::fs::write(&saved, format!("{text}none\n")).unwrap();
     let edited = select(
         &tables,
         Side::SERVER,
         unknown,
         Some((&code, 0x1000)),
+        0..0,
         |_| None,
         Some(&dir),
     )
     .unwrap();
-    assert_eq!(
-        edited.symbol("npc.lookup"),
-        Some(0x1234),
-        "read from the save, not searched"
+    assert_eq!(edited.table, first.table, "searched again");
+    assert_eq!(std::fs::read_to_string(&saved).unwrap(), text);
+    assert!(backup.exists(), "the edited save was replaced");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// The stub's hold on the entry point jumps to wherever the stub loaded, so
+/// those bytes differ from start to start and must not turn the save away.
+#[test]
+fn a_carried_table_is_read_back_when_only_the_entry_hold_differs() {
+    let tables = load();
+    let unknown = Fingerprint::new([0xee; 16], 1);
+    let dir = scratch("hold");
+    let saved = carried_file(&dir, Side::SERVER).unwrap();
+    let hold = 1000..1014;
+    let mut code = patterned_code();
+    code[hold.clone()].fill(0x11);
+    let first = select(
+        &tables,
+        Side::SERVER,
+        unknown,
+        Some((&code, 0x1000)),
+        hold.clone(),
+        |_| None,
+        Some(&dir),
+    )
+    .unwrap();
+    code[hold.clone()].fill(0x22);
+    let again = select(
+        &tables,
+        Side::SERVER,
+        unknown,
+        Some((&code, 0x1000)),
+        hold,
+        |_| None,
+        Some(&dir),
+    )
+    .unwrap();
+    assert_eq!(again.table, first.table);
+    assert!(
+        !enshwick::files::backup_path(&saved).exists(),
+        "read from the save, not searched and saved again"
     );
     std::fs::remove_dir_all(dir).unwrap();
 }
@@ -496,12 +560,13 @@ fn a_save_for_other_code_or_a_damaged_one_is_replaced() {
         Side::SERVER,
         unknown,
         Some((&code, 0x1000)),
+        0..0,
         |_| None,
         Some(&dir),
     )
     .unwrap();
     assert_eq!(found.table, base.fall_back(&code, 0x1000, |_| None));
-    let key = base.carry_key(&code, 0x1000);
+    let key = base.carry_key(&code, 0x1000, 0..0);
     assert!(
         std::fs::read_to_string(&saved)
             .unwrap()
@@ -513,12 +578,13 @@ fn a_save_for_other_code_or_a_damaged_one_is_replaced() {
         Side::SERVER,
         unknown,
         Some((&other, 0x1000)),
+        0..0,
         |_| None,
         Some(&dir),
     )
     .unwrap();
     assert_eq!(found.table, base.fall_back(&other, 0x1000, |_| None));
-    let key = base.carry_key(&other, 0x1000);
+    let key = base.carry_key(&other, 0x1000, 0..0);
     assert!(
         std::fs::read_to_string(&saved)
             .unwrap()
@@ -544,6 +610,7 @@ fn a_build_with_its_own_table_saves_nothing() {
         Side::SERVER,
         fingerprint,
         Some((&code, 0x1000)),
+        0..0,
         |_| None,
         Some(&dir),
     )

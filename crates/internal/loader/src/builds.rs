@@ -9,6 +9,7 @@
 //! its code pattern, and what it cannot find stays missing: the features and
 //! mods that need it turn off, the rest runs.
 
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -179,13 +180,15 @@ pub fn load() -> Vec<Table> {
 /// section and its RVA), with `cell` reading the `u32` the game's image
 /// holds at an RVA for the constants the game keeps in data cells. A carried table is read from its file under
 /// `data_dir` while the code and the table stay the same, and saved there
-/// otherwise.
+/// otherwise; the bytes of the code in `hold`, which the stub holds the
+/// entry point with, do not count.
 #[must_use]
 pub fn select(
     tables: &[Table],
     running: Side,
     fingerprint: Fingerprint,
     code: Option<(&[u8], u64)>,
+    hold: Range<usize>,
     cell: impl Fn(u64) -> Option<u32> + Sync,
     data_dir: Option<&Path>,
 ) -> Option<KnownBuild> {
@@ -204,7 +207,7 @@ pub fn select(
     let (code, code_rva) = code?;
     let base = tables::newest(tables, side)?;
     let table = match data_dir.and_then(|dir| carried_file(dir, running)) {
-        Some(path) => carry(base, code, code_rva, cell, &path),
+        Some(path) => carry(base, code, code_rva, hold, cell, &path),
         None => base.fall_back(code, code_rva, cell),
     };
     Some(KnownBuild {
@@ -232,19 +235,25 @@ fn carry(
     base: &Table,
     code: &[u8],
     code_rva: u64,
+    hold: Range<usize>,
     cell: impl Fn(u64) -> Option<u32> + Sync,
     path: &Path,
 ) -> Resolved {
-    let key = base.carry_key(code, code_rva);
-    if let Some(table) = std::fs::read_to_string(path)
-        .ok()
-        .and_then(|text| base.restore(&text, key))
-    {
-        return table;
+    let key = base.carry_key(code, code_rva, hold);
+    let saved = std::fs::read_to_string(path).ok();
+    if let Some(text) = &saved {
+        if let Some(table) = base.restore(text, key, code, code_rva, &cell) {
+            return table;
+        }
+        crate::log!(
+            INFO,
+            "the carried build table saved in {} is not for this code or does not match it, so it is searched again",
+            path.display()
+        );
     }
     let table = base.fall_back(code, code_rva, cell);
     if let Some(text) = table.to_saved(key)
-        && let Err(e) = save(path, &text)
+        && let Err(e) = enshwick::files::write_atomically(path, &text)
     {
         crate::log!(
             WARN,
@@ -253,15 +262,6 @@ fn carry(
         );
     }
     table
-}
-
-fn save(path: &Path, text: &str) -> std::io::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let staged = path.with_extension("tmp");
-    std::fs::write(&staged, text)?;
-    std::fs::rename(&staged, path)
 }
 
 /// The newest table of `running`'s side carried over by patterns in `code`

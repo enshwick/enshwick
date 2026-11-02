@@ -22,6 +22,13 @@ Each entry names the pull request that made the change.
   read (#710).
 - `Table::fall_back` carries a body symbol only where its function still
   holds its body (#710).
+- Breaking: `Table::restore` takes the code, its RVA and the cell reader
+  `Table::fall_back` takes, and checks every entry against the code as the
+  search does: the save keeps where each pattern matched, not the values,
+  and a pattern that does not match there turns the save away. A save of
+  the earlier format is not read and is searched again (#882).
+- Breaking: `Table::carry_key` takes a range of the code it leaves out of
+  the key, for bytes that change from start to start (#864).
 
 ## [1.0.0-alpha.11] - 2026-10-28
 

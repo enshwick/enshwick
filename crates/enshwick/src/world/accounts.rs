@@ -1,4 +1,5 @@
-//! The game's account actions: kick, ban and unban by account.
+//! The game's account actions, kick, ban and unban by account, and the
+//! loader's allowlist and chat mutes.
 
 use crate::PlayerKey;
 use crate::abi::AccountActionType;
@@ -122,5 +123,63 @@ impl World {
             &raw mut listed,
         ))?;
         Ok(listed == 1)
+    }
+
+    /// Mutes the account `key` in chat, or lifts its mute when `muted` is
+    /// false. The server then drops every line that player types before
+    /// anyone else reads it, and tells the player now and then with one of
+    /// the game's notices; a mute lasts across restarts until it is lifted.
+    /// The mod decides who may ask. Any thread.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for account 0, for a mute of an administrator
+    /// online or of a hosted game's host, and when the list's file is not
+    /// written; [`WorldError::Missing`] outside a server, the dedicated one
+    /// or the one a client hosts.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::world::World;
+    ///
+    /// fn quiet(world: &World, key: enshwick::PlayerKey) {
+    ///     if let Err(why) = world.set_muted(key, true) {
+    ///         enshwick::warn!("{key:016x} not muted: {why}");
+    ///     }
+    /// }
+    /// ```
+    pub fn set_muted(self, key: PlayerKey, muted: bool) -> Result<(), WorldError> {
+        WorldError::from_status((self.0.host.api().chat_mute_set)(
+            self.0.host.handle(),
+            key,
+            u8::from(muted),
+        ))
+    }
+
+    /// Whether the account `key` is muted in chat. Any thread.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for account 0; [`WorldError::Missing`]
+    /// outside a server, the dedicated one or the one a client hosts.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::world::World;
+    ///
+    /// fn may_talk(world: &World, key: enshwick::PlayerKey) -> bool {
+    ///     !world.muted(key).unwrap_or(false)
+    /// }
+    /// ```
+    pub fn muted(self, key: PlayerKey) -> Result<bool, WorldError> {
+        let mut muted = 0u8;
+        WorldError::from_status((self.0.host.api().chat_mute_has)(
+            self.0.host.handle(),
+            key,
+            &raw mut muted,
+        ))?;
+        Ok(muted == 1)
     }
 }

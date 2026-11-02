@@ -59,6 +59,7 @@
 "change.runtime" = "{id} {key} = {value} : enregistré pour ce monde, appliqué maintenant."
 "stand-in.name" = "Objet d'un mod retiré"
 "stand-in.description" = "Conservé pour un mod qui n'est plus installé. Réinstallez le mod pour récupérer l'objet."
+"muted.notice" = "Vous êtes muet dans le chat. Les autres joueurs ne voient pas ce que vous écrivez."
 "refused" = "Non modifié : {why}."
 "refused.by-mod" = "refusé par le mod"
 "refused.value" = "{key} accepte {accepts}"

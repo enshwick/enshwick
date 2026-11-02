@@ -3,11 +3,9 @@
 use std::os::windows::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
-use enshwick::abi::{ABI_VERSION, HostApi, Manifest, ModHandle, Status, exports};
+use enshwick::abi::{HostApi, Manifest, ModHandle, Status, check_major, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
-use windows_sys::Win32::System::LibraryLoader::{
-    GetModuleHandleW, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
-};
+use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 
 use crate::discovery::{self, ListRead, Skip};
 use crate::modlist;
@@ -56,9 +54,9 @@ pub(crate) struct Loaded {
     pub(crate) ready: ReadyFn,
 }
 
-/// Loads the mod DLL at `path` for a dev reload; `None`, logged, when it is
-/// no mod of this ABI.
-pub(crate) fn load_copy(path: &Path) -> Option<Loaded> {
+/// Loads the mod DLL at `path`, a dev reload copy of `original`; `None`,
+/// logged, when it is no mod of this ABI.
+pub(crate) fn load_copy(path: &Path, original: &Path) -> Option<Loaded> {
     if crate::others::is_mod_file(path) == Some(false) {
         crate::log!(
             WARN,
@@ -67,7 +65,7 @@ pub(crate) fn load_copy(path: &Path) -> Option<Loaded> {
         );
         return None;
     }
-    let library = load_from(path, None)?;
+    let library = load_from(path, Some(original))?;
     Some(Loaded {
         module: library.module,
         manifest: library.manifest,
@@ -345,18 +343,7 @@ pub(super) enum Run {
 /// file name, or `None`, logged, when it does not load.
 fn load_native(path: &Path) -> Option<String> {
     let file = path.file_name()?.to_string_lossy().into_owned();
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
-    // SAFETY: `wide` is NUL-terminated; the DLL runs its `DllMain` as it
-    // would from any loader and stays loaded for the process.
-    let module = unsafe {
-        LoadLibraryExW(
-            wide.as_ptr(),
-            core::ptr::null_mut(),
-            LOAD_WITH_ALTERED_SEARCH_PATH,
-        )
-    };
-    if module.is_null() {
-        let error = std::io::Error::last_os_error();
+    if let Err(error) = crate::module::load_library(path, None) {
         crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
         return None;
     }
@@ -369,43 +356,31 @@ fn load(path: &Path) -> Option<Library> {
     if crate::reload::copies() {
         let mods_dir = path.parent()?;
         let copy = crate::reload::first_copy(mods_dir, path)?;
-        let file = path.file_name()?.to_string_lossy().into_owned();
-        let mut library = load_from(&copy, Some(&file))?;
+        let mut library = load_from(&copy, Some(path))?;
         library.copied = Some((path.to_path_buf(), copy));
         return Some(library);
     }
     load_from(path, None)
 }
 
-/// Loads the DLL at `path`, named `file` in messages (its own name when
-/// `None`).
-fn load_from(path: &Path, named: Option<&str>) -> Option<Library> {
-    let file = match named {
-        Some(file) => file.to_owned(),
-        None => path.file_name()?.to_string_lossy().into_owned(),
-    };
-    let wide: Vec<u16> = path
-        .as_os_str()
+/// Loads the DLL at `path`, a dev reload copy of `original` when given, which
+/// then names it in messages and whose folder its imports also resolve from.
+fn load_from(path: &Path, original: Option<&Path>) -> Option<Library> {
+    let file = original
+        .unwrap_or(path)
+        .file_name()?
         .to_string_lossy()
-        .encode_utf16()
-        .chain([0])
-        .collect();
-    // SAFETY: `wide` is NUL-terminated.
-    let module = unsafe {
-        LoadLibraryExW(
-            wide.as_ptr(),
-            core::ptr::null_mut(),
-            LOAD_WITH_ALTERED_SEARCH_PATH,
-        )
+        .into_owned();
+    let module = match crate::module::load_library(path, original.and_then(Path::parent)) {
+        Ok(module) => module,
+        Err(error) => {
+            crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
+            return None;
+        }
     };
-    if module.is_null() {
-        let error = std::io::Error::last_os_error();
-        crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
-        return None;
-    }
     let library = exports_of(module, &file);
     if library.is_none() {
-        // SAFETY: `module` was loaded by `LoadLibraryExW` in this function, and
+        // SAFETY: `module` was loaded by `load_library` in this function, and
         // `exports_of` returned `None` without calling into it, so nothing of
         // it is in use.
         unsafe { FreeLibrary(module) };
@@ -442,8 +417,10 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     // SAFETY: a mod's `READY` export has the signature `enshwick::abi::exports`
     // documents for it.
     let ready = unsafe { core::mem::transmute::<Export, ReadyFn>(ready) };
-    if abi() != ABI_VERSION {
-        log_skip(&Skip::OtherAbi, file);
+    // The export states only the major; the manifest's header holds the
+    // minor, which `manifest::parse` checks.
+    if let Err(why) = check_major(abi()) {
+        log_skip(&Skip::OtherAbi(why), file);
         return None;
     }
     // SAFETY: `query` returns the mod's static manifest, null or readable

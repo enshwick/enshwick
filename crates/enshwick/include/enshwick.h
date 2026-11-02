@@ -7,9 +7,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// The ABI version: a hash of the layout of every ABI type. A loader
-// loads only mods built for its own.
-#define ENSHWICK_ABI_VERSION 0x0dc85f01
+// The major version of this interface. A loader refuses a mod built for
+// another major.
+//
+// Any change to the layout other than an append is a new major, with
+// `ABI_MINOR` back at 0; the layout tests of this crate hold the pair to
+// the committed layout.
+#define ENSHWICK_ABI_MAJOR 5
+
+// The minor version of this interface: one more for each append to the
+// layout of this `ABI_MAJOR`, a field at the end of a struct that starts
+// with a `Header` or a new type.
+//
+// A loader loads mods built for its minor or an older one, and reads a
+// field appended after the mod's minor only where
+// `Header::covers` it.
+#define ENSHWICK_ABI_MINOR 1
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -35,8 +48,10 @@ typedef uint8_t EnshwickAccountActionType;
 typedef struct EnshwickHeader {
   // The size of the whole struct as its writer knew it.
   uint32_t size;
-  // `ABI_VERSION` of the writer.
-  uint32_t abi_version;
+  // `ABI_MAJOR` of the writer.
+  uint16_t abi_major;
+  // `ABI_MINOR` of the writer.
+  uint16_t abi_minor;
 } EnshwickHeader;
 
 // An entity id, as the engine numbers entities: a character, a prop, an item
@@ -2839,11 +2854,10 @@ typedef struct EnshwickMapMarkerTypeInfo {
 
 // The table of services the loader offers a mod.
 //
-// Until 1.0 any change to its layout is a new
-// `ABI_VERSION`, and a loader loads only mods
-// built for its own. From 1.0 fields are only appended, and a mod checks
-// `Header::covers` before it calls a field added after the release it was
-// built against.
+// A function appended at its end is a new
+// `ABI_MINOR`, any other change a new
+// `ABI_MAJOR`. A mod starts only on a table of its
+// major and its minor or a newer one, which `Header::covers` whole.
 typedef struct EnshwickHostApi {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -4250,6 +4264,28 @@ typedef struct EnshwickHostApi {
   // other, with the id and the owner's exports logged;
   // `Status::BAD_ARGS` for a malformed id. Any thread.
   EnshwickStatus (*use_content)(EnshwickModHandle me, struct EnshwickStr id);
+  // Mutes `account` in chat when `muted` is 1, or lifts its mute when 0.
+  // The server drops every line the account's player types before any
+  // other player reads it, and tells that player with one of the game's
+  // notices at most every 30 seconds; lines mods send and mod messages
+  // pass. The mutes are the file `mod-data/enshwick/muted.txt`, written
+  // at once and read again at every start. `Status::OK` also when the
+  // list already says so; `Status::BAD_ARGS` for account 0 or `muted`
+  // above 1; `Status::REFUSED` for a mute of an administrator online
+  // or of a hosted game's host, whose lines pass even when muted before,
+  // and when the file is not written;
+  // `Status::MISSING` outside a server, the dedicated one or the one a
+  // client hosts. Any thread, also while another call changes the list:
+  // changes take turns and the file is replaced whole. A panic in the
+  // loader returns `Status::REFUSED`.
+  EnshwickStatus (*chat_mute_set)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t muted);
+  // Writes 1 to `muted` when `account` is muted in chat, 0 when not.
+  // `muted` is the caller's, writable for one byte for the call, and
+  // written only on `Status::OK`. `Status::BAD_ARGS` for account 0
+  // or a null `muted`; `Status::MISSING` outside a server, the
+  // dedicated one or the one a client hosts. Any thread. A panic in the
+  // loader returns `Status::REFUSED`.
+  EnshwickStatus (*chat_mute_has)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t *muted);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.
@@ -4478,7 +4514,8 @@ typedef struct EnshwickVoxelWrite {
 extern "C" {
 #endif
 
-// The ENSHWICK_ABI_VERSION the mod was built for.
+// The ENSHWICK_ABI_MAJOR the mod was built for; its manifest's header holds
+// the minor.
 ENSHWICK_EXPORT uint32_t enshwick_mod_abi(void);
 // The mod's manifest; static, no side effects.
 ENSHWICK_EXPORT const EnshwickManifest *enshwick_mod_query(void);

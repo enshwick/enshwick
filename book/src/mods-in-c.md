@@ -15,8 +15,8 @@ layout on every change. `hello.c` writes one line to the log when it starts.
 ## Write the mod
 
 1. Copy `enshwick.h` next to your source file.
-2. Fill a static `EnshwickManifest`: its `header` is the struct's size and
-   `ENSHWICK_ABI_VERSION`; a mod needs at least `id`,
+2. Fill a static `EnshwickManifest`: its `header` is the struct's size,
+   `ENSHWICK_ABI_MAJOR` and `ENSHWICK_ABI_MINOR`; a mod needs at least `id`,
    `version` and `side`. `ENSHWICK_STR_INIT("text")` makes a string.
 3. Define `enshwick_mod_abi`, `enshwick_mod_query`, `enshwick_mod_init` and
    `enshwick_mod_ready`; `enshwick_mod_shutdown` is optional. The header
@@ -44,6 +44,17 @@ clang --target=x86_64-pc-windows-msvc -std=c11 -O2 -shared -fuse-ld=lld \
 calls the C runtime links it as usual: with Visual Studio's `cl /LD`, `clang-cl`
 or [cargo-xwin](https://github.com/rust-cross/cargo-xwin)'s SDK off Windows.
 
+The loader loads your mod with
+[`LoadLibraryExW`](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexw)
+and the flags `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` and
+`LOAD_LIBRARY_SEARCH_DEFAULT_DIRS`, so a DLL your mod links against loads
+only from your mod's folder, the game's folder or the Windows system folder,
+never from the current directory or `PATH`. Ship every DLL it links against
+beside it, or link the C runtime statically (`/MT`). A DLL your mod loads
+itself, or marks for delay loading, follows
+[the default search order](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order),
+which leaves out your mod's folder: load it by its full path.
+
 ## Check it
 
 Run `cargo enshwick manifest hello_c.dll` on Windows. It loads the DLL, asks it
@@ -53,8 +64,8 @@ loader starts it.
 
 ## Keep it current
 
-Until 1.0 a loader loads only mods built for its own ABI version, so rebuild
-the mod against the `enshwick.h` of each Enshwick release whose
-`ENSHWICK_ABI_VERSION` differs from the one you built with. From 1.0 structs
-grow only at their end, and a mod built against an older header keeps loading.
-The [ABI reference](abi-reference.md#versions) has the rules.
+A loader loads a mod built against an older header while
+`ENSHWICK_ABI_MAJOR` is the same, so rebuild the mod against the `enshwick.h`
+of a release whose `ENSHWICK_ABI_MAJOR` differs from the one you built with.
+`enshwick_mod_abi` returns `ENSHWICK_ABI_MAJOR`. The
+[ABI reference](abi-reference.md#versions) has the rules.

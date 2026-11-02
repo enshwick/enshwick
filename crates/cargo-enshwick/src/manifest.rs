@@ -122,14 +122,13 @@ unsafe fn describe(manifest: &Manifest) -> String {
 /// - Its strings and lists stay readable for the rest of the process.
 #[cfg(any(windows, test))]
 unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
-    const REQUIRED: usize = size_of::<Manifest>();
+    const REQUIRED: usize = <Manifest as enshwick::abi::Headed>::BORN;
     // SAFETY: the caller's contract is the one `read_headed` needs: null or
     // readable for the size its header states, no concurrent writer.
     let manifest = unsafe { enshwick::abi::read_headed(raw, REQUIRED) }
         .ok_or("the mod returned no manifest, or a truncated one")?;
-    if manifest.header.abi_version != enshwick::abi::ABI_VERSION {
-        return Err(enshwick::abi::OTHER_ABI.to_owned());
-    }
+    let header = manifest.header;
+    enshwick::abi::check_abi(header.abi_major, header.abi_minor).map_err(|why| why.to_string())?;
     Ok(manifest)
 }
 
@@ -137,22 +136,48 @@ unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
 fn query(dll: &Path) -> Result<Manifest, String> {
     use std::os::windows::ffi::OsStrExt as _;
 
-    use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+    use windows_sys::Win32::System::LibraryLoader::{
+        GetProcAddress, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32,
+        LoadLibraryExW,
+    };
 
     // A bare name would go through the DLL search order, and could load a
-    // system DLL of that name instead.
+    // system DLL of that name instead; the folder flag also needs a full path.
     let dll = std::path::absolute(dll).map_err(|e| format!("{}: {e}", dll.display()))?;
     let wide: Vec<u16> = dll.as_os_str().encode_wide().chain([0]).collect();
-    // SAFETY: `wide` ends in the NUL chained onto it and lives across the call.
-    let module = unsafe { LoadLibraryW(wide.as_ptr()) };
+    // SAFETY: `wide` ends in the NUL chained onto it and lives across the
+    // call. The flags resolve the DLL's imports from its folder and the
+    // system's, never from the current directory, `PATH` or this tool's own
+    // folder, which the game's search would not see.
+    let module = unsafe {
+        LoadLibraryExW(
+            wide.as_ptr(),
+            core::ptr::null_mut(),
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32,
+        )
+    };
     if module.is_null() {
-        return Err(format!("{} could not be loaded", dll.display()));
+        return Err(format!(
+            "{} could not be loaded: {}",
+            dll.display(),
+            std::io::Error::last_os_error()
+        ));
     }
-    let name = format!("{}\0", enshwick::abi::exports::QUERY);
-    // SAFETY: `module` was checked non-null and is never freed; `name` ends in
-    // the NUL `format!` appended and lives across the call.
-    let query = unsafe { GetProcAddress(module, name.as_ptr()) }
-        .ok_or_else(|| format!("{} is not an Enshwick mod", dll.display()))?;
+    let export = |name: &str| {
+        let name = format!("{name}\0");
+        // SAFETY: `module` was checked non-null and is never freed; `name`
+        // ends in the NUL `format!` appended and lives across the call.
+        unsafe { GetProcAddress(module, name.as_ptr()) }
+            .ok_or_else(|| format!("{} is not an Enshwick mod", dll.display()))
+    };
+    // SAFETY: the ABI gives `exports::ABI` the signature
+    // `extern "system" fn() -> u32`.
+    let abi: unsafe extern "system" fn() -> u32 =
+        unsafe { core::mem::transmute(export(enshwick::abi::exports::ABI)?) };
+    // SAFETY: `abi` is the mod's `exports::ABI`, which takes no arguments and
+    // returns a constant, the major that decides how the manifest reads.
+    enshwick::abi::check_major(unsafe { abi() }).map_err(|why| why.to_string())?;
+    let query = export(enshwick::abi::exports::QUERY)?;
     // SAFETY: the ABI gives `exports::QUERY` the signature
     // `extern "system" fn() -> *const Manifest`.
     let query: unsafe extern "system" fn() -> *const Manifest =
@@ -216,17 +241,16 @@ mod tests {
     }
 
     #[test]
-    fn a_manifest_of_another_abi_version_is_refused_with_the_release_to_rebuild_for() {
+    fn a_manifest_of_an_older_abi_major_is_refused_with_the_release_to_rebuild_for() {
         let mut other = plain("you.other-mod", "1.0.0");
-        other.header.abi_version = enshwick::abi::ABI_VERSION.wrapping_add(1);
+        other.header.abi_major = enshwick::abi::ABI_MAJOR - 1;
         // SAFETY: `other` is a whole local manifest with static strings.
         let why = unsafe { copy(&raw const other) }.unwrap_err();
         assert_eq!(
             why,
-            format!(
-                "built for another Enshwick: rebuild it for Enshwick {}",
-                enshwick::VERSION
-            )
+            enshwick::abi::check_abi(other.header.abi_major, 0)
+                .unwrap_err()
+                .to_string()
         );
     }
 

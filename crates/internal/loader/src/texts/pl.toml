@@ -59,6 +59,7 @@
 "change.runtime" = "{id} {key} = {value}: zapisano dla tego świata, zastosowano."
 "stand-in.name" = "Przedmiot usuniętego moda"
 "stand-in.description" = "Zachowany dla moda, który nie jest teraz zainstalowany. Zainstaluj mod ponownie, aby odzyskać przedmiot."
+"muted.notice" = "Jesteś wyciszony na czacie. Inni gracze nie widzą, co piszesz."
 "refused" = "Nie zmieniono: {why}."
 "refused.by-mod" = "mod odrzucił zmianę"
 "refused.value" = "{key} przyjmuje {accepts}"

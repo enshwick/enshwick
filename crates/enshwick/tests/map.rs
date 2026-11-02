@@ -11,13 +11,13 @@ mod tests {
         AltarInfo, Bounds, Header, MapFrameInfo, MapMarkerInfo, PlayerInfo, Status,
     };
     use enshwick::altars::Altars;
-    use enshwick::content::Guid;
+    use enshwick::content::{EngineFacts, Guid};
     use enshwick::map::{
         Map, MapAltar, MapFrame, MapMarker, MapMarkerTypeId, MapPlayer, MapPoint, MapSnapshot,
     };
+    use enshwick::test::facts::{self, Fact};
     use enshwick::{Load, Mod, Off};
 
-    const WAYPOINT: u32 = 2;
     const TOWN: Guid = Guid::parse("5d2e6a2b-0c3f-4d8e-9a71-3e5f0b1c2d4e");
     const LABEL: Guid = Guid::parse("0b6f4c1a-7e2d-4a90-b3c8-1d2e3f405162");
 
@@ -65,13 +65,18 @@ mod tests {
         enabled: u8,
         at: [f64; 3],
     ) -> enshwick::test::FakeHost {
-        let mut bytes = vec![enabled, 0, 0, 0, 0, 0, 0, 0];
-        bytes.extend(
-            enshwick::ecs::fixed(at)
-                .iter()
-                .flat_map(|axis| axis.to_le_bytes()),
+        let field = |fact: Fact| fake.offset(fact.id()).unwrap();
+        let (shown, place) = (
+            field(facts::PLAYER_WAYPOINT_ENABLED),
+            field(facts::PLAYER_WAYPOINT_POSITION),
         );
-        fake.component(Entity(entity), WAYPOINT, &bytes)
+        let mut bytes = vec![0u8; place + 24];
+        bytes[shown] = enabled;
+        for (axis, value) in enshwick::ecs::fixed(at).iter().enumerate() {
+            bytes[place + 8 * axis..][..8].copy_from_slice(&value.to_le_bytes());
+        }
+        let ty = fake.hash(facts::PLAYER_WAYPOINT.id()).unwrap();
+        fake.component(Entity(entity), ty, &bytes)
     }
 
     /// The world's own types and the map's markers, as on a build without
@@ -81,11 +86,7 @@ mod tests {
     }
 
     fn fake() -> enshwick::test::FakeHost {
-        markers_only()
-            .type_hash("player_waypoint", WAYPOINT)
-            .type_size("player_waypoint", 32)
-            .constant("player_waypoint.enabled", 0)
-            .constant("player_waypoint.waypoint_position", 8)
+        markers_only().map_waypoints()
     }
 
     fn start(fake: enshwick::test::FakeHost) -> (enshwick::test::Installed, Map) {
@@ -215,8 +216,11 @@ mod tests {
 
     #[test]
     fn a_waypoint_field_past_its_type_turns_waypoints_off_alone() {
+        let fake = fake();
+        let place = fake.offset(facts::PLAYER_WAYPOINT_POSITION.id()).unwrap();
+        let short = u32::try_from(place + 16).unwrap();
         let fake = marker(
-            fake().type_size("player_waypoint", 0x18),
+            fake.type_size(facts::PLAYER_WAYPOINT.id(), short),
             [1.0, 2.0, 3.0],
             LABEL,
             TOWN,

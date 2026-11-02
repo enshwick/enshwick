@@ -29,7 +29,8 @@ pub(crate) extern "system" fn ui_widget(
         };
         // SAFETY: a mod passes null or its version of the widget, and all of
         // it is required.
-        let Some(mut copy) = (unsafe { get_headed(widget, size_of::<api_frame::UiWidget>()) })
+        let Some(mut copy) =
+            (unsafe { get_headed(widget, <api_frame::UiWidget as enshwick::abi::Headed>::BORN) })
         else {
             return Status::BAD_ARGS;
         };
@@ -70,9 +71,13 @@ pub(crate) extern "system" fn ui_markers(
         }
         // SAFETY: a mod passes `count` markers of its version, valid for the
         // call, and all of a marker is required.
-        let Some(given) =
-            (unsafe { get_headed_list(markers, count, size_of::<api_frame::UiMarker>()) })
-        else {
+        let Some(given) = (unsafe {
+            get_headed_list(
+                markers,
+                count,
+                <api_frame::UiMarker as enshwick::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         if given.iter().any(|m| m.marker_type != 0) {
@@ -125,7 +130,9 @@ pub(crate) extern "system" fn ui_dialog(
         };
         // SAFETY: a mod passes null or its version of the dialog, and all of
         // it is required.
-        let Some(dialog) = (unsafe { get_headed(dialog, size_of::<api_frame::UiDialog>()) }) else {
+        let Some(dialog) =
+            (unsafe { get_headed(dialog, <api_frame::UiDialog as enshwick::abi::Headed>::BORN) })
+        else {
             return Status::BAD_ARGS;
         };
         crate::ui::mod_dialog(loader, index, &dialog, callback, user)

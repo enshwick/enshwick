@@ -5,7 +5,7 @@
 mod tests {
     use enshwick::abi::Status;
     use enshwick::loot::{Drop, Kinds, Source};
-    use enshwick::test::FakeHost;
+    use enshwick::test::{FakeHost, facts};
     use enshwick::{Load, Mod, Off};
 
     const ROLL: u64 = 0x1_4010_0000;
@@ -52,10 +52,14 @@ mod tests {
             .constant("loot.request_node", 0x08)
             .constant("loot.request_labels", 0x0c)
             .world()
-            .type_hash("destroy_on_loot", 3)
-            .type_hash("boss", 4)
-            .type_hash("interaction_lock", 5)
-            .constant("interaction_lock.item", 0)
+            .loot()
+    }
+
+    /// The build's loot slot: `size` bytes, its item and count side by side.
+    fn slot(host: FakeHost, size: u32) -> FakeHost {
+        host.type_size(facts::LOOT_SLOT.id(), size)
+            .constant(facts::LOOT_SLOT_ITEM.id(), 0)
+            .constant(facts::LOOT_SLOT_COUNT.id(), 4)
     }
 
     fn linked(host: FakeHost) -> (Result<(), String>, Vec<u64>) {
@@ -70,32 +74,22 @@ mod tests {
 
     #[test]
     fn the_single_roll_links_where_the_build_names_its_slot() {
-        let (destroyed, targets) = linked(
-            build()
-                .type_size("loot_slot", 16)
-                .constant("loot_slot.item", 0)
-                .constant("loot_slot.count", 4),
-        );
+        let (destroyed, targets) = linked(slot(build(), 16));
         assert_eq!(destroyed, Ok(()));
         assert_eq!(targets, [ROLL, ROLL_ONE]);
     }
 
     #[test]
     fn a_slot_too_small_for_its_fields_keeps_the_single_roll_vanilla() {
-        let (destroyed, targets) = linked(
-            build()
-                .type_size("loot_slot", 5)
-                .constant("loot_slot.item", 0)
-                .constant("loot_slot.count", 4),
-        );
-        assert!(destroyed.unwrap_err().contains("loot_slot"));
+        let (destroyed, targets) = linked(slot(build(), 5));
+        assert!(destroyed.unwrap_err().contains(facts::LOOT_SLOT.id()));
         assert_eq!(targets, [ROLL]);
     }
 
     #[test]
     fn a_build_without_the_slot_keeps_the_single_roll_vanilla() {
         let (destroyed, targets) = linked(build());
-        assert!(destroyed.unwrap_err().contains("loot_slot"));
+        assert!(destroyed.unwrap_err().contains(facts::LOOT_SLOT.id()));
         assert_eq!(targets, [ROLL]);
     }
 }

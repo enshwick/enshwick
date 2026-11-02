@@ -415,9 +415,16 @@ pub(crate) fn joining(runs_enshwick: bool) {
     SERVER_RUNS_ENSHWICK.store(runs_enshwick, Ordering::Release);
 }
 
+/// Whether the server the client joins advertises Enshwick, itself or in
+/// its host's lobby.
+pub(crate) fn server_runs_enshwick() -> bool {
+    SERVER_RUNS_ENSHWICK.load(Ordering::Acquire) || crate::lobby::host_runs_enshwick()
+}
+
 /// Forgets every peer, when the client changes servers or a hosted game
 /// ends.
 pub(crate) fn forget() {
+    crate::carrier::forget();
     let mut guard = STATE.relock();
     *guard = None;
     WAITING.store(false, Ordering::Release);
@@ -577,9 +584,7 @@ pub(crate) fn client_lines() -> Vec<String> {
         let due = s
             .hello_at
             .is_none_or(|at| at.elapsed().as_secs_f64() >= HELLO_EVERY);
-        let modded = SERVER_RUNS_ENSHWICK.load(Ordering::Acquire)
-            || crate::lobby::host_runs_enshwick()
-            || crate::world::hosting();
+        let modded = server_runs_enshwick() || crate::world::hosting();
         if !answered && due && modded {
             s.hello_at = Some(Instant::now());
             let mods = crate::advertise::mod_list(&crate::host::join_mods());
