@@ -242,7 +242,7 @@ struct Container {
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 enum FieldsError {
     /// The build table lacks an entry.
-    #[error("is not in this build")]
+    #[error("{}", crate::builds::ABSENT)]
     Missing(&'static str),
     /// An entry's value is out of its range, or the fields it bounds do not
     /// fit the boxes, answers and heap the lookups use.

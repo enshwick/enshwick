@@ -89,8 +89,10 @@ entries found by their code patterns, <m> missing; ...`, and at `debug` the
 missing entries. The game was updated, and
 the loader runs it on the code patterns of the newest build table it has.
 Whatever those patterns do not find stays off: a loader feature logs
-`<feature> off on <build>: <entry> is not in this build`, or `<entry> does not
-read as the build table says` when the code at the entry changed, and a mod
+`<feature> off on build <guid>/<age>, carried table <table>: <entry> is not
+found by the carried table's patterns`, `<entry> is not in the carried table`
+when that table has no row for it, or `<entry> does not read as the build
+table says` when the code at the entry changed, and a mod
 that needs a missing entry turns off with
 `symbol <id>: missing on this game build`. The Mods screen lists the features
 that are off. A build whose reflection reads no types or systems runs vanilla,

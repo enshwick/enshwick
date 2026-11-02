@@ -433,6 +433,45 @@ fn an_unknown_build_falls_back_only_when_allowed_and_given_code() {
     );
 }
 
+/// A build without a table is named by its own fingerprint and the table it
+/// carries, never as the carried table's build, and an absent entry says
+/// whether the carried table lacks it or its pattern found nothing.
+#[test]
+fn a_build_without_a_table_names_itself_and_the_carried_table() {
+    let tables = load();
+    let base = tables::newest(&tables, enshwick_gamedata::Side::Server).unwrap();
+    let code = [0u8; 64];
+    let found = select(
+        &tables,
+        Side::SERVER,
+        Fingerprint::new([0xee; 16], 1),
+        Some((&code, 0x1000)),
+        0..0,
+        |_| None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        found.name,
+        format!(
+            "build eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/1, carried table {}",
+            base.name()
+        )
+    );
+    let absent = Unhooked::Absent.to_string();
+    assert_eq!(
+        found.reason("npc.lookup", &absent),
+        "is not found by the carried table's patterns"
+    );
+    assert_eq!(
+        found.reason("npc.nope", &absent),
+        "is not in the carried table"
+    );
+    let moved = Unhooked::Moved.to_string();
+    assert_eq!(found.reason("npc.lookup", &moved), moved);
+    assert_eq!(embedded(Side::SERVER).reason("npc.nope", &absent), absent);
+}
+
 fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("enshwick-carried-{name}-{}", std::process::id()));
     let _fresh = std::fs::remove_dir_all(&dir);

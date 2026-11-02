@@ -29,7 +29,7 @@ impl Missing {
     /// Why it failed, after its [`Missing::id`].
     pub(crate) fn reason(&self) -> String {
         match self {
-            Self::Entry(_) => "is not in this build".to_owned(),
+            Self::Entry(_) => crate::builds::ABSENT.to_owned(),
             Self::Bytes(_) => "does not read as the build table says".to_owned(),
             Self::Room(_) => "runs past the loader's buffer".to_owned(),
             Self::Looks => "lacks a reflected field".to_owned(),
