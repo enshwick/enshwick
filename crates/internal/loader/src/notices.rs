@@ -267,13 +267,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_sent_notice_fits_one_frame() {
+    fn a_sent_notice_fits_one_control_message() {
         let long = "ж".repeat(600);
         let text = cut(&long);
         assert!(text.len() <= MAX_TEXT && text.chars().all(|c| c == 'ж'));
-        let mut data = vec![0u8; 6];
-        data.extend_from_slice(text.as_bytes());
-        assert_eq!(crate::net::control_frames(&data).map(|f| f.len()), Some(1));
+        let data = crate::wire::notice(7, text);
+        assert!(data.len() <= crate::net::MAX_CONTROL);
     }
 
     /// Serialises the tests that take slots, which all tests share.

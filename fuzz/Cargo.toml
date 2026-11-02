@@ -112,13 +112,6 @@ doc = false
 bench = false
 
 [[bin]]
-name = "wire_frames"
-path = "fuzz_targets/wire_frames.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "migrations"
 path = "fuzz_targets/migrations.rs"
 test = false

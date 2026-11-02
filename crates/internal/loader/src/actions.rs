@@ -395,8 +395,8 @@ pub(crate) struct Hint {
 pub(crate) struct Heard {
     /// The mods with actions, once the server answered.
     pub(crate) sheets: Option<Vec<ModSheet>>,
-    /// Sheets of an answer still coming.
-    incoming: Vec<ModSheet>,
+    /// Sheets of an answer still coming, up to a bound.
+    incoming: crate::wire::Gathered<ModSheet, MAX_SHEETS>,
     /// The last run's outcome.
     pub(crate) result: Option<(bool, String)>,
     /// The hints at hand.
@@ -420,21 +420,25 @@ fn hear(change: impl FnOnce(&mut Heard)) {
     heard.news += 1;
 }
 
+/// Mods' action sheets a client takes from its server at most in one
+/// answer.
+const MAX_SHEETS: usize = 64;
+
 /// A sheet the server sent, on the client.
 pub(crate) fn sheet_heard(first: bool, last: bool, id: String, label: String, text: &str) {
     hear(|heard| {
-        if first {
-            heard.incoming.clear();
-        }
-        if !id.is_empty() {
-            heard.incoming.push(ModSheet {
-                id,
-                label,
-                entries: sheet::decode(text),
-            });
-        }
-        if last {
-            heard.sheets = Some(std::mem::take(&mut heard.incoming));
+        let sheet = (!id.is_empty()).then(|| ModSheet {
+            id,
+            label,
+            entries: sheet::decode(text),
+        });
+        match heard.incoming.add(first, last, sheet) {
+            Some(sheets) => heard.sheets = Some(sheets),
+            None if last => crate::log!(
+                WARN,
+                "actions: the server sent sheets of over {MAX_SHEETS} mods; kept the last ones"
+            ),
+            None => {}
         }
     });
 }

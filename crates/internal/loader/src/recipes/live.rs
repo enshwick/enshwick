@@ -60,8 +60,8 @@ struct Live {
     mods: Vec<(usize, Kind, String)>,
     /// On a client, the joined server's disabled recipes.
     server: Option<Vec<u32>>,
-    /// Ids of the server's message being received.
-    incoming: Vec<u32>,
+    /// Ids of the server's message being received, up to a bound.
+    incoming: crate::wire::Gathered<u32, MAX_SERVER_RECIPES>,
     index: Option<Arc<Index>>,
     names: Option<Arc<Names>>,
     /// The server's file and the world's, as last seen.
@@ -463,16 +463,19 @@ pub(crate) fn left() {
     DIRTY.store(true, Ordering::Release);
 }
 
+/// Disabled recipe ids a client takes from its server at most, far past the
+/// game's recipes.
+const MAX_SERVER_RECIPES: usize = 1 << 14;
+
 /// A part of the server's disabled recipes, on the client.
 pub(crate) fn received(first: bool, last: bool, ids: &[u32]) {
-    live(|l| {
-        if first {
-            l.incoming.clear();
-        }
-        l.incoming.extend_from_slice(ids);
-        if last {
-            l.server = Some(std::mem::take(&mut l.incoming));
-        }
+    live(|l| match l.incoming.add(first, last, ids.iter().copied()) {
+        Some(ids) => l.server = Some(ids),
+        None if last => crate::log!(
+            WARN,
+            "recipes: the server's disabled recipes are over {MAX_SERVER_RECIPES}; kept the last list"
+        ),
+        None => {}
     });
     if last {
         DIRTY.store(true, Ordering::Release);

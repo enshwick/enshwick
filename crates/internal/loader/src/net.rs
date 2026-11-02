@@ -1,31 +1,24 @@
-//! Messages between a join mod's server part and its client part, carried in
-//! chat lines no player sees.
+//! Messages between a join mod's server part and its client part, and the
+//! protocol's own, on the own channel of the game's connection (see the
+//! carrier module), reliable and in order.
 //!
-//! A client sends a line `/enshwick-net <frame>` into its chat queue; the
-//! server's chat link takes every such line before the game posts it, so the
-//! frame never reaches another player. The server sends a frame as a line of
-//! the kind its own replies use, posted to one connection alone; the
-//! client's link on its chat post takes the line where the client posts what
-//! the server sent, before the chat shows it.
-//!
-//! Only clients that announce themselves get frames: a client with the
+//! Only clients that announce themselves get messages: a client with the
 //! loader sends a hello with the protocol version and the join mods it runs
 //! when it joins a server whose rules name Enshwick, or a game whose host's
 //! lobby does (see the lobby module), the server answers unless it keeps
 //! the player out (see the admission module), and from then on both sides
-//! send. A vanilla client never says hello, so it never receives a frame,
-//! and a server that runs join mods disconnects it. A client never says
-//! hello to a game that names no Enshwick, whose chat would show the line.
+//! send. A vanilla client never says hello, so it never receives a message,
+//! and a server that runs join mods disconnects it. A client never opens
+//! the channel to a game that names no Enshwick.
 //!
-//! The frames and control messages are in [`wire`](crate::wire). Each side keeps
-//! a rate per peer and drops what is over it, counting the drops for the
+//! The control messages are in [`wire`](crate::wire). Each side keeps a
+//! rate per peer and drops what is over it, counting the drops for the
 //! status summary.
 
 use core::ffi::c_void;
-use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use enshwick::Entity;
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
@@ -37,32 +30,20 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 use crate::wire::{
-    CONTROL, ITEM_DATA, NOTICE, PART_BYTES, PREFIX, Peer, UI_DEMO, WELCOME, assemble, control,
-    demo_position, frames, hello, parse, read_notice, remote_message,
+    CONTROL, ITEM_DATA, NOTICE, Peer, UI_DEMO, WELCOME, control, demo_position, hello, read_notice,
+    remote_message,
 };
-pub(crate) use crate::wire::{MAX_CONTROL, MAX_MESSAGE, frame_body, is_frame};
+pub(crate) use crate::wire::{MAX_CONTROL, MAX_MESSAGE};
 
 mod server;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use server::{keep_greeting, server_received};
+pub(crate) use server::{keep_greeting, server_carried};
 
-/// Frames waiting to leave at most, per side.
-const MAX_WAITING: usize = 512;
-/// Frames a client puts into its chat queue at most per send, besides its
-/// hello. Nothing tells it whether the game's queue dropped one, and the
-/// queue's size is not known, so the client sends no more than the server
-/// posts in one step.
-const LINES_PER_SEND: usize = 16;
-/// Frames a client takes from its server per second, and in one burst. The
-/// server's chat sends at most 16 lines a step to all its players and holds
-/// at most 256 waiting, so its own frames always fit; a server that sends
-/// more is dropped from.
-const SERVER_FRAME_RATE: f64 = 1024.0;
-const SERVER_FRAME_BURST: f64 = 512.0;
-/// Seconds between a client's hellos until the server answers.
-const HELLO_EVERY: f64 = 5.0;
+/// How long a client waits for the server's answer before it says hello
+/// again on the same link.
+const HELLO_AGAIN: Duration = Duration::from_secs(5);
 
 /// One channel a mod opened.
 #[derive(Debug)]
@@ -78,20 +59,14 @@ struct State {
     /// On the server: peers by account key that said hello. On a client:
     /// the server, [`NetMessage::SERVER`], once it answered.
     peers: FxHashMap<u64, Peer>,
-    /// Lines waiting for the client's chat queue.
-    outbox: VecDeque<String>,
-    /// The id of the next message sent.
-    next_message: u16,
     /// When the client last said hello.
     hello_at: Option<Instant>,
-    /// Rates of the peers sending, by key, on the server.
+    /// Rates of the peers sending, by key.
     sending: FxHashMap<u64, Peer>,
-    /// On a client: the rate of the frames its server sends.
-    incoming: Option<Peer>,
     /// On the server: the hellos on their way in from clients that are no
     /// peers yet, by key.
     greeting: FxHashMap<u64, Peer>,
-    /// On the server: the clients whose join data was dropped on the way,
+    /// On the server: the clients whose join data did not fit their link,
     /// by key, with the tries so far; it goes again with the next look at
     /// the live slots.
     owed: Vec<(u64, u8)>,
@@ -99,13 +74,13 @@ struct State {
 
 static CHANNELS: Registry<Channel> = Registry::new();
 static STATE: Mutex<Option<State>> = Mutex::new(None);
-/// Set while the client's outbox holds anything, so an idle frame takes no
-/// lock.
-static WAITING: AtomicBool = AtomicBool::new(false);
 /// Set on a client while the server it joined advertises Enshwick, which
-/// takes frame lines out of the chat; another server would show them.
+/// opens the own channel to it.
 static SERVER_RUNS_ENSHWICK: AtomicBool = AtomicBool::new(false);
-/// Messages dropped: over a rate, too many waiting, or unreadable.
+/// Set on a client while its server's answer holds, so a frame takes no
+/// lock once it is welcomed.
+static ANSWERED: AtomicBool = AtomicBool::new(false);
+/// Messages dropped: over a rate, or unreadable.
 static DROPPED: AtomicU64 = AtomicU64::new(0);
 
 fn state<R>(f: impl FnOnce(&mut State) -> R) -> R {
@@ -172,14 +147,58 @@ pub(crate) fn link() {
     }
 }
 
-/// The frames of a control message, numbered when it takes more than one.
-pub(crate) fn control_frames(data: &[u8]) -> Option<Vec<String>> {
-    let id = if data.len() > PART_BYTES {
-        CONTROL_MESSAGE.fetch_add(1, Ordering::Relaxed)
+/// Sends `data` on `channel` to `key` over the own channel; false when it
+/// did not go: no link to the peer, or its link is full.
+fn carry(key: u64, channel: u32, data: &[u8]) -> bool {
+    crate::carrier::send(key, channel, data).is_ok()
+}
+
+/// Says hello to the server, on the thread that sends the client's chat: at
+/// once when its link `opened` (the caller forgot the last link's answer
+/// with [`link_lost`] first), and
+/// every few seconds until this one is answered, since the server may drop
+/// a hello it has no room for. Waits on no lock but for a new link.
+pub(crate) fn client_tick(opened: bool) {
+    let server = NetMessage::SERVER.get();
+    if ANSWERED.load(Ordering::Acquire) {
+        return;
+    }
+    let due = |s: &mut State| {
+        let due = !s.peers.contains_key(&server)
+            && (opened || s.hello_at.is_none_or(|at| at.elapsed() >= HELLO_AGAIN));
+        if due {
+            s.hello_at = Some(Instant::now());
+        }
+        due
+    };
+    let due = if opened {
+        state(due)
+    } else {
+        try_state(due).unwrap_or(false)
+    };
+    if !due {
+        return;
+    }
+    let mods = crate::advertise::mod_list(&crate::host::join_mods());
+    let nonce = if crate::world::hosting() {
+        crate::admission::nonce()
     } else {
         0
     };
-    frames(CONTROL, id, data)
+    carry(
+        NetMessage::SERVER.get(),
+        CONTROL,
+        &hello(&mods, nonce, crate::content::language()),
+    );
+}
+
+/// Forgets the server's answer when the client's link went.
+pub(crate) fn link_lost() {
+    ANSWERED.store(false, Ordering::Release);
+    state(|s| {
+        s.peers.remove(&NetMessage::SERVER.get());
+        s.sending.remove(&NetMessage::SERVER.get());
+    });
 }
 
 /// Hands a message to the mod that opened its channel.
@@ -219,34 +238,37 @@ pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), Status>
         return Err(Status::MISSING);
     }
     let data = crate::wire::notice(entity.0, text);
-    let lines = control_frames(&data).ok_or(Status::BAD_ARGS)?;
-    if !crate::chat::send_frames(key, &lines) {
+    if data.len() > MAX_CONTROL {
+        return Err(Status::BAD_ARGS);
+    }
+    if !carry(key, CONTROL, &data) {
         return Err(Status::REFUSED);
     }
     Ok(())
 }
 
 /// Sends item data records to the client of the player with account key
-/// `key`, or to every client that said hello for 0; `records` fits one
-/// frame. False when the line queue dropped them for a client.
+/// `key`, or to every client that said hello for 0. False when a client's
+/// link had no room for them.
 pub(crate) fn item_data(key: u64, records: &[u8]) -> bool {
     let mut data = control(ITEM_DATA);
     data.extend_from_slice(records);
+    if data.len() > MAX_CONTROL {
+        crate::log!(WARN, "mod messages: item data records too long to send");
+        return false;
+    }
     let peers: Vec<u64> = if key == 0 {
         state(|s| s.peers.keys().copied().collect())
     } else {
         vec![key]
     };
-    let Some(lines) = control_frames(&data) else {
-        crate::log!(WARN, "mod messages: item data records too long to send");
-        return true;
-    };
-    let dropped_for = peers
+    let peers: Vec<u64> = peers
         .into_iter()
         .filter(|&p| p != NetMessage::SERVER.get())
-        .filter(|&peer| !crate::chat::send_frames(peer, &lines))
-        .count();
-    dropped_for == 0
+        .collect();
+    let mut whole = true;
+    let sent = crate::carrier::send_many(&peers, CONTROL, &data, |_, _| whole = false);
+    sent.is_ok() && whole
 }
 
 /// Tells the client of the player with account key `key` to open the
@@ -259,53 +281,40 @@ pub(crate) fn ui_demo(key: u64, at: Option<[i64; 3]>) -> Result<(), Status> {
     for axis in at.iter().flatten() {
         data.extend_from_slice(&axis.to_le_bytes());
     }
-    let lines = control_frames(&data).ok_or(Status::BAD_ARGS)?;
-    if !crate::chat::send_frames(key, &lines) {
+    if !carry(key, CONTROL, &data) {
         return Err(Status::REFUSED);
     }
     Ok(())
 }
 
-/// Numbers the multi-part control messages this side sends.
-static CONTROL_MESSAGE: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1);
-
-/// The frames of a settings message, none for one too long to send.
-fn remote_frames(message: &crate::remote::Message) -> Vec<String> {
+/// A settings message as a control message; `None` for one too long to
+/// send.
+fn remote_data(message: &crate::remote::Message) -> Option<Vec<u8>> {
     let mut data = control(message.kind());
     data.extend_from_slice(&message.body());
-    let id = CONTROL_MESSAGE.fetch_add(1, Ordering::Relaxed);
-    frames(CONTROL, id, &data).unwrap_or_else(|| {
+    if data.len() > MAX_CONTROL {
         crate::log!(WARN, "mod messages: a settings message too long to send");
-        Vec::new()
-    })
+        return None;
+    }
+    Some(data)
 }
 
 /// Sends a settings message to the client of the player with account key
-/// `key`, when it takes messages. False when the line queue dropped it.
+/// `key`, when it takes messages. False when its link had no room.
 pub(crate) fn to_player(key: u64, message: &crate::remote::Message) -> bool {
     if !ready(key) {
         return true;
     }
-    let lines = remote_frames(message);
-    lines.is_empty() || crate::chat::send_frames(key, &lines)
+    remote_data(message).is_none_or(|data| carry(key, CONTROL, &data))
 }
 
 /// Sends a settings message to every client that runs Enshwick.
 pub(crate) fn broadcast_control(message: &crate::remote::Message) {
-    let keys: Vec<u64> = state(|s| {
-        s.peers
-            .keys()
-            .copied()
-            .filter(|&k| k != NetMessage::SERVER.get())
-            .collect()
-    });
-    let lines = remote_frames(message);
-    if keys.is_empty() || lines.is_empty() {
+    let keys = clients();
+    let Some(data) = remote_data(message) else {
         return;
-    }
-    for key in keys {
-        crate::chat::send_frames(key, &lines);
-    }
+    };
+    let _sent = crate::carrier::send_many(&keys, CONTROL, &data, |_, _| {});
 }
 
 /// Sends a settings message from the client to its server; false while the
@@ -314,97 +323,48 @@ pub(crate) fn to_server(message: &crate::remote::Message) -> bool {
     if !ready(NetMessage::SERVER.get()) {
         return false;
     }
-    let lines = remote_frames(message);
-    if lines.is_empty() {
-        return false;
-    }
-    state(|s| {
-        if s.outbox.len() + lines.len() > MAX_WAITING {
-            return false;
-        }
-        s.outbox.extend(lines);
-        WAITING.store(true, Ordering::Release);
-        true
-    })
+    remote_data(message).is_some_and(|data| carry(NetMessage::SERVER.get(), CONTROL, &data))
 }
 
-/// Takes a frame line the server sent, on the client; the line's text after
-/// the prefix. False when the line is no frame.
-pub(crate) fn client_received(text: &str) -> bool {
-    let Some(rest) = text.strip_prefix(PREFIX) else {
-        return false;
-    };
-    if !state(|s| admit_from_server(s, Instant::now())) {
-        dropped();
-        return true;
+/// Takes a message the server sent on `channel`, on the client.
+pub(crate) fn client_carried(channel: u32, data: &[u8]) {
+    if channel != CONTROL {
+        if state(|s| s.peers.contains_key(&NetMessage::SERVER.get())) {
+            deliver(channel, NetMessage::SERVER.get(), data);
+        }
+        return;
     }
-    let Some(frame) = parse(rest) else {
-        dropped();
-        return true;
-    };
-    if frame.channel() == CONTROL {
-        // Only the remote settings messages take more than one frame.
-        let single = frame.total() == 1;
-        if single && frame.part() == control(WELCOME) {
-            let fresh = state(|s| {
-                s.peers
-                    .insert(NetMessage::SERVER.get(), Peer::new())
-                    .is_none()
-            });
-            if fresh {
-                crate::log!(INFO, "mod messages: the server answered");
-                crate::actions::joined();
-            }
-        } else if single
-            && let Some(records) = frame.part().strip_prefix(control(ITEM_DATA).as_slice())
-        {
-            crate::item_data::received(records);
-        } else if single
-            && let Some(rest) = frame.part().strip_prefix(control(NOTICE).as_slice())
-            && let Some((entity, text)) = read_notice(rest)
-        {
-            crate::notices::queue(Entity(entity), text);
-        } else if single && let Some(rest) = frame.part().strip_prefix(control(UI_DEMO).as_slice())
-        {
-            if crate::host::loader().is_some_and(|loader| loader.developer_tools) {
-                crate::ui::open_demo(demo_position(rest));
-            } else {
-                crate::log!(
-                    WARN,
-                    "the server asked for the interface demo; developer tools are off here"
-                );
-            }
+    if data == control(WELCOME).as_slice() {
+        let fresh = state(|s| {
+            s.peers
+                .insert(NetMessage::SERVER.get(), Peer::new())
+                .is_none()
+        });
+        ANSWERED.store(true, Ordering::Release);
+        if fresh {
+            crate::log!(INFO, "mod messages: the server answered");
+            crate::actions::joined();
+        }
+    } else if let Some(records) = data.strip_prefix(control(ITEM_DATA).as_slice()) {
+        crate::item_data::received(records);
+    } else if let Some(rest) = data.strip_prefix(control(NOTICE).as_slice())
+        && let Some((entity, text)) = read_notice(rest)
+    {
+        crate::notices::queue(Entity(entity), text);
+    } else if let Some(rest) = data.strip_prefix(control(UI_DEMO).as_slice()) {
+        if crate::host::loader().is_some_and(|loader| loader.developer_tools) {
+            crate::ui::open_demo(demo_position(rest));
         } else {
-            let whole = state(|s| {
-                s.peers
-                    .get_mut(&NetMessage::SERVER.get())
-                    .and_then(|peer| assemble(peer, frame))
-            });
-            if let Some((_, data)) = whole
-                && let Some(message) = remote_message(&data)
-            {
-                crate::remote::client(message);
-            }
+            crate::log!(
+                WARN,
+                "the server asked for the interface demo; developer tools are off here"
+            );
         }
-        return true;
+    } else if ready(NetMessage::SERVER.get())
+        && let Some(message) = remote_message(data)
+    {
+        crate::remote::client(message);
     }
-    let message = state(|s| {
-        s.peers
-            .get_mut(&NetMessage::SERVER.get())
-            .and_then(|peer| assemble(peer, frame))
-    });
-    if let Some((channel, data)) = message {
-        deliver(channel, NetMessage::SERVER.get(), &data);
-    }
-    true
-}
-
-/// Takes one frame from the server's rate; false when it is spent.
-fn admit_from_server(state: &mut State, now: Instant) -> bool {
-    state
-        .incoming
-        .get_or_insert_with(|| Peer::with_tokens(SERVER_FRAME_BURST))
-        .admit_at(now, SERVER_FRAME_RATE, SERVER_FRAME_BURST)
 }
 
 /// Notes whether the server the client joins advertises Enshwick, and
@@ -425,9 +385,9 @@ pub(crate) fn server_runs_enshwick() -> bool {
 /// ends.
 pub(crate) fn forget() {
     crate::carrier::forget();
+    ANSWERED.store(false, Ordering::Release);
     let mut guard = STATE.relock();
     *guard = None;
-    WAITING.store(false, Ordering::Release);
     crate::item_data::forget_client();
 }
 
@@ -512,7 +472,7 @@ pub(crate) fn send(
 }
 
 fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
-    let (keys, lines) = state(|s| {
+    let keys = state(|s| {
         let keys: Vec<u64> = if peer == 0 {
             s.peers
                 .keys()
@@ -524,9 +484,6 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         } else {
             return Err(Status::MISSING);
         };
-        let message = s.next_message;
-        s.next_message = s.next_message.wrapping_add(1);
-        let lines = frames(channel, message, data).ok_or(Status::BAD_ARGS)?;
         let keys: Vec<u64> = keys
             .into_iter()
             .filter(|&key| {
@@ -540,79 +497,54 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         if peer != 0 && keys.is_empty() {
             return Err(Status::REFUSED);
         }
-        Ok((keys, lines))
+        Ok(keys)
     })?;
-    let mut queued = true;
-    for key in keys {
-        queued &= crate::chat::send_frames(key, &lines);
+    let mut failed = Vec::new();
+    crate::carrier::send_many(&keys, channel, data, |key, status| {
+        failed.push((key, status));
+    })
+    .inspect_err(|_| refund(&keys))?;
+    if !failed.is_empty() {
+        refund(&failed.iter().map(|&(key, _)| key).collect::<Vec<_>>());
     }
-    if peer != 0 && !queued {
-        return Err(Status::REFUSED);
+    match failed.first() {
+        Some(&(_, status)) if peer != 0 => Err(status),
+        _ => Ok(()),
     }
-    Ok(())
 }
 
 fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
+    let server = NetMessage::SERVER.get();
     state(|s| {
-        if !s.peers.contains_key(&NetMessage::SERVER.get()) {
+        if !s.peers.contains_key(&server) {
             return Err(Status::MISSING);
         }
-        let rate = s
-            .sending
-            .entry(NetMessage::SERVER.get())
-            .or_insert_with(Peer::new);
-        let lines = frames(channel, s.next_message, data).ok_or(Status::BAD_ARGS)?;
-        if !rate.admit() || s.outbox.len() + lines.len() > MAX_WAITING {
+        if !s.sending.entry(server).or_insert_with(Peer::new).admit() {
             dropped();
             return Err(Status::REFUSED);
         }
-        s.next_message = s.next_message.wrapping_add(1);
-        s.outbox.extend(lines);
-        WAITING.store(true, Ordering::Release);
         Ok(())
-    })
+    })?;
+    crate::carrier::send(server, channel, data).inspect_err(|_| refund(&[server]))
 }
 
-/// The lines waiting for the client's chat queue, and a hello when the
-/// server has not answered yet; on the client's thread that sends chat,
-/// every frame, so none while another thread holds the state.
-pub(crate) fn client_lines() -> Vec<String> {
-    crate::lobby::poll();
-    try_state(|s| {
-        let mut lines = Vec::new();
-        let answered = s.peers.contains_key(&NetMessage::SERVER.get());
-        let due = s
-            .hello_at
-            .is_none_or(|at| at.elapsed().as_secs_f64() >= HELLO_EVERY);
-        let modded = server_runs_enshwick() || crate::world::hosting();
-        if !answered && due && modded {
-            s.hello_at = Some(Instant::now());
-            let mods = crate::advertise::mod_list(&crate::host::join_mods());
-            let nonce = if crate::world::hosting() {
-                crate::admission::nonce()
-            } else {
-                0
-            };
-            lines.extend(
-                control_frames(&hello(&mods, nonce, crate::content::language()))
-                    .unwrap_or_default(),
-            );
+/// Gives the rate tokens of a send that did not go back to `keys`.
+fn refund(keys: &[u64]) {
+    state(|s| {
+        for key in keys {
+            if let Some(rate) = s.sending.get_mut(key) {
+                rate.refund();
+            }
         }
-        if WAITING.load(Ordering::Acquire) {
-            let count = s.outbox.len().min(LINES_PER_SEND);
-            lines.extend(s.outbox.drain(..count));
-            WAITING.store(!s.outbox.is_empty(), Ordering::Release);
-        }
-        lines
-    })
-    .unwrap_or_default()
+    });
 }
 
 /// The status summary's line on mod messages lost on the way, once any
 /// were.
 pub(crate) fn status() -> Option<String> {
     let (lines, strayed) = crate::chat::delivery();
-    crate::diag::messages_line(DROPPED.load(Ordering::Relaxed), lines, strayed)
+    let dropped = DROPPED.load(Ordering::Relaxed) + crate::carrier::dropped();
+    crate::diag::messages_line(dropped, lines, strayed)
 }
 
 /// Counts a dropped message and logs the first and every hundredth.

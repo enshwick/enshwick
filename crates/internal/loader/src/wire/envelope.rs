@@ -18,22 +18,6 @@ pub const MAX_HEADER: usize = 1 + 5;
 /// The longest sealed message, in bytes.
 pub const MAX_SEALED: usize = MAX_HEADER + MAX_PAYLOAD;
 
-/// Starts of executable code that no payload may have: PE, ELF, Mach-O
-/// (both byte orders, 32 and 64 bit, and fat), WebAssembly and Lua
-/// bytecode. Luau bytecode has no signature; no loader path runs received
-/// bytes as code.
-const EXECUTABLE: [&[u8]; 9] = [
-    b"MZ",
-    b"\x7fELF",
-    b"\xfe\xed\xfa\xce",
-    b"\xfe\xed\xfa\xcf",
-    b"\xce\xfa\xed\xfe",
-    b"\xcf\xfa\xed\xfe",
-    b"\xca\xfe\xba\xbe",
-    b"\0asm",
-    b"\x1bLua",
-];
-
 #[derive(Serialize, Deserialize)]
 struct Header {
     version: u8,
@@ -74,12 +58,29 @@ pub enum ReadMessageError {
 /// ```
 /// use enshwick_loader::wire::is_executable;
 ///
-/// assert!(is_executable(b"MZ\x90\0"));
+/// assert!(is_executable(b"\x7fELF\x02"));
 /// assert!(!is_executable(b"\x02hello"));
 /// ```
 #[must_use]
 pub fn is_executable(payload: &[u8]) -> bool {
-    EXECUTABLE.iter().any(|start| payload.starts_with(start))
+    enshwick::net::looks_like_code(payload)
+}
+
+/// Whether `payload` may travel at all: within [`MAX_PAYLOAD`] and not
+/// starting like executable code.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{MAX_PAYLOAD, sealable};
+///
+/// assert!(sealable(b"\x02hello"));
+/// assert!(!sealable(b"\0asm\x01\0\0\0"));
+/// assert!(!sealable(&[0; MAX_PAYLOAD + 1]));
+/// ```
+#[must_use]
+pub fn sealable(payload: &[u8]) -> bool {
+    payload.len() <= MAX_PAYLOAD && !is_executable(payload)
 }
 
 /// The channel and payload of a received message, the payload borrowed
@@ -152,7 +153,7 @@ pub const fn sealed_size(channel: u32, payload: usize) -> usize {
 /// See [`open`].
 #[must_use]
 pub fn seal(out: &mut [u8], channel: u32, payload: &[u8]) -> Option<usize> {
-    if payload.len() > MAX_PAYLOAD || is_executable(payload) {
+    if !sealable(payload) {
         return None;
     }
     let header = Header {
@@ -174,7 +175,13 @@ mod tests {
     #[test]
     fn a_payload_that_starts_like_code_is_refused_both_ways() {
         let mut out = [0; MAX_SEALED];
-        for start in EXECUTABLE {
+        let mut pe = vec![0u8; 0x48];
+        pe[..2].copy_from_slice(b"MZ");
+        pe[0x3c] = 0x40;
+        pe[0x40..0x44].copy_from_slice(b"PE\0\0");
+        assert!(!is_executable(b"MZ, a string and no PE header"));
+        let starts: [&[u8]; 4] = [&pe, b"\x7fELF", b"\0asm", b"\x1bLua"];
+        for start in starts {
             assert_eq!(seal(&mut out, 1, start), None);
             let mut message = vec![ENVELOPE, 1];
             message.extend_from_slice(start);

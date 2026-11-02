@@ -1,11 +1,9 @@
-//! The server's side: frames from clients, their hellos and the join data they are owed.
+//! The server's side: messages from clients, their hellos and the join data they are owed.
 
 use std::time::Instant;
 
 use super::{State, deliver, dropped, item_data, remember_language, state};
-use crate::wire::{
-    CONTROL, Frame, Peer, WELCOME, assemble, control, frames, parse, read_hello, remote_message,
-};
+use crate::wire::{CONTROL, Peer, WELCOME, control, read_hello, remote_message};
 
 /// Tries to hand a client its join data, one a second, before the server
 /// stops and leaves the queue to other players.
@@ -38,15 +36,11 @@ pub(super) fn greet(state: &mut State, key: u64, now: Instant) -> Greeting {
     }
 }
 
-/// Adds a frame from the client `key` on the server; the whole message once
-/// its last part came, with its channel and whether `key` is a peer. A
-/// client that is no peer yet may only send control messages, its hello;
-/// each message takes from the client's rate.
-pub(super) fn take_frame(
-    state: &mut State,
-    key: u64,
-    frame: Frame,
-) -> Option<(u32, Vec<u8>, bool)> {
+/// Takes a message on `channel` from the client `key` on the server: whether
+/// `key` is a peer, or `None` when the message is not taken. A client that
+/// is no peer yet may only send control messages, its hello; each message
+/// takes from the client's rate.
+pub(super) fn take_message(state: &mut State, key: u64, channel: u32) -> Option<bool> {
     if key == 0 {
         return None;
     }
@@ -54,7 +48,7 @@ pub(super) fn take_frame(
     let peer = if known {
         state.peers.get_mut(&key)?
     } else {
-        if frame.channel() != CONTROL {
+        if channel != CONTROL {
             return None;
         }
         let room = state.greeting.len() < MAX_GREETING;
@@ -64,13 +58,11 @@ pub(super) fn take_frame(
             std::collections::hash_map::Entry::Vacant(_) => return None,
         }
     };
-    // A peer's message takes one from its rate; a stranger's every frame.
-    if (frame.index() == 0 || !known) && !peer.admit() {
+    if !peer.admit() {
         dropped();
         return None;
     }
-    let (channel, data) = assemble(peer, frame)?;
-    Some((channel, data, known))
+    Some(known)
 }
 
 /// Makes room for the hello of the client `key` in a full store by
@@ -94,10 +86,9 @@ pub(super) fn make_greeting_room(
 /// player slot in `live`, and sends the join data again to the clients in
 /// `live` that are owed it.
 pub(crate) fn keep_greeting(live: &[u64]) {
-    let sending = crate::chat::one_player_on();
     let owed = state(|s| {
         keep_greeting_in(s, live);
-        owed_in(s, live, sending)
+        owed_in(s, live)
     });
     for key in owed {
         hand_data(key);
@@ -105,13 +96,12 @@ pub(crate) fn keep_greeting(live: &[u64]) {
 }
 
 /// The clients still owed their join data: peers with a live slot in
-/// `live`, while the server is `sending` lines to one player; the rest are
-/// forgotten.
-pub(super) fn owed_in(state: &mut State, live: &[u64], sending: bool) -> Vec<u64> {
+/// `live`; the rest are forgotten.
+pub(super) fn owed_in(state: &mut State, live: &[u64]) -> Vec<u64> {
     let peers = &state.peers;
     state
         .owed
-        .retain(|(key, _)| sending && live.contains(key) && peers.contains_key(key));
+        .retain(|(key, _)| live.contains(key) && peers.contains_key(key));
     state.owed.iter().map(|&(key, _)| key).collect()
 }
 
@@ -160,11 +150,11 @@ fn hand_data(key: u64) {
         Handover::Whole | Handover::Again { first: false } => {}
         Handover::Again { first: true } => crate::log!(
             WARN,
-            "mod messages: the join data for {key:016x} did not fit the line queue; it goes again"
+            "mod messages: the join data for {key:016x} did not fit the link to the client; it goes again"
         ),
         Handover::GaveUp => crate::log!(
             WARN,
-            "mod messages: the join data for {key:016x} did not fit the line queue in {MAX_HANDOVERS} tries; the player gets it on joining again"
+            "mod messages: the join data for {key:016x} did not fit the link to the client in {MAX_HANDOVERS} tries; the player gets it on joining again"
         ),
     }
 }
@@ -173,27 +163,23 @@ pub(super) fn keep_greeting_in(state: &mut State, live: &[u64]) {
     state.greeting.retain(|key, _| live.contains(key));
 }
 
-/// Takes a frame line a client sent, on the server's game thread: `args` is
-/// the frame after the line's prefix, `key` the client's account key.
-pub(crate) fn server_received(key: u64, args: &str) {
+/// Takes a message a client sent on `channel`, on the server's game
+/// thread: `key` is the client's account key.
+pub(crate) fn server_carried(key: u64, channel: u32, data: &[u8]) {
     if key == 0 {
         return;
     }
-    let Some(frame) = parse(args) else {
-        dropped();
-        return;
-    };
-    let Some((channel, data, known)) = state(|s| {
+    let Some(known) = state(|s| {
         make_greeting_room(s, key, crate::world::live_keys);
-        take_frame(s, key, frame)
+        take_message(s, key, channel)
     }) else {
         return;
     };
     if channel != CONTROL {
-        crate::texts::for_player(key, || deliver(channel, key, &data));
+        crate::texts::for_player(key, || deliver(channel, key, data));
         return;
     }
-    if let Some(hello) = read_hello(&data) {
+    if let Some(hello) = read_hello(data) {
         if let Some(language) = hello.language {
             state(|s| remember_language(s, key, language));
         }
@@ -202,7 +188,7 @@ pub(crate) fn server_received(key: u64, args: &str) {
     }
     if known
         && let Some(loader) = crate::host::loader()
-        && let Some(message) = remote_message(&data)
+        && let Some(message) = remote_message(data)
     {
         crate::remote::server(loader, key, message);
     }
@@ -223,10 +209,9 @@ fn said_hello(key: u64, hello: &crate::admission::Hello) {
             "mod messages: the client of {key:016x} said hello again; it gets its data again"
         );
     }
-    let welcome = frames(CONTROL, 0, &control(WELCOME)).unwrap_or_default();
     // A client takes the server's settings messages only after the
     // welcome; without it, the client says hello again.
-    if crate::chat::send_frames(key, &welcome) && greeting.data {
+    if super::carry(key, CONTROL, &control(WELCOME)) && greeting.data {
         hand_data(key);
     }
 }

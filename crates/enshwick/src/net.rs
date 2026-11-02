@@ -1,20 +1,17 @@
 //! Messages between a mod's server part and its client part.
 //!
 //! A join mod opens a channel by name and version during `init`, on both
-//! sides; the loader carries its messages in chat lines no player sees, and
-//! only to clients that run Enshwick, so a vanilla client never gets one.
-//! A message is a value of the channel's type, encoded with `postcard`, of
-//! at most [`MAX_MESSAGE`] bytes; each side sends at most about twenty
-//! messages a second to each peer and drops what is over.
-//!
-//! Delivery is best effort: nothing confirms a message, and one lost on the
-//! way does not come again. Send whole values, not changes, and send
-//! important state again once the peer is ready.
+//! sides; the loader carries its messages on its own channel of the game's
+//! connection, reliable and in order, and only to clients that run
+//! Enshwick, so a vanilla client never gets one. A message is a value of
+//! the channel's type, encoded with `postcard`, of at most [`MAX_MESSAGE`]
+//! bytes; each side sends at most about twenty messages a second to each
+//! peer and refuses what is over.
 //!
 //! On the server the handler runs on the game thread, with the player's
-//! account key; on a client on the thread that takes the server's chat. A
-//! client that hosts a game is both: its server part talks to the clients,
-//! itself among them, and its client part to its own server.
+//! account key; on a client on the thread that sends its chat. A client
+//! that hosts a game is both: its server part talks to the clients, itself
+//! among them, and its client part to its own server.
 //!
 //! # Examples
 //!
@@ -51,6 +48,48 @@ use crate::{Host, Load, Off, PlayerKey};
 
 /// The largest message a channel carries, encoded, in bytes.
 pub const MAX_MESSAGE: usize = 4096;
+
+/// Starts of executable code besides a PE: ELF, Mach-O (both byte orders,
+/// 32 and 64 bit, and fat), WebAssembly and Lua bytecode, four bytes each,
+/// which ordinary data rarely starts with. Luau bytecode has no signature;
+/// the loader runs no received bytes as code.
+const CODE_STARTS: [&[u8]; 8] = [
+    b"\x7fELF",
+    b"\xfe\xed\xfa\xce",
+    b"\xfe\xed\xfa\xcf",
+    b"\xce\xfa\xed\xfe",
+    b"\xcf\xfa\xed\xfe",
+    b"\xca\xfe\xba\xbe",
+    b"\0asm",
+    b"\x1bLua",
+];
+
+/// Whether `bytes` start like executable code, which a channel never
+/// carries either way; such a message fails with [`SendError::LooksLikeCode`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::net::looks_like_code;
+///
+/// assert!(looks_like_code(b"\x7fELF\x02\x01"));
+/// assert!(!looks_like_code(b"MZ is a string, no PE header"));
+/// assert!(!looks_like_code(b"\x02hello"));
+/// ```
+#[must_use]
+pub fn looks_like_code(bytes: &[u8]) -> bool {
+    CODE_STARTS.iter().any(|start| bytes.starts_with(start)) || is_pe(bytes)
+}
+
+/// Whether `bytes` hold a PE image's start: `MZ`, and `PE\0\0` where the
+/// offset at 0x3c points, so data that only starts with `MZ` passes.
+fn is_pe(bytes: &[u8]) -> bool {
+    let header = bytes.get(0x3c..0x40).and_then(|offset| {
+        let at = usize::try_from(u32::from_le_bytes(offset.try_into().ok()?)).ok()?;
+        bytes.get(at..at.checked_add(4)?)
+    });
+    bytes.starts_with(b"MZ") && header == Some(b"PE\0\0".as_slice())
+}
 
 /// Who a message comes from or goes to.
 ///
@@ -103,10 +142,14 @@ pub enum SendError {
     /// who left, or a server that has not answered yet.
     #[error("the peer takes no messages now")]
     NotReady,
-    /// The peer's rate is spent for now, or too many lines wait on the
-    /// server.
+    /// The peer's rate is spent for now, or the link to the peer holds too
+    /// much.
     #[error("over the rate of messages to the peer")]
     OverRate,
+    /// The encoded message starts like executable code, by
+    /// [`looks_like_code`], which the channel never carries.
+    #[error("the message starts like executable code")]
+    LooksLikeCode,
     /// The message does not encode.
     #[error("the message does not encode: {0}")]
     Encode(String),
@@ -197,13 +240,15 @@ fn send_raw(host: Host, id: u32, peer: PlayerKey, bytes: &[u8]) -> Result<(), Se
     if bytes.len() > MAX_MESSAGE {
         return Err(SendError::TooLarge);
     }
+    if looks_like_code(bytes) {
+        return Err(SendError::LooksLikeCode);
+    }
     let api = host.api();
     let size = u32::try_from(bytes.len()).map_err(|_| SendError::TooLarge)?;
     match (api.net_send)(host.handle(), id, peer, bytes.as_ptr(), size) {
         Status::OK => Ok(()),
         Status::MISSING => Err(SendError::NotReady),
         Status::REFUSED => Err(SendError::OverRate),
-        Status::BAD_ARGS => Err(SendError::TooLarge),
         _ => Err(SendError::Refused),
     }
 }

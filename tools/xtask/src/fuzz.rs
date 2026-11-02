@@ -78,7 +78,6 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
         ],
     ),
     ("table", &["crates/enshwick-gamedata/src"]),
-    ("wire_frames", &["crates/internal/loader/src/wire"]),
 ];
 
 /// Every target.
@@ -190,7 +189,7 @@ mod tests {
     fn a_module_reaches_the_targets_that_read_it() {
         assert_eq!(
             reached(&files(&["crates/internal/loader/src/wire/frames.rs"])),
-            ["channel_messages", "link_packets", "notices", "wire_frames"]
+            ["channel_messages", "link_packets", "notices"]
         );
         assert_eq!(
             reached(&files(&["crates/internal/loader/src/join.rs"])),

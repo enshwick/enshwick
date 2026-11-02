@@ -8,6 +8,14 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Channel messages travel on the loader's own channel of the game's
+  connection instead of hidden chat lines: reliable and in order, and
+  refused when they start like executable code. `SendError::OverRate` also
+  means the link to the peer holds too much. A message that starts like
+  executable code fails with the new `SendError::LooksLikeCode`, which
+  `net::looks_like_code` tells beforehand, and the loader's other refusals
+  with `SendError::Refused`. A client and server must both run this loader
+  to talk (#885).
 - **Breaking:** mod settings show only behind each mod's Settings button on
   the Mods screen: the player's own settings, then the world's. In a world
   the game runs, single player or hosted, those are that world's; in the

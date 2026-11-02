@@ -1,26 +1,21 @@
-//! The wire format of the messages between a join mod's server part and its
-//! client part: frames in chat lines, and the protocol's own control
-//! messages.
+//! The wire format of the own channel between server and clients.
 //!
-//! A frame is base64 of a small header and up to one line's worth of the
-//! message; a message of up to [`MAX_MESSAGE`] bytes takes up to
-//! [`MAX_PARTS`] frames. Everything here reads what another player's game
-//! sent, so it never trusts a size or a count.
+//! The envelope of each message, the reliable link that carries it, and the
+//! protocol's own control messages.
+//!
+//! Everything here reads what another player's game sent, so it never
+//! trusts a size or a count.
 
 mod delivery;
 mod envelope;
-mod frame;
 mod link;
 mod peer;
 
 pub use delivery::{Drops, Outbox, strays};
 pub use envelope::{
     ENVELOPE, MAX_HEADER, MAX_PAYLOAD, MAX_SEALED, ReadMessageError, is_executable, open, seal,
-    sealed_size,
+    sealable, sealed_size,
 };
-#[cfg(all(windows, test))]
-pub(crate) use frame::Partial;
-pub use frame::{Frame, assemble, frames, parse};
 pub use link::{
     BACKLOG, FIRST_TIMEOUT, LAST_TIMEOUT, LINK, Link, MAX_LINK_HEADER, QueueMessageError,
     ReadPacketError, SILENCE, WINDOW,
@@ -32,19 +27,12 @@ use enshwick::i18n::Language;
 use crate::admission::Hello;
 use crate::remote::Message;
 
-/// The prefix of a frame line, both ways.
-pub const PREFIX: &str = "/enshwick-net ";
-/// The version of the frame protocol.
-pub const PROTOCOL: u8 = 2;
+/// The version of the control messages, their second byte.
+pub const PROTOCOL: u8 = 3;
 pub use enshwick::net::MAX_MESSAGE;
-/// The most frames one message takes.
-pub const MAX_PARTS: usize = 8;
-/// Message bytes in one frame: a line holds 1024 bytes, less the prefix,
-/// as base64 of the header and the part.
-pub const PART_BYTES: usize = 720;
 /// The longest control message, in bytes, with its kind and version.
-pub const MAX_CONTROL: usize = PART_BYTES * MAX_PARTS - 2;
-/// The channel of the protocol's own frames.
+pub const MAX_CONTROL: usize = MAX_PAYLOAD;
+/// The channel of the protocol's own messages.
 pub const CONTROL: u32 = 0;
 /// A control message from a client: its hello.
 pub const HELLO: u8 = 1;
@@ -254,6 +242,89 @@ pub fn demo_position(bytes: &[u8]) -> Option<[i64; 3]> {
     }
 }
 
+/// A list the server sends a client in parts, gathered up to `CAP` items.
+///
+/// A list that goes past the bound is dropped, and parts are ignored until
+/// the next first part, so a server cannot grow a client's memory without
+/// end.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::Gathered;
+///
+/// let mut ids = Gathered::<u32, 3>::default();
+/// assert_eq!(ids.add(true, false, [1, 2]), None);
+/// assert_eq!(ids.add(false, true, [3]), Some(vec![1, 2, 3]));
+/// assert_eq!(ids.add(true, true, [1, 2, 3, 4]), None, "over the bound");
+/// ```
+#[derive(Debug)]
+pub struct Gathered<T, const CAP: usize> {
+    items: Vec<T>,
+    spoiled: bool,
+}
+
+impl<T, const CAP: usize> Default for Gathered<T, CAP> {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            spoiled: false,
+        }
+    }
+}
+
+impl<T, const CAP: usize> Gathered<T, CAP> {
+    /// Adds a part; the whole list once its last part came within the
+    /// bound, `None` before or for a list past it.
+    ///
+    /// # Examples
+    ///
+    /// See [`Gathered`].
+    pub fn add(
+        &mut self,
+        first: bool,
+        last: bool,
+        part: impl IntoIterator<Item = T>,
+    ) -> Option<Vec<T>> {
+        if first {
+            self.clear();
+        }
+        if !self.spoiled {
+            for item in part {
+                if self.items.len() == CAP {
+                    self.items = Vec::new();
+                    self.spoiled = true;
+                    break;
+                }
+                self.items.push(item);
+            }
+        }
+        if !last {
+            return None;
+        }
+        let spoiled = core::mem::take(&mut self.spoiled);
+        let items = core::mem::take(&mut self.items);
+        (!spoiled).then_some(items)
+    }
+
+    /// Drops what came so far.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::wire::Gathered;
+    ///
+    /// let mut ids = Gathered::<u32, 3>::default();
+    /// ids.add(true, false, [1]);
+    /// ids.clear();
+    /// assert_eq!(ids.add(false, true, [2]), Some(vec![2]));
+    /// ```
+    pub fn clear(&mut self) {
+        self.items.clear();
+        self.spoiled = false;
+    }
+}
+
 /// Probe number `id`: [`PROBE_SIZE`] bytes of filler that depends on the
 /// number, after the hash of that filler.
 ///
@@ -298,43 +369,12 @@ fn probe_hash(bytes: &[u8]) -> u64 {
         (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
     })
 }
-
-/// Whether `text` is a frame line, which no chat shows.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_loader::wire::is_frame;
-///
-/// assert!(is_frame(b"/enshwick-net AQ"));
-/// assert!(!is_frame(b"hello"));
-/// ```
-#[must_use]
-pub fn is_frame(text: &[u8]) -> bool {
-    text.starts_with(PREFIX.as_bytes())
-}
-
-/// The frame a frame line carries, after its prefix.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_loader::wire::frame_body;
-///
-/// assert_eq!(frame_body("/enshwick-net AQ "), Some("AQ"));
-/// assert_eq!(frame_body("hello"), None);
-/// ```
-#[must_use]
-pub fn frame_body(line: &str) -> Option<&str> {
-    line.strip_prefix(PREFIX).map(str::trim)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn a_hello_names_the_join_mods_within_its_frames() {
+    fn a_hello_names_the_join_mods_within_a_control_message() {
         let said = read_hello(&hello(
             "you.trading-post@0.3.0,zones@0.1.0",
             9,
@@ -354,13 +394,28 @@ mod tests {
         let many: Vec<String> = (0..1000).map(|i| format!("mod-{i:04}@1.0.0")).collect();
         let long = hello(&many.join(","), 0, Language::DE_DE);
         assert_eq!(read_hello(&long).unwrap().language, Some(Language::DE_DE));
-        assert!(frames(CONTROL, 1, &long).is_some());
+        assert!(long.len() <= MAX_CONTROL);
         let cut = read_hello(&long).unwrap();
         assert!(!cut.complete, "a cut list says so");
         assert!(
             cut.mods.split(',').all(|entry| entry.ends_with("@1.0.0")),
             "cut at an entry"
         );
+    }
+
+    #[test]
+    fn a_list_past_its_bound_is_dropped_until_the_next_first_part() {
+        let mut ids = Gathered::<u32, 4>::default();
+        assert_eq!(ids.add(true, false, [1, 2, 3]), None);
+        assert_eq!(ids.add(false, false, [4, 5]), None);
+        assert_eq!(ids.add(false, false, [6; 1000]), None);
+        assert!(ids.items.capacity() <= 4, "nothing kept past the bound");
+        assert_eq!(
+            ids.add(false, true, [7]),
+            None,
+            "a spoiled list never lands"
+        );
+        assert_eq!(ids.add(true, true, [1, 2, 3, 4]), Some(vec![1, 2, 3, 4]));
     }
 
     #[test]
