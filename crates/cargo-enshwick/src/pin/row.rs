@@ -453,6 +453,69 @@ pub(crate) fn confirm_by_patterns(ported: &mut PortedRow<'_>, table: &Table, new
     }
 }
 
+/// Settles the symbols of `ported` left missing or ambiguous that `table`'s
+/// own patterns find on `new`, the rule the loader trusts when it carries
+/// the table to a build without one, and reads their `.bytes` constants
+/// again at the found address.
+pub(crate) fn confirm_symbols_by_patterns(
+    ported: &mut PortedRow<'_>,
+    table: &Table,
+    new: &Exe<'_>,
+) {
+    let (code, code_rva) = new.text();
+    let cell = |rva| {
+        new.data(rva, 4)
+            .and_then(|bytes| bytes.try_into().ok())
+            .map(u32::from_le_bytes)
+    };
+    let carried = table.fall_back(code, code_rva, cell);
+    for (id, rva) in carried.symbols() {
+        let Some(line) = ported.lines.iter_mut().find(|l| {
+            l.kind == Kind::Symbol
+                && l.id == *id
+                && matches!(l.status, Status::Missing | Status::Ambiguous)
+        }) else {
+            continue;
+        };
+        line.status = Status::Moved;
+        line.new = Some(*rva);
+        "found by the table's own pattern".clone_into(&mut line.note);
+        set_edit(ported, id, Edit::Set(*rva));
+        let bytes = format!("{id}.bytes");
+        let now = new
+            .code(*rva, 8)
+            .and_then(|b| b.try_into().ok())
+            .map(u64::from_le_bytes);
+        let Some(line) = ported
+            .lines
+            .iter_mut()
+            .find(|l| l.kind == Kind::Constant && l.id == bytes)
+        else {
+            continue;
+        };
+        let edit = if now == Some(line.old) {
+            line.status = Status::Kept;
+            line.note = format!("the code bytes at {id} are unchanged");
+            Edit::Keep
+        } else {
+            line.status = Status::Flagged;
+            line.note = format!(
+                "the code bytes at {id} now read {}",
+                now.map_or_else(|| "nothing".to_owned(), hex)
+            );
+            Edit::Note(format!("{bytes} flagged: {}", line.note))
+        };
+        set_edit(ported, &bytes, edit);
+    }
+}
+
+/// Replaces the edit of entry `id` with `edit`.
+fn set_edit(ported: &mut PortedRow<'_>, id: &str, edit: Edit) {
+    if let Some(own) = ported.edits.iter_mut().find(|(e, _)| e.id == id) {
+        own.1 = edit;
+    }
+}
+
 /// Settles the constants of `ported` the game keeps in a data cell
 /// ([`Constant::cell`](enshwick_gamedata::Constant::cell)): the value is
 /// the `u32` in `new` at the cell's ported symbol, kept when unchanged and
