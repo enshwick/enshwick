@@ -259,7 +259,7 @@ Each entry names the pull request that made the change.
   protections it could stand for: its own key, or every missing one when the
   bad key is unknown or a table. A file that is not TOML names the line and
   column where it stops reading, and the log says the defaults apply
-  instead of the rest of the file.
+  instead of the rest of the file (#856).
 - `Load::world_store` refuses the names `settings` and `save`, whose files
   the loader keeps in the same world folder, so a store no longer writes
   over the world's settings (#680).
