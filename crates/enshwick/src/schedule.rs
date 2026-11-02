@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn runs_keep_their_buffers_between_steps() {
-        let (scheduler, _) = Scheduler::get(ModHandle(1));
+        let (scheduler, _) = Scheduler::get(ModHandle(3));
         scheduler.every(Duration::ZERO, || ControlFlow::Continue(()));
         scheduler.run_due(1);
         let lock = |m: &'static Mutex<Vec<Task>>| m.relock();
@@ -345,7 +345,9 @@ mod tests {
 
     #[test]
     fn a_delay_past_what_time_holds_never_runs() {
-        let (scheduler, _) = Scheduler::get(ModHandle(1));
+        // Each test owns its mod's queue: tests run in parallel, and two
+        // sharing one see each other's tasks.
+        let (scheduler, _) = Scheduler::get(ModHandle(2));
         scheduler.after(Duration::MAX, || unreachable!());
         scheduler.every(Duration::MAX, || unreachable!());
         scheduler.run_due(1);
