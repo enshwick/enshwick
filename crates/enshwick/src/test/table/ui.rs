@@ -211,6 +211,9 @@ pub(crate) extern "system" fn ui_markers(
     markers: *const UiMarker,
     count: u32,
 ) -> Status {
+    if with(true, |s| s.host.side == Side::SERVER) {
+        return Status::MISSING;
+    }
     if count as usize > crate::ui::MARKER_LIMIT {
         return Status::BAD_ARGS;
     }

@@ -50,29 +50,50 @@ fn headed() -> Vec<String> {
         .collect()
 }
 
-/// Whether `body` hands `param` to a header-aware helper.
+/// Whether `body` hands `param` to a header-aware helper and never reaches
+/// it directly.
 fn routed(body: &str, param: &str) -> bool {
-    HELPERS.iter().any(|helper| {
-        body.match_indices(helper).any(|(at, _)| {
-            let args = &body[at + helper.len()..];
-            let mut depth = 0_usize;
-            let end = args
-                .char_indices()
-                .find(|&(_, c)| {
-                    match c {
-                        '(' => depth += 1,
-                        ')' if depth == 0 => return true,
-                        ')' => depth -= 1,
-                        _ => {}
-                    }
-                    false
-                })
-                .map_or(args.len(), |(end, _)| end);
-            let args = &args[..end];
-            args.split(|c: char| !c.is_alphanumeric() && c != '_')
-                .any(|word| word == param)
+    // `param` itself, not a field of that name such as `kind.def`.
+    let alone = |text: &str| {
+        body.match_indices(text).any(|(at, _)| {
+            body[..at]
+                .chars()
+                .next_back()
+                .is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == '.'))
         })
-    })
+    };
+    let direct = [
+        ".as_ref()",
+        ".as_mut()",
+        ".write(",
+        ".read(",
+        ".read_unaligned(",
+    ]
+    .iter()
+    .any(|raw| alone(&format!("{param}{raw}")))
+        || body.contains(&format!("from_raw_parts({param},"));
+    !direct
+        && HELPERS.iter().any(|helper| {
+            body.match_indices(helper).any(|(at, _)| {
+                let args = &body[at + helper.len()..];
+                let mut depth = 0_usize;
+                let end = args
+                    .char_indices()
+                    .find(|&(_, c)| {
+                        match c {
+                            '(' => depth += 1,
+                            ')' if depth == 0 => return true,
+                            ')' => depth -= 1,
+                            _ => {}
+                        }
+                        false
+                    })
+                    .map_or(args.len(), |(end, _)| end);
+                let args = &args[..end];
+                args.split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .any(|word| word == param)
+            })
+        })
 }
 
 #[test]

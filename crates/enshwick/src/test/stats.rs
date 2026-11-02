@@ -111,7 +111,16 @@ pub(crate) extern "system" fn stat_open(
     let Some(id) = unsafe { id.as_str() }.and_then(full) else {
         return Status::BAD_ARGS;
     };
-    let def = super::table::get_headed(def);
+    let def = if def.is_null() {
+        None
+    } else {
+        // A definition short of what every writer knows is malformed, as the
+        // loader has it, not absent.
+        let Some(def) = super::table::get_headed(def) else {
+            return Status::BAD_ARGS;
+        };
+        Some(def)
+    };
     let parsed = match &def {
         Some(data) => match StatDef::from_data(data) {
             Some(def) => Some(def),
@@ -175,17 +184,11 @@ pub(crate) extern "system" fn stat_info(
     let Some((data, name)) = found else {
         return Status::MISSING;
     };
-    if def.is_null() || id.is_null() {
-        return Status::BAD_ARGS;
-    }
     let written = super::table::put_headed(def, data);
     if written != Status::OK {
         return written;
     }
-    // SAFETY: the `is_null` check refused null; the safe layer passes an
-    // aligned `Str` it owns.
-    unsafe { id.write(name) };
-    Status::OK
+    super::table::put(id, name)
 }
 
 /// Every modifier toward `stat` (all for `u32::MAX`) on `entity`, in
