@@ -7,7 +7,7 @@ use enshwick::Entity;
 use enshwick::abi::Event;
 use rustc_hash::FxHashSet;
 
-use super::carried::set_aside_older;
+use super::carried::{set_aside_cleared, set_aside_older};
 use super::{
     FILE, FINDING, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game, kind_of, scope,
     serves, take_destroyed, template_id, wanted,
@@ -174,6 +174,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 pending,
                 unopened,
                 joining: Vec::new(),
+                cleared: Vec::new(),
                 changed: false,
             });
         }
@@ -321,6 +322,13 @@ fn save(loader: &Loader, after_game_save: bool) {
         // an earlier leave still waits on counts: written so, the next load
         // would name the slot twice.
         if !FINDING.load(Ordering::Relaxed) {
+            if !server.cleared.is_empty() {
+                for (entity, character) in crate::world::characters(loader) {
+                    server.changed |= set_aside_cleared(server, character, |link, slot| {
+                        game::in_slot(loader, entity.0, link, slot)
+                    }) > 0;
+                }
+            }
             let newer = server
                 .values
                 .iter()

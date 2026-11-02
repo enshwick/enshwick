@@ -40,7 +40,7 @@ use enshwick::abi::{HookFlags, Status};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use self::attach::find_pending;
-use self::carried::{JOIN_LOOK_EVERY, Joining, look_for_carried};
+use self::carried::{JOIN_LOOK_EVERY, Joining, forget_carried, look_for_carried};
 pub(crate) use self::carried::{player_joined, player_left};
 pub(crate) use self::world_file::world_event;
 use crate::chains::Next;
@@ -116,6 +116,10 @@ struct Server {
     /// The joined characters whose carried records wait; at most one entry
     /// per player.
     joining: Vec<Joining>,
+    /// Item values cleared where no slot read while a carried record of
+    /// their kind and item waited, as (kind, item entity, item): a look or
+    /// leave that finds the entity in that record's slot sets it aside.
+    cleared: Vec<(u32, u32, u32)>,
     changed: bool,
 }
 
@@ -397,6 +401,9 @@ pub(crate) fn after_step(loader: &Loader) {
             return;
         };
         let gone = prune_destroyed(&mut server.values, &destroyed);
+        server
+            .cleared
+            .retain(|(_, pide, _)| !destroyed.contains(pide));
         server.changed |= !gone.is_empty();
         gone
     };
@@ -587,16 +594,8 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         let server = server.as_mut().ok_or(Status::MISSING)?;
         if value.is_empty() {
             server.values.remove(&(kind, pide));
-            // A carried value still waiting on this item's slot would come
-            // back at the next look: it goes aside, kept but attached to
-            // nothing.
-            if let Some(slot @ Anchor::Carried { .. }) = anchor {
-                for record in server.pending.iter_mut().filter(|record| {
-                    !record.aside
-                        && (record.kind, record.anchor, record.check) == (kind, slot, item)
-                }) {
-                    record.aside = true;
-                }
+            if spec.scope == Scope::Item {
+                forget_carried(server, kind, pide, item, anchor);
             }
         } else {
             let record = Record {

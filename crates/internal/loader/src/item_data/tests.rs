@@ -115,6 +115,7 @@ fn server(pending: Vec<Pending>, unopened: Vec<String>) -> Server {
         pending,
         unopened,
         joining: Vec::new(),
+        cleared: Vec::new(),
         changed: false,
     }
 }
@@ -356,6 +357,43 @@ fn a_value_set_on_a_slot_an_older_record_waits_on_sets_that_record_aside() {
     );
     assert_eq!(set_aside_older(&mut pending, [(0, slot)].into_iter()), 1);
     assert!(pending[0].aside);
+}
+
+#[test]
+fn a_value_cleared_where_its_slot_does_not_read_never_comes_back_at_the_next_look() {
+    const ANN: Entity = Entity(7);
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
+    kinds();
+    let slot = Anchor::Carried {
+        character: ANN_GUID,
+        link: 0,
+        slot: 1,
+    };
+    let mut world = server(
+        vec![Pending {
+            kind: 0,
+            anchor: slot,
+            check: 77,
+            value: Box::new([1]),
+            aside: false,
+        }],
+        Vec::new(),
+    );
+    // Ann just joined; off the game thread her item's slot does not read.
+    forget_carried(&mut world, 0, 3001, 77, None);
+    let mut joining = Joining::new(ANN);
+    let mut found = Vec::new();
+    let _look = look(
+        &mut world,
+        &[(ANN, ANN_GUID)],
+        &mut joining,
+        &mut found,
+        |_| true,
+        |_, link, slot| ((link, slot) == (0, 1)).then_some((3001, 77)),
+    );
+    assert!(found.is_empty());
+    assert!(world.values.is_empty());
+    assert!(world.pending[0].aside, "kept, attached to nothing");
 }
 
 #[test]

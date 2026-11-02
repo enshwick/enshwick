@@ -381,6 +381,9 @@ Each entry names the pull request that made the change.
   unwind data, so a stack walk or exception passes a frame stopped in one; a
   function whose unwind data cannot be read is still hooked, without it, and
   the loader logs why (#872, #873).
+- An item data value cleared off the game thread, or while its slot did not
+  read, stays cleared: the value a joining player's item still waited for
+  in the world's file no longer comes back at the next look (#911).
 - A mod whose binary holds declarations that do not read, such as a
   dependency's built with another enshwick, or damaged ones, gives the
   loader its manifest without schemas or exports and stays off with the
