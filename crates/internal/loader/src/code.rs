@@ -37,11 +37,17 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// The bytes the stop block's replacement needs: `inc r13` and a `jmp`.
 const JUMP_LEN: usize = 8;
 
+/// The feature of a mod's patch: every patch of a mod is one feature.
+pub(crate) const WHOLE_MOD: &str = "";
+
 /// A patch of game code, registered during init.
 #[derive(Clone, Debug)]
 pub(crate) struct CodePatch {
     /// The owning mod's index, or [`ModIndex::LOADER`].
     pub(crate) owner: ModIndex,
+    /// The feature of its owner it serves, empty for a mod: the patches of
+    /// one feature go in together, so a skipped one turns off only that.
+    pub(crate) feature: &'static str,
     /// The first byte.
     pub(crate) address: usize,
     /// What the bytes must read at arming.
@@ -324,9 +330,9 @@ pub(crate) fn seal() -> Vec<CodePatch> {
 
 /// What arming does with each patch, given the bytes the hooks being armed
 /// replace, their targets first, and what `current` reads at an address and
-/// length now. An owner's patches go in together or not at all: one skipped
-/// skips the rest, since a change made of several patches may be unsafe in
-/// part.
+/// length now. The patches of one owner's feature go in together or not at
+/// all: one skipped skips the rest, since a change made of several patches
+/// may be unsafe in part.
 pub(crate) fn check(
     patches: &[CodePatch],
     hooked: &[(usize, usize)],
@@ -360,20 +366,22 @@ pub(crate) fn check(
             }
         })
         .collect();
-    skip_with_owner(patches, &mut verdicts);
+    skip_with_feature(patches, &mut verdicts);
     verdicts
 }
 
-/// Skips every patch still to be written whose owner has a skipped one.
-pub(crate) fn skip_with_owner(patches: &[CodePatch], verdicts: &mut [Verdict]) {
-    let skipped: Vec<ModIndex> = patches
+/// Skips every patch still to be written whose owner's feature has a skipped
+/// one.
+pub(crate) fn skip_with_feature(patches: &[CodePatch], verdicts: &mut [Verdict]) {
+    let key = |patch: &CodePatch| (patch.owner, patch.feature);
+    let skipped: Vec<(ModIndex, &str)> = patches
         .iter()
         .zip(&*verdicts)
-        .filter_map(|(patch, verdict)| matches!(verdict, Verdict::Skip(_)).then_some(patch.owner))
+        .filter_map(|(patch, verdict)| matches!(verdict, Verdict::Skip(_)).then_some(key(patch)))
         .collect();
     for (patch, verdict) in patches.iter().zip(verdicts) {
-        if *verdict == Verdict::Write && skipped.contains(&patch.owner) {
-            *verdict = Verdict::Skip("another patch of its owner was skipped".into());
+        if *verdict == Verdict::Write && skipped.contains(&key(patch)) {
+            *verdict = Verdict::Skip("another patch of the same feature was skipped".into());
         }
     }
 }
@@ -539,6 +547,7 @@ fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftLimitError> {
     unsafe { crate::memory::read_bytes(stop, 0, &mut expected) };
     Ok(CodePatch {
         owner: ModIndex::LOADER,
+        feature: LIFT_FEATURE,
         address: stop,
         expected: expected.into(),
         replacement,

@@ -247,6 +247,34 @@ fn the_owners_of_a_failed_mid_function_hook_count_as_failed() {
 }
 
 #[test]
+fn a_patch_a_thread_stays_in_is_left_out_by_its_place_among_those_written() {
+    use crate::code::{CodePatch, Verdict, WHOLE_MOD};
+    use crate::mod_index::ModIndex;
+
+    let patch = |owner: usize, address: usize| CodePatch {
+        owner: ModIndex::new(owner),
+        feature: WHOLE_MOD,
+        address,
+        expected: Box::new([0x90]),
+        replacement: Box::new([0xcc]),
+        needs: Box::default(),
+    };
+    let patches = [
+        patch(0, 0x10),
+        patch(1, 0x20),
+        patch(1, 0x30),
+        patch(2, 0x40),
+    ];
+    let mut verdicts = [Verdict::Off, Verdict::Write, Verdict::Write, Verdict::Write];
+    // The round wrote patches 1 to 3, and a thread stayed in its first.
+    leave_out(&patches, &mut verdicts, &[1, 2, 3], &[0]);
+    assert_eq!(verdicts[0], Verdict::Off);
+    assert!(matches!(&verdicts[1], Verdict::Skip(why) if why.contains("thread")));
+    assert!(matches!(&verdicts[2], Verdict::Skip(why) if why.contains("another patch")));
+    assert_eq!(verdicts[3], Verdict::Write);
+}
+
+#[test]
 fn the_unwind_data_describes_the_frame() {
     assert_eq!(FRAME % 16, 8);
     assert_eq!(u32::from(UNWIND[6]) * 8, FRAME);
