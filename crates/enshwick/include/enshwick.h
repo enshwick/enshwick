@@ -2652,8 +2652,9 @@ typedef struct EnshwickTransactionOp {
   // The change, borrowed for the call: the record its kind names.
   const void *data;
 } EnshwickTransactionOp;
-// A terrain add, dig or flatten: `data` points at a `TerrainEdit`
-// without `TerrainEdit::DRY_RUN`.
+// A terrain add, dig or flatten: `data` points at a
+// `TerrainEdit` without
+// `TerrainEdit::DRY_RUN`.
 #define EnshwickTransactionOp_TERRAIN 1
 // Voxels written over a box: `data` points at a `VoxelWrite`.
 #define EnshwickTransactionOp_VOXELS 2
@@ -2690,8 +2691,8 @@ typedef struct EnshwickTransactionInfo {
   // undo, 1 KiB each.
   uint64_t bricks;
   // When the server refused the player the transaction acts for, its
-  // reason, one of the `BuildRights` refusals; `BuildRights::ALLOWED`
-  // otherwise.
+  // reason, one of the `BuildRights` refusals;
+  // `BuildRights::ALLOWED` otherwise.
   uint32_t refusal;
   // Zero.
   uint32_t reserved;

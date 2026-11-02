@@ -356,6 +356,7 @@ mod rates;
 mod services;
 mod stats;
 mod survivors;
+mod transactions;
 mod ui;
 mod world;
 
@@ -379,6 +380,7 @@ pub use rates::*;
 pub use services::*;
 pub use stats::*;
 pub use survivors::*;
+pub use transactions::*;
 pub use ui::*;
 pub use world::*;
 
