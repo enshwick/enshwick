@@ -233,6 +233,7 @@ fn size_patch(
     replacement[1..].copy_from_slice(&grown.to_le_bytes());
     Ok(CodePatch {
         owner: ModIndex::LOADER,
+        feature: PAST_16,
         address: start + create.start + at,
         expected: expected.into(),
         replacement: replacement.into(),
@@ -384,7 +385,8 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
 
 /// Settles, before arming writes anything, whether bases past 16 are armed:
 /// every site linked by us, among the `hooked` targets, and every size
-/// patch written.
+/// patch written. It runs before each round of writes and so only settles
+/// the state; [`report`] tells the outcome once, after the last round.
 pub(super) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]) {
     let armed = LINKED.load(Ordering::Acquire)
         && SITES.get().is_some_and(|sites| {
@@ -396,14 +398,22 @@ pub(super) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
                         .any(|(p, v)| p.address == mine.address && *v == Verdict::Write)
                 })
         });
-    if SITES.get().is_some() && !armed {
-        crate::log!(
-            WARN,
-            "bases keep 16: a hook or a size patch of bases past 16 is not armed"
-        );
-    }
     ARMED.store(armed, Ordering::Release);
     SETTLED.store(true, Ordering::Release);
+}
+
+/// Tells once, after the hooks are armed, that bases past 16 are off, unless
+/// a skipped patch already reported it among `already`.
+pub(super) fn report(loader: &Loader, already: &[&str]) {
+    if SITES.get().is_some() && !armed() && !already.contains(&PAST_16) {
+        loader.feature_off(PAST_16, "bases", "a hook or a size patch is not armed");
+    }
+}
+
+/// Turns off bases past 16 with a plain store, while the other threads may
+/// stand still: see [`crate::code::disarm`].
+pub(super) fn disarm() {
+    ARMED.store(false, Ordering::Release);
 }
 
 /// Fills the window of an object a create has just made.

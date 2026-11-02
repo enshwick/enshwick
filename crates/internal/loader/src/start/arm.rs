@@ -67,16 +67,19 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
     } else if crate::diag::counting() {
         crate::log!(INFO, "diagnostics on: hook calls counted");
     }
-    report_patches(loader, &patches, &verdicts);
+    let off = report_patches(loader, &patches, &verdicts);
+    crate::bases::report(loader, &off);
 }
 
 /// Logs what became of each code patch and turns off the owners of skipped
-/// ones.
+/// ones: a mod whole, a loader feature by its name. The loader features
+/// turned off, each once.
 fn report_patches(
     loader: &Loader,
     patches: &[crate::code::CodePatch],
     verdicts: &[crate::code::Verdict],
-) {
+) -> Vec<&'static str> {
+    let mut off: Vec<&'static str> = Vec::new();
     let mut tally = crate::diag::Patches::default();
     for verdict in verdicts {
         match verdict {
@@ -109,14 +112,20 @@ fn report_patches(
                     "code patch of {owner} at {:#x} skipped: {reason}",
                     patch.address
                 );
-                loader.turn_off(
-                    patch.owner,
-                    &format!("its code patch at {:#x} was skipped", patch.address),
-                );
+                if !patch.owner.is_loader() {
+                    loader.turn_off(
+                        patch.owner,
+                        &format!("its code patch at {:#x} was skipped", patch.address),
+                    );
+                } else if !off.contains(&patch.feature) {
+                    off.push(patch.feature);
+                    loader.feature_off(patch.feature, &format!("{:#x}", patch.address), reason);
+                }
             }
         }
     }
     if crate::code::lifted() {
         crate::log!(INFO, "workshop recipe limit lifted");
     }
+    off
 }

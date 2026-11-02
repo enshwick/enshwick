@@ -32,7 +32,7 @@ use crate::mod_index::ModIndex;
 pub(crate) use crate::chains::Counter;
 use crate::chains::{Chains, Hop};
 use crate::code::{CodePatch, Verdict};
-use crate::detour::{Pending, Request};
+use crate::detour::{Commit, Pending, Request};
 use crate::mid::{Mids, Stubs};
 
 const PAGE: usize = 4096;
@@ -660,22 +660,36 @@ fn write(
     let failed = failed_owners(failures, chains, mids);
     let off_or_failed = |owner: ModIndex| off(owner) || failed.contains(&owner);
     let mut verdicts = crate::code::check(patches, &hooked, off_or_failed, crate::code::read);
-    let writes: Vec<crate::detour::Bytes<'_>> = patches
-        .iter()
-        .zip(&verdicts)
-        .filter(|&(_, v)| *v == Verdict::Write)
-        .map(|(p, _)| crate::detour::Bytes {
-            address: p.address,
-            bytes: &p.replacement,
-        })
-        .collect();
     let targets: Vec<u64> = ready
         .iter()
         .filter(|&&(_, inside, _)| !inside)
         .map(|&(target, _, _)| target)
         .collect();
-    crate::code::arming(patches, &verdicts, &targets);
-    if !crate::detour::commit(&hooks, &writes) {
+    // Each round that finds a thread inside a code patch leaves that patch
+    // out, so the rounds end. Arming settles before each round, since it
+    // logs and so cannot run while the threads stand still; a round that
+    // finds a thread inside writes nothing and disarms the patch features
+    // before the threads resume, so no reader sees one on for a patch that
+    // then drops.
+    let committed = loop {
+        let writes: Vec<crate::detour::Bytes<'_>> = patches
+            .iter()
+            .zip(&verdicts)
+            .enumerate()
+            .filter(|&(_, (_, v))| *v == Verdict::Write)
+            .map(|(id, (p, _))| crate::detour::Bytes {
+                id,
+                address: p.address,
+                replacement: &p.replacement,
+            })
+            .collect();
+        crate::code::arming(patches, &verdicts, &targets);
+        match crate::detour::commit(&hooks, &writes, crate::code::disarm) {
+            Commit::Busy(stuck) => leave_out(patches, &mut verdicts, &stuck),
+            done => break done,
+        }
+    };
+    if committed == Commit::Failed {
         crate::code::arming(&[], &[], &[]);
         for verdict in &mut verdicts {
             if *verdict == Verdict::Write {
@@ -694,6 +708,19 @@ fn write(
         }
     }
     verdicts
+}
+
+/// Skips the patches a thread stayed inside, by their index in `patches`,
+/// with the rest of their feature.
+fn leave_out(patches: &[CodePatch], verdicts: &mut [Verdict], stuck: &[usize]) {
+    for &id in stuck {
+        // Every id comes from this batch's own patches: a miss is a bug.
+        debug_assert!(id < verdicts.len(), "a stuck patch {id} outside the batch");
+        if let Some(verdict) = verdicts.get_mut(id) {
+            *verdict = Verdict::Skip("a thread stayed inside it through every wait".into());
+        }
+    }
+    crate::code::skip_with_feature(patches, verdicts);
 }
 
 /// An entry of a function table for `RtlAddFunctionTable`: offsets from

@@ -314,6 +314,11 @@ Each entry names the pull request that made the change.
   instead of leaving them with the old copy. Queries and one-shot changes
   never stop a reload (#886).
 
+- A code patch that a thread stands in, or would return into, through every
+  wait at arming is left out instead of written under it: the log names the
+  patch with "a thread stayed inside it through every wait", and its mod is
+  turned off. A skipped patch of the loader turns off only the feature it
+  serves (#860).
 - A poisoned lock's warning names the line that took the lock, not a line
   inside the API (#821).
 - The command file runs no line again when it does not read for a while,
