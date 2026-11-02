@@ -453,6 +453,14 @@ fn arm_watched(loader: &Loader, frame: Option<FrameSlot>, watching: Option<&mut 
 fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching>) {
     for (index, library) in order.iter().enumerate() {
         let record = &loader.mods[index];
+        if let Some(why) = crate::developer_tools::refused(
+            loader.side,
+            loader.developer_tools,
+            record.manifest.flags,
+        ) {
+            loader.turn_off(ModIndex::new(index), why);
+            continue;
+        }
         // SAFETY: `library.init` is the mod's `INIT` export, typed `InitFn`
         // as `enshwick::abi::exports` documents, called with the static host
         // table and the mod's own handle.

@@ -420,6 +420,28 @@ pub(crate) fn note_manifest(api: *const HostApi, manifest: &crate::abi::Manifest
     }
 }
 
+/// Whether the fake, when `api` is its table, turns the mod of `manifest`
+/// off before its init, as a dedicated server without developer tools does
+/// a mod with `developer: true`; logs the loader's reason when it does.
+pub(crate) fn refuses_developer(api: *const HostApi, manifest: &crate::abi::Manifest) -> bool {
+    core::ptr::eq(api, &raw const TABLE)
+        && manifest
+            .flags
+            .contains(crate::abi::ManifestFlags::DEVELOPER)
+        && with(false, |s| {
+            let refused = s.host.side == crate::abi::Side::SERVER && !s.host.developer_tools;
+            if refused {
+                s.logs.push((
+                    Level::WARN,
+                    "a developer tool: a dedicated server runs it only while the file \
+                     mod-data/enshwick/developer-tools exists"
+                        .to_owned(),
+                ));
+            }
+            refused
+        })
+}
+
 /// The base limits the mod asked for, and whether the hooks are armed.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct BaseLimitState {

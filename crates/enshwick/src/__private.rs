@@ -440,6 +440,10 @@ pub unsafe fn init<M: Mod>(
     let Some(host) = (unsafe { Host::new(api, me) }) else {
         return Status::BAD_ARGS;
     };
+    #[cfg(feature = "test")]
+    if crate::test::table::refuses_developer(api, manifest) {
+        return Status::REFUSED;
+    }
     let host = host.install();
     crate::host::log_panics();
     MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);

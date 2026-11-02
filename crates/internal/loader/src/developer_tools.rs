@@ -1,10 +1,32 @@
-//! Developer tools, such as the interface demo: on only where the file
+//! Developer tools, such as the interface demo, dev reload and mods with
+//! `developer: true`: on only where the file
 //! `mod-data/enshwick/developer-tools` exists, read once at start, so a
-//! server or client the player installed never runs them.
+//! server players use never runs them. A client keeps its developer mods,
+//! with the warning.
 
 use std::path::Path;
 
-use enshwick::abi::ManifestFlags;
+use enshwick::abi::{ManifestFlags, Side};
+
+/// Why a dedicated server without developer tools turns a developer mod off
+/// before its `init`.
+pub(crate) const REFUSED: &str = "a developer tool: a dedicated server runs it only while the file \
+     mod-data/enshwick/developer-tools exists";
+
+/// Why a mod with `flags` does not run on `side`, where developer tools are
+/// `on` or not; `None` when it runs.
+#[must_use]
+pub(crate) fn refused(side: Side, on: bool, flags: ManifestFlags) -> Option<&'static str> {
+    (side == Side::SERVER && !on && flags.contains(ManifestFlags::DEVELOPER)).then_some(REFUSED)
+}
+
+/// Whether `dev_reload` (`wanted`) takes effect on `side`, where developer
+/// tools are `on` or not: on a client always, on a dedicated server only
+/// with developer tools.
+#[must_use]
+pub(crate) fn reloads(wanted: bool, side: Side, on: bool) -> bool {
+    wanted && (side != Side::SERVER || on)
+}
 
 /// The file that turns developer tools on, in the loader's data folder.
 pub(crate) const MARKER: &str = "developer-tools";
@@ -67,6 +89,23 @@ mod tests {
         assert!(on(false, [ManifestFlags::JOIN, ManifestFlags(4 | 1)]));
         assert!(on(false, [ManifestFlags::DEVELOPER]));
         assert!(!on(false, []));
+    }
+
+    #[test]
+    fn a_dedicated_server_runs_a_developer_mod_only_with_developer_tools() {
+        let tool = ManifestFlags::DEVELOPER;
+        assert_eq!(refused(Side::SERVER, false, tool), Some(REFUSED));
+        assert_eq!(refused(Side::SERVER, true, tool), None);
+        assert_eq!(refused(Side::CLIENT, false, tool), None);
+        assert_eq!(refused(Side::SERVER, false, ManifestFlags::JOIN), None);
+    }
+
+    #[test]
+    fn dev_reload_on_a_dedicated_server_needs_developer_tools() {
+        assert!(!reloads(true, Side::SERVER, false));
+        assert!(reloads(true, Side::SERVER, true));
+        assert!(reloads(true, Side::CLIENT, false));
+        assert!(!reloads(false, Side::CLIENT, true));
     }
 
     #[test]

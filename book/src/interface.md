@@ -254,11 +254,23 @@ the developer tools warning, the server's
 mods, features and parts of the loader that are off. The reasons are in the
 server's log and status summary.
 
-Developer tools are on while the file `mod-data/enshwick/developer-tools`
-exists or a mod with `developer: true` in its manifest runs. Then every
-player reads `DEVELOPER TOOLS ARE ON` in upper-case letters: in chat at
-join, in red at the top of the Mods screen and at the end of the main
-menu's line.
+## Developer tools
+
+The empty file `mod-data/enshwick/developer-tools`, read at start, turns on
+the tools for making mods: mods with `developer: true` in their manifest,
+[dev reload](testing.md#reloading-a-mod-while-the-game-runs) and the
+interface demo. A dedicated server without the file turns a developer mod
+off before its `init`, with the reason in the log and on the Mods screen,
+and leaves `dev_reload` off, so a server players use never runs them. A
+client runs its developer mods and reloads without the file.
+
+While the file exists or a developer mod runs, every player reads
+`DEVELOPER TOOLS ARE ON` in upper-case letters: in chat at join, in red at
+the top of the Mods screen and at the end of the main menu's line.
+
+The [fake loader](testing.md) has developer tools on, as a development
+server does; `FakeHost::developer_tools(false)` refuses a developer mod's
+`init` on the server side, as a server players use does.
 
 ## Testing
 
