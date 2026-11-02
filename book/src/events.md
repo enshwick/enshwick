@@ -84,8 +84,10 @@ On dedicated server build 399 the simulation runs fixed ticks of 1/60 s, and
 one step runs 1 to 3 of them (read from the server's code). With nobody
 online the server made 20 steps a second over 229 minutes of its own
 statistics. With players its loop waits only 1 ms, which allows up to 60
-steps a second; that rate is not yet measured with a real player. Steps
-are not time, so a tick handler runs on a period of wall time:
+steps a second. A client hosting a world with one player in it made 60
+steps a second over 20 minutes of the game's own statistics (client 426); a
+dedicated server with a real player is not yet measured. Steps are not
+time, so a tick handler runs on a period of wall time:
 
 - `load.on::<Ticked>(f)` runs `f` after the first step, then after the first
   step at least `Ticked::DEFAULT_EVERY` (100 ms) after its last call.
