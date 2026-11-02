@@ -144,6 +144,15 @@ Each entry names the pull request that made the change.
   `FakeHost::without_fact` drops one, so a world or inventory test copies no
   type hash or offset of its own (#809).
 
+- `FakeHost::game_events` sets the hit, death and equipment change events,
+  the hit history and experience credit a death reads its killer from, and
+  damage bits, an attack category and an equipment slot numbered unlike the
+  API's; `FakeHost::map_waypoints` sets each player's waypoint;
+  `FakeHost::effect_events` sets the NPC command, threat and ping events
+  `Effects` raises; `FakeHost::loot` sets the components loot from destroyed
+  things checks. `test::facts` names their facts, and the loot slot's, so a
+  test of these areas lays out and reads its events by them (#871).
+
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`
   name the running game's content by its debug names, so a mod's code holds
   no vanilla GUID; `deps!` offers them as `deps::vanilla`, and no dependency

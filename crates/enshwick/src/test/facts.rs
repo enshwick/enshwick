@@ -82,3 +82,99 @@ pub const FUEL: Fact = Fact(ids::FUEL);
 pub const FUEL_MAX: Fact = Fact(ids::FUEL_MAX);
 /// The component relating an entity to its owner, the owner's `u32` entity.
 pub const OWNER: Fact = Fact(ids::OWNER);
+
+/// The hit game event, set by
+/// [`FakeHost::game_events`](super::FakeHost::game_events); its size is a
+/// hit history's entry.
+pub const HIT_EVENT: Fact = Fact(ids::HIT_EVENT);
+/// Where a hit keeps the `u32` entity behind its source.
+pub const HIT_EVENT_ROOT_SOURCE_ID: Fact = Fact(ids::HIT_EVENT_ROOT_SOURCE_ID);
+/// Where a hit keeps its `u32` target.
+pub const HIT_EVENT_TARGET_ID: Fact = Fact(ids::HIT_EVENT_TARGET_ID);
+/// Where a hit keeps its `u32` source.
+pub const HIT_EVENT_SOURCE_ID: Fact = Fact(ids::HIT_EVENT_SOURCE_ID);
+/// Where a hit keeps the `u32` entity behind its target.
+pub const HIT_EVENT_ROOT_TARGET_ID: Fact = Fact(ids::HIT_EVENT_ROOT_TARGET_ID);
+/// Where a hit keeps its `u32` weapon item entity.
+pub const HIT_EVENT_WEAPON_PIDE_ID: Fact = Fact(ids::HIT_EVENT_WEAPON_PIDE_ID);
+/// Where a hit keeps its `i32` health change.
+pub const HIT_EVENT_HEALTH_CHANGE: Fact = Fact(ids::HIT_HEALTH_CHANGE);
+/// Where a hit keeps its `i32` stamina change.
+pub const HIT_EVENT_STAMINA_CHANGE: Fact = Fact(ids::HIT_STAMINA_CHANGE);
+/// Where a hit keeps its damage types, a `u16` of engine bits.
+pub const HIT_EVENT_DAMAGE_TYPES: Fact = Fact(ids::HIT_DAMAGE_TYPES);
+/// Where a hit keeps its attack category, a byte of engine bits.
+pub const HIT_EVENT_ATTACK_CATEGORY: Fact = Fact(ids::HIT_EVENT_ATTACK_CATEGORY);
+/// Where a hit keeps its target's faction, a byte.
+pub const HIT_EVENT_TARGET_FACTION: Fact = Fact(ids::HIT_TARGET_FACTION);
+/// The death game event.
+pub const ENTITY_DIED_EVENT: Fact = Fact(ids::ENTITY_DIED_EVENT);
+/// Where a death keeps its `u32` dead entity.
+pub const ENTITY_DIED_EVENT_DEAD_ENTITY_ID: Fact = Fact(ids::ENTITY_DIED_EVENT_DEAD_ENTITY_ID);
+/// The component of the hits an entity took.
+pub const HIT_HISTORY: Fact = Fact(ids::HIT_HISTORY);
+/// Where a hit history keeps the `u32` index of its last hit.
+pub const HIT_HISTORY_LAST_INDEX: Fact = Fact(ids::HIT_HISTORY_LAST_INDEX);
+/// Where a hit history's hits start, one [`HIT_EVENT`] each.
+pub const HIT_HISTORY_ENTRIES: Fact = Fact(ids::HIT_HISTORY_ENTRIES);
+/// The component naming the last player that hit an entity.
+pub const EXPERIENCE_CREDIT: Fact = Fact(ids::EXPERIENCE_CREDIT);
+/// Where an experience credit keeps that player's `u32` entity.
+pub const EXPERIENCE_CREDIT_LAST_PLAYER: Fact = Fact(ids::EXPERIENCE_CREDIT_LAST_PLAYER);
+/// The equipment change game event.
+pub const HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT: Fact =
+    Fact(ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT);
+/// Where an equipment change keeps its slot, a byte.
+pub const HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT_EQUIPMENT_SLOT: Fact =
+    Fact(ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT_EQUIPMENT_SLOT);
+/// The engine bit of magical fire damage.
+pub const DAMAGE_TYPE_MAGICAL_FIRE: Fact = Fact(ids::DAMAGE_TYPE_MAGICAL_FIRE);
+/// The engine bit of physical cut damage.
+pub const DAMAGE_TYPE_PHYSICAL_CUT: Fact = Fact(ids::DAMAGE_TYPE_PHYSICAL_CUT);
+/// The engine bit of the melee attack category.
+pub const ATTACK_CATEGORY_MELEE: Fact = Fact(ids::ATTACK_CATEGORY_MELEE);
+/// The engine number of the shield equipment slot.
+pub const EQUIPMENT_SLOT_SHIELD: Fact = Fact(ids::EQUIPMENT_SLOT_SHIELD);
+
+/// The component of a player's map waypoint, set by
+/// [`FakeHost::map_waypoints`](super::FakeHost::map_waypoints).
+pub const PLAYER_WAYPOINT: Fact = Fact(ids::PLAYER_WAYPOINT);
+/// Where a waypoint keeps the byte that shows it.
+pub const PLAYER_WAYPOINT_ENABLED: Fact = Fact(ids::PLAYER_WAYPOINT_ENABLED);
+/// Where a waypoint keeps its place, three 32.32 fixed-point `i64`.
+pub const PLAYER_WAYPOINT_POSITION: Fact = Fact(ids::PLAYER_WAYPOINT_POSITION);
+
+/// The NPC command game event, set by
+/// [`FakeHost::effect_events`](super::FakeHost::effect_events).
+pub const NPC_COMMAND_EVENT: Fact = Fact(ids::NPC_COMMAND_EVENT);
+/// Where an NPC command keeps its command type, a byte.
+pub const NPC_COMMAND_EVENT_TYPE: Fact = Fact(ids::NPC_COMMAND_EVENT_TYPE);
+/// Where an NPC command keeps its `u32` NPC.
+pub const NPC_COMMAND_EVENT_NPC_ID: Fact = Fact(ids::NPC_COMMAND_EVENT_NPC_ID);
+/// Where an NPC command keeps its target, a transform.
+pub const NPC_COMMAND_EVENT_TARGET_TRANSFORM: Fact = Fact(ids::NPC_COMMAND_EVENT_TARGET_TRANSFORM);
+/// The threat game event.
+pub const ADD_THREAT_TARGET_EVENT: Fact = Fact(ids::ADD_THREAT_TARGET_EVENT);
+/// Where a threat keeps its `u32` attacker.
+pub const ADD_THREAT_TARGET_EVENT_ATTACKER_ID: Fact =
+    Fact(ids::ADD_THREAT_TARGET_EVENT_ATTACKER_ID);
+/// Where a threat keeps its `u32` target.
+pub const ADD_THREAT_TARGET_EVENT_TARGET_ID: Fact = Fact(ids::ADD_THREAT_TARGET_EVENT_TARGET_ID);
+/// Where a threat keeps its `f32` value.
+pub const ADD_THREAT_TARGET_EVENT_THREAT_VALUE: Fact =
+    Fact(ids::ADD_THREAT_TARGET_EVENT_THREAT_VALUE);
+/// The ping game event.
+pub const UI_PING_EVENT: Fact = Fact(ids::UI_PING_EVENT);
+/// Where a ping keeps its `u32` sender.
+pub const UI_PING_EVENT_SENDER_ENTITY_ID: Fact = Fact(ids::UI_PING_EVENT_SENDER_ENTITY_ID);
+/// Where a ping keeps its place, three 32.32 fixed-point `i64`.
+pub const UI_PING_EVENT_POSITION: Fact = Fact(ids::UI_PING_POSITION);
+
+/// The slot the single loot roll fills, which no preset sets: the loot tests
+/// set its size and fields by hand, as the roll links only where a build
+/// names them.
+pub const LOOT_SLOT: Fact = Fact(ids::LOOT_SLOT);
+/// Where a loot slot keeps its `u32` item.
+pub const LOOT_SLOT_ITEM: Fact = Fact(ids::LOOT_SLOT_ITEM);
+/// Where a loot slot keeps its `u32` count.
+pub const LOOT_SLOT_COUNT: Fact = Fact(ids::LOOT_SLOT_COUNT);
