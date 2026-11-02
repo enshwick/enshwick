@@ -20,7 +20,8 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
         &mut chains,
         &mids,
         frame,
-        host::is_off,
+        host::bypassed,
+        host::wait,
         &patches,
         patch::Count::from_settings(),
     );
@@ -85,7 +86,7 @@ fn report_patches(
         match verdict {
             crate::code::Verdict::Write => tally.written += 1,
             crate::code::Verdict::Off => tally.off += 1,
-            crate::code::Verdict::Skip(_) => tally.skipped += 1,
+            crate::code::Verdict::Skip(_) | crate::code::Verdict::Wait => tally.skipped += 1,
         }
     }
     crate::diag::record_patches(tally);
@@ -104,6 +105,11 @@ fn report_patches(
             crate::code::Verdict::Off => crate::log!(
                 INFO,
                 "code patch of {owner} at {:#x} left out: the mod is off",
+                patch.address
+            ),
+            crate::code::Verdict::Wait => crate::log!(
+                WARN,
+                "code patch of {owner} at {:#x} waits: a thread stayed inside it",
                 patch.address
             ),
             crate::code::Verdict::Skip(reason) => {

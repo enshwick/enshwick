@@ -74,6 +74,9 @@ pub(crate) enum Verdict {
     Off,
     /// Left out, and why; its owner is turned off.
     Skip(String),
+    /// Left out for now: a thread stayed inside it, so it is tried again
+    /// later and its owner waits, its hooks bypassed, until it goes in.
+    Wait,
 }
 
 static PENDING: Mutex<Vec<CodePatch>> = Mutex::new(Vec::new());
@@ -370,18 +373,22 @@ pub(crate) fn check(
     verdicts
 }
 
-/// Skips every patch still to be written whose owner's feature has a skipped
-/// one.
 pub(crate) fn skip_with_feature(patches: &[CodePatch], verdicts: &mut [Verdict]) {
     let key = |patch: &CodePatch| (patch.owner, patch.feature);
-    let skipped: Vec<(ModIndex, &str)> = patches
-        .iter()
-        .zip(&*verdicts)
-        .filter_map(|(patch, verdict)| matches!(verdict, Verdict::Skip(_)).then_some(key(patch)))
-        .collect();
+    let marked = |verdicts: &[Verdict], wanted: fn(&Verdict) -> bool| -> Vec<(ModIndex, &str)> {
+        patches
+            .iter()
+            .zip(verdicts)
+            .filter_map(|(patch, verdict)| wanted(verdict).then_some(key(patch)))
+            .collect()
+    };
+    let skipped = marked(verdicts, |v| matches!(v, Verdict::Skip(_)));
+    let waiting = marked(verdicts, |v| *v == Verdict::Wait);
     for (patch, verdict) in patches.iter().zip(verdicts) {
-        if *verdict == Verdict::Write && skipped.contains(&key(patch)) {
+        if skipped.contains(&key(patch)) && matches!(verdict, Verdict::Write | Verdict::Wait) {
             *verdict = Verdict::Skip("another patch of the same feature was skipped".into());
+        } else if *verdict == Verdict::Write && waiting.contains(&key(patch)) {
+            *verdict = Verdict::Wait;
         }
     }
 }

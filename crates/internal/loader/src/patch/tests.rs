@@ -268,17 +268,18 @@ fn four_patches() -> [CodePatch; 4] {
 }
 
 #[test]
-fn a_patch_a_thread_stays_in_is_left_out_by_its_own_index() {
+fn a_patch_a_thread_stays_in_waits_with_its_feature_and_names_its_owner() {
     use crate::code::Verdict;
 
     let patches = four_patches();
     let mut verdicts = [Verdict::Off, Verdict::Write, Verdict::Write, Verdict::Write];
     // A thread stayed in patch 1, after the patch of the mod that is off.
-    leave_out(&patches, &mut verdicts, &[1]);
-    assert_eq!(verdicts[0], Verdict::Off);
-    assert!(matches!(&verdicts[1], Verdict::Skip(why) if why.contains("thread")));
-    assert!(matches!(&verdicts[2], Verdict::Skip(why) if why.contains("another patch")));
-    assert_eq!(verdicts[3], Verdict::Write);
+    let owners = wait_out(&patches, &mut verdicts, &[1]);
+    assert_eq!(
+        verdicts,
+        [Verdict::Off, Verdict::Wait, Verdict::Wait, Verdict::Write]
+    );
+    assert_eq!(owners, [patches[1].owner]);
 }
 
 #[test]
@@ -288,7 +289,7 @@ fn a_stuck_patch_id_outside_the_batch_is_a_bug() {
 
     let patches = four_patches();
     let mut verdicts = [Verdict::Off, Verdict::Write, Verdict::Write, Verdict::Write];
-    leave_out(&patches, &mut verdicts, &[9]);
+    let _owners = wait_out(&patches, &mut verdicts, &[9]);
 }
 
 #[test]
