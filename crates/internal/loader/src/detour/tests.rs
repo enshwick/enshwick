@@ -514,6 +514,22 @@ fn a_mid_function_hook_that_moved_an_epilogue_unwinds_as_a_leaf() {
     );
 }
 
+#[test]
+fn a_start_hook_that_moved_an_implicit_stack_pointer_write_unwinds_as_a_leaf() {
+    // `xchg rax, rsp` twice, past an empty prologue: rsp is the second
+    // operand, written all the same.
+    let original = trampoline_of(
+        with_entry(&[0x48, 0x87, 0xe0, 0x48, 0x87, 0xe0, 0xc3, 0xcc]),
+        false,
+    );
+    let mut image = 0;
+    // SAFETY: `RtlLookupFunctionEntry` takes any address, `image` is a
+    // writable `u64` and the history table may be null.
+    let entry =
+        unsafe { RtlLookupFunctionEntry(original as u64, &raw mut image, core::ptr::null_mut()) };
+    assert!(entry.is_null(), "a trampoline that moves rsp has no entry");
+}
+
 /// Sets `flags[1]`, then waits for `flags[0]` and returns; `r8` points at
 /// the flags. Touches no stack, so any alignment does.
 const SPIN: [u8; 16] = [

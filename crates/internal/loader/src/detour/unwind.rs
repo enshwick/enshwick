@@ -207,6 +207,7 @@ fn function_unwind(span: Span<'_>, function: Function, out: &mut [u8]) -> Result
                         span.moved_end,
                         function.begin + usize::from(offset),
                     )
+                    .ok_or(UnwindError::Misaligned)?
                 } else {
                     0
                 };
@@ -230,6 +231,8 @@ enum UnwindError {
     /// The hook is not at its function's start, or its moved bytes reach an
     /// epilogue.
     Inside,
+    /// A prologue code ends inside a moved instruction.
+    Misaligned,
     /// A page of the info does not read, or the info stops short.
     Unreadable,
     /// The info is not version 1 or 2.
@@ -248,6 +251,7 @@ impl UnwindError {
             Self::Inside => {
                 "a call it moved unwinds as a leaf, since only a hook at its function's start, short of any epilogue, carries the function's unwind codes"
             }
+            Self::Misaligned => "its unwind codes do not end on its moved instructions",
             Self::Unreadable => "its unwind info does not read",
             Self::BadVersion => "its unwind info is an unknown version",
             Self::UnknownOp => "its unwind info holds an unknown code",

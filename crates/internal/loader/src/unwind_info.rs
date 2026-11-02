@@ -97,7 +97,9 @@ pub(crate) fn prologue_code(op: u8) -> bool {
 /// ending at `end` (an address in the hooked function) counts as run: zero
 /// for one before the hooked bytes start at `target`, its place among the
 /// moved bytes after the relay of `relay` bytes for one inside them, and
-/// never for one after, which runs only once control jumps back.
+/// never (255) for one after, which runs only once control jumps back;
+/// `None` for one that ends inside a moved instruction, which no offset in
+/// the trampoline describes, and for one past what a byte holds.
 ///
 /// `moved` pairs each moved instruction's start offset from `target` with
 /// its start offset in the trampoline, and `moved_end` is where the moved
@@ -111,25 +113,22 @@ pub(crate) fn prologue_offset(
     moved: &[(usize, usize)],
     moved_end: usize,
     end: usize,
-) -> u8 {
+) -> Option<u8> {
     if end <= target {
-        return 0;
+        return Some(0);
     }
     let off = end - target;
     if off > stolen {
-        return u8::MAX;
+        return Some(u8::MAX);
     }
     // The code ends where the next moved instruction starts, or, for the
     // last, at the end of the moved bytes.
     let tramp = if off == stolen {
         moved_end
     } else {
-        match moved.iter().find(|&&(old, _)| old == off) {
-            Some(&(_, new)) => new,
-            None => return u8::MAX,
-        }
+        moved.iter().find(|&&(old, _)| old == off)?.1
     };
-    u8::try_from(relay + tramp).unwrap_or(u8::MAX)
+    u8::try_from(relay + tramp).ok()
 }
 
 #[cfg(test)]
@@ -165,12 +164,15 @@ mod tests {
         // Three moved instructions of 1, 1 and 4 bytes, laid out byte for
         // byte in the trampoline after a 14-byte relay: 6 stolen bytes.
         let moved = [(0, 0), (1, 1), (2, 2)];
-        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x1000), 0); // at the start
-        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x0fff), 0); // before it
-        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x1001), 15); // after push, 14 + 1
-        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x1002), 16); // after push, 14 + 2
-        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x1006), 20); // after sub, 14 + 6
-        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x1007), u8::MAX); // past it
+        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x1000), Some(0)); // at the start
+        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x0fff), Some(0)); // before it
+        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x1001), Some(15)); // after push, 14 + 1
+        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x1002), Some(16)); // after push, 14 + 2
+        assert_eq!(prologue_offset(14, 0x1000, 6, &moved, 6, 0x1006), Some(20)); // after sub, 14 + 6
+        assert_eq!(
+            prologue_offset(14, 0x1000, 6, &moved, 6, 0x1007),
+            Some(u8::MAX)
+        ); // past it
     }
 
     #[test]
@@ -179,8 +181,16 @@ mod tests {
         // trampoline (a `call rel32` turned into its far form), so the sub
         // after it, ending at offset 9 in the function, sits at 11 there.
         let moved = [(0, 0), (5, 11)];
-        assert_eq!(prologue_offset(14, 0x2000, 9, &moved, 15, 0x2005), 25); // after the call, 14 + 11
-        assert_eq!(prologue_offset(14, 0x2000, 9, &moved, 15, 0x2009), 29); // after the sub, 14 + 15
+        assert_eq!(prologue_offset(14, 0x2000, 9, &moved, 15, 0x2005), Some(25)); // after the call, 14 + 11
+        assert_eq!(prologue_offset(14, 0x2000, 9, &moved, 15, 0x2009), Some(29)); // after the sub, 14 + 15
+    }
+
+    #[test]
+    fn a_code_ending_inside_a_moved_instruction_has_no_offset() {
+        // A code ending at offset 3, inside the 5-byte call: no trampoline
+        // offset says it has run, so the trampoline gets no codes at all.
+        let moved = [(0, 0), (5, 11)];
+        assert_eq!(prologue_offset(14, 0x2000, 9, &moved, 15, 0x2003), None);
     }
 
     #[test]

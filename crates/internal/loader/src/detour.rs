@@ -53,7 +53,7 @@ use std::sync::Mutex;
 use enshwick::abi::Level;
 use iced_x86::{
     BlockEncoder, BlockEncoderOptions, Code, Decoder, DecoderOptions, FlowControl, Instruction,
-    InstructionBlock, Register,
+    InstructionBlock, InstructionInfoFactory, OpAccess, Register,
 };
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::System::Diagnostics::Debug::{
@@ -84,6 +84,9 @@ const CODE: usize = 128;
 /// A relay and a trampoline, then their function-table entry and unwind
 /// info.
 const ENTRY: usize = 256;
+// A copied code's offset of 255 means "never run" only while every
+// trampoline address sits below it.
+const _: () = assert!(CODE < u8::MAX as usize);
 /// Windows reserves memory in 64 KiB steps.
 const GRANULARITY: usize = 0x1_0000; // bound, not a game offset: a fact of Windows
 const BLOCK: usize = GRANULARITY;
@@ -386,12 +389,26 @@ fn stack_effects(instructions: &[Instruction], moved: &[(usize, usize)]) -> (Vec
             FlowControl::Call | FlowControl::IndirectCall
         )
     };
+    let mut factory = InstructionInfoFactory::new();
     let stack_moves = instructions
         .iter()
         .zip(moved)
         .filter(|&(instruction, _)| {
-            (instruction.stack_pointer_increment() != 0 && !call(instruction))
-                || instruction.op0_register() == Register::RSP
+            !call(instruction)
+                && factory
+                    .info(instruction)
+                    .used_registers()
+                    .iter()
+                    .any(|used| {
+                        used.register() == Register::RSP
+                            && matches!(
+                                used.access(),
+                                OpAccess::Write
+                                    | OpAccess::CondWrite
+                                    | OpAccess::ReadWrite
+                                    | OpAccess::ReadCondWrite
+                            )
+                    })
         })
         .map(|(_, &(old, _))| old)
         .collect();
