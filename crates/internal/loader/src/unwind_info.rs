@@ -18,6 +18,7 @@ pub(crate) const TABLE_ENTRY: usize = size_of::<RuntimeFunction>();
 /// Where a chained info's parent entry holds the parent's unwind info.
 pub(crate) const UNWIND_OF: usize = core::mem::offset_of!(RuntimeFunction, unwind);
 /// The most chained entries a walk follows, so a looping chain ends.
+#[cfg(windows)]
 pub(crate) const CHAIN: usize = 32;
 
 /// An entry of a function table for `RtlAddFunctionTable` or
