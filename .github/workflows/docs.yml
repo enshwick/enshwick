@@ -15,7 +15,6 @@ on:
       - "crates/enshwick-gamedata/tables/**"
       - "crates/internal/loader/src/errors.toml"
       - .github/workflows/docs.yml
-      - .github/workflows/docs-rebuild.yml
 
 permissions: {}
 
@@ -25,7 +24,13 @@ concurrency:
 
 jobs:
   site:
-    uses: ./.github/workflows/docs-rebuild.yml
-    secrets:
-      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
-      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      # The site builds on Cloudflare Workers Builds; its deploy hook builds
+      # main once more, and a call while a build is still queued joins it.
+      - name: Start the site build
+        env:
+          DOCS_DEPLOY_HOOK: ${{ secrets.DOCS_DEPLOY_HOOK }}
+        run: curl --fail-with-body --silent --show-error --retry 3 -X POST "$DOCS_DEPLOY_HOOK"
