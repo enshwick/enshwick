@@ -98,6 +98,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "channel_messages"
+path = "fuzz_targets/channel_messages.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "wire_frames"
 path = "fuzz_targets/wire_frames.rs"
 test = false
