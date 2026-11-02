@@ -53,7 +53,8 @@ pub enum ReadSectionError {
     /// A part is no UTF-8 text.
     #[error("the point section's part at byte {0} is no text")]
     NotText(usize),
-    /// A part is neither a head nor a point, event or call with a name.
+    /// A part is neither a head naming its mod nor a point, event or call
+    /// with a name.
     #[error("the point section's part at byte {0} is no head and no named point, event or call")]
     Damaged(usize),
     /// A head carries its tables itself, as a mod built before its
@@ -94,6 +95,9 @@ impl<'a> Section<'a> {
             if text.starts_with("schema = ") {
                 if text.contains("\n[[") {
                     return Err(ReadSectionError::Outdated);
+                }
+                if head_id(text).is_none() {
+                    return Err(ReadSectionError::Damaged(start));
                 }
                 section.heads.push(text);
                 continue;
@@ -161,7 +165,10 @@ impl<'a> Section<'a> {
         if own.is_empty() {
             return String::new();
         }
-        own.sort_unstable_by_key(|e| (e.kind, e.name));
+        // Two entries of one name, as two majors of a call, keep an order
+        // of their own text, whatever the linker's.
+        own.sort_unstable_by_key(|e| (e.kind, e.name, e.text));
+        own.dedup_by_key(|e| e.text);
         let mut text = head.to_owned();
         for entry in own {
             text.push_str(entry.text);
