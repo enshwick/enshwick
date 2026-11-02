@@ -118,10 +118,10 @@ pub fn write_atomically(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<(
     let written = io::Write::write_all(&mut file, contents.as_ref()).and_then(|()| file.sync_all());
     drop(file);
     let placed = written
-        .and_then(|()| while_busy(|| keep_backup(path)))
+        .and_then(|()| keep_backup(path))
         .and_then(|()| while_busy(|| std::fs::rename(&temporary, path)));
     if placed.is_err() {
-        let _gone = std::fs::remove_file(&temporary);
+        let _gone = while_busy(|| std::fs::remove_file(&temporary));
     }
     placed
 }
@@ -181,11 +181,11 @@ fn create_temporary(path: &Path) -> io::Result<(PathBuf, std::fs::File)> {
 /// file is there.
 fn keep_backup(path: &Path) -> io::Result<()> {
     let backup = backup_path(path);
-    match std::fs::remove_file(&backup) {
+    match while_busy(|| std::fs::remove_file(&backup)) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
         _ => {}
     }
-    match std::fs::hard_link(path, &backup) {
+    match while_busy(|| std::fs::hard_link(path, &backup)) {
         Ok(()) => Ok(()),
         // No file yet, or a writer at the same time kept it a moment ago: a
         // whole earlier file stays either way, and a copy would hold the file
@@ -198,7 +198,8 @@ fn keep_backup(path: &Path) -> io::Result<()> {
         {
             Ok(())
         }
-        Err(e) if busy(&e) => Err(e),
+        // Still refused once the tries ran out, as a file system without
+        // links answers.
         Err(_) => std::fs::copy(path, &backup).map(drop),
     }
 }
