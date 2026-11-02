@@ -29,6 +29,13 @@ fn toolchain() -> String {
 /// a change to the module file or below its folder reaches the target.
 pub(crate) const TARGETS: &[(&str, &[&str])] = &[
     ("action_sheet", &["crates/enshwick/src/actions"]),
+    (
+        "channel_messages",
+        &[
+            "crates/internal/loader/src/remote",
+            "crates/internal/loader/src/wire",
+        ],
+    ),
     ("item_records", &["crates/internal/loader/src/item_records"]),
     ("item_save", &["crates/internal/loader/src/item_records"]),
     (
@@ -182,7 +189,7 @@ mod tests {
     fn a_module_reaches_the_targets_that_read_it() {
         assert_eq!(
             reached(&files(&["crates/internal/loader/src/wire/frames.rs"])),
-            ["notices", "wire_frames"]
+            ["channel_messages", "notices", "wire_frames"]
         );
         assert_eq!(
             reached(&files(&["crates/internal/loader/src/join.rs"])),

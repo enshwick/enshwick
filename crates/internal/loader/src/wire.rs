@@ -8,10 +8,15 @@
 //! sent, so it never trusts a size or a count.
 
 mod delivery;
+mod envelope;
 mod frame;
 mod peer;
 
 pub use delivery::{Drops, Outbox, strays};
+pub use envelope::{
+    ENVELOPE, MAX_HEADER, MAX_PAYLOAD, MAX_SEALED, ReadMessageError, is_executable, open, seal,
+    sealed_size,
+};
 #[cfg(all(windows, test))]
 pub(crate) use frame::Partial;
 pub use frame::{Frame, assemble, frames, parse};
