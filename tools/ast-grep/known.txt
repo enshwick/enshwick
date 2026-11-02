@@ -81,9 +81,8 @@ static-is-registry-fuse-or-state crates/internal/loader/src/packs.rs static PACK
 static-is-registry-fuse-or-state crates/internal/loader/src/progress.rs static COMFORT: Mutex<Vec<Registered<ComfortFn>>> = Mutex::new(Vec::new());
 static-is-registry-fuse-or-state crates/internal/loader/src/progress.rs static EXPERIENCE_FILTERS: Mutex<Vec<Registered<ExperiencePassFn>>> = Mutex::new(Vec::new());
 static-is-registry-fuse-or-state crates/internal/loader/src/progress.rs static SKILLS: Mutex<Vec<(u32, Registered<SkillCheckFn>)>> = Mutex::new(Vec::new());
-# Each mod's table calls during init and the mods a join held off, reload
-# state; they move into one reload state struct with `GENERATIONS`.
-static-is-registry-fuse-or-state crates/internal/loader/src/reload.rs static CALLS: Mutex<Vec<Vec<&'static str>>> = Mutex::new(Vec::new());
+# The mods a join held off, reload state; it moves into one reload state
+# struct with `GENERATIONS`.
 static-is-registry-fuse-or-state crates/internal/loader/src/reload.rs static HELD: Mutex<Vec<String>> = Mutex::new(Vec::new());
 # When each player last changed a setting, the server's rate state; it
 # moves into one remote state struct with `QUERIES`.

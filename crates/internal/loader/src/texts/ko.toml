@@ -317,3 +317,5 @@
 "resistance_lightning.name" = "충격 저항"
 "resistance_poison.name" = "독 저항"
 "mods.developer.off" = "개발자 도구입니다. mod-data/enshwick/developer-tools 파일이 있을 때만 작동합니다"
+"reload.done" = "{name}을(를) 다시 불러왔습니다."
+"reload.waits" = "{name}이(가) 변경되었지만 다시 시작해야 적용됩니다: {why}"

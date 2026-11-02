@@ -103,6 +103,11 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
     let shown = listing.shown(*first, mods.len());
     for (index, record) in mods.iter().enumerate().take(shown.end).skip(shown.start) {
         about(paint, record);
+        if loader.developer_tools
+            && let Some(reloaded) = crate::reload::last(index)
+        {
+            paint.label(reloaded.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+        }
         let features = record.features.relock().clone();
         let features = crate::features::shown(&features, record.texts.relock().as_ref());
         for feature in features {
