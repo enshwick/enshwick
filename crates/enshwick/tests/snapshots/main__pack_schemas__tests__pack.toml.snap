@@ -60,14 +60,6 @@ expression: shape
             "null"
           ]
         },
-        "stage": {
-          "$ref": "#/$defs/Stage",
-          "default": "runtime"
-        },
-        "synced": {
-          "default": false,
-          "type": "boolean"
-        },
         "text": {
           "default": "",
           "type": "string"
@@ -91,30 +83,6 @@ expression: shape
         },
         {
           "const": "client",
-          "type": "string"
-        }
-      ]
-    },
-    "Stage": {
-      "oneOf": [
-        {
-          "const": "startup",
-          "type": "string"
-        },
-        {
-          "const": "runtime",
-          "type": "string"
-        },
-        {
-          "const": "client",
-          "type": "string"
-        },
-        {
-          "const": "sync",
-          "type": "string"
-        },
-        {
-          "const": "restart",
           "type": "string"
         }
       ]

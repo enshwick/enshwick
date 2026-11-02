@@ -45,17 +45,8 @@ mod tests {
     /// Test settings.
     #[enshwick::config]
     #[derive(Default)]
-    struct Settings {
-        /// A limit.
-        limit: u32,
-    }
-
-    /// Test settings.
-    #[enshwick::config]
-    #[derive(Default)]
     struct Live {
-        /// A limit, the same on the server and its players.
-        #[config(sync)]
+        /// A limit that follows the file while the world runs.
         limit: u32,
     }
 
@@ -65,23 +56,20 @@ mod tests {
 
     impl enshwick::Mod for Test {
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-            let settings: Settings = load.config()?;
             assert_eq!(load.symbol("npc.lookup")?, 0x1_4020_2e80);
             assert!(load.symbol("nope").is_err());
             // SAFETY: the fake's symbol is a function of the hook's type.
             unsafe { load.hook(&DOUBLE, load.system("anything")?) }?;
             // SAFETY: the fake's symbol is a function of the hook's type.
             unsafe { load.hook(&HALVE, load.symbol("tripled")?) }?;
-            enshwick::info!("limit {}", settings.limit);
+            enshwick::info!("limit {}", LIVE_LIMIT.load(Ordering::Relaxed));
             enshwick::debug!("{}", evaluated());
             for _ in 0..3 {
                 enshwick::warn_once!("once");
                 enshwick::warn_every!(std::time::Duration::from_secs(3600), "every");
             }
-            load.on_config_change(|live: Live| LIVE_LIMIT.store(live.limit, Ordering::Relaxed))?;
-            Ok(Self {
-                limit: settings.limit,
-            })
+            load.on_settings_change(|live: &Live| LIVE_LIMIT.store(live.limit, Ordering::Relaxed))?;
+            Ok(Self { limit: 7 })
         }
     }
 
@@ -175,36 +163,19 @@ mod tests {
             Event::SETTINGS_CHANGED,
         ];
         assert_eq!(loader.subscriptions(), watched);
-        loader.set_settings("limit = 9\n");
+        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 0, "no world yet");
+        assert_eq!(loader.raise::<events::SettingsReplaced>(&()), 1);
+        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 7);
+        loader.set_settings("settings", "limit = 9\n");
         assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
         assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 9);
-        loader.set_settings("limit = \"x\"\n");
+        loader.set_settings("settings", "limit = \"x\"\n");
         assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
-        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 9);
+        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 0);
         assert!(
-            loader
-                .logs()
-                .iter()
-                .any(|(_, line)| line.starts_with("settings change skipped"))
+            loader.logs().iter().any(|(_, line)| line
+                == "settings.toml: limit takes a whole number; the default applies")
         );
         assert_eq!(loader.raise::<events::LoaderSettingsChanged>(&()), 1);
-
-        // A joined server's join values reach the handler over the file's,
-        // and the file's come back without them.
-        loader.set_settings("limit = 9\n");
-        loader.set_server_synced(Some("{ limit = 12 }"));
-        assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
-        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 12);
-        assert_eq!(
-            loader.reported_synced().last().map(String::as_str),
-            Some("{ limit = 9 }")
-        );
-        loader.set_server_synced(Some("{ limit = 'x' }"));
-        assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
-        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 9);
-        loader.set_server_synced(None);
-        loader.set_settings("limit = 8\n");
-        assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
-        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 8);
     }
 }

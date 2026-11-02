@@ -16,14 +16,20 @@ mod tests {
     }
 
     struct Rates {
-        rate: u32,
+        rate: std::sync::atomic::AtomicU32,
     }
 
     impl Mod for Rates {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let settings: Settings = load.config()?;
+            load.on_settings(|settings: &Settings| {
+                if let Some(rates) = Rates::instance() {
+                    rates
+                        .rate
+                        .store(settings.rate, std::sync::atomic::Ordering::Relaxed);
+                }
+            })?;
             Ok(Self {
-                rate: settings.rate,
+                rate: std::sync::atomic::AtomicU32::new(0),
             })
         }
     }
@@ -42,7 +48,8 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        Rates::instance().map(|rates| rates.rate)
+        assert_eq!(loader.raise::<enshwick::events::SettingsReplaced>(&()), 1);
+        Rates::instance().map(|rates| rates.rate.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     #[test]

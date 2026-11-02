@@ -1,24 +1,3 @@
-use super::with_server;
-
-/// Test settings.
-#[crate::config(validate = Settings::check)]
-#[derive(Debug, Default)]
-struct Settings {
-    /// A join value.
-    #[config(sync)]
-    table: Vec<u8>,
-    /// This side's own.
-    local: u8,
-}
-
-impl Settings {
-    fn check(&self) -> Result<(), String> {
-        (self.table.len() < 4)
-            .then_some(())
-            .ok_or_else(|| "a long table".to_owned())
-    }
-}
-
 #[test]
 fn a_failed_call_names_what_failed_and_why() {
     use crate::abi::Status;
@@ -50,21 +29,4 @@ fn a_settings_text_refusal_stays_a_text_as_an_off() {
         Off::from(ConfigError::invalid("first after last")).to_reason(),
         "first after last"
     );
-}
-
-#[test]
-fn the_server_values_apply_over_the_file_and_are_checked() {
-    let mut settings = Settings {
-        table: vec![1],
-        local: 5,
-    };
-    with_server(&mut settings, "{ table = [2, 4] }").unwrap();
-    assert_eq!(
-        (settings.table.as_slice(), settings.local),
-        (&[2, 4][..], 5)
-    );
-    assert!(with_server(&mut settings, "{ table = [1, 2, 3, 4] }").is_err());
-    assert_eq!(settings.table, [2, 4], "a refused value leaves them");
-    assert!(with_server(&mut settings, "{ table = 'x' }").is_err());
-    assert_eq!(settings.table, [2, 4]);
 }

@@ -124,7 +124,6 @@ pub struct PackManifest {
 /// # Examples
 ///
 /// ```
-/// use enshwick::config::Stage;
 /// use enshwick::packs::PackManifest;
 ///
 /// let manifest = PackManifest::parse(r#"
@@ -140,10 +139,8 @@ pub struct PackManifest {
 /// key = "every"
 /// default = 30
 /// min = 1
-/// stage = "startup"
 /// "#)?;
 /// let schema = manifest.settings_schema().ok_or("no settings")?;
-/// assert_eq!(schema.fields[1].stage, Stage::Startup);
 /// assert_eq!(schema.fields[1].min, Some(1.0));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -160,12 +157,6 @@ pub struct PackSetting {
     /// What it does, for the file's comments and the Mods screen.
     #[serde(default)]
     pub doc: String,
-    /// When a change takes effect: `runtime` unless said.
-    #[serde(default)]
-    pub stage: crate::config::Stage,
-    /// A `startup` setting a joined client takes from the server.
-    #[serde(default)]
-    pub synced: bool,
     /// The smallest number it accepts.
     pub min: Option<f64>,
     /// The largest number it accepts.
@@ -446,7 +437,7 @@ impl PackManifest {
     }
 
     /// Refuses a key that is not `[a-z0-9_]` or given twice, a default
-    /// outside its own range or choices, and `synced` off `startup`.
+    /// outside its own range or choices.
     fn check_settings(&self, text: &str) -> Result<(), PackError> {
         let mut seen = std::collections::BTreeSet::new();
         for setting in &self.setting {
@@ -463,11 +454,6 @@ impl PackManifest {
             if !seen.insert(key.as_str()) {
                 return problem(format!("setting {key:?} is given twice"));
             }
-            if setting.synced && setting.stage != crate::config::Stage::Startup {
-                return problem(format!(
-                    "setting {key:?}: synced goes with stage = \"startup\"; a sync stage follows the server already"
-                ));
-            }
             if let Err(why) = setting.field().check(&setting.default) {
                 return problem(format!("setting {key:?}: the default is refused: {why}"));
             }
@@ -479,11 +465,10 @@ impl PackManifest {
 impl PackSetting {
     /// The setting as a field of a settings schema.
     fn field(&self) -> crate::config::Field {
-        crate::config::Field::new(&self.key, self.stage, &self.default)
+        crate::config::Field::new(&self.key, &self.default)
             .with_range(self.min, self.max)
             .with_choices(&self.choices)
             .with_doc(&self.doc, &self.text)
-            .with_synced(self.synced)
     }
 }
 

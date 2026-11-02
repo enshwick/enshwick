@@ -246,39 +246,37 @@ impl Host {
         (self.api.log_level)(self.me)
     }
 
-    /// The text of this mod's settings file, written from `defaults` when
-    /// missing.
-    pub(crate) fn settings_text(&self, defaults: &str) -> Result<String, Off> {
+    /// The text of this mod's settings file `file` in force, empty while no
+    /// world runs.
+    pub(crate) fn settings_text(&self, file: &str) -> Result<String, Off> {
         let mut text = Str::EMPTY;
-        let status = (self.api.settings)(self.me, Str::new(defaults), &raw mut text);
-        crate::load::ok(status, (), || "settings".to_owned())?;
+        let status = (self.api.settings)(self.me, Str::new(file), &raw mut text);
+        crate::load::ok(status, (), || format!("settings {file}.toml"))?;
         // SAFETY: the loader keeps the text for the life of the process.
         let text = unsafe { text.as_str() }.ok_or_else(|| Off::new("settings: not UTF-8"))?;
         Ok(text.to_owned())
     }
 
-    /// Hands the loader this mod's settings schema.
-    pub(crate) fn config_schema(&self, schema: &str) {
-        let status = (self.api.config_schema)(self.me, Str::new(schema));
-        if !status.is_ok() {
-            match crate::config::Schema::parse(schema) {
-                Err(why) => crate::warn!("the loader refused the {why}"),
-                Ok(_) => crate::warn!("the loader refused the settings schema ({})", status.0),
-            }
+    /// Hands the loader the schema and template of this mod's settings file
+    /// `file`.
+    pub(crate) fn config_schema(
+        &self,
+        file: &str,
+        schema: &str,
+        template: &str,
+    ) -> Result<(), Off> {
+        let status = (self.api.config_schema)(
+            self.me,
+            Str::new(file),
+            Str::new(schema),
+            Str::new(template),
+        );
+        if status == Status::REFUSED {
+            return Err(Off::new(format!(
+                "settings: two settings types write {file}.toml; name a file for each"
+            )));
         }
-    }
-
-    /// Reports this mod's join values, `synced`, and returns the server's to
-    /// run with over them; `None` when there are none.
-    pub(crate) fn sync(&self, synced: &str) -> Option<String> {
-        let mut text = Str::EMPTY;
-        let status = (self.api.sync)(self.me, Str::new(synced), &raw mut text);
-        if !status.is_ok() {
-            return None;
-        }
-        // SAFETY: the loader keeps the text for the life of the process.
-        let text = unsafe { text.as_str() }?;
-        (!text.is_empty()).then(|| text.to_owned())
+        crate::load::ok(status, (), || format!("the settings schema of {file}.toml"))
     }
 
     /// Subscribes `callback` to `event`.

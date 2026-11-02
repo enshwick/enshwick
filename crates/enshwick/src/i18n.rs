@@ -1,6 +1,6 @@
-//! Translations: a mod ships its texts per language in `src/texts.toml`, a
-//! server owner may add to them or change them, and the game shows them for
-//! the player's language. [`texts!`](crate::texts) names the keys.
+//! Translations: a mod ships its texts per language in `src/texts.toml`,
+//! and the game shows them for the player's language.
+//! [`texts!`](crate::texts) names the keys.
 //!
 //! ```toml
 //! [en]
@@ -10,8 +10,7 @@
 //! "locker.name" = "Шафка"
 //! ```
 //!
-//! `en` is the fallback for every language without a text of its own. A file
-//! `mod-configs/<id>.texts.toml` in the same form overrides or adds texts.
+//! `en` is the fallback for every language without a text of its own.
 
 use std::collections::BTreeMap;
 
@@ -602,17 +601,15 @@ static HANDED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, 
 
 impl Load<'_> {
     /// The mod's texts: its `src/texts.toml`, which
-    /// [`declare_mod!`](crate::declare_mod) embeds and checks, with
-    /// `mod-configs/<id>.texts.toml` over it when the server has one. The
-    /// loader keeps them too, to label the mod's settings on the Mods
+    /// [`declare_mod!`](crate::declare_mod) embeds and checks. The loader
+    /// keeps them too, to label the mod's settings on the Mods
     /// screen: `config.<field>` (or the field's `text` key) for a row,
     /// `<key>.doc` for its description and `<key>.<choice>` for a choice.
     /// [`texts!`](crate::texts) names the keys.
     ///
     /// # Errors
     ///
-    /// [`Off`] when the crate has no `src/texts.toml` or the server's file
-    /// is malformed.
+    /// [`Off`] when the crate has no `src/texts.toml`.
     ///
     /// # Examples
     ///
@@ -637,7 +634,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when `toml` or the server's file is malformed.
+    /// [`Off`] when `toml` is malformed.
     ///
     /// # Examples
     ///
@@ -649,28 +646,7 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn texts_from(&mut self, toml: &str) -> Result<Texts, Off> {
-        let mut texts = Texts::parse(toml)?;
-        let dir = self.mod_dir()?;
-        // shortcut: names the file by the mod's folder in `<game>/mods/`, which
-        // `cargo enshwick install` names by the id; fine until overrides go.
-        let overrides = dir
-            .file_name()
-            .zip(dir.parent().and_then(std::path::Path::parent))
-            .map(|(id, game)| {
-                game.join("mod-configs")
-                    .join(format!("{}.texts.toml", id.to_string_lossy()))
-            });
-        if let Some(path) = overrides {
-            match std::fs::read_to_string(&path) {
-                Ok(text) => texts.merge(
-                    Texts::parse(&text)
-                        .map_err(|off| Off::new(format!("{}: {off}", path.display())))?,
-                ),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                // Such as a file saved as UTF-16 or in a code page.
-                Err(error) => return Err(Off::new(format!("{}: {error}", path.display()))),
-            }
-        }
+        let texts = Texts::parse(toml)?;
         let api = self.host().api();
         // The loader keeps the last texts it was given, so it gets all
         // of this mod's, a pack's added to the mod's own.

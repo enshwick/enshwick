@@ -20,16 +20,19 @@ pub(crate) extern "system" fn log(_me: ModHandle, level: Level, message: Str) {
     with((), |s| s.logs.push((level, message)));
 }
 
-pub(crate) extern "system" fn settings(_me: ModHandle, defaults: Str, out: *mut Str) -> Status {
-    let defaults = text(defaults);
+pub(crate) extern "system" fn settings(_me: ModHandle, file: Str, out: *mut Str) -> Status {
+    let file = text(file);
     let served = with(None, |s| {
+        if !s.config_schemas.contains_key(&file) {
+            return None;
+        }
         let served: Box<str> = s
             .host
             .settings
-            .clone()
-            .unwrap_or_else(|| defaults.clone())
+            .get(&file)
+            .cloned()
+            .unwrap_or_default()
             .into();
-        s.defaults.push(defaults);
         // The heap text stays where it is while the box lives in the state.
         let view = Str::new(&served);
         s.settings.push(served);
@@ -131,43 +134,44 @@ pub(crate) fn list<T: Copy>(
     put(count, u32::try_from(items.len()).unwrap_or(u32::MAX))
 }
 
-pub(crate) extern "system" fn sync(_me: ModHandle, synced: Str, out: *mut Str) -> Status {
-    let synced = text(synced);
-    let served = with(Str::EMPTY, |s| {
-        s.synced.push(synced);
-        let served: Box<str> = s.host.server_synced.clone().unwrap_or_default().into();
-        // The heap text stays where it is while the box lives in the state.
-        let view = Str::new(&served);
-        s.sync_out.push(served);
-        view
-    });
-    put(out, served)
-}
-
-pub(crate) extern "system" fn config_schema(_me: ModHandle, schema: Str) -> Status {
-    // SAFETY: the mod passes text valid for the call.
-    let Some(text) = (unsafe { schema.as_str() }) else {
+pub(crate) extern "system" fn config_schema(
+    _me: ModHandle,
+    file: Str,
+    schema: Str,
+    template: Str,
+) -> Status {
+    // SAFETY: the mod passes texts valid for the call.
+    let (Some(file), Some(text), Some(_)) =
+        (unsafe { (file.as_str(), schema.as_str(), template.as_str()) })
+    else {
         return Status::BAD_ARGS;
     };
-    if crate::config::Schema::parse(text).is_err() {
+    if !crate::config::__file_name(file) || crate::config::Schema::parse(text).is_err() {
         return Status::BAD_ARGS;
     }
     with(Status::REFUSED, |s| {
-        s.config_schema = Some(text.to_owned());
+        match s.config_schemas.get(file) {
+            Some(known) if known != text => return Status::REFUSED,
+            _ => {}
+        }
+        s.config_schemas.insert(file.to_owned(), text.to_owned());
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn config_check(
     _me: ModHandle,
+    file: Str,
     callback: ConfigCheckFn,
     user: *mut c_void,
 ) -> Status {
+    let file = text(file);
     with(Status::MISSING, |s| {
-        if s.config_check.is_some() {
+        if s.config_checks.contains_key(&file) {
             return Status::REFUSED;
         }
-        s.config_check = Some((callback, user.expose_provenance()));
+        s.config_checks
+            .insert(file, (callback, user.expose_provenance()));
         Status::OK
     })
 }

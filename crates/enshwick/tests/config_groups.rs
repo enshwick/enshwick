@@ -3,29 +3,28 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::config::{Config, Stage};
+    use enshwick::config::Config;
 
     /// Comfort rules.
-    #[enshwick::config(default)]
+    #[enshwick::config]
     #[derive(Debug, Default, PartialEq)]
     struct Comfort {
         /// Comfort per piece of furniture, times this factor.
-        #[config(runtime, range = 0.0..=10.0)]
+        #[config(range = 0.0..=10.0)]
         multiplier: f32,
-        /// Players see the server's value.
-        #[config(sync)]
+        /// Whether players see it.
         shown: bool,
     }
 
     /// Rates of the game.
-    #[enshwick::config(default)]
+    #[enshwick::config]
     #[derive(Debug, Default, PartialEq)]
     struct Rates {
         /// The comfort rules.
         #[config(group)]
         comfort: Comfort,
         /// Recipes cost this many times their price.
-        #[config(startup, range = 1..=5)]
+        #[config(range = 1..=5)]
         cost: u32,
     }
 
@@ -64,28 +63,18 @@ mod tests {
     }
 
     #[test]
-    fn a_group_s_values_follow_their_stage_and_merge_back() {
-        let mut rates = Rates {
-            comfort: Comfort {
-                multiplier: 2.0,
-                shown: true,
-            },
-            cost: 3,
-        };
+    fn a_group_reads_missing_keys_at_their_defaults_and_is_checked() {
+        let mut rates: Rates = toml::from_str("cost = 3\n[comfort]\nmultiplier = 2.0\n").unwrap();
         assert_eq!(
-            rates.synced().as_deref(),
-            Some("{ comfort = { shown = true } }")
+            rates,
+            Rates {
+                comfort: Comfort {
+                    multiplier: 2.0,
+                    shown: false,
+                },
+                cost: 3,
+            }
         );
-        assert_eq!(
-            rates.values(Stage::Startup).as_deref(),
-            Some("{ cost = 3 }")
-        );
-        assert_eq!(rates.values(Stage::Client), None);
-        rates
-            .merge_synced("{ comfort = { shown = false } }")
-            .unwrap();
-        assert!(!rates.comfort.shown);
-        assert_eq!(rates.comfort.multiplier, 2.0);
         assert!(rates.validate().is_ok());
         rates.comfort.multiplier = 11.0;
         assert!(rates.validate().is_err());

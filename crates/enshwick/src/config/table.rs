@@ -1,39 +1,34 @@
 //! Settings whose fields are known only at run time, such as a data pack's
-//! or a script's: a TOML table checked against a [`Schema`].
+//! or a script's: a TOML table read against a [`Schema`].
 
 use core::ffi::c_void;
 use core::fmt::Write as _;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::abi::{Event, Level, Status, Str};
-use crate::config::{ConfigError, Schema, Stage, reason};
+use crate::config::{ConfigError, Schema, reason};
 use crate::host::Host;
-use crate::locks::Relock;
 use crate::{Load, Off};
 
-/// The values in force at the stages that wait: `startup` until the next
-/// world, `restart` until the next start.
-#[derive(Debug, Default)]
-struct Kept {
-    startup: Option<toml::Table>,
-    restart: Option<toml::Table>,
-}
+/// The file of every settings table, as of a type without its own file.
+const FILE: &str = "settings";
 
-/// One mod's settings described by a [`Schema`] rather than a type: read
+/// One mod's settings described by a [`Schema`] rather than a type: declared
 /// with [`Load::table_config`], followed with [`TableConfig::on_change`].
 ///
-/// The file, its stages, the Mods screen and the join values work as they
-/// do for a [`Config`](crate::config::Config) type.
+/// The world's file, its reading and the Mods screen work as they do for a
+/// [`Config`](crate::config::Config) type; its values follow the file while
+/// the world runs.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::config::{Field, Schema, Stage};
+/// use enshwick::config::{Field, Schema};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let limit = Field::new("limit", Stage::Runtime, &4).with_doc("How many.", "");
-///     let (settings, values) = load.table_config(Schema::new("", "config", vec![limit]))?;
-///     assert_eq!(values["limit"].as_integer(), Some(4));
+///     let limit = Field::new("limit", &4).with_doc("How many.", "");
+///     let (settings, defaults) = load.table_config(Schema::new("", "config", vec![limit]))?;
+///     assert_eq!(defaults["limit"].as_integer(), Some(4));
 ///     settings.on_change(load, |values| enshwick::info!("limit {}", values["limit"]))
 /// }
 /// ```
@@ -41,21 +36,20 @@ struct Kept {
 pub struct TableConfig {
     host: Host,
     schema: Arc<Schema>,
-    kept: Arc<Mutex<Kept>>,
 }
 
 impl Schema {
-    /// The settings file a player sees first: each field's documentation as
-    /// comments over its default, and a note for one that waits.
+    /// The settings file a world starts with: each field's documentation as
+    /// comments over its default.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick::config::{Field, Schema, Stage};
+    /// use enshwick::config::{Field, Schema};
     ///
-    /// let limit = Field::new("limit", Stage::Startup, &4).with_doc("How many.", "");
+    /// let limit = Field::new("limit", &4).with_doc("How many.", "");
     /// let text = Schema::new("Lockers.", "config", vec![limit]).template();
-    /// assert!(text.contains("# How many.\n# Takes effect when the world loads.\nlimit = 4\n"));
+    /// assert!(text.contains("# How many.\nlimit = 4\n"));
     /// ```
     #[must_use]
     pub fn template(&self) -> String {
@@ -64,36 +58,12 @@ impl Schema {
         for field in &self.fields {
             text.push('\n');
             comment(&mut text, &field.doc);
-            text.push_str(match (field.stage, field.synced) {
-                (_, true) | (Stage::Sync, _) => {
-                    "# The server's value applies to the players who join it.\n"
-                }
-                (Stage::Startup, _) => "# Takes effect when the world loads.\n",
-                (Stage::Restart, _) => "# Takes effect when the game starts again.\n",
-                _ => "",
-            });
             if !field.default.is_empty() {
                 let key = super::schema::toml_key(&field.key);
                 let _written = writeln!(text, "{key} = {}", field.default);
             }
         }
         text
-    }
-
-    /// The fields of `table` that `select` picks, as an inline table; `None`
-    /// when it picks none.
-    fn values_where(
-        &self,
-        table: &toml::Table,
-        select: impl Fn(&super::Field) -> bool,
-    ) -> Option<toml::Table> {
-        let picked: toml::Table = self
-            .fields
-            .iter()
-            .filter(|f| select(f))
-            .filter_map(|f| table.get(&f.key).map(|v| (f.key.clone(), v.clone())))
-            .collect();
-        (!picked.is_empty()).then_some(picked)
     }
 
     /// Every field `table` lacks, at its default.
@@ -108,22 +78,41 @@ impl Schema {
             }
         }
     }
+
+    /// `text` read against the schema as [`read`](crate::config::read)
+    /// reads a type: what does not read takes its default, with a line
+    /// through `log`.
+    fn read_table(&self, text: &str, log: &dyn Fn(&str)) -> toml::Table {
+        let mut table = if text.trim().is_empty() {
+            toml::Table::new()
+        } else {
+            toml::from_str(text).unwrap_or_else(|e| {
+                log(&format!(
+                    "{FILE}.toml: {}; the defaults apply",
+                    reason(Some(text), &e)
+                ));
+                toml::Table::new()
+            })
+        };
+        for line in self.settle(&mut table) {
+            log(&format!("{FILE}.toml: {line}"));
+        }
+        self.fill_defaults(&mut table);
+        table
+    }
 }
 
 impl Load<'_> {
-    /// The mod's settings described by `schema`: `mod-configs/<id>.toml`,
-    /// written from [`Schema::template`] when missing, its values checked
-    /// against the schema and every missing one at its default. The loader
-    /// gets the schema for the Mods screen and the console.
+    /// Declares the mod's settings described by `schema`, the world's
+    /// `settings.toml`, and returns its defaults: the values the mod runs on
+    /// while no world runs. [`TableConfig::on_change`] follows the world's.
     ///
     /// The fields are top-level keys: a schema with groups is refused.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a schema with groups, dotted or empty keys, a secret field a
-    /// server would send to its players, or `synced` off
-    /// [`Stage::Startup`]; and when the file does not parse or a value is
-    /// refused.
+    /// [`Off`] for a schema with groups, dotted or empty keys, or when the
+    /// loader refuses it.
     ///
     /// # Examples
     ///
@@ -131,31 +120,19 @@ impl Load<'_> {
     pub fn table_config(&mut self, schema: Schema) -> Result<(TableConfig, toml::Table), Off> {
         refuse_unsupported(&schema)?;
         let host = self.host();
-        host.config_schema(&schema.to_text());
+        host.config_schema(FILE, &schema.to_text(), &schema.template())?;
         let schema = Arc::new(schema);
         let user = Arc::into_raw(Arc::clone(&schema))
             .cast_mut()
             .cast::<c_void>();
-        let checked = (host.api().config_check)(host.handle(), check_table, user);
+        let checked = (host.api().config_check)(host.handle(), Str::new(FILE), check_table, user);
         if !checked.is_ok() {
             // SAFETY: the loader refused the check, so it keeps no copy of
             // `user`, which `Arc::into_raw` made just above.
             drop(unsafe { Arc::from_raw(user.cast_const().cast::<Schema>()) });
         }
-        let settings = TableConfig {
-            host,
-            schema,
-            kept: Arc::new(Mutex::new(Kept::default())),
-        };
-        let values = settings.read(|kept, table| {
-            kept.startup = settings
-                .schema
-                .values_where(table, |f| f.stage == Stage::Startup);
-            kept.restart = settings
-                .schema
-                .values_where(table, |f| f.stage == Stage::Restart);
-        })?;
-        Ok((settings, values))
+        let defaults = schema.read_table("", &|_| {});
+        Ok((TableConfig { host, schema }, defaults))
     }
 }
 
@@ -170,15 +147,14 @@ impl TableConfig {
         &self.schema
     }
 
-    /// Calls `handler` with the values in force each time the file changes,
-    /// after the console or the Mods screen sets one, and as a world loads
-    /// or stops, as [`Load::on_config_change`] does for a type: `startup`
-    /// values change only as a world loads or stops, `restart` values never.
-    /// A file that no longer reads or checks is logged and skipped.
+    /// Calls `handler` with the world's values as each world loads, the
+    /// defaults as it stops, and the file's again each time it changes while
+    /// the world runs; the thread is not fixed. What does not read takes
+    /// its default, with a line in the log.
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader cannot watch settings.
+    /// [`Off`] when the loader cannot tell the mod of settings.
     ///
     /// # Examples
     ///
@@ -188,141 +164,25 @@ impl TableConfig {
         F: Fn(toml::Table) + Send + Sync + 'static,
     {
         let handler = Arc::new(handler);
-        let on_world = Arc::clone(&handler);
-        let world = self.clone();
-        load.on_raw_event(Event::SETTINGS_REPLACED, move |_| {
-            let read = world.read(|kept, table| {
-                world.hold(kept.restart.as_ref(), table, Stage::Restart);
-                kept.startup = world
-                    .schema
-                    .values_where(table, |f| f.stage == Stage::Startup);
-            });
-            match read {
-                Ok(values) => {
-                    on_world(values);
-                    world.host.log(Level::INFO, "the world's settings apply");
-                }
-                Err(off) => world.host.log(
-                    Level::WARN,
-                    &format!("the world's settings are skipped: {off}"),
+        for event in [Event::SETTINGS_REPLACED, Event::SETTINGS_CHANGED] {
+            let (settings, handler) = (self.clone(), Arc::clone(&handler));
+            load.on_raw_event(event, move |_| match settings.host.settings_text(FILE) {
+                Ok(text) => handler(
+                    settings
+                        .schema
+                        .read_table(&text, &|line| settings.host.log(Level::WARN, line)),
                 ),
-            }
-        })?;
-        let running = self.clone();
-        load.on_raw_event(Event::SETTINGS_CHANGED, move |_| {
-            let read = running.read(|kept, table| {
-                running.hold(kept.restart.as_ref(), table, Stage::Restart);
-                running.hold(kept.startup.as_ref(), table, Stage::Startup);
-            });
-            match read {
-                Ok(values) => {
-                    handler(values);
-                    running.host.log(Level::INFO, "settings reloaded");
-                }
-                Err(off) => running.host.log(
-                    Level::WARN,
-                    &format!("settings change skipped, the running values stay: {off}"),
-                ),
-            }
-        })
-    }
-
-    /// Reads the file, lets `stages` put the values in force back, and puts
-    /// the server's join values over them while this client is joined.
-    fn read(&self, stages: impl FnOnce(&mut Kept, &mut toml::Table)) -> Result<toml::Table, Off> {
-        let text = self.host.settings_text(&self.schema.template())?;
-        let mut table: toml::Table = toml::from_str(&text)
-            .map_err(|e| Off::new(format!("settings: {}", reason(Some(&text), &e))))?;
-        for held in self.schema.clamp(&mut table) {
-            self.host.log(Level::WARN, &format!("settings: {held}"));
+                Err(off) => settings
+                    .host
+                    .log(Level::WARN, &format!("settings not read: {off}")),
+            })?;
         }
-        self.schema.fill_defaults(&mut table);
-        self.schema
-            .check(&table)
-            .map_err(|why| Off::new(format!("settings: {why}")))?;
-        stages(&mut self.kept.relock(), &mut table);
-        let local = self
-            .schema
-            .values_where(&table, super::Field::follows_server)
-            .map(|t| inline(&t))
-            .unwrap_or_default();
-        let Some(server) = self.host.sync(&local) else {
-            return Ok(table);
-        };
-        match self.with_server(&mut table, &server) {
-            Ok(()) => self.host.log(
-                Level::INFO,
-                &format!("the server's join values apply over the settings file: {server}"),
-            ),
-            Err(why) => self.host.log(
-                Level::WARN,
-                &format!("the server's join values are refused, the file's apply: {why}"),
-            ),
-        }
-        Ok(table)
-    }
-
-    /// Puts `kept`, the values in force at `stage`, back over `table`,
-    /// noting a change that waits.
-    fn hold(&self, kept: Option<&toml::Table>, table: &mut toml::Table, stage: Stage) {
-        let Some(kept) = kept else {
-            return;
-        };
-        let now = self.schema.values_where(table, |f| f.stage == stage);
-        if now.as_ref() == Some(kept) {
-            return;
-        }
-        let waits = if stage == Stage::Restart {
-            "the game starts again"
-        } else {
-            "the world loads"
-        };
-        let changed: Vec<&str> = kept
-            .iter()
-            .filter(|(key, value)| now.as_ref().and_then(|n| n.get(*key)) != Some(*value))
-            .map(|(key, _)| key.as_str())
-            .collect();
-        self.host.log(
-            Level::INFO,
-            &format!(
-                "settings that take effect when {waits} changed: {}",
-                changed.join(", ")
-            ),
-        );
-        for (key, value) in kept {
-            table.insert(key.clone(), value.clone());
-        }
-    }
-
-    /// Puts the join values `server` over `table` and checks them; an error
-    /// leaves `table` as it was.
-    fn with_server(&self, table: &mut toml::Table, server: &str) -> Result<(), ConfigError> {
-        let text = format!("v = {server}");
-        let parsed: toml::Table =
-            toml::from_str(&text).map_err(|e| ConfigError::Parse(reason(Some(&text), &e)))?;
-        let Some(toml::Value::Table(values)) = parsed.get("v") else {
-            return Err(ConfigError::Parse(
-                "the join values are no table".to_owned(),
-            ));
-        };
-        let mut merged = table.clone();
-        for (key, value) in values {
-            if self
-                .schema
-                .field(key)
-                .is_some_and(super::Field::follows_server)
-            {
-                merged.insert(key.clone(), value.clone());
-            }
-        }
-        self.schema.check(&merged)?;
-        *table = merged;
         Ok(())
     }
 }
 
 /// Refuses what [`Load::table_config`] does not take: groups and dotted
-/// keys, a secret that follows the server, `synced` off `startup`.
+/// or empty keys.
 fn refuse_unsupported(schema: &Schema) -> Result<(), Off> {
     if !schema.groups.is_empty() {
         return Err(Off::new("settings: a schema read as a table has no groups"));
@@ -335,16 +195,6 @@ fn refuse_unsupported(schema: &Schema) -> Result<(), Off> {
         if key.contains('.') {
             return Err(Off::new(format!(
                 "settings: {key} is a dotted key; a table has top-level keys"
-            )));
-        }
-        if field.secret && field.follows_server() {
-            return Err(Off::new(format!(
-                "settings: {key} is secret and would go to every player"
-            )));
-        }
-        if field.synced && field.stage != Stage::Startup {
-            return Err(Off::new(format!(
-                "settings: {key} is synced but not startup"
             )));
         }
     }
@@ -360,15 +210,6 @@ fn comment(text: &mut String, doc: &str) {
             let _written = writeln!(text, "# {line}");
         }
     }
-}
-
-/// `table` as an inline TOML table, as join values cross to the loader.
-fn inline(table: &toml::Table) -> String {
-    let entries: Vec<String> = table
-        .iter()
-        .map(|(key, value)| format!("{} = {value}", super::schema::toml_key(key)))
-        .collect();
-    format!("{{ {} }}", entries.join(", "))
 }
 
 /// Checks a settings text against the schema at `user`, for the loader's
@@ -410,31 +251,38 @@ mod tests {
     use crate::config::{Field, Group};
 
     #[test]
-    fn groups_dotted_keys_and_secrets_that_follow_the_server_are_refused() {
-        let grouped = Schema::new("", "config", vec![Field::new("a", Stage::Runtime, &1)])
+    fn groups_and_dotted_or_empty_keys_are_refused() {
+        let grouped = Schema::new("", "config", vec![Field::new("a", &1)])
             .with_groups(vec![Group::new("g", "")]);
         assert!(refuse_unsupported(&grouped).is_err());
-        let dotted = Schema::new("", "config", vec![Field::new("g.a", Stage::Runtime, &1)]);
+        let dotted = Schema::new("", "config", vec![Field::new("g.a", &1)]);
         assert!(refuse_unsupported(&dotted).is_err());
-        let empty = Schema::new("", "config", vec![Field::new("", Stage::Runtime, &1)]);
+        let empty = Schema::new("", "config", vec![Field::new("", &1)]);
         assert!(refuse_unsupported(&empty).is_err());
-        let secret = Schema::new(
-            "",
-            "config",
-            vec![Field::new("p", Stage::Sync, "x").with_secret(true)],
-        );
-        assert!(refuse_unsupported(&secret).is_err());
-        let synced = Schema::new(
-            "",
-            "config",
-            vec![Field::new("r", Stage::Runtime, &true).with_synced(true)],
-        );
-        assert!(refuse_unsupported(&synced).is_err());
-        let fine = Schema::new(
-            "",
-            "config",
-            vec![Field::new("a", Stage::Startup, &1).with_synced(true)],
-        );
+        let fine = Schema::new("", "config", vec![Field::new("a", &1).with_secret(true)]);
         assert!(refuse_unsupported(&fine).is_ok());
+    }
+
+    #[test]
+    fn a_table_reads_its_file_with_every_missing_or_bad_value_at_its_default() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("limit", &4).with_range(Some(1.0), Some(16.0)),
+                Field::new("name", "x"),
+            ],
+        );
+        let lines = std::cell::RefCell::new(Vec::new());
+        let table = schema.read_table("limit = 20\nname = 3\n", &|line| {
+            lines.borrow_mut().push(line.to_owned());
+        });
+        assert_eq!(table["limit"].as_integer(), Some(16));
+        assert_eq!(table["name"].as_str(), Some("x"));
+        assert_eq!(lines.borrow().len(), 2);
+        assert_eq!(
+            schema.read_table("", &|_| {})["limit"].as_integer(),
+            Some(4)
+        );
     }
 }

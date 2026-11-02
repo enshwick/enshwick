@@ -1,0 +1,186 @@
+---
+source: crates/enshwick/tests/pack_schemas.rs
+assertion_line: 33
+expression: shape
+---
+{
+  "$defs": {
+    "DependencyTable": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "PackDependency": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/DependencyTable"
+        }
+      ]
+    },
+    "PackSetting": {
+      "additionalProperties": false,
+      "properties": {
+        "choices": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "default": {},
+        "doc": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "max": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "text": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "default"
+      ],
+      "type": "object"
+    },
+    "PackSide": {
+      "oneOf": [
+        {
+          "const": "both",
+          "type": "string"
+        },
+        {
+          "const": "server",
+          "type": "string"
+        },
+        {
+          "const": "client",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "after": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      },
+      "type": "object"
+    },
+    "authors": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "breaks": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      },
+      "type": "object"
+    },
+    "description": {
+      "default": "",
+      "type": "string"
+    },
+    "enshwick": {
+      "default": "",
+      "type": "string"
+    },
+    "exports": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "homepage": {
+      "default": "",
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "join": {
+      "default": true,
+      "type": "boolean"
+    },
+    "license": {
+      "default": "",
+      "type": "string"
+    },
+    "name": {
+      "default": "",
+      "type": "string"
+    },
+    "recommends": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      },
+      "type": "object"
+    },
+    "replaces": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "requires": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      },
+      "type": "object"
+    },
+    "setting": {
+      "items": {
+        "$ref": "#/$defs/PackSetting"
+      },
+      "type": "array"
+    },
+    "side": {
+      "$ref": "#/$defs/PackSide"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version"
+  ],
+  "title": "PackManifest",
+  "type": "object"
+}

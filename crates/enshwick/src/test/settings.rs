@@ -1,4 +1,4 @@
-//! Settings: the settings text and synced values.
+//! Settings: the running world's settings files and the mod's checks.
 
 use crate::abi::Level;
 use crate::abi::Str;
@@ -8,15 +8,34 @@ use super::Installed;
 use super::table;
 
 impl FakeHost {
-    /// The text of the mod's settings file; without it the mod reads its own
-    /// defaults, as on first start.
+    /// The text of the running world's `settings.toml` for the mod, which
+    /// the mod reads as each world loads: raise
+    /// [`events::SettingsReplaced`](crate::events::SettingsReplaced) after
+    /// [`install`](Self::install). Without it the world's file is empty
+    /// and the mod runs on its defaults.
     ///
     /// # Examples
     ///
     /// See [`crate`].
     #[must_use]
-    pub fn settings(mut self, text: &str) -> Self {
-        self.settings = Some(text.to_owned());
+    pub fn settings(self, text: &str) -> Self {
+        self.settings_file("settings", text)
+    }
+
+    /// The text of the running world's `<file>.toml` for the mod, as
+    /// [`settings`](Self::settings) sets `settings.toml`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .settings_file("altars", "per_level = [2, 4]\n")
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn settings_file(mut self, file: &str, text: &str) -> Self {
+        self.settings.insert(file.to_owned(), text.to_owned());
         self
     }
 
@@ -71,9 +90,12 @@ impl FakeHost {
     reason = "the fake's state is process-wide; `self` proves it is installed"
 )]
 impl Installed {
-    /// Replaces the text of the mod's settings file, as a player's edit
-    /// would; raise [`events::SettingsChanged`](crate::events::SettingsChanged)
-    /// after it.
+    /// Replaces the text of the running world's `<file>.toml` for the mod,
+    /// as a person's edit or the next world would; raise
+    /// [`events::SettingsChanged`](crate::events::SettingsChanged) for a
+    /// change while the world runs, or
+    /// [`events::SettingsReplaced`](crate::events::SettingsReplaced) for a
+    /// world that loads.
     ///
     /// # Examples
     ///
@@ -81,72 +103,34 @@ impl Installed {
     /// use enshwick::events;
     ///
     /// let loader = enshwick::test::FakeHost::new().settings("limit = 7\n").install();
-    /// loader.set_settings("limit = 9\n");
+    /// loader.set_settings("settings", "limit = 9\n");
     /// assert_eq!(loader.raise::<events::SettingsChanged>(&()), 0);
     /// ```
-    pub fn set_settings(&self, text: &str) {
-        table::with((), |s| s.host.settings = Some(text.to_owned()));
+    pub fn set_settings(&self, file: &str, text: &str) {
+        table::with((), |s| {
+            s.host.settings.insert(file.to_owned(), text.to_owned());
+        });
     }
 
-    /// Sets the join values of the server this client joined, which the mod
-    /// gets over its file's on its next read, or `None` for none, as after
-    /// joining a server without them; raise
-    /// [`events::SettingsChanged`](crate::events::SettingsChanged)
-    /// after it, as the loader does.
+    /// The schema of the mod's settings file `file` as the mod handed it
+    /// the loader, which [`Load::on_settings`](crate::Load::on_settings)
+    /// does; `None` before.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// loader.set_server_synced(Some("{ altars = [2, 4] }"));
-    /// assert!(loader.reported_synced().is_empty());
-    /// ```
-    pub fn set_server_synced(&self, synced: Option<&str>) {
-        table::with((), |s| s.host.server_synced = synced.map(str::to_owned));
-    }
-
-    /// The join values the mod reported each time it read its settings, as
-    /// its file holds them.
-    ///
-    /// # Examples
-    ///
-    /// See [`Installed::set_server_synced`].
-    #[must_use]
-    pub fn reported_synced(&self) -> Vec<String> {
-        table::with(Vec::new(), |s| s.synced.clone())
-    }
-
-    /// The defaults the mod passed each time it read its settings.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(loader.settings_defaults().is_empty());
+    /// assert!(loader.config_schema("settings").is_none());
     /// ```
     #[must_use]
-    pub fn settings_defaults(&self) -> Vec<String> {
-        table::with(Vec::new(), |s| s.defaults.clone())
-    }
-
-    /// The settings schema the mod handed the loader, which
-    /// [`Load::config`](crate::Load::config) does; `None` before.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(loader.config_schema().is_none());
-    /// ```
-    #[must_use]
-    pub fn config_schema(&self) -> Option<crate::config::Schema> {
-        table::with(None, |s| s.config_schema.clone())
+    pub fn config_schema(&self, file: &str) -> Option<crate::config::Schema> {
+        table::with(None, |s| s.config_schemas.get(file).cloned())
             .and_then(|text| crate::config::Schema::parse(&text).ok())
     }
 
-    /// Runs the mod's check of a new settings text, as the loader does
-    /// before it writes a change: `Ok` when the mod accepts `text`, else
-    /// its reason; `Ok` for a mod without a check.
+    /// Runs the mod's check of a new text of its settings file `file`, as
+    /// the loader does before it writes a change: `Ok` when the mod accepts
+    /// `text`, else its reason; `Ok` for a file without a check.
     ///
     /// # Errors
     ///
@@ -156,10 +140,11 @@ impl Installed {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.check_settings("x = 1"), Ok(()));
+    /// assert_eq!(loader.check_settings("settings", "x = 1"), Ok(()));
     /// ```
-    pub fn check_settings(&self, text: &str) -> Result<(), SettingsRefused> {
-        let Some((callback, user)) = table::with(None, |s| s.config_check) else {
+    pub fn check_settings(&self, file: &str, text: &str) -> Result<(), SettingsRefused> {
+        let Some((callback, user)) = table::with(None, |s| s.config_checks.get(file).copied())
+        else {
             return Ok(());
         };
         let mut why = Str::EMPTY;

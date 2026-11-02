@@ -3,12 +3,9 @@
 use core::ffi::c_void;
 use std::borrow::Cow;
 
-use settings::check_text;
-
 use crate::abi::{HostApi, Status, Str};
-use crate::config::{Config, ConfigError, Stage};
+use crate::config::ConfigError;
 use crate::host::Host;
-use crate::locks::Relock;
 use crate::services::{ModEvent, Service};
 
 /// Why a mod turns itself off during initialisation; the loader logs the
@@ -457,49 +454,11 @@ fn event_spec<E: ModEvent>() -> crate::abi::EventSpec {
     }
 }
 
-/// The `startup` values in force, as an inline table: read in
-/// [`Load::config`] and again as each world loads; a change between waits
-/// for the next load.
-static STARTED: Kept = Kept::new();
-
-/// The `restart` values the mod read in [`Load::config`], as an inline
-/// table; later reads keep them until the game starts again.
-static RESTART: Kept = Kept::new();
-
-/// Settings values kept for one mod life.
-type Kept = crate::fresh::Fresh<std::sync::Mutex<Option<String>>>;
-
-/// Notes `settings`' values at `stage` as the ones in force.
-fn keep<T: Config>(kept: &Kept, settings: &T, stage: Stage) {
-    *kept.get_or_init(std::sync::Mutex::default).relock() =
-        Some(settings.values(stage).unwrap_or_default());
-}
-
 std::thread_local! {
     /// The reason a mod's check refused a settings text, kept on the thread
     /// that asked until its next check there: the game thread and the UI
     /// thread may check at once, and each reads its own after the call.
     pub(crate) static CHECK_WHY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };
-}
-
-impl Load<'_> {
-    /// Hands the loader the mod's check of new settings texts, when it
-    /// takes one.
-    fn config_check<T: Config>(&self) {
-        let api = self.api();
-        let _checked =
-            (api.config_check)(self.host.handle(), check_text::<T>, core::ptr::null_mut());
-    }
-}
-
-/// Puts the join values `server` over `settings` and checks them; an error
-/// leaves `settings` as they were.
-fn with_server<T: Config>(settings: &mut T, server: &str) -> Result<(), ConfigError> {
-    let own = settings.synced().unwrap_or_default();
-    settings.merge_synced(server)?;
-    settings.validate().inspect_err(|_| {
-        let _back = settings.merge_synced(&own);
-    })
 }
 
 /// A mid-function hook's handler and where it runs, for the fault message.

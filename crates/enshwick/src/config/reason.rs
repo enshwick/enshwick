@@ -28,7 +28,7 @@ pub(crate) fn reason(text: Option<&str>, error: &toml::de::Error) -> String {
 }
 
 /// The dotted key `error` happened under, which toml shows only in its text.
-fn key_path(error: &toml::de::Error) -> Option<String> {
+pub(crate) fn key_path(error: &toml::de::Error) -> Option<String> {
     let mut bare = error.clone();
     bare.set_input(None);
     let shown = bare.to_string();
