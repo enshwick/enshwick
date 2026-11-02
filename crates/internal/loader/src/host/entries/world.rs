@@ -411,7 +411,10 @@ pub(crate) extern "system" fn teleport(
         // SAFETY: the caller passes null or a request with its header; an
         // all-zero request is valid.
         let Some(request) = (unsafe {
-            enshwick::abi::read_headed(request, size_of::<enshwick::abi::TeleportRequest>())
+            enshwick::abi::read_headed(
+                request,
+                <enshwick::abi::TeleportRequest as enshwick::abi::Headed>::BORN,
+            )
         }) else {
             return Status::BAD_ARGS;
         };
@@ -431,7 +434,10 @@ pub(crate) extern "system" fn spawn(
         // SAFETY: the caller passes null or a request with its header; an
         // all-zero request is valid.
         let Some(request) = (unsafe {
-            enshwick::abi::read_headed(request, size_of::<enshwick::abi::SpawnRequest>())
+            enshwick::abi::read_headed(
+                request,
+                <enshwick::abi::SpawnRequest as enshwick::abi::Headed>::BORN,
+            )
         }) else {
             return Status::BAD_ARGS;
         };
@@ -662,9 +668,12 @@ pub(crate) extern "system" fn terrain_edit(
     entry("terrain_edit", || {
         // SAFETY: the caller passes null or an edit with its header; an
         // all-zero edit is valid.
-        let Some(edit) =
-            (unsafe { enshwick::abi::read_headed(edit, size_of::<enshwick::abi::TerrainEdit>()) })
-        else {
+        let Some(edit) = (unsafe {
+            enshwick::abi::read_headed(
+                edit,
+                <enshwick::abi::TerrainEdit as enshwick::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         match caller(me).and_then(|loader| crate::terrain::edit(loader, &edit)) {
@@ -732,9 +741,9 @@ pub(crate) extern "system" fn build_rights(
         // SAFETY: `HostApi::build_rights` has the mod pass `check` null or
         // pointing at a `BuildRights` readable for the size its header
         // states, borrowed for the call.
-        let Some(mut request) =
-            (unsafe { enshwick::abi::read_headed(check, size_of::<BuildRights>()) })
-        else {
+        let Some(mut request) = (unsafe {
+            enshwick::abi::read_headed(check, <BuildRights as enshwick::abi::Headed>::BORN)
+        }) else {
             return Status::BAD_ARGS;
         };
         request.refusal = match caller(me).and_then(|loader| crate::rights::check(loader, &request))

@@ -20,6 +20,14 @@ Each entry names the pull request that made the change.
   `abi_version`, `enshwick_mod_abi` returns the major, `abi::OTHER_ABI` is
   gone, and the C header defines `ENSHWICK_ABI_MAJOR` and
   `ENSHWICK_ABI_MINOR`. Rebuild every mod once (#852).
+- **Breaking:** `abi::Headed` has the constant `BORN`, the end of the fields
+  every writer of the ABI major knows, which the loader requires of a mod's
+  struct; `impl_headed!(T, born = N)` sets it once a minor appends to `T`.
+  `abi::check_major` checks the value of `enshwick_mod_abi`, and
+  `check_abi` takes the manifest header's `u16` major. `CheckAbiError`
+  gains `BeforeMajors` for a DLL built before ABI majors, and its
+  `OtherMajor` holds a `u16`. The ABI major moves only to the next one
+  (#PR).
 - **Breaking:** a mod does not build when a key of its texts lacks a text
   in a language of the new `Language::REQUIRED`, `en` and `uk`; add the
   missing Ukrainian texts (#838).

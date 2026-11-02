@@ -702,7 +702,8 @@ pub(crate) extern "system" fn build_rights(
     use crate::abi::BuildRights;
     // SAFETY: the safe layer passes `check` null or pointing at a live
     // `BuildRights` for the call, readable for the size its header states.
-    let Some(mut request) = (unsafe { crate::abi::read_headed(check, size_of::<BuildRights>()) })
+    let Some(mut request) =
+        (unsafe { crate::abi::read_headed(check, <BuildRights as crate::abi::Headed>::BORN) })
     else {
         return Status::BAD_ARGS;
     };

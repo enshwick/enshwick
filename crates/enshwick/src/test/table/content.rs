@@ -143,9 +143,9 @@ pub(crate) extern "system" fn declare_change(
     }
     // SAFETY: the safe layer passes null or a full record with its header,
     // valid for the call.
-    let Some(raw) =
-        (unsafe { crate::abi::read_headed(change, size_of::<crate::abi::DataChange>()) })
-    else {
+    let Some(raw) = (unsafe {
+        crate::abi::read_headed(change, <crate::abi::DataChange as crate::abi::Headed>::BORN)
+    }) else {
         return Status::BAD_ARGS;
     };
     let target = if raw.select == crate::abi::DataSelect::ENTRY {
