@@ -130,7 +130,7 @@ pub(crate) fn text_bytes(base: u64) -> Option<&'static [u8]> {
 
 /// The bytes the stub writes over the server's entry point while it holds
 /// it, `jmp [rip+0]` and the target, and writes back once released.
-const ENTRY_HOLD: usize = 14;
+pub(crate) const ENTRY_HOLD: usize = 14;
 
 /// The game's code while the loader starts: the copy each mod's load, init
 /// and ready is compared against.
@@ -224,7 +224,7 @@ impl Watching {
 }
 
 /// The game's entry point, from its mapped PE header, relative to `base`.
-fn entry_rva(base: u64) -> Option<usize> {
+pub(crate) fn entry_rva(base: u64) -> Option<usize> {
     let base = usize::try_from(base).ok().filter(|&b| b != 0)?;
     // SAFETY: `base` is the game executable's non-zero image base, where
     // Windows maps its PE headers as one readable page for the process.

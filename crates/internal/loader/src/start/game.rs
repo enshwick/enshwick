@@ -186,6 +186,17 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     })
 }
 
+/// Where in `code`, the game's `.text` and its RVA, the stub holds the entry
+/// point: its jump goes to wherever the stub loaded, so a carried table's key
+/// leaves those bytes out; empty when the entry is not in `.text`.
+fn entry_hold(base: u64, code: Option<(&[u8], u64)>) -> core::ops::Range<usize> {
+    code.and_then(|(bytes, rva)| {
+        let at = crate::code::entry_rva(base)?.checked_sub(usize::try_from(rva).ok()?)?;
+        (at < bytes.len()).then_some(at..at + crate::code::ENTRY_HOLD)
+    })
+    .unwrap_or(0..0)
+}
+
 /// Identifies the running game and its build table; `None`, logged, when the
 /// loader cannot serve it. On a build it has no table for, a mod's hold under
 /// `data_dir` stops the game.
@@ -229,8 +240,10 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
             .read(range.start, range.end - range.start)
             .map(|bytes| (bytes, range.start - base))
     });
+    let hold = entry_hold(base, code);
     let cell = |rva| image.u32(base + rva);
-    let Some(mut build) = builds::select(&tables, side, fingerprint, code, cell, Some(data_dir))
+    let Some(mut build) =
+        builds::select(&tables, side, fingerprint, code, hold, cell, Some(data_dir))
     else {
         crate::log!(
             ERROR,
