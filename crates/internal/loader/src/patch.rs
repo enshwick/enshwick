@@ -672,22 +672,20 @@ fn write(
     // before the threads resume, so no reader sees one on for a patch that
     // then drops.
     let committed = loop {
-        let (written, writes): (Vec<usize>, Vec<crate::detour::Bytes<'_>>) = patches
+        let writes: Vec<crate::detour::Bytes<'_>> = patches
             .iter()
             .zip(&verdicts)
             .enumerate()
             .filter(|&(_, (_, v))| *v == Verdict::Write)
-            .map(|(i, (p, _))| {
-                let bytes = crate::detour::Bytes {
-                    address: p.address,
-                    bytes: &p.replacement,
-                };
-                (i, bytes)
+            .map(|(id, (p, _))| crate::detour::Bytes {
+                id,
+                address: p.address,
+                replacement: &p.replacement,
             })
-            .unzip();
+            .collect();
         crate::code::arming(patches, &verdicts, &targets);
         match crate::detour::commit(&hooks, &writes, crate::code::disarm) {
-            Commit::Busy(stuck) => leave_out(patches, &mut verdicts, &written, &stuck),
+            Commit::Busy(stuck) => leave_out(patches, &mut verdicts, &stuck),
             done => break done,
         }
     };
@@ -712,11 +710,13 @@ fn write(
     verdicts
 }
 
-/// Skips the patches a thread stayed inside, by their index in `written`,
-/// the patches the round tried to write, with the rest of their feature.
-fn leave_out(patches: &[CodePatch], verdicts: &mut [Verdict], written: &[usize], stuck: &[usize]) {
-    for at in stuck.iter().filter_map(|&i| written.get(i)) {
-        if let Some(verdict) = verdicts.get_mut(*at) {
+/// Skips the patches a thread stayed inside, by their index in `patches`,
+/// with the rest of their feature.
+fn leave_out(patches: &[CodePatch], verdicts: &mut [Verdict], stuck: &[usize]) {
+    for &id in stuck {
+        // Every id comes from this batch's own patches: a miss is a bug.
+        debug_assert!(id < verdicts.len(), "a stuck patch {id} outside the batch");
+        if let Some(verdict) = verdicts.get_mut(id) {
             *verdict = Verdict::Skip("a thread stayed inside it through every wait".into());
         }
     }

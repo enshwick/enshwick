@@ -150,10 +150,12 @@ pub(crate) fn prepare(requests: &[Request]) -> Vec<Result<Pending, PrepareError>
 /// Bytes to write over game code in the same batch as the hooks.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Bytes<'a> {
+    /// The caller's own id for the patch, which [`Commit::Busy`] reports.
+    pub(crate) id: usize,
     /// Where they go.
     pub(crate) address: usize,
     /// What goes there.
-    pub(crate) bytes: &'a [u8],
+    pub(crate) replacement: &'a [u8],
 }
 
 impl Pending {
@@ -172,8 +174,8 @@ pub(crate) enum Commit {
     /// thread's context could not be read to check and move it.
     Failed,
     /// Nothing is written: a thread stood or returned inside these code
-    /// patches, by index, through every wait. A code patch has no
-    /// trampoline to move it to, so the batch goes again without them.
+    /// patches, by their [`Bytes::id`], through every wait. A code patch has
+    /// no trampoline to move it to, so the batch goes again without them.
     Busy(Vec<usize>),
 }
 
@@ -341,7 +343,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit 
     let writes: Vec<(usize, &[u8])> = prepared
         .iter()
         .map(|&p| (p.target, &p.patch[..]))
-        .chain(code.iter().map(|c| (c.address, c.bytes)))
+        .chain(code.iter().map(|c| (c.address, c.replacement)))
         .collect();
     if writes.is_empty() {
         return Commit::Written;
@@ -349,7 +351,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit 
     let moved = moved_instructions(prepared);
     let patched: Vec<(usize, usize)> = code
         .iter()
-        .map(|c| (c.address, c.address + c.bytes.len()))
+        .map(|c| (c.address, c.address + c.replacement.len()))
         .collect();
     let returns = patch_returns(code);
     // Nothing below allocates while the other threads stand still: one of
@@ -365,22 +367,31 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit 
             return Commit::Failed;
         }
         stuck.fill(false);
-        // A thread whose context Windows does not hand over can be neither
-        // checked nor moved: the writes wait for it, then give up.
-        let blind = checked
-            .then(|| {
-                threads.iter().find(|&thread| {
-                    // SAFETY: `suspend` just suspended every other thread of
-                    // the process, `iter` yields each of them, and they stay
-                    // suspended until `resume`.
-                    !unsafe { mark(thread, &patched, &returns, &mut stuck) }
-                })
-            })
-            .flatten()
-            // SAFETY: `GetThreadId` only reads the id of a thread handle
-            // `suspend` opened with `THREAD_QUERY_LIMITED_INFORMATION`.
-            .map(|thread| unsafe { GetThreadId(thread) });
-        if !(stuck.contains(&true) || blind.is_some()) || tries == SETTLE_TRIES {
+        let last = tries == SETTLE_TRIES;
+        let mut blind = None;
+        if checked {
+            for thread in threads.iter() {
+                // SAFETY: `suspend` just suspended every other thread of the
+                // process, `iter` yields each of them, and they stay
+                // suspended until `resume`.
+                if !unsafe { mark(thread, &patched, &returns, &mut stuck) } {
+                    // A thread whose context Windows does not hand over can be
+                    // neither checked nor moved: the writes wait for it, then
+                    // give up.
+                    // SAFETY: `GetThreadId` only reads the id of a thread
+                    // handle `suspend` opened with
+                    // `THREAD_QUERY_LIMITED_INFORMATION`.
+                    blind = Some(unsafe { GetThreadId(thread) });
+                    break;
+                }
+                // A pass that waits again needs only one stuck thread; the
+                // last pass marks every patch each thread stays in.
+                if !last && stuck.contains(&true) {
+                    break;
+                }
+            }
+        }
+        if !(stuck.contains(&true) || blind.is_some()) || last {
             break blind;
         }
         threads.resume();
@@ -402,10 +413,9 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit 
         disarm();
         threads.resume();
         return Commit::Busy(
-            stuck
-                .iter()
-                .enumerate()
-                .filter_map(|(i, &s)| s.then_some(i))
+            code.iter()
+                .zip(&stuck)
+                .filter_map(|(patch, &s)| s.then_some(patch.id))
                 .collect(),
         );
     }
@@ -475,7 +485,7 @@ fn patch_returns(code: &[Bytes<'_>]) -> Vec<(usize, usize)> {
         .iter()
         .enumerate()
         .flat_map(|(i, c)| {
-            (c.address + 1..c.address + c.bytes.len())
+            (c.address + 1..c.address + c.replacement.len())
                 .filter(|&at| follows_call(c.address, at))
                 .map(move |at| (at, i))
         })
