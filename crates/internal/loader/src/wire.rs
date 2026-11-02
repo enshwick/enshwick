@@ -10,6 +10,7 @@
 mod delivery;
 mod envelope;
 mod frame;
+mod link;
 mod peer;
 
 pub use delivery::{Drops, Outbox, strays};
@@ -20,6 +21,10 @@ pub use envelope::{
 #[cfg(all(windows, test))]
 pub(crate) use frame::Partial;
 pub use frame::{Frame, assemble, frames, parse};
+pub use link::{
+    BACKLOG, FIRST_TIMEOUT, LAST_TIMEOUT, LINK, Link, MAX_LINK_HEADER, MAX_TRIES,
+    QueueMessageError, ReadPacketError, WINDOW,
+};
 pub use peer::{DATA_AGAIN, Peer};
 
 use enshwick::i18n::Language;
