@@ -377,7 +377,18 @@ fn a_mod_list_that_does_not_read_stays_byte_for_byte() {
     std::fs::create_dir_all(list.parent().unwrap()).unwrap();
     let saved_as_ansi = b"[\"you.lanterns\"]\nenabled = false\n# \xef\xbf\n";
     std::fs::write(&list, saved_as_ansi).unwrap();
-    let _found = libraries(&mods, Run::Dry, &mut |_| {});
+    let ids = || {
+        let (_, candidates, _) = libraries(&mods, Run::Dry, &mut |_| {});
+        candidates.into_iter().map(|c| c.id).collect::<Vec<_>>()
+    };
+    assert_eq!(ids(), ["you.lanterns"], "found, so the list would gain it");
+    assert_eq!(std::fs::read(&list).unwrap(), saved_as_ansi);
+    std::fs::write(
+        enshwick::files::backup_path(&list),
+        "[\"you.lanterns\"]\nenabled = false\n",
+    )
+    .unwrap();
+    assert!(ids().is_empty(), "off in the backup, so off");
     assert_eq!(std::fs::read(&list).unwrap(), saved_as_ansi);
     std::fs::remove_dir_all(&dir).unwrap();
 }

@@ -87,15 +87,20 @@ pub(super) fn libraries(
     let list_file = mods_dir
         .join(crate::settings::LOADER_ID)
         .join(modlist::LIST_FILE);
+    let read = enshwick::files::read_to_string_if_present(&list_file);
+    let mut changed = matches!(read, Ok(None));
     let ListRead {
         mut list,
         writable,
         problem,
-    } = discovery::read_list(enshwick::files::read_to_string_if_present(&list_file));
+    } = discovery::read_list(read, || {
+        enshwick::files::read_to_string_if_present(&enshwick::files::backup_path(&list_file))
+            .ok()
+            .flatten()
+    });
     if let Some(problem) = problem {
         crate::log!(WARN, "{problem}");
     }
-    let mut changed = !list_file.exists();
     let mut libraries = Vec::new();
     let mut candidates = Vec::new();
     let packs = crate::packs::discover(mods_dir)

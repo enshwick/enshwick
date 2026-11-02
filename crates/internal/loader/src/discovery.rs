@@ -83,10 +83,13 @@ pub(crate) struct ListRead {
 }
 
 /// Reads the mod list from what reading its file gave: `None` for a file
-/// that is not there. A file that does not read or parse is never written.
-pub(crate) fn read_list(read: std::io::Result<Option<String>>) -> ListRead {
-    let text = match read {
-        Ok(Some(text)) => text,
+/// that is not there. A file that does not read or parse is never written,
+/// and the mods off in `backup`, the list before its last write, stay off.
+pub(crate) fn read_list(
+    read: std::io::Result<Option<String>>,
+    backup: impl FnOnce() -> Option<String>,
+) -> ListRead {
+    let reason = match read.map(|text| text.map(|text| ModList::parse(&text))) {
         Ok(None) => {
             return ListRead {
                 list: ModList::default(),
@@ -94,31 +97,32 @@ pub(crate) fn read_list(read: std::io::Result<Option<String>>) -> ListRead {
                 problem: None,
             };
         }
-        Err(e) => {
+        Ok(Some(Ok(list))) => {
             return ListRead {
-                list: ModList::default(),
-                writable: false,
-                problem: Some(format!(
-                    "{LIST_PATH} is not read, every mod is on: {e} ({})",
-                    errors::BAD_MOD_LIST
-                )),
+                list,
+                writable: true,
+                problem: None,
             };
         }
+        Ok(Some(Err(reason))) => reason.to_string(),
+        Err(e) => e.to_string(),
     };
-    match ModList::parse(&text) {
-        Ok(list) => ListRead {
-            list,
-            writable: true,
-            problem: None,
-        },
-        Err(reason) => ListRead {
-            list: ModList::default(),
-            writable: false,
-            problem: Some(format!(
-                "{LIST_PATH} is not read, every mod is on: {reason} ({})",
-                errors::BAD_MOD_LIST
-            )),
-        },
+    let kept = backup().and_then(|text| ModList::parse(&text).ok());
+    let problem = if kept.is_some() {
+        format!(
+            "{LIST_PATH} is not read, so the mods off in {LIST_PATH}.bak stay off and every other mod is on: {reason} ({})",
+            errors::BAD_MOD_LIST
+        )
+    } else {
+        format!(
+            "{LIST_PATH} is not read, every mod is on: {reason} ({})",
+            errors::BAD_MOD_LIST
+        )
+    };
+    ListRead {
+        list: kept.unwrap_or_default(),
+        writable: false,
+        problem: Some(problem),
     }
 }
 
@@ -202,7 +206,7 @@ mod tests {
 
     #[test]
     fn a_missing_mod_list_turns_every_mod_on_and_is_written() {
-        let read = read_list(Ok(None));
+        let read = read_list(Ok(None), || None);
         assert!(read.writable);
         assert!(read.problem.is_none());
         assert!(read.list.off().is_empty());
@@ -210,7 +214,7 @@ mod tests {
 
     #[test]
     fn a_list_that_does_not_read_is_never_written() {
-        let read = read_list(Err(std::io::ErrorKind::InvalidData.into()));
+        let read = read_list(Err(std::io::ErrorKind::InvalidData.into()), || None);
         assert!(!read.writable);
         let problem = read.problem.unwrap();
         assert!(
@@ -224,8 +228,32 @@ mod tests {
     }
 
     #[test]
+    fn a_list_that_does_not_read_keeps_the_mods_off_in_its_backup() {
+        let backup = || Some("[\"you.lanterns\"]\nenabled = false\n".to_owned());
+        let read = read_list(Err(std::io::ErrorKind::InvalidData.into()), backup);
+        assert!(!read.writable);
+        assert!(read.list.is_off("you.lanterns"));
+        let problem = read.problem.unwrap();
+        assert!(
+            problem.starts_with(
+                "mods/enshwick/mods.toml is not read, so the mods off in \
+                 mods/enshwick/mods.toml.bak stay off and every other mod is on: "
+            ),
+            "{problem}"
+        );
+        let broken = read_list(Ok(Some("[you.lanterns\n".into())), backup);
+        assert!(!broken.writable);
+        assert!(broken.list.is_off("you.lanterns"));
+        let unreadable_backup = read_list(Ok(Some("[x\n".into())), || Some("[y\n".into()));
+        assert!(unreadable_backup.list.off().is_empty());
+    }
+
+    #[test]
     fn a_mod_list_that_reads_keeps_its_mods_off() {
-        let read = read_list(Ok(Some("[\"you.lanterns\"]\nenabled = false\n".into())));
+        let read = read_list(
+            Ok(Some("[\"you.lanterns\"]\nenabled = false\n".into())),
+            || None,
+        );
         assert!(read.writable);
         assert!(read.problem.is_none());
         assert!(read.list.is_off("you.lanterns"));
@@ -233,7 +261,7 @@ mod tests {
 
     #[test]
     fn a_broken_mod_list_turns_every_mod_on_and_is_never_overwritten() {
-        let read = read_list(Ok(Some("[you.lanterns\nenabled = false\n".into())));
+        let read = read_list(Ok(Some("[you.lanterns\nenabled = false\n".into())), || None);
         assert!(!read.writable);
         assert!(!read.list.is_off("you.lanterns"));
         let problem = read.problem.unwrap();
