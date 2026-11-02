@@ -37,7 +37,7 @@
       "default": ""
     },
     "exports": {
-      "description": "What other mods may use, each `<kind>:<local name>` with a kind of\n`point`, `event`, `call`, `service`, `content` or `stat`, such as the\nevents its scripts define: `event:greeted` lets them hear\n`<id>:greeted`. The loader refuses them anything else of the pack's.",
+      "description": "What other mods may use, each `event:<name>` for an event its scripts\ndefine or `content:<name>` for its content: `event:greeted` lets them\nhear `<id>:greeted`. The loader refuses them anything else of the\npack's.",
       "type": "array",
       "default": [],
       "items": {

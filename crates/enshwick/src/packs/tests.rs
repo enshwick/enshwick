@@ -706,6 +706,10 @@ fn an_export_without_its_kind_with_a_full_name_or_given_twice_is_a_problem() {
         ("exports = [\"hi\"]\n", "is not `<kind>:<name>`"),
         ("exports = [\"greeting:hi\"]\n", "is not `<kind>:<name>`"),
         (
+            "exports = [\"point:hi\"]\n",
+            "the kind one a pack declares: event, content",
+        ),
+        (
             "exports = [\"event:you.greeter:hi\"]\n",
             "without the pack's id",
         ),

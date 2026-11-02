@@ -182,8 +182,23 @@ impl FakeHost {
     ///     .install();
     /// # let _ = loader;
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// When a name lacks its kind, as the loader refuses a manifest whose
+    /// export lacks it.
     #[must_use]
+    #[expect(
+        clippy::panic,
+        reason = "a test that hands the fake a bare name fails as the loader refuses it"
+    )]
     pub fn exports(mut self, id: &str, names: &[&str]) -> Self {
+        if let Some(bare) = names.iter().find(|name| {
+            name.split_once(':')
+                .is_none_or(|(kind, _)| crate::schema_section::Kind::of_word(kind).is_none())
+        }) {
+            panic!("the export {bare:?} lacks its kind: write <kind>:<name>");
+        }
         self.exports.insert(
             id.to_owned(),
             names.iter().map(|&name| name.to_owned()).collect(),

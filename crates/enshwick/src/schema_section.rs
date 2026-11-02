@@ -207,7 +207,9 @@ impl<'a> Section<'a> {
                 section.heads.push(Head { text, id });
                 continue;
             }
-            let name = value(text, "name")
+            // The entry's own name, before its `[[type]]` and other tables.
+            let own = text.split("\n[").next().unwrap_or(text);
+            let name = value(own, "name")
                 .filter(|name| text.starts_with("[[") && !name.is_empty())
                 .ok_or(ReadSectionError::Damaged(start))?;
             if let Some(&(kind, _)) = Kind::TABLES
@@ -232,8 +234,9 @@ impl<'a> Section<'a> {
         &self.entries
     }
 
-    /// The exports of the mod `id`'s declarations, `<kind>:<local name>`,
-    /// each once.
+    /// The exports the mod `id`'s entries make, each `<kind>:<local name>`,
+    /// sorted and each once; its content and stat exports are not entries
+    /// and are not among them.
     ///
     /// # Examples
     ///
@@ -332,5 +335,15 @@ mod tests {
         let section = Section::parse(b"[[future]]\nname = \"you.a:x\"\nwhat = 1\n").unwrap();
         assert!(section.entries().is_empty());
         assert!(Section::parse(b"[[future]]\nwhat = 1\n").is_err());
+    }
+
+    #[test]
+    fn a_table_whose_name_is_only_in_a_nested_table_is_damaged() {
+        let nested = b"[[point]]\nmode = \"override\"\n[[type]]\nname = \"you.a:price\"\n";
+        assert!(Section::parse(nested).is_err());
+        let own =
+            Section::parse(b"[[point]]\nname = \"you.a:price\"\n[[type]]\nname = \"Price\"\n")
+                .unwrap();
+        assert_eq!(own.entries()[0].name, "you.a:price");
     }
 }

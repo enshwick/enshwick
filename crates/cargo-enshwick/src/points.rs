@@ -27,6 +27,26 @@ pub use rust::rust_deps;
 /// The schema format this tool reads.
 const FORMAT: u32 = enshwick::schema_section::FORMAT;
 
+/// What to do about a schema of `format`: an older one is the owner's to
+/// rebuild, a newer one this tool's to update.
+const fn format_fix(format: u32) -> &'static str {
+    if format < FORMAT {
+        "rebuild its mod with this enshwick"
+    } else {
+        "update cargo-enshwick"
+    }
+}
+
+/// A value read and dropped, which no definition is written from.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Ignored;
+
+impl<'de> Deserialize<'de> for Ignored {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        serde::de::IgnoredAny::deserialize(deserializer).map(|_| Self)
+    }
+}
+
 /// Why a point schema does not read or does not make a definition.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -35,7 +55,7 @@ pub enum Error {
     #[error("the schema: {0}")]
     Toml(String),
     /// The schema is of another format than this tool reads.
-    #[error("the schema is format {0}; this cargo-enshwick reads {FORMAT}: update it")]
+    #[error("the schema is format {0}; this cargo-enshwick reads {FORMAT}: {fix}", fix = format_fix(*.0))]
     Format(u32),
     /// A name, type or version is not one generated code may carry.
     #[error("the schema's {what} {value:?} is not one a definition may carry")]
@@ -140,7 +160,7 @@ pub struct Schema {
     /// whole; no declaration is written from them, since its exported
     /// declarations are the tables below.
     #[serde(default)]
-    exports: Vec<String>,
+    exports: Ignored,
     /// The owner's id.
     #[serde(rename = "mod")]
     owner: String,
@@ -253,10 +273,18 @@ impl Schema {
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
     pub fn parse(text: &str) -> Result<Self, Error> {
-        let schema: Self = toml::from_str(text).map_err(|e| Error::Toml(e.to_string()))?;
-        if schema.format != FORMAT {
-            return Err(Error::Format(schema.format));
+        /// The head's format alone, read before the rest, whose keys another
+        /// format may change.
+        #[derive(Deserialize)]
+        struct Head {
+            #[serde(rename = "schema")]
+            format: u32,
         }
+        let head: Head = toml::from_str(text).map_err(|e| Error::Toml(e.to_string()))?;
+        if head.format != FORMAT {
+            return Err(Error::Format(head.format));
+        }
+        let schema: Self = toml::from_str(text).map_err(|e| Error::Toml(e.to_string()))?;
         schema.check()?;
         Ok(schema)
     }
@@ -926,12 +954,19 @@ mod tests {
                 ..
             })
         ));
-        let newer = SCHEMA.replace("schema = 2", "schema = 3");
+        let newer = SCHEMA.replace("schema = 2", "schema = 3\nnew_key = 1");
+        let error = Schema::parse(&newer).unwrap_err();
+        assert!(matches!(error, Error::Format(3)), "{error}");
         assert!(
-            Schema::parse(&newer)
-                .unwrap_err()
-                .to_string()
-                .contains("update it")
+            error.to_string().ends_with("update cargo-enshwick"),
+            "{error}"
+        );
+        let older = Schema::parse(&SCHEMA.replace("schema = 2", "schema = 1"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            older.ends_with("rebuild its mod with this enshwick"),
+            "{older}"
         );
     }
 }
