@@ -317,3 +317,5 @@
 "resistance_lightning.name" = "Resistência a Eletricidade"
 "resistance_poison.name" = "Resistência ao veneno"
 "mods.developer.off" = "uma ferramenta de desenvolvedor: só funciona enquanto o arquivo mod-data/enshwick/developer-tools existir"
+"reload.done" = "{name} recarregado."
+"reload.waits" = "{name} mudou e aguarda um reinício: {why}"
