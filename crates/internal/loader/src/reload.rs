@@ -524,7 +524,7 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, ReloadM
         unsafe { (new.init)(&raw const host::API, host::handle(ModIndex::new(index))) }
     });
     REINIT.store(NONE, Ordering::Release);
-    loader.chains.relock().rewire(host::is_off);
+    loader.chains.relock().rewire(host::bypassed);
     if !status.is_ok() {
         loader.turn_off(
             ModIndex::new(index),
@@ -557,7 +557,7 @@ fn unlink(loader: &Loader, index: usize) {
         generation.fetch_add(1, Ordering::AcqRel);
     }
     loader.mods[index].off.store(true, Ordering::Release);
-    loader.chains.relock().rewire(host::is_off);
+    loader.chains.relock().rewire(host::bypassed);
     if loader.side == enshwick::abi::Side::CLIENT {
         // The new copy sets its own markers; the old copy's go.
         let _cleared = crate::ui::set_markers(ModIndex::new(index), &[]);
