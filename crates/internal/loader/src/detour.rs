@@ -889,14 +889,20 @@ unsafe fn mark(
 /// address into on its stack, from `from`, the address of a caller's local,
 /// up; its own instruction pointer is in this code, never in a patch.
 fn mark_own(from: usize, returns: &[(usize, usize)], stuck: &mut [bool]) {
-    if returns.is_empty() {
+    let (Some(&(low, _)), Some(&(high, _))) = (returns.first(), returns.last()) else {
         return;
-    }
+    };
     if let Some(stack) = Stack::at(from as u64) {
         // SAFETY: the stack is the calling thread's own, from a local of a
         // frame this call runs below: those frames stay committed, and only
         // this thread, busy in this call, writes them.
-        unsafe { stack.each(|word| mark_return(word, returns, stuck)) };
+        unsafe {
+            stack.each(|word| {
+                if (low..=high).contains(&word) {
+                    mark_return(word, returns, stuck);
+                }
+            });
+        }
     }
 }
 

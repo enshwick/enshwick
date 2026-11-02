@@ -377,8 +377,8 @@ Each entry names the pull request that made the change.
   wait at arming is not written under it: the patch waits, and its mod
   waits with it, its hooks and mid-function hooks passed by while the rest
   of it runs; the Mods screen, the status report and the log show it
-  waiting. The patch is tried again on the game thread when a world loads,
-  then up to three more times a minute apart. When it goes in, the hooks
+  waiting. The patch is tried again on the game thread after the first step
+  of the running world, then up to three more times a minute apart. When it goes in, the hooks
   come on; after the last try the log names the patch with "a thread stayed
   inside it through every wait" and the mod is turned off. A loader patch
   waits and turns off only the feature it serves (#860, #903).

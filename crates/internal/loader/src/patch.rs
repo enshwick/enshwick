@@ -706,7 +706,8 @@ fn write(
     if committed == Commit::Failed {
         crate::code::arming(&[], &[], &[]);
         for verdict in &mut verdicts {
-            if *verdict == Verdict::Write {
+            // A patch an earlier round left waiting needs these hooks too.
+            if matches!(verdict, Verdict::Write | Verdict::Wait) {
                 *verdict = Verdict::Skip("the code could not be written".into());
             }
         }
@@ -741,6 +742,7 @@ fn wait_out(patches: &[CodePatch], verdicts: &mut [Verdict], stuck: &[usize]) ->
         .filter(|&(p, v)| *v == Verdict::Wait && !p.owner.is_loader())
         .map(|(p, _)| p.owner)
         .collect();
+    owners.sort_unstable();
     owners.dedup();
     owners
 }

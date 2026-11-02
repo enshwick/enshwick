@@ -108,7 +108,8 @@ fn report_patches(
                 crate::log!(
                     WARN,
                     "code patch of {owner} at {:#x} waits: a thread stayed inside it; \
-                     tried again when a world loads, then each minute, its hooks off until then",
+                     tried again after the next game step, then up to three times a minute apart, \
+                     its hooks off until then",
                     patch.address
                 );
                 if patch.owner.is_loader() && !reported.contains(&patch.feature) {

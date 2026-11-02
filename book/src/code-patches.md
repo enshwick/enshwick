@@ -58,10 +58,11 @@ them:
 - the rest of it runs: its events, services, actions and other calls work;
 - the Mods screen and the status report show it as waiting.
 
-The loader tries the waiting patches again on the game thread, after a game
-step, when a world loads and then up to three more times a minute apart. Each
-try checks at most once a second for a few seconds and never waits on the
-game thread. When the patches go in, the mod's hooks come on. After the last
+The loader tries the waiting patches again on the game thread, after the
+first step of the running world and then up to three more times a minute
+apart. Each try checks at most once a second for ten seconds and never waits
+on the game thread. A client that joins another's server runs no world, so
+there its waiting patches are not tried again. When the patches go in, the mod's hooks come on. After the last
 try, the patches are skipped with "a thread stayed inside it through every
 wait" and the mod is turned off. A loader feature waits and comes on the same
 way.

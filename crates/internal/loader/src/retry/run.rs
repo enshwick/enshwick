@@ -12,16 +12,14 @@ use crate::locks::Relock;
 
 /// [`Retry::due`] with nothing held.
 const IDLE: u64 = u64::MAX;
-/// [`Retry::due`] while the held patches wait for a world to load.
-const AT_LOAD: u64 = u64::MAX - 1;
 
 /// The code patches waiting to go in, and when the step next checks them.
 #[derive(Debug)]
 pub(crate) struct Retry {
     /// Where [`Retry::due`] counts from.
     start: Instant,
-    /// Milliseconds from `start` to the next check, [`AT_LOAD`] or
-    /// [`IDLE`]: the step compares it without the lock.
+    /// Milliseconds from `start` to the next check, or [`IDLE`]: the step
+    /// compares it without the lock.
     due: AtomicU64,
     held: Mutex<Option<Held>>,
 }
@@ -50,14 +48,14 @@ impl Default for Retry {
 
 impl Retry {
     fn millis(&self, at: Instant) -> u64 {
-        u64::try_from(at.saturating_duration_since(self.start).as_millis()).unwrap_or(AT_LOAD - 1)
+        u64::try_from(at.saturating_duration_since(self.start).as_millis()).unwrap_or(IDLE - 1)
     }
 
     /// Publishes when the step next checks `held`.
     fn publish(&self, held: Option<&Held>) {
-        let due = held.map_or(IDLE, |h| {
-            h.schedule.next().map_or(AT_LOAD, |at| self.millis(at))
-        });
+        let due = held
+            .and_then(|h| h.schedule.next())
+            .map_or(IDLE, |at| self.millis(at));
         self.due.store(due, Ordering::Release);
     }
 
@@ -97,23 +95,11 @@ pub(crate) fn hold(
         patches,
         verdicts,
         hooked,
-        schedule: Schedule::new(),
+        schedule: Schedule::new(Instant::now()),
     };
     let mut slot = loader.retry.held.relock();
     loader.retry.publish(Some(&held));
     *slot = Some(held);
-}
-
-/// Starts the tries when a world loads.
-pub(crate) fn world_loaded(loader: &Loader) {
-    if loader.retry.due.load(Ordering::Acquire) != AT_LOAD {
-        return;
-    }
-    let mut held = loader.retry.held.relock();
-    if let Some(h) = held.as_mut() {
-        h.schedule.world_loaded(Instant::now());
-        loader.retry.publish(Some(h));
-    }
 }
 
 /// Checks the waiting patches when a check is due, on the game thread after
@@ -140,7 +126,20 @@ fn check(loader: &Loader, now: Instant) {
     for (patch, verdict) in held.patches.iter().zip(&mut held.verdicts) {
         if *verdict == Verdict::Wait && !patch.owner.is_loader() && host::is_off(patch.owner) {
             *verdict = Verdict::Off;
+            if let Some(record) = loader.mods.get(patch.owner.get()) {
+                record.waiting.store(false, Ordering::Release);
+            }
         }
+    }
+    let changed = held.patches.iter().zip(&held.verdicts).any(|(p, v)| {
+        *v == Verdict::Wait
+            && crate::code::read(p.address, p.expected.len()).as_deref() != Some(&*p.expected)
+    });
+    if changed {
+        let held = slot.take();
+        loader.retry.publish(None);
+        drop(slot);
+        return give_up(loader, held, "the bytes changed while it waited");
     }
     let writes: Vec<Bytes<'_>> = held
         .patches
