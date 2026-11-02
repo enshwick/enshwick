@@ -619,6 +619,11 @@ impl Stack {
 /// holds a return address into on its stack, by the index `returns` pairs
 /// with each address; false when the thread's context does not read.
 ///
+/// It scans every stack word rather than unwinding the frames: an unwind
+/// looks up function entries under ntdll locks that a suspended thread may
+/// hold (in `LoadLibrary` or `RtlAddFunctionTable`), which would hang the
+/// settle, while the scan needs only `VirtualQuery`.
+///
 /// # Safety
 ///
 /// - Every thread of the process but the caller, `thread` among them, stays
