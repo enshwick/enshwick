@@ -44,6 +44,7 @@ pub(crate) fn off_reason() -> &'static str {
 
 /// The key of a developer mod's off reason, whose English text is
 /// [`enshwick::mods::DEVELOPER_TOOL_OFF`].
+#[cfg(windows)]
 const OFF_REASON: &str = "mods.developer.off";
 
 #[cfg(test)]
