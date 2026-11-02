@@ -4,12 +4,18 @@
 //! (server 399). What it keeps is the template and the position of every
 //! placed thing, and an item's place in its owner's inventory.
 
+use enshwick::{Entity, ItemId};
 use rustc_hash::FxHashMap;
 
 /// The GUID of a player's character, `keen::CharacterId` (server 399): one
 /// account may have several characters on a server.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct CharacterId(pub(crate) [u8; 16]);
+
+/// A data kind by its index among the kinds of the session: the opened
+/// kinds in order, then the file's kinds no mod opened.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub(crate) struct KindIndex(pub(crate) u32);
 
 /// The save keeps each 32.32 fixed-point axis as a 128 m sector, the axis
 /// shifted right by `SECTOR_SHIFT` and clamped to `0..=MAX_SECTOR`, and a
@@ -198,7 +204,7 @@ impl Index {
 /// value, and whether it is aside.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Pending {
-    pub(crate) kind: u32,
+    pub(crate) kind: KindIndex,
     pub(crate) anchor: Anchor,
     pub(crate) check: u32,
     pub(crate) value: Box<[u8]>,
@@ -212,7 +218,7 @@ pub(crate) struct Pending {
 #[derive(Debug, Default)]
 pub(crate) struct Outcome {
     /// Records with their entity: kind, entity, record.
-    pub(crate) found: Vec<(u32, u32, Pending)>,
+    pub(crate) found: Vec<(KindIndex, Entity, Pending)>,
     /// Records aside from now on, written back as they were.
     pub(crate) left: Vec<Pending>,
     /// Of `left`: places the world or the file holds more than once.
@@ -237,8 +243,8 @@ pub(crate) struct Outcome {
 pub(crate) fn resolve(
     pending: Vec<Pending>,
     index: &Index,
-    held: impl Fn(u32, u8, u8) -> Option<(u32, u32)>,
-    taken: impl Fn(u32, u32) -> bool,
+    held: impl Fn(Entity, u8, u8) -> Option<(Entity, ItemId)>,
+    taken: impl Fn(KindIndex, Entity) -> bool,
 ) -> Outcome {
     settle(
         pending,
@@ -246,9 +252,9 @@ pub(crate) fn resolve(
         |record| match record.anchor {
             Anchor::Placed(placed) => index.find(&placed),
             Anchor::Held { root, link, slot } => match index.find(&root) {
-                Some(Found::One(root)) => held(root, link, slot)
-                    .filter(|&(_, item)| item == record.check)
-                    .map(|(pide, _)| Found::One(pide)),
+                Some(Found::One(root)) => held(Entity(root), link, slot)
+                    .filter(|&(_, item)| item.0 == record.check)
+                    .map(|(pide, _)| Found::One(pide.0)),
                 other => other,
             },
             Anchor::Session(_) | Anchor::Carried { .. } => None,
@@ -271,8 +277,8 @@ pub(crate) fn resolve(
 pub(crate) fn resolve_carried(
     pending: &mut Vec<Pending>,
     character: CharacterId,
-    held: impl Fn(u8, u8) -> Option<(u32, u32)>,
-    taken: impl Fn(u32, u32) -> bool,
+    held: impl Fn(u8, u8) -> Option<(Entity, ItemId)>,
+    taken: impl Fn(KindIndex, Entity) -> bool,
 ) -> Outcome {
     let mine = |record: &Pending| match record.anchor {
         Anchor::Carried {
@@ -282,13 +288,13 @@ pub(crate) fn resolve_carried(
         } if c == character && !record.aside => Some((link, slot)),
         _ => None,
     };
-    let mut uses: FxHashMap<(u32, Anchor), usize> = FxHashMap::default();
+    let mut uses: FxHashMap<(KindIndex, Anchor), usize> = FxHashMap::default();
     for record in pending.iter().filter(|record| mine(record).is_some()) {
         *uses.entry((record.kind, record.anchor)).or_default() += 1;
     }
     let mut outcome = Outcome::default();
     // What becomes of each of the character's records: its item, or aside.
-    let mut fates: Vec<(usize, Option<u32>)> = Vec::new();
+    let mut fates: Vec<(usize, Option<Entity>)> = Vec::new();
     for (at, record) in pending.iter().enumerate() {
         let Some((link, slot)) = mine(record) else {
             continue;
@@ -298,7 +304,7 @@ pub(crate) fn resolve_carried(
             fates.push((at, None));
             continue;
         }
-        match held(link, slot).filter(|&(_, item)| item == record.check) {
+        match held(link, slot).filter(|&(_, item)| item.0 == record.check) {
             Some((pide, _)) if !taken(record.kind, pide) => fates.push((at, Some(pide))),
             Some(_) => {
                 outcome.replaced += 1;
@@ -326,9 +332,9 @@ fn settle(
     pending: Vec<Pending>,
     turn: impl Fn(&Pending) -> bool,
     find: impl Fn(&Pending) -> Option<Found>,
-    taken: impl Fn(u32, u32) -> bool,
+    taken: impl Fn(KindIndex, Entity) -> bool,
 ) -> Outcome {
-    let mut uses: FxHashMap<(u32, Anchor), usize> = FxHashMap::default();
+    let mut uses: FxHashMap<(KindIndex, Anchor), usize> = FxHashMap::default();
     for record in pending.iter().filter(|r| !r.aside && turn(r)) {
         *uses.entry((record.kind, record.anchor)).or_default() += 1;
     }
@@ -355,8 +361,8 @@ fn settle(
             _ => find(&record),
         };
         let count = match target {
-            Some(Found::One(entity)) if !taken(record.kind, entity) => {
-                outcome.found.push((record.kind, entity, record));
+            Some(Found::One(entity)) if !taken(record.kind, Entity(entity)) => {
+                outcome.found.push((record.kind, Entity(entity), record));
                 continue;
             }
             Some(Found::One(_)) => &mut outcome.replaced,
@@ -384,7 +390,7 @@ mod tests {
 
     fn pending(kind: u32, anchor: Anchor, check: u32, value: u8) -> Pending {
         Pending {
-            kind,
+            kind: KindIndex(kind),
             anchor,
             check,
             value: Box::new([value]),
@@ -480,7 +486,7 @@ mod tests {
         let found: Vec<(u32, u8)> = outcome
             .found
             .iter()
-            .map(|(_, entity, record)| (*entity, record.value[0]))
+            .map(|(_, entity, record)| (entity.0, record.value[0]))
             .collect();
         assert_eq!(
             found,
@@ -518,16 +524,16 @@ mod tests {
         let outcome = resolve(records, &index, |_, _, _| None, |_, _| false);
         assert_eq!(outcome.ambiguous, 2);
         assert_eq!(outcome.found.len(), 1, "another kind on the key is fine");
-        assert_eq!(outcome.found[0].0, 1);
+        assert_eq!(outcome.found[0].0, KindIndex(1));
     }
 
     #[test]
     fn an_item_is_found_by_its_owner_link_and_slot_only_while_it_holds_its_item() {
         let mut index = Index::default();
         index.add(chest(1), 1046);
-        let held = |root, link, slot| match (root, link, slot) {
-            (1046, 0, 3) => Some((1047, 77)),
-            (1046, 0, 4) => Some((1048, 78)),
+        let held = |root: Entity, link, slot| match (root.0, link, slot) {
+            (1046, 0, 3) => Some((Entity(1047), ItemId(77))),
+            (1046, 0, 4) => Some((Entity(1048), ItemId(78))),
             _ => None,
         };
         let item = |slot, check| {
@@ -549,7 +555,7 @@ mod tests {
             |_, _| false,
         );
         assert_eq!(outcome.found.len(), 1);
-        assert_eq!(outcome.found[0].1, 1047);
+        assert_eq!(outcome.found[0].1, Entity(1047));
         assert_eq!(outcome.left.len(), 2, "another item, an empty slot");
     }
 
@@ -612,7 +618,7 @@ mod tests {
             vec![pending(4, Anchor::Placed(chest(1)), 1, 1)],
             &index,
             |_, _, _| None,
-            |kind, entity| (kind, entity) == (4, 1027),
+            |kind, entity| (kind, entity) == (KindIndex(4), Entity(1027)),
         );
         assert!(outcome.found.is_empty());
         assert_eq!((outcome.left.len(), outcome.replaced), (1, 1));
@@ -671,9 +677,9 @@ mod tests {
             carried(ANN_SECOND, 0, 1, 77, 4),
         ];
         let held = |link, slot| match (link, slot) {
-            (0, 1) => Some((2001, 77)),
+            (0, 1) => Some((Entity(2001), ItemId(77))),
             // Played elsewhere: another item lies in the slot now.
-            (0, 2) => Some((2002, 90)),
+            (0, 2) => Some((Entity(2002), ItemId(90))),
             _ => None,
         };
         let mut records = records;
@@ -681,7 +687,7 @@ mod tests {
         let found: Vec<(u32, u8)> = outcome
             .found
             .iter()
-            .map(|(_, e, r)| (*e, r.value[0]))
+            .map(|(_, e, r)| (e.0, r.value[0]))
             .collect();
         assert_eq!(found, [(2001, 1)]);
         assert_eq!(outcome.waiting, 2, "the changed slot and the empty one");
@@ -697,7 +703,12 @@ mod tests {
     #[test]
     fn a_carried_record_whose_item_has_a_newer_value_goes_aside() {
         let mut records = vec![carried(ANN, 0, 1, 77, 1)];
-        let outcome = resolve_carried(&mut records, ANN, |_, _| Some((2001, 77)), |_, _| true);
+        let outcome = resolve_carried(
+            &mut records,
+            ANN,
+            |_, _| Some((Entity(2001), ItemId(77))),
+            |_, _| true,
+        );
         assert!(outcome.found.is_empty());
         assert_eq!(outcome.replaced, 1);
         assert!(records[0].aside);
@@ -706,7 +717,12 @@ mod tests {
     #[test]
     fn two_records_on_one_carried_slot_both_go_aside_and_neither_attaches() {
         let mut records = vec![carried(ANN, 0, 1, 77, 1), carried(ANN, 0, 1, 77, 2)];
-        let outcome = resolve_carried(&mut records, ANN, |_, _| Some((2001, 77)), |_, _| false);
+        let outcome = resolve_carried(
+            &mut records,
+            ANN,
+            |_, _| Some((Entity(2001), ItemId(77))),
+            |_, _| false,
+        );
         assert!(outcome.found.is_empty());
         assert_eq!(outcome.ambiguous, 2);
         assert!(records.iter().all(|r| r.aside));

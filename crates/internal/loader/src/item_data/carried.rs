@@ -3,7 +3,7 @@
 
 use std::sync::atomic::Ordering;
 
-use enshwick::Entity;
+use enshwick::{Entity, ItemId};
 use rustc_hash::FxHashSet;
 
 use super::{
@@ -12,7 +12,7 @@ use super::{
 };
 use crate::fuse::Fuse;
 use crate::host::Loader;
-use crate::item_records::anchor::{self, Anchor, CharacterId, Pending};
+use crate::item_records::anchor::{self, Anchor, CharacterId, KindIndex, Pending};
 use crate::locks::Relock;
 
 /// Server steps between two looks of a joined character for its carried
@@ -114,6 +114,11 @@ fn left(loader: &Loader, entity: Entity) {
             .iter()
             .any(|joining| joining.entity == entity && joining.settled);
         server.joining.retain(|joining| joining.entity != entity);
+        if let Some(character) = character_of(entity) {
+            server.changed |= set_aside_cleared(server, character, |link, slot| {
+                game::in_slot(loader, entity, link, slot)
+            }) > 0;
+        }
         // First the values on its items, before the game destroys them: a
         // panic in the reads after leaves them kept.
         let kept = keep_carried(server, entity, |pide| {
@@ -136,7 +141,7 @@ fn left(loader: &Loader, entity: Entity) {
             // now: a record whose slot holds another item will not find its
             // own at a later join either. The records just kept hold theirs.
             let gone = set_aside_waiting(&mut server.pending, character, |link, slot| {
-                game::in_slot(loader, entity.0, link, slot).map(|(_, item)| item)
+                game::in_slot(loader, entity, link, slot).map(|(_, item)| item)
             });
             server.changed |= gone > 0;
         }
@@ -155,15 +160,15 @@ fn left(loader: &Loader, entity: Entity) {
 pub(super) fn keep_carried(
     server: &mut Server,
     character: Entity,
-    held: impl Fn(u32) -> Option<game::Held>,
+    held: impl Fn(Entity) -> Option<game::Held>,
 ) -> Kept {
-    let carried: Vec<((u32, u32), game::Held)> = server
+    let carried: Vec<((KindIndex, Entity), game::Held)> = server
         .values
         .iter()
         .filter(|&(&(kind, _), record)| scope(kind, record.anchor) == Some(Scope::Item))
         .filter_map(|(&key, _)| {
             held(key.1)
-                .filter(|held| held.root == character.0)
+                .filter(|held| held.root == character)
                 .map(|held| (key, held))
         })
         .collect();
@@ -174,7 +179,7 @@ pub(super) fn keep_carried(
             continue;
         };
         moved.push((kind, pide));
-        if held.item != record.item {
+        if held.item.0 != record.item {
             continue;
         }
         let anchor = held
@@ -182,8 +187,8 @@ pub(super) fn keep_carried(
             .filter(|anchor| matches!(anchor, Anchor::Carried { .. }));
         left.push(Pending {
             kind,
-            anchor: anchor.unwrap_or(Anchor::Session(pide)),
-            check: held.item,
+            anchor: anchor.unwrap_or(Anchor::Session(pide.0)),
+            check: held.item.0,
             value: record.value,
             aside: anchor.is_none(),
         });
@@ -208,11 +213,89 @@ pub(super) fn keep_carried(
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct Kept {
     /// The kinds and item entities whose values left `values`.
-    pub(super) moved: Vec<(u32, u32)>,
+    pub(super) moved: Vec<(KindIndex, Entity)>,
     /// Values that wait for the character's next join.
     pub(super) waiting: usize,
     /// Values set aside: no character GUID reads.
     pub(super) aside: usize,
+}
+
+/// Keeps a cleared item value cleared: kind `kind`'s value on the item
+/// `pide` holding `item` was just removed, its slot read as `anchor`. A
+/// carried record still waiting on that slot would come back at the next
+/// look, so it goes aside, kept but attached to nothing. Where no slot read
+/// (off the game thread, or no GUID read) the clear is noted while such a
+/// record waits, for [`set_aside_cleared`] once a look or leave reads it.
+pub(super) fn forget_carried(
+    server: &mut Server,
+    kind: KindIndex,
+    pide: Entity,
+    item: ItemId,
+    anchor: Option<Anchor>,
+) {
+    let waits = |record: &Pending| {
+        !record.aside
+            && (record.kind, record.check) == (kind, item.0)
+            && matches!(record.anchor, Anchor::Carried { .. })
+    };
+    match anchor {
+        Some(slot @ Anchor::Carried { .. }) => {
+            for record in server
+                .pending
+                .iter_mut()
+                .filter(|record| waits(record) && record.anchor == slot)
+            {
+                record.aside = true;
+            }
+        }
+        Some(_) => {}
+        None => {
+            let note = (kind, pide, item);
+            if server.pending.iter().any(waits) && !server.cleared.contains(&note) {
+                server.cleared.push(note);
+            }
+        }
+    }
+}
+
+/// Sets aside each record waiting for `character` whose slot, as
+/// `in_slot(link, slot)` reads it, holds an item entity [`forget_carried`]
+/// noted cleared of the record's kind while it held the record's item; the
+/// notes used go. The number set aside.
+pub(super) fn set_aside_cleared(
+    server: &mut Server,
+    character: CharacterId,
+    in_slot: impl Fn(u8, u8) -> Option<(Entity, ItemId)>,
+) -> usize {
+    if server.cleared.is_empty() {
+        return 0;
+    }
+    let mut gone = 0usize;
+    for record in server.pending.iter_mut().filter(|record| !record.aside) {
+        let Anchor::Carried {
+            character: c,
+            link,
+            slot,
+        } = record.anchor
+        else {
+            continue;
+        };
+        if c != character {
+            continue;
+        }
+        let Some((pide, item)) = in_slot(link, slot) else {
+            continue;
+        };
+        let note = (record.kind, pide, item);
+        if let Some(at) = server.cleared.iter().position(|&n| n == note)
+            && item.0 == record.check
+        {
+            server.cleared.swap_remove(at);
+            record.aside = true;
+            gone += 1;
+        }
+    }
+    gone
 }
 
 /// Sets aside every waiting carried record of `pending` on a kind and slot
@@ -220,9 +303,9 @@ pub(super) struct Kept {
 /// named twice. Logs how many went aside; the number.
 pub(super) fn set_aside_older(
     pending: &mut [Pending],
-    newer: impl Iterator<Item = (u32, Anchor)>,
+    newer: impl Iterator<Item = (KindIndex, Anchor)>,
 ) -> usize {
-    let newer: FxHashSet<(u32, Anchor)> = newer
+    let newer: FxHashSet<(KindIndex, Anchor)> = newer
         .filter(|(_, anchor)| matches!(anchor, Anchor::Carried { .. }))
         .collect();
     if newer.is_empty() {
@@ -254,7 +337,7 @@ pub(super) fn set_aside_older(
 pub(super) fn set_aside_waiting(
     pending: &mut [Pending],
     character: CharacterId,
-    item_in: impl Fn(u8, u8) -> Option<u32>,
+    item_in: impl Fn(u8, u8) -> Option<ItemId>,
 ) -> usize {
     let mut gone = 0usize;
     for record in pending.iter_mut().filter(|record| !record.aside) {
@@ -266,7 +349,7 @@ pub(super) fn set_aside_waiting(
         else {
             continue;
         };
-        if c == character && item_in(link, slot).is_some_and(|item| item != record.check) {
+        if c == character && item_in(link, slot).is_some_and(|item| item.0 != record.check) {
             record.aside = true;
             gone += 1;
         }
@@ -312,7 +395,7 @@ fn find_carried(loader: &Loader) {
                 &mut entry,
                 &mut found,
                 |entity| game::ready(loader, entity),
-                |entity, link, slot| game::in_slot(loader, entity.0, link, slot),
+                |entity, link, slot| game::in_slot(loader, entity, link, slot),
             );
             if let Look::Stop(why) = look {
                 crate::log!(
@@ -359,9 +442,9 @@ pub(super) fn look(
     server: &mut Server,
     characters: &[(Entity, CharacterId)],
     joining: &mut Joining,
-    found: &mut Vec<(u32, u32)>,
+    found: &mut Vec<(KindIndex, Entity)>,
     ready: impl Fn(Entity) -> bool,
-    in_slot: impl Fn(Entity, u8, u8) -> Option<(u32, u32)>,
+    in_slot: impl Fn(Entity, u8, u8) -> Option<(Entity, ItemId)>,
 ) -> Look {
     let entity = joining.entity;
     let character = crate::world::character_in(characters, entity).filter(|_| ready(entity));
@@ -373,6 +456,8 @@ pub(super) fn look(
             Look::Again
         };
     };
+    server.changed |=
+        set_aside_cleared(server, character, |link, slot| in_slot(entity, link, slot)) > 0;
     let back = take_back_carried(server, character, |link, slot| in_slot(entity, link, slot));
     if !back.found.is_empty() || back.replaced + back.ambiguous > 0 {
         crate::log!(
@@ -404,7 +489,7 @@ pub(super) fn look(
 pub(super) fn take_back_carried(
     server: &mut Server,
     character: CharacterId,
-    held: impl Fn(u8, u8) -> Option<(u32, u32)>,
+    held: impl Fn(u8, u8) -> Option<(Entity, ItemId)>,
 ) -> TakenBack {
     let values = &server.values;
     let outcome = anchor::resolve_carried(&mut server.pending, character, held, |kind, pide| {
@@ -424,7 +509,7 @@ pub(super) fn take_back_carried(
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct TakenBack {
     /// The kinds and item entities that took a value back.
-    pub(super) found: Vec<(u32, u32)>,
+    pub(super) found: Vec<(KindIndex, Entity)>,
     /// Records aside: their item already had a newer value.
     pub(super) replaced: usize,
     /// Records aside: two records named the same slot.
@@ -435,7 +520,7 @@ pub(super) struct TakenBack {
 
 /// Whether any of the `found` kinds and entities is an item's stats, which
 /// the entities that wear the item read.
-pub(super) fn touches_item_stats(found: &[(u32, u32)]) -> bool {
+pub(super) fn touches_item_stats(found: &[(KindIndex, Entity)]) -> bool {
     found
         .iter()
         .any(|&(id, _)| kind(id).is_some_and(|k| k.id == enshwick::stats::ITEM_KIND))

@@ -35,17 +35,17 @@ mod world_file;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use enshwick::Entity;
 use enshwick::abi::{HookFlags, Status};
+use enshwick::{Entity, ItemId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use self::attach::find_pending;
-use self::carried::{JOIN_LOOK_EVERY, Joining, look_for_carried};
+use self::carried::{JOIN_LOOK_EVERY, Joining, forget_carried, look_for_carried};
 pub(crate) use self::carried::{player_joined, player_left};
 pub(crate) use self::world_file::world_event;
 use crate::chains::Next;
 use crate::host::{Loader, Target};
-use crate::item_records::anchor::{self, Anchor, Pending};
+use crate::item_records::anchor::{self, Anchor, KindIndex, Pending};
 use crate::item_records::{decode, encode};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -98,7 +98,7 @@ struct Kind {
 }
 
 /// Values by kind index and item entity.
-type Values = FxHashMap<(u32, u32), Record>;
+type Values = FxHashMap<(KindIndex, Entity), Record>;
 
 /// The server's values and the world they belong to.
 #[derive(Debug, Default)]
@@ -116,13 +116,17 @@ struct Server {
     /// The joined characters whose carried records wait; at most one entry
     /// per player.
     joining: Vec<Joining>,
+    /// Item values cleared where no slot read while a carried record of
+    /// their kind and item waited, as (kind, item entity, item): a look or
+    /// leave that finds the entity in that record's slot sets it aside.
+    cleared: Vec<(KindIndex, Entity, ItemId)>,
     changed: bool,
 }
 
 impl Server {
     /// The id of kind `kind`, opened or not.
-    fn kind_id(&self, kind: u32) -> Option<&str> {
-        let kind = usize::try_from(kind).ok()?;
+    fn kind_id(&self, kind: KindIndex) -> Option<&str> {
+        let kind = usize::try_from(kind.0).ok()?;
         let opened = KINDS.sealed().unwrap_or_default();
         match opened.get(kind) {
             Some(spec) => Some(&spec.id),
@@ -135,7 +139,7 @@ impl Server {
 /// kind, else the one its anchor tells. A live value of a kind no mod
 /// opened has no anchor only once its item left every placed inventory: an
 /// entity value always keeps its place.
-fn scope(kind: u32, anchor: Option<Anchor>) -> Option<Scope> {
+fn scope(kind: KindIndex, anchor: Option<Anchor>) -> Option<Scope> {
     match (self::kind(kind), anchor) {
         (Some(spec), _) => Some(spec.scope),
         (None, Some(Anchor::Placed(_))) => Some(Scope::Entity),
@@ -263,14 +267,14 @@ pub(crate) fn open_platform(id: &str) {
 /// The value of the loader's own kind `id` on the item `pide` holding
 /// `item`.
 pub(crate) fn get_platform_kind(id: &str, pide: u32, item: u32) -> Option<Box<[u8]>> {
-    get(kind_of(id)?, pide, item).ok()
+    get(kind_of(id)?.0, pide, item).ok()
 }
 
 /// Sets the item stats of the item `pide` holding `item`, as a mod's set
 /// would.
 pub(crate) fn set_platform(pide: u32, item: u32, value: &[u8]) -> Result<(), Status> {
     let kind = kind_of(enshwick::stats::ITEM_KIND).ok_or(Status::MISSING)?;
-    set(kind, pide, item, value)
+    set(kind.0, pide, item, value)
 }
 
 /// The item stats of the item `pide` holding `item`.
@@ -364,10 +368,10 @@ fn take_destroyed() -> FxHashSet<u32> {
 
 /// Drops the records of the `destroyed` entities from `values`; the keys
 /// dropped.
-fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(u32, u32)> {
-    let gone: Vec<(u32, u32)> = values
+fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(KindIndex, Entity)> {
+    let gone: Vec<(KindIndex, Entity)> = values
         .keys()
-        .filter(|(_, pide)| destroyed.contains(pide))
+        .filter(|(_, pide)| destroyed.contains(&pide.0))
         .copied()
         .collect();
     for key in &gone {
@@ -397,6 +401,9 @@ pub(crate) fn after_step(loader: &Loader) {
             return;
         };
         let gone = prune_destroyed(&mut server.values, &destroyed);
+        server
+            .cleared
+            .retain(|(_, pide, _)| !destroyed.contains(&pide.0));
         server.changed |= !gone.is_empty();
         gone
     };
@@ -405,7 +412,7 @@ pub(crate) fn after_step(loader: &Loader) {
 
 /// The messages that tell clients the values of `keys` are gone, for the
 /// kinds clients get.
-fn removals(keys: &[(u32, u32)]) -> Vec<Vec<u8>> {
+fn removals(keys: &[(KindIndex, Entity)]) -> Vec<Vec<u8>> {
     let mut messages = Vec::new();
     for &(id, pide) in keys {
         if let Some(spec) = kind(id).filter(|k| k.sent) {
@@ -417,13 +424,13 @@ fn removals(keys: &[(u32, u32)]) -> Vec<Vec<u8>> {
 
 /// Appends a record's encoding to the last of `messages`, moving it to a
 /// new message when it would grow the last past [`MESSAGE_BYTES`].
-fn push_encoded(messages: &mut Vec<Vec<u8>>, id: &str, pide: u32, item: u32, value: &[u8]) {
+fn push_encoded(messages: &mut Vec<Vec<u8>>, id: &str, pide: Entity, item: u32, value: &[u8]) {
     if messages.is_empty() {
         messages.push(Vec::new());
     }
     let last = messages.len() - 1;
     let start = messages[last].len();
-    encode(&mut messages[last], id, pide, item, value);
+    encode(&mut messages[last], id, pide.0, item, value);
     if start > 0 && messages[last].len() > MESSAGE_BYTES {
         let record = messages[last].split_off(start);
         messages.push(record);
@@ -432,7 +439,7 @@ fn push_encoded(messages: &mut Vec<Vec<u8>>, id: &str, pide: u32, item: u32, val
 
 /// The messages that tell clients the values of `keys` in `values`, for the
 /// kinds clients get.
-fn messages_for(values: &Values, keys: &[(u32, u32)]) -> Vec<Vec<u8>> {
+fn messages_for(values: &Values, keys: &[(KindIndex, Entity)]) -> Vec<Vec<u8>> {
     let mut messages = Vec::new();
     for &(kind, pide) in keys {
         if let (Some(spec), Some(record)) = (
@@ -454,7 +461,10 @@ fn send(messages: &[Vec<u8>]) {
 
 /// Puts each `found` record into `values` under its kind and entity, as
 /// attached from now on; the keys.
-fn insert_found(values: &mut Values, found: Vec<(u32, u32, Pending)>) -> Vec<(u32, u32)> {
+fn insert_found(
+    values: &mut Values,
+    found: Vec<(KindIndex, Entity, Pending)>,
+) -> Vec<(KindIndex, Entity)> {
     found
         .into_iter()
         .map(|(kind, entity, record)| {
@@ -477,13 +487,13 @@ pub(crate) fn wanted() -> bool {
     KINDS.sealed().is_some_and(|k| !k.is_empty())
 }
 
-fn kind(kind: u32) -> Option<&'static Kind> {
-    KINDS.sealed()?.get(usize::try_from(kind).ok()?)
+fn kind(kind: KindIndex) -> Option<&'static Kind> {
+    KINDS.sealed()?.get(usize::try_from(kind.0).ok()?)
 }
 
-fn kind_of(id: &str) -> Option<u32> {
+fn kind_of(id: &str) -> Option<KindIndex> {
     let index = KINDS.sealed()?.iter().position(|k| k.id == id)?;
-    u32::try_from(index).ok()
+    u32::try_from(index).ok().map(KindIndex)
 }
 
 /// The game id of `entity`'s template, on the server's game thread; `None`
@@ -504,6 +514,7 @@ fn serves() -> bool {
 /// entity kind on the entity `pide` (`item` 0). On the server's game thread
 /// an entity whose template changed loses its value.
 pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> {
+    let (kind, pide) = (KindIndex(kind), Entity(pide));
     let scope = self::kind(kind).ok_or(Status::BAD_ARGS)?.scope;
     if serves() {
         let mut server = SERVER.relock();
@@ -513,7 +524,7 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
             Scope::Item => item,
             // An entity in an area that is not loaded is not in the world's
             // map either: its value stays, unchecked.
-            Scope::Entity => match template_id(Entity(pide)) {
+            Scope::Entity => match template_id(pide) {
                 Some(now) => now,
                 None => return Ok(record.value.clone()),
             },
@@ -541,9 +552,10 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
 /// server only, once its world has loaded. An entity kind's value needs an
 /// entity the next load finds again: [`Status::NOT_KEPT`] otherwise.
 pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), Status> {
+    let (kind, pide) = (KindIndex(kind), Entity(pide));
     let spec = self::kind(kind).ok_or(Status::BAD_ARGS)?;
     let id = spec.id.as_str();
-    if pide == 0 || value.len() > MAX_VALUE {
+    if pide.0 == 0 || value.len() > MAX_VALUE {
         return Err(Status::BAD_ARGS);
     }
     if !serves() {
@@ -574,9 +586,9 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
             if value.is_empty() {
                 (0, None)
             } else {
-                let template = template_id(Entity(pide)).ok_or(Status::BAD_ARGS)?;
+                let template = template_id(pide).ok_or(Status::BAD_ARGS)?;
                 let placed = loader
-                    .and_then(|loader| game::placed(loader, pide))
+                    .and_then(|loader| game::placed(loader, pide.0))
                     .ok_or(Status::NOT_KEPT)?;
                 (template, Some(Anchor::Placed(placed)))
             }
@@ -587,16 +599,8 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         let server = server.as_mut().ok_or(Status::MISSING)?;
         if value.is_empty() {
             server.values.remove(&(kind, pide));
-            // A carried value still waiting on this item's slot would come
-            // back at the next look: it goes aside, kept but attached to
-            // nothing.
-            if let Some(slot @ Anchor::Carried { .. }) = anchor {
-                for record in server.pending.iter_mut().filter(|record| {
-                    !record.aside
-                        && (record.kind, record.anchor, record.check) == (kind, slot, item)
-                }) {
-                    record.aside = true;
-                }
+            if spec.scope == Scope::Item {
+                forget_carried(server, kind, pide, ItemId(item), anchor);
             }
         } else {
             let record = Record {
@@ -616,7 +620,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         return Ok(());
     }
     let mut message = Vec::new();
-    encode(&mut message, id, pide, item, value);
+    encode(&mut message, id, pide.0, item, value);
     crate::net::item_data(0, &message);
     Ok(())
 }
@@ -666,6 +670,7 @@ fn keep(values: &mut Values, bytes: &[u8]) -> bool {
         let Some(kind) = kind_of(id) else {
             continue;
         };
+        let pide = Entity(pide);
         if value.is_empty() {
             values.remove(&(kind, pide));
             continue;
