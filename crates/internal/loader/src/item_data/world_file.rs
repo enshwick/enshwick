@@ -8,8 +8,8 @@ use enshwick::abi::Event;
 use rustc_hash::FxHashSet;
 
 use super::{
-    FILE, FINDING, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game, kind_of, scope,
-    serves, take_destroyed, template_id, wanted,
+    FILE, FINDING, JOINING, JOINS, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game,
+    kind_of, scope, serves, take_destroyed, template_id, wanted,
 };
 use crate::host::Loader;
 use crate::item_records::anchor::{Anchor, Pending};
