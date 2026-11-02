@@ -428,6 +428,70 @@ impl FakeHost {
         )
     }
 
+    /// Item meters: what [`MeterLayout`](crate::content::items::MeterLayout)
+    /// resolves, the meter's own component and the templates it is cloned
+    /// into.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::items::MeterLayout;
+    ///
+    /// let host = enshwick::test::FakeHost::new().meters();
+    /// let layout = MeterLayout::resolve(&host)?;
+    /// assert!(layout.fuel_setup[2] + 4 <= layout.fuel_setup[0]);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn meters(self) -> Self {
+        self.preset(
+            &[ids::FUEL_SETUP, ids::TEMPLATE, ids::TEMPLATE_COLLECTION],
+            &[(ids::FUEL_SETUP, 8)],
+            &[
+                (ids::FUEL_SETUP_MAX, 0),
+                (ids::FUEL_SETUP_START, 4),
+                (ids::TEMPLATE_COMPONENTS, 0x10),
+                (ids::TEMPLATE_COLLECTION_TEMPLATES, 0),
+            ],
+        )
+    }
+
+    /// The markers `ContainerKinds` tells holders apart by: characters, NPCs, animals, drops, loot chests and
+    /// plants. Placed things carry [`FakeHost::world`]'s used item, and every
+    /// holder [`FakeHost::inventory`]'s setup.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().inventory().container_kinds();
+    /// let setup = host.hash(facts::INVENTORY_SETUP.id())?;
+    /// let loot = host.hash(facts::LOOT_FILL.id())?;
+    /// let loader = host
+    ///     .placed(setup, enshwick::Entity(9), [0.0; 3])
+    ///     .component(enshwick::Entity(9), loot, &[])
+    ///     .install();
+    /// # let _ = loader;
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn container_kinds(self) -> Self {
+        self.preset(
+            &[
+                ids::PLAYER_INPUT,
+                ids::NPC,
+                ids::ANIMAL,
+                ids::DESTROY_ON_LOOT,
+                ids::LOOT_FILL,
+                ids::RESOURCE_NODE,
+            ],
+            &[],
+            &[],
+        )
+    }
+
     /// Plays a build that lacks `fact`, whichever preset set it, so a test
     /// of what turns off without it starts from the preset.
     ///

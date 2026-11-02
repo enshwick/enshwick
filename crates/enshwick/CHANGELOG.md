@@ -153,6 +153,11 @@ Each entry names the pull request that made the change.
   things checks. `test::facts` names their facts, and the loot slot's, so a
   test of these areas lays out and reads its events by them (#871).
 
+- `FakeHost::meters` sets what `MeterLayout` resolves, and
+  `FakeHost::container_kinds` the markers `ContainerKinds` tells holders
+  apart by, which `test::facts` names, so a mod's test of item meters or
+  containers copies no type hash or offset of its own (#877).
+
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`
   name the running game's content by its debug names, so a mod's code holds
   no vanilla GUID; `deps!` offers them as `deps::vanilla`, and no dependency

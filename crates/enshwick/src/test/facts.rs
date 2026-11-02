@@ -170,6 +170,20 @@ pub const UI_PING_EVENT_SENDER_ENTITY_ID: Fact = Fact(ids::UI_PING_EVENT_SENDER_
 /// Where a ping keeps its place, three 32.32 fixed-point `i64`.
 pub const UI_PING_EVENT_POSITION: Fact = Fact(ids::UI_PING_POSITION);
 
+/// The marker of a player character, set by
+/// [`FakeHost::container_kinds`](super::FakeHost::container_kinds).
+pub const PLAYER_INPUT: Fact = Fact(ids::PLAYER_INPUT);
+/// The marker of an NPC.
+pub const NPC: Fact = Fact(ids::NPC);
+/// The marker of an animal.
+pub const ANIMAL: Fact = Fact(ids::ANIMAL);
+/// The marker of a drop the game removes once it is looted.
+pub const DESTROY_ON_LOOT: Fact = Fact(ids::DESTROY_ON_LOOT);
+/// The marker of a container the game fills with loot.
+pub const LOOT_FILL: Fact = Fact(ids::LOOT_FILL);
+/// The marker of a plant or other resource node.
+pub const RESOURCE_NODE: Fact = Fact(ids::RESOURCE_NODE);
+
 /// The slot the single loot roll fills, which no preset sets: the loot tests
 /// set its size and fields by hand, as the roll links only where a build
 /// names them.
