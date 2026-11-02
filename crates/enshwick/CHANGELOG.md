@@ -104,7 +104,9 @@ Each entry names the pull request that made the change.
   file exists (#803).
 - The built-in stat kinds have names in the loader's texts, in every
   language the game offers: the `<kind>.name` key of each kind's
-  `StatInfo::text`, such as "Max health" for `health_max.name` (#831).
+  `StatInfo::text`, such as "Max Health" for `health_max.name` (#831).
+  The names are the game's own texts in each language, so lightning reads
+  "Shock" as the game's tooltips do (#851).
 - `Relock`, `RelockRw` and `RelockWait` take a `Mutex`, an `RwLock` and a
   `Condvar` wait under the API's poison policy: the state a panicking thread
   left is kept, the poison cleared and the place logged, so a mod needs no
