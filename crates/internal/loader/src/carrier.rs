@@ -155,9 +155,11 @@ struct Carrier {
     to_server: Mutex<Vec<Looped>>,
     /// Messages a hosting client's server half sent its own player.
     to_client: Mutex<Vec<Looped>>,
-    /// Set while either queue may hold anything, so an idle step takes no
+    /// Set while `to_server` may hold anything, so an idle step takes no
     /// lock.
-    looping: AtomicBool,
+    server_waiting: AtomicBool,
+    /// Set while `to_client` may hold anything.
+    client_waiting: AtomicBool,
     /// Set once a hosting client's client half said hello to its server
     /// half.
     hosted_hello: AtomicBool,
@@ -181,7 +183,8 @@ static CARRIER: Carrier = Carrier {
     client: Mutex::new(None),
     to_server: Mutex::new(Vec::new()),
     to_client: Mutex::new(Vec::new()),
-    looping: AtomicBool::new(false),
+    server_waiting: AtomicBool::new(false),
+    client_waiting: AtomicBool::new(false),
     hosted_hello: AtomicBool::new(false),
     host_key: AtomicU64::new(0),
     client_open: AtomicBool::new(false),
@@ -249,28 +252,38 @@ unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
 /// its link is full, [`Status::BAD_ARGS`] for a payload too long or that
 /// starts like executable code.
 pub(crate) fn send(key: u64, channel: u32, payload: &[u8]) -> Result<(), Status> {
-    send_many(&[key], channel, payload)
+    let mut failed = Ok(());
+    send_many(&[key], channel, payload, |_, status| failed = Err(status))?;
+    failed
 }
 
-/// [`send`] to each of `keys`, sealed once under one lock.
+/// [`send`] to each of `keys`, sealed once under one lock; `failed` hears
+/// each key it did not go to, with why.
 ///
 /// # Errors
 ///
-/// As for [`send`], the first error of any key; the others still go.
-pub(crate) fn send_many(keys: &[u64], channel: u32, payload: &[u8]) -> Result<(), Status> {
+/// [`Status::BAD_ARGS`] for a payload too long or that starts like
+/// executable code, which goes to no one.
+pub(crate) fn send_many(
+    keys: &[u64],
+    channel: u32,
+    payload: &[u8],
+    mut failed: impl FnMut(u64, Status),
+) -> Result<(), Status> {
     if !sealable(payload) {
         return Err(Status::BAD_ARGS);
     }
     let hosting = crate::world::hosting();
     let host = CARRIER.host_key.load(Ordering::Acquire);
     let looped = |key: u64| hosting && (key == SERVER || (host != 0 && key == host));
-    let mut result = Ok(());
     for &key in keys.iter().filter(|&&key| looped(key)) {
-        result = result.and(loop_back(key == SERVER, channel, payload));
+        if let Err(status) = loop_back(key == SERVER, channel, payload) {
+            failed(key, status);
+        }
     }
     let mut wired = keys.iter().copied().filter(|&key| !looped(key)).peekable();
     let Some(&first) = wired.peek() else {
-        return result;
+        return Ok(());
     };
     let mut sealed = [0u8; MAX_SEALED];
     let size = seal(&mut sealed, channel, payload).ok_or(Status::BAD_ARGS)?;
@@ -280,30 +293,25 @@ pub(crate) fn send_many(keys: &[u64], channel: u32, payload: &[u8]) -> Result<()
         &CARRIER.server
     };
     let mut guard = half.relock();
-    let Some(state) = guard.as_mut() else {
-        return result.and(Err(Status::MISSING));
-    };
     for key in wired {
-        let sent = match state.peers.get_mut(&key) {
+        let sent = match guard.as_mut().and_then(|state| state.peers.get_mut(&key)) {
             Some(peer) if key == SERVER || peer.heard => {
                 peer.link.send(&sealed[..size]).map_err(|_| Status::REFUSED)
             }
             _ => Err(Status::MISSING),
         };
-        result = result.and(sent);
+        if let Err(status) = sent {
+            failed(key, status);
+        }
     }
-    result
+    Ok(())
 }
 
 /// Holds a message between a hosting client's halves until the other half
 /// takes it: to the server from its client half, or to the host's own
 /// player from the server.
 fn loop_back(to_server: bool, channel: u32, payload: &[u8]) -> Result<(), Status> {
-    let queue = if to_server {
-        &CARRIER.to_server
-    } else {
-        &CARRIER.to_client
-    };
+    let (queue, waiting) = looped_queue(to_server);
     let mut looped = queue.relock();
     if looped.len() >= MAX_LOOPED {
         return Err(Status::REFUSED);
@@ -312,20 +320,26 @@ fn loop_back(to_server: bool, channel: u32, payload: &[u8]) -> Result<(), Status
         channel,
         data: payload.to_vec(),
     });
-    CARRIER.looping.store(true, Ordering::Release);
+    waiting.store(true, Ordering::Release);
     Ok(())
 }
 
-/// The messages held for one half of a hosting client, taken whole.
+/// The queue for one half of a hosting client, and its flag.
+fn looped_queue(to_server: bool) -> (&'static Mutex<Vec<Looped>>, &'static AtomicBool) {
+    if to_server {
+        (&CARRIER.to_server, &CARRIER.server_waiting)
+    } else {
+        (&CARRIER.to_client, &CARRIER.client_waiting)
+    }
+}
+
+/// The messages held for one half of a hosting client, taken whole; no
+/// lock while its queue is empty.
 fn take_looped(to_server: bool) -> Vec<Looped> {
-    if !CARRIER.looping.load(Ordering::Acquire) {
+    let (queue, waiting) = looped_queue(to_server);
+    if !waiting.swap(false, Ordering::AcqRel) {
         return Vec::new();
     }
-    let queue = if to_server {
-        &CARRIER.to_server
-    } else {
-        &CARRIER.to_client
-    };
     core::mem::take(&mut *queue.relock())
 }
 
@@ -393,11 +407,15 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
 /// of machines that left; notes the hosting player's key.
 fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32)], now: Instant) {
     let host = game.host_machine(session);
-    let host_key = machines
-        .iter()
-        .find(|&&(_, machine)| machine == host)
-        .map_or(0, |&(key, _)| key);
-    CARRIER.host_key.store(host_key, Ordering::Release);
+    // Only a client hosts a player of its own; a dedicated server's host
+    // machine is no player's.
+    if game.local_machine_kind().is_some()
+        && let Some(&(key, _)) = machines
+            .iter()
+            .find(|&&(_, machine)| machine == host && machine != 0)
+    {
+        CARRIER.host_key.store(key, Ordering::Release);
+    }
     state.peers.retain(|&key, peer| {
         let live = machines.iter().any(|&(k, m)| k == key && m == peer.machine);
         if !live && game.holds(peer.socket, peer.slot) {
@@ -442,9 +460,7 @@ unsafe fn client_frame(client: *mut u8, now: Instant) {
         for message in take_looped(false) {
             crate::net::client_carried(message.channel, &message.data);
         }
-        if !CARRIER.hosted_hello.swap(true, Ordering::AcqRel) {
-            crate::net::link_opened();
-        }
+        crate::net::client_tick(!CARRIER.hosted_hello.swap(true, Ordering::AcqRel));
         return;
     }
     let modded = crate::net::server_runs_enshwick();
@@ -481,8 +497,9 @@ unsafe fn client_frame(client: *mut u8, now: Instant) {
     }
     give_back(&CARRIER.client, session, inbox);
     match change {
-        Some(Change::Opened) => crate::net::link_opened(),
+        Some(Change::Opened) => crate::net::client_tick(true),
         Some(Change::Lost) => crate::net::link_lost(),
+        None if CARRIER.client_open.load(Ordering::Acquire) => crate::net::client_tick(false),
         None => {}
     }
 }
@@ -545,7 +562,12 @@ fn pump_client(
     }
     let State { peers, inbox, .. } = state;
     let peer = peers.get_mut(&SERVER)?;
+    let restarts = peer.link.restarts();
     receive(game, session, SERVER, peer, inbox, now);
+    if peer.link.restarts() != restarts {
+        // The server started its link over and forgot this client.
+        change = Some(Change::Opened);
+    }
     if loader.developer_tools {
         probe_step(peer);
     }
@@ -577,7 +599,8 @@ pub(crate) fn forget() {
     CARRIER.client_open.store(false, Ordering::Release);
     CARRIER.to_server.relock().clear();
     CARRIER.to_client.relock().clear();
-    CARRIER.looping.store(false, Ordering::Release);
+    CARRIER.server_waiting.store(false, Ordering::Release);
+    CARRIER.client_waiting.store(false, Ordering::Release);
     CARRIER.host_key.store(0, Ordering::Release);
     CARRIER.hosted_hello.store(false, Ordering::Release);
 }

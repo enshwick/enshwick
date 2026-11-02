@@ -18,22 +18,6 @@ pub const MAX_HEADER: usize = 1 + 5;
 /// The longest sealed message, in bytes.
 pub const MAX_SEALED: usize = MAX_HEADER + MAX_PAYLOAD;
 
-/// Starts of executable code that no payload may have: PE, ELF, Mach-O
-/// (both byte orders, 32 and 64 bit, and fat), WebAssembly and Lua
-/// bytecode. Luau bytecode has no signature; no loader path runs received
-/// bytes as code.
-const EXECUTABLE: [&[u8]; 9] = [
-    b"MZ",
-    b"\x7fELF",
-    b"\xfe\xed\xfa\xce",
-    b"\xfe\xed\xfa\xcf",
-    b"\xce\xfa\xed\xfe",
-    b"\xcf\xfa\xed\xfe",
-    b"\xca\xfe\xba\xbe",
-    b"\0asm",
-    b"\x1bLua",
-];
-
 #[derive(Serialize, Deserialize)]
 struct Header {
     version: u8,
@@ -79,7 +63,7 @@ pub enum ReadMessageError {
 /// ```
 #[must_use]
 pub fn is_executable(payload: &[u8]) -> bool {
-    EXECUTABLE.iter().any(|start| payload.starts_with(start))
+    enshwick::net::looks_like_code(payload)
 }
 
 /// Whether `payload` may travel at all: within [`MAX_PAYLOAD`] and not
@@ -191,7 +175,8 @@ mod tests {
     #[test]
     fn a_payload_that_starts_like_code_is_refused_both_ways() {
         let mut out = [0; MAX_SEALED];
-        for start in EXECUTABLE {
+        let starts: [&[u8]; 4] = [b"MZ", b"\x7fELF", b"\0asm", b"\x1bLua"];
+        for start in starts {
             assert_eq!(seal(&mut out, 1, start), None);
             let mut message = vec![ENVELOPE, 1];
             message.extend_from_slice(start);

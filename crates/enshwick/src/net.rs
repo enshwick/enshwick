@@ -49,6 +49,37 @@ use crate::{Host, Load, Off, PlayerKey};
 /// The largest message a channel carries, encoded, in bytes.
 pub const MAX_MESSAGE: usize = 4096;
 
+/// Starts of executable code: PE, ELF, Mach-O (both byte orders, 32 and 64
+/// bit, and fat), WebAssembly and Lua bytecode. Luau bytecode has no
+/// signature; the loader runs no received bytes as code.
+const CODE_STARTS: [&[u8]; 9] = [
+    b"MZ",
+    b"\x7fELF",
+    b"\xfe\xed\xfa\xce",
+    b"\xfe\xed\xfa\xcf",
+    b"\xce\xfa\xed\xfe",
+    b"\xcf\xfa\xed\xfe",
+    b"\xca\xfe\xba\xbe",
+    b"\0asm",
+    b"\x1bLua",
+];
+
+/// Whether `bytes` start like executable code, which a channel never
+/// carries either way; such a message fails with [`SendError::LooksLikeCode`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::net::looks_like_code;
+///
+/// assert!(looks_like_code(b"MZ\x90\0"));
+/// assert!(!looks_like_code(b"\x02hello"));
+/// ```
+#[must_use]
+pub fn looks_like_code(bytes: &[u8]) -> bool {
+    CODE_STARTS.iter().any(|start| bytes.starts_with(start))
+}
+
 /// Who a message comes from or goes to.
 ///
 /// # Examples
@@ -104,9 +135,8 @@ pub enum SendError {
     /// much.
     #[error("over the rate of messages to the peer")]
     OverRate,
-    /// The encoded message starts like executable code (a PE, ELF, Mach-O,
-    /// WebAssembly or Lua bytecode signature), which the channel never
-    /// carries.
+    /// The encoded message starts like executable code, by
+    /// [`looks_like_code`], which the channel never carries.
     #[error("the message starts like executable code")]
     LooksLikeCode,
     /// The message does not encode.
@@ -199,13 +229,15 @@ fn send_raw(host: Host, id: u32, peer: PlayerKey, bytes: &[u8]) -> Result<(), Se
     if bytes.len() > MAX_MESSAGE {
         return Err(SendError::TooLarge);
     }
+    if looks_like_code(bytes) {
+        return Err(SendError::LooksLikeCode);
+    }
     let api = host.api();
     let size = u32::try_from(bytes.len()).map_err(|_| SendError::TooLarge)?;
     match (api.net_send)(host.handle(), id, peer, bytes.as_ptr(), size) {
         Status::OK => Ok(()),
         Status::MISSING => Err(SendError::NotReady),
         Status::REFUSED => Err(SendError::OverRate),
-        Status::BAD_ARGS => Err(SendError::LooksLikeCode),
         _ => Err(SendError::Refused),
     }
 }

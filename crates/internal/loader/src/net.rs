@@ -18,6 +18,7 @@
 use core::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use enshwick::Entity;
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
@@ -40,6 +41,10 @@ mod tests;
 
 pub(crate) use server::{keep_greeting, server_carried};
 
+/// How long a client waits for the server's answer before it says hello
+/// again on the same link.
+const HELLO_AGAIN: Duration = Duration::from_secs(5);
+
 /// One channel a mod opened.
 #[derive(Debug)]
 struct Channel {
@@ -54,6 +59,8 @@ struct State {
     /// On the server: peers by account key that said hello. On a client:
     /// the server, [`NetMessage::SERVER`], once it answered.
     peers: FxHashMap<u64, Peer>,
+    /// When the client last said hello.
+    hello_at: Option<Instant>,
     /// Rates of the peers sending, by key.
     sending: FxHashMap<u64, Peer>,
     /// On the server: the hellos on their way in from clients that are no
@@ -76,6 +83,13 @@ static DROPPED: AtomicU64 = AtomicU64::new(0);
 fn state<R>(f: impl FnOnce(&mut State) -> R) -> R {
     let mut guard = STATE.relock();
     f(guard.get_or_insert_with(State::default))
+}
+
+/// [`state`] for a per-frame path: `None`, without waiting, while another
+/// thread holds the state.
+fn try_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
+    let mut guard = STATE.try_relock()?;
+    Some(f(guard.get_or_insert_with(State::default)))
 }
 
 /// The id of mod `id`'s channel `name`.
@@ -136,11 +150,32 @@ fn carry(key: u64, channel: u32, data: &[u8]) -> bool {
     crate::carrier::send(key, channel, data).is_ok()
 }
 
-/// Says hello on a client link that just opened, and forgets the last
-/// link's answer: the server is ready again once it answers this one. On
-/// the thread that sends the client's chat.
-pub(crate) fn link_opened() {
-    link_lost();
+/// Says hello to the server, on the thread that sends the client's chat: at
+/// once when its link `opened`, forgetting the last link's answer, and
+/// every few seconds until this one is answered, since the server may drop
+/// a hello it has no room for. Waits on no lock but for a new link.
+pub(crate) fn client_tick(opened: bool) {
+    let server = NetMessage::SERVER.get();
+    let due = |s: &mut State| {
+        if opened {
+            s.peers.remove(&server);
+            s.sending.remove(&server);
+        }
+        let due = !s.peers.contains_key(&server)
+            && (opened || s.hello_at.is_none_or(|at| at.elapsed() >= HELLO_AGAIN));
+        if due {
+            s.hello_at = Some(Instant::now());
+        }
+        due
+    };
+    let due = if opened {
+        state(due)
+    } else {
+        try_state(due).unwrap_or(false)
+    };
+    if !due {
+        return;
+    }
     let mods = crate::advertise::mod_list(&crate::host::join_mods());
     let nonce = if crate::world::hosting() {
         crate::admission::nonce()
@@ -227,7 +262,9 @@ pub(crate) fn item_data(key: u64, records: &[u8]) -> bool {
         .into_iter()
         .filter(|&p| p != NetMessage::SERVER.get())
         .collect();
-    crate::carrier::send_many(&peers, CONTROL, &data).is_ok()
+    let mut whole = true;
+    let sent = crate::carrier::send_many(&peers, CONTROL, &data, |_, _| whole = false);
+    sent.is_ok() && whole
 }
 
 /// Tells the client of the player with account key `key` to open the
@@ -273,7 +310,7 @@ pub(crate) fn broadcast_control(message: &crate::remote::Message) {
     let Some(data) = remote_data(message) else {
         return;
     };
-    let _sent = crate::carrier::send_many(&keys, CONTROL, &data);
+    let _sent = crate::carrier::send_many(&keys, CONTROL, &data, |_, _| {});
 }
 
 /// Sends a settings message from the client to its server; false while the
@@ -456,11 +493,16 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         }
         Ok(keys)
     })?;
-    let sent = crate::carrier::send_many(&keys, channel, data);
-    if sent.is_err() {
-        refund(&keys);
+    let mut failed = Vec::new();
+    crate::carrier::send_many(&keys, channel, data, |key, status| {
+        failed.push((key, status));
+    })
+    .inspect_err(|_| refund(&keys))?;
+    refund(&failed.iter().map(|&(key, _)| key).collect::<Vec<_>>());
+    match failed.first() {
+        Some(&(_, status)) if peer != 0 => Err(status),
+        _ => Ok(()),
     }
-    if peer == 0 { Ok(()) } else { sent }
 }
 
 fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
