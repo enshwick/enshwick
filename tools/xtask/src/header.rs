@@ -385,6 +385,7 @@ fn compile_asserts(header: &Path, source: &str) -> Vec<String> {
     }
     let include = header.parent().unwrap_or(Path::new("."));
     let output = Command::new("clang")
+        .env("PATH", crate::tool_path())
         .args([
             &format!("--target={C_TARGET}"),
             "-std=c11",
@@ -405,7 +406,7 @@ fn compile_asserts(header: &Path, source: &str) -> Vec<String> {
             .map(|line| format!("{HEADER} against {LAYOUT}: {line}"))
             .collect(),
         Err(error) => vec![format!(
-            "running clang, which checks {HEADER} against {LAYOUT}: {error}; install LLVM's clang"
+            "running clang, which checks {HEADER} against {LAYOUT}: {error}; install LLVM's clang and put its bin folder on PATH"
         )],
     }
 }
