@@ -143,7 +143,7 @@ Each entry names the pull request that made the change.
   `FakeHost::effect_events` sets the NPC command, threat and ping events
   `Effects` raises; `FakeHost::loot` sets the components loot from destroyed
   things checks. `test::facts` names their facts, and the loot slot's, so a
-  test of these areas lays out and reads its events by them (#PR).
+  test of these areas lays out and reads its events by them (#871).
 
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`
   name the running game's content by its debug names, so a mod's code holds
