@@ -61,7 +61,8 @@ fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
 }
 
 /// The kinds these tests share, sealed once per process: `a:charges`
-/// (0), an item kind clients get, and `a:owner` (1), an entity kind.
+/// (0), an item kind clients get, `a:owner` (1), an entity kind, and the
+/// item stats kind (2).
 fn kinds() {
     let _charges = KINDS.add(Kind {
         id: "a:charges".into(),
@@ -72,6 +73,11 @@ fn kinds() {
         id: "a:owner".into(),
         scope: Scope::Entity,
         sent: false,
+    });
+    let _stats = KINDS.add(Kind {
+        id: enshwick::stats::ITEM_KIND.into(),
+        scope: Scope::Item,
+        sent: true,
     });
     let _sealed = KINDS.seal();
 }
@@ -107,6 +113,7 @@ fn server(pending: Vec<Pending>, unopened: Vec<String>) -> Server {
         values: Values::default(),
         pending,
         unopened,
+        joining: Vec::new(),
         changed: false,
     }
 }
@@ -187,7 +194,7 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
             root,
         })
     };
-    assert_eq!(set_aside_carried(&mut world, ANN, held), 2);
+    assert_eq!(keep_carried(&mut world, ANN, held), (0, 2));
     let mut kept: Vec<(u32, u32)> = world.values.keys().copied().collect();
     kept.sort_unstable();
     assert_eq!(kept, [(0, 2003), (0, 2004), (1, ANN)]);
@@ -209,6 +216,117 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
     let mut destroyed = FxHashSet::default();
     destroyed.extend([2001, 2002]);
     assert!(prune_destroyed(&mut world.values, &destroyed).is_empty());
+}
+
+#[test]
+fn a_leaving_character_s_items_wait_for_its_join_and_come_back_in_their_slots() {
+    const ANN: u32 = 7;
+    const ANN_GUID: [u8; 16] = [0xa1; 16];
+    kinds();
+    let mut world = server(Vec::new(), Vec::new());
+    let value = |item, byte| Record {
+        item,
+        anchor: None,
+        value: Box::new([byte]),
+    };
+    // Two items in Ann's backpack slots 1 and 2, and one whose
+    // character GUID does not read.
+    world.values.insert((0, 2001), value(77, 1));
+    world.values.insert((0, 2002), value(78, 2));
+    world.values.insert((0, 2003), value(79, 3));
+    let left = |pide| {
+        let (anchor, item) = match pide {
+            2001 => (Some((0, 1)), 77),
+            2002 => (Some((0, 2)), 78),
+            2003 => (None, 79),
+            _ => return None,
+        };
+        Some(game::Held {
+            anchor: anchor.map(|(link, slot)| Anchor::Carried {
+                character: ANN_GUID,
+                link,
+                slot,
+            }),
+            item,
+            root: ANN,
+        })
+    };
+    assert_eq!(keep_carried(&mut world, ANN, left), (2, 1));
+    assert!(world.values.is_empty());
+    assert!(world.changed);
+    world.changed = false;
+    // Rejoined: new item entities, slot 2 now holds another item.
+    let joined = |link, slot| match (link, slot) {
+        (0, 1) => Some((3001, 77)),
+        (0, 2) => Some((3002, 90)),
+        _ => None,
+    };
+    let back = take_back_carried(&mut world, ANN_GUID, joined);
+    assert_eq!(back.found, [(0, 3001)]);
+    assert_eq!(
+        (back.replaced, back.waiting),
+        (0, 1),
+        "the slot holding another item"
+    );
+    let value = &world.values[&(0, 3001)];
+    assert_eq!((value.item, &value.value[..]), (77, &[1][..]));
+    let waiting: Vec<bool> = world.pending.iter().map(|r| r.aside).collect();
+    assert_eq!(
+        waiting.iter().filter(|&&aside| !aside).count(),
+        1,
+        "the changed slot waits on"
+    );
+    assert_eq!(world.pending.len(), 2);
+    assert!(world.changed);
+    // A later look, once the slot holds the item, takes the rest back.
+    let filled = |link, slot| match (link, slot) {
+        (0, 2) => Some((3002, 78)),
+        _ => None,
+    };
+    let back = take_back_carried(&mut world, ANN_GUID, filled);
+    assert_eq!((back.found, back.waiting), (vec![(0, 3002)], 0));
+}
+
+#[test]
+fn a_second_leave_keeps_one_waiting_record_per_slot_with_the_newer_value() {
+    const ANN: u32 = 7;
+    const ANN_GUID: [u8; 16] = [0xa1; 16];
+    kinds();
+    let mut world = server(Vec::new(), Vec::new());
+    let in_slot = |pide| {
+        (pide == 2001 || pide == 3001).then_some(game::Held {
+            anchor: Some(Anchor::Carried {
+                character: ANN_GUID,
+                link: 0,
+                slot: 1,
+            }),
+            item: 77,
+            root: ANN,
+        })
+    };
+    let value = |byte| Record {
+        item: 77,
+        anchor: None,
+        value: Box::new([byte]),
+    };
+    world.values.insert((0, 2001), value(1));
+    assert_eq!(keep_carried(&mut world, ANN, in_slot), (1, 0));
+    // Rejoined, nothing taken back in time, a new value set, left again.
+    world.values.insert((0, 3001), value(2));
+    assert_eq!(keep_carried(&mut world, ANN, in_slot), (1, 0));
+    let waiting: Vec<u8> = world.pending.iter().map(|r| r.value[0]).collect();
+    assert_eq!(waiting, [2]);
+    let back = take_back_carried(&mut world, ANN_GUID, |_, _| Some((4001, 77)));
+    assert_eq!(back.found, [(0, 4001)]);
+    assert_eq!(&*world.values[&(0, 4001)].value, &[2]);
+}
+
+#[test]
+fn a_taken_back_item_stats_value_makes_the_wearers_look_again() {
+    kinds();
+    let stats = kind_of(enshwick::stats::ITEM_KIND).unwrap();
+    assert!(touches_item_stats(&[(0, 3001), (stats, 3002)]));
+    assert!(!touches_item_stats(&[(0, 3001)]));
 }
 
 #[test]

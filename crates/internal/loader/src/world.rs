@@ -45,6 +45,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::server::PLAYER_SLOT_COUNT.id(),
     pinned::server::PLAYER_SLOT_ENTITY.id(),
     pinned::server::PLAYER_SLOT_KEY.id(),
+    pinned::server::PLAYER_SLOT_CHARACTER.id(),
     pinned::server::PLAYER_SLOT_MACHINE.id(),
     pinned::server::PLAYER_SLOT_NAME.id(),
     pinned::server::PLAYER_SLOT_SIZE.id(),
@@ -263,6 +264,9 @@ struct Layout {
     slot_key: usize,
     slot_name: usize,
     slot_machine: usize,
+    /// Where a slot holds the GUID of the character in game; `None` on a
+    /// build whose table does not pin it.
+    slot_character: Option<usize>,
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
@@ -326,6 +330,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 slot_key: constant(pinned::server::PLAYER_SLOT_KEY)?,
                 slot_name: constant(pinned::server::PLAYER_SLOT_NAME)?,
                 slot_machine: constant(pinned::server::PLAYER_SLOT_MACHINE)?,
+                slot_character: constant(pinned::server::PLAYER_SLOT_CHARACTER),
             })
         })
         .as_ref()
@@ -566,27 +571,11 @@ pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
     // which alone writes it; the table's `server.player_infos` offset holds
     // its player infos pointer.
     let infos: usize = unsafe { read(server, layout.server_players) };
-    Ok((0..layout.slot_count)
-        .filter_map(|index| {
-            let slot = server + layout.slots + index * layout.slot_size;
-            // SAFETY: the table's `server.player_slots`, `player_slot_size`
-            // and `player_slot_count` place `slot_count` slots in the server,
-            // `index < slot_count`, and each slot starts with its `u32`
-            // handle; read on the game thread (checked by `reader`).
-            let handle: u32 = unsafe { read(slot, 0) };
-            // SAFETY: `slot` is a player slot of the server (`index <
-            // slot_count`, slots from the table); the table's
-            // `server.player_slot_state` offset holds its state byte; read on
-            // the game thread (checked by `reader`).
-            let state: u8 = unsafe { read(slot, layout.slot_state) };
-            // SAFETY: `slot` is a player slot of the server (`index <
-            // slot_count`, slots from the table); the table's
-            // `server.player_slot_entity` offset holds its `u32` entity; read
-            // on the game thread (checked by `reader`).
-            let entity: u32 = unsafe { read(slot, layout.slot_entity) };
-            (handle != 0 && state == SLOT_IN_GAME && entity != 0)
-                .then(|| player_at(layout, slot, index, Entity(entity), infos))
-        })
+    // SAFETY: `reader` returned the live server on its game thread, which
+    // alone writes it; the table places its slots.
+    Ok(unsafe { occupied(layout.player_slots(), server) }
+        .filter(|&(_, _, state, _)| state == SLOT_IN_GAME)
+        .map(|(index, slot, _, entity)| player_at(layout, slot, index, Entity(entity), infos))
         .collect())
 }
 
@@ -597,27 +586,102 @@ use crate::admission::MAX_PLAYERS;
 pub(crate) fn player_entities(loader: &Loader) -> Result<ArrayVec<u32, MAX_PLAYERS>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = reader()?;
-    Ok((0..layout.slot_count.min(MAX_PLAYERS))
-        .filter_map(|index| {
-            let slot = server + layout.slots + index * layout.slot_size;
-            // SAFETY: the table's `server.player_slots`, `player_slot_size`
-            // and `player_slot_count` place `slot_count` slots in the server,
-            // `index < slot_count`, and each slot starts with its `u32`
-            // handle; read on the game thread (checked by `reader`).
-            let handle: u32 = unsafe { read(slot, 0) };
-            // SAFETY: `slot` is a player slot of the server (`index <
-            // slot_count`, slots from the table); the table's
-            // `server.player_slot_state` offset holds its state byte; read on
-            // the game thread (checked by `reader`).
-            let state: u8 = unsafe { read(slot, layout.slot_state) };
-            // SAFETY: `slot` is a player slot of the server (`index <
-            // slot_count`, slots from the table); the table's
-            // `server.player_slot_entity` offset holds its `u32` entity; read
-            // on the game thread (checked by `reader`).
-            let entity: u32 = unsafe { read(slot, layout.slot_entity) };
-            (handle != 0 && state == SLOT_IN_GAME && entity != 0).then_some(entity)
-        })
+    // SAFETY: `reader` returned the live server on its game thread, which
+    // alone writes it; the table places its slots.
+    Ok(unsafe { occupied(layout.player_slots(), server) }
+        .filter(|&(_, _, state, _)| state == SLOT_IN_GAME)
+        .map(|(_, _, _, entity)| entity)
+        .take(MAX_PLAYERS)
         .collect())
+}
+
+/// The character GUID of each player slot that names a character entity,
+/// a leaving player's included until its slot clears: one account may have
+/// several characters on a server. Empty when the build table does not pin
+/// where a slot holds the GUID, or off the game thread.
+pub(crate) fn characters(loader: &Loader) -> ArrayVec<(u32, [u8; 16]), MAX_PLAYERS> {
+    let Some(layout) = layout(loader) else {
+        return ArrayVec::new();
+    };
+    let (Some(at), Ok(server)) = (
+        layout
+            .slot_character
+            .filter(|&at| at + 16 <= layout.slot_size),
+        reader(),
+    ) else {
+        return ArrayVec::new();
+    };
+    // SAFETY: `reader` returned the live server on its game thread, which
+    // alone writes it; the table places its slots, and its
+    // `server.player_slot_character` offset holds the GUID inside a slot
+    // (`at + 16 <= slot_size`, checked above).
+    unsafe { guids(layout.player_slots(), server, at) }
+        .take(MAX_PLAYERS)
+        .collect()
+}
+
+/// The index, address, state byte and character entity of each player slot
+/// of `server` with a handle and an entity, in slot order.
+///
+/// # Safety
+///
+/// - `server` holds `slots.count` player slots of `slots.size` bytes from
+///   `slots.first`, each with its `u32` handle at 0, its state byte at
+///   `slots.state` and its `u32` entity at `slots.entity`.
+/// - Nothing writes them while the iterator runs: on the game thread.
+unsafe fn occupied(slots: Slots, server: usize) -> impl Iterator<Item = (usize, usize, u8, u32)> {
+    (0..slots.count).filter_map(move |index| {
+        let slot = server + slots.first + index * slots.size;
+        // SAFETY: `index < count`, so `slot` is one of the caller's player
+        // slots, which starts with its `u32` handle and has no writer.
+        let handle: u32 = unsafe { read(slot, 0) };
+        // SAFETY: `slot` is one of the caller's player slots, its state byte
+        // at `slots.state`.
+        let state: u8 = unsafe { read(slot, slots.state) };
+        // SAFETY: `slot` is one of the caller's player slots, its `u32` entity
+        // at `slots.entity`.
+        let entity: u32 = unsafe { read(slot, slots.entity) };
+        (handle != 0 && entity != 0).then_some((index, slot, state, entity))
+    })
+}
+
+/// The character entity and GUID of each player slot of `server` that names
+/// both, in any state: a leaving player's slot counts until it clears.
+///
+/// # Safety
+///
+/// As [`occupied`]; each slot also holds a 16-byte GUID at `at`, with
+/// `at + 16 <= slots.size`.
+unsafe fn guids(slots: Slots, server: usize, at: usize) -> impl Iterator<Item = (u32, [u8; 16])> {
+    // SAFETY: the caller's guarantees are `occupied`'s.
+    unsafe { occupied(slots, server) }.filter_map(move |(_, slot, _, entity)| {
+        // SAFETY: `slot` is one of the caller's player slots, which holds the
+        // 16-byte GUID at `at`, inside the slot.
+        let guid: [u8; 16] = unsafe { read(slot, at) };
+        (guid != [0; 16]).then_some((entity, guid))
+    })
+}
+
+/// Where the server holds its player slots, from the build table.
+#[derive(Clone, Copy, Debug)]
+struct Slots {
+    first: usize,
+    size: usize,
+    count: usize,
+    state: usize,
+    entity: usize,
+}
+
+impl Layout {
+    const fn player_slots(&self) -> Slots {
+        Slots {
+            first: self.slots,
+            size: self.slot_size,
+            count: self.slot_count,
+            state: self.slot_state,
+            entity: self.slot_entity,
+        }
+    }
 }
 
 /// The machine handle of each player in game, by account key: the handle
@@ -751,5 +815,36 @@ mod tests {
         assert!(!quiet());
         STEPPING.set(0);
         assert!(quiet());
+    }
+
+    #[test]
+    fn a_leaving_player_s_slot_still_names_its_character_until_it_clears() {
+        // A made-up slot layout: handle 0, state 4, entity 8, GUID 16.
+        let (size, guid_at) = (32, 16);
+        let slots = Slots {
+            first: 8,
+            size,
+            count: 3,
+            state: 4,
+            entity: 8,
+        };
+        let mut server = vec![0u8; 8 + 3 * size];
+        let mut fill = |index: usize, handle: u32, state: u8, entity: u32, guid: u8| {
+            let slot = 8 + index * size;
+            server[slot..slot + 4].copy_from_slice(&handle.to_le_bytes());
+            server[slot + 4] = state;
+            server[slot + 8..slot + 12].copy_from_slice(&entity.to_le_bytes());
+            server[slot + guid_at..slot + guid_at + 16].fill(guid);
+        };
+        fill(0, 1, SLOT_IN_GAME, 7, 0xa1);
+        // Leaving: no longer in game, handle and entity still set.
+        fill(1, 2, SLOT_IN_GAME + 1, 8, 0xb2);
+        // Cleared: no handle.
+        fill(2, 0, 0, 9, 0xc3);
+        // SAFETY: `server` holds the three slots `slots` describes, owned by
+        // this test, each with its GUID at `guid_at`, inside the slot.
+        let found: Vec<(u32, [u8; 16])> =
+            unsafe { guids(slots, server.as_ptr().expose_provenance(), guid_at) }.collect();
+        assert_eq!(found, [(7, [0xa1; 16]), (8, [0xb2; 16])]);
     }
 }
