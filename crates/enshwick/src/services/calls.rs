@@ -3,7 +3,8 @@
 //!
 //! A call is declared once with [`#[call]`](macro@crate::call). An
 //! exported call's schema goes into the server's manifest beside its
-//! points', and `cargo enshwick deps` writes the
+//! points', and `cargo enshwick deps` writes the declaration for another
+//! mod from it. The loader matches a caller with
 //! the server by name and major once every mod is initialised: the input
 //! and the answer must agree field by field and in size. A changed call is
 //! a new major, which a server may serve beside the old one.
