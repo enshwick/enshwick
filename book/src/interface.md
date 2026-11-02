@@ -68,13 +68,15 @@ the smaller end. `progress` draws a fraction that is not finite as 0.
 Styles are the game's named ones: `Body`, `Secondary`, `H1` to `H3`,
 `Warning`, `Positive` and `Negative`.
 
-The console line `enshwick ui-demo <player>` shows every widget at once: it
-opens the loader's own demo window on that player's client, and its last
-page shows samples on the HUD and a marker on the map where the player
-stood. It is a developer tool: it works only when the empty file
-`mod-data/enshwick/developer-tools` exists on the server and on that
-player's client when they start. Never leave the file on a server that
-players use.
+The Interface demo button on the Mods screen, above the list of mods, shows
+every widget at once in the loader's own demo window; its last page shows
+samples on the HUD. The button shows only while the empty file
+`mod-data/enshwick/developer-tools` exists on that client, a
+[developer tool](#developer-tools). On a server, the console line
+`enshwick ui-demo <player>` opens the same window on that player's client,
+with a marker on the map where the player stood; it works only when the
+file exists on the server and on that client when they start. Never leave
+the file on a server that players use.
 
 `frame.screen()` says where the player is: the menus, loading, or in game.
 

@@ -325,3 +325,4 @@
 
 "mods.waiting" = "{name} {version} (waiting)"
 "mods.waiting.why" = "Waiting for the game to leave the code this mod changes. It tries again soon, then three more times a minute apart. Then it turns off."
+"mods.demo" = "Interface demo"

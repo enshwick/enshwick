@@ -323,3 +323,4 @@
 
 "mods.waiting" = "{name} {version} (en espera)"
 "mods.waiting.why" = "Espera a que el juego salga del código que cambia este mod. Lo intenta de nuevo pronto y luego tres veces más, una por minuto. Después se desactiva."
+"mods.demo" = "Demostración de la interfaz"

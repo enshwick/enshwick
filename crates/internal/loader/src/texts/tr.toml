@@ -323,3 +323,4 @@
 
 "mods.waiting" = "{name} {version} (bekliyor)"
 "mods.waiting.why" = "Oyunun bu modun değiştirdiği koddan çıkmasını bekliyor. Birazdan yeniden dener, sonra dakikada bir üç kez daha dener. Ardından kapanır."
+"mods.demo" = "Arayüz tanıtımı"
