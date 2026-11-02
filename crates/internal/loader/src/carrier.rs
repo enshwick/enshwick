@@ -373,6 +373,14 @@ pub(crate) fn host_for_test(key: u64) {
     set_host(key);
 }
 
+/// Makes this test process a client that hosts nothing again, after
+/// [`host_for_test`].
+#[cfg(test)]
+pub(crate) fn unhost_for_test() {
+    CARRIER.hosts.store(false, Ordering::Release);
+    CARRIER.host_key.store(0, Ordering::Release);
+}
+
 /// Notes the account key of the player of a client that hosts; a new one
 /// makes the client half say hello to its server half again.
 fn set_host(key: u64) {
