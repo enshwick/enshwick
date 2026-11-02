@@ -597,7 +597,7 @@ impl Load<'_> {
     /// enshwick::deps!();
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let luck = load.open_stat(deps::lockers::id("luck")?)?;
+    ///     let luck = load.open_stat(enshwick::content::Id::of(deps::lockers::ID, "luck"))?;
     ///     load.on_stats_changed(move |change| {
     ///         if change.stat == luck {
     ///             enshwick::info!("{:?} has luck {}", change.entity, change.new);

@@ -41,9 +41,9 @@ pub(crate) fn required_owner<'a>(record: &ModRecord, name: &'a str) -> Option<&'
 }
 
 /// Why the mod of `record` may not use the `kind` `name`, `<id>:<what>`: a
-/// loaded mod `id` whose manifest does not export `what`. `None` for a name
-/// of its own, an exported one, or one of a mod that is not loaded, which
-/// stays unmatched.
+/// loaded mod `id` whose manifest does not export `what` as that kind. `None`
+/// for a name of its own, an exported one, or one of a mod that is not
+/// loaded, which stays unmatched, so built-in `enshwick:` ids pass.
 pub(crate) fn unexported(
     loader: &Loader,
     record: &ModRecord,
@@ -53,21 +53,6 @@ pub(crate) fn unexported(
     let (owner, _) = name.split_once(':')?;
     let (_, provider) = loader.find_mod(owner)?;
     crate::manifest::unexported(kind, name, &record.id, &provider.exports())
-}
-
-/// Why the mod of `record` may not name the content id `name` as a `kind`:
-/// a loaded mod's id whose manifest exports neither its name nor the name it
-/// is a part of. `None` as [`unexported`] gives it, so built-in `enshwick:`
-/// ids pass.
-pub(crate) fn unexported_content(
-    loader: &Loader,
-    record: &ModRecord,
-    kind: &str,
-    name: &str,
-) -> Option<String> {
-    let (owner, _) = name.split_once(':')?;
-    let (_, provider) = loader.find_mod(owner)?;
-    crate::manifest::unexported_content(kind, name, &record.id, &provider.exports())
 }
 
 /// The name and layout of a service or event spec the safe layer passed.
@@ -524,7 +509,7 @@ pub(crate) extern "system" fn use_content(me: ModHandle, id: Str) -> Status {
         else {
             return Status::BAD_ARGS;
         };
-        match unexported_content(loader, record, "content id", id) {
+        match unexported(loader, record, "content id", id) {
             Some(reason) => {
                 crate::log::write(Level::WARN, &record.id, &reason);
                 Status::REFUSED

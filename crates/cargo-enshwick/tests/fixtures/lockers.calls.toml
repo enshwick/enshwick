@@ -1,6 +1,7 @@
-schema = 1
+schema = 2
 mod = "you.lockers"
 version = "1.2.0"
+exports = []
 [[call]]
 name = "you.lockers:fee"
 input = "Fee"

@@ -165,18 +165,20 @@ impl FakeHost {
         self
     }
 
-    /// Another mod `id` that exports only the local names `names`: as the
-    /// loader, the fake refuses the mod a call, link, service, event or
-    /// content id of `id` outside them. Without it, the fake takes every name of another
-    /// mod as exported, where the loader refuses every name of a mod
-    /// without `exports`: a test that links another mod passes that mod's
-    /// exports here, so it fails where the game would.
+    /// Another mod `id` that exports only `names`, each `<kind>:<local
+    /// name>` as a manifest lists it (`call:price-of`, `content:locker`): as
+    /// the loader, the fake refuses the mod a call, link, service, event,
+    /// content id or stat of `id` outside them, matching kind and name.
+    /// Without it, the fake takes every name of another mod as exported,
+    /// where the loader refuses every name a mod does not export: a test
+    /// that links another mod passes that mod's exports here, so it fails
+    /// where the game would.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .exports("you.trading-post", &["price-of", "sold"])
+    ///     .exports("you.trading-post", &["call:price-of", "event:sold"])
     ///     .install();
     /// # let _ = loader;
     /// ```

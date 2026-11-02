@@ -39,13 +39,13 @@ pub enum PackSide {
 /// id = "you.lanterns"
 /// version = "1.0.0"
 /// name = "Lanterns"
-/// exports = ["lit"]
+/// exports = ["event:lit"]
 ///
 /// [requires]
 /// market = { id = "you.trading-post", version = ">=0.5, <1.0" }
 /// "#)?;
 /// assert_eq!(manifest.id, "you.lanterns");
-/// assert_eq!(manifest.exports, ["lit"]);
+/// assert_eq!(manifest.exports, ["event:lit"]);
 /// assert_eq!(manifest.side, PackSide::Both);
 /// assert!(manifest.join);
 /// assert_eq!(manifest.requires["market"].id, "you.trading-post");
@@ -107,9 +107,10 @@ pub struct PackManifest {
     /// another release skips the pack and names both.
     #[serde(default)]
     pub enshwick: String,
-    /// The local names of what other mods may use, such as the events its
-    /// scripts define: `greeted` lets them hear `<id>:greeted`. The loader
-    /// refuses them anything else of the pack's.
+    /// What other mods may use, each `<kind>:<local name>` with a kind of
+    /// `point`, `event`, `call`, `service`, `content` or `stat`, such as the
+    /// events its scripts define: `event:greeted` lets them hear
+    /// `<id>:greeted`. The loader refuses them anything else of the pack's.
     #[serde(default)]
     pub exports: Vec<String>,
     /// The pack's settings, in the order the Mods screen shows them; a Luau
@@ -403,14 +404,24 @@ impl PackManifest {
         ))
     }
 
-    /// Refuses an export that is not a local name or given twice, as
-    /// `declare_mod!` refuses one in `[package.metadata.enshwick]`.
+    /// Refuses an export that is not `<kind>:<local name>` or given twice,
+    /// as `declare_mod!` refuses one in `[package.metadata.enshwick]`.
     fn check_exports(&self, text: &str) -> Result<(), PackError> {
         let mut seen = std::collections::BTreeSet::new();
         for name in &self.exports {
-            let problem = if !crate::content::is_id(&format!("{}:{name}", self.id)) {
+            let parts = name.split_once(':');
+            let problem = if !parts
+                .is_some_and(|(kind, _)| crate::rules::EXPORT_KINDS.contains(&kind))
+            {
                 format!(
-                    "exports: {name:?} is not a local name, 1 to 128 of [a-z0-9_./-] without the pack's id"
+                    "exports: {name:?} is not `<kind>:<name>`, the kind one of {}",
+                    crate::rules::EXPORT_KINDS.join(", ")
+                )
+            } else if !parts
+                .is_some_and(|(_, local)| crate::content::is_id(&format!("{}:{local}", self.id)))
+            {
+                format!(
+                    "exports: {name:?}: the name is 1 to 128 of [a-z0-9_./-], without the pack's id"
                 )
             } else if !seen.insert(name) {
                 format!("exports: {name:?} is given twice")

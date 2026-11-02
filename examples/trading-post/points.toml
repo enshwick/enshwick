@@ -1,6 +1,7 @@
-schema = 1
+schema = 2
 mod = "you.trading-post"
 version = "0.0.0-dev"
+exports = []
 [[point]]
 name = "you.trading-post:price"
 mode = "override"

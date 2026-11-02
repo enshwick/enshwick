@@ -359,11 +359,13 @@ impl ManifestFacts {
         }
     }
 
-    /// Whether `name`, `<id>:<what>`, is of another mod whose exports
-    /// [`FakeHost::exports`] gave and lack `what`, which the loader refuses
-    /// the mod.
+    /// Whether the `kind` `name`, `<id>:<what>`, is of another mod whose
+    /// exports [`FakeHost::exports`] gave and lack `<kind>:<what>`, or for
+    /// content and stats also the name it is a part of, which the loader
+    /// refuses the mod.
     pub(crate) fn unexported(
         &self,
+        kind: &str,
         name: &str,
         exports: &rustc_hash::FxHashMap<String, Vec<String>>,
     ) -> bool {
@@ -371,23 +373,7 @@ impl ManifestFacts {
             owner != self.id
                 && exports
                     .get(owner)
-                    .is_some_and(|names| !names.iter().any(|n| n == what))
-        })
-    }
-
-    /// Whether the content id `name`, `<id>:<what>`, is of another mod whose
-    /// exports [`FakeHost::exports`] gave and cover neither `what` nor the
-    /// name it is a part of, which the loader refuses the mod.
-    pub(crate) fn unexported_content(
-        &self,
-        name: &str,
-        exports: &rustc_hash::FxHashMap<String, Vec<String>>,
-    ) -> bool {
-        name.split_once(':').is_some_and(|(owner, what)| {
-            owner != self.id
-                && exports
-                    .get(owner)
-                    .is_some_and(|names| !crate::rules::exports_content(names, what))
+                    .is_some_and(|names| !crate::rules::exports_name(names, kind, what))
         })
     }
 

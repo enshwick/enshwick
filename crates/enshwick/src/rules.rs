@@ -44,13 +44,26 @@ pub fn may_declare_rate(rate: RateId, joins: bool) -> bool {
     joins || !Rate::from_id(rate).is_some_and(Rate::seen_by_clients)
 }
 
-/// Whether a mod's `exports` let other mods name its content `name`, the
-/// local part of a content id: `name` itself or the name it is a part of
-/// (`locker` for `locker.recipe`) is exported.
+/// The kinds of names a mod exports, each the word before `:` in an export
+/// such as `point:price`.
+pub const EXPORT_KINDS: [&str; 6] = ["point", "event", "call", "service", "content", "stat"];
+
+/// Whether a mod's `exports`, each `<kind>:<local name>`, let other mods use
+/// its `kind` `name`.
+///
+/// `name` is a local name, exported when `kind:name` is, or, for `content`
+/// and `stat`, the name it is a part of (`content:locker` for
+/// `locker.recipe`).
 #[must_use]
-pub fn exports_content<S: AsRef<str>>(exports: &[S], name: &str) -> bool {
-    let exported = |local: &str| exports.iter().any(|e| e.as_ref() == local);
-    exported(name) || name.match_indices('.').any(|(at, _)| exported(&name[..at]))
+pub fn exports_name<S: AsRef<str>>(exports: &[S], kind: &str, name: &str) -> bool {
+    let exported = |local: &str| {
+        exports
+            .iter()
+            .any(|e| e.as_ref().split_once(':') == Some((kind, local)))
+    };
+    exported(name)
+        || (matches!(kind, "content" | "stat")
+            && name.match_indices('.').any(|(at, _)| exported(&name[..at])))
 }
 
 #[cfg(test)]
@@ -113,17 +126,29 @@ mod tests {
     }
 
     #[test]
-    fn an_exported_name_exports_its_parts_too() {
-        let exports = ["locker", "bench.recipe"];
-        assert!(exports_content(&exports, "locker"));
-        assert!(exports_content(&exports, "locker.recipe"));
-        assert!(exports_content(&exports, "locker.icon.png"));
-        assert!(exports_content(&exports, "bench.recipe"));
-        assert!(!exports_content(&exports, "bench"));
-        assert!(!exports_content(&exports, "bench.name"));
-        assert!(!exports_content(&exports, "lockers"));
-        assert!(!exports_content(&exports, "locker-key"));
-        assert!(!exports_content::<&str>(&[], "locker"));
+    fn an_exported_content_name_exports_its_parts_too() {
+        let exports = ["content:locker", "content:bench.recipe"];
+        let content = |name| exports_name(&exports, "content", name);
+        assert!(content("locker"));
+        assert!(content("locker.recipe"));
+        assert!(content("locker.icon.png"));
+        assert!(content("bench.recipe"));
+        assert!(!content("bench"));
+        assert!(!content("bench.name"));
+        assert!(!content("lockers"));
+        assert!(!content("locker-key"));
+        assert!(!exports_name::<&str>(&[], "content", "locker"));
+    }
+
+    #[test]
+    fn an_export_opens_only_its_own_kind() {
+        let exports = ["point:price", "event:sold"];
+        assert!(exports_name(&exports, "point", "price"));
+        assert!(!exports_name(&exports, "content", "price"));
+        assert!(!exports_name(&exports, "stat", "price"));
+        assert!(!exports_name(&exports, "event", "price"));
+        assert!(!exports_name(&exports, "call", "sold"));
+        assert!(!exports_name(&exports, "point", "price.part"));
     }
 
     fn seen_by_clients(rate: RateId) -> bool {

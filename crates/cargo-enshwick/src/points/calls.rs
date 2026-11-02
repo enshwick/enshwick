@@ -21,7 +21,7 @@ pub(super) struct CallSchema {
 mod tests {
     use super::super::{Error, Schema, luau, rust_deps};
 
-    const SCHEMA: &str = r#"schema = 1
+    const SCHEMA: &str = r#"schema = 2
 mod = "you.trading-post"
 version = "1.2.0"
 

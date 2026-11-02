@@ -343,9 +343,11 @@ pub struct Manifest {
     /// `declare_mod!` collects them from the DLL's `.enshpt` section, where
     /// a tool reads them without running the mod.
     pub points: Str,
-    /// The local names of what other mods may use: calls, points, services
-    /// and events named `<id>:<name>`. The loader refuses another mod a
-    /// reference to a name of this mod outside the list.
+    /// What other mods may use, each `<kind>:<local name>` with a kind of
+    /// `point`, `event`, `call`, `service`, `content` or `stat`, such as
+    /// `call:price-of` for `<id>:price-of`. The loader refuses another mod a
+    /// reference to a name of this mod unless the list holds it with its
+    /// kind.
     pub exports: *const Str,
     /// How many names `exports` points at.
     pub export_count: usize,

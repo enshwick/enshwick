@@ -25,7 +25,7 @@ pub use luau::{LuauDeps, luau_deps};
 pub use rust::rust_deps;
 
 /// The schema format this tool reads.
-const FORMAT: u32 = 1;
+const FORMAT: u32 = enshwick::schema_section::FORMAT;
 
 /// Why a point schema does not read or does not make a definition.
 #[derive(Debug, thiserror::Error)]
@@ -127,14 +127,18 @@ pub enum Error {
 /// ```
 /// use cargo_enshwick::points::Schema;
 ///
-/// assert!(Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"").is_err());
+/// assert!(Schema::parse("schema = 3\nmod = \"you.stalls\"\nversion = \"1.0.0\"").is_err());
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Schema {
-    /// The format, 1.
+    /// The format, [`FORMAT`].
     #[serde(rename = "schema")]
     format: u32,
+    /// The content and stat kinds the owner's `exports` lists, each
+    /// `<kind>:<name>`; its exported declarations are the tables below.
+    #[serde(default)]
+    exports: Vec<String>,
     /// The owner's id.
     #[serde(rename = "mod")]
     owner: String,
@@ -242,7 +246,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.owner(), "you.stalls");
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -272,7 +276,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.version(), "1.0.0");
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -288,7 +292,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.points().count(), 0);
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -303,7 +307,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.events().count(), 0);
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -318,7 +322,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.calls().count(), 0);
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -920,7 +924,7 @@ mod tests {
                 ..
             })
         ));
-        let newer = SCHEMA.replace("schema = 1", "schema = 2");
+        let newer = SCHEMA.replace("schema = 2", "schema = 3");
         assert!(
             Schema::parse(&newer)
                 .unwrap_err()

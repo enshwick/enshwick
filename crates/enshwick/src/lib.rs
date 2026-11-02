@@ -458,7 +458,7 @@ pub use enshwick_macros::declare_mod;
 ///
 /// Each module holds `ID`, the dependency's mod id, and `id("<name>")`, its
 /// content id `<dependency>:<name>`, once the loader lets this mod name it:
-/// the dependency's `exports` list `<name>` or the name it is a part of. A
+/// the dependency's `exports` list `content:<name>` or the name it is a part of. A
 /// required dependency's `id` returns [`Off`] for a name it does not export.
 /// An optional one's, from `after` or `recommends`, is `None` while it does
 /// not run or does not export the name. Ask once, at init, and keep the id.

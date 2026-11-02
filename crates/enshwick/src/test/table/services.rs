@@ -61,7 +61,7 @@ pub(crate) extern "system" fn service(
     let answer = with(Err("no fake installed".to_owned()), |s| {
         if s.manifest
             .as_ref()
-            .is_some_and(|manifest| manifest.unexported(&name, &s.host.exports))
+            .is_some_and(|manifest| manifest.unexported("service", &name, &s.host.exports))
         {
             return Err("its mod does not export it".to_owned());
         }
@@ -134,7 +134,7 @@ pub(crate) extern "system" fn subscribe_event(
     with(Status::MISSING, |s| {
         if s.manifest
             .as_ref()
-            .is_some_and(|manifest| manifest.unexported(&name, &s.host.exports))
+            .is_some_and(|manifest| manifest.unexported("event", &name, &s.host.exports))
         {
             return Status::REFUSED;
         }
@@ -207,7 +207,7 @@ pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
         let refused = s
             .manifest
             .as_ref()
-            .is_some_and(|manifest| manifest.unexported_content(&id, &s.host.exports));
+            .is_some_and(|manifest| manifest.unexported("content", &id, &s.host.exports));
         if !refused {
             return Status::OK;
         }
