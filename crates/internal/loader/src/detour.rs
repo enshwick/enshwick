@@ -178,9 +178,10 @@ pub(crate) enum Commit {
 }
 
 /// Writes the jumps over the targets of `pending` and the `code` patches,
-/// all or none.
-pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>]) -> Commit {
-    write_all(pending, code)
+/// all or none. On [`Commit::Busy`], `disarm` runs while the other threads
+/// still stand still, so it must neither allocate, lock nor log.
+pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit {
+    write_all(pending, code, disarm)
 }
 
 /// Whether `address` is mapped code followed by `len` bytes that read: a
@@ -336,7 +337,7 @@ fn allocate_near(target: usize) -> Option<usize> {
 /// trampoline, so the writes wait, a few times, until no thread stands or
 /// returns inside one; a patch a thread never leaves is never written over
 /// it, since the thread would resume in the middle of other instructions.
-fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> Commit {
+fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit {
     let writes: Vec<(usize, &[u8])> = prepared
         .iter()
         .map(|&p| (p.target, &p.patch[..]))
@@ -398,6 +399,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> Commit {
         return Commit::Failed;
     }
     if stuck.contains(&true) {
+        disarm();
         threads.resume();
         return Commit::Busy(
             stuck

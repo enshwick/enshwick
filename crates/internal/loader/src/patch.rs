@@ -668,8 +668,9 @@ fn write(
     // Each round that finds a thread inside a code patch leaves that patch
     // out, so the rounds end. Arming settles before each round, since it
     // logs and so cannot run while the threads stand still; a round that
-    // finds a thread inside writes nothing, so no detour reads it until the
-    // round that writes.
+    // finds a thread inside writes nothing and disarms the patch features
+    // before the threads resume, so no reader sees one on for a patch that
+    // then drops.
     let committed = loop {
         let (written, writes): (Vec<usize>, Vec<crate::detour::Bytes<'_>>) = patches
             .iter()
@@ -685,7 +686,7 @@ fn write(
             })
             .unzip();
         crate::code::arming(patches, &verdicts, &targets);
-        match crate::detour::commit(&hooks, &writes) {
+        match crate::detour::commit(&hooks, &writes, crate::code::disarm) {
             Commit::Busy(stuck) => leave_out(patches, &mut verdicts, &written, &stuck),
             done => break done,
         }
