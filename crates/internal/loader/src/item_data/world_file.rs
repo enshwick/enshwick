@@ -182,6 +182,15 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     }
 }
 
+/// The anchor `held` reads, or the carried anchor `old` while a player slot
+/// in `slots` still names the item's root but its GUID reads none: the
+/// character still carries it, and no anchor would set it aside.
+fn keep_carried_anchor(held: game::Held, old: Option<Anchor>, slots: &[u32]) -> Option<Anchor> {
+    held.anchor.or_else(|| {
+        old.filter(|anchor| matches!(anchor, Anchor::Carried { .. }) && slots.contains(&held.root))
+    })
+}
+
 /// After a save of the game's, reads each value's anchor afresh from its
 /// entity. A value whose entity holds another item or template now is
 /// dropped. One whose entity the world no longer holds goes aside: every
@@ -199,15 +208,17 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
         .map(|places| places.iter().map(|p| p.entity.0).collect());
     let characters = crate::world::characters(loader);
     let character_of = |root| crate::world::character_in(&characters, root);
+    let slots = crate::world::character_entities(loader).unwrap_or_default();
     let before = server.values.len();
     let mut anchorless = 0;
     let mut gone = Vec::new();
     server.values.retain(|&(kind, entity), record| {
         // `Some(None)`: the world no longer holds the entity.
         let now = match scope(kind, record.anchor) {
-            Some(Scope::Item) => {
-                Some(game::held(loader, entity, character_of).map(|held| (held.item, held.anchor)))
-            }
+            Some(Scope::Item) => Some(
+                game::held(loader, entity, character_of)
+                    .map(|held| (held.item, keep_carried_anchor(held, record.anchor, &slots))),
+            ),
             Some(Scope::Entity) => match &placed {
                 Some(placed) if !placed.contains(&entity) => Some(None),
                 Some(_) => template_id(Entity(entity)).map(|template| {
@@ -265,6 +276,7 @@ fn refresh_carried(loader: &Loader, server: &mut Server) {
     }
     let characters = crate::world::characters(loader);
     let character_of = |root| crate::world::character_in(&characters, root);
+    let slots = crate::world::character_entities(loader).unwrap_or_default();
     let carried = |anchor: Option<Anchor>| matches!(anchor, Some(Anchor::Carried { .. }));
     let mut changed = false;
     for (&(kind, pide), record) in &mut server.values {
@@ -277,8 +289,9 @@ fn refresh_carried(loader: &Loader, server: &mut Server) {
         else {
             continue;
         };
-        if carried(held.anchor) || carried(record.anchor) {
-            changed |= core::mem::replace(&mut record.anchor, held.anchor) != held.anchor;
+        let anchor = keep_carried_anchor(held, record.anchor, &slots);
+        if carried(anchor) || carried(record.anchor) {
+            changed |= core::mem::replace(&mut record.anchor, anchor) != anchor;
         }
     }
     server.changed |= changed;

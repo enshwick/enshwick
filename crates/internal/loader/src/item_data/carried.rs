@@ -114,19 +114,8 @@ fn left(loader: &Loader, entity: Entity) {
             .iter()
             .any(|joining| joining.entity == entity && joining.settled);
         server.joining.retain(|joining| joining.entity != entity);
-        if let Some(character) = character_of(entity)
-            && settled
-            && !UNREAD.load(Ordering::Relaxed)
-            && game::filled(loader, entity) == Some(true)
-        {
-            // Its looks have run on filled inventories, which read exactly
-            // now: a record whose slot holds another item will not find its
-            // own at a later join either.
-            let gone = set_aside_waiting(&mut server.pending, character, |link, slot| {
-                game::in_slot(loader, entity.0, link, slot).map(|(_, item)| item)
-            });
-            server.changed |= gone > 0;
-        }
+        // First the values on its items, before the game destroys them: a
+        // panic in the reads after leaves them kept.
         let kept = keep_carried(server, entity, |pide| {
             game::held(loader, pide, character_of)
         });
@@ -137,6 +126,19 @@ fn left(loader: &Loader, entity: Entity) {
                 kept.waiting,
                 kept.aside
             );
+        }
+        if let Some(character) = character_of(entity)
+            && settled
+            && !UNREAD.load(Ordering::Relaxed)
+            && game::filled(loader, entity) == Some(true)
+        {
+            // Its looks have run on filled inventories, which read exactly
+            // now: a record whose slot holds another item will not find its
+            // own at a later join either. The records just kept hold theirs.
+            let gone = set_aside_waiting(&mut server.pending, character, |link, slot| {
+                game::in_slot(loader, entity.0, link, slot).map(|(_, item)| item)
+            });
+            server.changed |= gone > 0;
         }
         removals(&kept.moved)
     };
