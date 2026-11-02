@@ -31,6 +31,7 @@ mod containers;
 mod damage;
 mod daytime;
 pub mod deps;
+mod developer_tools;
 #[cfg(feature = "unstable")]
 mod effects;
 mod engine_names;

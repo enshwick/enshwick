@@ -285,8 +285,9 @@ a client that joins the server or hosts the game.
 
 ## Reloading a mod while the game runs
 
-With `dev_reload = true` in `mod-configs/enshwick.toml`, a dedicated server
-or a client loads every mod from a copy under `mods/enshwick/reload/`, so
+With `dev_reload = true` in `mod-configs/enshwick.toml`, a client, or a
+dedicated server while [developer tools](interface.md#developer-tools) are
+on, loads every mod from a copy under `mods/enshwick/reload/`, so
 its DLL in `mods/` stays writable, and watches those DLLs. When one changes and stays
 the same for a second, as after `cargo enshwick install`, the loader reloads
 its mod without a restart:

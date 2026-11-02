@@ -246,6 +246,10 @@ pub(crate) enum BaseCode {
 /// assert!(loader.hooks().is_empty());
 /// ```
 #[derive(Clone, Debug)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is a switch of its own that a test sets through its builder"
+)]
 pub struct FakeHost {
     side: Side,
     base: u64,
@@ -270,6 +274,7 @@ pub struct FakeHost {
     players: Vec<PlayerInfo>,
     mods: Vec<ModInfo>,
     hosting: bool,
+    developer_tools: bool,
     host_key: Option<crate::PlayerKey>,
     server_world: u64,
     join_missing: Vec<ModInfo>,
@@ -360,6 +365,7 @@ impl FakeHost {
             players: Vec::new(),
             mods: Vec::new(),
             hosting: false,
+            developer_tools: true,
             host_key: None,
             server_world: 0,
             join_missing: Vec::new(),
@@ -435,6 +441,25 @@ impl FakeHost {
     #[must_use]
     pub const fn language(mut self, language: crate::i18n::Language) -> Self {
         self.language = language.0;
+        self
+    }
+
+    /// Whether developer tools are on, as the file
+    /// `mod-data/enshwick/developer-tools` turns them on; on by default,
+    /// as on a development server. Without them a dedicated server turns a
+    /// mod with `developer: true` off before its `init`, so the fake's init
+    /// returns [`Status::REFUSED`](crate::abi::Status::REFUSED).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let _loader = enshwick::test::FakeHost::new()
+    ///     .developer_tools(false)
+    ///     .install();
+    /// ```
+    #[must_use]
+    pub const fn developer_tools(mut self, on: bool) -> Self {
+        self.developer_tools = on;
         self
     }
 

@@ -125,20 +125,31 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     let (settings, settings_problems) = crate::settings::Settings::read(&settings_file, listed);
     crate::status::mark_start();
     crate::diag::configure(&settings);
-    crate::reload::configure(settings.dev_reload);
+    let side = identify().map(|(side, _, _)| side);
+    let developer = crate::developer_tools::marked(&game_dir.join("mod-data"));
+    let reloads = side
+        .is_some_and(|side| crate::developer_tools::reloads(settings.dev_reload, side, developer));
+    crate::reload::configure(reloads);
     crate::knowledge::guard::configure(settings.knowledge_guard);
     crate::admission::configure(&settings);
     crate::allowlist::configure(&settings);
     crate::ui::configure_actions_key(&settings.actions_key);
-    crate::texts::configure(
-        &settings.language,
-        identify().is_some_and(|(side, _, _)| side == Side::SERVER),
-    );
+    crate::texts::configure(&settings.language, side == Some(Side::SERVER));
+    let dev_reload_held = settings.dev_reload && !reloads;
     builds::configure(settings.build_patterns);
     let motd = settings.motd.clone();
     log::set_levels(settings);
     log::open(&game_dir.join(log::LOGS).join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
+    if dev_reload_held {
+        crate::log!(
+            WARN,
+            "dev_reload is on but reloads stay off: a dedicated server reloads mods only while \
+             the file mod-data/{}/{} exists",
+            crate::settings::LOADER_ID,
+            crate::developer_tools::MARKER
+        );
+    }
     crate::greeting::configure(&motd);
     let applies = if settings_problems.unread {
         "the defaults apply"
