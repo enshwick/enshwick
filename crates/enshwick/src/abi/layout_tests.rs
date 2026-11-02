@@ -448,6 +448,17 @@ fn wrong_born(old: &Snapshot, new: &Snapshot, new_major: bool) -> Option<String>
     })
 }
 
+/// The golden file's text, `None` only when it does not exist; any other
+/// error, such as a lock or a denied read, is an error, so the update mode
+/// never writes over a file it could not read.
+fn read_golden(path: &Path) -> std::io::Result<Option<String>> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 fn golden_path() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("src/abi/layout.txt")
 }
@@ -459,7 +470,8 @@ fn the_abi_layout_and_version_match_the_golden_file() {
     let now = (ABI_MAJOR, ABI_MINOR);
     let rendered = render_golden(now, &new);
     let update = std::env::var_os("ENSHWICK_ABI_LAYOUT").is_some_and(|value| value == "update");
-    let Ok(text) = std::fs::read_to_string(&path) else {
+    let read = read_golden(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let Some(text) = read else {
         // A missing file holds no version to bump from.
         assert!(
             update,
@@ -542,6 +554,20 @@ fn every_abi_type_and_field_is_listed() {
         })
         .collect();
     assert_eq!(listed, structs_in_source());
+}
+
+#[test]
+fn only_a_missing_golden_file_counts_as_missing() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    assert!(matches!(
+        read_golden(&src.join("abi/no-such-layout.txt")),
+        Ok(None)
+    ));
+    assert!(matches!(read_golden(&golden_path()), Ok(Some(_))));
+    assert!(
+        read_golden(&src).is_err(),
+        "a folder reads as an error, not as missing"
+    );
 }
 
 #[test]
