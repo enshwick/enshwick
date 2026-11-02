@@ -2,11 +2,12 @@
 
 use std::sync::atomic::Ordering;
 
+use enshwick::{Entity, ItemId};
 use rustc_hash::FxHashSet;
 
 use super::{FINDING, KEPT, SERVER, Server, UNREAD, game, insert_found, messages_for, send};
 use crate::host::Loader;
-use crate::item_records::anchor::{self, Anchor, Index, Pending};
+use crate::item_records::anchor::{self, Anchor, Index, KindIndex, Pending};
 use crate::locks::Relock;
 
 /// The placed things whose templates the `pending` records name, by key;
@@ -56,7 +57,7 @@ fn index(loader: &Loader, pending: &[Pending]) -> Option<Index> {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct Attached {
     /// The kinds and entities that took a value.
-    found: Vec<(u32, u32)>,
+    found: Vec<(KindIndex, Entity)>,
     /// Records newly aside: on shared places, on empty ones, replaced.
     ambiguous: usize,
     missing: usize,
@@ -72,10 +73,10 @@ pub(super) struct Attached {
 pub(super) fn attach(
     server: &mut Server,
     index: Option<&Index>,
-    held: impl Fn(u32, u8, u8) -> Option<(u32, u32)>,
+    held: impl Fn(Entity, u8, u8) -> Option<(Entity, ItemId)>,
 ) -> Option<Attached> {
     let index = index?;
-    let taken: FxHashSet<(u32, u32)> = server.values.keys().copied().collect();
+    let taken: FxHashSet<(KindIndex, Entity)> = server.values.keys().copied().collect();
     let outcome = anchor::resolve(
         std::mem::take(&mut server.pending),
         index,

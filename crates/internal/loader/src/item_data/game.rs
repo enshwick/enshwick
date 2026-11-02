@@ -4,8 +4,8 @@
 
 use std::sync::OnceLock;
 
-use enshwick::Entity;
 use enshwick::raw::read_at;
+use enshwick::{Entity, ItemId};
 use enshwick_gamedata::catalogue as names;
 
 use super::anchor::{Anchor, CharacterId, Placed};
@@ -164,11 +164,11 @@ fn link_of(loader: &Loader, layout: &Layout, root: u32, inventory: u32) -> Optio
 /// anchor is `None` for an item in neither.
 pub(crate) fn held(
     loader: &Loader,
-    pide: u32,
+    pide: Entity,
     character_of: impl FnOnce(Entity) -> Option<CharacterId>,
 ) -> Option<Held> {
     let layout = layout(loader)?;
-    let state = component(loader, pide, layout.item_state)?;
+    let state = component(loader, pide.0, layout.item_state)?;
     // SAFETY: `state` is the entity's live `ItemState`, whose reflected slot
     // id holds its `u32` inventory entity at `slot_entity` (in bounds, checked
     // by `layout`); read on the game thread (checked by `world::component`).
@@ -198,15 +198,19 @@ pub(crate) fn held(
                 })
             })
     });
-    Some(Held { anchor, item, root })
+    Some(Held {
+        anchor,
+        item: ItemId(item),
+        root: Entity(root),
+    })
 }
 
 /// An item entity's place: its anchor, the item it holds and its root.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Held {
     pub(crate) anchor: Option<Anchor>,
-    pub(crate) item: u32,
-    pub(crate) root: u32,
+    pub(crate) item: ItemId,
+    pub(crate) root: Entity,
 }
 
 /// Whether the inventories of `root`, a character, are filled: its
@@ -235,15 +239,20 @@ pub(crate) fn ready(loader: &Loader, root: Entity) -> bool {
 
 /// The item entity in slot `slot` of the inventory at `link` of `root`, and
 /// the item it holds.
-pub(crate) fn in_slot(loader: &Loader, root: u32, link: u8, slot: u8) -> Option<(u32, u32)> {
+pub(crate) fn in_slot(
+    loader: &Loader,
+    root: Entity,
+    link: u8,
+    slot: u8,
+) -> Option<(Entity, ItemId)> {
     let layout = layout(loader)?;
     if slot >= SLOTS {
         return None;
     }
     let inventory = if link == OWN {
-        root
+        root.0
     } else if link < LINKS {
-        let setup = component(loader, root, layout.setup)?;
+        let setup = component(loader, root.0, layout.setup)?;
         // SAFETY: `setup` is the root's live `InventorySetup`; `link < LINKS`
         // indexes its `u32` `linksEntities`; read on the game thread.
         unsafe { read_at::<u32>(setup, layout.links + usize::from(link) * 4) }
@@ -264,5 +273,5 @@ pub(crate) fn in_slot(loader: &Loader, root: u32, link: u8, slot: u8) -> Option<
     // the stack (checked by `layout`); read on the game thread (checked by
     // `world::component`).
     let pide = unsafe { read_at::<u32>(stacks, at + layout.stack_pide) };
-    (pide != 0).then_some((pide, item))
+    (pide != 0).then_some((Entity(pide), ItemId(item)))
 }

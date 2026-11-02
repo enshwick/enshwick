@@ -3,7 +3,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
-use enshwick::Entity;
 use enshwick::abi::Event;
 use rustc_hash::FxHashSet;
 
@@ -13,7 +12,7 @@ use super::{
     serves, take_destroyed, template_id, wanted,
 };
 use crate::host::Loader;
-use crate::item_records::anchor::{Anchor, Pending};
+use crate::item_records::anchor::{Anchor, KindIndex, Pending};
 use crate::item_records::file::{self, Saved};
 use crate::locks::Relock;
 
@@ -46,7 +45,7 @@ pub(super) fn read_file(bytes: &[u8]) -> Option<(Vec<Pending>, Vec<String>)> {
                     unopened.push(saved.id.to_owned());
                     unopened.len() - 1
                 });
-            u32::try_from(opened + at).ok()?
+            KindIndex(u32::try_from(opened + at).ok()?)
         };
         pending.push(Pending {
             kind,
@@ -68,7 +67,7 @@ pub(super) fn write_file(server: &Server) -> Vec<u8> {
     let values = sorted.into_iter().filter_map(|(&(kind, entity), record)| {
         Some(Saved {
             id: server.kind_id(kind)?,
-            anchor: record.anchor.unwrap_or(Anchor::Session(entity)),
+            anchor: record.anchor.unwrap_or(Anchor::Session(entity.0)),
             check: record.item,
             value: &record.value,
             aside: false,
@@ -188,7 +187,9 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 /// character still carries it, and no anchor would set it aside.
 fn keep_carried_anchor(held: game::Held, old: Option<Anchor>, slots: &[u32]) -> Option<Anchor> {
     held.anchor.or_else(|| {
-        old.filter(|anchor| matches!(anchor, Anchor::Carried { .. }) && slots.contains(&held.root))
+        old.filter(|anchor| {
+            matches!(anchor, Anchor::Carried { .. }) && slots.contains(&held.root.0)
+        })
     })
 }
 
@@ -216,14 +217,16 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
     server.values.retain(|&(kind, entity), record| {
         // `Some(None)`: the world no longer holds the entity.
         let now = match scope(kind, record.anchor) {
-            Some(Scope::Item) => Some(
-                game::held(loader, entity, character_of)
-                    .map(|held| (held.item, keep_carried_anchor(held, record.anchor, &slots))),
-            ),
+            Some(Scope::Item) => Some(game::held(loader, entity, character_of).map(|held| {
+                (
+                    held.item.0,
+                    keep_carried_anchor(held, record.anchor, &slots),
+                )
+            })),
             Some(Scope::Entity) => match &placed {
-                Some(placed) if !placed.contains(&entity) => Some(None),
-                Some(_) => template_id(Entity(entity)).map(|template| {
-                    Some((template, game::placed(loader, entity).map(Anchor::Placed)))
+                Some(placed) if !placed.contains(&entity.0) => Some(None),
+                Some(_) => template_id(entity).map(|template| {
+                    Some((template, game::placed(loader, entity.0).map(Anchor::Placed)))
                 }),
                 None => None,
             },
@@ -234,7 +237,7 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
             Some(None) => {
                 gone.push(Pending {
                     kind,
-                    anchor: record.anchor.unwrap_or(Anchor::Session(entity)),
+                    anchor: record.anchor.unwrap_or(Anchor::Session(entity.0)),
                     check: record.item,
                     value: core::mem::take(&mut record.value),
                     aside: true,
@@ -286,7 +289,7 @@ fn refresh_carried(loader: &Loader, server: &mut Server) {
         {
             continue;
         }
-        let Some(held) = game::held(loader, pide, character_of).filter(|h| h.item == record.item)
+        let Some(held) = game::held(loader, pide, character_of).filter(|h| h.item.0 == record.item)
         else {
             continue;
         };
@@ -325,7 +328,7 @@ fn save(loader: &Loader, after_game_save: bool) {
             if !server.cleared.is_empty() {
                 for (entity, character) in crate::world::characters(loader) {
                     server.changed |= set_aside_cleared(server, character, |link, slot| {
-                        game::in_slot(loader, entity.0, link, slot)
+                        game::in_slot(loader, entity, link, slot)
                     }) > 0;
                 }
             }
