@@ -45,3 +45,20 @@ value = 0
 [[type.value]]
 name = "SELL"
 value = 1
+[[event]]
+name = "you.trading-post:sold"
+data = "Sold"
+doc = "An item sold at the trading post, sent on the thread that sold it."
+layout = ["5938679357011966802", "13834071525596909927"]
+[[type]]
+name = "Sold"
+doc = "An item sold at the trading post, sent on the thread that sold it."
+kind = "struct"
+[[type.field]]
+name = "item"
+doc = "The item sold."
+type = "u32"
+[[type.field]]
+name = "price"
+doc = "What it sold for, in coins."
+type = "u32"

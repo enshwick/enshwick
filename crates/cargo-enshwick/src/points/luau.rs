@@ -514,13 +514,11 @@ mod tests {
         ))
         .unwrap();
         let deps = luau_deps(&schema, "trading_post").unwrap();
-        let [(name, text)] = &deps.modules[..] else {
+        let [(price, text), (sold, _)] = &deps.modules[..] else {
             panic!("{:?}", deps.modules);
         };
-        assert_eq!(name, "price");
+        assert_eq!([price.as_str(), sold.as_str()], ["price", "sold"]);
         insta::assert_snapshot!(text);
-        let events = luau_deps(&Schema::parse(SOLD).unwrap(), "post").unwrap();
-        assert_eq!(events.modules[0].0, "sold");
     }
 
     #[test]

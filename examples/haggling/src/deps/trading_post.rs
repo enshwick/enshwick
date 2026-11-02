@@ -49,6 +49,27 @@ const _: () = {
     );
 };
 
+/// An item sold at the trading post, sent on the thread that sold it.
+#[enshwick::event(name = "sold", of = trading_post)]
+#[derive(Clone, Copy, Debug)]
+pub struct Sold {
+    /// The item sold.
+    pub item: u32,
+    /// What it sold for, in coins.
+    pub price: u32,
+}
+
+const _: () = {
+    assert!(
+        <Sold as enshwick::services::ModEvent>::LAYOUT[0].hash == 0x526a_6d69_25a4_bb52,
+        "`item` differs from the owner's",
+    );
+    assert!(
+        <Sold as enshwick::services::ModEvent>::LAYOUT[1].hash == 0xbffc_7ec1_a88c_d167,
+        "`price` differs from the owner's",
+    );
+};
+
 /// What a player does at the trading post.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, enshwick::Shape)]
