@@ -251,7 +251,7 @@ pub(super) fn find_carried(loader: &Loader) {
                 &characters,
                 joining,
                 &mut found,
-                |entity| game::filled(loader, entity) != Some(false),
+                |entity| game::ready(loader, entity),
                 |entity, link, slot| game::in_slot(loader, entity.0, link, slot),
             ) {
                 Look::Again => true,
