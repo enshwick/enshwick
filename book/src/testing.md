@@ -180,6 +180,7 @@ let item_hash = host.hash(types::ITEM_INFO.id())?;
 | `effect_events()` | The NPC command, threat and ping events `Effects` raises.                    |
 | `loot()`          | The components loot from destroyed things checks; the loot slot stays the test's. |
 | `meters()`        | `MeterLayout`: an item meter's component and the templates it is cloned into. |
+| `container_kinds()` | The markers `ContainerKinds` tells holders apart by.                       |
 
 Where no layout type is public, `test::facts` names each fact a test lays its
 blobs out by:
