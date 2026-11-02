@@ -23,14 +23,14 @@ folder holds the mod this chapter follows: `trading-post` publishes item
 prices and sends `you.trading-post:sold`. The chapter's own examples show a
 mod that uses the prices and counts the coins from each sale.
 
-## One declaration
+## Declaring a service and an event
 
-Declare the table and the event once, in a small crate both mods depend on,
-so the layouts the loader compares come from one source:
+The publisher declares the table and the event in its own crate, by their
+local names:
 
 ```rust
 /// Item prices, published by `trading-post`.
-#[enshwick::service(name = "you.trading-post:prices", version = 1)]
+#[enshwick::service(name = "prices", version = 1)]
 pub struct Prices {
     /// The price of `item` in coins, 0 for an item with no price.
     pub price: extern "system" fn(item: u32) -> u32,
@@ -39,7 +39,7 @@ pub struct Prices {
 }
 
 /// An item sold at the trading post.
-#[enshwick::event(name = "you.trading-post:sold")]
+#[enshwick::event(name = "sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
@@ -50,9 +50,10 @@ pub struct Sold {
 - [`#[service]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
   and `#[event]` make the struct `repr(C)` and give it a layout: a hash per
   field of its name, the shape of its type, its size, alignment and offset.
-- Name both after the publishing mod, as `<id>:<what>`, the form content
-  ids and extension points use. An event's name must start with its
-  definer's id; the loader refuses others.
+- The full name is `<id>:<what>`, with the id from the publisher's
+  `Cargo.toml`, the form content ids and extension points use: here
+  `you.trading-post:prices`. An event's name must start with its definer's
+  id; the loader refuses others.
 - `version` is the major version of the service, 1 when left out.
 - Every field's type implements [`Shape`](#shapes): its structural hash
   reaches into the type, so a change inside it refuses the link with the name
@@ -114,7 +115,7 @@ two mods that read the same bytes differently never link.
 publishes a `'static` table during `init`:
 
 ```rust
-#[enshwick::service(name = "you.trading-post:prices")]
+#[enshwick::service(name = "prices")]
 pub struct Prices {
     pub price: extern "system" fn(item: u32) -> u32,
 }
@@ -148,10 +149,12 @@ exports = ["prices", "sold"]
 
 [`load.service::<T>()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 returns the table once the loader has checked that the published table
-starts with every field of `T`:
+starts with every field of `T`. The user declares `T` in its own crate: the
+publisher's fields it needs, in the publisher's order, named with the alias
+its `Cargo.toml` gives the publisher (see [Load order](#load-order)):
 
 ```rust
-#[enshwick::service(name = "you.trading-post:prices")]
+#[enshwick::service(name = "prices", of = trading_post)]
 pub struct Prices {
     pub price: extern "system" fn(item: u32) -> u32,
 }
@@ -178,7 +181,7 @@ it gets back; sending calls every subscriber's handler on the sending
 thread, with no queue and no allocation:
 
 ```rust
-#[enshwick::event(name = "you.trading-post:sold")]
+#[enshwick::event(name = "sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
@@ -200,10 +203,15 @@ fn sell(item: u32, price: u32) {
 }
 ```
 
-Other mods subscribe during `init`:
+The definer lists the event in `declare_mod!(TradingPost, events: [Sold])`,
+so its manifest carries the event's schema. Other mods take the declaration
+from it: [`cargo enshwick deps`](extending.md#getting-a-points-definition)
+writes it into `src/deps/trading_post.rs`, with the definer's points and
+calls, as `#[enshwick::event(name = "sold", of = trading_post)]`. They
+subscribe during `init`:
 
 ```rust
-#[enshwick::event(name = "you.trading-post:sold")]
+#[enshwick::event(name = "sold", of = trading_post)]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
