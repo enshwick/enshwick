@@ -1,6 +1,6 @@
 # Release pull requests and releases with release-plz (release-plz.toml), run
-# by hand only. `release-pr` opens or updates the release pull request and
-# starts ci.yml on it; `release`, after that pull request merged, tags each
+# by hand on main only. `release-pr` opens or updates the release pull
+# request; `release`, after that pull request merged, tags each
 # released crate `<package>-v<version>`, makes its GitHub release and
 # publishes the public crates to crates.io through trusted publishing, which
 # matches this file's name.
@@ -21,16 +21,14 @@ permissions: {}
 
 jobs:
   release-plz:
+    # Releases come only from main.
+    if: github.ref == 'refs/heads/main'
     # A fresh machine: what ships is built and published without the
     # caches that branch builds write to.
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
-      # Push the release branch and tags, make releases.
-      contents: write
-      pull-requests: write
-      # Start ci.yml on the release branch.
-      actions: write
+      contents: read
       # crates.io trusted publishing.
       id-token: write
     concurrency:
@@ -43,23 +41,22 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-rust
-        with:
-          gh: true
 
-      - id: release-plz
-        uses: release-plz/action@f67a7e724bdad4a0f6875f186060a0ca2770d76c # v0.5.147
+      # The app pushes the release branch and tags and opens the release pull
+      # request, which then runs CI as any other; the job token may not open
+      # pull requests.
+      - name: Token for the release
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+          private-key: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: release-plz/action@f67a7e724bdad4a0f6875f186060a0ca2770d76c # v0.5.147
         with:
           command: ${{ inputs.command }}
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      # A pull request opened with GITHUB_TOKEN starts no workflow, but a
-      # dispatch does, and the checks attach to the branch's commit.
-      - name: Start CI on the release branch
-        if: inputs.command == 'release-pr' && steps.release-plz.outputs.prs_created == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ steps.release-plz.outputs.pr }}
-        run: |
-          branch=$(jq -r .head_branch <<< "$PR")
-          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}

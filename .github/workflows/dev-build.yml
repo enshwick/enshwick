@@ -3,8 +3,8 @@
 # whose files replace those of the single prerelease `dev`. enshwick.zip
 # there holds the stub and the loader; each mod releases from its own
 # repository. Every push to main that changes what the archive builds from
-# runs it, so `dev` always carries main; a run by hand rebuilds it, or only
-# builds.
+# runs it, so `dev` always carries main; a run by hand on main rebuilds it,
+# or only builds.
 name: dev-build
 
 on:
@@ -36,6 +36,8 @@ concurrency:
 
 jobs:
   dist:
+    # Players download `dev`, so it is built only from main.
+    if: github.ref == 'refs/heads/main'
     # A fresh machine: what ships is built and published without the
     # caches that branch builds write to.
     runs-on: ubuntu-26.04
@@ -71,7 +73,7 @@ jobs:
           out: ${{ runner.temp }}/dev
 
       - name: Save the Windows SDK
-        if: github.ref == 'refs/heads/main' && steps.xwin.outputs.cache-hit != 'true'
+        if: steps.xwin.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.tool_cache }}/xwin
