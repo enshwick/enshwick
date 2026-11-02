@@ -8,6 +8,13 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** a call, point, service or event is exported by `export` on
+  its declaration, as `#[enshwick::point(name = "price", export, ..)]`, and
+  ships its schema only then; `exports` in `[package.metadata.enshwick]`
+  lists content and stat kinds alone. The manifest's exports join both.
+  `export` with `of`, or on a full name of another mod's id outside a test,
+  fails the build. Move each such name from `exports` onto its declaration
+  (#883).
 - **Breaking:** `declare_mod!(Type)` takes no `points`, `events` or `calls`
   lists. Each `#[point]`, `#[event]` and `#[call]` declared without `of`
   whose local name `exports` lists writes its schema into the DLL's
