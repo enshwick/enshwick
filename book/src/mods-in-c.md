@@ -15,8 +15,8 @@ layout on every change. `hello.c` writes one line to the log when it starts.
 ## Write the mod
 
 1. Copy `enshwick.h` next to your source file.
-2. Fill a static `EnshwickManifest`: its `header` is the struct's size and
-   `ENSHWICK_ABI_VERSION`; a mod needs at least `id`,
+2. Fill a static `EnshwickManifest`: its `header` is the struct's size,
+   `ENSHWICK_ABI_MAJOR` and `ENSHWICK_ABI_MINOR`; a mod needs at least `id`,
    `version` and `side`. `ENSHWICK_STR_INIT("text")` makes a string.
 3. Define `enshwick_mod_abi`, `enshwick_mod_query`, `enshwick_mod_init` and
    `enshwick_mod_ready`; `enshwick_mod_shutdown` is optional. The header
@@ -53,8 +53,8 @@ loader starts it.
 
 ## Keep it current
 
-Until 1.0 a loader loads only mods built for its own ABI version, so rebuild
-the mod against the `enshwick.h` of each Enshwick release whose
-`ENSHWICK_ABI_VERSION` differs from the one you built with. From 1.0 structs
-grow only at their end, and a mod built against an older header keeps loading.
-The [ABI reference](abi-reference.md#versions) has the rules.
+A loader loads a mod built against an older header while
+`ENSHWICK_ABI_MAJOR` is the same, so rebuild the mod against the `enshwick.h`
+of a release whose `ENSHWICK_ABI_MAJOR` differs from the one you built with.
+`enshwick_mod_abi` returns `ENSHWICK_ABI_MAJOR`. The
+[ABI reference](abi-reference.md#versions) has the rules.

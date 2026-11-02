@@ -24,11 +24,10 @@ use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, Reci
 
 /// The table of services the loader offers a mod.
 ///
-/// Until 1.0 any change to its layout is a new
-/// [`ABI_VERSION`](crate::abi::ABI_VERSION), and a loader loads only mods
-/// built for its own. From 1.0 fields are only appended, and a mod checks
-/// [`Header::covers`] before it calls a field added after the release it was
-/// built against.
+/// A function appended at its end is a new
+/// [`ABI_MINOR`](crate::abi::ABI_MINOR), any other change a new
+/// [`ABI_MAJOR`](crate::abi::ABI_MAJOR). A mod starts only on a table of its
+/// major and its minor or a newer one, which [`Header::covers`] whole.
 ///
 /// # Examples
 ///

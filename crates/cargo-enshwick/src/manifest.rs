@@ -127,9 +127,9 @@ unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
     // readable for the size its header states, no concurrent writer.
     let manifest = unsafe { enshwick::abi::read_headed(raw, REQUIRED) }
         .ok_or("the mod returned no manifest, or a truncated one")?;
-    if manifest.header.abi_version != enshwick::abi::ABI_VERSION {
-        return Err(enshwick::abi::OTHER_ABI.to_owned());
-    }
+    let header = manifest.header;
+    enshwick::abi::check_abi(u32::from(header.abi_major), header.abi_minor)
+        .map_err(|why| why.to_string())?;
     Ok(manifest)
 }
 
@@ -216,17 +216,16 @@ mod tests {
     }
 
     #[test]
-    fn a_manifest_of_another_abi_version_is_refused_with_the_release_to_rebuild_for() {
+    fn a_manifest_of_another_abi_major_is_refused_with_the_release_to_rebuild_for() {
         let mut other = plain("you.other-mod", "1.0.0");
-        other.header.abi_version = enshwick::abi::ABI_VERSION.wrapping_add(1);
+        other.header.abi_major = enshwick::abi::ABI_MAJOR + 1;
         // SAFETY: `other` is a whole local manifest with static strings.
         let why = unsafe { copy(&raw const other) }.unwrap_err();
         assert_eq!(
             why,
-            format!(
-                "built for another Enshwick: rebuild it for Enshwick {}",
-                enshwick::VERSION
-            )
+            enshwick::abi::check_abi(u32::from(other.header.abi_major), 0)
+                .unwrap_err()
+                .to_string()
         );
     }
 

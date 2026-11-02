@@ -68,9 +68,13 @@ enshwick::test::declare_mod!(
 const HALF: &str = r#"
 #[unsafe(no_mangle)]
 pub extern "system" fn enshwick_mod_abi() -> u32 {
-    enshwick::abi::ABI_VERSION
+    u32::from(enshwick::abi::ABI_MAJOR)
 }
 "#;
+
+/// What `enshwick_mod_abi` returned before ABI majors: a hash of the
+/// layout, here the last one.
+const HASHED_ABI: u32 = 0x0dc8_5f01;
 
 /// All four exports; `{abi}` is the version it says and `{query}` its
 /// manifest.
@@ -156,12 +160,12 @@ fn build_fixtures(dir: &Path) -> Option<PathBuf> {
         ("half", HALF.to_owned()),
         (
             "old_abi",
-            RAW.replace("{abi}", "enshwick::abi::ABI_VERSION.wrapping_add(1)")
+            RAW.replace("{abi}", &HASHED_ABI.to_string())
                 .replace("{query}", "core::ptr::null()"),
         ),
         (
             "no_manifest",
-            RAW.replace("{abi}", "enshwick::abi::ABI_VERSION")
+            RAW.replace("{abi}", "u32::from(enshwick::abi::ABI_MAJOR)")
                 .replace("{query}", "core::ptr::null()"),
         ),
     ];
@@ -309,7 +313,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         Level::WARN,
         &format!(
             "old-abi.dll skipped: {} ({})",
-            enshwick::abi::OTHER_ABI,
+            enshwick::abi::check_abi(HASHED_ABI, 0).unwrap_err(),
             errors::OTHER_ABI
         ),
     );

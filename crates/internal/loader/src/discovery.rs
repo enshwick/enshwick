@@ -16,8 +16,8 @@ pub(crate) enum Skip {
     IdOff(String),
     /// It exports the interface's version but not all four functions.
     NotAMod,
-    /// It was built for another ABI version.
-    OtherAbi,
+    /// It was built for another ABI major, as its `enshwick_mod_abi` says.
+    OtherAbi(enshwick::abi::CheckAbiError),
     /// Its manifest does not read or parse.
     Manifest(ManifestError),
     /// Another file in `mods/` holds the same mod and runs instead.
@@ -50,11 +50,9 @@ impl Skip {
             Self::FileOff => format!("{file} skipped: off in {LIST_PATH}"),
             Self::IdOff(id) => format!("{file} skipped: {id} is off in {LIST_PATH}"),
             Self::NotAMod => format!("{file} is not an Enshwick mod ({})", errors::BROKEN_DLL),
-            Self::OtherAbi | Self::Manifest(ManifestError::OtherAbi) => format!(
-                "{file} skipped: {} ({})",
-                ManifestError::OtherAbi,
-                errors::OTHER_ABI
-            ),
+            Self::OtherAbi(why) | Self::Manifest(ManifestError::OtherAbi(why)) => {
+                format!("{file} skipped: {why} ({})", errors::OTHER_ABI)
+            }
             Self::Manifest(reason) => {
                 format!("{file} skipped: {reason} ({})", errors::BROKEN_DLL)
             }
@@ -139,18 +137,16 @@ mod tests {
     }
 
     #[test]
-    fn a_mod_of_another_abi_names_the_release_to_rebuild_for_with_its_code() {
-        let line = Skip::OtherAbi.line("old.dll");
+    fn a_mod_of_another_abi_names_what_to_do_with_its_code() {
+        let why = enshwick::abi::check_abi(1, 0).unwrap_err();
+        let line = Skip::OtherAbi(why).line("old.dll");
         assert_eq!(
             line,
-            format!(
-                "old.dll skipped: {} ({})",
-                enshwick::abi::OTHER_ABI,
-                errors::OTHER_ABI
-            )
+            format!("old.dll skipped: {why} ({})", errors::OTHER_ABI)
         );
+        assert!(line.contains("rebuild it for Enshwick"), "{line}");
         assert_eq!(
-            Skip::Manifest(ManifestError::OtherAbi).line("old.dll"),
+            Skip::Manifest(ManifestError::OtherAbi(why)).line("old.dll"),
             line
         );
     }

@@ -6,7 +6,7 @@
 mod tests {
     use std::os::windows::ffi::OsStrExt as _;
 
-    use enshwick::abi::{ABI_VERSION, Level, Manifest, Status, exports};
+    use enshwick::abi::{ABI_MAJOR, ABI_MINOR, Level, Manifest, Status, exports};
     use enshwick::test::{FakeHost, InitFn};
     use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
@@ -28,7 +28,7 @@ mod tests {
         let abi: unsafe extern "system" fn() -> u32 =
             unsafe { core::mem::transmute(export(exports::ABI)) };
         // SAFETY: `abi` takes nothing and returns a constant.
-        assert_eq!(unsafe { abi() }, ABI_VERSION);
+        assert_eq!(unsafe { abi() }, u32::from(ABI_MAJOR));
 
         // SAFETY: the ABI gives `exports::QUERY` the signature
         // `fn() -> *const Manifest`.
@@ -42,6 +42,10 @@ mod tests {
         // static manifest no thread writes, in a DLL that is never unloaded.
         let manifest = unsafe { &*manifest };
         assert_eq!(manifest.header.size as usize, size_of::<Manifest>());
+        assert_eq!(
+            (manifest.header.abi_major, manifest.header.abi_minor),
+            (ABI_MAJOR, ABI_MINOR)
+        );
         // SAFETY: the manifest's strings are static literals of the DLL.
         assert_eq!(unsafe { manifest.id.as_str() }, Some("you.hello-c"));
 

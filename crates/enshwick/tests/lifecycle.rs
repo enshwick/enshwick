@@ -105,7 +105,7 @@ mod tests {
         // SAFETY: the id points at a `'static` string literal of `declare_mod!`.
         assert_eq!(unsafe { manifest.id.as_str() }, Some("you.test-mod"));
         assert_eq!(manifest.dependency_count, 1);
-        assert_eq!(enshwick_mod_abi(), enshwick::abi::ABI_VERSION);
+        assert_eq!(enshwick_mod_abi(), u32::from(enshwick::abi::ABI_MAJOR));
 
         let target = address(original as extern "system" fn(u32) -> u32);
         let loader = FakeHost::new()
