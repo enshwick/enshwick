@@ -100,17 +100,14 @@ mod tests {
 
     use super::{Deal, Opened, Price, generated};
 
-    /// The schema text of a manifest's points and events, with the API
-    /// crate's version, which the mod takes, written as the fixtures have
-    /// it. The calls, last in the text, are `call_schema`'s, in the same
-    /// test binary.
+    /// The schema text of a manifest's points, with the API crate's version,
+    /// which the mod takes, written as the fixtures have it.
     fn points(manifest: *const enshwick::abi::Manifest) -> String {
-        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-        // `declare_mod!`, which no thread writes.
+        // SAFETY: `enshwick_mod_query` returns the manifest of
+        // `declare_mod!`, valid until its shutdown, which no test runs.
         let manifest = unsafe { &*manifest };
-        // SAFETY: `declare_mod!` points the schema at static text.
+        // SAFETY: the manifest's schema text lives as long as the manifest.
         let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
-        let text = text.split_once("[[call]]").map_or(text, |(own, _)| own);
         text.replacen(
             &format!("version = \"{}\"", enshwick::VERSION),
             "version = \"1.2.0\"",

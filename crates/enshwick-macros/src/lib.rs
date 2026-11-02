@@ -14,11 +14,13 @@ use syn::{
 };
 
 mod declare;
+mod schema;
 mod texts;
 
 use crate::config::expand_config;
+use crate::schema::{call_schema, event_schema, point_schema, schema_entry};
 use crate::shape::expand_layout;
-use crate::shape::{expand_shape, toml_string};
+use crate::shape::expand_shape;
 
 /// Exports a mod type from its DLL, with the manifest built from the
 /// `[package.metadata.enshwick]` table of the crate's `Cargo.toml`. Examples
@@ -305,12 +307,12 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     let schema = event_schema(&item, name.as_ref());
     let padding = padding_free_assert(&item, "a mod event's data");
     let ident = &item.ident;
-    let entry = of.is_none().then(|| {
-        let event = quote!(<#ident as ::enshwick::services::ModEvent>);
-        quote! {
-            ::enshwick::__schema_entry!(if #event::DESCRIBED { #event::SCHEMA } else { "" });
-        }
-    });
+    let entry = schema_entry(
+        name.as_ref(),
+        of.as_ref(),
+        &quote!(<#ident as ::enshwick::services::ModEvent>),
+        true,
+    );
     match expand_declaration(&item, name, &schema, &quote!(services::ModEvent)) {
         Ok(declared) => {
             let declared = proc_macro2::TokenStream::from(declared);
@@ -373,54 +375,6 @@ pub fn texts(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// The `SCHEMA` of a mod event: its `[[event]]` table with the layout
-/// hashes, then the `[[type]]` tables of its data. An event with a field
-/// whose type a schema cannot describe ships no schema.
-fn event_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -> proc_macro2::TokenStream {
-    let shape = quote!(::enshwick::Shape);
-    let event = quote!(::enshwick::services::ModEvent);
-    let ident = &item.ident;
-    let data = ident.unraw().to_string();
-    let head = format!(
-        "[[event]]\nname = {}\ndata = {}\ndoc = {}\nlayout = [",
-        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
-        toml_string(&data),
-        toml_string(&schema_doc(&item.attrs)),
-    );
-    let mut parts = vec![quote!(#head)];
-    let mut fields = Vec::new();
-    let mut nested = Vec::new();
-    let mut described = vec![quote!(true)];
-    for (i, field) in item.fields.iter().enumerate() {
-        let Some(field_ident) = &field.ident else {
-            continue;
-        };
-        let ty = &field.ty;
-        let label = field_ident.unraw().to_string();
-        let separator = if i == 0 { "\"" } else { ", \"" };
-        parts.push(quote!(#separator, <#ident as #event>::LAYOUT[#i].hash, "\""));
-        described.push(quote!(!<#ty as #shape>::SCHEMA_NAME.is_empty()));
-        let entry = format!(
-            "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
-            toml_string(&label),
-            toml_string(&schema_doc(&field.attrs))
-        );
-        fields.push(quote!(#entry, <#ty as #shape>::SCHEMA_NAME, "\"\n"));
-        nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
-    }
-    let table = format!(
-        "]\n[[type]]\nname = {}\ndoc = {}\nkind = \"struct\"\n",
-        toml_string(&data),
-        toml_string(&schema_doc(&item.attrs))
-    );
-    quote! {
-        const DESCRIBED: bool = #(#described)&&*;
-        const SCHEMA: &'static str = ::enshwick::__private::concatcp!(
-            #(#parts,)* #table, #(#fields,)* #(#nested,)*
-        );
-    }
-}
-
 /// Declares an extension point: makes the input struct `repr(C)` and
 /// implements `enshwick::points::Point` with a layout hash per
 /// field and one for the answer.
@@ -458,6 +412,12 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
     let ident = item.ident.clone();
     let expanded = (|| {
         let (name, tracked) = resolve(name, of.as_ref())?;
+        let entry = schema_entry(
+            name.as_ref(),
+            of.as_ref(),
+            &quote!(<#ident as ::enshwick::points::Point>),
+            false,
+        );
         let mode = mode.ok_or_else(|| {
             syn::Error::new_spanned(
                 &ident,
@@ -498,9 +458,6 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
             &quote!(points::Point),
         )?);
         let padding = padding_free_assert(&item, "a point's input");
-        let entry = of.is_none().then(
-            || quote!(::enshwick::__schema_entry!(<#ident as ::enshwick::points::Point>::SCHEMA);),
-        );
         Ok(quote! {
             #declared
             #padding
@@ -569,6 +526,12 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
     let ident = item.ident.clone();
     let expanded = (|| -> syn::Result<TokenStream> {
         let (name, tracked) = resolve(name, of.as_ref())?;
+        let entry = schema_entry(
+            name.as_ref(),
+            of.as_ref(),
+            &quote!(<#ident as ::enshwick::services::Call>),
+            false,
+        );
         let output = output
             .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
         let major = version.map_or_else(|| quote!(1), |v| quote!(#v));
@@ -597,9 +560,6 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
         )?);
         let types: Vec<&Type> = item.fields.iter().map(|f| &f.ty).collect();
         let shape = quote!(::enshwick::Shape);
-        let entry = of.is_none().then(
-            || quote!(::enshwick::__schema_entry!(<#ident as ::enshwick::services::Call>::SCHEMA);),
-        );
         Ok(quote! {
             #declared
             #tracked
@@ -620,139 +580,6 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
         .into())
     })();
     expanded.unwrap_or_else(|e| e.to_compile_error().into())
-}
-
-/// The `SCHEMA` of a call: its `[[call]]` table with the layout hashes, then
-/// the `[[type]]` tables of its input and answer; and a check that a schema
-/// can describe every field and the answer.
-fn call_schema(
-    item: &syn::ItemStruct,
-    name: Option<&syn::LitStr>,
-    output: &Type,
-) -> proc_macro2::TokenStream {
-    let shape = quote!(::enshwick::Shape);
-    let call = quote!(::enshwick::services::Call);
-    let ident = &item.ident;
-    let input = ident.unraw().to_string();
-    let head = format!(
-        "[[call]]\nname = {}\ninput = {}\ndoc = {}\nmajor = ",
-        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
-        toml_string(&input),
-        toml_string(&schema_doc(&item.attrs)),
-    );
-    let mut parts = vec![quote!(
-        #head, <#ident as #call>::MAJOR, "\noutput = \"", <#output as #shape>::SCHEMA_NAME,
-        "\"\noutput_layout = \"", <#ident as #call>::OUTPUT[0].hash,
-        "\"\ninput_size = ", ::core::mem::size_of::<#ident>(),
-        "\noutput_size = ", ::core::mem::size_of::<#output>(),
-        "\nlayout = ["
-    )];
-    let mut checks = vec![quote! {
-        assert!(
-            !<#output as #shape>::SCHEMA_NAME.is_empty(),
-            "a call schema cannot describe the answer's type: derive `Shape` for it",
-        );
-    }];
-    let mut fields = Vec::new();
-    let mut nested = Vec::new();
-    for (i, field) in item.fields.iter().enumerate() {
-        let Some(field_ident) = &field.ident else {
-            continue;
-        };
-        let ty = &field.ty;
-        let label = field_ident.unraw().to_string();
-        let separator = if i == 0 { "\"" } else { ", \"" };
-        parts.push(quote!(#separator, <#ident as #call>::LAYOUT[#i].hash, "\""));
-        let message =
-            format!("a call schema cannot describe the type of `{label}`: derive `Shape` for it");
-        checks.push(quote!(assert!(!<#ty as #shape>::SCHEMA_NAME.is_empty(), #message);));
-        let entry = format!(
-            "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
-            toml_string(&label),
-            toml_string(&schema_doc(&field.attrs))
-        );
-        fields.push(quote!(#entry, <#ty as #shape>::SCHEMA_NAME, "\"\n"));
-        nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
-    }
-    let table = format!(
-        "]\n[[type]]\nname = {}\ndoc = {}\nkind = \"struct\"\n",
-        toml_string(&input),
-        toml_string(&schema_doc(&item.attrs))
-    );
-    quote! {
-        const SCHEMA: &'static str = {
-            const _: () = { #(#checks)* };
-            ::enshwick::__private::concatcp!(
-                #(#parts,)* #table, #(#fields,)* #(#nested,)* <#output as #shape>::SCHEMA_TYPES,
-            )
-        };
-    }
-}
-
-/// The `SCHEMA` of a point: its `[[point]]` table with the layout hashes,
-/// then the `[[type]]` tables of its input and answer; and a check that a
-/// schema can describe every field and the answer.
-fn point_schema(
-    item: &syn::ItemStruct,
-    name: Option<&syn::LitStr>,
-    mode: &Ident,
-    output: &Type,
-    refusable: bool,
-) -> proc_macro2::TokenStream {
-    let shape = quote!(::enshwick::Shape);
-    let point = quote!(::enshwick::points::Point);
-    let ident = &item.ident;
-    let input = ident.unraw().to_string();
-    let head = format!(
-        "[[point]]\nname = {}\nmode = \"{}\"\nrefusable = {refusable}\ninput = {}\ndoc = {}\noutput = \"",
-        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
-        mode.to_string().to_lowercase(),
-        toml_string(&input),
-        toml_string(&schema_doc(&item.attrs)),
-    );
-    let mut parts = vec![
-        quote!(#head, <#output as #shape>::SCHEMA_NAME, "\"\noutput_layout = \"", <#ident as #point>::OUTPUT[0].hash, "\"\nlayout = ["),
-    ];
-    let mut checks = vec![quote! {
-        assert!(
-            !<#output as #shape>::SCHEMA_NAME.is_empty(),
-            "a point schema cannot describe the answer's type: derive `Shape` for it",
-        );
-    }];
-    let mut fields = Vec::new();
-    let mut nested = Vec::new();
-    for (i, field) in item.fields.iter().enumerate() {
-        let Some(field_ident) = &field.ident else {
-            continue;
-        };
-        let ty = &field.ty;
-        let label = field_ident.unraw().to_string();
-        let separator = if i == 0 { "\"" } else { ", \"" };
-        parts.push(quote!(#separator, <#ident as #point>::LAYOUT[#i].hash, "\""));
-        let message =
-            format!("a point schema cannot describe the type of `{label}`: derive `Shape` for it");
-        checks.push(quote!(assert!(!<#ty as #shape>::SCHEMA_NAME.is_empty(), #message);));
-        let entry = format!(
-            "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
-            toml_string(&label),
-            toml_string(&schema_doc(&field.attrs))
-        );
-        fields.push(quote!(#entry, <#ty as #shape>::SCHEMA_NAME, "\"\n"));
-        nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
-    }
-    let table = format!(
-        "]\n[[type]]\nname = {}\ndoc = {}\nkind = \"struct\"\n",
-        toml_string(&input),
-        toml_string(&schema_doc(&item.attrs))
-    );
-    quote! {
-        const SCHEMA: &'static str = {
-            const _: () = { #(#checks)* };
-            ::enshwick::__private::concatcp!(
-                #(#parts,)* #table, #(#fields,)* #(#nested,)* <#output as #shape>::SCHEMA_TYPES,
-            )
-        };
-    }
 }
 
 /// Implements `enshwick::Shape`: the structural hash the layout

@@ -212,6 +212,17 @@
 /// }
 /// ```
 ///
+/// An exported event with a field a schema cannot describe, here an array;
+/// `exports` in the crate's `Cargo.toml` lists `price`:
+///
+/// ```compile_fail
+/// #[enshwick::event(name = "price")]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Price {
+///     pub items: [u16; 2],
+/// }
+/// ```
+///
 /// A key with a Ukrainian text and no English one:
 ///
 /// ```compile_fail

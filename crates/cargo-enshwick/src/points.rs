@@ -10,19 +10,19 @@
 //! their own layout against the hashes the owner's build wrote.
 
 mod calls;
+mod dll;
 mod luau;
 mod rust;
 
 use std::fmt::Write as _;
 
-use enshwick_gamedata::reflect::{Image, ImageError, Layout};
+use enshwick::schema_section::ReadSectionError;
+use enshwick_gamedata::reflect::ImageError;
 use serde::Deserialize;
 
+pub use dll::{SECTION, from_dll};
 pub use luau::{LuauDeps, luau_deps};
 pub use rust::rust_deps;
-
-/// The section of a mod DLL that holds its point schemas.
-pub const SECTION: &str = ".enshpt";
 
 /// The schema format this tool reads.
 const FORMAT: u32 = 1;
@@ -114,9 +114,10 @@ pub enum Error {
     /// The point section ends before its header says.
     #[error("the point section is cut short")]
     CutShort,
-    /// The point section is no UTF-8 text.
-    #[error("the point section is no text")]
-    NotText,
+    /// A part of the point section is damaged, or the owner was built with
+    /// an older enshwick.
+    #[error(transparent)]
+    Section(#[from] ReadSectionError),
 }
 
 /// A mod's point schemas, as `declare_mod!` writes them.
@@ -546,50 +547,6 @@ fn local_name<'a>(schema: &Schema, name: &'a str) -> Result<&'a str, Error> {
         })
 }
 
-/// The point schemas in the DLL `bytes`; `None` for a DLL without points.
-///
-/// # Errors
-///
-/// [`Error`] when the bytes are no x64 DLL, or the section is no text.
-///
-/// # Examples
-///
-/// ```
-/// use cargo_enshwick::points::from_dll;
-///
-/// assert!(from_dll(b"MZ").is_err());
-/// ```
-pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, Error> {
-    let image = Image::parse(bytes, Layout::File, None)?;
-    let Some(section) = image.section(SECTION) else {
-        return Ok(None);
-    };
-    let range = image.range(section);
-    let raw = image
-        .read(range.start, range.end - range.start)
-        .ok_or(Error::CutShort)?;
-    from_section(raw)
-}
-
-/// The schema text in `raw`, the bytes of a mod's `.enshpt` section: the
-/// head `declare_mod!` wrote, then the mod's own declarations.
-fn from_section(raw: &[u8]) -> Result<Option<String>, Error> {
-    let Some(head) = raw
-        .split(|&b| b == 0)
-        .find(|entry| entry.starts_with(b"schema = "))
-    else {
-        return Ok(None);
-    };
-    let head = std::str::from_utf8(head).map_err(|_| Error::NotText)?;
-    let table = toml::from_str::<toml::Table>(head).map_err(|e| Error::Toml(e.to_string()))?;
-    let id = table
-        .get("mod")
-        .and_then(toml::Value::as_str)
-        .ok_or_else(|| Error::Toml("the head names no `mod`".to_owned()))?;
-    let text = enshwick::__private::own_schemas(head, id, raw);
-    Ok((!text.is_empty()).then_some(text))
-}
-
 /// The Rust path of a schema type name.
 fn rust_type(name: &str) -> String {
     built_in(name).map_or_else(|| name.to_owned(), |b| b.rust.to_owned())
@@ -970,26 +927,5 @@ mod tests {
                 .to_string()
                 .contains("update it")
         );
-    }
-
-    #[test]
-    fn a_section_reads_as_its_head_and_the_mods_own_declarations() {
-        let raw = b"\0\0[[point]]\nname = \"you.lockers:price\"\n\0\
-            [[point]]\nname = \"you.other:price\"\n\0\
-            schema = 1\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\0\0\0\
-            [[event]]\nname = \"you.lockers:opened\"\n\0\0";
-        assert_eq!(
-            from_section(raw).unwrap().as_deref(),
-            Some(
-                "schema = 1\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\
-                 [[point]]\nname = \"you.lockers:price\"\n\
-                 [[event]]\nname = \"you.lockers:opened\"\n"
-            )
-        );
-        assert_eq!(
-            from_section(b"\0schema = 1\nmod = \"you.a\"\n\0").unwrap(),
-            None
-        );
-        assert_eq!(from_section(b"\0\0").unwrap(), None);
     }
 }

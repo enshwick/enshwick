@@ -94,20 +94,17 @@ mod tests {
 
     #[test]
     fn the_schema_is_the_one_cargo_enshwick_is_tested_with() {
-        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-        // `declare_mod!`, which no thread writes.
+        // SAFETY: `enshwick_mod_query` returns the manifest of
+        // `declare_mod!`, valid until its shutdown, which no test runs.
         let manifest = unsafe { &*super::lockers::enshwick_mod_query() };
-        // SAFETY: `declare_mod!` points the schema at static text.
-        let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
-        // The points and events, before the calls, are `point_schema`'s, in
-        // the same test binary.
-        let (head, _) = text.split_once("[[point]]").unwrap_or((text, ""));
-        let calls = text.find("[[call]]").map_or("", |at| &text[at..]);
-        let text = format!("{head}{calls}").replacen(
-            &format!("version = \"{}\"", enshwick::VERSION),
-            "version = \"1.2.0\"",
-            1,
-        );
+        // SAFETY: the manifest's schema text lives as long as the manifest.
+        let text = unsafe { manifest.points.as_str() }
+            .unwrap_or_default()
+            .replacen(
+                &format!("version = \"{}\"", enshwick::VERSION),
+                "version = \"1.2.0\"",
+                1,
+            );
         assert_eq!(
             text,
             include_str!("../../cargo-enshwick/tests/fixtures/lockers.calls.toml")

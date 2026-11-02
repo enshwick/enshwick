@@ -10,12 +10,13 @@ Each entry names the pull request that made the change.
 
 - **Breaking:** `declare_mod!(Type)` takes no `points`, `events` or `calls`
   lists. Each `#[point]`, `#[event]` and `#[call]` declared without `of`
-  writes its schema into the DLL's `.enshpt` section, and the manifest
-  collects the mod's own from there once, at the loader's first query; a
-  test binary's mods each take the schemas named with their id. An own
-  event whose fields a schema cannot describe ships no schema; an own point
-  or call whose types a schema cannot describe fails the build. Remove the
-  lists (#868).
+  whose local name `exports` lists writes its schema into the DLL's
+  `.enshpt` section; the manifest collects them from there at the loader's
+  first query, and `cargo enshwick deps` from the DLL file. An exported
+  event, point or call a schema cannot describe fails the build.
+  `enshwick_mod_query` builds the manifest at its first call, returns null
+  when that panics, and the manifest lives until `enshwick_mod_shutdown`,
+  which frees it. Remove the lists (#868).
 - **Breaking:** mod settings show only behind each mod's Settings button on
   the Mods screen: the player's own settings, then the world's. In a world
   the game runs, single player or hosted, those are that world's; in the

@@ -274,7 +274,8 @@ impl ManifestFlags {
 
 /// What a mod is, read by the loader before it runs any of the mod's code.
 ///
-/// It is static data returned by `enshwick_mod_query`.
+/// `enshwick_mod_query` returns it, valid until the mod's
+/// `enshwick_mod_shutdown`; the loader copies what it keeps.
 ///
 /// # Examples
 ///
