@@ -272,6 +272,10 @@ Each entry names the pull request that made the change.
   bad key is unknown or a table. A file that is not TOML names the line and
   column where it stops reading, and the log says the defaults apply
   instead of the rest of the file (#856).
+- A `mods.toml` that does not read, such as one saved in another encoding
+  or held open by another program, is never written over with every mod
+  on. The loader writes `mods.toml`, `enshwick.lock`, a mod's default
+  settings and the recipe template atomically (#863).
 - `Load::world_store` refuses the names `settings` and `save`, whose files
   the loader keeps in the same world folder, so a store no longer writes
   over the world's settings (#680).
