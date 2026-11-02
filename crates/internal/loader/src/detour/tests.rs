@@ -149,16 +149,22 @@ fn a_function_shorter_than_the_jump_is_refused() {
 /// Writes `code` like [`function`] and registers a function entry for it
 /// with an empty unwind info, as a leaf without a frame has.
 fn with_entry(code: &[u8]) -> usize {
+    with_unwind(code, [1, 0, 0, 0, 0, 0, 0, 0])
+}
+
+/// Writes `code` like [`function`] and registers a function entry for it
+/// with `info`, an unwind info of at most two code slots.
+fn with_unwind(code: &[u8], info: [u8; 8]) -> usize {
     /// Where the unwind info goes in the page, the one-entry table after it.
     const UNWIND: usize = 0x800; // bound, not a game offset: the test's own page
-    const TABLE: usize = UNWIND + 4;
+    const TABLE: usize = UNWIND + 8;
     let page = function(code);
     let len = u32::try_from(code.len()).unwrap();
     let rva = u32::try_from(UNWIND).unwrap();
+    let word = |at: usize| u32::from_le_bytes(info[at..at + 4].try_into().unwrap());
     // SAFETY: the 4096 writable bytes `function` allocated, of which `code`
-    // took fewer than `UNWIND`. The unwind info is version 1 with no flags,
-    // prologue or codes; the entry spans the code.
-    unsafe { ((page + UNWIND) as *mut [u32; 4]).write([1, 0, len, rva]) };
+    // took fewer than `UNWIND`; the entry spans the code.
+    unsafe { ((page + UNWIND) as *mut [u32; 5]).write([word(0), word(4), 0, len, rva]) };
     // SAFETY: one entry naming the code and unwind info in the page, which
     // is never freed.
     let added = unsafe {
@@ -218,6 +224,149 @@ fn a_mid_function_hook_takes_a_loop_head_but_not_the_bytes_after_it() {
     assert_eq!(at(looped + 2), Err(PrepareError::JumpedInto(looped + 7)));
     // The back edge is among the moved bytes and lands on the jump's start.
     assert_eq!(at(looped + 3), Ok((looped + 3, 6)));
+}
+
+/// `sub rsp, 0x28; call rdx; add rsp, 0x28; ret`, with unwind info for its
+/// four-byte prologue that allocates 0x28 bytes: the jump moves the call.
+fn framed() -> usize {
+    with_unwind(
+        &[
+            0x48, 0x83, 0xec, 0x28, 0xff, 0xd2, 0x48, 0x83, 0xc4, 0x28, 0xc3, 0xcc,
+        ],
+        [1, 4, 1, 0, 4, 0x42, 0, 0],
+    )
+}
+
+/// Writes the crash walk's return addresses through the pointer the
+/// trampoline forwards in `rcx`, so the test needs no shared state.
+extern "system" fn walk(out: *mut Vec<usize>) -> u32 {
+    // SAFETY: the test passes a pointer to its own live `Vec` as the first
+    // argument, which the trampoline's moved code leaves in `rcx`.
+    unsafe { *out = crate::crash::walk_here() };
+    0
+}
+
+/// Calls the trampoline, so the walk's caller frame is a return address
+/// inside this one function, which the test pins exactly.
+#[inline(never)]
+extern "system" fn drive(original: usize, walked: *mut Vec<usize>) {
+    // SAFETY: the trampoline takes a pointer in rcx and a function in rdx,
+    // calls the function with rcx unchanged, then runs the moved `sub rsp`.
+    let call = unsafe {
+        core::mem::transmute::<usize, extern "system" fn(*mut Vec<usize>, usize) -> u32>(original)
+    };
+    let walk_at = (walk as extern "system" fn(*mut Vec<usize>) -> u32 as *const ()).addr();
+    call(walked, walk_at);
+}
+
+/// The start and end of the function around `address`, by its function table.
+fn bounds(address: usize) -> Option<(usize, usize)> {
+    let mut image = 0;
+    // SAFETY: any address, a writable `u64`, no history table.
+    let entry =
+        unsafe { RtlLookupFunctionEntry(address as u64, &raw mut image, core::ptr::null_mut()) };
+    // SAFETY: a non-null entry is a readable runtime function of the image at
+    // `image`, whose first two `u32` are the function's start and end.
+    let [begin, end]: [u32; 2] = unsafe { enshwick::raw::read_at(entry.cast(), 0) };
+    (!entry.is_null()).then(|| {
+        let image = usize::try_from(image).unwrap();
+        (image + begin as usize, image + end as usize)
+    })
+}
+
+#[test]
+fn a_stack_walk_from_below_a_trampoline_passes_it_to_the_caller() {
+    let original = hook(framed()).unwrap();
+    let mut walked = Vec::new();
+    drive(original, &raw mut walked);
+    let at = walked
+        .iter()
+        .position(|&frame| frame == original + 6)
+        .expect("the walk reaches the trampoline");
+    let caller = walked.get(at + 1).copied().expect("and passes it");
+    let (begin, end) =
+        bounds((drive as extern "system" fn(usize, *mut Vec<usize>) as *const ()).addr())
+            .expect("drive has a function entry");
+    assert!(
+        (begin..end).contains(&caller),
+        "caller {caller:#x} is the return address inside drive {begin:#x}..{end:#x}"
+    );
+}
+
+extern "system-unwind" fn panics() -> u32 {
+    panic!("below the trampoline");
+}
+
+#[test]
+fn a_panic_below_a_trampoline_unwinds_through_it_to_its_catch() {
+    let original = hook(framed()).unwrap();
+    // SAFETY: the trampoline takes a value in ecx and a function in rdx and
+    // unwinds as the function it moved, with the unwind data `prepare`
+    // registered.
+    let call = unsafe {
+        core::mem::transmute::<usize, extern "system-unwind" fn(u32, usize) -> u32>(original)
+    };
+    let below = (panics as extern "system-unwind" fn() -> u32 as *const ()).addr();
+    assert!(
+        std::panic::catch_unwind(|| {
+            scrub();
+            call(0, below)
+        })
+        .is_err()
+    );
+}
+
+/// Zeroes the stack below the caller, so that unwinding a frame there with
+/// wrong unwind data reads no stale return address.
+#[inline(never)]
+fn scrub() {
+    core::hint::black_box([0u8; 4096]);
+}
+
+#[test]
+fn a_moved_call_out_of_reach_returns_onto_the_jump_back_not_its_data() {
+    // A call about 2 GiB ahead or behind: one is past the reach of a
+    // trampoline near the target, whichever side it lands, so that one
+    // moves in its far form, `call [rip + x]` with the target as data.
+    let far = [0x7fff_fff0_i32, -0x7fff_fff0].into_iter().find_map(|rel| {
+        let mut code = vec![0xe8];
+        code.extend_from_slice(&rel.to_le_bytes());
+        code.extend_from_slice(&[0xc3, 0xcc, 0xcc, 0xcc]);
+        let target = with_entry(&code);
+        let trampoline = prepare(&[Request {
+            target,
+            detour: (plus_hundred as Unary as *const ()).addr(),
+            inside: false,
+        }])
+        .remove(0)
+        .unwrap()
+        .original;
+        // SAFETY: the trampoline's bytes are readable in its sealed block.
+        let bytes =
+            unsafe { core::slice::from_raw_parts(trampoline as *const u8, CODE - FAR_JUMP) };
+        let mut decoder = Decoder::with_ip(64, bytes, trampoline as u64, DecoderOptions::NONE);
+        let call = decoder.iter().find(|i| {
+            matches!(
+                i.flow_control(),
+                FlowControl::Call | FlowControl::IndirectCall
+            )
+        })?;
+        (call.flow_control() == FlowControl::IndirectCall).then(|| {
+            // The call returns here: it must be the jump back to target + 5,
+            // not the 8-byte target data iced lays after the whole block.
+            let returns = usize::try_from(call.next_ip()).unwrap();
+            let at = returns - trampoline;
+            let next =
+                Decoder::with_ip(64, &bytes[at..], returns as u64, DecoderOptions::NONE).decode();
+            (next, bytes[..at + 16].to_vec())
+        })
+    });
+    let (next, around) = far.expect("one of the calls moves in its far form");
+    assert_eq!(
+        next.flow_control(),
+        FlowControl::UnconditionalBranch,
+        "the call returns onto {around:x?}"
+    );
 }
 
 /// Sets `flags[1]`, then waits for `flags[0]` and returns; `r8` points at

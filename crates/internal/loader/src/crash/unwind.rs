@@ -46,7 +46,8 @@ pub(super) const UNWIND_INFO: usize = 4 + 256 * 2 + 12;
 /// version or code this does not know, or info cut short.
 pub(super) fn reach(info: &[u8]) -> Option<Reach> {
     let (&head, &count, &frame) = (info.first()?, info.get(2)?, info.get(3)?);
-    if !matches!(head & 7, 1 | 2) {
+    let version = head & 7;
+    if !matches!(version, 1 | 2) {
         return None;
     }
     let count = usize::from(count);
@@ -59,21 +60,23 @@ pub(super) fn reach(info: &[u8]) -> Option<Reach> {
     let (mut size, mut saves, mut i) = (0usize, 0usize, 0usize);
     while i < count {
         let byte = codes[i * 2 + 1];
+        let op = byte & 0xf;
         let op_info = usize::from(byte >> 4);
-        match byte & 0xf {
-            0 => (size, i) = (size + 8, i + 1),
-            1 if op_info == 0 => (size, i) = (size + slot(i + 1)? * 8, i + 2),
-            1 => (size, i) = (size + wide(i + 1)?, i + 3),
-            2 => (size, i) = (size + op_info * 8 + 8, i + 1),
-            3 => i += 1,
-            4 => (saves, i) = (saves.max(slot(i + 1)? * 8 + 8), i + 2),
-            5 => (saves, i) = (saves.max(wide(i + 1)? + 8), i + 3),
-            6 => i += 2,
-            8 => (saves, i) = (saves.max(slot(i + 1)? * 16 + 16), i + 2),
-            9 => (saves, i) = (saves.max(wide(i + 1)? + 16), i + 3),
-            10 => (size, i) = (size + if op_info == 0 { 40 } else { 48 }, i + 1),
-            _ => return None,
+        let taken = crate::unwind_info::slots(op, byte >> 4)?;
+        match op {
+            0 => size += 8,
+            1 if op_info == 0 => size += slot(i + 1)? * 8,
+            1 => size += wide(i + 1)?,
+            2 => size += op_info * 8 + 8,
+            4 => saves = saves.max(slot(i + 1)? * 8 + 8),
+            5 => saves = saves.max(wide(i + 1)? + 8),
+            8 => saves = saves.max(slot(i + 1)? * 16 + 16),
+            9 => saves = saves.max(wide(i + 1)? + 16),
+            10 => size += if op_info == 0 { 40 } else { 48 },
+            // SET_FPREG and the version 2 epilogue codes move no `RSP`.
+            _ => {}
         }
+        i += taken;
     }
     let chained = if (head >> 3) & 4 == 0 {
         None

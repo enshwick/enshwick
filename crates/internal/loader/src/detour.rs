@@ -26,12 +26,31 @@
 //! compiler split into entries of their own, and code without a function
 //! entry, such as generated code. A wrong site then fails only when that
 //! path runs.
+//!
+//! Each relay and trampoline carries unwind data copied from its target's
+//! function, so stack walks and exceptions pass a frame stopped there, such
+//! as one that called out of the moved instructions. The copy sets a
+//! prologue length of 255, past the whole entry, so the unwinder always
+//! treats a trampoline address as inside the prologue and never scans for an
+//! epilogue (x64 exception handling,
+//! `learn.microsoft.com/cpp/build/exception-handling-x64`); each code's
+//! offset is where its instruction has run in the trampoline, so a frame on
+//! the relay unwinds as the function's entry and one past the moved bytes as
+//! past that much of the prologue. The function's own exception handler is
+//! not copied: an exception raised below a moved call passes that function
+//! by, as if it had no handler. A function whose unwind data cannot be read
+//! is still hooked, without unwind data, as a leaf.
+
+// Long file: the inline-hook engine is one tightly-coupled unsafe algorithm
+// (prepare, batched write with threads suspended, thread relocation) over
+// shared private invariants; the thread-suspension and relocation machinery
+// is to split out with the frame-walk settle work that follows.
 
 use std::sync::Mutex;
 
 use enshwick::abi::Level;
 use iced_x86::{
-    BlockEncoder, BlockEncoderOptions, Decoder, DecoderOptions, FlowControl, Instruction,
+    BlockEncoder, BlockEncoderOptions, Code, Decoder, DecoderOptions, FlowControl, Instruction,
     InstructionBlock,
 };
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
@@ -59,7 +78,10 @@ const FAR_JUMP: usize = 14;
 /// Bytes read from a target to find the instructions to move.
 const READ: usize = 32;
 /// A relay and a trampoline: moved instructions grow at most to this.
-const ENTRY: usize = 128;
+const CODE: usize = 128;
+/// A relay and a trampoline, then their function-table entry and unwind
+/// info.
+const ENTRY: usize = 256;
 /// Windows reserves memory in 64 KiB steps.
 const GRANULARITY: usize = 0x1_0000; // bound, not a game offset: a fact of Windows
 const BLOCK: usize = GRANULARITY;
@@ -159,6 +181,9 @@ pub(crate) fn prepare(requests: &[Request]) -> Vec<Result<Pending, PrepareError>
                 .collect();
         }
     }
+    for &block in &fresh {
+        unwind::register(block);
+    }
     prepared
 }
 
@@ -207,17 +232,9 @@ fn hookable(address: usize, len: usize) -> bool {
     let Some(end) = address.checked_add(len) else {
         return false;
     };
-    let Some(first) = pages::query(address).filter(pages::Region::runs) else {
-        return false;
-    };
-    let mut reached = first.end;
-    while reached < end {
-        match pages::query(reached) {
-            Some(next) if next.reads() && next.end > reached => reached = next.end,
-            _ => return false,
-        }
-    }
-    true
+    pages::query(address)
+        .filter(pages::Region::runs)
+        .is_some_and(|first| reads_to(first.end, end))
 }
 
 fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, PrepareError> {
@@ -258,11 +275,21 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Prep
         stolen += instruction.len();
         instructions.push(instruction);
     }
-    if let Some(branch) = jumped_into(request.target, stolen) {
+    let function = function_around(request.target);
+    if let Some(branch) = jumped_into(request.target, stolen, function) {
         return Err(PrepareError::JumpedInto(branch));
     }
-    let entry = near(request.target, fresh)?;
+    let (base, entry) = near(request.target, fresh)?;
     let (relay, trampoline) = (entry, entry + FAR_JUMP);
+    let back = request.target + stolen;
+    let moved_count = instructions.len();
+    // The jump back goes through the encoder, as the block's last
+    // instruction, so the encoder lays any far-call target data after it,
+    // where execution never falls and no return address lands.
+    instructions.push(
+        Instruction::with_branch(Code::Jmp_rel32_64, back as u64)
+            .map_err(|e| PrepareError::CannotMove(e.to_string()))?,
+    );
     let block = InstructionBlock::new(&instructions, trampoline as u64);
     let encoded = BlockEncoder::encode(
         64,
@@ -270,26 +297,38 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Prep
         BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS,
     )
     .map_err(|e| PrepareError::CannotMove(e.to_string()))?;
-    let back = request.target + stolen;
-    if FAR_JUMP + encoded.code_buffer.len() + FAR_JUMP > ENTRY {
+    let length = FAR_JUMP + encoded.code_buffer.len();
+    if length > CODE {
         return Err(PrepareError::GrowsTooLong);
     }
-    let mut bytes = Vec::with_capacity(ENTRY);
-    bytes.extend_from_slice(&far_jump(request.detour));
-    bytes.extend_from_slice(&encoded.code_buffer);
-    bytes.extend_from_slice(&far_jump(back));
+    // The jump back is the first instruction after the moved bytes and is
+    // never rewritten, so its offset bounds the moved region.
+    let moved_end = usize::try_from(encoded.new_instruction_offsets[moved_count])
+        .ok()
+        .filter(|&end| end <= encoded.code_buffer.len())
+        .ok_or_else(|| PrepareError::CannotMove("the jump back did not encode".into()))?;
+    // The encoder reports `u32::MAX` for an instruction it rewrote into a far
+    // form, so the moved instructions' trampoline offsets come from decoding
+    // the moved region; a rewrite that split one into several (a branch out of
+    // reach) leaves a different count, and the target is refused.
+    let moved = moved_offsets(
+        &encoded.code_buffer[..moved_end],
+        &instructions[..moved_count],
+    )?;
+    let mut bytes = [0; ENTRY];
+    let (code, unwind) = bytes.split_at_mut(CODE);
+    code[..FAR_JUMP].copy_from_slice(&far_jump(request.detour));
+    code[FAR_JUMP..length].copy_from_slice(&encoded.code_buffer);
+    unwind::fill(
+        entry - base,
+        length,
+        request.target,
+        stolen,
+        function,
+        unwind,
+    );
     // SAFETY: `entry` has `ENTRY` writable bytes in a block not yet sealed.
-    unsafe { (entry as *mut u8).copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
-    let mut offset = 0;
-    let moved = instructions
-        .iter()
-        .zip(&encoded.new_instruction_offsets)
-        .map(|(instruction, &new)| {
-            let pair = (offset, new as usize);
-            offset += instruction.len();
-            pair
-        })
-        .collect();
+    unsafe { (entry as *mut u8).copy_from_nonoverlapping(bytes.as_ptr(), ENTRY) };
     let distance = i32::try_from(relay.wrapping_sub(request.target + PATCH).cast_signed())
         .map_err(|_| PrepareError::NoRelayInReach)?;
     let mut patch = [0xe9, 0, 0, 0, 0];
@@ -304,13 +343,43 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Prep
     })
 }
 
-/// The first direct branch or call of the function around `target` that
-/// lands in `target + 1..target + stolen`, by the function's bounds in the
-/// unwind data of its image. A branch among the moved instructions moves
-/// with them, its target in the trampoline. Code without a function entry,
-/// a leaf such as generated code, is not checked.
-fn jumped_into(target: usize, stolen: usize) -> Option<usize> {
-    let (begin, end) = function_around(target)?;
+/// Each moved instruction's start offset in the target and in the trampoline,
+/// by decoding the `region` the moved instructions occupy in the trampoline.
+/// Refuses when the encoder split one into several (a branch rewritten out of
+/// reach), which leaves more instructions than were moved.
+fn moved_offsets(
+    region: &[u8],
+    moved: &[Instruction],
+) -> Result<Vec<(usize, usize)>, PrepareError> {
+    let mut decoder = Decoder::with_ip(64, region, 0, DecoderOptions::NONE);
+    let starts: Vec<usize> = decoder
+        .iter()
+        .map(|instruction| usize::try_from(instruction.ip()).unwrap_or(usize::MAX))
+        .collect();
+    if starts.len() != moved.len() {
+        return Err(PrepareError::CannotMove(
+            "a moved branch was rewritten into several instructions".into(),
+        ));
+    }
+    let mut old = 0;
+    Ok(moved
+        .iter()
+        .zip(starts)
+        .map(|(instruction, new)| {
+            let pair = (old, new);
+            old += instruction.len();
+            pair
+        })
+        .collect())
+}
+
+/// The first direct branch or call of `function` that lands in
+/// `target + 1..target + stolen`, where it would land in the jump itself. A
+/// branch among the moved instructions moves with them, its target in the
+/// trampoline. Code without a function entry, a leaf such as generated code,
+/// is not checked.
+fn jumped_into(target: usize, stolen: usize, function: Option<Function>) -> Option<usize> {
+    let Function { begin, end, .. } = function?;
     let len = end.checked_sub(begin)?;
     if !hookable(begin, len) {
         return None;
@@ -329,9 +398,9 @@ fn jumped_into(target: usize, stolen: usize) -> Option<usize> {
         .and_then(|instruction| usize::try_from(instruction.ip()).ok())
 }
 
-/// The start and end of the function whose entry in its image's function
-/// table holds `address`; `None` without one.
-fn function_around(address: usize) -> Option<(usize, usize)> {
+/// The function whose entry in its image's function table holds `address`;
+/// `None` without one.
+fn function_around(address: usize) -> Option<Function> {
     let mut image = 0;
     // SAFETY: `RtlLookupFunctionEntry` takes any address, `image` is a
     // writable `u64` and the history table may be null.
@@ -342,11 +411,43 @@ fn function_around(address: usize) -> Option<(usize, usize)> {
     }
     let image = usize::try_from(image).ok()?;
     // SAFETY: a non-null entry is a readable `IMAGE_RUNTIME_FUNCTION_ENTRY`
-    // of a loaded image or a registered table, kept while the image is, and
-    // its first two `u32` are the function's start and end, offsets from
-    // `image`. Hooks arm while the game's and the mods' images stay loaded.
-    let [begin, end]: [u32; 2] = unsafe { enshwick::raw::read_at(entry.cast(), 0) };
-    Some((image + begin as usize, image + end as usize))
+    // of a loaded image or a registered table, kept while the image is: the
+    // function's start, end and unwind info, offsets from `image`. Hooks arm
+    // while the game's and the mods' images stay loaded.
+    let [begin, end, unwind]: [u32; 3] = unsafe { enshwick::raw::read_at(entry.cast(), 0) };
+    Some(Function {
+        image,
+        begin: image + begin as usize,
+        end: image + end as usize,
+        unwind,
+    })
+}
+
+/// A function as its image's function table records it.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Function {
+    pub(super) image: usize,
+    pub(super) begin: usize,
+    pub(super) end: usize,
+    /// Its unwind info, an offset from `image`.
+    pub(super) unwind: u32,
+}
+
+/// Whether the `len` bytes from `address` all lie in readable pages.
+fn reads(address: usize, len: usize) -> bool {
+    address
+        .checked_add(len)
+        .is_some_and(|end| reads_to(address, end))
+}
+
+fn reads_to(mut reached: usize, end: usize) -> bool {
+    while reached < end {
+        match pages::query(reached) {
+            Some(next) if next.reads() && next.end > reached => reached = next.end,
+            _ => return false,
+        }
+    }
+    true
 }
 
 /// `jmp [rip + 0]` to `destination`.
@@ -356,9 +457,9 @@ fn far_jump(destination: usize) -> [u8; FAR_JUMP] {
     bytes
 }
 
-/// `ENTRY` bytes within `rel32` reach of `target`, from a block allocated in
-/// this batch.
-fn near(target: usize, fresh: &mut Vec<usize>) -> Result<usize, PrepareError> {
+/// `ENTRY` bytes within `rel32` reach of `target`, and the base of the block
+/// they sit in, both from a block allocated in this batch.
+fn near(target: usize, fresh: &mut Vec<usize>) -> Result<(usize, usize), PrepareError> {
     let mut blocks = BLOCKS.relock();
     let reaches = |base: usize| base.abs_diff(target) < REACH;
     if let Some((base, used)) = blocks
@@ -367,12 +468,12 @@ fn near(target: usize, fresh: &mut Vec<usize>) -> Result<usize, PrepareError> {
     {
         let entry = *base + *used;
         *used += ENTRY;
-        return Ok(entry);
+        return Ok((*base, entry));
     }
     let base = allocate_near(target).ok_or(PrepareError::NoMemoryInReach)?;
     fresh.push(base);
     blocks.push((base, ENTRY));
-    Ok(base)
+    Ok((base, base))
 }
 
 /// Reserves and commits a block within reach of `target`, nearest first.
@@ -923,3 +1024,4 @@ impl Threads {
 
 #[cfg(test)]
 mod tests;
+mod unwind;
