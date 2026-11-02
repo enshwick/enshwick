@@ -130,6 +130,6 @@ which the loader never started, each with `replaced_by` and its `file`.
 
 ## Removed mods and holds
 
-Removing a mod that set a hold needs the player to delete its
-`mod-data/<id>/hold.txt` as well, at their own risk; see
-[Holds](state.md#holds).
+Removing a mod's folder removes the hold in it too; a hold the mod set in a
+world's `<stem>-mod-data/<id>/hold.txt` stays until the player deletes it, at
+their own risk; see [Holds](state.md#holds).

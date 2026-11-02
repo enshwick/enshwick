@@ -66,7 +66,7 @@ changes the settings the same way and keeps the fields whose value it
 changed with the running world: the loader applies them again each time that
 world loads, by the end of its first step, over what the configuration says.
 The loader keeps them by field name in
-`mod-data/enshwick/worlds/<key>/game-settings.toml`. `forget_kept()` forgets
+`<stem>-mod-data/enshwick/game-settings.toml`. `forget_kept()` forgets
 every kept field of the world, any mod's, and puts back the values the world
 loaded with.
 

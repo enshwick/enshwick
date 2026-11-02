@@ -159,7 +159,7 @@ answer from what the server keeps, until that next check.
 ## Saved and sent
 
 The server keeps item and entity data in one file,
-`mod-data/enshwick/worlds/<key>/attachments.bin`, written when the world
+`<stem>-mod-data/enshwick/attachments.bin`, written when the world
 saves and when the server stops, never in the game's save: removing the mods
 leaves the world vanilla. A client that joins gets every value it is sent,
 and each change after, so `get` on a client answers from what its server

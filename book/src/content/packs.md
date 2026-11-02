@@ -329,7 +329,7 @@ pack holds that world, and the loader keeps the raised size;
 [Stack sizes and saved worlds](limits.md#stack-sizes-and-saved-worlds) tells
 both and how they meet. To remove such a pack safely, split every stack larger
 than the game's size first, then delete
-`mod-data/<id>/worlds/<key>/hold.txt`, the file the log names.
+`<stem>-mod-data/<id>/hold.txt` beside the world's save, the file the log names.
 
 ## `workshops.toml`
 

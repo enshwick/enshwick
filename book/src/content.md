@@ -167,7 +167,7 @@ Removing a content mod leaves the world playable:
   station of a removed mod loads as the vanilla station it was cloned from.
 
 For both the loader records every template and item a mod clones, with its
-vanilla source, in `mod-data/enshwick/clones.toml`. Keep the file: the record
+vanilla source, in `mods/enshwick/clones.toml`. Keep the file: the record
 outlives the mods. The loader logs how many cloned templates read as their
 vanilla source and how many items stand in. An item a mod
 [renamed](#renamed-content) gets no stand-in, since the game reads it under

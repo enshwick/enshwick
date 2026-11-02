@@ -75,7 +75,7 @@ their server need the same versions of these mods. A player who lacks one, or
 has another version, sees which and does not join. Such a mod that the player
 has and the server does not run is off for that session. Other mods are each
 side's own. At each world load, a server writes the set of mods that ran, with the SHA-256
-of each DLL, to `mod-data/enshwick/worlds/<world>/mods.lock`.
+of each DLL, to `<save>-mod-data/enshwick/mods.lock` beside the world's save.
 
 ### Settings
 
@@ -83,15 +83,15 @@ Each mod writes its settings to `mod-configs/<id>.toml` on first start. These
 are the settings a new world starts with, plus a few that belong to each player
 or to the game as a whole.
 
-A world takes a copy of the file when it first loads and keeps it in
-`mod-data/<id>/worlds/<world>/settings.toml`. From then on the world uses its
+A world takes a copy of the file when it first loads and keeps it beside its
+save, in `<save>-mod-settings/<id>/settings.toml`. From then on the world uses its
 copy. An edit of `mod-configs/<id>.toml` reaches only new worlds, each player's
 own settings and the settings read at start.
 
 Change settings in the game with a mod's Settings button on the Mods screen:
 in a world, that world's; in the main menu, the settings new worlds start
 with. On a dedicated server, an administrator changes the server's from the
-same page. The server's command file, `mod-data/enshwick/commands.txt`, also takes
+same page. The server's command file, `mods/enshwick/commands.txt`, also takes
 `enshwick config <mod> <key> <value>`. A change applies at once, unless the
 mod's page says it waits for the world or the game to start again.
 

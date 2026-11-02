@@ -96,11 +96,11 @@ the pack as usual. When several packs raise one item, each of them holds. A
 pack that only lowers stack sizes sets no hold.
 
 ```text
-error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ..., in world mygame-1a2b3c4d) and the mod does not run: the game stops before the world loads
+error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ..., in world world0) and the mod does not run: the game stops before the world loads
 ```
 
 **The kept sizes.** The loader keeps every stack size above the game's that
-was in force when a world was saved, in `mod-data/enshwick/kept-stacks.toml`,
+was in force when a world was saved, in `mods/enshwick/kept-stacks.toml`,
 and serves at least that size from the start, for every mod and pack and
 without them:
 
