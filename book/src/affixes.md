@@ -13,8 +13,8 @@ entity that wears it gets the modifiers.
 
 Unstable: rolling affixes onto items needs the `unstable` feature and may
 change in any release ([Stability](stability.md)). What an item rolled is
-kept as [item data](item-and-entity-data.md), so after a restart a roll on an item no
-load or join finds in its slot again stays aside. Defining
+kept as [item data](item-and-entity-data.md), so after a restart a roll on an item
+outside a placed container or a player's inventory stays aside. Defining
 affixes and reading what an item rolled are stable.
 
 ```rust

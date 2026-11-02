@@ -218,6 +218,8 @@ pub(crate) struct Outcome {
     pub(crate) replaced: usize,
     /// Of `left`: records aside before this pass, session ids among them.
     pub(crate) earlier: usize,
+    /// Of `left`: carried records that still wait, not aside.
+    pub(crate) waiting: usize,
 }
 
 /// Finds each pending record's entity, once per load, when the world holds
@@ -250,28 +252,48 @@ pub(crate) fn resolve(
     )
 }
 
-/// Finds the items character `character` carried, once it has joined and
-/// its inventories are filled. `held(link, slot)` is the item entity in that
-/// slot of the character's inventories and the item it holds. A record
-/// attaches only where the same item lies in the same slot; every other
-/// record of the character is aside from now on.
+/// Finds the items character `character` carried, after it joined.
+/// `held(link, slot)` is the item entity in that slot of the character's
+/// inventories and the item it holds. A record attaches only where the same
+/// item lies in the same slot. One whose slot holds another item or none
+/// keeps waiting: the inventories may still fill, and a guess never sets a
+/// carried value aside. One whose item already has a value of the kind is
+/// aside, replaced. Every other record passes through untouched.
 pub(crate) fn resolve_carried(
     pending: Vec<Pending>,
     character: [u8; 16],
     held: impl Fn(u8, u8) -> Option<(u32, u32)>,
     taken: impl Fn(u32, u32) -> bool,
 ) -> Outcome {
-    settle(
-        pending,
-        |record| matches!(record.anchor, Anchor::Carried { character: c, .. } if c == character),
-        |record| match record.anchor {
-            Anchor::Carried { link, slot, .. } => held(link, slot)
-                .filter(|&(_, item)| item == record.check)
-                .map(|(pide, _)| Found::One(pide)),
-            _ => None,
-        },
-        taken,
-    )
+    let mut outcome = Outcome::default();
+    for mut record in pending {
+        let place = match record.anchor {
+            Anchor::Carried {
+                character: c,
+                link,
+                slot,
+            } if c == character && !record.aside => (link, slot),
+            _ => {
+                outcome.left.push(record);
+                continue;
+            }
+        };
+        match held(place.0, place.1).filter(|&(_, item)| item == record.check) {
+            Some((pide, _)) if !taken(record.kind, pide) => {
+                outcome.found.push((record.kind, pide, record));
+            }
+            Some(_) => {
+                outcome.replaced += 1;
+                record.aside = true;
+                outcome.left.push(record);
+            }
+            None => {
+                outcome.waiting += 1;
+                outcome.left.push(record);
+            }
+        }
+    }
+    outcome
 }
 
 /// One pass over `pending`: the records whose `turn` it is attach where
@@ -638,21 +660,23 @@ mod tests {
             .map(|(_, e, r)| (*e, r.value[0]))
             .collect();
         assert_eq!(found, [(2001, 1)]);
-        assert_eq!(outcome.missing, 2, "the changed slot and the empty one");
-        let waiting: Vec<u8> = outcome
+        assert_eq!(outcome.waiting, 2, "the changed slot and the empty one");
+        let mut waiting: Vec<u8> = outcome
             .left
             .iter()
             .filter(|r| !r.aside)
             .map(|r| r.value[0])
             .collect();
-        assert_eq!(waiting, [4], "only the other character's record waits");
+        waiting.sort_unstable();
+        assert_eq!(waiting, [2, 3, 4], "nothing carried goes aside on a guess");
     }
 
     #[test]
-    fn two_records_on_one_carried_slot_both_go_aside() {
-        let records = vec![carried(ANN, 0, 1, 77, 1), carried(ANN, 0, 1, 77, 2)];
-        let outcome = resolve_carried(records, ANN, |_, _| Some((2001, 77)), |_, _| false);
+    fn a_carried_record_whose_item_has_a_newer_value_goes_aside() {
+        let records = vec![carried(ANN, 0, 1, 77, 1)];
+        let outcome = resolve_carried(records, ANN, |_, _| Some((2001, 77)), |_, _| true);
         assert!(outcome.found.is_empty());
-        assert_eq!(outcome.ambiguous, 2);
+        assert_eq!(outcome.replaced, 1);
+        assert!(outcome.left[0].aside);
     }
 }

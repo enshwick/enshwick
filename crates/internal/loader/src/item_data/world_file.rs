@@ -197,6 +197,7 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
     let placed: Option<FxHashSet<u32>> = game::transform_type(loader)
         .and_then(|ty| crate::entities::with_component(loader, ty).ok())
         .map(|places| places.iter().map(|p| p.entity.0).collect());
+    let characters = crate::world::characters(loader);
     let before = server.values.len();
     let mut anchorless = 0;
     let mut gone = Vec::new();
@@ -204,7 +205,7 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
         // `Some(None)`: the world no longer holds the entity.
         let now = match scope(kind, record.anchor) {
             Some(Scope::Item) => {
-                Some(game::held(loader, entity).map(|held| (held.item, held.anchor)))
+                Some(game::held(loader, entity, &characters).map(|held| (held.item, held.anchor)))
             }
             Some(Scope::Entity) => match &placed {
                 Some(placed) if !placed.contains(&entity) => Some(None),
@@ -229,9 +230,8 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
             }
             Some(Some((held, _))) if held != record.item => false,
             Some(Some((_, anchor))) => {
-                // A live entity in no place a load finds, such as an item in
-                // a player's inventory, loses its anchor: the old one names a
-                // slot another item may fill.
+                // A live entity in no place a load or a join finds loses its
+                // anchor: the old one names a slot another item may fill.
                 if anchor != record.anchor {
                     record.anchor = anchor;
                     server.changed = true;
@@ -281,7 +281,7 @@ fn save(loader: &Loader, after_game_save: bool) {
     if anchorless > 0 {
         crate::log!(
             WARN,
-            "mod data: {anchorless} item values sit where a load cannot find them, such as a player's inventory; after a restart they stay aside unless the item is in a placed container when the world saves"
+            "mod data: {anchorless} item values sit where neither a load nor a join can find them; after a restart they stay aside unless the item is in a placed container or a player's inventory when the world saves"
         );
     }
     let path = file(loader, &key);

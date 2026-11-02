@@ -35,7 +35,9 @@ struct Layout {
     owner_entity: usize,
     setup: u32,
     links: usize,
-    initialized: usize,
+    /// Where an `InventorySetup` says its inventories are filled; `None`
+    /// turns off only the wait for a joining character's inventories.
+    initialized: Option<usize>,
     inventory: u32,
     stack: usize,
     stack_item: usize,
@@ -75,7 +77,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 owner_entity: field(names::type_name(names::ids::OWNER), "ownerEntityId")?,
                 setup: ty(names::ids::INVENTORY_SETUP)?,
                 links: at(names::ids::INVENTORY_SETUP_LINKS)?,
-                initialized: at(names::ids::INVENTORY_SETUP_INITIALIZED)?,
+                initialized: at(names::ids::INVENTORY_SETUP_INITIALIZED),
                 inventory: ty(names::ids::INVENTORY)?,
                 stack: usize::try_from(stack.size()).ok()?,
                 stack_item: field(names::type_name(names::ids::ITEM_STACK), "id")?,
@@ -90,11 +92,15 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 && layout.slot_entity.max(layout.item) + 4 <= size(ITEM_STATE)?
                 && layout.slot_index < size(ITEM_STATE)?
                 && layout.owner_entity + 4 <= size(names::type_name(names::ids::OWNER))?
-                && (layout.links + usize::from(LINKS) * 4).max(layout.initialized + 1)
+                && layout.links + usize::from(LINKS) * 4
                     <= size(names::type_name(names::ids::INVENTORY_SETUP))?
                 && usize::from(SLOTS) * layout.stack
                     <= size(names::type_name(names::ids::INVENTORY))?;
-            inside.then_some(layout)
+            let setup_size = size(names::type_name(names::ids::INVENTORY_SETUP))?;
+            inside.then_some(Layout {
+                initialized: layout.initialized.filter(|&at| at < setup_size),
+                ..layout
+            })
         })
         .as_ref()
 }
@@ -154,9 +160,11 @@ fn link_of(loader: &Loader, layout: &Layout, root: u32, inventory: u32) -> Optio
 
 /// Where the item entity `pide` sits, as an anchor, the item it holds and
 /// the root whose inventory holds it; `None` for an entity the world does
-/// not hold. The anchor is `None` for an item in neither a placed thing's
-/// inventory nor a character whose GUID reads.
-pub(crate) fn held(loader: &Loader, pide: u32) -> Option<Held> {
+/// not hold. An item a character in `characters` carries, by entity and
+/// GUID as [`crate::world::characters`] reads them, is anchored to it. The
+/// anchor is `None` for an item in neither a placed thing's inventory nor
+/// such a character's.
+pub(crate) fn held(loader: &Loader, pide: u32, characters: &[(u32, [u8; 16])]) -> Option<Held> {
     let layout = layout(loader)?;
     let state = component(loader, pide, layout.item_state)?;
     // SAFETY: `state` is the entity's live `ItemState`, whose reflected slot
@@ -178,15 +186,15 @@ pub(crate) fn held(loader: &Loader, pide: u32) -> Option<Held> {
         None => inventory,
     };
     let anchor = link_of(loader, layout, root, inventory).and_then(|link| {
-        if crate::world::player_entities(loader).ok()?.contains(&root) {
-            crate::world::character_of(loader, root).map(|character| Anchor::Carried {
+        characters
+            .iter()
+            .find(|&&(entity, _)| entity == root)
+            .map(|&(_, character)| Anchor::Carried {
                 character,
                 link,
                 slot,
             })
-        } else {
-            placed(loader, root).map(|root| Anchor::Held { root, link, slot })
-        }
+            .or_else(|| placed(loader, root).map(|root| Anchor::Held { root, link, slot }))
     });
     Some(Held { anchor, item, root })
 }
@@ -200,16 +208,21 @@ pub(crate) struct Held {
 }
 
 /// Whether the inventories of `root`, a joining character, are filled: its
-/// `InventorySetup` says it is initialized, which its own save carries.
+/// `InventorySetup` says it is initialized (server 399). Always `true` on a
+/// build without that field, where a join takes back what it finds as the
+/// steps go.
 pub(crate) fn ready(loader: &Loader, root: u32) -> bool {
     let Some(layout) = layout(loader) else {
         return false;
     };
+    let Some(initialized) = layout.initialized else {
+        return true;
+    };
     component(loader, root, layout.setup).is_some_and(|setup| {
         // SAFETY: `setup` is the root's live `InventorySetup`, which holds its
-        // initialized byte at `initialized` (in bounds, checked by
+        // `isInitialized` byte at `initialized` (inside the type, checked by
         // `layout`); read on the game thread (checked by `world::component`).
-        unsafe { read_at::<u8>(setup, layout.initialized) != 0 }
+        unsafe { crate::transactions::props::setup_initialized(setup, initialized) }
     })
 }
 
