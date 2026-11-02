@@ -3,6 +3,13 @@
 use crate::Host;
 use crate::abi::{ManifestFlags, ModInfo, Side, Str};
 
+/// The loader's id as a literal, for the paths built from it.
+macro_rules! loader_id {
+    () => {
+        "enshwick"
+    };
+}
+
 /// The id the loader lists itself under in [`all`]; no mod may take it.
 ///
 /// # Examples
@@ -14,7 +21,34 @@ use crate::abi::{ManifestFlags, ModInfo, Side, Str};
 /// let others = mods.iter().filter(|m| m.id != LOADER_ID);
 /// assert!(others.count() <= mods.len());
 /// ```
-pub const LOADER_ID: &str = "enshwick";
+pub const LOADER_ID: &str = loader_id!();
+
+/// The file, relative to the game's folder, that turns developer tools on.
+///
+/// The loader reads it once at start. Developer tools are mods with
+/// `developer: true`, dev reload and the interface demo; without the file
+/// the loader turns a developer mod off before its `init`.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(enshwick::mods::DEVELOPER_TOOLS, "mod-data/enshwick/developer-tools");
+/// ```
+pub const DEVELOPER_TOOLS: &str = concat!("mod-data/", loader_id!(), "/developer-tools");
+
+/// Why the loader turns a mod with `developer: true` off before its `init`
+/// when [`DEVELOPER_TOOLS`] is missing, as its log and the Mods screen say.
+///
+/// # Examples
+///
+/// ```
+/// assert!(enshwick::mods::DEVELOPER_TOOL_OFF.contains(enshwick::mods::DEVELOPER_TOOLS));
+/// ```
+pub const DEVELOPER_TOOL_OFF: &str = concat!(
+    "a developer tool: it runs only while the file mod-data/",
+    loader_id!(),
+    "/developer-tools exists"
+);
 
 /// The stub that starts the loader, in the game's folder.
 ///

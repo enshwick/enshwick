@@ -452,11 +452,34 @@ enum ReloadModError {
     /// The new copy's init failed.
     #[error("its init returned {status}")]
     Init { status: u32 },
+    /// The new copy is a developer tool and developer tools are off.
+    #[error("{0}")]
+    Developer(&'static str),
+}
+
+/// What a reload's manifest must keep, its version aside.
+type Shape = (u8, u32, usize, usize);
+
+/// Why the new copy of a mod is not initialised, by the running copy's
+/// `(id, shape)` and the new one's `(id, shape, flags)`, where developer
+/// tools are `on` or not; `None` when it may be.
+fn copy_refused(
+    on: bool,
+    (id, was): (&str, Shape),
+    (new_id, now, flags): (&str, Shape, ManifestFlags),
+) -> Option<ReloadModError> {
+    if new_id != id {
+        Some(ReloadModError::OtherMod)
+    } else if now != was {
+        Some(ReloadModError::Shape)
+    } else {
+        crate::developer_tools::refused(on, flags).map(ReloadModError::Developer)
+    }
 }
 
 /// What in `manifest` must stay the same across a reload, its version
 /// aside.
-fn shape(manifest: &Manifest) -> (u8, u32, usize, usize) {
+fn shape(manifest: &Manifest) -> Shape {
     (
         manifest.side.0,
         manifest.flags.0,
@@ -491,13 +514,11 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, ReloadM
     // strings point into the new DLL's static data; the DLL stays loaded
     // until the `FreeLibrary` below, after the last use of `new_id`.
     let new_id = unsafe { new.manifest.id.as_str() }.unwrap_or_default();
-    let refused = if new_id != record.id {
-        Some(ReloadModError::OtherMod)
-    } else if shape(new.manifest) != shape(record.manifest) {
-        Some(ReloadModError::Shape)
-    } else {
-        None
-    };
+    let refused = copy_refused(
+        loader.developer_tools,
+        (&record.id, shape(record.manifest)),
+        (new_id, shape(new.manifest), new.manifest.flags),
+    );
     if let Some(why) = refused {
         // SAFETY: `load_copy` loaded `new.module` and none of its code ran but
         // its query exports, which start nothing; nothing reads `new` after
@@ -686,6 +707,25 @@ mod tests {
         configure(true);
         note(0);
         assert!(calls_of(0).is_empty());
+    }
+
+    #[test]
+    fn a_reload_never_initialises_a_developer_copy_without_developer_tools() {
+        let shape = (2, ManifestFlags::DEVELOPER.0, 0, 0);
+        let tool = ("you.inspector", shape, ManifestFlags::DEVELOPER);
+        assert!(matches!(
+            copy_refused(false, ("you.inspector", shape), tool),
+            Some(ReloadModError::Developer(why)) if why == enshwick::mods::DEVELOPER_TOOL_OFF
+        ));
+        assert!(copy_refused(true, ("you.inspector", shape), tool).is_none());
+        assert!(matches!(
+            copy_refused(true, ("you.other", shape), tool),
+            Some(ReloadModError::OtherMod)
+        ));
+        assert!(matches!(
+            copy_refused(true, ("you.inspector", (2, 0, 0, 0)), tool),
+            Some(ReloadModError::Shape)
+        ));
     }
 
     #[test]

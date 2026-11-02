@@ -1,5 +1,5 @@
-//! A dedicated server runs a mod with `developer: true` only while developer
-//! tools are on, and the fake host refuses it the same way.
+//! A mod with `developer: true` runs only while developer tools are on, and
+//! the fake host refuses it the same way the loader does.
 
 #[cfg(test)]
 mod tests {
@@ -36,31 +36,29 @@ mod tests {
     }
 
     #[test]
-    fn a_server_without_developer_tools_refuses_a_developer_mod_before_init() {
-        let (status, loader) = start(FakeHost::new().developer_tools(false));
-        assert_eq!(status, Status::REFUSED);
-        assert!(!ran(&loader));
-        assert!(
-            loader
-                .logs()
-                .iter()
-                .any(|(_, line)| line.contains("mod-data/enshwick/developer-tools")),
-            "{:?}",
-            loader.logs()
-        );
+    fn without_developer_tools_a_developer_mod_is_off_before_init() {
+        for side in [Side::SERVER, Side::CLIENT] {
+            let (status, loader) = start(FakeHost::new().side(side));
+            assert_eq!(status, Status::REFUSED);
+            assert!(!ran(&loader));
+            assert_eq!(loader.faults(), [enshwick::mods::DEVELOPER_TOOL_OFF]);
+            assert!(
+                loader
+                    .logs()
+                    .iter()
+                    .any(|(level, line)| *level == enshwick::abi::Level::ERROR
+                        && line == &format!("off: {}", enshwick::mods::DEVELOPER_TOOL_OFF)),
+                "{:?}",
+                loader.logs()
+            );
+        }
     }
 
     #[test]
     fn a_developer_mod_runs_with_developer_tools_on() {
-        let (status, loader) = start(FakeHost::new());
+        let (status, loader) = start(FakeHost::new().developer_tools(true));
         assert_eq!(status, Status::OK);
         assert!(ran(&loader));
-    }
-
-    #[test]
-    fn a_client_runs_a_developer_mod_without_developer_tools() {
-        let (status, loader) = start(FakeHost::new().side(Side::CLIENT).developer_tools(false));
-        assert_eq!(status, Status::OK);
-        assert!(ran(&loader));
+        assert!(loader.faults().is_empty());
     }
 }

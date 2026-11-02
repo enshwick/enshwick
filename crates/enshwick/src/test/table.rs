@@ -421,24 +421,22 @@ pub(crate) fn note_manifest(api: *const HostApi, manifest: &crate::abi::Manifest
 }
 
 /// Whether the fake, when `api` is its table, turns the mod of `manifest`
-/// off before its init, as a dedicated server without developer tools does
-/// a mod with `developer: true`; logs the loader's reason when it does.
+/// off before its init, as the loader does a mod with `developer: true`
+/// while developer tools are off; records the off reason as the loader
+/// does when it does.
 pub(crate) fn refuses_developer(api: *const HostApi, manifest: &crate::abi::Manifest) -> bool {
     core::ptr::eq(api, &raw const TABLE)
         && manifest
             .flags
             .contains(crate::abi::ManifestFlags::DEVELOPER)
         && with(false, |s| {
-            let refused = s.host.side == crate::abi::Side::SERVER && !s.host.developer_tools;
-            if refused {
-                s.logs.push((
-                    Level::WARN,
-                    "a developer tool: a dedicated server runs it only while the file \
-                     mod-data/enshwick/developer-tools exists"
-                        .to_owned(),
-                ));
+            if s.host.developer_tools {
+                return false;
             }
-            refused
+            let reason = crate::mods::DEVELOPER_TOOL_OFF;
+            s.faults.push(reason.to_owned());
+            s.logs.push((Level::ERROR, format!("off: {reason}")));
+            true
         })
 }
 
