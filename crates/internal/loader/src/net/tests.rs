@@ -65,7 +65,7 @@ fn a_repeated_hello_keeps_the_peer_and_spends_its_rate() {
         }
     );
     handed(&mut state, 7, true, now);
-    let hellos = core::iter::repeat_with(|| take_message(&mut state, 7, CONTROL))
+    let hellos = core::iter::repeat_with(|| take_message(&mut state, 7, CONTROL, false))
         .take(100)
         .take_while(Option::is_some)
         .count();
@@ -90,15 +90,15 @@ fn a_repeated_hello_keeps_the_peer_and_spends_its_rate() {
 #[test]
 fn a_stranger_s_message_on_a_mod_channel_is_not_taken() {
     let mut state = State::default();
-    assert_eq!(take_message(&mut state, 7, 5), None);
-    assert_eq!(take_message(&mut state, 7, CONTROL), Some(false));
+    assert_eq!(take_message(&mut state, 7, 5, false), None);
+    assert_eq!(take_message(&mut state, 7, CONTROL, false), Some(false));
     assert!(state.peers.is_empty(), "a hello alone makes no peer");
 }
 
 #[test]
 fn a_message_from_an_unknown_sender_is_not_taken() {
     let mut state = State::default();
-    assert_eq!(take_message(&mut state, 0, CONTROL), None);
+    assert_eq!(take_message(&mut state, 0, CONTROL, false), None);
     assert!(state.greeting.is_empty());
 }
 
@@ -106,7 +106,7 @@ fn a_message_from_an_unknown_sender_is_not_taken() {
 fn every_message_of_a_stranger_takes_from_its_rate() {
     let mut state = State::default();
     for _ in 0..200 {
-        let _taken = take_message(&mut state, 7, CONTROL);
+        let _taken = take_message(&mut state, 7, CONTROL, false);
     }
     assert!(state.greeting[&7].tokens < 1.0, "the rate ran out");
 }
@@ -115,7 +115,7 @@ fn every_message_of_a_stranger_takes_from_its_rate() {
 fn strangers_waiting_to_say_hello_are_bounded_and_follow_the_live_slots() {
     let mut state = State::default();
     for key in 1..=1000 {
-        let _taken = take_message(&mut state, key, CONTROL);
+        let _taken = take_message(&mut state, key, CONTROL, false);
     }
     assert!(state.greeting.len() <= MAX_GREETING);
     keep_greeting_in(&mut state, &[3, 4]);
@@ -127,7 +127,7 @@ fn strangers_waiting_to_say_hello_are_bounded_and_follow_the_live_slots() {
 #[test]
 fn a_hello_s_language_stays_with_its_client_and_goes_with_it() {
     let mut state = State::default();
-    let _taken = take_message(&mut state, 7, CONTROL);
+    let _taken = take_message(&mut state, 7, CONTROL, false);
     remember_language(&mut state, 7, Language::UK_UA);
     remember_language(&mut state, 8, Language::DE_DE);
     assert_eq!(language_in(&state, 7), Some(Language::UK_UA));
@@ -140,17 +140,31 @@ fn a_hello_s_language_stays_with_its_client_and_goes_with_it() {
     assert_eq!(language_in(&state, 7), Some(Language::UK_UA));
     state.peers.remove(&7);
     assert_eq!(language_in(&state, 7), None);
-    let _again = take_message(&mut state, 9, CONTROL);
+    let _again = take_message(&mut state, 9, CONTROL, false);
     remember_language(&mut state, 9, Language::DE_DE);
     keep_greeting_in(&mut state, &[]);
     assert_eq!(language_in(&state, 9), None);
 }
 
 #[test]
+fn a_hosting_client_s_messages_to_its_own_server_half_spend_only_the_sender_s_rate() {
+    let mut state = State::default();
+    let _greeting = greet(&mut state, 7, Instant::now());
+    let taken = (0..200)
+        .filter(|_| take_message(&mut state, 7, 5, true).is_some())
+        .count();
+    assert_eq!(taken, 200, "the client half's send already took the rate");
+    assert!(
+        take_message(&mut state, 7, 5, false).is_some(),
+        "the rate of the wire is untouched"
+    );
+}
+
+#[test]
 fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
     let mut state = State::default();
     for key in 1..=MAX_GREETING as u64 {
-        let _taken = take_message(&mut state, key, CONTROL);
+        let _taken = take_message(&mut state, key, CONTROL, false);
     }
     assert_eq!(state.greeting.len(), MAX_GREETING);
     let newcomer = MAX_GREETING as u64 + 1;
@@ -162,7 +176,7 @@ fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
         "no slots read, none forgotten"
     );
     make_greeting_room(&mut state, newcomer, || Some(vec![2, newcomer]));
-    assert!(take_message(&mut state, newcomer, CONTROL).is_some());
+    assert!(take_message(&mut state, newcomer, CONTROL, false).is_some());
     let mut kept: Vec<u64> = state.greeting.keys().copied().collect();
     kept.sort_unstable();
     assert_eq!(kept, [2, newcomer]);

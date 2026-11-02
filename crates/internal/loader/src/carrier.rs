@@ -459,7 +459,7 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
     }
     for item in &inbox.items {
         let (start, end) = item.span;
-        crate::net::server_carried(item.from, item.channel, &inbox.bytes[start..end]);
+        crate::net::server_carried(item.from, item.channel, &inbox.bytes[start..end], false);
     }
     give_back(&CARRIER.server, session, inbox);
     for key in gone {
@@ -484,7 +484,7 @@ fn hosted_step(loader: &Loader) {
         return;
     }
     for message in take_looped(true) {
-        crate::net::server_carried(host, message.channel, &message.data);
+        crate::net::server_carried(host, message.channel, &message.data, true);
     }
 }
 
