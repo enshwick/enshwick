@@ -9,6 +9,7 @@ pub static TABLE_IDS: &[(&str, &[&str])] = &[
     ("altars", crate::altars::TABLE_IDS),
     ("bases", crate::bases::TABLE_IDS),
     ("buffs", crate::buffs::TABLE_IDS),
+    ("carrier", crate::carrier::TABLE_IDS),
     ("chat", crate::chat::TABLE_IDS),
     ("code", crate::code::TABLE_IDS),
     ("console", crate::console::TABLE_IDS),

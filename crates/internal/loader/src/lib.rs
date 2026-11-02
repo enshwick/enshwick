@@ -32,6 +32,8 @@ pub mod builds;
 #[cfg(windows)]
 mod calls;
 #[cfg(windows)]
+mod carrier;
+#[cfg(windows)]
 mod catalogue;
 pub mod chains;
 #[cfg(windows)]
