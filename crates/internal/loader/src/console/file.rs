@@ -6,9 +6,10 @@
 //! break. Lines already in the file when the server starts are skipped, also
 //! for a file that does not read then, by the length it had. A file that does
 //! not read is read again on the next look and changes nothing meanwhile, so a
-//! lock never runs a line again. A file that is gone and comes back goes on
-//! where it was if it still starts with what ran, and runs from its start as a
-//! new file otherwise.
+//! lock never runs a line again. A file that is gone and comes back, or
+//! another file put in its place, goes on where it was if it still starts with
+//! what ran; one that holds none of the lines that ran is a new file and runs
+//! from its start once it reads the same twice; any other counts as an edit.
 //!
 //! The file is append-only. A file whose part already read changed counts
 //! once it reads the same twice in a row, so an editor's save caught half
@@ -205,6 +206,9 @@ pub struct Watched {
     /// A hash of the whole file that came back without the lines that ran,
     /// which waits for a second read before it counts as new.
     anew: Option<u64>,
+    /// Hashes of every console line that ran or was there at start, so a
+    /// file that comes back holding one of them is never taken as new.
+    ran: rustc_hash::FxHashSet<u64>,
     /// The error of a file that did not read at start, for the first look.
     unread_at_start: Option<std::io::Error>,
     /// Whether the file fails to read, and whether that was noted.
@@ -221,11 +225,19 @@ impl Watched {
     #[must_use]
     pub fn new(path: PathBuf) -> Self {
         let seen = stamp(&path);
-        let (tail, identity, unread_at_start) = match read_with_identity(&path) {
-            Ok(Some((content, identity))) => (Some(Tail::at(&content)), identity, None),
-            Ok(None) => (Some(Tail::at(b"")), None, None),
+        let (content, identity, unread_at_start) = match read_with_identity(&path) {
+            Ok(Some((content, identity))) => (Some(content), identity, None),
+            Ok(None) => (Some(Vec::new()), None, None),
             Err(error) => (None, None, Some(error)),
         };
+        let tail = content.as_deref().map(Tail::at);
+        let ran = content
+            .as_deref()
+            .map(|content| lines_of(&content[..complete(content)]))
+            .unwrap_or_default()
+            .iter()
+            .map(|line| hash(line.as_bytes()))
+            .collect();
         Self {
             skip: seen.map_or(0, |(_, len)| usize::try_from(len).unwrap_or(usize::MAX)),
             seen,
@@ -235,6 +247,7 @@ impl Watched {
             identity,
             anew: None,
             unread_at_start,
+            ran,
             failing: None,
             noted: None,
             quiet: 0,
@@ -284,9 +297,9 @@ impl Watched {
     /// The lines added since the last look and how many lines held at start
     /// a first read skipped. A file that is gone changes nothing. A file that
     /// comes back, or another file put in its place, goes on where it was if
-    /// it still starts with what ran, and counts as a new file otherwise once
-    /// it reads the same twice in a row, so one caught half written runs
-    /// nothing.
+    /// it still starts with what ran; one that holds no line that ran counts
+    /// as a new file once it reads the same twice in a row, and any other is
+    /// an edit, which skips as many lines as ran.
     fn fresh_lines(&mut self) -> std::io::Result<(Vec<String>, usize)> {
         if let Some(error) = self.unread_at_start.take() {
             return Err(error);
@@ -308,16 +321,22 @@ impl Watched {
             self.identity = identity;
         }
         let mut skipped = 0;
-        let skip = self.skip;
-        let tail = self.tail.get_or_insert_with(|| {
-            let start = &content[..complete(&content[..skip.min(content.len())])];
-            skipped = String::from_utf8_lossy(start)
-                .lines()
-                .filter_map(line)
-                .count();
-            Tail::at(start)
-        });
-        if (self.gone || replaced) && !tail.continues(&content) {
+        if self.tail.is_none() {
+            let start = &content[..complete(&content[..self.skip.min(content.len())])];
+            skipped = self.note_ran(start);
+            self.tail = Some(Tail::at(start));
+        }
+        let Some(tail) = &mut self.tail else {
+            return Ok((Vec::new(), skipped));
+        };
+        // A file with no line that ran or was there at start is new; any
+        // other goes through the edit check, so no line runs twice.
+        let new = (self.gone || replaced)
+            && !tail.continues(&content)
+            && !lines_of(&content[..complete(&content)])
+                .iter()
+                .any(|line| self.ran.contains(&hash(line.as_bytes())));
+        if new {
             let whole = hash(&content);
             if self.anew != Some(whole) {
                 self.anew = Some(whole);
@@ -330,8 +349,27 @@ impl Watched {
         }
         self.gone = false;
         self.anew = None;
-        Ok((tail.feed(&content), skipped))
+        let fresh = tail.feed(&content);
+        self.ran
+            .extend(fresh.iter().map(|line| hash(line.as_bytes())));
+        Ok((fresh, skipped))
     }
+
+    /// Notes the console lines of `content` as there at start; how many.
+    fn note_ran(&mut self, content: &[u8]) -> usize {
+        let lines = lines_of(content);
+        self.ran
+            .extend(lines.iter().map(|line| hash(line.as_bytes())));
+        lines.len()
+    }
+}
+
+/// The console lines of `content`.
+fn lines_of(content: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(content)
+        .lines()
+        .filter_map(line)
+        .collect()
 }
 
 /// The file's volume and index, which tell another file put at its path.
@@ -655,6 +693,46 @@ mod tests {
         assert!(lines(&mut watched).is_empty(), "caught half restored");
         std::fs::write(&path, "give 7 1 Ann\nban Bob\nkick Cy\n").unwrap();
         assert_eq!(lines(&mut watched), ["kick Cy"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
+    fn an_edit_saved_through_a_rename_runs_no_line_again() {
+        let dir = scratch("rename-edit");
+        let path = dir.join(FILE);
+        let mut watched = Watched::new(path.clone());
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\n").unwrap();
+        assert_eq!(lines(&mut watched), ["give 7 1 Ann", "ban Bob"]);
+        let staged = dir.join("commands.tmp");
+        std::fs::write(&staged, "ban Bob\n").unwrap();
+        std::fs::rename(&staged, &path).unwrap();
+        for _ in 0..3 {
+            assert!(watched.look().0.is_empty());
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
+    fn an_older_copy_put_back_runs_no_line_again() {
+        let dir = scratch("older-copy");
+        let path = dir.join(FILE);
+        let mut watched = Watched::new(path.clone());
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\nkick Cy\n").unwrap();
+        assert_eq!(lines(&mut watched), ["give 7 1 Ann", "ban Bob", "kick Cy"]);
+        std::fs::remove_file(&path).unwrap();
+        assert!(lines(&mut watched).is_empty());
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\n").unwrap();
+        for _ in 0..3 {
+            assert!(watched.look().0.is_empty());
+        }
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\nkick Di\n").unwrap();
+        assert_eq!(
+            watched.look().0,
+            ["kick Di"],
+            "past the count kept by the edit"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
