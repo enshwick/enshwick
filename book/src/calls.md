@@ -137,7 +137,7 @@ with the reason. In a test, serve a required server's call with
 
 A server that is loaded but does not export the call refuses every caller,
 required or not, and the log says
-`call you.trading-post:price-of: you.trading-post does not export price-of; it exports prices, sold`.
+`call you.trading-post:price-of: you.trading-post does not export call:price-of; it exports service:prices, event:sold`.
 What a refused export does, in the game and in a test, is in
 [What other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use).
 

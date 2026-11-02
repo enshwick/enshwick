@@ -33,6 +33,15 @@ pub fn declare_mod(input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// The export kinds this crate knows, as an array of their words, for the
+/// API's test that they are its `schema_section::Kind`'s.
+#[doc(hidden)]
+#[proc_macro]
+pub fn __export_kinds(_input: TokenStream) -> TokenStream {
+    let kinds = declare::EXPORT_KINDS;
+    quote!([#(#kinds),*]).into()
+}
+
 /// Names a piece of the mod's own content by its local name.
 ///
 /// `id!("locker")` is the constant content id `<mod>:locker`, the mod id

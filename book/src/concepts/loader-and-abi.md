@@ -255,7 +255,7 @@ When `you.trading-post` exports its call `price-of` and its event `sold`,
 another mod may call `you.trading-post:price-of` and hear
 `you.trading-post:sold`. A link to the point `you.trading-post:margin` is
 refused, and the log says
-`point you.trading-post:margin: you.trading-post does not export margin; it exports call:price-of, event:sold`.
+`point you.trading-post:margin: you.trading-post does not export point:margin; it exports call:price-of, event:sold`.
 
 - `caller`, `extend_point`, `observe_point`, `on_mod_event` and `open_stat`
   return `Off`, which turns the asking mod off at init.
@@ -265,7 +265,7 @@ refused, and the log says
   and `None` for an optional one. An exported content name exports its
   parts too: with `exports = ["content:locker"]`, `you.lockers:locker.recipe`
   passes. The log says
-  `content id you.lockers:key: you.lockers does not export key; it exports content:locker`.
+  `content id you.lockers:key: you.lockers does not export content:key; it exports content:locker`.
   A stat kind exports its parts the same way.
 - A data pack's reference to another mod's content, `<alias>:<name>` or
   `<mod>:<name>`, is checked the same way when the pack is added.

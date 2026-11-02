@@ -175,7 +175,7 @@ mod tests {
             assert_ne!(status, Status::OK);
             assert!(
                 logs.iter().any(|(level, line)| *level == Level::WARN
-                    && line == "content id you.lockers:key: you.lockers does not export key; it exports content:locker, point:key"),
+                    && line == "content id you.lockers:key: you.lockers does not export content:key; it exports content:locker, point:key"),
                 "{logs:?}"
             );
         }

@@ -293,7 +293,7 @@ mod dependency {
         assert_eq!(
             warnings,
             [
-                "stat you.lockers:luck: you.lockers does not export luck; it exports point:luck, content:luck"
+                "stat you.lockers:luck: you.lockers does not export stat:luck; it exports point:luck, content:luck"
             ]
         );
     }

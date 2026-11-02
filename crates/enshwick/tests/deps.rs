@@ -144,9 +144,9 @@ mod tests {
         assert_eq!(
             warnings,
             [
-                "content id you.lanterns:locker: you.lanterns does not export locker; it exports content:lantern",
-                "content id you.lanterns:locker.recipe: you.lanterns does not export locker.recipe; it exports content:lantern",
-                "content id you.lockers:lantern.icon: you.lockers does not export lantern.icon; it exports content:locker, point:key",
+                "content id you.lanterns:locker: you.lanterns does not export content:locker; it exports content:lantern",
+                "content id you.lanterns:locker.recipe: you.lanterns does not export content:locker.recipe; it exports content:lantern",
+                "content id you.lockers:lantern.icon: you.lockers does not export content:lantern.icon; it exports content:locker, point:key",
             ]
         );
         assert!(required[2].is_err());
@@ -166,7 +166,7 @@ mod tests {
         assert_eq!(optional, [None]);
         assert!(
             warnings.contains(
-                &"content id you.lockers:key: you.lockers does not export key; it exports content:locker, point:key"
+                &"content id you.lockers:key: you.lockers does not export content:key; it exports content:locker, point:key"
                     .to_owned()
             )
         );

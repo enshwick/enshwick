@@ -13,6 +13,10 @@ mod deps;
 
 pub(crate) use deps::expand_deps;
 
+/// The words of the API's `schema_section::Kind`, which this crate cannot
+/// depend on; an API test holds the two to each other.
+pub(crate) const EXPORT_KINDS: [&str; 6] = ["point", "event", "call", "service", "content", "stat"];
+
 /// The keys of the table, the identity the platform reads.
 const KEYS: [&str; 13] = [
     "id",
@@ -460,10 +464,8 @@ fn exports_of(table: &toml::Table) -> syn::Result<Vec<String>> {
         .map(|name| {
             let name = name.as_str().ok_or_else(|| refuse(TAKES))?;
             let local = match name.split_once(':') {
-                Some(("content" | "stat", local)) => local,
-                // This crate cannot depend on the API's `schema_section::Kind`,
-                // whose words these are.
-                Some(("point" | "call" | "event" | "service", _)) => {
+                Some((kind @ ("content" | "stat"), local)) if EXPORT_KINDS.contains(&kind) => local,
+                Some((kind, _)) if EXPORT_KINDS.contains(&kind) => {
                     return Err(refuse(format!(
                         "`exports`: {name:?}: a point, call, event or service is exported by `export` on its declaration"
                     )));

@@ -18,8 +18,9 @@ use crate::{declare, schema_doc};
 ///
 /// # Errors
 ///
-/// When `export` comes with `of`, which names a dependency's declaration,
-/// or the crate's `Cargo.toml` does not read.
+/// When `export` comes with `of`, which names a dependency's declaration.
+/// Outside a test build, `export` in a crate whose `Cargo.toml` does not
+/// read as a mod's fails the build with that error.
 pub(crate) fn schema_entry(
     name: Option<&syn::LitStr>,
     owner: &declare::Owner,
@@ -49,11 +50,15 @@ pub(crate) fn schema_entry(
         Kind::Point | Kind::Call | Kind::Event => quote!(#declared::SCHEMA),
     };
     match owner {
-        declare::Owner::Unread(e) => Err(syn::Error::new_spanned(export, e.to_string())),
-        declare::Owner::Other => {
-            let message = format!(
-                "`export` on `{full}`: the crate's mod exports only its own names; name it locally"
-            );
+        // A test crate may declare other mods' names without a mod of its
+        // own; outside a test the crate's metadata decides.
+        declare::Owner::Unread(_) | declare::Owner::Other => {
+            let message = match owner {
+                declare::Owner::Unread(e) => e.to_string(),
+                _ => format!(
+                    "`export` on `{full}`: the crate's mod exports only its own names; name it locally"
+                ),
+            };
             Ok(quote! {
                 #[cfg(not(test))]
                 ::core::compile_error!(#message);

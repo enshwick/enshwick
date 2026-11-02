@@ -44,6 +44,29 @@ pub fn may_declare_rate(rate: RateId, joins: bool) -> bool {
     joins || !Rate::from_id(rate).is_some_and(Rate::seen_by_clients)
 }
 
+/// Why a mod may not use the `kind` `name`, `<owner>:<what>`, whose owner
+/// exports `exports`: the loader's and the fake's one message, naming the
+/// missing export with its kind.
+#[must_use]
+pub fn unexported_reason<S: AsRef<str>>(
+    kind: crate::schema_section::Kind,
+    name: &str,
+    exports: &[S],
+) -> String {
+    let (owner, what) = name.split_once(':').unwrap_or((name, ""));
+    let offered = if exports.is_empty() {
+        "it exports nothing".to_owned()
+    } else {
+        let names: Vec<&str> = exports.iter().map(AsRef::as_ref).collect();
+        format!("it exports {}", names.join(", "))
+    };
+    format!(
+        "{} {name}: {owner} does not export {}:{what}; {offered}",
+        kind.label(),
+        kind.word()
+    )
+}
+
 /// Whether a mod's `exports`, each `<kind>:<local name>`, let other mods use
 /// its `kind` `name`.
 ///
