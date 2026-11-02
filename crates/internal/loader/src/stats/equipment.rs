@@ -43,7 +43,7 @@ fn layout(loader: &Loader) -> Option<Layout> {
             inventory: catalogue::component_hash(loader, ids::INVENTORY)?,
             links: catalogue::offset(loader, ids::INVENTORY_SETUP_LINKS)?,
             categories: catalogue::offset(loader, ids::INVENTORY_SETUP_CATEGORIES)?,
-            initialized: catalogue::offset(loader, ids::INVENTORY_SETUP_INITIALIZED)?,
+            initialized: catalogue::setup_initialized_at(loader)?,
             stack: catalogue::size(loader, ids::ITEM_STACK)?,
             count,
             pide: count + size_of::<u32>(),
@@ -68,7 +68,7 @@ fn walk(loader: &Loader, layout: &Layout, root: u32, depth: u32, out: &mut Vec<(
     // SAFETY: `world::component` returned the entity's live `InventorySetup`,
     // read on the game thread that owns it; `isInitialized` is a one-byte
     // field at the offset reflection gave.
-    if unsafe { read_at::<u8>(setup.cast(), layout.initialized) } == 0 {
+    if !unsafe { crate::transactions::props::setup_initialized(setup.cast(), layout.initialized) } {
         return;
     }
     for i in 0..LINKS {

@@ -1,9 +1,10 @@
 //! Tests of kind ids, destroy requests, the client's cap and the world file's records.
 
 use super::attach::attach;
+use super::carried::*;
 use super::world_file::{read_file, read_world, unwritten, write_file};
 use super::*;
-use crate::item_records::anchor::Index;
+use crate::item_records::anchor::{CharacterId, Index};
 use crate::item_records::file::{self, Saved};
 
 #[test]
@@ -61,7 +62,8 @@ fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
 }
 
 /// The kinds these tests share, sealed once per process: `a:charges`
-/// (0), an item kind clients get, and `a:owner` (1), an entity kind.
+/// (0), an item kind clients get, `a:owner` (1), an entity kind, and the
+/// item stats kind (2).
 fn kinds() {
     let _charges = KINDS.add(Kind {
         id: "a:charges".into(),
@@ -72,6 +74,11 @@ fn kinds() {
         id: "a:owner".into(),
         scope: Scope::Entity,
         sent: false,
+    });
+    let _stats = KINDS.add(Kind {
+        id: enshwick::stats::ITEM_KIND.into(),
+        scope: Scope::Item,
+        sent: true,
     });
     let _sealed = KINDS.seal();
 }
@@ -107,6 +114,7 @@ fn server(pending: Vec<Pending>, unopened: Vec<String>) -> Server {
         values: Values::default(),
         pending,
         unopened,
+        joining: Vec::new(),
         changed: false,
     }
 }
@@ -187,7 +195,8 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
             root,
         })
     };
-    assert_eq!(set_aside_carried(&mut world, ANN, held), 2);
+    let kept = keep_carried(&mut world, Entity(ANN), held);
+    assert_eq!((kept.waiting, kept.aside), (0, 2));
     let mut kept: Vec<(u32, u32)> = world.values.keys().copied().collect();
     kept.sort_unstable();
     assert_eq!(kept, [(0, 2003), (0, 2004), (1, ANN)]);
@@ -209,6 +218,298 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
     let mut destroyed = FxHashSet::default();
     destroyed.extend([2001, 2002]);
     assert!(prune_destroyed(&mut world.values, &destroyed).is_empty());
+}
+
+#[test]
+fn a_leaving_character_s_items_wait_for_its_join_and_come_back_in_their_slots() {
+    const ANN: u32 = 7;
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
+    kinds();
+    let mut world = server(Vec::new(), Vec::new());
+    let value = |item, byte| Record {
+        item,
+        anchor: None,
+        value: Box::new([byte]),
+    };
+    // Two items in Ann's backpack slots 1 and 2, and one whose
+    // character GUID does not read.
+    world.values.insert((0, 2001), value(77, 1));
+    world.values.insert((0, 2002), value(78, 2));
+    world.values.insert((0, 2003), value(79, 3));
+    let left = |pide| {
+        let (anchor, item) = match pide {
+            2001 => (Some((0, 1)), 77),
+            2002 => (Some((0, 2)), 78),
+            2003 => (None, 79),
+            _ => return None,
+        };
+        Some(game::Held {
+            anchor: anchor.map(|(link, slot)| Anchor::Carried {
+                character: ANN_GUID,
+                link,
+                slot,
+            }),
+            item,
+            root: ANN,
+        })
+    };
+    let kept = keep_carried(&mut world, Entity(ANN), left);
+    assert_eq!((kept.waiting, kept.aside), (2, 1));
+    assert!(world.values.is_empty());
+    assert!(world.changed);
+    world.changed = false;
+    // Rejoined: new item entities, slot 2 now holds another item.
+    let joined = |link, slot| match (link, slot) {
+        (0, 1) => Some((3001, 77)),
+        (0, 2) => Some((3002, 90)),
+        _ => None,
+    };
+    let back = take_back_carried(&mut world, ANN_GUID, joined);
+    assert_eq!(back.found, [(0, 3001)]);
+    assert_eq!(
+        (back.replaced, back.waiting),
+        (0, 1),
+        "the slot holding another item"
+    );
+    let value = &world.values[&(0, 3001)];
+    assert_eq!((value.item, &value.value[..]), (77, &[1][..]));
+    let waiting: Vec<bool> = world.pending.iter().map(|r| r.aside).collect();
+    assert_eq!(
+        waiting.iter().filter(|&&aside| !aside).count(),
+        1,
+        "the changed slot waits on"
+    );
+    assert_eq!(world.pending.len(), 2);
+    assert!(world.changed);
+    // A later look, once the slot holds the item, takes the rest back.
+    let filled = |link, slot| match (link, slot) {
+        (0, 2) => Some((3002, 78)),
+        _ => None,
+    };
+    let back = take_back_carried(&mut world, ANN_GUID, filled);
+    assert_eq!((back.found, back.waiting), (vec![(0, 3002)], 0));
+}
+
+#[test]
+fn a_second_leave_keeps_one_waiting_record_per_slot_with_the_newer_value() {
+    const ANN: u32 = 7;
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
+    kinds();
+    let mut world = server(Vec::new(), Vec::new());
+    let in_slot = |pide| {
+        (pide == 2001 || pide == 3001).then_some(game::Held {
+            anchor: Some(Anchor::Carried {
+                character: ANN_GUID,
+                link: 0,
+                slot: 1,
+            }),
+            item: 77,
+            root: ANN,
+        })
+    };
+    let value = |byte| Record {
+        item: 77,
+        anchor: None,
+        value: Box::new([byte]),
+    };
+    world.values.insert((0, 2001), value(1));
+    let kept = keep_carried(&mut world, Entity(ANN), in_slot);
+    assert_eq!((kept.waiting, kept.aside), (1, 0));
+    // Rejoined, nothing taken back in time, a new value set, left again.
+    world.values.insert((0, 3001), value(2));
+    let kept = keep_carried(&mut world, Entity(ANN), in_slot);
+    assert_eq!((kept.waiting, kept.aside), (1, 0));
+    let pending: Vec<(u8, bool)> = world
+        .pending
+        .iter()
+        .map(|r| (r.value[0], r.aside))
+        .collect();
+    assert_eq!(
+        pending,
+        [(1, true), (2, false)],
+        "the older one kept, aside"
+    );
+    let back = take_back_carried(&mut world, ANN_GUID, |_, _| Some((4001, 77)));
+    assert_eq!(back.found, [(0, 4001)]);
+    assert_eq!(&*world.values[&(0, 4001)].value, &[2]);
+}
+
+#[test]
+fn a_value_set_on_a_slot_an_older_record_waits_on_sets_that_record_aside() {
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
+    let slot = Anchor::Carried {
+        character: ANN_GUID,
+        link: 0,
+        slot: 1,
+    };
+    let mut pending = vec![Pending {
+        kind: 0,
+        anchor: slot,
+        check: 77,
+        value: Box::new([1]),
+        aside: false,
+    }];
+    assert_eq!(
+        set_aside_older(&mut pending, [(1, slot)].into_iter()),
+        0,
+        "another kind"
+    );
+    assert_eq!(set_aside_older(&mut pending, [(0, slot)].into_iter()), 1);
+    assert!(pending[0].aside);
+}
+
+#[test]
+fn a_slow_join_counts_its_looks_from_when_its_inventories_fill() {
+    const ANN: Entity = Entity(7);
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
+    kinds();
+    let mut world = server(
+        vec![Pending {
+            kind: 0,
+            anchor: Anchor::Carried {
+                character: ANN_GUID,
+                link: 0,
+                slot: 1,
+            },
+            check: 77,
+            value: Box::new([1]),
+            aside: false,
+        }],
+        Vec::new(),
+    );
+    let characters = [(ANN, ANN_GUID)];
+    let mut joining = Joining::new(ANN);
+    let mut found = Vec::new();
+    // Not filled for longer than the looks a filled join gets.
+    for _ in 0..JOIN_LOOKS * 2 {
+        let look = look(
+            &mut world,
+            &characters,
+            &mut joining,
+            &mut found,
+            |_| false,
+            |_, _, _| None,
+        );
+        assert!(matches!(look, Look::Again));
+    }
+    // Filled, the slot still empty, then holding the item.
+    let empty = look(
+        &mut world,
+        &characters,
+        &mut joining,
+        &mut found,
+        |_| true,
+        |_, _, _| None,
+    );
+    assert!(matches!(empty, Look::Again));
+    let filled = look(
+        &mut world,
+        &characters,
+        &mut joining,
+        &mut found,
+        |_| true,
+        |_, _, _| Some((3001, 77)),
+    );
+    assert!(matches!(filled, Look::Done));
+    assert_eq!(found, [(0, 3001)]);
+}
+
+#[test]
+fn a_join_that_never_fills_stops_at_the_cap_and_its_records_keep_waiting() {
+    const ANN: Entity = Entity(7);
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
+    kinds();
+    let record = Pending {
+        kind: 0,
+        anchor: Anchor::Carried {
+            character: ANN_GUID,
+            link: 0,
+            slot: 1,
+        },
+        check: 77,
+        value: Box::new([1]),
+        aside: false,
+    };
+    let mut world = server(vec![record.clone()], Vec::new());
+    let mut joining = Joining::new(ANN);
+    let mut found = Vec::new();
+    let mut stopped = None;
+    for at in 1..=JOIN_LOOKS_CAP {
+        if let Look::Stop(why) = look(
+            &mut world,
+            &[(ANN, ANN_GUID)],
+            &mut joining,
+            &mut found,
+            |_| false,
+            |_, _, _| None,
+        ) {
+            stopped = Some((at, why));
+            break;
+        }
+    }
+    assert_eq!(stopped.map(|(at, _)| at), Some(JOIN_LOOKS_CAP));
+    assert!(stopped.is_some_and(|(_, why)| why.contains("never")));
+    assert_eq!(world.pending, [record], "nothing went aside");
+}
+
+#[test]
+fn a_leaving_character_s_records_whose_slot_holds_another_item_go_aside_and_others_stay() {
+    let record = |character, slot, aside| Pending {
+        kind: 0,
+        anchor: Anchor::Carried {
+            character: CharacterId([character; 16]),
+            link: 0,
+            slot,
+        },
+        check: 77,
+        value: Box::new([1]),
+        aside,
+    };
+    let mut pending = vec![
+        record(0xa1, 1, false),
+        record(0xa1, 2, false),
+        record(0xa1, 4, false),
+        record(0xa1, 3, true),
+        record(0xb2, 1, false),
+    ];
+    // Slot 1 holds another item, slot 2 one of the record's id, slot 4
+    // reads empty or not at all.
+    let item_in = |_, slot| match slot {
+        1 => Some(90),
+        2 => Some(77),
+        _ => None,
+    };
+    assert_eq!(
+        set_aside_waiting(&mut pending, CharacterId([0xa1; 16]), item_in),
+        1
+    );
+    let aside: Vec<bool> = pending.iter().map(|r| r.aside).collect();
+    assert_eq!(aside, [true, false, false, true, false]);
+}
+
+#[test]
+fn records_batch_into_messages_no_longer_than_the_limit_in_their_order() {
+    let mut messages = Vec::new();
+    let mut whole = Vec::new();
+    for pide in 0..100 {
+        push_encoded(&mut messages, "a:charges", pide, 7, &[3; 20]);
+        encode(&mut whole, "a:charges", pide, 7, &[3; 20]);
+    }
+    assert!(messages.len() > 1);
+    assert!(
+        messages
+            .iter()
+            .all(|m| !m.is_empty() && m.len() <= MESSAGE_BYTES)
+    );
+    assert_eq!(messages.concat(), whole);
+}
+
+#[test]
+fn a_taken_back_item_stats_value_makes_the_wearers_look_again() {
+    kinds();
+    let stats = kind_of(enshwick::stats::ITEM_KIND).unwrap();
+    assert!(touches_item_stats(&[(0, 3001), (stats, 3002)]));
+    assert!(!touches_item_stats(&[(0, 3001)]));
 }
 
 #[test]

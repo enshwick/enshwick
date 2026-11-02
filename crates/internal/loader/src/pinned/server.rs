@@ -33,6 +33,7 @@ pub(crate) const PLAYER_SLOTS: Constant = Constant::new("server.player_slots");
 pub(crate) const PLAYER_SLOT_COUNT: Constant = Constant::new("server.player_slot_count");
 pub(crate) const PLAYER_SLOT_ENTITY: Constant = Constant::new("server.player_slot_entity");
 pub(crate) const PLAYER_SLOT_KEY: Constant = Constant::new("server.player_slot_key");
+pub(crate) const PLAYER_SLOT_CHARACTER: Constant = Constant::new("server.player_slot_character");
 pub(crate) const PLAYER_SLOT_MACHINE: Constant = Constant::new("server.player_slot_machine");
 pub(crate) const PLAYER_SLOT_NAME: Constant = Constant::new("server.player_slot_name");
 pub(crate) const PLAYER_SLOT_SIZE: Constant = Constant::new("server.player_slot_size");

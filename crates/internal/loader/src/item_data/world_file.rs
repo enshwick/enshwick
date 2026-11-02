@@ -7,6 +7,7 @@ use enshwick::Entity;
 use enshwick::abi::Event;
 use rustc_hash::FxHashSet;
 
+use super::carried::set_aside_older;
 use super::{
     FILE, FINDING, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game, kind_of, scope,
     serves, take_destroyed, template_id, wanted,
@@ -172,12 +173,22 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 values: Values::default(),
                 pending,
                 unopened,
+                joining: Vec::new(),
                 changed: false,
             });
         }
         Event::WORLD_SAVED | Event::SHUTDOWN_STARTED => save(loader, event == Event::WORLD_SAVED),
         _ => {}
     }
+}
+
+/// The anchor `held` reads, or the carried anchor `old` while a player slot
+/// in `slots` still names the item's root but its GUID reads none: the
+/// character still carries it, and no anchor would set it aside.
+fn keep_carried_anchor(held: game::Held, old: Option<Anchor>, slots: &[u32]) -> Option<Anchor> {
+    held.anchor.or_else(|| {
+        old.filter(|anchor| matches!(anchor, Anchor::Carried { .. }) && slots.contains(&held.root))
+    })
 }
 
 /// After a save of the game's, reads each value's anchor afresh from its
@@ -195,15 +206,19 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
     let placed: Option<FxHashSet<u32>> = game::transform_type(loader)
         .and_then(|ty| crate::entities::with_component(loader, ty).ok())
         .map(|places| places.iter().map(|p| p.entity.0).collect());
+    let characters = crate::world::characters(loader);
+    let character_of = |root| crate::world::character_in(&characters, root);
+    let slots = crate::world::character_entities(loader).unwrap_or_default();
     let before = server.values.len();
     let mut anchorless = 0;
     let mut gone = Vec::new();
     server.values.retain(|&(kind, entity), record| {
         // `Some(None)`: the world no longer holds the entity.
         let now = match scope(kind, record.anchor) {
-            Some(Scope::Item) => {
-                Some(game::held(loader, entity).map(|held| (held.item, held.anchor)))
-            }
+            Some(Scope::Item) => Some(
+                game::held(loader, entity, character_of)
+                    .map(|held| (held.item, keep_carried_anchor(held, record.anchor, &slots))),
+            ),
             Some(Scope::Entity) => match &placed {
                 Some(placed) if !placed.contains(&entity) => Some(None),
                 Some(_) => template_id(Entity(entity)).map(|template| {
@@ -227,9 +242,8 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
             }
             Some(Some((held, _))) if held != record.item => false,
             Some(Some((_, anchor))) => {
-                // A live entity in no place a load finds, such as an item in
-                // a player's inventory, loses its anchor: the old one names a
-                // slot another item may fill.
+                // A live entity in no place a load or a join finds loses its
+                // anchor: the old one names a slot another item may fill.
                 if anchor != record.anchor {
                     record.anchor = anchor;
                     server.changed = true;
@@ -251,6 +265,38 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
     anchorless
 }
 
+/// Reads afresh, at shutdown, the anchor of each value whose item a player
+/// in game carries now or carried at the last save, so the next join finds
+/// it where it is now and no old slot is left naming it. Other values keep
+/// the anchors of the game's last save, which a load rebuilds; a value
+/// whose item does not read or holds another item keeps its anchor.
+fn refresh_carried(loader: &Loader, server: &mut Server) {
+    if !game::readable(loader) {
+        return;
+    }
+    let characters = crate::world::characters(loader);
+    let character_of = |root| crate::world::character_in(&characters, root);
+    let slots = crate::world::character_entities(loader).unwrap_or_default();
+    let carried = |anchor: Option<Anchor>| matches!(anchor, Some(Anchor::Carried { .. }));
+    let mut changed = false;
+    for (&(kind, pide), record) in &mut server.values {
+        if scope(kind, record.anchor) != Some(Scope::Item)
+            || (characters.is_empty() && !carried(record.anchor))
+        {
+            continue;
+        }
+        let Some(held) = game::held(loader, pide, character_of).filter(|h| h.item == record.item)
+        else {
+            continue;
+        };
+        let anchor = keep_carried_anchor(held, record.anchor, &slots);
+        if carried(anchor) || carried(record.anchor) {
+            changed |= core::mem::replace(&mut record.anchor, anchor) != anchor;
+        }
+    }
+    server.changed |= changed;
+}
+
 /// Writes the values when they changed, under their anchors as the world
 /// holds them now.
 fn save(loader: &Loader, after_game_save: bool) {
@@ -261,12 +307,26 @@ fn save(loader: &Loader, after_game_save: bool) {
         };
         // Before the first step the records wait as read, and the values set
         // since carry the anchors they were set with. At shutdown the world
-        // is being torn down: the anchors of its last save stand.
-        let anchorless = if FINDING.load(Ordering::Relaxed) || !after_game_save {
+        // is being torn down: the anchors of its last save stand, but for
+        // the items players carry, whose slots change all the time.
+        let anchorless = if FINDING.load(Ordering::Relaxed) {
             0
-        } else {
+        } else if after_game_save {
             refresh(loader, server)
+        } else {
+            refresh_carried(loader, server);
+            0
         };
+        // A carried value, its anchor read afresh, on a slot a record from
+        // an earlier leave still waits on counts: written so, the next load
+        // would name the slot twice.
+        if !FINDING.load(Ordering::Relaxed) {
+            let newer = server
+                .values
+                .iter()
+                .filter_map(|(&(kind, _), record)| record.anchor.map(|anchor| (kind, anchor)));
+            server.changed |= set_aside_older(&mut server.pending, newer) > 0;
+        }
         if !server.changed {
             return;
         }
@@ -279,7 +339,7 @@ fn save(loader: &Loader, after_game_save: bool) {
     if anchorless > 0 {
         crate::log!(
             WARN,
-            "mod data: {anchorless} item values sit where a load cannot find them, such as a player's inventory; after a restart they stay aside unless the item is in a placed container when the world saves"
+            "mod data: {anchorless} item values sit where neither a load nor a join can find them; after a restart they stay aside unless the item is in a placed container or a player's inventory when the world saves"
         );
     }
     let path = file(loader, &key);

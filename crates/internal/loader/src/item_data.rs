@@ -28,6 +28,7 @@
 //! keeps what it got and answers reads from it.
 
 mod attach;
+mod carried;
 mod game;
 mod world_file;
 
@@ -39,6 +40,8 @@ use enshwick::abi::{HookFlags, Status};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use self::attach::find_pending;
+use self::carried::{JOIN_LOOK_EVERY, Joining, look_for_carried};
+pub(crate) use self::carried::{player_joined, player_left};
 pub(crate) use self::world_file::world_event;
 use crate::chains::Next;
 use crate::host::{Loader, Target};
@@ -110,6 +113,9 @@ struct Server {
     /// any other, so they are right when their mod returns; no mod reads
     /// them meanwhile.
     unopened: Vec<String>,
+    /// The joined characters whose carried records wait; at most one entry
+    /// per player.
+    joining: Vec<Joining>,
     changed: bool,
 }
 
@@ -133,7 +139,7 @@ fn scope(kind: u32, anchor: Option<Anchor>) -> Option<Scope> {
     match (self::kind(kind), anchor) {
         (Some(spec), _) => Some(spec.scope),
         (None, Some(Anchor::Placed(_))) => Some(Scope::Entity),
-        (None, Some(Anchor::Held { .. }) | None) => Some(Scope::Item),
+        (None, Some(Anchor::Held { .. } | Anchor::Carried { .. }) | None) => Some(Scope::Item),
         (None, Some(Anchor::Session(_))) => None,
     }
 }
@@ -371,11 +377,15 @@ fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(u32,
 }
 
 /// After the server's step: after a load's first, finds the file's records'
-/// entities; after every step, drops the records of the entities destroyed
-/// in it, and tells the clients.
+/// entities; every [`JOIN_LOOK_EVERY`] steps, looks for joined characters'
+/// carried items; after every step, drops the records of the entities
+/// destroyed in it, and tells the clients.
 pub(crate) fn after_step(loader: &Loader) {
     if FINDING.load(Ordering::Relaxed) {
         find_pending(loader);
+    }
+    if crate::events::steps().is_multiple_of(JOIN_LOOK_EVERY) && wanted() {
+        look_for_carried(loader);
     }
     if !KEPT.load(Ordering::Relaxed) || !any_destroyed() {
         return;
@@ -390,71 +400,75 @@ pub(crate) fn after_step(loader: &Loader) {
         server.changed |= !gone.is_empty();
         gone
     };
-    let mut message = Vec::new();
-    for (kind, pide) in gone {
-        if let Some(spec) = self::kind(kind).filter(|k| k.sent) {
-            encode(&mut message, &spec.id, pide, 0, &[]);
-            if message.len() > MESSAGE_BYTES {
-                crate::net::item_data(0, &std::mem::take(&mut message));
-            }
+    send(&removals(&gone));
+}
+
+/// The messages that tell clients the values of `keys` are gone, for the
+/// kinds clients get.
+fn removals(keys: &[(u32, u32)]) -> Vec<Vec<u8>> {
+    let mut messages = Vec::new();
+    for &(id, pide) in keys {
+        if let Some(spec) = kind(id).filter(|k| k.sent) {
+            push_encoded(&mut messages, &spec.id, pide, 0, &[]);
         }
     }
-    if !message.is_empty() {
-        crate::net::item_data(0, &message);
+    messages
+}
+
+/// Appends a record's encoding to the last of `messages`, moving it to a
+/// new message when it would grow the last past [`MESSAGE_BYTES`].
+fn push_encoded(messages: &mut Vec<Vec<u8>>, id: &str, pide: u32, item: u32, value: &[u8]) {
+    if messages.is_empty() {
+        messages.push(Vec::new());
+    }
+    let last = messages.len() - 1;
+    let start = messages[last].len();
+    encode(&mut messages[last], id, pide, item, value);
+    if start > 0 && messages[last].len() > MESSAGE_BYTES {
+        let record = messages[last].split_off(start);
+        messages.push(record);
     }
 }
 
-/// A player's character `entity` leaves, its items still in the world: the
-/// values on them go aside, kept in the world's file, rather than be dropped
-/// when the game destroys the items it removes with the character. No load
-/// finds a character's items by place, so they never attach again.
-#[cold]
-pub(crate) fn player_left(loader: &Loader, entity: u32) {
-    if !wanted() || !serves() {
-        return;
+/// The messages that tell clients the values of `keys` in `values`, for the
+/// kinds clients get.
+fn messages_for(values: &Values, keys: &[(u32, u32)]) -> Vec<Vec<u8>> {
+    let mut messages = Vec::new();
+    for &(kind, pide) in keys {
+        if let (Some(spec), Some(record)) = (
+            self::kind(kind).filter(|k| k.sent),
+            values.get(&(kind, pide)),
+        ) {
+            push_encoded(&mut messages, &spec.id, pide, record.item, &record.value);
+        }
     }
-    let mut server = SERVER.relock();
-    let Some(server) = server.as_mut() else {
-        return;
-    };
-    let aside = set_aside_carried(server, entity, |pide| game::held(loader, pide));
-    if aside > 0 {
-        crate::log!(
-            INFO,
-            "mod data: {aside} values on a leaving player's items set aside in the world's file"
-        );
+    messages
+}
+
+/// Sends `messages` to every client.
+fn send(messages: &[Vec<u8>]) {
+    for message in messages {
+        crate::net::item_data(0, message);
     }
 }
 
-/// Moves the item values of `server` whose item `held` finds in an
-/// inventory of `character` into its records aside, each under its item's
-/// session id; the number moved.
-fn set_aside_carried(
-    server: &mut Server,
-    character: u32,
-    held: impl Fn(u32) -> Option<game::Held>,
-) -> usize {
-    let mut left = Vec::new();
-    server.values.retain(|&(kind, pide), record| {
-        if scope(kind, record.anchor) != Some(Scope::Item) {
-            return true;
-        }
-        let Some(held) = held(pide).filter(|held| held.root == character) else {
-            return true;
-        };
-        left.push(Pending {
-            kind,
-            anchor: Anchor::Session(pide),
-            check: held.item,
-            value: core::mem::take(&mut record.value),
-            aside: true,
-        });
-        false
-    });
-    let moved = left.len();
-    server.changed |= moved > 0;
-    server.pending.append(&mut left);
-    moved
+/// Puts each `found` record into `values` under its kind and entity, as
+/// attached from now on; the keys.
+fn insert_found(values: &mut Values, found: Vec<(u32, u32, Pending)>) -> Vec<(u32, u32)> {
+    found
+        .into_iter()
+        .map(|(kind, entity, record)| {
+            values.insert(
+                (kind, entity),
+                Record {
+                    item: record.check,
+                    anchor: Some(record.anchor),
+                    value: record.value,
+                },
+            );
+            (kind, entity)
+        })
+        .collect()
 }
 
 /// Whether any mod keeps item data, which needs the world events and the
@@ -548,7 +562,11 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         Scope::Item => (
             item,
             loader
-                .and_then(|loader| game::held(loader, pide))
+                .and_then(|loader| {
+                    game::held(loader, pide, |root| {
+                        crate::world::character_of(loader, root)
+                    })
+                })
                 .and_then(|held| held.anchor),
         ),
         Scope::Entity => {
@@ -569,6 +587,17 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         let server = server.as_mut().ok_or(Status::MISSING)?;
         if value.is_empty() {
             server.values.remove(&(kind, pide));
+            // A carried value still waiting on this item's slot would come
+            // back at the next look: it goes aside, kept but attached to
+            // nothing.
+            if let Some(slot @ Anchor::Carried { .. }) = anchor {
+                for record in server.pending.iter_mut().filter(|record| {
+                    !record.aside
+                        && (record.kind, record.anchor, record.check) == (kind, slot, item)
+                }) {
+                    record.aside = true;
+                }
+            }
         } else {
             let record = Record {
                 item,
@@ -597,20 +626,10 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
 fn snapshot() -> Vec<Vec<u8>> {
     let server = SERVER.relock();
     let mut messages = Vec::new();
-    let mut message = Vec::new();
     for (&(kind, pide), record) in server.iter().flat_map(|s| &s.values) {
-        let Some(id) = self::kind(kind).filter(|k| k.sent).map(|k| k.id.as_str()) else {
-            continue;
-        };
-        let mut one = Vec::new();
-        encode(&mut one, id, pide, record.item, &record.value);
-        if message.len() + one.len() > MESSAGE_BYTES && !message.is_empty() {
-            messages.push(std::mem::take(&mut message));
+        if let Some(spec) = self::kind(kind).filter(|k| k.sent) {
+            push_encoded(&mut messages, &spec.id, pide, record.item, &record.value);
         }
-        message.extend_from_slice(&one);
-    }
-    if !message.is_empty() {
-        messages.push(message);
     }
     messages
 }

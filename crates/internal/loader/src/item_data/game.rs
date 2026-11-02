@@ -8,7 +8,7 @@ use enshwick::Entity;
 use enshwick::raw::read_at;
 use enshwick_gamedata::catalogue as names;
 
-use super::anchor::{Anchor, Placed};
+use super::anchor::{Anchor, CharacterId, Placed};
 use crate::host::Loader;
 
 /// `link` of an item in its root's own inventory rather than a linked one.
@@ -35,6 +35,9 @@ struct Layout {
     owner_entity: usize,
     setup: u32,
     links: usize,
+    /// Where an `InventorySetup` says its inventories are filled; `None`
+    /// turns off only the wait for a joining character's inventories.
+    initialized: Option<usize>,
     inventory: u32,
     stack: usize,
     stack_item: usize,
@@ -74,6 +77,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 owner_entity: field(names::type_name(names::ids::OWNER), "ownerEntityId")?,
                 setup: ty(names::ids::INVENTORY_SETUP)?,
                 links: at(names::ids::INVENTORY_SETUP_LINKS)?,
+                initialized: crate::catalogue::setup_initialized_at(loader),
                 inventory: ty(names::ids::INVENTORY)?,
                 stack: usize::try_from(stack.size()).ok()?,
                 stack_item: field(names::type_name(names::ids::ITEM_STACK), "id")?,
@@ -82,17 +86,20 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             // Every read lies inside the reflected type it reads.
             let size =
                 |name: &str| usize::try_from(loader.reflection.type_info(name).ok()?.size()).ok();
+            let setup_size = size(names::type_name(names::ids::INVENTORY_SETUP))?;
             let inside = layout.position + size_of::<[i64; 3]>()
                 <= usize::try_from(transform_type.size()).ok()?
                 && layout.stack_pide.max(layout.stack_item) + 4 <= layout.stack
                 && layout.slot_entity.max(layout.item) + 4 <= size(ITEM_STATE)?
                 && layout.slot_index < size(ITEM_STATE)?
                 && layout.owner_entity + 4 <= size(names::type_name(names::ids::OWNER))?
-                && layout.links + usize::from(LINKS) * 4
-                    <= size(names::type_name(names::ids::INVENTORY_SETUP))?
+                && layout.links + usize::from(LINKS) * 4 <= setup_size
                 && usize::from(SLOTS) * layout.stack
                     <= size(names::type_name(names::ids::INVENTORY))?;
-            inside.then_some(layout)
+            inside.then_some(Layout {
+                initialized: layout.initialized.filter(|&at| at < setup_size),
+                ..layout
+            })
         })
         .as_ref()
 }
@@ -119,7 +126,7 @@ fn component(loader: &Loader, entity: u32, ty: u32) -> Option<*const u8> {
 /// world save does not hold, and for an entity with no template or place.
 pub(crate) fn placed(loader: &Loader, entity: u32) -> Option<Placed> {
     let layout = layout(loader)?;
-    if crate::world::player_entities(loader)
+    if crate::world::character_entities(loader)
         .ok()?
         .contains(&entity)
     {
@@ -152,9 +159,14 @@ fn link_of(loader: &Loader, layout: &Layout, root: u32, inventory: u32) -> Optio
 
 /// Where the item entity `pide` sits, as an anchor, the item it holds and
 /// the root whose inventory holds it; `None` for an entity the world does
-/// not hold. The anchor is `None` for an item in no placed thing's
-/// inventory, such as a player's.
-pub(crate) fn held(loader: &Loader, pide: u32) -> Option<Held> {
+/// not hold. An item in no placed thing's inventory is anchored to the
+/// character `character_of` names for its root, which runs only then. The
+/// anchor is `None` for an item in neither.
+pub(crate) fn held(
+    loader: &Loader,
+    pide: u32,
+    character_of: impl FnOnce(Entity) -> Option<CharacterId>,
+) -> Option<Held> {
     let layout = layout(loader)?;
     let state = component(loader, pide, layout.item_state)?;
     // SAFETY: `state` is the entity's live `ItemState`, whose reflected slot
@@ -175,13 +187,17 @@ pub(crate) fn held(loader: &Loader, pide: u32) -> Option<Held> {
         Some(owner) => unsafe { read_at::<u32>(owner, layout.owner_entity) },
         None => inventory,
     };
-    let anchor = link_of(loader, layout, root, inventory)
-        .zip(placed(loader, root))
-        .map(|(link, placed)| Anchor::Held {
-            root: placed,
-            link,
-            slot,
-        });
+    let anchor = link_of(loader, layout, root, inventory).and_then(|link| {
+        placed(loader, root)
+            .map(|root| Anchor::Held { root, link, slot })
+            .or_else(|| {
+                character_of(Entity(root)).map(|character| Anchor::Carried {
+                    character,
+                    link,
+                    slot,
+                })
+            })
+    });
     Some(Held { anchor, item, root })
 }
 
@@ -191,6 +207,30 @@ pub(crate) struct Held {
     pub(crate) anchor: Option<Anchor>,
     pub(crate) item: u32,
     pub(crate) root: u32,
+}
+
+/// Whether the inventories of `root`, a character, are filled: its
+/// `InventorySetup` says it is initialized (server 399). `None` when that
+/// does not read: a build without the field, or no setup.
+pub(crate) fn filled(loader: &Loader, root: Entity) -> Option<bool> {
+    let layout = layout(loader)?;
+    let initialized = layout.initialized?;
+    let setup = component(loader, root.0, layout.setup)?;
+    // SAFETY: `setup` is the root's live `InventorySetup`, which holds its
+    // `isInitialized` byte at `initialized` (inside the type, checked by
+    // `layout`); read on the game thread (checked by `world::component`).
+    Some(unsafe { crate::transactions::props::setup_initialized(setup, initialized) })
+}
+
+/// Whether a joining character `root` may be looked at for its carried
+/// items: its inventories are [`filled`]; on a build without the field,
+/// always, since a look only takes back what it finds.
+pub(crate) fn ready(loader: &Loader, root: Entity) -> bool {
+    match layout(loader) {
+        Some(layout) if layout.initialized.is_none() => true,
+        Some(_) => filled(loader, root) == Some(true),
+        None => false,
+    }
 }
 
 /// The item entity in slot `slot` of the inventory at `link` of `root`, and
