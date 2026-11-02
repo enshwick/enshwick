@@ -18,6 +18,8 @@ use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
 mod build;
 mod content;
 pub(crate) mod gameplay;
+#[cfg(test)]
+mod headed_tests;
 mod hooks;
 mod inventory;
 mod mods;
@@ -670,6 +672,89 @@ pub(crate) fn put_list<T: Copy>(
     // it pointing at a writable, aligned `u32` for the call.
     unsafe { count.write(u32::try_from(items.len()).unwrap_or(u32::MAX)) };
     Status::OK
+}
+
+/// A mod's struct that starts with a header, read as the loader reads it: it
+/// needs only [`Headed::BORN`](crate::abi::Headed::BORN), and the fields past
+/// what the mod wrote read zero, so a mod of an older minor works here as in
+/// the game.
+pub(crate) fn get_headed<T: crate::abi::Headed>(raw: *const T) -> Option<T> {
+    // SAFETY: the safe layer passes null or its version of `T`, readable for
+    // the size its header states, with no other writer during the call.
+    unsafe { crate::abi::read_headed(raw, T::BORN) }
+}
+
+/// Writes `value` to a mod's struct that starts with a header, as the loader
+/// does: only as far as the mod's header says, with that size written back.
+pub(crate) fn put_headed<T: crate::abi::Headed>(out: *mut T, value: T) -> Status {
+    // SAFETY: the safe layer passes null or its version of `T`, its header
+    // stating the size it may be written for, untouched by others during the
+    // call.
+    if unsafe { crate::abi::write_headed(out, value) } {
+        Status::OK
+    } else {
+        Status::BAD_ARGS
+    }
+}
+
+/// [`found`] for a struct that starts with a header, written as
+/// [`put_headed`] writes it.
+pub(crate) fn found_headed<T: crate::abi::Headed>(value: Option<T>, out: *mut T) -> Status {
+    value.map_or(Status::MISSING, |value| put_headed(out, value))
+}
+
+/// A mod's list of `count` headed entries, read as the loader reads it: the
+/// entries are as far apart as the first one's header says, every one states
+/// that size, and each is read as [`get_headed`] reads one. `None` for a
+/// null list with entries, or entries of different sizes.
+pub(crate) fn get_headed_list<T: crate::abi::Headed>(raw: *const T, count: u32) -> Option<Vec<T>> {
+    if count == 0 {
+        return Some(Vec::new());
+    }
+    if raw.is_null() {
+        return None;
+    }
+    // SAFETY: a non-null list from the safe layer starts with an entry's
+    // header, readable for its eight bytes.
+    // The mod's headed list, not game memory.
+    // ast-grep-ignore: game-memory-through-raw
+    let stride = unsafe { raw.cast::<Header>().read_unaligned() }.size as usize;
+    if stride < size_of::<Header>() {
+        return None;
+    }
+    (0..count as usize)
+        .map(|index| {
+            let entry = raw.cast::<u8>().wrapping_add(index * stride).cast::<T>();
+            // SAFETY: the safe layer passes `count` entries of `stride` bytes,
+            // so `entry` starts one of them, its header readable.
+            // The mod's headed list, not game memory.
+            // ast-grep-ignore: game-memory-through-raw
+            let size = unsafe { entry.cast::<Header>().read_unaligned() }.size as usize;
+            (size == stride).then(|| get_headed(entry))?
+        })
+        .collect()
+}
+
+/// Writes up to `capacity` of `items` to a mod's list of headed entries, as
+/// the loader does: entries are as far apart as the first one's header says,
+/// and each gets only what both sides know.
+pub(crate) fn put_headed_list<T: crate::abi::Headed>(
+    items: &[T],
+    out: *mut T,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    if out.is_null() || capacity == 0 {
+        return mods::list(items, core::ptr::null_mut(), 0, 0, count);
+    }
+    let stride = {
+        // SAFETY: a non-null list with room for an entry, checked above,
+        // starts with that entry's header, readable for its eight bytes.
+        // The mod's headed list, not game memory.
+        // ast-grep-ignore: game-memory-through-raw
+        unsafe { out.cast::<Header>().read_unaligned() }.size
+    };
+    mods::list(items, out, stride, capacity, count)
 }
 
 /// The table every installed fake answers through.
