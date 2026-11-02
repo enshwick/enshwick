@@ -752,6 +752,34 @@ unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line
     );
 }
 
+/// The return addresses the crash walk finds on the calling thread's stack,
+/// innermost first, for tests of code it must pass.
+#[cfg(test)]
+#[inline(never)]
+pub(crate) fn walk_here() -> Vec<usize> {
+    // SAFETY: an all-zero context is a valid value to capture into.
+    let mut aligned = crate::detour::ThreadContext(unsafe { core::mem::zeroed() });
+    // SAFETY: a writable context on its 16-byte boundary.
+    unsafe {
+        windows_sys::Win32::System::Diagnostics::Debug::RtlCaptureContext(&raw mut aligned.0);
+    }
+    walk_from(&aligned.0)
+}
+
+/// The return addresses the crash walk finds above a frame stopped as
+/// `context` says, over a stack the caller keeps unchanged, for tests of
+/// code it must pass.
+#[cfg(test)]
+pub(crate) fn walk_from(
+    context: &windows_sys::Win32::System::Diagnostics::Debug::CONTEXT,
+) -> Vec<usize> {
+    let mut frames = [0usize; FRAMES];
+    // SAFETY: the walk reads only committed, readable memory, and the
+    // caller keeps the stack it names unchanged during it.
+    let found = unsafe { unwind(context, &mut frames) };
+    frames[..found].to_vec()
+}
+
 #[cfg(test)]
 mod tests;
 mod unwind;

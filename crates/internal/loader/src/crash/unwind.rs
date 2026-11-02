@@ -8,6 +8,7 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
 };
 
 use super::FRAMES;
+use crate::unwind_info::{CHAIN, CODES, SLOT, TABLE_ENTRY, info_len, parent};
 
 /// The first byte and the end of the readable region `address` lies in.
 pub(super) fn readable(address: usize) -> Option<(usize, usize)> {
@@ -29,7 +30,8 @@ pub(super) fn read_word(address: usize) -> Option<u64> {
 /// What unwinding one function's frame reads, from its `UNWIND_INFO`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Reach {
-    /// The frame register's number and its offset below the frame's base.
+    /// The frame register's number and its offset below the frame's base,
+    /// once its `UWOP_SET_FPREG` has run.
     pub(super) frame: Option<(u8, usize)>,
     /// The bytes above the frame's base the unwind reads, the return
     /// address included.
@@ -40,58 +42,76 @@ pub(super) struct Reach {
 
 /// The longest `UNWIND_INFO`: the header, 256 code slots and a chained
 /// entry.
-pub(super) const UNWIND_INFO: usize = 4 + 256 * 2 + 12;
+pub(super) const UNWIND_INFO: usize = CODES + 256 * SLOT + TABLE_ENTRY;
 
-/// What unwinding reads for the `UNWIND_INFO` in `info`; `None` for a
-/// version or code this does not know, or info cut short.
-pub(super) fn reach(info: &[u8]) -> Option<Reach> {
-    let (&head, &count, &frame) = (info.first()?, info.get(2)?, info.get(3)?);
-    if !matches!(head & 7, 1 | 2) {
+/// What unwinding reads for the `UNWIND_INFO` in `info` at a stop `at_offset`
+/// bytes into the prologue; `None` for a version or code this does not know,
+/// or info cut short.
+///
+/// A code whose offset is past `at_offset` describes an instruction that has
+/// not run at the stop, so its effect is skipped, as the unwinder skips it;
+/// pass `usize::MAX` to apply every code (a frame past the prologue, or a
+/// chained parent).
+pub(super) fn reach(info: &[u8], at_offset: usize) -> Option<Reach> {
+    let head: [u8; 4] = info.get(..CODES)?.try_into().ok()?;
+    let [version, _, count, frame] = head;
+    if !matches!(version & 7, 1 | 2) {
         return None;
     }
+    let info = info.get(..info_len(head))?;
     let count = usize::from(count);
-    let codes = info.get(4..4 + count * 2)?;
+    let codes = &info[CODES..CODES + count * SLOT];
     let slot = |i: usize| -> Option<usize> {
-        let bytes = codes.get(i * 2..i * 2 + 2)?;
+        let bytes = codes.get(i * SLOT..(i + 1) * SLOT)?;
         Some(usize::from(u16::from_le_bytes([bytes[0], bytes[1]])))
     };
     let wide = |i: usize| -> Option<usize> { Some(slot(i)? | (slot(i + 1)? << 16)) };
     let (mut size, mut saves, mut i) = (0usize, 0usize, 0usize);
+    // The frame register holds the frame only once its SET_FPREG has run;
+    // before, the frame is read from `RSP` (x64 exception handling: the
+    // codes taking an offset "must only be used after the FP register is
+    // established").
+    let mut framed = false;
     while i < count {
-        let byte = codes[i * 2 + 1];
-        let op_info = usize::from(byte >> 4);
-        match byte & 0xf {
-            0 => (size, i) = (size + 8, i + 1),
-            1 if op_info == 0 => (size, i) = (size + slot(i + 1)? * 8, i + 2),
-            1 => (size, i) = (size + wide(i + 1)?, i + 3),
-            2 => (size, i) = (size + op_info * 8 + 8, i + 1),
-            3 => i += 1,
-            4 => (saves, i) = (saves.max(slot(i + 1)? * 8 + 8), i + 2),
-            5 => (saves, i) = (saves.max(wide(i + 1)? + 8), i + 3),
-            6 => i += 2,
-            8 => (saves, i) = (saves.max(slot(i + 1)? * 16 + 16), i + 2),
-            9 => (saves, i) = (saves.max(wide(i + 1)? + 16), i + 3),
-            10 => (size, i) = (size + if op_info == 0 { 40 } else { 48 }, i + 1),
-            _ => return None,
+        let byte = codes[i * SLOT + 1];
+        let op = byte & 0xf;
+        // A spare code (version 2) in a frame being unwound is unexpected;
+        // the walk stops rather than read on from a corrupt info.
+        if op == 7 {
+            return None;
         }
+        let op_info = usize::from(byte >> 4);
+        let taken = crate::unwind_info::slots(op, byte >> 4)?;
+        if usize::from(codes[i * SLOT]) <= at_offset {
+            match op {
+                3 => framed = true,
+                0 => size += 8,
+                1 if op_info == 0 => size += slot(i + 1)? * 8,
+                1 => size += wide(i + 1)?,
+                2 => size += op_info * 8 + 8,
+                4 => saves = saves.max(slot(i + 1)? * 8 + 8),
+                5 => saves = saves.max(wide(i + 1)? + 8),
+                8 => saves = saves.max(slot(i + 1)? * 16 + 16),
+                9 => saves = saves.max(wide(i + 1)? + 16),
+                10 => size += if op_info == 0 { 40 } else { 48 },
+                // The version 2 epilogue codes move no `RSP`.
+                _ => {}
+            }
+        }
+        i += taken;
     }
-    let chained = if (head >> 3) & 4 == 0 {
-        None
-    } else {
-        let at = 4 + count.next_multiple_of(2) * 2 + 8;
-        let bytes = info.get(at..at + 4)?;
-        Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
-    };
     let register = frame & 0xf;
     Some(Reach {
-        frame: (register != 0).then_some((register, usize::from(frame >> 4) * 16)),
+        frame: (framed && register != 0).then_some((register, usize::from(frame >> 4) * 16)),
         bytes: (size + 8).max(saves),
-        chained,
+        chained: parent(info),
     })
 }
 
-/// What unwinding the function of `entry` in the image at `image` reads,
-/// its chained entries included.
+/// What unwinding the function of `entry` in the image at `image` reads at
+/// the stop `rip`, its chained entries included. The stop's offset into the
+/// function skips the codes of prologue instructions it has not reached; a
+/// chained parent's codes all apply.
 ///
 /// # Safety
 ///
@@ -102,13 +122,19 @@ pub(super) fn reach(info: &[u8]) -> Option<Reach> {
 pub(super) unsafe fn reach_of(
     image: usize,
     entry: *const IMAGE_RUNTIME_FUNCTION_ENTRY,
+    rip: usize,
 ) -> Option<Reach> {
     let unwind_data = core::mem::offset_of!(IMAGE_RUNTIME_FUNCTION_ENTRY, Anonymous);
-    // SAFETY: the caller's contract makes `entry` a readable function entry,
-    // whose union at `Anonymous` is the `u32` RVA of its unwind data.
+    // SAFETY: the caller's contract makes `entry` a readable function entry:
+    // its first `u32` the function's start, offset from `image`, and the
+    // union at `Anonymous` the `u32` RVA of its unwind data.
+    let begin: u32 = unsafe { enshwick::raw::read_at(entry.cast(), 0) };
+    // SAFETY: the same readable function entry, whose `Anonymous` union is
+    // the `u32` RVA of its unwind data.
     let mut rva: u32 = unsafe { enshwick::raw::read_at(entry.cast(), unwind_data) };
+    let mut at_offset = rip.saturating_sub(image + begin as usize);
     let mut total: Option<Reach> = None;
-    for _ in 0..32 {
+    for _ in 0..CHAIN {
         let at = image.checked_add(rva as usize)?;
         let (_, end) = readable(at)?;
         // SAFETY: `readable` reported the bytes from `at` up to `end` as one
@@ -120,17 +146,18 @@ pub(super) unsafe fn reach_of(
                 (end - at).min(UNWIND_INFO),
             )
         };
-        let step = reach(info)?;
+        let step = reach(info, at_offset)?;
         let merged = match total {
             None => step,
             Some(first) => Reach {
+                frame: first.frame.or(step.frame),
                 bytes: first.bytes + step.bytes - 8,
                 chained: step.chained,
-                ..first
             },
         };
         match merged.chained {
-            Some(next) => (total, rva) = (Some(merged), next),
+            // A chained parent describes the whole prologue, all of it run.
+            Some(next) => (total, rva, at_offset) = (Some(merged), next, usize::MAX),
             None => return Some(merged),
         }
     }
@@ -222,7 +249,8 @@ pub(super) unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> 
             // SAFETY: `entry` is the non-null function entry
             // `RtlLookupFunctionEntry` just returned for the loaded image at
             // `base`.
-            let Some(reach) = (unsafe { reach_of(base, entry) }) else {
+            let Some(reach) = (unsafe { reach_of(base, entry, usize::try_from(rip).unwrap_or(0)) })
+            else {
                 break;
             };
             let frame = match reach.frame {

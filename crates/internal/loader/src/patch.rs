@@ -34,6 +34,7 @@ use crate::chains::{Chains, Hop};
 use crate::code::{CodePatch, Verdict};
 use crate::detour::{Commit, Pending, Request};
 use crate::mid::{Mids, Stubs};
+use crate::unwind_info::RuntimeFunction;
 
 const PAGE: usize = 4096;
 const THUNK: usize = 96;
@@ -721,16 +722,6 @@ fn leave_out(patches: &[CodePatch], verdicts: &mut [Verdict], stuck: &[usize]) {
         }
     }
     crate::code::skip_with_feature(patches, verdicts);
-}
-
-/// An entry of a function table for `RtlAddFunctionTable`: offsets from
-/// the table's base.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-struct RuntimeFunction {
-    begin: u32,
-    end: u32,
-    unwind: u32,
 }
 
 /// What [`write_thunk`] wrote.
