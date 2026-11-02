@@ -135,7 +135,6 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         let dir = game_dir.join(dir);
         std::fs::create_dir_all(&dir).map_err(io(&dir))?;
     }
-    let data_dir = game_dir.join("mod-data");
     let (libraries, candidates, others) = libraries(&mods_dir, Run::Dry, &mut |_| {});
     let plan = resolve::resolve(&candidates, side);
     let loader = Loader {
@@ -145,7 +144,6 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         build,
         reflection,
         configs_dir: game_dir.join("mod-configs"),
-        data_dir,
         developer_tools: crate::developer_tools::marked(game_dir),
         mods_dir,
         stub: 0,

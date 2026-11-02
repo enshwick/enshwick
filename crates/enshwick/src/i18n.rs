@@ -650,11 +650,12 @@ impl Load<'_> {
     /// ```
     pub fn texts_from(&mut self, toml: &str) -> Result<Texts, Off> {
         let mut texts = Texts::parse(toml)?;
-        let data = self.data_dir()?;
-        // `<game>/mod-data/<id>` beside `<game>/mod-configs/`.
-        let overrides = data
+        let dir = self.mod_dir()?;
+        // shortcut: names the file by the mod's folder in `<game>/mods/`, which
+        // `cargo enshwick install` names by the id; fine until overrides go.
+        let overrides = dir
             .file_name()
-            .zip(data.parent().and_then(std::path::Path::parent))
+            .zip(dir.parent().and_then(std::path::Path::parent))
             .map(|(id, game)| {
                 game.join("mod-configs")
                     .join(format!("{}.texts.toml", id.to_string_lossy()))

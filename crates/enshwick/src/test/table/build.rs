@@ -49,7 +49,18 @@ pub(crate) extern "system" fn constant(_me: ModHandle, name: Str, out: *mut u64)
 }
 
 pub(crate) extern "system" fn data_dir(_me: ModHandle, out: *mut Str) -> Status {
-    let dir = with(None, |s| Some(s.host.data_dir.clone()));
+    let dir = with(None, |s| {
+        s.host.world_key.is_some().then(|| s.host.data_dir.clone())
+    });
+    // The loader's path lives for the process; a test leaks a few bytes for it.
+    found(
+        dir.map(|dir| Str::new(Box::leak(dir.into_boxed_str()))),
+        out,
+    )
+}
+
+pub(crate) extern "system" fn mod_dir(_me: ModHandle, out: *mut Str) -> Status {
+    let dir = with(None, |s| Some(s.host.mod_dir.clone()));
     // The loader's path lives for the process; a test leaks a few bytes for it.
     found(
         dir.map(|dir| Str::new(Box::leak(dir.into_boxed_str()))),

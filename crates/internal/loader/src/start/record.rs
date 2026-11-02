@@ -1,7 +1,7 @@
 //! Taking the record of what runs at start, and writing it into each world
 //! that loads.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::Ordering;
 
 use crate::host::Loader;
@@ -55,23 +55,13 @@ pub(super) fn take(loader: &'static Loader, folders: Vec<(String, String, String
     }
 }
 
-/// Where the world `key` keeps its record.
-fn path_of(loader: &Loader, key: &str) -> PathBuf {
-    loader
-        .data_dir
-        .join(crate::settings::LOADER_ID)
-        .join("worlds")
-        .join(key)
-        .join(record::RECORD_FILE)
-}
-
 /// Writes the record into the world that loaded, on a thread of its own,
 /// and logs what changed since that world last loaded.
-pub(crate) fn write_for_world(loader: &'static Loader) {
+pub(crate) fn write_for_world() {
     let (Some(taken), Some(key)) = (record::taken(), crate::worlds::current()) else {
         return;
     };
-    let path = path_of(loader, &key);
+    let path = crate::world_folders::loader_data(&key, record::RECORD_FILE);
     let spawned = std::thread::Builder::new()
         .name("enshwick-record".into())
         .spawn(move || {

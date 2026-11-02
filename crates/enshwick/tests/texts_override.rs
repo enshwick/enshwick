@@ -37,9 +37,9 @@ mod tests {
             [&[0xff, 0xfe][..], &utf16].concat(),
         )
         .unwrap();
-        let data = game.join("mod-data").join("texty");
+        let folder = game.join("mods").join("texty");
         let loader = enshwick::test::FakeHost::new()
-            .data_dir(data.to_str().unwrap())
+            .mod_dir(folder.to_str().unwrap())
             .install();
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Texty)`.
         let status = unsafe { loader.init(enshwick_mod_init) };

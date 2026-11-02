@@ -54,10 +54,10 @@ fn keep_sizes(loader: &Loader) {
 
 /// On the side that keeps the world: keeps the stack sizes in force when it
 /// loads and saves, and when it loads sets the hold of every pack that
-/// raised a stack size on that world, and releases that of every other pack
-/// still on. A pack's hold of the whole data folder, from before holds knew
-/// worlds, goes once the world is known. A mod with code keeps its own
-/// hold.
+/// raised a stack size on that world, in the world's data folder, and
+/// releases that of every other pack still on. A pack's hold in its folder
+/// in `mods/`, from before holds knew worlds, goes once the world is known.
+/// A mod with code keeps its own hold.
 pub(crate) fn world_event(loader: &Loader, event: Event) {
     if event == Event::WORLD_SAVED {
         keep_sizes(loader);
@@ -73,7 +73,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
         if !on(loader, index) {
             continue;
         }
-        let dir = loader.data_dir.join(&record.id);
+        let dir = loader.mods_dir.join(record.folder());
         let hold = match world {
             Some(world) => {
                 if record.pack
@@ -81,7 +81,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 {
                     crate::log::write(Level::WARN, &record.id, &format!("hold not kept: {why}"));
                 }
-                Hold::for_world(&dir, world)
+                Hold::new(&crate::world_folders::data_of(world).join(&record.id))
             }
             None => Hold::new(&dir),
         };

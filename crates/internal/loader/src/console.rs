@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn a_server_reads_the_loader_s_command_file() {
-        let data = Path::new("mod-data");
+        let data = Path::new("mods");
         assert_eq!(command_files(data), [data.join(LOADER_ID).join(file::FILE)]);
     }
 

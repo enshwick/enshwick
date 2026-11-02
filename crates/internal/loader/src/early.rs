@@ -49,6 +49,15 @@ pub fn line(unix_seconds: u64, message: &str) -> String {
     format!("{year:04}-{month:02}-{day:02} {time} loader: {message}\n")
 }
 
+/// `2026-10-29-14-03-09`, UTC, for a file name.
+#[must_use]
+pub fn stamp(unix_seconds: u64) -> String {
+    let (year, month, day) = civil(unix_seconds / 86_400);
+    let second = unix_seconds % 86_400;
+    let (hour, minute, second) = (second / 3600, second / 60 % 60, second % 60);
+    format!("{year:04}-{month:02}-{day:02}-{hour:02}-{minute:02}-{second:02}")
+}
+
 /// The proleptic Gregorian date `days` after 1970-01-01.
 fn civil(days: u64) -> (u64, u64, u64) {
     let z = days + 719_468;

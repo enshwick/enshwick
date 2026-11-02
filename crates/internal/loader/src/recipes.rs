@@ -3,7 +3,7 @@
 //! refuses to craft them.
 //!
 //! `mod-configs/enshwick.recipes.toml` holds the rules of every world this
-//! process runs, and `mod-data/enshwick/worlds/<key>/recipes.toml` a world's
+//! process runs, and `<stem>-mod-settings/enshwick/recipes.toml` a world's
 //! own, applied over it; mods add rules through the API, under both files.
 //! Each file disables recipes by name, by the item they make or by the
 //! workshop they are made at, and enables some back.
@@ -35,7 +35,7 @@ const NEAR: usize = 5;
 /// The recipe file the loader writes on first start.
 pub const TEMPLATE: &str = r#"# Recipes nobody crafts in this game. They leave every crafting menu (by
 # hand, at stations and at survivors), and the server refuses to craft them;
-# items that exist stay. A world's own mod-data/enshwick/worlds/<key>/recipes.toml
+# items that exist stay. A world's own <save>-mod-settings/enshwick/recipes.toml
 # applies over this file. Changes apply within a second.
 #
 # recipes names a recipe by its debug name (Tool_Torch01_T0_PK), a mod's

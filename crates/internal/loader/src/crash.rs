@@ -305,7 +305,7 @@ struct State {
     ranges: Box<[Range]>,
     /// `crash.log`, opened for appending.
     log: usize,
-    /// `mod-data/enshwick/last-crash.txt`, rewritten with the last crash.
+    /// `mods/enshwick/last-crash.txt`, rewritten with the last crash.
     last: usize,
 }
 
@@ -571,10 +571,10 @@ pub(crate) fn last() -> Option<&'static str> {
 }
 
 /// Starts blaming crashes on `modules`, `(index, id, start, end)`, writing
-/// `crash.log` to `logs_dir` and the last crash to `mod-data/enshwick` in
-/// `data_dir`; reads the last session's crash first.
-pub(crate) fn install(modules: &[(usize, String, usize, usize)], logs_dir: &Path, data_dir: &Path) {
-    let own = data_dir.join(crate::settings::LOADER_ID);
+/// `crash.log` to `logs_dir` and the last crash to `enshwick/` in
+/// `mods_dir`; reads the last session's crash first.
+pub(crate) fn install(modules: &[(usize, String, usize, usize)], logs_dir: &Path, mods_dir: &Path) {
+    let own = mods_dir.join(crate::settings::LOADER_ID);
     let _made = std::fs::create_dir_all(&own);
     let last_path = own.join("last-crash.txt");
     if let Ok(text) = std::fs::read_to_string(&last_path)

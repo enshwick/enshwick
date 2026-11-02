@@ -168,7 +168,7 @@
 "ui-demo.player" = "Nie ma online gracza o nazwie {name}."
 "ui-demo.opening" = "Otwieram demo interfejsu dla {name}."
 "ui-demo.no-client" = "Klient gracza {name} nie uruchamia Enshwick albo jeszcze nie odpowiedział."
-"ui-demo.off" = "Narzędzia deweloperskie są wyłączone. Aby je włączyć, utwórz pusty plik mod-data/enshwick/developer-tools na serwerze i w kliencie gracza, a potem uruchom oba ponownie."
+"ui-demo.off" = "Narzędzia deweloperskie są wyłączone. Aby je włączyć, utwórz pusty plik mods/enshwick/developer-tools na serwerze i w kliencie gracza, a potem uruchom oba ponownie."
 "console.not-run" = "Nie wykonano ({status})."
 "usage.entity" = "enshwick entity <numer>"
 "usage.placed" = "enshwick placed [liczba]"
@@ -314,7 +314,7 @@
 "resistance_shroud.name" = "Odporność na Mgłę"
 "resistance_lightning.name" = "Odporność na porażenie"
 "resistance_poison.name" = "Odporność na truciznę"
-"mods.developer.off" = "narzędzie deweloperskie: działa tylko wtedy, gdy istnieje plik mod-data/enshwick/developer-tools"
+"mods.developer.off" = "narzędzie deweloperskie: działa tylko wtedy, gdy istnieje plik mods/enshwick/developer-tools"
 
 "mods.waiting" = "{name} {version} (czeka)"
 "mods.waiting.why" = "Czeka, aż gra opuści kod, który zmienia ten mod. Wkrótce spróbuje ponownie, potem jeszcze trzy razy co minutę. Potem się wyłączy."

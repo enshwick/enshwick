@@ -43,7 +43,7 @@ last part is what the faulting access read, wrote or ran.
 
 `crash.log` is appended to across sessions, unlike the other logs. The next
 start logs the last crash as a warning and shows it at the top of
-`status.log`; the line waits in `mod-data/enshwick/last-crash.txt` until
+`status.log`; the line waits in `mods/enshwick/last-crash.txt` until
 then.
 
 ## What is in status.log?
@@ -160,12 +160,12 @@ acted. It stays off until the game restarts.
 ## The game stops before the world loads
 
 A mod that keeps a world the vanilla game cannot open safely sets a hold:
-`mod-data/<id>/hold.txt`, holding the reason. While the file exists and that
-mod does not run (removed, skipped, off, or the build is unknown), the loader
-logs
+`hold.txt` in its folder `mods/<folder>/`, or in a world's
+`<stem>-mod-data/<id>/`, holding the reason. While the file exists and that
+mod does not run (skipped, off, or the build is unknown), the loader logs
 
 ```text
-<id> holds this game (<reason>) and the mod does not run: the game stops before the world loads; update Enshwick and the mod, or delete mod-data/<id>/hold.txt to open the world anyway, at your own risk
+<id> holds this game (<reason>) and the mod does not run: the game stops before the world loads; update Enshwick and the mod, or delete <path>/hold.txt to open the world anyway, at your own risk
 ```
 
 and ends the process with exit code 3. On an unknown build the middle part

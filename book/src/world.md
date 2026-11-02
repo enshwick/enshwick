@@ -233,14 +233,16 @@ an entity not in the world (`WorldError::Gone`).
 [`WorldSaved`](events.md) follows once the save is on disk. A save already
 under way counts as asked. Before the world has loaded it is refused.
 
-`key()` names the world the server runs: its save file's name and a hash of
-its folder, such as `world0-1a2b3c4d`, the same in every session. A
-[world store](state.md#per-world-state) files the mod's state under it. A
-world whose save moves to another folder gets a new key, and the loader
-moves its mods' data along ([Move a world to another folder](https://enshwick.com/guides/run-a-server-in-docker/#move-a-world-to-another-folder)).
+`key()` names the world the server runs: its save file's name without
+`.ksd`, such as `world0`, the same in every session. The game gives a
+deleted world's name to its next new world, so a key names a slot.
+`data_dir()` is the mod's folder in that world, `<stem>-mod-data/<id>`
+beside the save, where a [world store](state.md#per-world-state) keeps the
+mod's state; the loader sets it aside when a new world takes the name
+([State](state.md#when-a-new-world-takes-a-saves-name)).
 
-Like the reads, all three need the game thread; `key()` works from any
-thread.
+Like the reads, all three need the game thread; `key()` and `data_dir()`
+work from any thread.
 
 ## Players
 
@@ -291,7 +293,7 @@ With `allowlist = true` in `mod-configs/enshwick.toml`, a dedicated server
 lets in only the accounts its allowlist lists, and its administrators; the
 loader removes any other player as the player enters the world, and a player
 the game gives no account. The game has
-no such list, so the loader keeps it in `mod-data/enshwick/allowlist.txt`,
+no such list, so the loader keeps it in `mods/enshwick/allowlist.txt`,
 one account per line, with `#` notes.
 
 `set_allowlisted(key, true)` lists an account and `set_allowlisted(key,
@@ -319,7 +321,7 @@ every line the muted player types before any other player reads it, and
 tells the player why with one of the game's notices, at most every 30
 seconds; a client without Enshwick reads the same as a chat line. Lines mods
 send and mod messages pass. The loader keeps the mutes in
-`mod-data/enshwick/muted.txt`, one account per line, with `#` notes, and
+`mods/enshwick/muted.txt`, one account per line, with `#` notes, and
 reads it at every start, so a mute lasts until it is lifted; an edit of the
 file by hand applies at the next start.
 

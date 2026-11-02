@@ -87,7 +87,7 @@ loaded. `grant_account(account, id, grant)` and
 `revoke_account(account, id, revoke)` take the account's
 [`Player::key`](world.md) instead of a character: when the account's
 character is in the game the change applies now, otherwise it waits with the
-world, in `mod-data/enshwick/worlds/<key>/knowledge.toml`, and applies once
+world, in `<stem>-mod-data/enshwick/knowledge.toml`, and applies once
 the account's next character has loaded in that world, whichever character
 it is. Only a player's ids qualify.
 

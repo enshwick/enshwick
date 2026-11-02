@@ -18,7 +18,7 @@ const WINDOW_POLL: Duration = Duration::from_millis(100);
 const HEADER_PAGE: usize = 0x400; // bound, not a game offset: the loader's read
 
 /// The folders beside the game's executable the loader keeps.
-pub(super) const GAME_DIRS: [&str; 4] = ["mods", "mod-configs", "mod-data", "logs"];
+pub(super) const GAME_DIRS: [&str; 3] = ["mods", "mod-configs", "logs"];
 
 /// The stub contract the loader speaks.
 const STUB_ABI: u32 = 2;
@@ -123,7 +123,7 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     let settings_file = game_dir
         .join("mod-configs")
         .join(format!("{}.toml", crate::settings::LOADER_ID));
-    let listed = crate::allowlist::listed(&game_dir.join("mod-data"));
+    let listed = crate::allowlist::listed(&mods_dir);
     let (settings, settings_problems) = crate::settings::Settings::read(&settings_file, listed);
     crate::status::mark_start();
     crate::diag::configure(&settings);
@@ -196,8 +196,8 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
 
 /// Identifies the running game and its build table; `None`, logged, when the
 /// loader cannot serve it. On a build it has no table for, a mod's hold under
-/// `data_dir` stops the game.
-pub(super) fn game(data_dir: &Path) -> Option<Game> {
+/// `mods_dir` stops the game.
+pub(super) fn game(mods_dir: &Path) -> Option<Game> {
     let Some((side, base, image_len)) = identify() else {
         crate::log!(
             ERROR,
@@ -227,7 +227,7 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
         return None;
     };
     let reflection = Reflection::scan(image);
-    if !reflection_read(&reflection, fingerprint, data_dir) {
+    if !reflection_read(&reflection, fingerprint, mods_dir) {
         return None;
     }
     let tables = builds::load();
@@ -245,7 +245,7 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
             builds::fingerprint_name(fingerprint),
             errors::UNKNOWN_BUILD
         );
-        crate::holds::enforce(data_dir, &[], true, None);
+        crate::holds::enforce(mods_dir, &[], true, None);
         return None;
     };
     for (name, rva) in build.checks() {
@@ -258,11 +258,11 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
                 "{name} is not where the build table says; nothing loads ({})",
                 errors::TABLE_MISMATCH
             );
-            crate::holds::enforce(data_dir, &[], true, None);
+            crate::holds::enforce(mods_dir, &[], true, None);
             return None;
         }
     }
-    if let Some(game_dir) = data_dir.parent() {
+    if let Some(game_dir) = mods_dir.parent() {
         crate::attribute_slots::supply(&mut build, &reflection, game_dir, side);
     }
     let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
@@ -351,8 +351,8 @@ pub(super) fn identify() -> Option<(Side, u64, usize)> {
 
 /// Logs what the scan reflected, and whether it read the game: a build whose
 /// scan finds no types or no systems is logged as unknown, and a mod's hold
-/// under `data_dir` stops the game.
-fn reflection_read(reflection: &Reflection<'_>, fingerprint: Fingerprint, data_dir: &Path) -> bool {
+/// under `mods_dir` stops the game.
+fn reflection_read(reflection: &Reflection<'_>, fingerprint: Fingerprint, mods_dir: &Path) -> bool {
     crate::log!(
         INFO,
         "{} types and {} systems reflected",
@@ -368,6 +368,6 @@ fn reflection_read(reflection: &Reflection<'_>, fingerprint: Fingerprint, data_d
         builds::fingerprint_name(fingerprint),
         errors::UNKNOWN_BUILD
     );
-    crate::holds::enforce(data_dir, &[], true, None);
+    crate::holds::enforce(mods_dir, &[], true, None);
     false
 }

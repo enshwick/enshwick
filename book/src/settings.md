@@ -169,7 +169,7 @@ the schema states (`Field::scope`, `Scope`):
 | Scope   | Stages                       | Where                                                                     |
 | ------- | ---------------------------- | ------------------------------------------------------------------------- |
 | `user`  | `client`, `restart`          | the settings file `mod-configs/<id>.toml`, every world                    |
-| `world` | `startup`, `runtime`, `sync` | `mod-data/<id>/worlds/<key>/settings.toml`, with the world                |
+| `world` | `startup`, `runtime`, `sync` | `<stem>-mod-settings/<id>/settings.toml`, beside the world's save         |
 
 The settings file is also the template: a world that loads for the first time
 in single player, hosted or on a dedicated server gets a copy of it as its
@@ -192,7 +192,7 @@ in each world. A change to a world setting while a game client runs no
 world, as from the main menu, goes into the settings file: worlds made from
 then on start with it, and a world that has its own file keeps its values.
 On a dedicated server before its world loads, the change waits in
-`mod-data/<id>/worlds/next.toml` and goes into that world as it loads.
+`mod-configs/<id>.next.toml` and goes into that world as it loads.
 
 While a world runs, the loader watches its settings file as it watches the
 settings file, and an edit reaches `on_config_change` about a second after it

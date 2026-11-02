@@ -168,7 +168,7 @@
 "ui-demo.player" = "Kein Spieler namens {name} ist online."
 "ui-demo.opening" = "Öffne die Oberflächen-Demo für {name}."
 "ui-demo.no-client" = "Der Client von {name} führt Enshwick nicht aus oder hat noch nicht geantwortet."
-"ui-demo.off" = "Die Entwicklerwerkzeuge sind aus. Zum Einschalten die leere Datei mod-data/enshwick/developer-tools auf dem Server und im Client des Spielers anlegen und beide neu starten."
+"ui-demo.off" = "Die Entwicklerwerkzeuge sind aus. Zum Einschalten die leere Datei mods/enshwick/developer-tools auf dem Server und im Client des Spielers anlegen und beide neu starten."
 "console.not-run" = "Nicht ausgeführt ({status})."
 "usage.entity" = "enshwick entity <Nummer>"
 "usage.placed" = "enshwick placed [Anzahl]"
@@ -314,7 +314,7 @@
 "resistance_shroud.name" = "Miasma-Beständigkeit"
 "resistance_lightning.name" = "Schockbeständigkeit"
 "resistance_poison.name" = "Giftresistenz"
-"mods.developer.off" = "ein Entwicklerwerkzeug: es läuft nur, solange die Datei mod-data/enshwick/developer-tools existiert"
+"mods.developer.off" = "ein Entwicklerwerkzeug: es läuft nur, solange die Datei mods/enshwick/developer-tools existiert"
 
 "mods.waiting" = "{name} {version} (wartet)"
 "mods.waiting.why" = "Wartet, bis das Spiel den Code verlässt, den diese Mod ändert. Gleich neuer Versuch, dann noch dreimal im Minutenabstand. Danach schaltet sie sich aus."

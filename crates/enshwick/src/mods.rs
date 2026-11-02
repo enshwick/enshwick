@@ -27,9 +27,9 @@ pub const LOADER_ID: &str = "enshwick";
 /// ```
 /// use enshwick::mods::{DEVELOPER_TOOLS, LOADER_ID};
 ///
-/// assert_eq!(DEVELOPER_TOOLS, format!("mod-data/{LOADER_ID}/developer-tools"));
+/// assert_eq!(DEVELOPER_TOOLS, format!("mods/{LOADER_ID}/developer-tools"));
 /// ```
-pub const DEVELOPER_TOOLS: &str = "mod-data/enshwick/developer-tools";
+pub const DEVELOPER_TOOLS: &str = "mods/enshwick/developer-tools";
 
 /// Why the loader turns a mod with `developer: true` off before its `init`
 /// when [`DEVELOPER_TOOLS`] is missing, as its log and the Mods screen say.
@@ -45,7 +45,7 @@ pub const DEVELOPER_TOOLS: &str = "mod-data/enshwick/developer-tools";
 /// );
 /// ```
 pub const DEVELOPER_TOOL_OFF: &str =
-    "a developer tool: it runs only while the file mod-data/enshwick/developer-tools exists";
+    "a developer tool: it runs only while the file mods/enshwick/developer-tools exists";
 
 /// The stub that starts the loader, in the game's folder.
 ///

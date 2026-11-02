@@ -1,6 +1,6 @@
 //! Chat mutes: the accounts whose typed lines the server drops.
 //!
-//! They are kept in `mod-data/enshwick/muted.txt`. Mods mute and lift mutes
+//! They are kept in `mods/enshwick/muted.txt`. Mods mute and lift mutes
 //! through the host table; the chat post link asks about every line a
 //! player types, before any other player reads it.
 

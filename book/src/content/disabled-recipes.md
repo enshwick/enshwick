@@ -54,7 +54,7 @@ pick from.
 
 The file in `mod-configs` holds the rules of every world the process runs:
 the dedicated server's world, or each world of a player who plays alone or
-hosts. A world's own file, `mod-data/enshwick/worlds/<key>/recipes.toml`, in
+hosts. A world's own file, `<stem>-mod-settings/enshwick/recipes.toml` beside the world's save, in
 the same form, applies over it while that world runs, so a host can disable
 recipes in one world only. The rules apply in turn: mods' rules, then the
 `mod-configs` file, then the world's; each file disables what its

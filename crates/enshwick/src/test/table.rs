@@ -31,8 +31,8 @@ mod ui;
 pub(crate) mod world;
 
 use build::{
-    build, caller_frame, constant, data_dir, field_offset, log_level, symbol, system, type_hash,
-    type_size,
+    build, caller_frame, constant, data_dir, field_offset, log_level, mod_dir, symbol, system,
+    type_hash, type_size,
 };
 use content::{
     add_text, change_data, content_read, content_serve, declare_change, entity_data_open,
@@ -971,4 +971,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     use_content,
     chat_mute_set,
     chat_mute_has,
+    mod_dir,
 };

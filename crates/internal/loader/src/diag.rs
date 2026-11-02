@@ -350,7 +350,6 @@ mod tests {
                 "interaction filter: you.trading-post, you.market-stalls, chained".into(),
             ],
             knowledge_guard: Some("watching; 3 requests it would refuse let through".into()),
-            world_folders: Vec::new(),
             messages: messages_line(0, 3, 1),
             settings: Vec::new(),
             parts: vec![
@@ -382,16 +381,6 @@ mod tests {
         assert!(text.contains(
             "\nmod messages: 3 lines for one player dropped (queue full, player gone or such lines off), \
              1 line for one player reached others, lines for one player off\n"
-        ));
-    }
-
-    #[test]
-    fn the_summary_names_other_worlds_of_the_save_name_with_mod_data() {
-        let mut summary = summary();
-        assert!(!summary.render().contains("other worlds"));
-        summary.world_folders = vec!["world0-aaaaaaaa".into(), "world0-cccccccc".into()];
-        assert!(summary.render().contains(
-            "mod data of other worlds of this save name: world0-aaaaaaaa, world0-cccccccc;"
         ));
     }
 

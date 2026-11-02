@@ -1,5 +1,5 @@
 //! The server's allowlist, ours since the game has none: with the
-//! `allowlist` setting on, only the accounts `mod-data/enshwick/allowlist.txt`
+//! `allowlist` setting on, only the accounts `mods/enshwick/allowlist.txt`
 //! lists, and administrators, stay in the game.
 
 use std::fmt::Write as _;
@@ -14,7 +14,7 @@ pub(crate) use runtime::{command, configure, guarded, has, is_on, refuses, set, 
 /// The file under the loader's data folder.
 pub const FILE: &str = "allowlist.txt";
 
-/// Whether the allowlist's file exists under `data_dir`, the `mod-data`
+/// Whether the allowlist's file exists under `mods_dir`, the `mods`
 /// folder: a broken settings file then holds the allowlist on.
 #[must_use]
 pub fn listed(data_dir: &std::path::Path) -> bool {

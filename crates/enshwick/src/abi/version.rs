@@ -15,7 +15,7 @@
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_major, ABI_MAJOR);
 /// ```
-pub const ABI_MAJOR: u16 = 7;
+pub const ABI_MAJOR: u16 = 8;
 
 /// The minor version of this interface: one more for each append to the
 /// layout of this [`ABI_MAJOR`], a field at the end of a struct that starts

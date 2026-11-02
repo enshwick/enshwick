@@ -22,7 +22,7 @@
 //! attaches again, since a later entity may take its place.
 //!
 //! The server keeps the values and writes them, when the world saves, to
-//! `mod-data/enshwick/worlds/<key>/attachments.bin`, never into the game's
+//! `<stem>-mod-data/enshwick/attachments.bin` beside the save, never into the game's
 //! save. Every change of a sent kind goes to the clients that said hello,
 //! and a client that says hello gets every value of those kinds; a client
 //! keeps what it got and answers reads from it.

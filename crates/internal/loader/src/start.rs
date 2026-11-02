@@ -59,14 +59,8 @@ fn no_game(
 
 /// Stops the game when a mod that holds a world is not running.
 fn enforce_holds(loader: &Loader) {
-    let running: Vec<&str> = loader
-        .mods
-        .iter()
-        .filter(|m| !m.off.load(Ordering::Acquire))
-        .map(|m| m.id.as_str())
-        .chain([crate::settings::LOADER_ID])
-        .collect();
-    crate::holds::enforce(&loader.data_dir, &running, false, Some(loader));
+    let running = crate::holds::running(loader);
+    crate::holds::enforce(&loader.mods_dir, &running, false, Some(loader));
 }
 
 /// Seals the registries mods filled during init, in the order they depend
@@ -135,8 +129,7 @@ pub(crate) fn start(
     else {
         return;
     };
-    let data_dir = mods_dir.with_file_name("mod-data");
-    let Some(game) = game(&data_dir).or_else(|| no_game(&mods_dir, stub_abi, first_report)) else {
+    let Some(game) = game(&mods_dir).or_else(|| no_game(&mods_dir, stub_abi, first_report)) else {
         return;
     };
     let mut watching = Watching::start(game.base);
@@ -170,7 +163,6 @@ pub(crate) fn start(
         reflection: game.reflection,
         configs_dir: mods_dir.with_file_name("mod-configs"),
         developer_tools,
-        data_dir,
         mods_dir,
         stub: stub_abi,
         mods: records(&libraries, &candidates, &plan),
@@ -388,7 +380,7 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
         crate::crash::install(
             &modules,
             &game_dir.join("logs").join(crate::settings::LOADER_ID),
-            &loader.data_dir,
+            &loader.mods_dir,
         );
     }
 }

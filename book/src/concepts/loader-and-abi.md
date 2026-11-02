@@ -43,7 +43,7 @@ folder. The loader keeps no list of mods. A DLL directly in `mods/`, a
 ## The record of a world
 
 At every world load the loader writes `mods.lock` into that world's data,
-`mod-data/enshwick/worlds/<world>/mods.lock`: the loader's version and
+`<stem>-mod-data/enshwick/mods.lock` beside its save: the loader's version and
 SHA-256, the game build, and each running mod's id, version, folder and
 SHA-256, in load order, then under `[[replaced]]` the mods a present mod
 replaces (see `replaces` in [the manifest](#the-manifest)). Copying the
@@ -127,7 +127,7 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
 
 - `id` is `<author>.<name>`, each part of `[a-z0-9-]`, at most 64 characters
   in all. It names the mod in logs, its settings file `mod-configs/<id>.toml`
-  and its data folder `mod-data/<id>`, and is the namespace of its content,
+  and its data folder `<stem>-mod-data/<id>` in each world, and is the namespace of its content,
   stats, points, services and events (`you.trading-post:prices`). An invalid
   id fails the build; `enshwick` is the loader's own and is refused.
 - `side`: see [Sides and hosting](sides-and-hosting.md).

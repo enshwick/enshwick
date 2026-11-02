@@ -75,7 +75,7 @@ mod tests {
             .placed(transform(), Entity(2), [0.0, 0.0, 0.0])
             .player(player)
             .data_dir(data.to_str().unwrap())
-            .world_key("world0-1a2b3c4d")
+            .world_key("world0")
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Queries)`.
         let status =
@@ -99,7 +99,7 @@ mod tests {
         assert_eq!(loader.destroyed(), [11]);
         assert_eq!(world.save(), Ok(()));
         assert_eq!(loader.saves(), 1);
-        assert_eq!(world.key().as_deref(), Some("world0-1a2b3c4d"));
+        assert_eq!(world.key().as_deref(), Some("world0"));
 
         assert_eq!(store.update(|v| v.count += 1), None);
         assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
@@ -107,7 +107,7 @@ mod tests {
         assert_eq!(loader.raise::<WorldSaved>(&()), 1);
         assert_eq!(loader.raise::<ShutdownStarted>(&()), 1);
         assert_eq!(store.key(), None);
-        let file = data.join("worlds/world0-1a2b3c4d/visits.toml");
+        let file = data.join("visits.toml");
         let text = std::fs::read_to_string(&file).unwrap();
         assert!(text.contains("count = 3"), "{text}");
         let _gone = std::fs::remove_dir_all(&data);
@@ -117,14 +117,14 @@ mod tests {
     fn a_store_that_does_not_read_stays_shut_and_says_why_in_the_status() {
         let data = std::env::temp_dir().join(format!("enshwick-shut-store-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&data);
-        let file = data.join("worlds/world0-1a2b3c4d/visits.toml");
+        let file = data.join("visits.toml");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "count = ").unwrap();
         let loader = FakeHost::new()
             .world()
             .type_hash("keen::ecs::NpcBed", BED)
             .data_dir(data.to_str().unwrap())
-            .world_key("world0-1a2b3c4d")
+            .world_key("world0")
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Queries)`.
         let status =

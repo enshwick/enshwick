@@ -115,6 +115,13 @@ fn note_old_layout(mods_dir: &Path) {
             );
         }
     }
+    if mods_dir.with_file_name("mod-data").exists() {
+        crate::log!(
+            WARN,
+            "mod-data/ is not read: a world's mod data lives in <save>-mod-data/ beside its save, \
+             and the loader's own files in mods/enshwick/; move them by hand or delete mod-data/"
+        );
+    }
 }
 
 /// Writes the line of `skip` for the DLL `file` to the loader's log.

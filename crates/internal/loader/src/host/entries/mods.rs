@@ -77,7 +77,7 @@ pub(crate) extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut S
                 defaults.to_owned()
             }
         };
-        let content = crate::worlds::effective(loader, record, &content);
+        let content = crate::worlds::effective(record, &content);
         let kept = record.settings.keep(&content);
         // SAFETY: `HostApi::settings` has the mod pass `out` null or pointing
         // at a writable, aligned `Str` that no other thread touches during the

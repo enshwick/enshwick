@@ -8,6 +8,27 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** a world's mod settings live in `<stem>-mod-settings/<mod>/`
+  and the data mods write for it in `<stem>-mod-data/<mod>/`, beside its
+  save, so copying the save folder moves a world with its mod data. The
+  loader's world files (`attachments.bin`, `stats.bin`, `game-settings.toml`,
+  `knowledge.toml`, `mods.lock`) are in `<stem>-mod-data/enshwick/` and the
+  recipes a world turns off in `<stem>-mod-settings/enshwick/recipes.toml`.
+  The loader records each world's GUID from its save in
+  `<stem>-mod-data/enshwick/world.toml`; when a new world takes a deleted
+  world's save name, both folders are renamed to `<name>.old-<date>-<time>`
+  and the world starts from the mods' defaults. `clones.toml`,
+  `kept-stacks.toml`, `last-crash.txt` and the `developer-tools` marker are
+  in `mods/enshwick/`. `mod-data/` is no longer read, the loader logs one
+  line when it is there, and moved worlds are no longer taken over: move a
+  world's files by hand (#915).
+- **Breaking:** `Load::data_dir` answers the mod's data folder in the world
+  that runs, `None` without one, and `World::data_dir` does the same at run
+  time; `Load::mod_dir` names the mod's folder in `mods/`, where an
+  installation `Hold` now lives. `World::key` is the save's stem, such as
+  `world0`. `Store`, `Hold::for_world`, `world_holds`, `held_worlds` and
+  `WORLDS_DIR` are gone: a world hold is a `Hold` in the world's data folder.
+  The ABI is 8.0, with `HostApi::mod_dir` (#915).
 - **Breaking:** each mod lives in a folder of its own, `mods/<mod>/`, and runs
   while that folder is there. In each folder the one DLL with the Enshwick
   exports is the mod; the folder's other DLLs are the mod's own, and a second

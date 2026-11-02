@@ -13,7 +13,7 @@
 // Any change to the layout other than an append is a new major, with
 // `ABI_MINOR` back at 0; the layout tests of this crate hold the pair to
 // the committed layout.
-#define ENSHWICK_ABI_MAJOR 7
+#define ENSHWICK_ABI_MAJOR 8
 
 // The minor version of this interface: one more for each append to the
 // layout of this `ABI_MAJOR`, a field at the end of a struct that starts
@@ -2848,8 +2848,10 @@ typedef struct EnshwickHostApi {
   // Resolves an engine constant of the running build, such as a field
   // offset reflection does not describe, by its symbolic id.
   EnshwickStatus (*constant)(EnshwickModHandle me, struct EnshwickStr name, uint64_t *out);
-  // The mod's own data folder, `mod-data/<id>`, created on first use; the
-  // path stays valid for the process.
+  // The mod's data folder in the world the server runs,
+  // `<stem>-mod-data/<id>` beside the world's save, created on first use;
+  // the path stays valid for the process. `Status::MISSING` while no
+  // world runs, as during init. Any thread.
   EnshwickStatus (*data_dir)(EnshwickModHandle me, struct EnshwickStr *out);
   // The most detailed level kept for the mod's lines; the mod skips
   // formatting anything more detailed.
@@ -3118,8 +3120,9 @@ typedef struct EnshwickHostApi {
   // way counts as asked; `Status::REFUSED` while the world may not be
   // saved, as before it has loaded. On the server's game thread only.
   EnshwickStatus (*save_world)(EnshwickModHandle me);
-  // Writes the key of the world the server runs: its save file's name and
-  // a hash of its folder, `[a-z0-9_-]`, valid for the process.
+  // Writes the key of the world the server runs: its save file's name
+  // without `.ksd`, such as `world0`, `[A-Za-z0-9_-]`, valid for the
+  // process.
   // `Status::MISSING` before the server has read or written the world.
   // Any thread.
   EnshwickStatus (*world_key)(EnshwickModHandle me, struct EnshwickStr *out);
@@ -4111,7 +4114,7 @@ typedef struct EnshwickHostApi {
   // Puts `account` on the loader's allowlist when `listed` is 1, or takes
   // it off when 0: the accounts a dedicated server with the loader's
   // `allowlist` setting on lets join, beside its administrators. The
-  // list is the file `mod-data/enshwick/allowlist.txt`, written at once
+  // list is the file `mods/enshwick/allowlist.txt`, written at once
   // whether the setting is on or not; it applies from the next join.
   // `Status::OK` also when the list already says so;
   // `Status::BAD_ARGS` for account 0 or `listed` above 1;
@@ -4206,7 +4209,7 @@ typedef struct EnshwickHostApi {
   // The server drops every line the account's player types before any
   // other player reads it, and tells that player with one of the game's
   // notices at most every 30 seconds; lines mods send and mod messages
-  // pass. The mutes are the file `mod-data/enshwick/muted.txt`, written
+  // pass. The mutes are the file `mods/enshwick/muted.txt`, written
   // at once and read again at every start. `Status::OK` also when the
   // list already says so; `Status::BAD_ARGS` for account 0 or `muted`
   // above 1; `Status::REFUSED` for a mute of an administrator online
@@ -4224,6 +4227,9 @@ typedef struct EnshwickHostApi {
   // dedicated one or the one a client hosts. Any thread. A panic in the
   // loader returns `Status::REFUSED`.
   EnshwickStatus (*chat_mute_has)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t *muted);
+  // The mod's folder in `mods/`, which holds its installation; the path
+  // stays valid for the process. Any thread.
+  EnshwickStatus (*mod_dir)(EnshwickModHandle me, struct EnshwickStr *out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

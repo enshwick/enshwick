@@ -1,11 +1,12 @@
-//! Saves on demand and the world's key for mods' per-world data.
+//! Saves on demand and the world's key, which places its mod folders.
 //!
 //! A save request sets the flags the server's own 30-second save sets; the
 //! server writes the world over the next loop iterations and
-//! `Event::WORLD_SAVED` follows. The world key comes from the path of the
-//! world's save file, which the engine builds whenever it reads or writes
-//! it: the loader links the path builder and keeps the world path built
-//! last.
+//! `Event::WORLD_SAVED` follows. The world key is the path of the world's
+//! save file without `.ksd`, which the engine builds whenever it reads or
+//! writes it: the loader links the path builder and keeps the world path
+//! built last. The world's folders sit beside the save
+//! ([`crate::world_folders`]).
 //!
 //! A dedicated server runs one world, so its key is the last one built. A
 //! client also builds the paths of all its worlds for its menus, and its
@@ -17,7 +18,6 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, Side, Status};
-use enshwick_gamedata::reflect::fnv1a32;
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
@@ -228,8 +228,8 @@ unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
 }
 
 /// Keeps the key of `path` when it names a world save; a key that names
-/// the world `side` runs from now on stops the game when a hold on that
-/// world is unmet, before its save is read.
+/// the world `side` runs from now on has its folders checked and stops the
+/// game when a hold on that world is unmet, before its save is read.
 fn remember(path: &str, side: Side) {
     let Some(key) = key_of(path) else {
         return;
@@ -243,46 +243,41 @@ fn remember(path: &str, side: Side) {
         now.is_some() && now != before
     };
     if changed && let Some(loader) = crate::host::loader() {
-        arrive(loader, key, path);
+        arrive(key);
         crate::holds::enforce_world(loader, key);
     }
 }
 
-/// The world `key`, saved at `path`, appears: takes over the mod data of the
-/// world it moved or was copied from, before anything reads that data.
-fn arrive(loader: &Loader, key: &str, path: &str) {
-    use crate::moved_worlds::Arrival;
-    let arrival = crate::moved_worlds::arrive(
-        &loader.data_dir,
-        crate::settings::LOADER_ID,
-        key,
-        Path::new(path),
-    );
-    match arrival {
-        Ok(Arrival::Moved { from }) => {
-            crate::log!(
-                INFO,
-                "world {key}: its save moved, so it took over the mod data of world {from}"
-            );
-        }
-        Ok(Arrival::Copied { from }) => {
-            crate::log!(
-                INFO,
-                "world {key}: a copy of world {from}, whose save is still there, got a copy of its mod data"
-            );
-        }
-        Ok(Arrival::Unclear(others)) => crate::log!(
+/// The world `key` appears: its folders are set aside when they belong to
+/// another world, before anything reads them.
+fn arrive(key: &str) {
+    use crate::world_folders::{Identity, check};
+    let stamp = crate::early::stamp(crate::diag::now());
+    match check(key, &stamp) {
+        Ok(Identity::Renamed { suffix }) => crate::log!(
             WARN,
-            "world {key} has no mod data, and several worlds of its save name have some: {}; \
-             it starts without, and an admin who moved it renames the right folders under \
-             mod-data/<mod>/worlds/ to {key}",
-            others.join(", ")
+            "world {key}: the mod settings and data beside its save belonged to another world, \
+             so they were renamed with {suffix} and this world starts from the mods' defaults"
+        ),
+        Ok(Identity::Unreadable) => crate::log!(
+            WARN,
+            "world {key}: its save has no header the loader reads, so its mod folders are used \
+             without checking they belong to it"
         ),
         Ok(_) => {}
         Err(e) => crate::log!(
             WARN,
-            "world {key}: the mod data of the world it came from was not taken over: {e}"
+            "world {key}: its mod folders were not checked against its save: {e}"
         ),
+    }
+}
+
+/// The world saved: a new world's GUID is recorded once it has a save.
+pub(crate) fn saved(loader: &Loader) {
+    if let Some(key) = world_key(loader)
+        && let Err(e) = crate::world_folders::note(key)
+    {
+        crate::log!(WARN, "world {key}: its GUID was not recorded: {e}");
     }
 }
 
@@ -313,8 +308,8 @@ pub(crate) fn forget() {
     *KEYS.relock() = Keys::CLOSED;
 }
 
-/// The world key of a save file path: the file's stem and a hash of its
-/// folder, so two worlds of one name in different folders differ.
+/// The world key of a save file path: the path without `.ksd`, so the
+/// world's folders are the key with a suffix.
 fn key_of(path: &str) -> Option<String> {
     let path = Path::new(path);
     if path.extension()? != WORLD_EXTENSION {
@@ -329,11 +324,7 @@ fn key_of(path: &str) -> Option<String> {
     {
         return None;
     }
-    let folder = path.parent().map_or(String::new(), |p| {
-        p.to_string_lossy().to_lowercase().replace('\\', "/")
-    });
-    let folder = folder.trim_end_matches('/');
-    Some(format!("{stem}-{:08x}", fnv1a32(folder.as_bytes())))
+    Some(path.with_extension("").to_str()?.to_owned())
 }
 
 /// The key of the world the server runs, once the engine has built its path.
@@ -343,6 +334,11 @@ pub(crate) fn world_key(loader: &Loader) -> Option<&'static str> {
         crate::log!(DEBUG, "world key {key}");
     }
     key
+}
+
+/// The save's stem in the key `key`, such as `world0`: what mods see.
+pub(crate) fn stem(key: &'static str) -> &'static str {
+    key.rsplit(['\\', '/']).next().unwrap_or(key)
 }
 
 /// Asks the server to save the world now; `Event::WORLD_SAVED` follows when
@@ -398,11 +394,11 @@ mod tests {
     }
 
     #[test]
-    fn a_world_key_names_the_save_and_its_folder() {
+    fn a_world_key_is_the_save_path_without_its_extension() {
         let key = key_of(r"D:\Server\savegame\world0.ksd").unwrap();
-        assert!(key.starts_with("world0-"));
-        assert_eq!(Some(key.clone()), key_of("d:/server/SAVEGAME/world0.ksd"));
-        assert_ne!(Some(key), key_of(r"D:\Other\savegame\world0.ksd"));
+        assert_eq!(key, r"D:\Server\savegame\world0");
+        assert_eq!(stem(Box::leak(key.into_boxed_str())), "world0");
+        assert_eq!(stem("world1"), "world1");
         assert_eq!(key_of(r"D:\Server\savegame\world0.ksd.backup-1"), None);
         assert_eq!(key_of(r"D:\Server\savegame\characters"), None);
         assert_eq!(key_of(r"D:\Server\savegame\a b.ksd"), None);
@@ -435,6 +431,6 @@ mod tests {
         assert_eq!(key_of("character0.ksd"), None);
         assert_eq!(key_of(r"C:\Saves\default\character12.ksd"), None);
         assert_eq!(key_of("global.ksd"), None);
-        assert!(key_of("world1.ksd").is_some_and(|k| k.starts_with("world1-")));
+        assert_eq!(key_of("world1.ksd").as_deref(), Some("world1"));
     }
 }

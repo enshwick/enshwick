@@ -5,32 +5,30 @@ struct Count {
     n: u32,
 }
 
+/// The data folder of the mod `you.safes` in the world `key` under `dir`.
+fn world(dir: &Path, key: &str) -> PathBuf {
+    dir.join(format!("{key}-mod-data")).join("you.safes")
+}
+
 #[test]
-fn a_world_s_hold_holds_that_world_alone() {
+fn holds_are_read_from_the_folders_in_one_folder() {
     let data = std::env::temp_dir().join(format!("enshwick-world-hold-{}", std::process::id()));
     let _gone = std::fs::remove_dir_all(&data);
-    let lanterns = data.join("you.lanterns");
-    Hold::for_world(&lanterns, "world0-aa")
+    Hold::new(&data.join("world0-mod-data/you.lanterns"))
         .set("20 lit lanterns")
         .unwrap();
-    Hold::for_world(&data.join("you.altars"), "world1-bb")
-        .set("17 altars")
-        .unwrap();
-    Hold::new(&data.join("you.stacks"))
+    Hold::new(&data.join("mods/stacks"))
         .set("raised stacks")
         .unwrap();
     assert_eq!(
-        world_holds(&data, "world0-aa"),
+        holds(&data.join("world0-mod-data")),
         vec![("you.lanterns".to_owned(), "20 lit lanterns".to_owned())]
     );
-    assert!(world_holds(&data, "world2-cc").is_empty());
-    assert_eq!(held_worlds(&data), ["world0-aa", "world1-bb"]);
+    assert!(holds(&data.join("world1-mod-data")).is_empty());
     assert_eq!(
-        holds(&data),
-        vec![("you.stacks".to_owned(), "raised stacks".to_owned())]
+        holds(&data.join("mods")),
+        vec![("stacks".to_owned(), "raised stacks".to_owned())]
     );
-    Hold::for_world(&lanterns, "world0-aa").clear().unwrap();
-    assert_eq!(held_worlds(&data), ["world1-bb"]);
     let _gone = std::fs::remove_dir_all(&data);
 }
 
@@ -73,36 +71,34 @@ fn a_hold_file_of_one_plain_line_still_holds() {
 fn a_world_store_writes_its_world_s_file_and_switches_worlds() {
     let dir = std::env::temp_dir().join(format!("enshwick-world-store-{}", std::process::id()));
     let _gone = std::fs::remove_dir_all(&dir);
-    let store: WorldStore<Count> = WorldStore::new(&dir, "count").unwrap();
+    let store: WorldStore<Count> = WorldStore::new("count").unwrap();
     assert_eq!(store.update(|c| c.n += 1), None);
-    store.open("world0-aa").unwrap();
+    store.open("world0", &world(&dir, "world0")).unwrap();
     store.update(|c| c.n = 5);
     store.flush().unwrap();
-    store.open("world1-bb").unwrap();
+    store.open("world1", &world(&dir, "world1")).unwrap();
     assert_eq!(store.with(|c| c.n), Some(0));
-    store.open("world0-aa").unwrap();
+    store.open("world0", &world(&dir, "world0")).unwrap();
     assert_eq!(store.with(|c| c.n), Some(5));
-    assert!(dir.join("worlds/world0-aa/count.toml").exists());
+    assert_eq!(store.key().as_deref(), Some("world0"));
+    let file = dir.join("world0-mod-data/you.safes/count.toml");
+    assert!(file.exists());
     store.update(|c| c.n = 6);
     store.flush_in_background();
     store.close().unwrap();
-    let text = std::fs::read_to_string(dir.join("worlds/world0-aa/count.toml")).unwrap();
+    let text = std::fs::read_to_string(&file).unwrap();
     assert!(text.contains('6'), "{text}");
-    store.open("world0-aa").unwrap();
+    store.open("world0", &world(&dir, "world0")).unwrap();
     store.close().unwrap();
     assert_eq!(store.key(), None);
-    assert!(WorldStore::<Count>::new(&dir, "a/b").is_err());
     let _gone = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
-fn a_world_store_cannot_take_the_name_of_a_file_kept_beside_it() {
-    let dir = Path::new("mod-data/you.safes");
-    for name in ["settings", "save"] {
-        let refused = WorldStore::<Count>::new(dir, name).unwrap_err().to_string();
-        assert!(refused.contains("kept for the loader"), "{name}: {refused}");
-    }
-    assert!(WorldStore::<Count>::new(dir, "settings-old").is_ok());
+fn a_world_store_name_is_a_plain_file_name() {
+    assert!(WorldStore::<Count>::new("a/b").is_err());
+    assert!(WorldStore::<Count>::new("").is_err());
+    assert!(WorldStore::<Count>::new("settings").is_ok());
 }
 
 #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -162,9 +158,9 @@ fn a_store_whose_type_gained_fields_reads_them_from_the_default() {
 fn a_flush_lands_after_a_background_write() {
     let dir = std::env::temp_dir().join(format!("enshwick-world-flush-{}", std::process::id()));
     let _gone = std::fs::remove_dir_all(&dir);
-    let store: WorldStore<Count> = WorldStore::new(&dir, "count").unwrap();
-    store.open("world0-aa").unwrap();
-    let file = dir.join("worlds/world0-aa/count.toml");
+    let store: WorldStore<Count> = WorldStore::new("count").unwrap();
+    store.open("world0", &world(&dir, "world0")).unwrap();
+    let file = world(&dir, "world0").join("count.toml");
     for n in 0..20 {
         store.update(|c| c.n = n);
         store.flush_in_background();
@@ -181,11 +177,11 @@ fn a_flush_lands_after_a_background_write() {
 fn a_failed_background_write_is_retried_at_the_next_save() {
     let dir = std::env::temp_dir().join(format!("enshwick-world-retry-{}", std::process::id()));
     let _gone = std::fs::remove_dir_all(&dir);
-    let store: WorldStore<Count> = WorldStore::new(&dir, "count").unwrap();
-    store.open("world0-aa").unwrap();
+    let store: WorldStore<Count> = WorldStore::new("count").unwrap();
+    store.open("world0", &world(&dir, "world0")).unwrap();
     store.update(|c| c.n = 7);
     // A folder in the file's place: the rename fails.
-    let file = dir.join("worlds/world0-aa/count.toml");
+    let file = world(&dir, "world0").join("count.toml");
     std::fs::create_dir_all(&file).unwrap();
     store.flush_in_background();
     drop(store.wait_for_writes());

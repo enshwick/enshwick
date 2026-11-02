@@ -238,7 +238,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     });
     let stand_ins = {
         let keys: Vec<ResourceKey> = PENDING.relock().iter().map(|s| s.key).collect();
-        let recorded = crate::clones::items(&loader.data_dir);
+        let recorded = crate::clones::items(&loader.mods_dir);
         let orphans = crate::standins::orphans(&recorded, &keys, |guid| renames.contains_key(guid));
         crate::standins::served(loader, &orphans)
     };
@@ -255,7 +255,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     }
     let mut served = std::mem::take(&mut *PENDING.relock());
     let count = served.len();
-    let aliases = crate::clones::update(&loader.data_dir, served.iter().map(|s| (s.key, s.base)));
+    let aliases = crate::clones::update(&loader.mods_dir, served.iter().map(|s| (s.key, s.base)));
     let standing = stand_ins.map_or(0, |(items, registry)| {
         serve_stand_ins(&mut served, items, registry)
     });

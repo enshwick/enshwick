@@ -71,7 +71,7 @@ Styles are the game's named ones: `Body`, `Secondary`, `H1` to `H3`,
 The Interface demo button on the Mods screen, above the list of mods, shows
 every widget at once in the loader's own demo window; its last page shows
 samples on the HUD. The button shows only while the empty file
-`mod-data/enshwick/developer-tools` exists on that client, a
+`mods/enshwick/developer-tools` exists on that client, a
 [developer tool](#developer-tools). On a server, the console line
 `enshwick ui-demo <player>` opens the same window on that player's client,
 with a marker on the map where the player stood; it works only when the
@@ -258,7 +258,7 @@ server's log and status summary.
 
 ## Developer tools
 
-The empty file `mod-data/enshwick/developer-tools`, read at start, turns on
+The empty file `mods/enshwick/developer-tools`, read at start, turns on
 the tools for making mods: mods with `developer: true` in their manifest and
 the interface demo. The rule is the same for a dedicated server, a client and
 a game a client hosts for others. Without the file the loader turns a

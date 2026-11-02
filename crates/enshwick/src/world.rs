@@ -654,21 +654,41 @@ impl World {
         WorldError::from_status((self.0.host.api().save_world)(self.0.host.handle()))
     }
 
-    /// The key of the world the server runs: its save file's name and a hash
-    /// of its folder, such as `world0-1a2b3c4d`, the same in every session;
-    /// `None` before the server has read the world. On a client it is the key of the game it hosts,
-    /// and `None` once that game ends. Any thread.
+    /// The key of the world the server runs: its save file's name without
+    /// `.ksd`, such as `world0`, the same in every session; `None` before
+    /// the server has read the world. The game gives a deleted world's name
+    /// to its next new world, so a key names a slot, not one world for
+    /// ever. On a client it is the key of the game it hosts, and `None` once
+    /// that game ends. Any thread.
     ///
     /// # Examples
     ///
     /// ```
-    /// fn folder(world: &enshwick::world::World) -> Option<String> {
-    ///     world.key().map(|key| format!("worlds/{key}"))
+    /// fn named(world: &enshwick::world::World) -> String {
+    ///     world.key().unwrap_or_else(|| "no world".to_owned())
     /// }
     /// ```
     #[must_use]
     pub fn key(self) -> Option<String> {
         crate::state::world_key(self.0.host)
+    }
+
+    /// The mod's data folder in the world the server runs,
+    /// `<stem>-mod-data/<id>` beside the world's save, made on first use;
+    /// `None` while no world runs. The loader renames the folder aside when
+    /// a new world takes the save's name, so what a mod keeps there belongs
+    /// to this world. Any thread.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn hold(world: &enshwick::world::World) -> Option<enshwick::state::Hold> {
+    ///     world.data_dir().map(|dir| enshwick::state::Hold::new(&dir))
+    /// }
+    /// ```
+    #[must_use]
+    pub fn data_dir(self) -> Option<std::path::PathBuf> {
+        crate::state::data_dir(self.0.host)
     }
 }
 

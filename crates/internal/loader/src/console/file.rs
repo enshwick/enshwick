@@ -1,4 +1,4 @@
-//! The command file: lines appended to `mod-data/enshwick/commands.txt` run
+//! The command file: lines appended to `mods/enshwick/commands.txt` run
 //! on the server's console, each once.
 //!
 //! The file is read again whenever its length or modified time changes.

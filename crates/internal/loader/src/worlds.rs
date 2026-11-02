@@ -2,8 +2,8 @@
 //!
 //! A mod's settings file, `mod-configs/<id>.toml`, holds each player's own
 //! settings (the `client` stage) and is the template every world starts
-//! from. The other settings live with the world, in the mod's data folder:
-//! `mod-data/<id>/worlds/<key>/settings.toml`, made from the template when a
+//! from. The other settings live with the world, beside its save:
+//! `<stem>-mod-settings/<id>/settings.toml`, made from the template when a
 //! world first loads, never inside the game's save. While a world runs in
 //! this process, a mod reads that world's settings with its own `client`
 //! settings over them; with no world, the template.
@@ -11,7 +11,7 @@
 //! A change to a world setting while no world runs goes, on a game client
 //! as from the main menu, into the template: the defaults of worlds made
 //! from then on. On a dedicated server, which runs one world, it waits in
-//! `mod-data/<id>/worlds/next.toml` and goes into the world as it loads.
+//! `mod-configs/<id>.next.toml` and goes into the world as it loads.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -54,20 +54,19 @@ pub fn set_current(key: Option<String>) {
     *current = key;
 }
 
-/// Where a world's settings of mod `id` live.
+/// Where the settings of mod `id` in the world `key` live.
 #[must_use]
-pub fn world_file(data_dir: &Path, id: &str, key: &str) -> PathBuf {
-    data_dir
+pub fn world_file(id: &str, key: &str) -> PathBuf {
+    crate::world_folders::settings_of(key)
         .join(id)
-        .join("worlds")
-        .join(key)
         .join("settings.toml")
 }
 
-/// Where changes for the next world wait.
+/// Where changes for the next world wait, in the `mod-configs` folder
+/// `configs_dir`.
 #[must_use]
-pub fn next_file(data_dir: &Path, id: &str) -> PathBuf {
-    data_dir.join(id).join("worlds").join("next.toml")
+pub fn next_file(configs_dir: &Path, id: &str) -> PathBuf {
+    configs_dir.join(format!("{id}.next.toml"))
 }
 
 /// Where a change of a setting at `stage` goes.
@@ -293,11 +292,11 @@ mod live {
 
     /// What mod `record` reads now: the running world's settings with its
     /// own `client` settings over them, else the settings file `global`.
-    pub(crate) fn effective(loader: &Loader, record: &ModRecord, global: &str) -> String {
+    pub(crate) fn effective(record: &ModRecord, global: &str) -> String {
         let (Some(key), Some(schema)) = (current(), schema(record)) else {
             return global.to_owned();
         };
-        match read(&world_file(&loader.data_dir, &record.id, &key)) {
+        match read(&world_file(&record.id, &key)) {
             Some(world) => compose(&world, global, &schema),
             None => global.to_owned(),
         }
@@ -309,9 +308,9 @@ mod live {
     pub(crate) fn show_text(loader: &Loader, record: &ModRecord) -> String {
         let global = read(&global_path(loader, record)).unwrap_or_default();
         let shown = if let Some(key) = current() {
-            read(&world_file(&loader.data_dir, &record.id, &key)).unwrap_or_else(|| global.clone())
+            read(&world_file(&record.id, &key)).unwrap_or_else(|| global.clone())
         } else {
-            match read(&next_file(&loader.data_dir, &record.id)) {
+            match read(&next_file(&loader.configs_dir, &record.id)) {
                 Some(next) => super::overlay(&global, &next, None),
                 None => global.clone(),
             }
@@ -335,8 +334,8 @@ mod live {
     ) -> Result<(PathBuf, String), (PathBuf, std::io::Error)> {
         let path = match destination {
             Destination::Global | Destination::NewWorlds => global_path(loader, record),
-            Destination::World(key) => world_file(&loader.data_dir, &record.id, key),
-            Destination::Next => next_file(&loader.data_dir, &record.id),
+            Destination::World(key) => world_file(&record.id, key),
+            Destination::Next => next_file(&loader.configs_dir, &record.id),
         };
         match enshwick::files::read_to_string_if_present(&path) {
             Ok(text) => Ok((path, text.unwrap_or_default())),
@@ -366,8 +365,8 @@ mod live {
         };
         for record in loader.mods.iter().filter(|m| schema(m).is_some()) {
             let global = read(&global_path(loader, record)).unwrap_or_default();
-            let world_path = world_file(&loader.data_dir, &record.id, &key);
-            let next_path = next_file(&loader.data_dir, &record.id);
+            let world_path = world_file(&record.id, &key);
+            let next_path = next_file(&loader.configs_dir, &record.id);
             let next = read(&next_path);
             let text = match world_text(&global, &world_path, next.as_deref()) {
                 Ok(text) => text,
@@ -552,11 +551,11 @@ workers = 6
             "a server's change waits for the world it runs"
         );
         assert_eq!(client_keys(&schema()), ["labels"]);
-        let file = world_file(Path::new("d"), "you.trading-post", "w-1");
-        assert!(file.ends_with("you.trading-post/worlds/w-1/settings.toml"));
+        let file = world_file("you.trading-post", "save/world1");
+        assert!(file.ends_with("save/world1-mod-settings/you.trading-post/settings.toml"));
         assert!(
-            next_file(Path::new("d"), "you.trading-post")
-                .ends_with("you.trading-post/worlds/next.toml")
+            next_file(Path::new("mod-configs"), "you.trading-post")
+                .ends_with("mod-configs/you.trading-post.next.toml")
         );
     }
 

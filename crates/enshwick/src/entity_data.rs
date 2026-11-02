@@ -14,7 +14,7 @@
 //! [`SetError::NotKept`]. Once the entity is gone or holds another
 //! template, the value reads as missing on the server's game thread, and the
 //! server drops it when the world saves. Values live in
-//! `mod-data/enshwick/worlds/<key>/`, never in the game's save, beside
+//! `<stem>-mod-data/enshwick/` beside the world's save, never in it, beside
 //! [item data](crate::item_data), which is the same store for items.
 //!
 //! A kind opened with [`Replication::Clients`] goes to the clients that run
