@@ -142,6 +142,20 @@ impl KnownBuild {
         })
     }
 
+    /// `reason` for entry `id` as this build tells it: on a build without a
+    /// table, an [`ABSENT`] entry is one the carried table lacks or one its
+    /// pattern did not find.
+    #[must_use]
+    pub fn reason<'a>(&self, id: &str, reason: &'a str) -> &'a str {
+        if self.kind != Kind::Fallback || reason != ABSENT {
+            reason
+        } else if self.missing().iter().any(|m| m == id) {
+            "is not found by the carried table's patterns"
+        } else {
+            "is not in the carried table"
+        }
+    }
+
     /// How many symbols and constants this build has.
     #[must_use]
     pub fn entries(&self) -> usize {
@@ -211,11 +225,31 @@ pub fn select(
         None => base.fall_back(code, code_rva, cell),
     };
     Some(KnownBuild {
-        name: table.name().to_owned(),
+        name: format!(
+            "build {}, carried table {}",
+            fingerprint_name(fingerprint),
+            base.name()
+        ),
         kind: Kind::Fallback,
         table,
         lacking: OnceLock::new(),
     })
+}
+
+/// A build as its fingerprint names it, `<guid>/<age>`, for a build no
+/// table names.
+#[must_use]
+pub fn fingerprint_name(fingerprint: Fingerprint) -> String {
+    use core::fmt::Write as _;
+    let mut name = fingerprint
+        .guid()
+        .iter()
+        .fold(String::with_capacity(40), |mut out, b| {
+            let _written = write!(out, "{b:02x}");
+            out
+        });
+    let _written = write!(name, "/{}", fingerprint.age());
+    name
 }
 
 /// The file under the game's `mod-data` a build of `running`'s side without
@@ -300,6 +334,10 @@ pub fn code_holds(checks: &[Option<bool>]) -> bool {
     checks.iter().any(Option::is_some) && !checks.contains(&Some(false))
 }
 
+/// Why a table entry fails when the build's table has no row for it; on a
+/// build without a table [`KnownBuild::reason`] tells it apart.
+pub const ABSENT: &str = "is not in this build";
+
 /// Why a hook stays off before anything is patched.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Unhooked {
@@ -312,7 +350,7 @@ pub enum Unhooked {
 impl core::fmt::Display for Unhooked {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(match self {
-            Self::Absent => "is not in this build",
+            Self::Absent => ABSENT,
             Self::Moved => "does not read as the build table says",
         })
     }

@@ -51,7 +51,7 @@ type DestroyFn = unsafe extern "system" fn(obj: *mut u8) -> u64;
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub(super) enum SiteError {
     /// The build table lacks an entry.
-    #[error("is not in this build")]
+    #[error("{}", crate::builds::ABSENT)]
     Missing(&'static str),
     /// A create does not load the size the table names exactly once.
     #[error("is not loaded once by its create")]

@@ -453,7 +453,7 @@ const LOOKUP_FEATURE: &str = "recipe list lookup";
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 enum LiftLimitError {
     /// The entry is not in this build's table.
-    #[error("is not in this build")]
+    #[error("{}", crate::builds::ABSENT)]
     NotInBuild { entry: String },
     /// The game's code at the entry is not the table's.
     #[error("does not hold the table's code")]
