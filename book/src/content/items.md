@@ -72,9 +72,9 @@ item data is the vanilla item's, so a cloned chest places the same vanilla
 chest.
 
 An item whose GUID changed keeps the stacks saved with the old one through a
-[migration](../migrations.md): `rename_content(old, new)` adds it under both.
+[content rename](../content.md#renamed-content), which adds it under both.
 Old stacks keep the old game id, so compare item ids through
-[`migrations::current_id`](../migrations.md#items-under-their-old-ids).
+`content::renames::current_id`.
 
 The item exists once the game reads it, but nobody has one yet. Players get
 it from a [recipe](recipes.md), loot, or a mod's

@@ -27,8 +27,8 @@ use super::entries::hooks::{
 };
 use super::entries::inventory::{inventory_open, inventory_submit, item_info};
 use super::entries::mods::{
-    config_check, config_schema, fault, join_missing, language, log, migrate, mods, replaced,
-    settings, sync, texts,
+    config_check, config_schema, fault, join_missing, language, log, mods, rename_content,
+    replaced, settings, sync, texts,
 };
 use super::entries::net::{net_channel, net_ready, net_send};
 use super::entries::services::{
@@ -174,7 +174,7 @@ pub(crate) static API: HostApi = HostApi {
     define_event,
     subscribe_event,
     send_event,
-    migrate,
+    rename_content,
     declare_content,
     entity_data_open,
     replaced,

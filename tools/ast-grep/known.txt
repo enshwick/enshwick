@@ -66,10 +66,6 @@ static-is-registry-fuse-or-state crates/internal/loader/src/knowledge/changes.rs
 # The dry run's captured lines, kept off the poison policy on purpose; they
 # move into the log's state struct with `CAPTURING`.
 static-is-registry-fuse-or-state crates/internal/loader/src/log.rs static CAPTURED: Mutex<Option<Vec<(Level, String, String)>>> = Mutex::new(None);
-# The migrations mods register and the mods whose settings were born this
-# process; they move into one migrations state struct with `RECORD`.
-static-is-registry-fuse-or-state crates/internal/loader/src/migrations/live.rs static BORN: Mutex<Vec<usize>> = Mutex::new(Vec::new());
-static-is-registry-fuse-or-state crates/internal/loader/src/migrations/live.rs static REGISTERED: Mutex<Vec<Arc<Registered>>> = Mutex::new(Vec::new());
 # The notices waiting for a slot, runtime state; they move into the
 # notices' state struct with the slots.
 static-is-registry-fuse-or-state crates/internal/loader/src/notices.rs static WAITING: Mutex<(Waiting, bool)> = Mutex::new((Vec::new(), false));

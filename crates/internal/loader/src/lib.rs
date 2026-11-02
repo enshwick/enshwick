@@ -49,6 +49,11 @@ pub mod conflicts;
 pub mod console;
 #[cfg(windows)]
 mod content;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the running game takes mods' renames")
+)]
+mod content_renames;
 #[cfg(windows)]
 mod crash;
 #[cfg(windows)]
@@ -151,7 +156,6 @@ pub mod map_marker_types;
 mod memory;
 #[cfg(windows)]
 mod mid;
-pub mod migrations;
 pub mod mod_index;
 pub mod modlist;
 pub mod mods_screen;

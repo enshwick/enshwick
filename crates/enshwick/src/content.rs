@@ -20,6 +20,7 @@ pub mod items;
 pub mod loot_tables;
 pub mod menu;
 pub mod recipes;
+pub mod renames;
 pub mod vanilla;
 pub mod workshops;
 

@@ -91,8 +91,7 @@ every machine, in every release and in any tool: Python's
 prints `67842cb8-d551-542b-8765-fe1af9c28aca`, and `cargo enshwick id you.lockers:locker` prints it with
 its game id. Saves hold these GUIDs and the ids derived from them, so a
 content id is fixed for good once players have the content; to move content
-to another id, keep its old one through a
-[migration](migrations.md).
+to another id, [rename it](#renamed-content).
 
 The content calls take an `Id` for what they create and declare it to the
 loader, which turns the mod off when the id lies outside the mod's own
@@ -114,6 +113,31 @@ that mod [exports](concepts/loader-and-abi.md#what-other-mods-may-use) it.
 `Guid::named("you.lockers:locker")` still names another mod's content
 without depending on that mod, and without that check. Stat kinds and affixes have `<mod>:<name>` ids
 too, and their keys come from the same GUIDs.
+
+## Renamed content
+
+Content whose GUID changed keeps what saves hold under the old one through
+[`Load::rename_content`](https://docs.rs/enshwick/latest/enshwick/struct.Load.html#method.rename_content).
+Declare every rename the mod ever made, oldest first, once in `init` and
+before adding the content:
+
+```rust
+use enshwick::content::renames::Renames;
+use enshwick::content::{Guid, Id, id};
+
+const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+const LOCKER: Id = id!("locker");
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.rename_content(Renames::new().rename(OLD_LOCKER, LOCKER.guid()))
+}
+```
+
+The game then reads a placed object saved under the old GUID as the content
+under the new one, and an item the mod adds under the new GUID is served
+under every old one too, so old stacks stay. A chain of renames reads as its
+last GUID. Old stacks keep the old game id, so compare item ids through
+`content::renames::current_id`. Nothing is written to a save or a file.
 
 ## Mods compose
 
@@ -145,8 +169,8 @@ Removing a content mod leaves the world playable:
 For both the loader records every template and item a mod clones, with its
 vanilla source, in `mod-data/enshwick/clones.toml`. Keep the file: the record
 outlives the mods. The loader logs how many cloned templates read as their
-vanilla source and how many items stand in. An item renamed by a mod's
-[migration](migrations.md) gets no stand-in, since the game reads it under
+vanilla source and how many items stand in. An item a mod
+[renamed](#renamed-content) gets no stand-in, since the game reads it under
 its new GUID.
 
 Both fallbacks also apply while the mod is installed but turned off. A

@@ -432,8 +432,8 @@ mod tests {
     #[test]
     fn rustdoc_links_become_plain_code() {
         assert_eq!(
-            plain_links("// the [`Header`] of [`HostApi::migrate`](super::HostApi::migrate)."),
-            "// the `Header` of `HostApi::migrate`."
+            plain_links("// the [`Header`] of [`HostApi::mods`](super::HostApi::mods)."),
+            "// the `Header` of `HostApi::mods`."
         );
         assert_eq!(plain_links("// a [`dangling"), "// a [`dangling");
         assert_eq!(

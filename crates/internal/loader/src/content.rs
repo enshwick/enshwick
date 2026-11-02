@@ -230,7 +230,12 @@ fn write_differences(held: usize, new: usize, len: usize) -> usize {
 pub(crate) fn seal_and_link(loader: &'static Loader) {
     LOADED.get_or_init(|| loader);
     crate::item_kinds::seal(&loader.reflection);
-    let renames = crate::migrations::renamed(loader);
+    let renames = crate::content_renames::renamed(|owner| {
+        loader
+            .mods
+            .get(owner.get())
+            .is_some_and(|m| !m.off.load(Ordering::Acquire))
+    });
     let stand_ins = {
         let keys: Vec<ResourceKey> = PENDING.relock().iter().map(|s| s.key).collect();
         let recorded = crate::clones::items(&loader.data_dir);
@@ -534,10 +539,10 @@ fn alias(key: &ResourceKey) -> Option<ResourceKey> {
 }
 
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
-/// Content mods renamed, old GUID to new, from their migrations.
+/// Content mods renamed, old GUID to new.
 static RENAMES: OnceLock<&'static rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
 
-/// The key `key` was renamed to by a mod's migration.
+/// The key a mod renamed `key` to.
 fn renamed(key: &ResourceKey) -> Option<ResourceKey> {
     let new = RENAMES.get()?.get(&key.guid)?;
     Some(ResourceKey { guid: *new, ..*key })

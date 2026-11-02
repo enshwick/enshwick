@@ -51,8 +51,8 @@ use gameplay::{
 use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
 use mods::{
-    config_check, config_schema, fault, join_missing, language, log, migrate, mods, replaced,
-    settings, sync, texts,
+    config_check, config_schema, fault, join_missing, language, log, mods, rename_content,
+    replaced, settings, sync, texts,
 };
 use net::{net_channel, net_ready, net_send};
 pub(crate) use services::view;
@@ -126,8 +126,8 @@ pub(crate) struct State {
     pub(crate) mod_event_subscriptions: Vec<ModEventSubscription>,
     /// The names of the mod events the mod sent, in order.
     pub(crate) sent_events: Vec<(String, Vec<u8>)>,
-    /// The migrations the mod declared.
-    pub(crate) migrations: Option<super::FakeMigrations>,
+    /// The content renames the mod declared, old GUID to new.
+    pub(crate) content_renames: Option<Vec<([u8; 16], [u8; 16])>>,
     /// Content ids the mod declared, in order.
     pub(crate) content_ids: Vec<String>,
     pub(crate) defaults: Vec<String>,
@@ -558,7 +558,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         defined_events: Vec::new(),
         mod_event_subscriptions: Vec::new(),
         sent_events: Vec::new(),
-        migrations: None,
+        content_renames: None,
         content_ids: Vec::new(),
         defaults: Vec::new(),
         synced: Vec::new(),
@@ -914,7 +914,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     affix_roll: super::stats::affix_roll,
     item_lines: super::stats::item_lines,
     affix_info: super::stats::affix_info,
-    migrate,
+    rename_content,
     declare_content,
     entity_data_open,
     replaced,

@@ -172,8 +172,7 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
   that DLL right after reading its manifest and logs once
   `<old> is replaced by <new>; delete mods/<file>`, which `enshwick` on the
   console and the status summary repeat and the lock lists under
-  `[[replaced]]`. Their settings stay where they are; take the ones this mod
-  keeps with a [migration](../migrations.md#settings-from-another-mod).
+  `[[replaced]]`. Their settings stay where they are.
 - `builds` pins symbols and constants for game builds the loader's table does
   not cover, per side, by the build's GUID and age; see
   [Finding the game](../finding-the-game.md).

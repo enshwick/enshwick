@@ -41,7 +41,6 @@ static PATCHES: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
 /// timing only at the first, since thunks are written once.
 pub fn configure(settings: &Settings) {
     STATUS_MINUTES.store(settings.status_minutes, Ordering::Relaxed);
-    crate::migrations::set_dry_run(settings.migrations_dry_run);
     let _first = COUNTING.set((
         settings.diagnostics,
         settings.diagnostics && settings.diagnostics_timing,

@@ -13,7 +13,7 @@
 // Any change to the layout other than an append is a new major, with
 // `ABI_MINOR` back at 0; the layout tests of this crate hold the pair to
 // the committed layout.
-#define ENSHWICK_ABI_MAJOR 6
+#define ENSHWICK_ABI_MAJOR 7
 
 // The minor version of this interface: one more for each append to the
 // layout of this `ABI_MAJOR`, a field at the end of a struct that starts
@@ -693,6 +693,17 @@ typedef struct EnshwickComfort {
   // Where the provider stands, in metres.
   float position[3];
 } EnshwickComfort;
+
+// One content rename for `HostApi::rename_content`:
+// content saved under `from` reads as the content now under `to`.
+//
+// Frozen: written as an array.
+typedef struct EnshwickContentRename {
+  // The GUID the content had, in memory order.
+  uint8_t from[16];
+  // The GUID the content has now, in memory order.
+  uint8_t to[16];
+} EnshwickContentRename;
 
 // A crafting recipe of the game by its recipe id, to grant, refuse or watch
 // the crafting of one recipe.
@@ -2315,73 +2326,6 @@ typedef struct EnshwickItemLine {
   uint32_t affix;
 } EnshwickItemLine;
 
-// One step of a mod migration, as `HostApi::migrate` takes it.
-//
-// Frozen: written as an array.
-typedef struct EnshwickMigrationStep {
-  // What the step does: one of the constants below.
-  uint32_t kind;
-  // The setting or store the step reads, or renames from.
-  struct EnshwickStr from;
-  // The setting or store a rename writes to; empty otherwise.
-  struct EnshwickStr to;
-  // The GUID content had, for `MigrationStep::RENAME_CONTENT`.
-  uint8_t from_guid[16];
-  // The GUID content has now, for `MigrationStep::RENAME_CONTENT`.
-  uint8_t to_guid[16];
-} EnshwickMigrationStep;
-// Renames the setting `from` to `to`, value and comments kept.
-#define EnshwickMigrationStep_RENAME_SETTING 1
-// Changes the value of the setting `from` through the mod's
-// `MigrateFn`, which gets and returns a TOML value.
-#define EnshwickMigrationStep_MAP_SETTING 2
-// Removes the setting `from`.
-#define EnshwickMigrationStep_REMOVE_SETTING 3
-// Renames the world store `from` to `to`.
-#define EnshwickMigrationStep_RENAME_STORE 4
-// Changes the world store `from` through the mod's `MigrateFn`, which
-// gets and returns the whole TOML file.
-#define EnshwickMigrationStep_MAP_STORE 5
-// Reads content saved under `from_guid` as the content now under
-// `to_guid`.
-#define EnshwickMigrationStep_RENAME_CONTENT 6
-// Sets the setting `to` from the setting another mod keeps, `from`
-// written `<mod id>:<key>`, in its settings file and in each world's
-// copy; nothing where that mod has no such value.
-#define EnshwickMigrationStep_TAKE_SETTING 7
-
-// One mod migration: an id and its steps, in order.
-//
-// Frozen: written as an array.
-typedef struct EnshwickMigration {
-  // The migration's id, unique in the mod; the record keeps it.
-  struct EnshwickStr id;
-  // Its steps.
-  const struct EnshwickMigrationStep *steps;
-  // How many `steps` points at.
-  uint32_t count;
-} EnshwickMigration;
-
-// Every migration of a mod, oldest first, for `HostApi::migrate`.
-typedef struct EnshwickMigrationSet {
-  // Size and version of this struct.
-  struct EnshwickHeader header;
-  // The migrations, oldest first.
-  const struct EnshwickMigration *migrations;
-  // How many `migrations` points at.
-  uint32_t count;
-  // Changes values for the steps that map them, a `MigrateFn`; the
-  // loader refuses a set without it. Spelled out so C sees a nullable
-  // function pointer.
-  EnshwickStatus (*map)(void *user,
-                        uint32_t migration,
-                        uint32_t step,
-                        struct EnshwickStr input,
-                        struct EnshwickStr *out);
-  // The pointer `map` takes.
-  void *user;
-} EnshwickMigrationSet;
-
 // Knowledge a client asks the server for in its input, handed to the
 // filters registered with `HostApi::knowledge_input_filter` with the
 // verdict so far.
@@ -3630,13 +3574,14 @@ typedef struct EnshwickHostApi {
                                uint32_t affix,
                                struct EnshwickStr *text,
                                uint8_t *rarity);
-  // Registers the mod's migrations, `set`, copied: the loader runs the
-  // settings steps on the settings file now, and every step on each
-  // world's files when the world loads, once per world, and records what
-  // ran in `mod-data/enshwick/migrations.toml`. `Status::REFUSED` for
-  // a second call or a migration that failed on the settings file, with
-  // the reason logged. Allowed during `enshwick_mod_init` only.
-  EnshwickStatus (*migrate)(EnshwickModHandle me, const struct EnshwickMigrationSet *set);
+  // Declares the mod's content renames, the `count` entries at `renames`,
+  // copied: content saved under a rename's `from` reads as the content
+  // now under its `to`. `Status::REFUSED` for a second call or a
+  // rename to itself; `Status::BAD_ARGS` for a null `renames` with a
+  // nonzero `count`. Allowed during `enshwick_mod_init` only.
+  EnshwickStatus (*rename_content)(EnshwickModHandle me,
+                                   const struct EnshwickContentRename *renames,
+                                   uint32_t count);
   // Declares the content id `id`, `<mod>:<name>` in the mod's own
   // namespace, and writes its GUID to `out`; `Status::REFUSED` for a
   // malformed id, one outside the namespace, or one whose game id

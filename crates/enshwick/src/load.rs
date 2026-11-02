@@ -126,7 +126,6 @@ off_from!(
     crate::content::vanilla::VanillaError,
     crate::inventory::BatchError,
     crate::item_data::SetError,
-    crate::migrations::MigrationError,
     crate::net::SendError,
     crate::packs::PackError,
     crate::packs::ReadPackError,

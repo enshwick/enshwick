@@ -8,7 +8,7 @@ builds against every later 1.y and loads in a 1.y loader.
 
 Everything the crate offers without a feature:
 
-- the mod and its loader: `Load`, `Host`, settings, texts, state and migrations;
+- the mod and its loader: `Load`, `Host`, settings, texts and state;
 - hooks, game memory, events and game events;
 - the server's world calls outside `world`: altars, buffs, daytime, effects,
   game settings, the damage types, terrain, voxels and weather, whose errors share

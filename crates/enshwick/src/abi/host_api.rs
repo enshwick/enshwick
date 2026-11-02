@@ -7,11 +7,11 @@ use crate::abi::{
     AccountActionType, ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo,
     AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo,
     BuildCheckFn, BuildInfo, BuildRights, BuildingZoneCheckFn, CallFn, CallSpec, CallerFrame,
-    ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange,
-    DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
-    ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest,
-    InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn,
-    LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, MigrationSet,
+    ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, ContentRename, CraftCheckFn, DamageFilterFn,
+    DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec,
+    EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec, InteractionFn,
+    InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn,
+    Level, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec,
     ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
     PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
     ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
@@ -861,13 +861,13 @@ pub struct HostApi {
     /// and `rarity`. Any thread.
     pub affix_info:
         extern "system" fn(me: ModHandle, affix: u32, text: *mut Str, rarity: *mut u8) -> Status,
-    /// Registers the mod's migrations, `set`, copied: the loader runs the
-    /// settings steps on the settings file now, and every step on each
-    /// world's files when the world loads, once per world, and records what
-    /// ran in `mod-data/enshwick/migrations.toml`. [`Status::REFUSED`] for
-    /// a second call or a migration that failed on the settings file, with
-    /// the reason logged. Allowed during `enshwick_mod_init` only.
-    pub migrate: extern "system" fn(me: ModHandle, set: *const MigrationSet) -> Status,
+    /// Declares the mod's content renames, the `count` entries at `renames`,
+    /// copied: content saved under a rename's `from` reads as the content
+    /// now under its `to`. [`Status::REFUSED`] for a second call or a
+    /// rename to itself; [`Status::BAD_ARGS`] for a null `renames` with a
+    /// nonzero `count`. Allowed during `enshwick_mod_init` only.
+    pub rename_content:
+        extern "system" fn(me: ModHandle, renames: *const ContentRename, count: u32) -> Status,
     /// Declares the content id `id`, `<mod>:<name>` in the mod's own
     /// namespace, and writes its GUID to `out`; [`Status::REFUSED`] for a
     /// malformed id, one outside the namespace, or one whose game id

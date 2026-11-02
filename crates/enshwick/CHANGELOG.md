@@ -472,6 +472,23 @@ Each entry names the pull request that made the change.
 - **Breaking:** the console's `enshwick reload <mod id>` is gone; a mod
   reads a changed settings file as before, through its settings change
   event (#912).
+- **Breaking:** the migration machinery is gone: `Load::migrate`,
+  `migrations::Migration`, `Migrations`, `MigrationError`,
+  `abi::MigrationStep`, `abi::Migration`, `abi::MigrationSet`,
+  `abi::MigrateFn`, `HostApi::migrate`, the fake host's `migrate_settings`,
+  `migrate_store`, `migrations` and `FakeHost::other_settings`, and the
+  loader setting `migrations_dry_run`. The loader no longer rewrites a mod's
+  settings or world stores for a new version and keeps no record: a mod that
+  changes a format reads the old one itself. Delete `migrations_dry_run` from
+  `mod-configs/enshwick.toml`; `mod-data/enshwick/migrations.toml` and each
+  world's `.migrations.toml`, `.backup/` and `.under-way.toml` are no longer
+  read and may be deleted by hand (#912).
+- **Breaking:** content renames stand alone: `Load::rename_content` takes a
+  `content::renames::Renames`, built with `Renames::new().rename(old, new)`,
+  in place of `rename_content` steps, and `content::renames::current_id`
+  replaces `migrations::current_id`. `HostApi::rename_content` takes an
+  array of `abi::ContentRename` in the place of `HostApi::migrate`, so the
+  ABI is 7.0: rebuild every mod (#912).
 - The loader no longer saves the build table it carries to a game build
   without its own: it searches the patterns on every start. A
   `mod-data/enshwick/carried-<side>.txt` and its `.bak` left by an earlier

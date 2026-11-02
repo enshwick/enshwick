@@ -66,11 +66,6 @@ struct Calls;
 #[expect(dead_code, reason = "the doc comment carries the chapter")]
 struct Extending;
 
-#[cfg(feature = "test")]
-#[doc = include_str!("../../../book/src/migrations.md")]
-#[expect(dead_code, reason = "the doc comment carries the chapter")]
-struct Migrations;
-
 // Chapters whose examples use unstable calls, if only to show a stable one
 // in context, run only with the `unstable` feature.
 #[cfg(feature = "unstable")]
