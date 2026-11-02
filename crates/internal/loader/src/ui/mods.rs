@@ -97,7 +97,8 @@ enum Page {
     /// The joined server's mods with settings, from `first` while they page.
     ServerList { first: usize },
     /// The joined server's settings of mod `id`, from row `first` while
-    /// they page, as last heard (`news`).
+    /// they page, as last heard (`news`); opened from the server's list or
+    /// from the mod on the list of mods (`from_mod`).
     ServerSettings {
         id: String,
         first: usize,
@@ -105,6 +106,7 @@ enum Page {
         schema: Option<enshwick::config::Schema>,
         news: u64,
         entries: Entries,
+        from_mod: bool,
     },
     /// The actions the server offers.
     Actions(super::actions::View),
@@ -117,7 +119,10 @@ impl Page {
             Self::List { .. } => Kind::List,
             Self::Settings { .. } => Kind::Settings,
             Self::ServerList { .. } => Kind::ServerList,
-            Self::ServerSettings { .. } => Kind::ServerSettings,
+            Self::ServerSettings {
+                from_mod: false, ..
+            } => Kind::ServerSettings,
+            Self::ServerSettings { from_mod: true, .. } => Kind::ModServerSettings,
             Self::Actions(_) => Kind::Actions,
         }
     }
@@ -527,7 +532,7 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             if let Some(id) = server
                 && paint.button(texts::text("mods.server").as_bytes(), true)
             {
-                return server_page(id.clone());
+                return server_page(id.clone(), true);
             }
             if rows.is_empty() {
                 paint.label(
@@ -554,7 +559,9 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
                 None => Next::Stay,
             }
         }
-        Page::ServerList { first } => server_list(paint, first).map_or(Next::Stay, server_page),
+        Page::ServerList { first } => {
+            server_list(paint, first).map_or(Next::Stay, |id| server_page(id, false))
+        }
         Page::ServerSettings {
             id,
             first,
@@ -562,6 +569,7 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             schema,
             news,
             entries,
+            ..
         } => server_settings(paint, id, first, rows, schema, news, entries)
             .map_or(Next::Stay, Next::Message),
         Page::Actions(view) => {
@@ -582,7 +590,7 @@ fn settings_page(loader: &Loader, from: u8, index: usize) -> Next {
     let rows = page_rows(loader, index, place);
     let server = server_id(loader, index, place);
     match server {
-        Some(id) if rows.is_empty() => server_page(id),
+        Some(id) if rows.is_empty() => server_page(id, true),
         server => Next::Page(
             Page::Settings {
                 index,
@@ -620,8 +628,9 @@ fn server_id(loader: &Loader, index: usize, place: mods_screen::Place) -> Option
 /// which needs a lock; a world starting or stopping is seen at once.
 const JOINED_EVERY: u64 = 60;
 
-/// Asks the joined server for its settings of mod `id` and opens their page.
-fn server_page(id: String) -> Next {
+/// Asks the joined server for its settings of mod `id` and opens their page,
+/// from the mod on the list of mods (`from_mod`) or the server's list.
+fn server_page(id: String, from_mod: bool) -> Next {
     let asked = crate::net::to_server(&crate::remote::Message::Query { id: id.clone() });
     Next::Page(
         Page::ServerSettings {
@@ -631,6 +640,7 @@ fn server_page(id: String) -> Next {
             schema: None,
             news: 0,
             entries: Entries::default(),
+            from_mod,
         },
         (!asked).then(|| (texts::text("mods.server.closed").to_owned(), false)),
     )
