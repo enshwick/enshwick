@@ -150,10 +150,12 @@ pub(crate) fn prepare(requests: &[Request]) -> Vec<Result<Pending, PrepareError>
 /// Bytes to write over game code in the same batch as the hooks.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Bytes<'a> {
+    /// The caller's own id for the patch, which [`Commit::Busy`] reports.
+    pub(crate) id: usize,
     /// Where they go.
     pub(crate) address: usize,
     /// What goes there.
-    pub(crate) bytes: &'a [u8],
+    pub(crate) replacement: &'a [u8],
 }
 
 impl Pending {
@@ -163,10 +165,25 @@ impl Pending {
     }
 }
 
+/// What [`commit`] did with a batch.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Commit {
+    /// Every jump and code patch is written.
+    Written,
+    /// Nothing is written: a target could not be made writable, or a
+    /// thread's context could not be read to check and move it.
+    Failed,
+    /// Nothing is written: a thread stood or returned inside these code
+    /// patches, by their [`Bytes::id`], through every wait. A code patch has
+    /// no trampoline to move it to, so the batch goes again without them.
+    Busy(Vec<usize>),
+}
+
 /// Writes the jumps over the targets of `pending` and the `code` patches,
-/// all or none; false when none could be written.
-pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>]) -> bool {
-    write_all(pending, code)
+/// all or none. On [`Commit::Busy`], `disarm` runs while the other threads
+/// still stand still, so it must neither allocate, lock nor log.
+pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit {
+    write_all(pending, code, disarm)
 }
 
 /// Whether `address` is mapped code followed by `len` bytes that read: a
@@ -313,58 +330,69 @@ fn allocate_near(target: usize) -> Option<usize> {
         })
 }
 
-/// Writes every hook jump and code patch with the other threads suspended;
-/// false when any target could not be made writable, or a thread's context
-/// could not be read to check and move it, in which case none is written.
+/// Writes every hook jump and code patch with the other threads suspended,
+/// or none of them.
 ///
 /// A suspended thread may stand inside the bytes a hook replaces, or have
 /// called out of them, with a return address into them on its stack; both
 /// move to the same instruction in the trampoline. A code patch has no
 /// trampoline, so the writes wait, a few times, until no thread stands or
-/// returns inside one.
-fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
+/// returns inside one; a patch a thread never leaves is never written over
+/// it, since the thread would resume in the middle of other instructions.
+fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit {
     let writes: Vec<(usize, &[u8])> = prepared
         .iter()
         .map(|&p| (p.target, &p.patch[..]))
-        .chain(code.iter().map(|c| (c.address, c.bytes)))
+        .chain(code.iter().map(|c| (c.address, c.replacement)))
         .collect();
     if writes.is_empty() {
-        return true;
+        return Commit::Written;
     }
     let moved = moved_instructions(prepared);
     let patched: Vec<(usize, usize)> = code
         .iter()
-        .map(|c| (c.address, c.address + c.bytes.len()))
+        .map(|c| (c.address, c.address + c.replacement.len()))
         .collect();
     let returns = patch_returns(code);
     // Nothing below allocates while the other threads stand still: one of
     // them may hold the heap's lock.
     let mut protections = Vec::with_capacity(writes.len());
+    let mut stuck = vec![false; code.len()];
     let mut threads = Threads::new();
     let mut tries = 0;
     let checked = !moved.is_empty() || !patched.is_empty();
-    let (unsettled, blind) = loop {
+    let blind = loop {
         if !threads.suspend() {
             threads.resume();
-            return false;
+            return Commit::Failed;
         }
-        // A thread whose context Windows does not hand over can be neither
-        // checked nor moved: the writes wait for it, then give up.
-        let blind = checked
-            .then(|| threads.iter().find(|&thread| control(thread).is_none()))
-            .flatten()
-            // SAFETY: `GetThreadId` only reads the id of a thread handle
-            // `suspend` opened with `THREAD_QUERY_LIMITED_INFORMATION`.
-            .map(|thread| unsafe { GetThreadId(thread) });
-        let busy = !patched.is_empty()
-            && threads
-                .iter()
+        stuck.fill(false);
+        let last = tries == SETTLE_TRIES;
+        let mut blind = None;
+        if checked {
+            for thread in threads.iter() {
                 // SAFETY: `suspend` just suspended every other thread of the
-                // process, `iter` yields each of them, and they stay suspended
-                // until `resume`.
-                .any(|thread| unsafe { in_flight(thread, &patched, &returns) });
-        if !(busy || blind.is_some()) || tries == SETTLE_TRIES {
-            break (busy, blind);
+                // process, `iter` yields each of them, and they stay
+                // suspended until `resume`.
+                if !unsafe { mark(thread, &patched, &returns, &mut stuck) } {
+                    // A thread whose context Windows does not hand over can be
+                    // neither checked nor moved: the writes wait for it, then
+                    // give up.
+                    // SAFETY: `GetThreadId` only reads the id of a thread
+                    // handle `suspend` opened with
+                    // `THREAD_QUERY_LIMITED_INFORMATION`.
+                    blind = Some(unsafe { GetThreadId(thread) });
+                    break;
+                }
+                // A pass that waits again needs only one stuck thread; the
+                // last pass marks every patch each thread stays in.
+                if !last && stuck.contains(&true) {
+                    break;
+                }
+            }
+        }
+        if !(stuck.contains(&true) || blind.is_some()) || last {
+            break blind;
         }
         threads.resume();
         tries += 1;
@@ -379,7 +407,17 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
                 "hooks not written: the context of thread {thread} could not be read to move it out of the code"
             ),
         );
-        return false;
+        return Commit::Failed;
+    }
+    if stuck.contains(&true) {
+        disarm();
+        threads.resume();
+        return Commit::Busy(
+            code.iter()
+                .zip(&stuck)
+                .filter_map(|(patch, &s)| s.then_some(patch.id))
+                .collect(),
+        );
     }
     let mut writable = true;
     for &(address, bytes) in &writes {
@@ -415,14 +453,11 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
         }
     }
     threads.resume();
-    if unsettled {
-        crate::log::write(
-            Level::WARN,
-            LOADER_ID,
-            "code patched while a thread still stood in or returned into it",
-        );
+    if writable {
+        Commit::Written
+    } else {
+        Commit::Failed
     }
-    writable
 }
 
 /// Where each instruction a hook moves stands in the target and in the
@@ -443,16 +478,20 @@ fn moved_instructions(prepared: &[&Pending]) -> Vec<(usize, usize)> {
 }
 
 /// Addresses inside the code patches that follow a call there in the code
-/// as it is now, sorted: where a thread that called out of a patch returns.
-fn patch_returns(code: &[Bytes<'_>]) -> Vec<usize> {
-    let mut returns: Vec<usize> = code
+/// as it is now, each with its patch's index, sorted: where a thread that
+/// called out of a patch returns.
+fn patch_returns(code: &[Bytes<'_>]) -> Vec<(usize, usize)> {
+    let mut returns: Vec<(usize, usize)> = code
         .iter()
-        .flat_map(|c| {
-            (c.address + 1..c.address + c.bytes.len()).filter(|&at| follows_call(c.address, at))
+        .enumerate()
+        .flat_map(|(i, c)| {
+            (c.address + 1..c.address + c.replacement.len())
+                .filter(|&at| follows_call(c.address, at))
+                .map(move |at| (at, i))
         })
         .collect();
     returns.sort_unstable();
-    returns.dedup();
+    returns.dedup_by_key(|&mut (at, _)| at);
     returns
 }
 
@@ -535,20 +574,20 @@ impl Stack {
         self.first + word * size_of::<usize>()
     }
 
-    /// Whether any word satisfies `test`.
+    /// Hands each word to `visit`.
     ///
     /// # Safety
     ///
     /// - Every thread of the process but the caller stays suspended for the
     ///   call, as `Threads::suspend` leaves them, so the stack's region stays
     ///   committed and no other thread writes it.
-    unsafe fn any(self, mut test: impl FnMut(usize) -> bool) -> bool {
-        (0..self.words).any(|word| {
+    unsafe fn each(self, mut visit: impl FnMut(usize)) {
+        for word in 0..self.words {
             // SAFETY: `word` is below `words`, so its eight bytes lie in the
             // committed read-write region `at` found, which stays committed
             // and unwritten while every other thread stays suspended.
-            test(unsafe { crate::memory::read_stack_word(self.address(word)) })
-        })
+            visit(unsafe { crate::memory::read_stack_word(self.address(word)) });
+        }
     }
 
     /// Replaces each word for which `new` gives a value.
@@ -576,31 +615,50 @@ impl Stack {
     }
 }
 
-/// Whether a suspended thread stands inside a patched range or holds a
-/// return address into one on its stack.
+/// Marks in `stuck` each patched range a suspended thread stands inside or
+/// holds a return address into on its stack, by the index `returns` pairs
+/// with each address; false when the thread's context does not read.
+///
+/// It scans every stack word rather than unwinding the frames: an unwind
+/// looks up function entries under ntdll locks that a suspended thread may
+/// hold (in `LoadLibrary` or `RtlAddFunctionTable`), which would hang the
+/// settle, while the scan needs only `VirtualQuery`.
 ///
 /// # Safety
 ///
 /// - Every thread of the process but the caller, `thread` among them, stays
 ///   suspended for the call, as `Threads::suspend` leaves them.
-unsafe fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize]) -> bool {
+unsafe fn mark(
+    thread: HANDLE,
+    patched: &[(usize, usize)],
+    returns: &[(usize, usize)],
+    stuck: &mut [bool],
+) -> bool {
     let Some(ThreadContext(context)) = control(thread) else {
         return false;
     };
     let rip = usize::try_from(context.Rip).unwrap_or(0);
-    if patched.iter().any(|&(start, end)| start < rip && rip < end) {
-        return true;
+    for (flag, &(start, end)) in stuck.iter_mut().zip(patched) {
+        *flag |= start < rip && rip < end;
     }
-    let (Some(&low), Some(&high)) = (returns.first(), returns.last()) else {
-        return false;
+    let (Some(&(low, _)), Some(&(high, _))) = (returns.first(), returns.last()) else {
+        return true;
     };
-    Stack::at(context.Rsp).is_some_and(|stack| {
+    if let Some(stack) = Stack::at(context.Rsp) {
         // SAFETY: the caller keeps every other thread, the stack's owner
         // among them, suspended for the call.
         unsafe {
-            stack.any(|word| (low..=high).contains(&word) && returns.binary_search(&word).is_ok())
+            stack.each(|word| {
+                if (low..=high).contains(&word)
+                    && let Ok(i) = returns.binary_search_by_key(&word, |&(at, _)| at)
+                    && let Some(flag) = stuck.get_mut(returns[i].1)
+                {
+                    *flag = true;
+                }
+            });
         }
-    })
+    }
+    true
 }
 
 /// Moves a suspended thread standing in replaced bytes into the trampoline,

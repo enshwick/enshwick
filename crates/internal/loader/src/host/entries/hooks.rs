@@ -116,6 +116,7 @@ pub(crate) extern "system" fn patch_code(
         crate::code::register(
             crate::code::CodePatch {
                 owner: index,
+                feature: crate::code::WHOLE_MOD,
                 address,
                 expected: expected.into(),
                 replacement: replacement.into(),

@@ -3,6 +3,7 @@ use super::*;
 fn patch(owner: ModIndex, address: usize, expected: &[u8], replacement: &[u8]) -> CodePatch {
     CodePatch {
         owner,
+        feature: WHOLE_MOD,
         address,
         expected: expected.into(),
         replacement: replacement.into(),
@@ -73,6 +74,27 @@ fn an_owner_s_patches_go_in_together_or_not_at_all() {
     let verdicts = check(&patches, &[], |_| false, current);
     assert!(matches!(&verdicts[0], Verdict::Skip(why) if why.contains("another patch")));
     assert!(matches!(&verdicts[1], Verdict::Skip(why) if why.contains("72")));
+    assert_eq!(verdicts[2], Verdict::Write);
+}
+
+#[test]
+fn a_skipped_loader_patch_leaves_out_only_its_own_feature() {
+    let feature = |name, at| CodePatch {
+        feature: name,
+        ..patch(ModIndex::LOADER, at, &[0x90], &[0xcc])
+    };
+    let patches = [
+        feature("one", 0x10),
+        feature("one", 0x20),
+        feature("two", 0x30),
+    ];
+    let mut verdicts = [
+        Verdict::Skip("stuck".into()),
+        Verdict::Write,
+        Verdict::Write,
+    ];
+    skip_with_feature(&patches, &mut verdicts);
+    assert!(matches!(&verdicts[1], Verdict::Skip(why) if why.contains("another patch")));
     assert_eq!(verdicts[2], Verdict::Write);
 }
 
