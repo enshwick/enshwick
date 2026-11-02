@@ -155,7 +155,7 @@ Each entry names the pull request that made the change.
 
 - `FakeHost::vanilla_items` lists items in the game's item registry by
   their debug names, so a mod's test finds them with
-  `content::vanilla::item` as in the game (#PR).
+  `content::vanilla::item` as in the game (#880).
 
 - `FakeHost::meters` sets what `MeterLayout` resolves, and
   `FakeHost::container_kinds` the markers `ContainerKinds` tells holders
