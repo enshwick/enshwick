@@ -237,7 +237,7 @@ fn expand_hook(
 /// Declares a service table: makes the struct `repr(C)` and implements
 /// `enshwick::services::Service` with a layout hash per field.
 ///
-/// `#[service(name = "<what>", of = <alias>, version = <major>)]`; the
+/// `#[service(name = "<what>", of = <alias>, version = <major>, export)]`; the
 /// version defaults to 1. Fields are `extern "system" fn` pointers or plain
 /// data, appended over time. Examples are on `enshwick::service`.
 #[proc_macro_attribute]
@@ -267,13 +267,14 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
     });
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
-    let (name, tracked) = match resolve(name, of.as_ref()) {
+    let (name, tracked, owner) = match resolve(name, of.as_ref()) {
         Ok(resolved) => resolved,
         Err(e) => return e.to_compile_error().into(),
     };
     let ident = &item.ident;
     let entry = match schema_entry(
         name.as_ref(),
+        &owner,
         of.as_ref(),
         export.as_ref(),
         &quote!(<#ident as ::enshwick::services::Service>),
@@ -297,7 +298,7 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
 /// Declares a mod event: makes the struct `repr(C)` and implements
 /// `enshwick::services::ModEvent` with a layout hash per field.
 ///
-/// `#[event(name = "<what>", of = <alias>)]`; the struct is `Copy`
+/// `#[event(name = "<what>", of = <alias>, export)]`; the struct is `Copy`
 /// plain data, appended over time. Examples are on
 /// `enshwick::event`.
 #[proc_macro_attribute]
@@ -321,7 +322,7 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     });
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
-    let (name, tracked) = match resolve(name, of.as_ref()) {
+    let (name, tracked, owner) = match resolve(name, of.as_ref()) {
         Ok(resolved) => resolved,
         Err(e) => return e.to_compile_error().into(),
     };
@@ -330,6 +331,7 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     let ident = &item.ident;
     let entry = match schema_entry(
         name.as_ref(),
+        &owner,
         of.as_ref(),
         export.as_ref(),
         &quote!(<#ident as ::enshwick::services::ModEvent>),
@@ -348,24 +350,28 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /// The full name of a declaration given `name` and `of`, with the item that
-/// tracks the `Cargo.toml` read for it.
+/// tracks the `Cargo.toml` read for it and whose the name is.
 fn resolve(
     name: Option<syn::LitStr>,
     of: Option<&Ident>,
-) -> syn::Result<(Option<syn::LitStr>, proc_macro2::TokenStream)> {
+) -> syn::Result<(
+    Option<syn::LitStr>,
+    proc_macro2::TokenStream,
+    declare::Owner,
+)> {
     let Some(name) = name else {
         return match of {
             Some(of) => Err(syn::Error::new_spanned(of, "`of` needs a `name`")),
-            None => Ok((None, proc_macro2::TokenStream::new())),
+            None => Ok((None, proc_macro2::TokenStream::new(), declare::Owner::Other)),
         };
     };
-    let (full, cargo) = declare::full_name(&name, of)?;
+    let (full, cargo, owner) = declare::full_name(&name, of)?;
     let tracked = cargo.map_or_else(proc_macro2::TokenStream::new, |path| {
         quote!(
             const _: &[u8] = ::core::include_bytes!(#path);
         )
     });
-    Ok((Some(full), tracked))
+    Ok((Some(full), tracked, owner))
 }
 
 /// Generates `pub mod deps`, a module per dependency the crate's
@@ -405,7 +411,8 @@ pub fn texts(input: TokenStream) -> TokenStream {
 /// field and one for the answer.
 ///
 /// `#[point(name = "<point>", of = <alias>, mode = Observe | Advise | Override,
-/// output = <type>, refusable)]`; `refusable` lets a link refuse. Examples
+/// output = <type>, refusable, export)]`; `refusable` lets a link refuse,
+/// `export` lets other mods use the declaration and ships its schema. Examples
 /// are on `enshwick::point`.
 #[proc_macro_attribute]
 pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -439,9 +446,10 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as syn::ItemStruct);
     let ident = item.ident.clone();
     let expanded = (|| {
-        let (name, tracked) = resolve(name, of.as_ref())?;
+        let (name, tracked, owner) = resolve(name, of.as_ref())?;
         let entry = schema_entry(
             name.as_ref(),
+            &owner,
             of.as_ref(),
             export.as_ref(),
             &quote!(<#ident as ::enshwick::points::Point>),
@@ -526,7 +534,7 @@ fn padding_free_assert(item: &syn::ItemStruct, what: &str) -> proc_macro2::Token
 /// `repr(C)` and implements `enshwick::services::Call` with a layout hash
 /// per field and one for the answer.
 ///
-/// `#[call(name = "<call>", of = <alias>, output = <type>, version = <major>)]`;
+/// `#[call(name = "<call>", of = <alias>, output = <type>, version = <major>, export)]`;
 /// `version` is 1 when left out. Examples are on `enshwick::call`.
 #[proc_macro_attribute]
 pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -557,9 +565,10 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as syn::ItemStruct);
     let ident = item.ident.clone();
     let expanded = (|| -> syn::Result<TokenStream> {
-        let (name, tracked) = resolve(name, of.as_ref())?;
+        let (name, tracked, owner) = resolve(name, of.as_ref())?;
         let entry = schema_entry(
             name.as_ref(),
+            &owner,
             of.as_ref(),
             export.as_ref(),
             &quote!(<#ident as ::enshwick::services::Call>),

@@ -9,6 +9,10 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{Ident, LitStr, Token, Type};
 
+mod deps;
+
+pub(crate) use deps::expand_deps;
+
 /// The keys of the table, the identity the platform reads.
 const KEYS: [&str; 13] = [
     "id",
@@ -166,122 +170,51 @@ pub(crate) fn expand_id(name: &LitStr) -> syn::Result<TokenStream> {
     }
     let (metadata, shown) = cargo_metadata()?;
     let full = format!("{}:{local}", metadata.id);
+    let own = format!(
+        "[[own]]\nname = {}\nkind = \"content\"\n",
+        crate::shape::toml_string(&full)
+    );
     Ok(quote! {{
         const _: &[u8] = ::core::include_bytes!(#shown);
+        ::enshwick::__schema_entry!(#own);
         ::enshwick::content::Id::new(#full)
     }})
 }
 
-/// Expands `deps!()`: a module per dependency the crate's `Cargo.toml`
-/// names by alias in `requires`, `after` or `recommends`, with the
-/// dependency's id and its content ids, and the declarations
-/// `cargo enshwick deps` wrote to `src/deps/<alias>.rs`, if any.
-pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
-    let (metadata, shown) = cargo_metadata()?;
-    let written = PathBuf::from(&shown)
-        .parent()
-        .map(|dir| dir.join("src").join("deps"));
-    let modules = metadata.dependencies.iter().filter_map(|d| {
-        let relation = match d.relation {
-            "REQUIRES" => "requires",
-            "RECOMMENDS" => "recommends",
-            "AFTER" => "loads after",
-            _ => return None,
-        };
-        let alias = Ident::new(&d.alias, Span::call_site());
-        let id = &d.id;
-        let doc = format!("`{id}`, which this mod {relation}.");
-        let content = if d.relation == "REQUIRES" {
-            quote! {
-                /// The dependency's content id `<dependency>:<name>`, once
-                /// the loader lets this mod name it: the dependency's
-                /// `exports` list `<name>` or the name it is a part of.
-                /// Ask once, at init, and keep the id.
-                ///
-                /// # Errors
-                ///
-                /// [`Off`](::enshwick::Off) when the dependency does not
-                /// export the name; the loader logs what it exports.
-                ///
-                /// # Panics
-                ///
-                /// When `name` is not 1 to 128 of `[a-z0-9_./-]`.
-                pub fn id(
-                    name: &'static str,
-                ) -> ::core::result::Result<::enshwick::content::Id, ::enshwick::Off> {
-                    ::enshwick::__private::dependency_id(::enshwick::content::Id::of(ID, name))
-                }
-            }
-        } else {
-            quote! {
-                /// The dependency's content id `<dependency>:<name>`; `None`
-                /// while the dependency does not run, and when it does not
-                /// export the name, which the loader logs. Each call asks
-                /// the loader which mods run: call it once, at init, and
-                /// keep the id.
-                ///
-                /// # Panics
-                ///
-                /// When `name` is not 1 to 128 of `[a-z0-9_./-]`, whether
-                /// the dependency runs or not.
-                #[must_use]
-                pub fn id(name: &'static str) -> ::core::option::Option<::enshwick::content::Id> {
-                    let id = ::enshwick::content::Id::of(ID, name);
-                    if !::enshwick::mods::is_running(ID) {
-                        return ::core::option::Option::None;
-                    }
-                    ::enshwick::__private::dependency_id(id).ok()
-                }
-            }
-        };
-        let declared = written
-            .as_ref()
-            .map(|dir| dir.join(format!("{}.rs", d.alias)))
-            .filter(|path| path.is_file())
-            .map(|path| {
-                let path = path.display().to_string();
-                quote! {
-                    #[path = #path]
-                    mod declared;
-                    pub use self::declared::*;
-                }
-            });
-        Some(quote! {
-            #[doc = #doc]
-            pub mod #alias {
-                /// The dependency's mod id.
-                pub const ID: &str = #id;
-
-                #content
-
-                #declared
-            }
-        })
-    });
-    Ok(quote! {
-        /// The mods this one depends on, by the aliases its `Cargo.toml` gives
-        /// them.
-        pub mod deps {
-            const _: &[u8] = ::core::include_bytes!(#shown);
-
-            /// The game's own content, by the debug names its data gives it.
-            pub mod vanilla {
-                pub use ::enshwick::content::vanilla::{item, loot_table, recipe, station, workshop};
-            }
-
-            #(#modules)*
-        }
-    })
+/// Whose a declaration's name is, by the crate's `Cargo.toml`.
+pub(crate) enum Owner {
+    /// The crate's mod's own; `listed` when `exports` lists its local name.
+    Own {
+        /// Whether `exports` lists the local name.
+        listed: bool,
+    },
+    /// Another mod's.
+    Other,
+    /// Unknown: the crate's `Cargo.toml` does not read as a mod's.
+    Unread(syn::Error),
 }
 
-/// The full name `<mod id>:<what>` of a call, point or event declared with
-/// `name`: as written when it holds a `:`, else after the id of the
-/// dependency `of` or, without `of`, of the crate's own mod. With the name,
-/// the `Cargo.toml` it read, if any, for build tracking.
+impl Owner {
+    /// Whose `full`, `<mod id>:<what>`, is by `metadata`.
+    fn of(metadata: &Metadata, full: &str) -> Self {
+        match full.split_once(':') {
+            Some((id, local)) if id == metadata.id => Self::Own {
+                listed: metadata.exports.iter().any(|e| e == local),
+            },
+            _ => Self::Other,
+        }
+    }
+}
+
+/// The full name `<mod id>:<what>` of a call, point, event or service
+/// declared with `name`: as written when it holds a `:`, else after the id
+/// of the dependency `of` or, without `of`, of the crate's own mod. With
+/// the name, the `Cargo.toml` it read, if any, for build tracking, and
+/// whose the name is, from that one read.
 pub(crate) fn full_name(
     name: &LitStr,
     of: Option<&Ident>,
-) -> syn::Result<(LitStr, Option<String>)> {
+) -> syn::Result<(LitStr, Option<String>, Owner)> {
     let text = name.value();
     if text.contains(':') {
         if let Some(of) = of {
@@ -290,7 +223,13 @@ pub(crate) fn full_name(
                 "with `of`, the name is the dependency's own, without `<mod id>:`",
             ));
         }
-        return Ok((name.clone(), None));
+        return Ok(match cargo_metadata() {
+            Ok((metadata, shown)) => {
+                let owner = Owner::of(&metadata, &text);
+                (name.clone(), Some(shown), owner)
+            }
+            Err(e) => (name.clone(), None, Owner::Unread(e)),
+        });
     }
     let (metadata, shown) = cargo_metadata()?;
     let owner = match of {
@@ -326,23 +265,13 @@ pub(crate) fn full_name(
             found.id.clone()
         }
     };
-    Ok((
-        LitStr::new(&format!("{owner}:{text}"), name.span()),
-        Some(shown),
-    ))
-}
-
-/// Whether the declaration named `full`, `<mod id>:<what>`, is the crate's
-/// mod's own, read from the crate's `Cargo.toml`, with its path when it
-/// was read, for build tracking; another mod's when the crate names none.
-pub(crate) fn is_own(full: &str) -> (bool, Option<String>) {
-    let Ok((metadata, shown)) = cargo_metadata() else {
-        return (false, None);
+    let full = format!("{owner}:{text}");
+    let whose = if of.is_some() {
+        Owner::Other
+    } else {
+        Owner::of(&metadata, &full)
     };
-    let own = full
-        .split_once(':')
-        .is_some_and(|(id, _)| id == metadata.id);
-    (own, Some(shown))
+    Ok((LitStr::new(&full, name.span()), Some(shown), whose))
 }
 
 /// Whether `name` is the name side of a content id: 1 to 128 of

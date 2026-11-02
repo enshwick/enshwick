@@ -48,7 +48,11 @@ fn from_section(raw: &[u8]) -> Result<Option<String>, Error> {
     let Some(id) = head_id(head) else {
         return Ok(None);
     };
-    let text = section.schema(head, id);
+    // The content names of the owner's `exports` are not in the file: a
+    // point that shares its local name with content the owner exports stays
+    // out here, as one it keeps.
+    let exports = section.exports(id, &[]);
+    let text = section.schema(head, id, &exports);
     Ok((!text.is_empty()).then_some(text))
 }
 
@@ -81,7 +85,8 @@ mod tests {
 
     #[test]
     fn a_damaged_or_older_section_is_refused_with_the_reason() {
-        let damaged = from_section(b"schema = 1\nmod = \"you.a\"\n\0[[type]]\nname = \"T\"\n");
+        let damaged =
+            from_section(b"schema = 1\nmod = \"you.a\"\n\0[[point]]\nmode = \"override\"\n");
         assert!(
             matches!(damaged, Err(Error::Section(ReadSectionError::Damaged(26)))),
             "{damaged:?}"

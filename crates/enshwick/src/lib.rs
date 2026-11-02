@@ -298,7 +298,7 @@ pub use enshwick_macros::Shape;
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
 ///
-/// `#[call(name = "<call>", output = <type>, version = <major>)]`, with
+/// `#[call(name = "<call>", output = <type>, version = <major>, export)]`, with
 /// `of = <alias>` for a dependency's call ([`deps!`]); `version` is 1 when
 /// left out. A changed field or answer is a new major. Every type in it has
 /// a [`trait@Shape`]. `export` lets other mods call it and ships its schema
@@ -505,7 +505,7 @@ pub use enshwick_macros::deps;
 /// `repr(C)` and implements [`services::ModEvent`] with a layout hash per
 /// field.
 ///
-/// `#[event(name = "<what>")]` for this mod's event, `#[event(of = <alias>,
+/// `#[event(name = "<what>", export)]` for this mod's event, `#[event(of = <alias>,
 /// name = "<what>")]` for a dependency's ([`deps!`]); the struct is `Copy`
 /// plain data and grows by appending fields, as a
 /// [`#[service]`](macro@service) table does. `export` lets other mods hear
@@ -560,7 +560,7 @@ pub use enshwick_macros::hook;
 /// and one for the answer, which the loader checks for every link.
 ///
 /// `#[point(name = "<point>", mode = Observe | Advise | Override, output =
-/// <type>, refusable)]`, with `of = <alias>` for a dependency's point
+/// <type>, refusable, export)]`, with `of = <alias>` for a dependency's point
 /// ([`deps!`]); `refusable` lets a link refuse, which stops the chain. The
 /// input grows by appending fields; a changed field or answer type needs a
 /// new name. Every type in it has a [`trait@Shape`], so
@@ -609,7 +609,7 @@ pub use enshwick_macros::script;
 /// and implements [`services::Service`] with a layout hash per field, which
 /// the loader checks when a mod asks for the service.
 ///
-/// `#[service(name = "<what>", version = <major>)]`, with `of = <alias>`
+/// `#[service(name = "<what>", version = <major>, export)]`, with `of = <alias>`
 /// for a dependency's service ([`deps!`]); the version is 1 when left out.
 /// Fields are `extern "system" fn` pointers or plain data. Append fields to grow the table: users built against the
 /// shorter table keep working. Change a published field only with a new

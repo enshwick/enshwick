@@ -1,7 +1,9 @@
 //! A point declared only by its attribute, with a local name: marked
 //! `export`, its schema reaches its owner's manifest and no other mod's,
 //! its name the owner's exports, and another mod links to it; a point
-//! without the flag ships nothing and another mod's link to it is refused.
+//! without the flag ships nothing and another mod's link to it is refused,
+//! and an exported point whose local name an internal event shares is not
+//! exported.
 //! This crate's `Cargo.toml` gives the owner's id, `you.hello`.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,8 +24,28 @@ pub(crate) struct Hidden {
     pub(crate) item: u32,
 }
 
+/// A point of the owner marked `export`, whose local name an event the
+/// owner keeps shares: exporting it would open the event, so neither is.
+#[enshwick::point(name = "fee", export, mode = Override, output = u32)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FeePoint {
+    /// The item.
+    pub(crate) item: u32,
+}
+
+/// The owner's event of the same local name, without `export`.
+#[enshwick::event(name = "fee")]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FeeEvent {
+    /// The item.
+    pub(crate) item: u32,
+}
+
 /// Whether the extender's link to [`Hidden`] was refused.
 static HIDDEN_REFUSED: AtomicBool = AtomicBool::new(false);
+
+/// Whether the extender's link to [`FeePoint`] was refused.
+static FEE_REFUSED: AtomicBool = AtomicBool::new(false);
 
 /// The mod that owns the points.
 mod owner {
@@ -85,6 +107,10 @@ mod extender {
                 Verdict::Set(*so_far)
             });
             super::HIDDEN_REFUSED.store(hidden.is_err(), Ordering::Relaxed);
+            let fee = load.extend_point(&Order::new(), |_: &super::FeePoint, so_far: &u32| {
+                Verdict::Set(*so_far)
+            });
+            super::FEE_REFUSED.store(fee.is_err(), Ordering::Relaxed);
             Ok(Self)
         }
     }
@@ -149,7 +175,7 @@ mod tests {
             .iter()
             .filter_map(|p| p["name"].as_str())
             .collect();
-        assert_eq!(names, ["you.hello:price"]);
+        assert_eq!(names, ["you.hello:price"], "`fee` would open the event");
         assert_eq!(exports(owner::enshwick_mod_query()), ["price"]);
     }
 
@@ -179,6 +205,10 @@ mod tests {
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(loader.attached_points(), ["you.hello:price"]);
         assert!(HIDDEN_REFUSED.load(Ordering::Relaxed));
+        assert!(
+            FEE_REFUSED.load(Ordering::Relaxed),
+            "`fee` would open the event"
+        );
         assert_eq!(
             loader.ask_point(&Price { item: 2 }, 3),
             Decision::Changed(5)
