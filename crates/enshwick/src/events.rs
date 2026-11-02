@@ -270,9 +270,15 @@ with_data! {
 }
 
 impl Ticked {
-    /// How often a tick handler runs unless it asks otherwise: about every
-    /// second step of an empty dedicated server (20 steps a second, build
-    /// 399), more steps apart when the server steps faster.
+    /// How often a tick handler runs unless it asks otherwise: on the first
+    /// step at least this long after its last call.
+    ///
+    /// An empty dedicated server steps about 20 to 22 times a second, so a
+    /// handler runs about every third step, about 7 times a second (server
+    /// 399: the probe mod counted 36 to 37 calls in 5 s). A client hosting a
+    /// world with a player in it steps 60 times a second (client 426, the
+    /// game's own `[ecss] Stats` log lines), so a handler runs every sixth
+    /// step, 10 times a second.
     ///
     /// # Examples
     ///
