@@ -116,7 +116,8 @@ mod tests {
         let loader = fake.install();
         *WORLD.lock().unwrap() = None;
         // SAFETY: both functions are the exports of this file's `declare_mod!(Surveyor)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = WORLD.lock().unwrap().take().unwrap();
         (loader, world)

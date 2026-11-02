@@ -1,0 +1,45 @@
+---
+source: crates/cargo-enshwick/src/points/rust.rs
+assertion_line: 414
+expression: "rust_deps(&schema, \"trading_post\").unwrap()"
+---
+//! What you.trading-post 1.2.0 offers other mods, by the alias `trading_post`.
+//!
+//! Written by `cargo enshwick deps trading_post`. Write it again for a newer
+//! you.trading-post rather than edit it; the checks hold each declaration to the
+//! owner's layout. `enshwick::deps!()` makes it `deps::trading_post`.
+
+/// Item prices.
+#[enshwick::service(name = "prices", of = trading_post, version = 2)]
+#[derive(Clone, Copy, Debug)]
+pub struct Prices {
+    /// The price of an item.
+    pub price: extern "system" fn(u32, Deal) -> u32,
+    /// Forgets every price.
+    pub reset: unsafe extern "system" fn(),
+    /// How many prices there are.
+    pub count: u32,
+}
+
+const _: () = {
+    assert!(
+        <Prices as enshwick::services::Service>::LAYOUT[0].hash == 0x0000_0000_0000_0001,
+        "`price` differs from the publisher's",
+    );
+    assert!(
+        <Prices as enshwick::services::Service>::LAYOUT[1].hash == 0x0000_0000_0000_0002,
+        "`reset` differs from the publisher's",
+    );
+    assert!(
+        <Prices as enshwick::services::Service>::LAYOUT[2].hash == 0x0000_0000_0000_0003,
+        "`count` differs from the publisher's",
+    );
+};
+
+/// What the player does.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, enshwick::Shape)]
+pub enum Deal {
+    /// `Buy`, as `you.trading-post` names it.
+    Buy = 0,
+}

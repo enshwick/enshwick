@@ -70,6 +70,27 @@ const _: () = {
     );
 };
 
+/// Item prices, published for other mods.
+#[enshwick::service(name = "prices", of = trading_post, version = 1)]
+#[derive(Clone, Copy, Debug)]
+pub struct Prices {
+    /// The price of `item` in coins, 0 for an item with no price.
+    pub price: extern "system" fn(u32) -> u32,
+    /// Sets the price of `item`; returns the old one.
+    pub set_price: extern "system" fn(u32, u32) -> u32,
+}
+
+const _: () = {
+    assert!(
+        <Prices as enshwick::services::Service>::LAYOUT[0].hash == 0x0f7e_3530_594a_0244,
+        "`price` differs from the publisher's",
+    );
+    assert!(
+        <Prices as enshwick::services::Service>::LAYOUT[1].hash == 0xb4f3_0d07_76eb_8e20,
+        "`set_price` differs from the publisher's",
+    );
+};
+
 /// What a player does at the trading post.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, enshwick::Shape)]

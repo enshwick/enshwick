@@ -204,7 +204,7 @@ impl Migration {
     ///     .install();
     /// // SAFETY: `enshwick_mod_init` and `enshwick_mod_ready` are the exports
     /// // `declare_mod!` generated in this example.
-    /// let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+    /// let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
     /// assert!(status.is_ok());
     /// assert_eq!(
     ///     loader.migrate_settings("[comfort]\nmultiplier = 1.0\n"),

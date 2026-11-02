@@ -204,8 +204,13 @@ mod tests {
             .exports("you.hello", &offered)
             .install();
         // SAFETY: both functions are the exports of `declare_mod!(Extender)`.
-        let status =
-            unsafe { loader.start(extender::enshwick_mod_init, extender::enshwick_mod_ready) };
+        let status = unsafe {
+            loader.start(
+                extender::enshwick_mod_query,
+                extender::enshwick_mod_init,
+                extender::enshwick_mod_ready,
+            )
+        };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(
             loader.attached_points(),

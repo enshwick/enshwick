@@ -90,7 +90,7 @@ enum Command {
     /// Checks, describes and packages data packs.
     #[command(subcommand)]
     Pack(pack::Command),
-    /// Writes what each dependency offers, its points, calls and mod events,
+    /// Writes what each dependency offers, its points, calls, mod events and services,
     /// as declarations in `src/deps/<alias>.rs` that `enshwick::deps!()`
     /// makes `deps::<alias>`, read from the owners' DLLs without running
     /// them.

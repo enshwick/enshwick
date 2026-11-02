@@ -27,7 +27,8 @@ mod tests {
     fn start(host: FakeHost) -> (Status, enshwick::test::Installed) {
         let loader = host.install();
         // SAFETY: the exports of the `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         (status, loader)
     }
 
@@ -58,6 +59,26 @@ mod tests {
                 loader.logs()
             );
         }
+    }
+
+    #[test]
+    fn the_fake_never_calls_the_init_export_of_a_refused_mod() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static CALLS: AtomicU32 = AtomicU32::new(0);
+        // An init of its own, as a mod written in C exports one.
+        unsafe extern "system" fn counted(
+            _: *const enshwick::abi::HostApi,
+            _: enshwick::abi::ModHandle,
+        ) -> Status {
+            CALLS.fetch_add(1, Ordering::Relaxed);
+            Status::OK
+        }
+        let loader = FakeHost::new().install();
+        // SAFETY: the query and ready exports of the `declare_mod!` above,
+        // with an init that touches nothing.
+        let status = unsafe { loader.start(enshwick_mod_query, counted, enshwick_mod_ready) };
+        assert_eq!(status, Status::REFUSED);
+        assert_eq!(CALLS.load(Ordering::Relaxed), 0);
     }
 
     #[test]

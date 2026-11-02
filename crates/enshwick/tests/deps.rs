@@ -106,7 +106,8 @@ mod tests {
             .exports("you.lanterns", &["content:lantern"])
             .install();
         // SAFETY: both functions are the exports of this function's `declare_mod!(Namer)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         let warnings = loader
             .logs()
             .into_iter()
@@ -213,7 +214,8 @@ mod tests {
             })
             .install();
         // SAFETY: both functions are the exports of this test's `declare_mod!(Hello)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
 
         assert_eq!(

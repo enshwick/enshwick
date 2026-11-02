@@ -15,7 +15,9 @@ use enshwick::schema_section::Section;
 use libfuzzer_sys::fuzz_target;
 
 /// The attributes a definition carries.
-const ATTRIBUTES: [&str; 7] = ["doc", "repr", "derive", "shape", "point", "call", "event"];
+const ATTRIBUTES: [&str; 8] = [
+    "doc", "repr", "derive", "shape", "point", "call", "event", "service",
+];
 
 /// Whether `c` hides or reorders text, as the writer drops it.
 fn is_hidden(c: char) -> bool {

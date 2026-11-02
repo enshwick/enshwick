@@ -60,7 +60,8 @@ mod tests {
         let npc_size = host.size(facts::NPC_COMMAND_EVENT.id()).unwrap();
         let loader = host.template(Entity(5), [5; 16]).install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let effects = EFFECTS.get().unwrap();
 

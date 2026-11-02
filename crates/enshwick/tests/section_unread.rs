@@ -44,7 +44,13 @@ mod tests {
         assert_eq!(unsafe { manifest.points.as_str() }.unwrap_or_default(), "");
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: both functions are the exports of `declare_mod!(Stale)`.
-        let status = unsafe { loader.start(stale::enshwick_mod_init, stale::enshwick_mod_ready) };
+        let status = unsafe {
+            loader.start(
+                stale::enshwick_mod_query,
+                stale::enshwick_mod_init,
+                stale::enshwick_mod_ready,
+            )
+        };
         assert_eq!(status, Status::REFUSED);
         assert_eq!(
             loader.faults(),

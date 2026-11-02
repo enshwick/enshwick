@@ -42,7 +42,8 @@ mod tests {
     fn values_stay_with_their_entity() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Chests)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let (owners, nicknames) = (OWNERS.get().unwrap(), NICKNAMES.get().unwrap());
         let chest = Entity(4_200);
@@ -83,7 +84,8 @@ mod tests {
         };
         let loader = enshwick::test::FakeHost::new().player(player).install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Chests)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let owners = OWNERS.get().unwrap();
         let owner = Owner {

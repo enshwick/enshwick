@@ -59,6 +59,9 @@ pub unsafe trait Service: Sync + 'static {
     const MAJOR: u32;
     /// The table's fields, in order.
     const LAYOUT: &'static [LayoutField];
+    /// The service's `[[service]]` and `[[type]]` tables for its publisher's
+    /// schema, which an exported declaration puts into the manifest.
+    const SCHEMA: &'static str = "";
 }
 
 /// Plain data one mod sends to the mods that subscribed to it.

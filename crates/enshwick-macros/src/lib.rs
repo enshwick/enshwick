@@ -18,8 +18,7 @@ mod schema;
 mod texts;
 
 use crate::config::expand_config;
-use crate::schema::{Kind, call_schema, event_schema, point_schema, schema_entry};
-use crate::shape::expand_layout;
+use crate::schema::{Kind, call_schema, event_schema, point_schema, schema_entry, service_schema};
 use crate::shape::expand_shape;
 
 /// Exports a mod type from its DLL, with the manifest built from the
@@ -292,12 +291,14 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
         Ok(entry) => entry,
         Err(e) => return e.to_compile_error().into(),
     };
+    let major = version.map_or_else(|| quote!(1), |v| quote!(#v));
+    let schema = service_schema(&item, name.as_ref());
     let declared = proc_macro2::TokenStream::from(
-        expand_layout(
+        expand_declaration(
             &item,
             name,
-            Some(version.map_or_else(|| quote!(1), |v| quote!(#v))),
-            &quote!(Service),
+            &quote!(const MAJOR: u32 = #major; #schema),
+            &quote!(services::Service),
         )
         .unwrap_or_else(|e| e.to_compile_error().into()),
     );

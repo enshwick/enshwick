@@ -29,7 +29,8 @@ mod tests {
     fn filters_see_typed_requests_and_refuse_by_returning_false() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Picky)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let craft = |crafting_station_id, recipe_amount| CraftCheck {
             header: Header::of::<CraftCheck>(),

@@ -62,7 +62,8 @@ mod tests {
     fn a_window_draws_each_frame_takes_inputs_and_closes() {
         let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Panel)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
 
         let first = loader.draw_frame();

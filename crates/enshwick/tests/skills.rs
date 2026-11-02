@@ -43,7 +43,8 @@ mod tests {
             .constant("skill.airborne_architect", 0x51)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Flyer)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(loader.skill(&check(0x51)), SkillCheck::UNLOCKED);
         assert_eq!(loader.skill(&check(0x52)), SkillCheck::VANILLA);

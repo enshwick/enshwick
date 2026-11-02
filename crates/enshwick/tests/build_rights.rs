@@ -73,7 +73,8 @@ mod tests {
             .no_build_zone([200.0; 3], [210.0; 3], false)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Builder)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         loader
     }

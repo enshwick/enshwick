@@ -47,7 +47,8 @@ mod tests {
         assert_eq!(ask(HOMELESS, None), Answer::Vanilla, "before init");
 
         // SAFETY: both functions are the exports of this file's `declare_mod!(Housing)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(ask(HOMELESS, None), Answer::Nobody);
         assert_eq!(ask(ROAMER, Some(Entity(11))), Answer::Entity(Entity(11)));

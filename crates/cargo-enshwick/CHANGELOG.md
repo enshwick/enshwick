@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `cargo enshwick deps` reads schema format 3 and writes each
+  exported service table as `#[enshwick::service(name = .., of = <alias>,
+  version = ..)]` with checks that hold every field to the publisher's
+  layout; `--luau` leaves services out and says why (#910).
 - **Breaking:** `cargo enshwick deps` writes only the declarations an owner
   marks `export`, and reads schema format 2, whose head lists the owner's
   content and stat exports; an owner built with an older release asks for a

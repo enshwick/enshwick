@@ -1,4 +1,4 @@
-schema = 2
+schema = 3
 mod = "you.trading-post"
 version = "0.0.0-dev"
 [[point]]
@@ -62,3 +62,21 @@ type = "u32"
 name = "price"
 doc = "What it sold for, in coins."
 type = "u32"
+[[service]]
+name = "you.trading-post:prices"
+table = "Prices"
+doc = "Item prices, published for other mods."
+major = 1
+layout = ["1116388239407186500", "13038779671878798880"]
+[[type]]
+name = "Prices"
+doc = "Item prices, published for other mods."
+kind = "struct"
+[[type.field]]
+name = "price"
+doc = "The price of `item` in coins, 0 for an item with no price."
+type = "fn(u32) -> u32"
+[[type.field]]
+name = "set_price"
+doc = "Sets the price of `item`; returns the old one."
+type = "fn(u32, u32) -> u32"

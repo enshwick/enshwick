@@ -57,7 +57,8 @@ mod tests {
             .prop(OLD_CHEST, CHEST, [50.0, 40.0, 50.0])
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Decorator)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         loader.set_terrain(&[TerrainMaterialInfo {
             header: Header::of::<TerrainMaterialInfo>(),

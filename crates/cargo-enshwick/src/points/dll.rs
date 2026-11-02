@@ -61,18 +61,18 @@ mod tests {
     fn a_section_reads_as_its_head_and_the_mods_own_declarations() {
         let raw = b"\0\0[[point]]\nname = \"you.lockers:price\"\n\0\
             [[point]]\nname = \"you.other:price\"\n\0\
-            schema = 2\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\0\0\0\
+            schema = 3\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\0\0\0\
             [[event]]\nname = \"you.lockers:opened\"\n\0\0";
         assert_eq!(
             from_section(raw).unwrap().as_deref(),
             Some(
-                "schema = 2\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\
+                "schema = 3\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\
                  [[point]]\nname = \"you.lockers:price\"\n\
                  [[event]]\nname = \"you.lockers:opened\"\n"
             )
         );
         assert_eq!(
-            from_section(b"\0schema = 2\nmod = \"you.a\"\n\0").unwrap(),
+            from_section(b"\0schema = 3\nmod = \"you.a\"\n\0").unwrap(),
             None
         );
         assert_eq!(from_section(b"\0\0").unwrap(), None);
@@ -81,7 +81,7 @@ mod tests {
     #[test]
     fn a_damaged_or_older_section_is_refused_with_the_reason() {
         let damaged =
-            from_section(b"schema = 2\nmod = \"you.a\"\n\0[[point]]\nmode = \"override\"\n");
+            from_section(b"schema = 3\nmod = \"you.a\"\n\0[[point]]\nmode = \"override\"\n");
         assert!(
             matches!(damaged, Err(Error::Section(ReadSectionError::Damaged(26)))),
             "{damaged:?}"

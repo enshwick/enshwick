@@ -32,7 +32,8 @@ mod tests {
     fn edits_reach_the_loader_as_asked() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Digger)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let terrain = TERRAIN.get().unwrap();
 
@@ -95,7 +96,8 @@ mod tests {
             .world_extent([200, 200, 200])
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Digger)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         loader.set_terrain(&[]);
         let terrain = TERRAIN.get().unwrap();
@@ -124,7 +126,8 @@ mod tests {
             )
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Digger)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         loader.set_terrain(&[]);
         let terrain = TERRAIN.get().unwrap();

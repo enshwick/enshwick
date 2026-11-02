@@ -36,7 +36,8 @@ mod tests {
     fn ticks_move_the_clock_by_their_time_up_to_the_most_a_step_counts() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Timed)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let clock = CLOCK.get().unwrap();
         let start = clock.now();

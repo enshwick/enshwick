@@ -91,7 +91,8 @@ mod tests {
     fn found(host: FakeHost, kinds: ContainerKinds) -> Vec<u32> {
         let loader = host.install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Holders)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let world = Holders::instance().unwrap().world;
         world

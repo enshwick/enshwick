@@ -55,7 +55,8 @@ fn tick(c: &mut Criterion) {
     {
         let loader = FakeHost::new().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Bench)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let data = TickData::new(1);
         group.bench_function("four_handlers_and_an_idle_scheduler", |b| {
@@ -65,7 +66,7 @@ fn tick(c: &mut Criterion) {
     PERIODIC.store(true, Ordering::Relaxed);
     let loader = FakeHost::new().install();
     // SAFETY: both functions are the exports of this file's `declare_mod!(Bench)`.
-    let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+    let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
     assert_eq!(status, Status::OK, "{:?}", loader.logs());
     assert_eq!(loader.tick(Duration::ZERO), 1, "the first step runs it");
     group.bench_function("default_period_skipped_step", |b| {

@@ -120,7 +120,8 @@ mod moved {
     fn a_flat_setting_renames_into_a_group() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: the exports of `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(
             loader.migrate_settings("per_level = [2, 4]\n"),

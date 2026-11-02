@@ -72,7 +72,8 @@ mod tests {
         let loader = enshwick::test::FakeHost::new().install();
         *POINT.lock().unwrap() = Some(point);
         // SAFETY: both functions are the exports of this file's `declare_mod!(Haggler)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         loader
     }
@@ -114,7 +115,8 @@ mod tests {
         let loader = enshwick::test::FakeHost::new().install();
         *POINT.lock().unwrap() = None;
         // SAFETY: both functions are the exports of this file's `declare_mod!(Haggler)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(loader.attached_points(), ["you.trading-post:price"]);
         let ask = |item| {

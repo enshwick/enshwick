@@ -1,4 +1,4 @@
-schema = 2
+schema = 3
 mod = "you.lockers"
 version = "1.2.0"
 [[call]]

@@ -177,7 +177,13 @@ mod tests {
     fn a_link_changes_or_refuses_the_price() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(TradingPost)`.
-        let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
+        let status = unsafe {
+            loader.start(
+                super::enshwick_mod_query,
+                super::enshwick_mod_init,
+                super::enshwick_mod_ready,
+            )
+        };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.defined_points(), ["you.trading-post:price"]);
         let attached = loader.extend_point(|price: &Price, _paid: &u32| match price.item {
@@ -197,7 +203,13 @@ mod tests {
     fn publishes_prices_and_defines_sold() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: both functions are the exports of this crate's `declare_mod!(TradingPost)`.
-        let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
+        let status = unsafe {
+            loader.start(
+                super::enshwick_mod_query,
+                super::enshwick_mod_init,
+                super::enshwick_mod_ready,
+            )
+        };
         assert_eq!(status, Status::OK);
         assert_eq!(
             loader.published(),

@@ -48,7 +48,7 @@ mod tests {
 
     fn start(loader: &enshwick::test::Installed) -> Status {
         // SAFETY: both functions are the exports of this file's `declare_mod!(Haggler)`.
-        unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) }
+        unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) }
     }
 
     #[test]
@@ -107,7 +107,7 @@ mod tests {
 
         fn start(loader: &enshwick::test::Installed) -> Status {
             // SAFETY: both functions are the exports of this module's `declare_mod!(Renter)`.
-            unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) }
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) }
         }
 
         #[test]

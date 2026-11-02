@@ -30,7 +30,8 @@ mod tests {
     fn an_init_that_turns_the_mod_off_tells_the_loader_why_in_its_texts() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: the exports of `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::REFUSED);
         let faults = loader.faults();
         let [sent] = faults.as_slice() else {

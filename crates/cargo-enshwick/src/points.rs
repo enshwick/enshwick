@@ -104,6 +104,12 @@ pub enum Error {
         /// The field's type in the schema.
         ty: String,
     },
+    /// A service is a table of native functions, which a Luau mod cannot
+    /// call; a call serves Luau mods instead.
+    #[error(
+        "the service {0} is a table of native functions, which a Luau mod cannot call; only a call serves Luau mods"
+    )]
+    ScriptService(String),
     /// The point's mode is none this tool knows.
     #[error("the point {point} has the unknown mode {mode:?}")]
     UnknownMode {
@@ -154,7 +160,7 @@ impl Error {
 /// ```
 /// use cargo_enshwick::points::Schema;
 ///
-/// assert!(Schema::parse("schema = 3\nmod = \"you.stalls\"\nversion = \"1.0.0\"").is_err());
+/// assert!(Schema::parse("schema = 4\nmod = \"you.stalls\"\nversion = \"1.0.0\"").is_err());
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -176,6 +182,9 @@ pub struct Schema {
     /// The calls it serves.
     #[serde(default)]
     call: Vec<calls::CallSchema>,
+    /// The service tables it publishes.
+    #[serde(default)]
+    service: Vec<ServiceSchema>,
     /// The types its points reach.
     #[serde(default, rename = "type")]
     types: Vec<TypeSchema>,
@@ -202,6 +211,17 @@ struct EventSchema {
     name: String,
     data: String,
     doc: String,
+    layout: Vec<String>,
+}
+
+/// One service table, whose `table` struct may hold function fields.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct ServiceSchema {
+    name: String,
+    table: String,
+    doc: String,
+    major: u32,
     layout: Vec<String>,
 }
 
@@ -269,7 +289,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 3\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.owner(), "you.stalls");
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -308,7 +328,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 3\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.version(), "1.0.0");
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -324,7 +344,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 3\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.points().count(), 0);
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -339,7 +359,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 3\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.events().count(), 0);
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -354,12 +374,27 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 3\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.calls().count(), 0);
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
     pub fn calls(&self) -> impl Iterator<Item = &str> {
         self.call.iter().map(|c| c.name.as_str())
+    }
+
+    /// The names of the service tables it publishes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cargo_enshwick::points::Schema;
+    ///
+    /// let schema = Schema::parse("schema = 3\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// assert_eq!(schema.services().count(), 0);
+    /// # Ok::<(), cargo_enshwick::points::Error>(())
+    /// ```
+    pub fn services(&self) -> impl Iterator<Item = &str> {
+        self.service.iter().map(|s| s.name.as_str())
     }
 
     /// Refuses every value that would leave its place in generated code.
@@ -406,7 +441,33 @@ impl Schema {
                 return Err(invalid("event data type", &event.data));
             }
         }
+        // A table's functions are for its service alone: no other
+        // declaration or type may take the table.
+        let mut taken = (self.point.iter())
+            .flat_map(|p| [&p.input, &p.output])
+            .chain(self.call.iter().flat_map(|c| [&c.input, &c.output]))
+            .chain(self.event.iter().map(|e| &e.data))
+            .chain(
+                self.types
+                    .iter()
+                    .flat_map(|t| t.field.iter().map(|f| &f.ty)),
+            );
+        let mut tables = Vec::new();
+        for service in &self.service {
+            if !is_point_name(&service.name) {
+                return Err(invalid("service name", &service.name));
+            }
+            if !is_ident(&service.table) || tables.contains(&&service.table) {
+                return Err(invalid("service table type", &service.table));
+            }
+            tables.push(&service.table);
+        }
+        if let Some(table) = taken.find(|ty| tables.contains(ty)) {
+            return Err(invalid("use of a service table type", table));
+        }
+        let is_field = |ty: &str| is_type(ty) && (!is_named(ty) || is_ident(ty));
         for ty in &self.types {
+            let is_table = self.service.iter().any(|s| s.table == ty.name);
             if !is_ident(&ty.name) {
                 return Err(invalid("type name", &ty.name));
             }
@@ -422,7 +483,13 @@ impl Schema {
                 if ty.kind != Kind::Newtype && !is_ident(&field.name) {
                     return Err(invalid("field name", &field.name));
                 }
-                if !(is_type(&field.ty) && (!is_named(&field.ty) || is_ident(&field.ty))) {
+                let function = function_type(&field.ty);
+                let valid = match &function {
+                    Some(function) if is_table => function.parts().all(is_field),
+                    Some(_) => false,
+                    None => is_field(&field.ty),
+                };
+                if !valid {
                     return Err(invalid("field type", &field.ty));
                 }
             }
@@ -585,7 +652,58 @@ fn local_name<'a>(schema: &Schema, name: &'a str) -> Result<&'a str, Error> {
 
 /// The Rust path of a schema type name.
 fn rust_type(name: &str) -> String {
+    if let Some(function) = function_type(name) {
+        let args: Vec<String> = function.args.iter().map(|arg| rust_type(arg)).collect();
+        let unsafety = if function.unsafety { "unsafe " } else { "" };
+        let output = function
+            .output
+            .map(|output| format!(" -> {}", rust_type(output)))
+            .unwrap_or_default();
+        return format!(
+            "{unsafety}extern \"system\" fn({}){output}",
+            args.join(", ")
+        );
+    }
     built_in(name).map_or_else(|| name.to_owned(), |b| b.rust.to_owned())
+}
+
+/// An `extern "system"` function field of a service table, as a schema
+/// writes it: `fn(<args>) -> <answer>`, with `unsafe ` before an unsafe
+/// one and without ` -> <answer>` for one that answers nothing.
+struct FunctionType<'a> {
+    unsafety: bool,
+    args: Vec<&'a str>,
+    output: Option<&'a str>,
+}
+
+impl<'a> FunctionType<'a> {
+    /// The argument types, then the answer's.
+    fn parts(&self) -> impl Iterator<Item = &'a str> + '_ {
+        self.args.iter().copied().chain(self.output)
+    }
+}
+
+/// The function type `text` writes; `None` for any other type.
+fn function_type(text: &str) -> Option<FunctionType<'_>> {
+    let (unsafety, rest) = text
+        .strip_prefix("unsafe ")
+        .map_or((false, text), |rest| (true, rest));
+    let (args, rest) = rest.strip_prefix("fn(")?.split_once(')')?;
+    let output = if rest.is_empty() {
+        None
+    } else {
+        Some(rest.strip_prefix(" -> ")?)
+    };
+    let args = if args.is_empty() {
+        Vec::new()
+    } else {
+        args.split(", ").collect()
+    };
+    Some(FunctionType {
+        unsafety,
+        args,
+        output,
+    })
 }
 
 /// Whether `name` is a type the schema itself describes.
@@ -698,6 +816,10 @@ fn reached_from<'a>(
 ) -> Result<Vec<&'a TypeSchema>, Error> {
     let mut reached: Vec<&TypeSchema> = Vec::new();
     while let Some(type_name) = pending.pop() {
+        if let Some(function) = function_type(type_name) {
+            pending.extend(function.parts());
+            continue;
+        }
         if !is_named(type_name) || reached.iter().any(|t| t.name == type_name) {
             continue;
         }
@@ -797,178 +919,4 @@ fn named_type(code: &mut String, named: &TypeSchema, owner: &str) -> Result<(), 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SCHEMA: &str = include_str!("../tests/fixtures/lockers.points.toml");
-
-    #[test]
-    fn a_point_becomes_a_declaration_of_the_alias_with_its_types_and_layout_checks() {
-        let schema = Schema::parse(SCHEMA).unwrap();
-        let code = rust_deps(&schema, "lockers").unwrap();
-        assert_eq!(code, include_str!("../tests/fixtures/lockers_points.rs"));
-    }
-
-    #[test]
-    fn the_examples_declarations_are_what_the_trading_post_publishes() {
-        let schema =
-            Schema::parse(include_str!("../../../examples/trading-post/points.toml")).unwrap();
-        assert_eq!(
-            rust_deps(&schema, "trading_post").unwrap(),
-            include_str!("../../../examples/haggling/src/deps/trading_post.rs"),
-            "run cargo enshwick deps trading_post again"
-        );
-    }
-
-    #[test]
-    fn a_doc_keeps_its_first_sentence_as_a_paragraph_of_its_own() {
-        let mut code = String::new();
-        doc(&mut code, "    ", "The price. A refusal means no deal.", "");
-        assert_eq!(
-            code,
-            "    /// The price.\n    ///\n    /// A refusal means no deal.\n"
-        );
-        let mut code = String::new();
-        doc(&mut code, "", "", "The input.");
-        assert_eq!(code, "/// The input.\n");
-    }
-
-    #[test]
-    fn a_doc_can_open_no_code_block_and_hides_nothing() {
-        let hostile = [
-            "The character.\n\n```\nstd::fs::write(\"x\", \"\").ok();\n```",
-            "The deal.\n\n    std::process::Command::new(\"true\").status().ok();",
-            "The deal. ~~~ std::fs::write(\"x\", \"\").ok();",
-            "The deal. ```rust",
-            "The \u{202e}deal\u{200b}.",
-        ];
-        for text in hostile {
-            let mut code = String::new();
-            doc(&mut code, "", text, "");
-            for line in code.lines() {
-                let body = line.strip_prefix("/// ").unwrap_or_default();
-                assert!(
-                    !body.starts_with([' '])
-                        && !body.starts_with("```")
-                        && !body.starts_with("~~~"),
-                    "{line}"
-                );
-                assert!(!body.chars().any(is_hidden), "{line:?}");
-            }
-            assert!(code.lines().count() <= 3, "{code}");
-        }
-    }
-
-    #[test]
-    fn a_schema_value_that_would_leave_its_place_in_the_code_is_refused() {
-        let hostile = [
-            (
-                "mod = \"you.lockers\"",
-                "mod = \"you.lockers\\nfn evil() {}\"",
-            ),
-            ("version = \"1.2.0\"", "version = \"1.2.0 }\""),
-            (
-                "name = \"you.lockers:price\"",
-                "name = \"you.lockers:price\\nfn evil() {}\"",
-            ),
-            ("input = \"Price\"", "input = \"Price {}\""),
-            ("output = \"u32\"", "output = \"u32> evil\""),
-            (
-                "name = \"character\"",
-                "name = \"character: u8, } fn evil() { let x\"",
-            ),
-            ("type = \"bool\"", "type = \"bool, } fn evil() {}\""),
-            ("repr = \"u32\"", "repr = \"u32)] fn evil() {} #[allow(\""),
-            (
-                "name = \"BUY\"",
-                "name = \"BUY: Self = Self(0); fn evil() {} const X\"",
-            ),
-        ];
-        for (good, bad) in hostile {
-            assert!(SCHEMA.contains(good), "{good}");
-            let text = SCHEMA.replacen(good, bad, 1);
-            assert!(
-                matches!(Schema::parse(&text), Err(Error::Invalid { .. })),
-                "{bad}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_schema_name_that_rust_keeps_for_itself_is_refused() {
-        let keywords = [
-            ("name = \"BUY\"", "name = \"while\""),
-            ("name = \"character\"", "name = \"type\""),
-            ("name = \"character\"", "name = \"self\""),
-            ("input = \"Price\"", "input = \"Self\""),
-            ("name = \"BUY\"", "name = \"_\""),
-            ("name = \"BUY\"", "name = \"async\""),
-        ];
-        for (good, bad) in keywords {
-            assert!(SCHEMA.contains(good), "{good}");
-            let text = SCHEMA.replacen(good, bad, 1);
-            assert!(
-                matches!(Schema::parse(&text), Err(Error::Invalid { .. })),
-                "{bad}"
-            );
-        }
-    }
-    #[test]
-    fn a_quote_in_a_point_name_stays_inside_its_string() {
-        let text = SCHEMA.replace("you.lockers:price", "you.lockers:price\\\", evil = (\\\"");
-        let schema = Schema::parse(&text).unwrap();
-        let code = rust_deps(&schema, "lockers").unwrap();
-        assert!(
-            code.contains(r#"name = "price\", evil = (\"", of = lockers"#),
-            "{code}"
-        );
-    }
-
-    #[test]
-    fn an_alias_that_is_no_rust_name_is_refused() {
-        let schema = Schema::parse(SCHEMA).unwrap();
-        for alias in ["", "two words", "lockers::evil", "self", "9lives"] {
-            assert!(
-                matches!(
-                    rust_deps(&schema, alias),
-                    Err(Error::Invalid { what: "alias", .. })
-                ),
-                "{alias:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn control_characters_in_a_doc_are_dropped() {
-        let mut code = String::new();
-        doc(&mut code, "", "A price\rpub fn evil() {}\u{7}.", "");
-        assert_eq!(code, "/// A price pub fn evil() {} .\n");
-    }
-
-    #[test]
-    fn a_name_of_another_mod_or_another_format_is_refused() {
-        let other = SCHEMA.replace("you.lockers:price", "you.lanterns:price");
-        let schema = Schema::parse(&other).unwrap();
-        assert!(matches!(
-            rust_deps(&schema, "lockers"),
-            Err(Error::Invalid {
-                what: "name of its owner",
-                ..
-            })
-        ));
-        let newer = SCHEMA.replace("schema = 2", "schema = 3\nnew_key = 1");
-        let error = Schema::parse(&newer).unwrap_err();
-        assert!(matches!(error, Error::Format(3)), "{error}");
-        assert!(
-            error.to_string().ends_with("update cargo-enshwick"),
-            "{error}"
-        );
-        let older = Schema::parse(&SCHEMA.replace("schema = 2", "schema = 1"))
-            .unwrap_err()
-            .to_string();
-        assert!(
-            older.ends_with("rebuild its mod with this enshwick"),
-            "{older}"
-        );
-    }
-}
+mod tests;

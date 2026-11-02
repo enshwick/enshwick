@@ -79,7 +79,8 @@ mod tests {
             .icons_ready()
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Staffs)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let image = loader
             .build_resource(&ICON.key_by_hash(image_hash), &vanilla)

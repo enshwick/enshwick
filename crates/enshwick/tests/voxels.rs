@@ -43,7 +43,8 @@ mod tests {
             )
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Surveyor)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         loader
     }
@@ -163,7 +164,8 @@ mod tests {
             .voxels(VoxelPos::new(32, 32, 32), [8, 8, 8], &[AIR; 512])
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Surveyor)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let voxels = VOXELS.get().unwrap();
 

@@ -409,7 +409,7 @@ impl Stats {
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// // SAFETY: both functions are the exports of `declare_mod!(Lucky)`.
-    /// let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+    /// let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
     /// assert!(status.is_ok());
     /// let (stats, luck) = LUCK.get().ok_or("init ran")?;
     /// let info = stats.info(*luck).ok_or("luck is defined")?;

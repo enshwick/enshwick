@@ -35,7 +35,8 @@ mod tests {
         let loader = enshwick::test::FakeHost::new().side(side).install();
         *CAPS.lock().unwrap() = caps;
         // SAFETY: both functions are the exports of this file's `declare_mod!(Workers)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         (CAPPED.load(Ordering::Relaxed), loader.task_workers())
     }
