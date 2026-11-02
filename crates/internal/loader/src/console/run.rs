@@ -41,6 +41,13 @@ pub(crate) fn start(loader: &'static Loader) {
                         shown(&game, path)
                     );
                 },
+                |path, error| {
+                    crate::log!(
+                        WARN,
+                        "{} does not read, so no line in it runs until it does: {error}",
+                        shown(&game, path)
+                    );
+                },
             )
         });
     if let Err(e) = started {

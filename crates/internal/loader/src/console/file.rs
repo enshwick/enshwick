@@ -3,7 +3,11 @@
 //!
 //! The file is read again whenever its length or modified time changes.
 //! Only complete lines run, so a line still being written waits for its line
-//! break. Lines already in the file when the server starts are skipped.
+//! break. Lines already in the file when the server starts are skipped, or,
+//! for a file that does not read then, the lines it holds when it first reads.
+//! A file that is gone or does not read is read again on the next look and
+//! changes nothing meanwhile, so a lock or a delete and re-create never runs a
+//! line again.
 //!
 //! The file is append-only. A file whose part already read changed counts
 //! once it reads the same twice in a row, so an editor's save caught half
@@ -156,17 +160,25 @@ fn stamp(path: &Path) -> Stamp {
 pub struct Watched {
     path: PathBuf,
     seen: Stamp,
-    tail: Tail,
+    /// `None` until the file first reads, so the lines it holds then are
+    /// skipped.
+    tail: Option<Tail>,
+    /// Whether the last look failed, so a failure is reported once.
+    failing: bool,
 }
 
 impl Watched {
     /// Starts watching `path` past what it holds now.
     #[must_use]
     pub fn new(path: PathBuf) -> Self {
+        let tail = enshwick::files::read_if_present(&path)
+            .ok()
+            .map(|content| Tail::at(&content.unwrap_or_default()));
         Self {
             seen: stamp(&path),
-            tail: Tail::at(&std::fs::read(&path).unwrap_or_default()),
+            tail,
             path,
+            failing: false,
         }
     }
 
@@ -176,31 +188,57 @@ impl Watched {
         &self.path
     }
 
-    /// The lines added since the last look.
-    #[must_use]
-    pub fn look(&mut self) -> Vec<String> {
+    /// The lines added since the last look. A file that is gone counts as
+    /// unchanged, since only emptying it starts it over.
+    ///
+    /// # Errors
+    ///
+    /// The error of a file that is there but does not read; the next look
+    /// reads it again.
+    pub fn look(&mut self) -> std::io::Result<Vec<String>> {
         let now = stamp(&self.path);
-        if now == self.seen && !self.tail.waits() {
-            return Vec::new();
+        if now == self.seen && self.tail.as_ref().is_some_and(|tail| !tail.waits()) {
+            return Ok(Vec::new());
         }
+        let content = enshwick::files::read_if_present(&self.path)?;
         self.seen = now;
-        self.tail
-            .feed(&std::fs::read(&self.path).unwrap_or_default())
+        let Some(content) = content else {
+            return Ok(Vec::new());
+        };
+        if let Some(tail) = &mut self.tail {
+            return Ok(tail.feed(&content));
+        }
+        self.tail = Some(Tail::at(&content));
+        Ok(Vec::new())
     }
 }
 
-/// Watches `files` for good, handing each new line to `submit` with the file
-/// it came from, and each file whose lines that ran were edited to `edited`.
+/// Watches `files` for good, handing each new line to `submit` with its file.
+///
+/// A file whose lines that ran were edited goes to `edited`; a file that
+/// stops reading goes to `failed`, once until it reads again.
 pub fn watch(
     mut files: Vec<Watched>,
     mut submit: impl FnMut(&Path, String),
     mut edited: impl FnMut(&Path),
+    mut failed: impl FnMut(&Path, &std::io::Error),
 ) -> ! {
     loop {
         std::thread::sleep(POLL);
         for file in &mut files {
-            let lines = file.look();
-            if file.tail.take_edited() {
+            let lines = match file.look() {
+                Ok(lines) => {
+                    file.failing = false;
+                    lines
+                }
+                Err(error) => {
+                    if !core::mem::replace(&mut file.failing, true) {
+                        failed(file.path(), &error);
+                    }
+                    continue;
+                }
+            };
+            if file.tail.as_mut().is_some_and(Tail::take_edited) {
                 edited(file.path());
             }
             for line in lines {
@@ -298,10 +336,10 @@ mod tests {
         let path = dir.join(FILE);
         std::fs::write(&path, "enshwick status\n").unwrap();
         let mut watched = Watched::new(path.clone());
-        assert!(watched.look().is_empty());
+        assert!(watched.look().unwrap().is_empty());
         std::fs::write(&path, "enshwick status\nenshwick world\n").unwrap();
-        assert_eq!(watched.look(), ["enshwick world"]);
-        assert!(watched.look().is_empty());
+        assert_eq!(watched.look().unwrap(), ["enshwick world"]);
+        assert!(watched.look().unwrap().is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -313,9 +351,69 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(FILE);
         let mut watched = Watched::new(path.clone());
-        assert!(watched.look().is_empty());
+        assert!(watched.look().unwrap().is_empty());
         std::fs::write(&path, "enshwick world\n").unwrap();
-        assert_eq!(watched.look(), ["enshwick world"]);
+        assert_eq!(watched.look().unwrap(), ["enshwick world"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A fresh folder for one test, named `name`.
+    fn dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("enshwick-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
+    fn a_read_error_runs_no_line_again() {
+        let dir = dir("commands-locked");
+        let path = dir.join(FILE);
+        let mut watched = Watched::new(path.clone());
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\n").unwrap();
+        assert_eq!(watched.look().unwrap(), ["give 7 1 Ann", "ban Bob"]);
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert!(watched.look().is_err(), "a folder does not read as a file");
+        assert!(watched.look().is_err());
+        std::fs::remove_dir(&path).unwrap();
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\n").unwrap();
+        assert!(watched.look().unwrap().is_empty());
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\nkick Cy\n").unwrap();
+        assert_eq!(watched.look().unwrap(), ["kick Cy"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
+    fn a_file_gone_for_a_while_runs_no_line_again() {
+        let dir = dir("commands-gone");
+        let path = dir.join(FILE);
+        let mut watched = Watched::new(path.clone());
+        std::fs::write(&path, "give 7 1 Ann\n").unwrap();
+        assert_eq!(watched.look().unwrap(), ["give 7 1 Ann"]);
+        std::fs::remove_file(&path).unwrap();
+        assert!(watched.look().unwrap().is_empty());
+        assert!(watched.look().unwrap().is_empty());
+        std::fs::write(&path, "give 7 1 Ann\n").unwrap();
+        assert!(watched.look().unwrap().is_empty());
+        assert!(watched.look().unwrap().is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
+    fn a_file_that_does_not_read_at_start_skips_its_lines() {
+        let dir = dir("commands-start");
+        let path = dir.join(FILE);
+        std::fs::create_dir(&path).unwrap();
+        let mut watched = Watched::new(path.clone());
+        assert!(watched.look().is_err());
+        std::fs::remove_dir(&path).unwrap();
+        std::fs::write(&path, "give 7 1 Ann\n").unwrap();
+        assert!(watched.look().unwrap().is_empty());
+        std::fs::write(&path, "give 7 1 Ann\nkick Cy\n").unwrap();
+        assert_eq!(watched.look().unwrap(), ["kick Cy"]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
