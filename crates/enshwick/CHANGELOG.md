@@ -472,6 +472,10 @@ Each entry names the pull request that made the change.
 - **Breaking:** the console's `enshwick reload <mod id>` is gone; a mod
   reads a changed settings file as before, through its settings change
   event (#912).
+- The loader no longer saves the build table it carries to a game build
+  without its own: it searches the patterns on every start. A
+  `mod-data/enshwick/carried-<side>.txt` and its `.bak` left by an earlier
+  build are no longer read and may be deleted by hand (#912).
 - **Breaking:** `was: [...]` in `manifest!` and `Relation::WAS` are gone. A
   mod keeps one id: the loader no longer copies a former id's settings and
   data, no longer finds a mod, its requirements, points, calls, events,

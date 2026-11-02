@@ -30,6 +30,12 @@ Each entry names the pull request that made the change.
 - Breaking: `Table::carry_key` takes a range of the code it leaves out of
   the key, for bytes that change from start to start (#864).
 
+### Removed
+
+- Breaking: `Table::carry_key`, `CarryKey`, `Table::restore` and
+  `Resolved::to_saved` are gone with the loader's saved carried table;
+  `Table::fall_back` searches every time (#912).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Added

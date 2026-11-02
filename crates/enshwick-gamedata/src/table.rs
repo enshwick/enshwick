@@ -42,9 +42,6 @@ pub struct Table {
     pub(crate) checks: Vec<(String, u64)>,
     pub(crate) symbols: Vec<Symbol>,
     pub(crate) constants: Vec<Constant>,
-    /// The XXH3-128 of the table's text, which a carried table is saved
-    /// under ([`Table::carry_key`]).
-    pub(crate) digest: u128,
 }
 
 #[derive(serde::Deserialize)]
@@ -415,7 +412,6 @@ impl Table {
             })
             .collect::<Result<_, TableError>>()?;
         Ok(Self {
-            digest: twox_hash::XxHash3_128::oneshot(text.as_bytes()),
             name: file.name,
             side: file.side,
             fingerprint: Fingerprint::new(guid, file.age),
@@ -508,7 +504,6 @@ impl Table {
             attributes: self.attributes(),
             heads: self.heads(),
             bodies: self.bodies(),
-            starts: Vec::new(),
         }
     }
 
@@ -562,17 +557,17 @@ impl Table {
         cell: impl Fn(u64) -> Option<u32> + Sync,
     ) -> Resolved {
         let patterns: Vec<&Pattern> = self.carry_patterns().map(|(_, p)| p).collect();
-        let starts = find_each_unique(&patterns, code)
+        let starts: Vec<Option<usize>> = find_each_unique(&patterns, code)
             .into_iter()
             .map(Result::ok)
             .collect();
-        self.carried_at(code, code_rva, starts, cell)
+        self.carried_at(code, code_rva, &starts, cell)
     }
 
     /// The patterns [`Table::fall_back`] searches for, each once, with the
     /// id of its entry: the symbols' in table order, then the carried
     /// constants' searched alone.
-    pub(crate) fn carry_patterns(&self) -> impl Iterator<Item = (&str, &Pattern)> {
+    fn carry_patterns(&self) -> impl Iterator<Item = (&str, &Pattern)> {
         self.symbols
             .iter()
             .filter_map(|s| Some((s.id.as_str(), s.pattern.as_ref()?)))
@@ -586,11 +581,11 @@ impl Table {
 
     /// [`Table::fall_back`] once its patterns are found: `starts` holds, in
     /// [`Table::carry_patterns`] order, where each matched once in `code`.
-    pub(crate) fn carried_at(
+    fn carried_at(
         &self,
         code: &[u8],
         code_rva: u64,
-        starts: Vec<Option<usize>>,
+        starts: &[Option<usize>],
         cell: impl Fn(u64) -> Option<u32> + Sync,
     ) -> Resolved {
         let carried: Vec<&Constant> = self.constants.iter().filter(|c| c.carried).collect();
@@ -653,13 +648,7 @@ impl Table {
                 None => missing.push(constant.id.clone()),
             }
         }
-        let mut resolved = self.carried(symbols, constants, missing);
-        resolved.starts = self
-            .carry_patterns()
-            .map(|(id, _)| id.to_owned())
-            .zip(starts)
-            .collect();
-        resolved
+        self.carried(symbols, constants, missing)
     }
 
     /// The table carried with what its patterns found.
@@ -686,7 +675,6 @@ impl Table {
             attributes: self.attributes(),
             heads: self.heads(),
             bodies: self.bodies(),
-            starts: Vec::new(),
         }
     }
 
