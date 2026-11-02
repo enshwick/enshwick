@@ -12,7 +12,9 @@
 //! fiber that is not running keeps its stack where no thread points. The
 //! game makes none: neither image imports or names a fiber call, and on the
 //! server no thread left the stack its thread block records (build
-//! 1269579); a fiber another module makes stays unseen.
+//! 1269579). On the client (build 426) no module of the process, drivers
+//! and overlays included, called a fiber function from the main menu
+//! through a world load; a fiber another module makes stays unseen.
 
 use std::sync::Mutex;
 
