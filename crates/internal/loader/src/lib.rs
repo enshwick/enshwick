@@ -285,6 +285,8 @@ pub mod ticks;
 mod transactions;
 #[cfg(windows)]
 mod ui;
+#[cfg(any(windows, test))]
+mod unwind_info;
 #[cfg(windows)]
 mod vetoes;
 #[cfg_attr(

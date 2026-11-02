@@ -42,9 +42,15 @@ pub(super) struct Reach {
 /// entry.
 pub(super) const UNWIND_INFO: usize = 4 + 256 * 2 + 12;
 
-/// What unwinding reads for the `UNWIND_INFO` in `info`; `None` for a
-/// version or code this does not know, or info cut short.
-pub(super) fn reach(info: &[u8]) -> Option<Reach> {
+/// What unwinding reads for the `UNWIND_INFO` in `info` at a stop `at_offset`
+/// bytes into the prologue; `None` for a version or code this does not know,
+/// or info cut short.
+///
+/// A code whose offset is past `at_offset` describes an instruction that has
+/// not run at the stop, so its effect is skipped, as the unwinder skips it;
+/// pass `usize::MAX` to apply every code (a frame past the prologue, or a
+/// chained parent).
+pub(super) fn reach(info: &[u8], at_offset: usize) -> Option<Reach> {
     let (&head, &count, &frame) = (info.first()?, info.get(2)?, info.get(3)?);
     if !matches!(head & 7, 1 | 2) {
         return None;
@@ -59,21 +65,30 @@ pub(super) fn reach(info: &[u8]) -> Option<Reach> {
     let (mut size, mut saves, mut i) = (0usize, 0usize, 0usize);
     while i < count {
         let byte = codes[i * 2 + 1];
-        let op_info = usize::from(byte >> 4);
-        match byte & 0xf {
-            0 => (size, i) = (size + 8, i + 1),
-            1 if op_info == 0 => (size, i) = (size + slot(i + 1)? * 8, i + 2),
-            1 => (size, i) = (size + wide(i + 1)?, i + 3),
-            2 => (size, i) = (size + op_info * 8 + 8, i + 1),
-            3 => i += 1,
-            4 => (saves, i) = (saves.max(slot(i + 1)? * 8 + 8), i + 2),
-            5 => (saves, i) = (saves.max(wide(i + 1)? + 8), i + 3),
-            6 => i += 2,
-            8 => (saves, i) = (saves.max(slot(i + 1)? * 16 + 16), i + 2),
-            9 => (saves, i) = (saves.max(wide(i + 1)? + 16), i + 3),
-            10 => (size, i) = (size + if op_info == 0 { 40 } else { 48 }, i + 1),
-            _ => return None,
+        let op = byte & 0xf;
+        // A spare code (version 2) in a frame being unwound is unexpected;
+        // the walk stops rather than read on from a corrupt info.
+        if op == 7 {
+            return None;
         }
+        let op_info = usize::from(byte >> 4);
+        let taken = crate::unwind_info::slots(op, byte >> 4)?;
+        if usize::from(codes[i * 2]) <= at_offset {
+            match op {
+                0 => size += 8,
+                1 if op_info == 0 => size += slot(i + 1)? * 8,
+                1 => size += wide(i + 1)?,
+                2 => size += op_info * 8 + 8,
+                4 => saves = saves.max(slot(i + 1)? * 8 + 8),
+                5 => saves = saves.max(wide(i + 1)? + 8),
+                8 => saves = saves.max(slot(i + 1)? * 16 + 16),
+                9 => saves = saves.max(wide(i + 1)? + 16),
+                10 => size += if op_info == 0 { 40 } else { 48 },
+                // SET_FPREG and the version 2 epilogue codes move no `RSP`.
+                _ => {}
+            }
+        }
+        i += taken;
     }
     let chained = if (head >> 3) & 4 == 0 {
         None
@@ -90,8 +105,10 @@ pub(super) fn reach(info: &[u8]) -> Option<Reach> {
     })
 }
 
-/// What unwinding the function of `entry` in the image at `image` reads,
-/// its chained entries included.
+/// What unwinding the function of `entry` in the image at `image` reads at
+/// the stop `rip`, its chained entries included. The stop's offset into the
+/// function skips the codes of prologue instructions it has not reached; a
+/// chained parent's codes all apply.
 ///
 /// # Safety
 ///
@@ -102,11 +119,17 @@ pub(super) fn reach(info: &[u8]) -> Option<Reach> {
 pub(super) unsafe fn reach_of(
     image: usize,
     entry: *const IMAGE_RUNTIME_FUNCTION_ENTRY,
+    rip: usize,
 ) -> Option<Reach> {
     let unwind_data = core::mem::offset_of!(IMAGE_RUNTIME_FUNCTION_ENTRY, Anonymous);
-    // SAFETY: the caller's contract makes `entry` a readable function entry,
-    // whose union at `Anonymous` is the `u32` RVA of its unwind data.
+    // SAFETY: the caller's contract makes `entry` a readable function entry:
+    // its first `u32` the function's start, offset from `image`, and the
+    // union at `Anonymous` the `u32` RVA of its unwind data.
+    let begin: u32 = unsafe { enshwick::raw::read_at(entry.cast(), 0) };
+    // SAFETY: the same readable function entry, whose `Anonymous` union is
+    // the `u32` RVA of its unwind data.
     let mut rva: u32 = unsafe { enshwick::raw::read_at(entry.cast(), unwind_data) };
+    let mut at_offset = rip.saturating_sub(image + begin as usize);
     let mut total: Option<Reach> = None;
     for _ in 0..32 {
         let at = image.checked_add(rva as usize)?;
@@ -120,7 +143,7 @@ pub(super) unsafe fn reach_of(
                 (end - at).min(UNWIND_INFO),
             )
         };
-        let step = reach(info)?;
+        let step = reach(info, at_offset)?;
         let merged = match total {
             None => step,
             Some(first) => Reach {
@@ -130,7 +153,8 @@ pub(super) unsafe fn reach_of(
             },
         };
         match merged.chained {
-            Some(next) => (total, rva) = (Some(merged), next),
+            // A chained parent describes the whole prologue, all of it run.
+            Some(next) => (total, rva, at_offset) = (Some(merged), next, usize::MAX),
             None => return Some(merged),
         }
     }
@@ -222,7 +246,8 @@ pub(super) unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> 
             // SAFETY: `entry` is the non-null function entry
             // `RtlLookupFunctionEntry` just returned for the loaded image at
             // `base`.
-            let Some(reach) = (unsafe { reach_of(base, entry) }) else {
+            let Some(reach) = (unsafe { reach_of(base, entry, usize::try_from(rip).unwrap_or(0)) })
+            else {
                 break;
             };
             let frame = match reach.frame {

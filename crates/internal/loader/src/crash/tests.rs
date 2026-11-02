@@ -130,10 +130,30 @@ fn unwind_codes_say_how_far_a_frame_reads() {
         1, 0x10, 4, 0, 0x08, 0x42, 0x04, 0x00, 0x0c, 0x34, 0x0c, 0x00,
     ];
     assert_eq!(
-        reach(&info),
+        reach(&info, usize::MAX),
         Some(Reach {
             frame: None,
             bytes: 0x68,
+            chained: None,
+        })
+    );
+    // Stopped at offset 3, before any code's instruction has run: only the
+    // return address is read.
+    assert_eq!(
+        reach(&info, 3),
+        Some(Reach {
+            frame: None,
+            bytes: 8,
+            chained: None,
+        })
+    );
+    // Stopped at offset 8: the alloc (offset 8) and the push (offset 4) have
+    // run, the save of rsi (offset 0xc) has not.
+    assert_eq!(
+        reach(&info, 8),
+        Some(Reach {
+            frame: None,
+            bytes: 0x38,
             chained: None,
         })
     );
@@ -141,7 +161,7 @@ fn unwind_codes_say_how_far_a_frame_reads() {
     // allocation of 0x1000 bytes in one more slot.
     let framed = [1, 0x10, 3, 0x25, 0x10, 0x01, 0x00, 0x02, 0x08, 0x03];
     assert_eq!(
-        reach(&framed),
+        reach(&framed, usize::MAX),
         Some(Reach {
             frame: Some((5, 32)),
             bytes: 0x1008,
@@ -151,10 +171,17 @@ fn unwind_codes_say_how_far_a_frame_reads() {
     // Chained: one code, padded to two, then the parent entry.
     let mut chained = vec![(4 << 3) | 1, 0, 1, 0, 0x00, 0x30, 0, 0];
     chained.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0, 0x78, 0x56, 0x34, 0x12]);
-    assert_eq!(reach(&chained).and_then(|r| r.chained), Some(0x1234_5678));
-    assert_eq!(reach(&[3, 0, 0, 0]), None, "an unknown version");
-    assert_eq!(reach(&[1, 0, 2, 0, 0, 0x07]), None, "cut short");
-    assert_eq!(reach(&[1, 0, 1, 0, 0, 0x0f]), None, "an unknown code");
+    assert_eq!(
+        reach(&chained, usize::MAX).and_then(|r| r.chained),
+        Some(0x1234_5678)
+    );
+    assert_eq!(reach(&[3, 0, 0, 0], usize::MAX), None, "an unknown version");
+    assert_eq!(reach(&[1, 0, 2, 0, 0, 0x07], usize::MAX), None, "cut short");
+    assert_eq!(
+        reach(&[1, 0, 1, 0, 0, 0x0f], usize::MAX),
+        None,
+        "an unknown code"
+    );
 }
 
 #[test]

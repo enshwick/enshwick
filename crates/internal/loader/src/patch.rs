@@ -34,6 +34,7 @@ use crate::chains::{Chains, Hop};
 use crate::code::{CodePatch, Verdict};
 use crate::detour::{Commit, Pending, Request};
 use crate::mid::{Mids, Stubs};
+use crate::unwind_info::RuntimeFunction;
 
 const PAGE: usize = 4096;
 const THUNK: usize = 96;
@@ -267,10 +268,7 @@ pub(crate) fn arm(
     // SAFETY: the data pages hold at least `slots_len + counters_len +
     // functions_len + UNWIND.len()` bytes, so this offset stays inside.
     let function_start = unsafe { data_start.add(slots_len + counters_len) };
-    #[expect(
-        clippy::cast_ptr_alignment,
-        reason = "the counters end on an 8-byte boundary"
-    )]
+    // The counters end on an 8-byte boundary, so the table is aligned.
     let function_base = function_start.cast::<RuntimeFunction>();
     // SAFETY: the data pages hold at least `slots_len + counters_len +
     // functions_len + UNWIND.len()` bytes, so this offset stays inside.
@@ -721,16 +719,6 @@ fn leave_out(patches: &[CodePatch], verdicts: &mut [Verdict], stuck: &[usize]) {
         }
     }
     crate::code::skip_with_feature(patches, verdicts);
-}
-
-/// An entry of a function table for `RtlAddFunctionTable`: offsets from
-/// the table's base.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-struct RuntimeFunction {
-    begin: u32,
-    end: u32,
-    unwind: u32,
 }
 
 /// What [`write_thunk`] wrote.

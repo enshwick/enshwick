@@ -83,6 +83,9 @@ run and the function goes on.
   unwind data. Pick an address inside a straight run of instructions.
 - Control must not leave within those bytes: a return, an unconditional or
   indirect jump, or an interrupt among them makes the loader refuse the address.
+- The first bytes must move cleanly: the loader refuses the address when
+  re-encoding a branch among them would split it into several instructions
+  (its target lies too far for a short form).
 - The bytes must not overlap another hook's jump. Function hooks keep their
   bytes first, so a mid-function hook within the first bytes of a hooked
   function is refused, and of two mid-function hooks whose bytes overlap, one
