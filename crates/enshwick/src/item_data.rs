@@ -3,8 +3,8 @@
 //! per world and sent to players.
 //!
 //! Unstable: needs the `unstable` feature and may change in any release.
-//! After a restart, a value on an item a load cannot find, such as one in a
-//! player's inventory, stays aside and no longer reads.
+//! After a restart, a value on an item a load cannot find stays aside and no
+//! longer reads.
 //!
 //! An item with an entity of its own, its PIDE (see
 //! [`Slot::pide`](crate::inventory::Slot::pide)), is an [`ItemInstance`]:
@@ -14,10 +14,12 @@
 //! when the world saves. A load numbers item entities anew, so the server
 //! keeps a value under the item's place when the world saves: the placed
 //! container and the slot it lies in. After the next load the value finds
-//! the item in that slot again. An item a load cannot find there, such as
-//! one in a player's inventory, keeps its value while its player plays:
-//! when the player leaves, or the server stops while they play, the value
-//! goes aside in the world's file, kept but attached to nothing.
+//! the item in that slot again. An item in a player's inventory is kept
+//! under the character and the slot instead: when the player leaves, or the
+//! server stops while they play, the value waits for that character's next
+//! join and then finds the item in that slot again, if it holds the same
+//! item. A value that finds no item goes aside in the world's file, kept but
+//! attached to nothing.
 //!
 //! The server keeps the values, in `mod-data/enshwick/worlds/<key>/`, never
 //! in the game's save, and sends every change to the clients that run

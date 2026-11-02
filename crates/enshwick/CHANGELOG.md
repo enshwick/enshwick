@@ -86,6 +86,9 @@ Each entry names the pull request that made the change.
   gains `BeforeMajors` for a DLL built before ABI majors, and its
   `OtherMajor` holds a `u16`. The ABI major moves only to the next one
   (#865).
+- Item data on a leaving player's items waits for that character's next
+  join and attaches again where the same item lies in the same slot,
+  instead of going aside in the world's file (#782).
 - **Breaking:** a mod does not build when a key of its texts lacks a text
   in a language of the new `Language::REQUIRED`, `en` and `uk`; add the
   missing Ukrainian texts (#838).

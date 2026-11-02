@@ -119,11 +119,15 @@ files. The server keeps each value under its owner's place instead.
 **Items.** When the world saves, the server keeps each value under the
 item's place: the placed container, which of its inventories, and the slot.
 After the next load the value finds the item in that slot again, if it holds
-the same item. An item in a player's inventory has no such place: its value
-lasts while its player plays. When the player leaves, or the server stops
-while they play, the value goes aside in the world's file, kept but attached
-to nothing. Within a session the value stays with the item across moves
-between inventories and trades.
+the same item. An item in a player's inventory is kept under the character,
+which of its inventories, and the slot. When the player leaves, or the
+server stops while they play, the value waits for that character's next
+join. Once its inventories fill, the value finds the item in that slot
+again, if it holds the same item; otherwise it goes aside. Another character
+of the same account never gets it. On a game build whose table does not say
+where the server keeps a player's character, the value goes aside in the
+world's file at the leave, kept but attached to nothing. Within a session
+the value stays with the item across moves between inventories and trades.
 
 **Entities.** The server keeps each value under the entity's template and
 position, as the save keeps it, to a sixteen-thousandth of a metre. After the
