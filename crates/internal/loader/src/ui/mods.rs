@@ -5,8 +5,7 @@
 //! player's own, then the world's. In a world this process runs those are
 //! the world's; in the main menu, the defaults of new worlds. Joined to
 //! another's server, the server's settings of the mod are a page of their
-//! own, which only its administrators change. Mod settings show nowhere
-//! else, not in the game's world settings.
+//! own, which only its administrators change.
 //!
 //! The entries are drawn from two hooks inside the menus' drawing: in the
 //! main menu before its Credits entry, in the pause menu right after its
@@ -33,7 +32,7 @@ use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use enshwick::abi::{Registers, UiWidget};
 use list::{Listed, list};
 use server::{server_list, server_settings};
-use settings::{page_rows, page_schema, settings};
+use settings::{page_rows, settings};
 
 use crate::configure::rows::Row;
 use crate::fuse::Fuse;
@@ -84,12 +83,16 @@ static BACK: AtomicU8 = AtomicU8::new(0);
 enum Page {
     /// The mods, from `first` while they page.
     List { first: usize },
-    /// Mod `index`'s settings, from row `first` while they page.
+    /// Mod `index`'s settings, from row `first` while they page, where
+    /// `place` says, with the mod's id when the joined server keeps its
+    /// world settings (`server`).
     Settings {
         index: usize,
         first: usize,
         rows: Vec<Row>,
         entries: Entries,
+        place: Place,
+        server: Option<String>,
     },
     /// The joined server's mods with settings, from `first` while they page.
     ServerList { first: usize },
@@ -436,7 +439,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
     // unmoved until `scroll_end` below.
     let scrolled = unsafe { engine.scroll_begin(context, &mut screen.scroll, height, GAP) };
     paint.set_scrolled(scrolled);
-    let next = content(loader, &paint, &mut screen.page);
+    let next = content(loader, &paint, screen.from, &mut screen.page);
     // SAFETY: `scroll_begin` started `screen.scroll` in this frame inside
     // this window; it did not move, and the painter's widgets close every
     // frame they open.
@@ -483,26 +486,16 @@ enum Next {
 }
 
 /// Draws the page's content, inside the scroll area where the build has
-/// one; what the screen does next.
-fn content(loader: &Loader, paint: &Painter<'_>, page: &mut Page) -> Next {
+/// one; what the screen does next. `from` is the menu the screen opened
+/// over.
+fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> Next {
     match page {
         Page::List { first } => {
             if joined_elsewhere() && paint.button(texts::text("mods.server").as_bytes(), true) {
                 return Next::ServerList;
             }
             match list(loader, paint, first) {
-                Listed::Settings(index) => match loader.mods.get(index) {
-                    Some(record) if page_schema(record).is_none() => server_page(record.id.clone()),
-                    _ => Next::Page(
-                        Page::Settings {
-                            index,
-                            first: 0,
-                            rows: page_rows(loader, index),
-                            entries: Entries::default(),
-                        },
-                        None,
-                    ),
-                },
+                Listed::Settings(index) => settings_page(loader, from, index),
                 Listed::Actions(id) => {
                     Next::Page(Page::Actions(super::actions::View::new(id, None)), None)
                 }
@@ -514,24 +507,17 @@ fn content(loader: &Loader, paint: &Painter<'_>, page: &mut Page) -> Next {
             first,
             rows,
             entries,
+            place,
+            server,
         } => {
-            let record = loader.mods.get(*index);
-            let server = record.filter(|record| {
-                joined_elsewhere()
-                    && record
-                        .schema
-                        .relock()
-                        .as_ref()
-                        .is_some_and(mods_screen::has_world_settings)
-            });
-            if let Some(record) = server
+            if let Some(id) = server
                 && paint.button(texts::text("mods.server").as_bytes(), true)
             {
-                return server_page(record.id.clone());
+                return server_page(id.clone());
             }
-            match settings(loader, paint, *index, first, rows, entries) {
+            match settings(loader, paint, *index, first, rows, entries, place.world) {
                 Some(message) => {
-                    *rows = page_rows(loader, *index);
+                    *rows = page_rows(loader, *index, place.away);
                     Next::Message(message)
                 }
                 None => Next::Stay,
@@ -551,6 +537,50 @@ fn content(loader: &Loader, paint: &Painter<'_>, page: &mut Page) -> Next {
             super::actions::body(paint, view);
             Next::Stay
         }
+    }
+}
+
+/// Where the screen shows a mod's settings, fixed as its page opens.
+#[derive(Clone, Copy)]
+struct Place {
+    /// This process runs a world: its settings are that world's.
+    world: bool,
+    /// The player is in another's world, which keeps the world's settings.
+    away: bool,
+}
+
+/// Opens mod `index`'s settings page, or the joined server's settings of a
+/// mod with none of the player's own; `from` is the menu under the screen.
+fn settings_page(loader: &Loader, from: u8, index: usize) -> Next {
+    let Some(record) = loader.mods.get(index) else {
+        return Next::Stay;
+    };
+    let world = crate::worlds::current().is_some();
+    let place = Place {
+        world,
+        away: joined_elsewhere() || (from == FROM_PAUSE && !world),
+    };
+    let server = (joined_elsewhere()
+        && record
+            .schema
+            .relock()
+            .as_ref()
+            .is_some_and(mods_screen::has_world_settings))
+    .then(|| record.id.clone());
+    let rows = page_rows(loader, index, place.away);
+    match server {
+        Some(id) if rows.is_empty() => server_page(id),
+        _ => Next::Page(
+            Page::Settings {
+                index,
+                first: 0,
+                rows,
+                entries: Entries::default(),
+                place,
+                server,
+            },
+            None,
+        ),
     }
 }
 

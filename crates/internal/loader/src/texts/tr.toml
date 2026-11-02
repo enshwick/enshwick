@@ -49,6 +49,7 @@
 "row.value" = "{label}: {value}"
 "world.belongs" = "Bu ayarlar bu dünyaya aittir."
 "world.new" = "Bundan sonra oluşturulan dünyalar bu ayarlarla başlar. Her dünya kendi ayarlarını korur."
+"change.next" = "{id} {key} = {value}: yüklenecek bir sonraki dünya için kaydedildi."
 "change.new-worlds" = "{id} {key} = {value}: yeni dünyalar için kaydedildi. Her dünya kendi ayarlarını korur."
 "change.startup" = "{id} {key} = {value}: bu dünya için kaydedildi; dünya yeniden yüklendiğinde etkili olur."
 "change.startup-sync" = "{id} {key} = {value}: bu dünya için kaydedildi; dünya yeniden yüklendiğinde etkili olur ve katılmış oyuncular da o zaman alır."

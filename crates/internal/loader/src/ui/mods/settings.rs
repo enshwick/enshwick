@@ -5,7 +5,7 @@
 use enshwick::abi::UiWidget;
 
 use super::list::{listing, pages};
-use super::{Entries, ROWS_PER_PAGE, joined_elsewhere};
+use super::{Entries, ROWS_PER_PAGE};
 use crate::configure::rows::{self, Lock, Row, Widget};
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -13,12 +13,18 @@ use crate::mods_screen;
 use crate::texts;
 use crate::ui::Painter;
 
-/// The rows of mod `index`'s settings page.
-pub(super) fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
+/// The rows of mod `index`'s settings page, for a player in another's
+/// world (`away`) or not.
+pub(super) fn page_rows(loader: &Loader, index: usize, away: bool) -> Vec<Row> {
     let Some(record) = loader.mods.get(index) else {
         return Vec::new();
     };
-    let Some(schema) = page_schema(record) else {
+    let Some(schema) = record
+        .schema
+        .relock()
+        .clone()
+        .and_then(|schema| mods_screen::page_settings(schema, away))
+    else {
         return Vec::new();
     };
     let file = crate::worlds::show_text(loader, record);
@@ -30,12 +36,8 @@ pub(super) fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
     rows::rows(&schema, &file, None, words)
 }
 
-/// The settings mod `record`'s page edits here; `None` when it has none.
-pub(super) fn page_schema(record: &crate::host::ModRecord) -> Option<enshwick::config::Schema> {
-    mods_screen::page_settings(record.schema.relock().clone()?, joined_elsewhere())
-}
-
-/// Draws a page of mod `index`'s settings; the outcome of a change.
+/// Draws a page of mod `index`'s settings, the world's those of the world
+/// this process runs (`world`) or of new worlds; the outcome of a change.
 pub(super) fn settings(
     loader: &Loader,
     paint: &Painter<'_>,
@@ -43,6 +45,7 @@ pub(super) fn settings(
     first: &mut usize,
     rows: &[Row],
     entries: &mut Entries,
+    world: bool,
 ) -> Option<(String, bool)> {
     entries.editing = false;
     let record = loader.mods.get(index)?;
@@ -59,7 +62,6 @@ pub(super) fn settings(
     let listing = listing(paint, ROWS_PER_PAGE);
     *first = listing.clamp_first(*first, rows.len());
     let shown = listing.shown(*first, rows.len());
-    let world = crate::worlds::current().is_some();
     let mut section = None;
     for row in rows.iter().take(shown.end).skip(shown.start) {
         let scope = schema

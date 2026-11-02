@@ -450,6 +450,7 @@ pub fn changed(id: &str, key: &str, change: &Change) -> String {
     use crate::worlds::Destination;
     let args = [("id", id), ("key", key), ("value", change.value.as_str())];
     match (&change.destination, change.stage) {
+        (Destination::Next, _) => texts::fill("change.next", &args),
         (Destination::NewWorlds, _) => texts::fill("change.new-worlds", &args),
         (_, Stage::Startup) if change.synced => texts::fill("change.startup-sync", &args),
         (_, Stage::Startup) => texts::fill("change.startup", &args),

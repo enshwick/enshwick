@@ -49,6 +49,7 @@
 "row.value" = "{label}：{value}"
 "world.belongs" = "これらの設定はこのワールドのものです。"
 "world.new" = "これから作成するワールドはこの設定で始まります。各ワールドは独自の設定を保持します。"
+"change.next" = "{id} {key} = {value}：次に読み込まれるワールド用に保存しました。"
 "change.new-worlds" = "{id} {key} = {value}：新しいワールド用に保存しました。各ワールドは独自の設定を保持します。"
 "change.startup" = "{id} {key} = {value}：このワールド用に保存しました。ワールドを再び読み込んだときに反映されます。"
 "change.startup-sync" = "{id} {key} = {value}：このワールド用に保存しました。ワールドを再び読み込んだときに反映され、参加中のプレイヤーにもそのとき届きます。"

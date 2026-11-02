@@ -49,6 +49,7 @@
 "row.value" = "{label}: {value}"
 "world.belongs" = "Estos ajustes pertenecen a este mundo."
 "world.new" = "Los mundos que se creen a partir de ahora empiezan con estos ajustes. Cada mundo conserva los suyos."
+"change.next" = "{id} {key} = {value}: guardado para el próximo mundo que se cargue."
 "change.new-worlds" = "{id} {key} = {value}: guardado para mundos nuevos. Cada mundo conserva sus propios ajustes."
 "change.startup" = "{id} {key} = {value}: guardado para este mundo; se aplica cuando el mundo vuelva a cargarse."
 "change.startup-sync" = "{id} {key} = {value}: guardado para este mundo; se aplica cuando el mundo vuelva a cargarse, y entonces lo reciben los jugadores conectados."

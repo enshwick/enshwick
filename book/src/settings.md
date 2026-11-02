@@ -193,9 +193,11 @@ the one the game started with, and the settings file holds it for every
 world.
 
 A newer version of a mod that adds a setting finds it at its template value
-in each world. A change to a world setting while no world runs, as from the
-main menu, goes into the settings file: worlds made from then on start with
-it, and a world that has its own file keeps its values.
+in each world. A change to a world setting while a game client runs no
+world, as from the main menu, goes into the settings file: worlds made from
+then on start with it, and a world that has its own file keeps its values.
+On a dedicated server before its world loads, the change waits in
+`mod-data/<id>/worlds/next.toml` and goes into that world as it loads.
 
 While a world runs, the loader watches its settings file as it watches the
 settings file, and an edit reaches `on_config_change` about a second after it
@@ -224,7 +226,7 @@ changes them too:
 | `enshwick config <mod> <key> <value>` | checks the value and writes it to the running world's settings, comments kept    |
 
 On a dedicated server, `enshwick config` edits the world it runs; before its
-world loads, a world setting goes into the settings file, for new worlds. A key names one element of a list with
+world loads, the change waits for it. A key names one element of a list with
 its index, `per_level[2]`, and a grouped setting with its dotted key,
 `comfort.multiplier`.
 

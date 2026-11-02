@@ -49,6 +49,7 @@
 "row.value" = "{label}：{value}"
 "world.belongs" = "這些設定屬於此世界。"
 "world.new" = "今後建立的世界將以這些設定開始。每個世界保留自己的設定。"
+"change.next" = "{id} {key} = {value}：已為下一個載入的世界儲存。"
 "change.new-worlds" = "{id} {key} = {value}：已為新世界儲存。每個世界保留自己的設定。"
 "change.startup" = "{id} {key} = {value}：已為此世界儲存；世界再次載入時生效。"
 "change.startup-sync" = "{id} {key} = {value}：已為此世界儲存；世界再次載入時生效，屆時已加入的玩家也會收到。"

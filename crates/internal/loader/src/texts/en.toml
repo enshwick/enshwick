@@ -49,6 +49,7 @@
 "row.value" = "{label}: {value}"
 "world.belongs" = "These settings belong to this world."
 "world.new" = "Worlds made from now on start with these settings. Each world keeps its own."
+"change.next" = "{id} {key} = {value}: saved for the next world that loads."
 "change.new-worlds" = "{id} {key} = {value}: saved for new worlds. Each world keeps its own settings."
 "change.startup" = "{id} {key} = {value}: saved for this world; it takes effect when the world loads again."
 "change.startup-sync" = "{id} {key} = {value}: saved for this world; it takes effect when the world loads again, and joined players get it then."
