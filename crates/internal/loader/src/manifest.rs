@@ -245,6 +245,14 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     // SAFETY: the caller guarantees the manifest's lists and strings
     // readable and unchanged for the call.
     let listed = unsafe { exports(manifest) };
+    let count = if manifest.exports.is_null() {
+        0
+    } else {
+        manifest.export_count
+    };
+    if listed.len() != count {
+        return Err(ManifestError::NotUtf8("export"));
+    }
     if let Some(bare) = enshwick::__private::rules::bad_export(&listed) {
         return Err(ManifestError::ExportWithoutKind(bare.to_owned()));
     }

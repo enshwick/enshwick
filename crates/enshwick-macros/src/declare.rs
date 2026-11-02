@@ -714,15 +714,7 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
             }
         }
     });
-    let listed = format!(
-        "exports = [{}]\n",
-        metadata
-            .exports
-            .iter()
-            .map(|e| crate::shape::toml_string(e))
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
+    let listed = &metadata.exports;
     quote! {{
         #tracked
         static DEPENDENCIES: &[#abi::Dependency] = &[#(#dependencies),*];
@@ -733,7 +725,7 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
         const VERSION: &str = ::core::env!("CARGO_PKG_VERSION");
         const HEAD: &str = ::enshwick::__private::concatcp!(
             "schema = ", ::enshwick::schema_section::FORMAT, "\nmod = \"", #id,
-            "\"\nversion = \"", VERSION, "\"\n", #listed,
+            "\"\nversion = \"", VERSION, "\"\n",
         );
         ::enshwick::__schema_entry!(HEAD);
         static MANIFEST: #abi::Manifest = #abi::Manifest {
@@ -758,7 +750,7 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
             exports: ::core::ptr::null(),
             export_count: 0,
         };
-        ::enshwick::__private::Manifested::new(&MANIFEST, #id, HEAD)
+        ::enshwick::__private::Manifested::new(&MANIFEST, #id, HEAD, &[#(#listed),*])
     }}
 }
 

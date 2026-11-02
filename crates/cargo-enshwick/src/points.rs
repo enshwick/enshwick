@@ -37,16 +37,6 @@ const fn format_fix(format: u32) -> &'static str {
     }
 }
 
-/// A value read and dropped, which no definition is written from.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct Ignored;
-
-impl<'de> Deserialize<'de> for Ignored {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        serde::de::IgnoredAny::deserialize(deserializer).map(|_| Self)
-    }
-}
-
 /// Why a point schema does not read or does not make a definition.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -155,11 +145,6 @@ pub struct Schema {
     /// The format, [`FORMAT`].
     #[serde(rename = "schema")]
     format: u32,
-    /// The content and stat kinds the owner's `exports` lists, which the
-    /// owner's manifest reads from its head; no declaration is written from
-    /// them, so this tool accepts and drops the key.
-    #[serde(default)]
-    exports: Ignored,
     /// The owner's id.
     #[serde(rename = "mod")]
     owner: String,

@@ -122,6 +122,7 @@ pub struct Manifested {
     base: &'static crate::abi::Manifest,
     id: &'static str,
     head: &'static str,
+    exports: &'static [&'static str],
     built: std::sync::Mutex<Option<Built>>,
 }
 
@@ -145,17 +146,19 @@ unsafe impl Send for Built {}
 
 impl Manifested {
     /// The manifest `base` of the mod `id`, its schema text to start with
-    /// `head`, which also names the content and stat kinds it exports.
+    /// `head`, exporting the content and stat kinds `exports`.
     #[must_use]
     pub const fn new(
         base: &'static crate::abi::Manifest,
         id: &'static str,
         head: &'static str,
+        exports: &'static [&'static str],
     ) -> Self {
         Self {
             base,
             id,
             head,
+            exports,
             built: std::sync::Mutex::new(None),
         }
     }
@@ -195,13 +198,10 @@ impl Manifested {
     fn build(&self) -> Option<Built> {
         let section = crate::schema_section::Section::parse(section()).ok()?;
         let text = section.schema(self.head, self.id).into_boxed_str();
-        let head = crate::schema_section::Head {
-            text: self.head,
-            id: self.id,
-        };
-        let names: Box<[Box<str>]> = head
-            .exports()
-            .into_iter()
+        let names: Box<[Box<str>]> = self
+            .exports
+            .iter()
+            .map(|&name| name.to_owned())
             .chain(section.exports(self.id))
             .map(String::into_boxed_str)
             .collect();

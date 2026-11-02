@@ -83,7 +83,7 @@ mod tests {
             matches!(damaged, Err(Error::Section(ReadSectionError::Damaged(26)))),
             "{damaged:?}"
         );
-        let older = from_section(b"schema = 2\nmod = \"you.a\"\n[[point]]\nname = \"you.a:p\"\n")
+        let older = from_section(b"schema = 1\nmod = \"you.a\"\n[[point]]\nname = \"you.a:p\"\n")
             .unwrap_err()
             .to_string();
         assert!(older.contains("rebuild"), "{older}");

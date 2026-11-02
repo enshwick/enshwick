@@ -51,17 +51,20 @@ pub fn may_declare_rate(rate: RateId, joins: bool) -> bool {
 /// The loader refuses a manifest with such an export, and the fake does too.
 #[must_use]
 pub fn bad_export<S: AsRef<str>>(exports: &[S]) -> Option<&str> {
-    let local_ok = |local: &str| {
-        (1..=128).contains(&local.len())
-            && local.bytes().all(|b| {
-                b.is_ascii_lowercase()
-                    || b.is_ascii_digit()
-                    || matches!(b, b'_' | b'.' | b'/' | b'-')
-            })
-    };
     exports.iter().map(AsRef::as_ref).find(|export| {
-        crate::schema_section::Kind::of_export(export).is_none_or(|(_, local)| !local_ok(local))
+        crate::schema_section::Kind::of_export(export)
+            .is_none_or(|(_, local)| !is_local_name(local))
     })
+}
+
+/// Whether `local` is a local name: 1 to 128 of `[a-z0-9_./-]`, with no mod
+/// id.
+#[must_use]
+pub fn is_local_name(local: &str) -> bool {
+    (1..=128).contains(&local.len())
+        && local.bytes().all(|b| {
+            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'/' | b'-')
+        })
 }
 
 /// Why a mod may not use the `kind` `name`, `<owner>:<what>`, whose owner

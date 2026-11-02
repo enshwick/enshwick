@@ -180,26 +180,22 @@ pub(crate) fn run(
     let mut found = Vec::new();
     let mut unread = Vec::new();
     for (dll, text) in schemas(from, &mut unread)? {
-        match Schema::parse(&text) {
-            Ok(schema) => found.push(schema),
-            // One DLL of a folder in another schema format: its owner or
-            // this tool needs another release, which the error names. A
-            // schema file asked for by name still fails the run.
-            Err(e @ cargo_enshwick::points::Error::Format(_)) if dll != from => {
-                unread.push(format!("{}: {e}", dll.display()));
-            }
-            Err(e) => return Err(e).with_context(|| dll.display().to_string()),
-        }
+        found.push(Schema::parse(&text).with_context(|| dll.display().to_string())?);
     }
-    let mut lines: Vec<String> = unread
-        .iter()
-        .map(|why| format!("left out: {why}"))
-        .collect();
+    let left_out = if unread.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "; left out, whose sections do not read: {}",
+            unread.join("; ")
+        )
+    };
+    let mut lines = Vec::new();
     let mut written = 0;
     for (alias, id) in wanted {
         let Some(schema) = found.iter().find(|s| s.owner() == id) else {
             lines.push(format!(
-                "{alias}: no DLL in {} carries what {id} offers",
+                "{alias}: no DLL in {} carries what {id} offers{left_out}",
                 from.display()
             ));
             continue;

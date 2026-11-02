@@ -182,18 +182,15 @@ impl<'a> Entry<'a> {
     }
 }
 
-/// The head one `declare_mod!` wrote, which names its mod and the content
-/// and stat kinds it exports.
+/// The head one `declare_mod!` wrote, which names its format and mod.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::schema_section::Section;
 ///
-/// let section = Section::parse(b"schema = 2\nmod = \"you.a\"\nexports = [\"content:locker\"]\n")?;
-/// let head = section.heads()[0];
-/// assert_eq!(head.id, "you.a");
-/// assert_eq!(head.exports(), ["content:locker"]);
+/// let section = Section::parse(b"schema = 2\nmod = \"you.a\"\n")?;
+/// assert_eq!(section.heads()[0].id, "you.a");
 /// # Ok::<(), enshwick::schema_section::ReadSectionError>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -202,30 +199,6 @@ pub struct Head<'a> {
     pub text: &'a str,
     /// The mod id it names.
     pub id: &'a str,
-}
-
-impl Head<'_> {
-    /// The content and stat kinds its `exports = [..]` line names, each
-    /// `<kind>:<name>`; empty without the line.
-    ///
-    /// # Examples
-    ///
-    /// See [`Head`].
-    #[must_use]
-    pub fn exports(&self) -> Vec<String> {
-        toml::from_str::<toml::Table>(self.text)
-            .ok()
-            .and_then(|head| match head.get("exports")? {
-                toml::Value::Array(names) => Some(
-                    names
-                        .iter()
-                        .filter_map(|name| name.as_str().map(str::to_owned))
-                        .collect(),
-                ),
-                _ => None,
-            })
-            .unwrap_or_default()
-    }
 }
 
 /// The section, split into heads and entries once.
@@ -245,10 +218,13 @@ pub enum ReadSectionError {
     /// A part is neither a head naming its mod nor a table with a name.
     #[error("the point section's part at byte {0} is no head and no named table")]
     Damaged(usize),
-    /// A head carries its tables itself, as a mod built before its
-    /// declarations wrote their own entries does.
-    #[error("the point section is of an older enshwick: rebuild its mod with this one")]
-    Outdated,
+    /// A head states another [`FORMAT`]: an older one is its mod's to
+    /// rebuild, a newer one the reader's to update.
+    #[error(
+        "the point section is format {0}; this enshwick reads {FORMAT}: {fix}",
+        fix = if *.0 < FORMAT { "rebuild its mod with this enshwick" } else { "update cargo-enshwick" }
+    )]
+    Format(u32),
 }
 
 impl<'a> Section<'a> {
@@ -273,6 +249,16 @@ impl<'a> Section<'a> {
     /// # Ok::<(), enshwick::schema_section::ReadSectionError>(())
     /// ```
     pub fn parse(bytes: &'a [u8]) -> Result<Self, ReadSectionError> {
+        // The format first: a table of another format is no damage.
+        for part in bytes.split(|&b| b == 0) {
+            let format = part
+                .strip_prefix(b"schema = ")
+                .and_then(|rest| rest.split(|&b| b == b'\n').next())
+                .and_then(|digits| core::str::from_utf8(digits).ok()?.parse::<u32>().ok());
+            if let Some(format) = format.filter(|&format| format != FORMAT) {
+                return Err(ReadSectionError::Format(format));
+            }
+        }
         let mut section = Self::default();
         let mut at = 0;
         for part in bytes.split(|&b| b == 0) {
@@ -283,9 +269,6 @@ impl<'a> Section<'a> {
             }
             let text = core::str::from_utf8(part).map_err(|_| ReadSectionError::NotText(start))?;
             if text.starts_with("schema = ") {
-                if text.contains("\n[[") {
-                    return Err(ReadSectionError::Outdated);
-                }
                 let id = head_id(text).ok_or(ReadSectionError::Damaged(start))?;
                 section.heads.push(Head { text, id });
                 continue;
@@ -293,7 +276,12 @@ impl<'a> Section<'a> {
             // The entry's own name, before its `[[type]]` and other tables.
             let own = text.split("\n[").next().unwrap_or(text);
             let name = value(own, "name")
-                .filter(|name| text.starts_with("[[") && !name.is_empty())
+                .filter(|name| {
+                    text.starts_with("[[")
+                        && name
+                            .split_once(':')
+                            .is_some_and(|(_, local)| crate::rules::is_local_name(local))
+                })
                 .ok_or(ReadSectionError::Damaged(start))?;
             // A new kind comes with a new format, which the head reports, so
             // an unknown table of this format is damage.
@@ -419,6 +407,25 @@ mod tests {
         assert_eq!(
             enshwick_macros::__export_kinds!(),
             super::Kind::ALL.map(super::Kind::word)
+        );
+    }
+
+    #[test]
+    fn a_head_of_another_format_is_reported_before_any_table() {
+        use super::ReadSectionError;
+        let newer = b"[[future]]\nname = \"you.a:x\"\n\0schema = 3\nmod = \"you.a\"\n";
+        let error = Section::parse(newer).unwrap_err();
+        assert_eq!(error, ReadSectionError::Format(3));
+        assert!(
+            error.to_string().ends_with("update cargo-enshwick"),
+            "{error}"
+        );
+        let older = Section::parse(b"schema = 1\nmod = \"you.a\"\n[[point]]\nname = \"you.a:p\"\n")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            older.ends_with("rebuild its mod with this enshwick"),
+            "{older}"
         );
     }
 

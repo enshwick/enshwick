@@ -131,8 +131,8 @@ fuzz_target!(|data: &[u8]| {
                 "a schema text starts with its head"
             );
             assert!(
-                section.exports(head.id).iter().all(|e| e.contains(':')),
-                "every export names its kind"
+                enshwick::__private::rules::bad_export(&section.exports(head.id)).is_none(),
+                "every export names its kind and a valid local name"
             );
             written(&text);
         }
