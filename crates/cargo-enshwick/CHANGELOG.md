@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `cargo enshwick deps` reads an owner's schemas from the
+  entries its points, events and calls write into the DLL's `.enshpt`
+  section, beside the head of its `declare_mod!`; rebuild the owner with
+  this release (#868).
+
 ### Added
 
 - `cargo enshwick new --enshwick-rev <commit>` builds the new mod on a

@@ -390,7 +390,7 @@ pub use enshwick_macros::config;
 ///
 /// The mod's own [extension points](crate::points), [mod
 /// events](crate::services) and calls, each a [`#[point]`](macro@point),
-/// [`#[event]`](macro@event) or [`#[call]`](macro@call) declared without
+/// [`#[event]`](macro@event) or `#[call]` declared without
 /// `of`, put their schemas into the DLL's `.enshpt` section. The manifest
 /// collects them from there once, at the loader's first query, and
 /// `cargo enshwick deps` reads them from the DLL file.

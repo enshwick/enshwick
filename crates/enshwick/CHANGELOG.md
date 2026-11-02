@@ -8,6 +8,14 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `declare_mod!(Type)` takes no `points`, `events` or `calls`
+  lists. Each `#[point]`, `#[event]` and `#[call]` declared without `of`
+  writes its schema into the DLL's `.enshpt` section, and the manifest
+  collects the mod's own from there once, at the loader's first query; a
+  test binary's mods each take the schemas named with their id. An own
+  event whose fields a schema cannot describe ships no schema; an own point
+  or call whose types a schema cannot describe fails the build. Remove the
+  lists (#868).
 - `net::MAX_MESSAGE` is 8192 bytes, up from 4096, and `Channel::send` and
   `broadcast` encode into a stack buffer instead of allocating (#889).
 - Channel messages travel on the loader's own channel of the game's
