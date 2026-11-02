@@ -56,7 +56,7 @@ pub(crate) fn is_on() -> bool {
 
 /// The file in the game's `data_dir`.
 fn path(loader: &Loader) -> PathBuf {
-    loader.data_dir.join(LOADER_ID).join(FILE)
+    loader.mods_dir.join(LOADER_ID).join(FILE)
 }
 
 /// Writes the file's header when the allowlist is on and the file is
@@ -178,7 +178,7 @@ pub(crate) fn command(loader: &Loader, args: &str) -> String {
         .trim()
         .split_once(char::is_whitespace)
         .map_or((args.trim(), ""), |(word, rest)| (word, rest.trim()));
-    let shown = format!("mod-data/{LOADER_ID}/{FILE}");
+    let shown = format!("mods/{LOADER_ID}/{FILE}");
     let on = texts::fill(
         if STATE.on.load(Ordering::Acquire) {
             "allowlist.is_on"

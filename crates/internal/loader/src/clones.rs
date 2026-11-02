@@ -1,6 +1,6 @@
 //! Cloned resources outlive the mods that clone them: the loader records each
 //! cloned template and item with its vanilla source in
-//! `mod-data/enshwick/clones.toml`, and when no mod serves a cloned template
+//! `mods/enshwick/clones.toml`, and when no mod serves a cloned template
 //! any more, the game reads the vanilla template under the clone's GUID, so a
 //! saved station loads as the vanilla station.
 //!
@@ -17,7 +17,7 @@ use rustc_hash::FxHashMap;
 
 use crate::catalogue::types;
 
-/// The record file, under the `mod-data` folder.
+/// The record file, under the `mods` folder.
 pub(crate) const FILE: &str = "enshwick/clones.toml";
 
 /// Every clone ever served: clone GUID to vanilla GUID, as text.

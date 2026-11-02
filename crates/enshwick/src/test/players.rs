@@ -97,13 +97,14 @@ impl FakeHost {
         self
     }
 
-    /// The key of the world the server runs, for
-    /// `World::key` and world stores.
+    /// The key of the world the server runs, its save's stem, for
+    /// `World::key`; while it is set, a world runs and
+    /// [`data_dir`](Self::data_dir) answers, so world stores open.
     ///
     /// # Examples
     ///
     /// ```
-    /// let loader = enshwick::test::FakeHost::new().world_key("world0-1a2b3c4d").install();
+    /// let loader = enshwick::test::FakeHost::new().world_key("world0").install();
     /// # let _ = loader;
     /// ```
     #[must_use]

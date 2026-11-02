@@ -37,7 +37,7 @@ static STATE: State = State {
 
 /// The file in the game's `data_dir`.
 fn path(loader: &Loader) -> PathBuf {
-    loader.data_dir.join(LOADER_ID).join(FILE)
+    loader.mods_dir.join(LOADER_ID).join(FILE)
 }
 
 fn keep(keys: Vec<u64>) {

@@ -277,7 +277,7 @@ pub(crate) fn wanted(loader: &Loader) -> bool {
     );
     declared
         || kept
-        || enshwick::state::holds(&loader.data_dir)
+        || enshwick::state::holds(&loader.mods_dir)
             .iter()
             .any(|(id, _)| loader.mods.iter().any(|m| m.pack && &m.id == id))
 }
@@ -591,7 +591,7 @@ fn label(source: &str) -> Option<&str> {
 
 /// The loader's own data folder.
 fn loader_dir(loader: &Loader) -> std::path::PathBuf {
-    loader.data_dir.join(crate::settings::LOADER_ID)
+    loader.mods_dir.join(crate::settings::LOADER_ID)
 }
 
 /// Whether the running build reflects what `field` changes.

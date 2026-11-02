@@ -720,7 +720,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 123 * 8);
-    assert!(size_of::<HostApi>() == 24 + 178 * 8);
+    assert!(size_of::<HostApi>() == 24 + 179 * 8);
+    assert!(core::mem::offset_of!(HostApi, mod_dir) == 24 + 178 * 8);
     assert!(core::mem::offset_of!(HostApi, chat_mute_has) == 24 + 177 * 8);
     assert!(core::mem::offset_of!(HostApi, chat_mute_set) == 24 + 176 * 8);
     assert!(core::mem::offset_of!(HostApi, use_content) == 24 + 175 * 8);

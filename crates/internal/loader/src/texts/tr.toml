@@ -168,7 +168,7 @@
 "ui-demo.player" = "Çevrimiçi {name} adlı oyuncu yok."
 "ui-demo.opening" = "Arayüz demosu açılıyor, oyuncu: {name}."
 "ui-demo.no-client" = "{name} adlı oyuncunun istemcisi Enshwick çalıştırmıyor ya da henüz yanıt vermedi."
-"ui-demo.off" = "Geliştirici araçları kapalı. Açmak için sunucuda ve oyuncunun istemcisinde boş mod-data/enshwick/developer-tools dosyasını oluşturun, sonra ikisini de yeniden başlatın."
+"ui-demo.off" = "Geliştirici araçları kapalı. Açmak için sunucuda ve oyuncunun istemcisinde boş mods/enshwick/developer-tools dosyasını oluşturun, sonra ikisini de yeniden başlatın."
 "console.not-run" = "Çalıştırılmadı ({status})."
 "usage.entity" = "enshwick entity <numara>"
 "usage.placed" = "enshwick placed [sayı]"
@@ -314,7 +314,7 @@
 "resistance_shroud.name" = "Pus Direnci"
 "resistance_lightning.name" = "Şok Direnci"
 "resistance_poison.name" = "Zehir Direnci"
-"mods.developer.off" = "bir geliştirici aracı: yalnızca mod-data/enshwick/developer-tools dosyası varken çalışır"
+"mods.developer.off" = "bir geliştirici aracı: yalnızca mods/enshwick/developer-tools dosyası varken çalışır"
 
 "mods.waiting" = "{name} {version} (bekliyor)"
 "mods.waiting.why" = "Oyunun bu modun değiştirdiği koddan çıkmasını bekliyor. Birazdan yeniden dener, sonra dakikada bir üç kez daha dener. Ardından kapanır."

@@ -15,13 +15,12 @@
 //! outlast a restart.
 //!
 //! Fields mods keep are the loader's to keep: by reflected name, with the
-//! world, in `mod-data/enshwick/worlds/<key>/game-settings.toml`. When a
+//! world, in `<stem>-mod-data/enshwick/game-settings.toml` beside its save. When a
 //! world loads, or at the end of its first step where the load does not run
 //! on the game thread, the loader takes the values it loaded with, then
 //! writes the kept fields over them; a forget puts the loaded values back.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -284,19 +283,10 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-fn file(loader: &Loader, key: &str) -> PathBuf {
-    loader
-        .data_dir
-        .join("enshwick")
-        .join("worlds")
-        .join(key)
-        .join(FILE)
-}
-
 /// Reads the kept fields of world `key`; none for a missing file, `None`
 /// for one that does not read, which then stays as it is.
-fn read_kept(loader: &Loader, key: &str) -> Option<BTreeMap<String, Vec<u8>>> {
-    let path = file(loader, key);
+fn read_kept(key: &str) -> Option<BTreeMap<String, Vec<u8>>> {
+    let path = crate::world_folders::loader_data(key, FILE);
     let read = enshwick::files::read_to_string_if_present(&path)
         .map_err(|e| e.to_string())
         .and_then(|text| {
@@ -324,8 +314,8 @@ fn read_kept(loader: &Loader, key: &str) -> Option<BTreeMap<String, Vec<u8>>> {
 }
 
 /// Writes the kept fields of world `key`, removing the file when none are.
-fn write_kept(loader: &Loader, key: &str, fields: &BTreeMap<String, Vec<u8>>) {
-    let path = file(loader, key);
+fn write_kept(key: &str, fields: &BTreeMap<String, Vec<u8>>) {
+    let path = crate::world_folders::loader_data(key, FILE);
     let written = if fields.is_empty() {
         match std::fs::remove_file(&path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
@@ -357,7 +347,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     match event {
         Event::WORLD_LOADED => {
             let mut key = crate::saves::world_key(loader).map(str::to_owned);
-            let fields = match key.as_deref().map(|key| read_kept(loader, key)) {
+            let fields = match key.as_deref().map(|key| read_kept(key)) {
                 Some(Some(fields)) => fields,
                 // A world without a key keeps nothing, so nothing is written.
                 Some(None) => {
@@ -429,7 +419,7 @@ pub(crate) fn keep(loader: &Loader, data: &[u8], mask: &[u8]) -> Result<(), Stat
         return Ok(());
     }
     kept.fields.extend(fields);
-    write_kept(loader, &key, &kept.fields);
+    write_kept(&key, &kept.fields);
     Ok(())
 }
 
@@ -455,7 +445,7 @@ pub(crate) fn forget(loader: &Loader) -> Result<(), Status> {
         write(loader, &bytes)?;
     }
     kept.fields.clear();
-    write_kept(loader, &key, &kept.fields);
+    write_kept(&key, &kept.fields);
     Ok(())
 }
 

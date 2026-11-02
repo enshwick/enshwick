@@ -160,7 +160,6 @@ pub mod mod_index;
 pub mod mods_screen;
 #[cfg(windows)]
 mod module;
-pub mod moved_worlds;
 #[cfg(windows)]
 mod net;
 pub mod notice_queue;
@@ -304,6 +303,7 @@ pub mod widget_checks;
 pub mod wire;
 #[cfg(windows)]
 mod world;
+pub mod world_folders;
 pub mod worlds;
 #[cfg(windows)]
 mod writes;

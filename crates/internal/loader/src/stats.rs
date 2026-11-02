@@ -10,7 +10,7 @@
 //!
 //! Players are always watched, and so is every entity a mod keeps a
 //! modifier on or asks to watch. Saved modifiers stay with the player's
-//! account in `mod-data/enshwick/worlds/<key>/stats.bin` and come back when
+//! account in `<stem>-mod-data/enshwick/stats.bin` and come back when
 //! the player joins.
 
 use combat::{combat, expire, follow};
@@ -818,13 +818,8 @@ fn publish(sealed: &Sealed, state: &State) -> Snapshot {
 }
 
 /// The file of world `key`'s saved modifiers.
-fn file(loader: &Loader, key: &str) -> PathBuf {
-    loader
-        .data_dir
-        .join("enshwick")
-        .join("worlds")
-        .join(key)
-        .join(FILE)
+fn file(key: &str) -> PathBuf {
+    crate::world_folders::loader_data(key, FILE)
 }
 
 /// Follows the server's world: reads the saved modifiers once it has
@@ -837,7 +832,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
         Event::WORLD_LOADED => {
             let mut key = crate::saves::world_key(loader).map(str::to_owned);
             let read = key.as_deref().map_or(Ok(None), |key| {
-                let path = file(loader, key);
+                let path = file(key);
                 enshwick::files::read_if_present(&path)
                     .map_err(|e| e.to_string())
                     .and_then(|bytes| {
@@ -868,7 +863,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             });
             snapshot().store(Arc::new(Snapshot::default()));
         }
-        Event::WORLD_SAVED | Event::SHUTDOWN_STARTED => save(loader),
+        Event::WORLD_SAVED | Event::SHUTDOWN_STARTED => save(),
         _ => {}
     }
 }
@@ -876,14 +871,12 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 /// The hosted game stopped: saves what changed and drops its world's
 /// entities and values, so the next world starts clean.
 pub(crate) fn forget() {
-    if let Some(loader) = crate::host::loader() {
-        save(loader);
-    }
+    save();
     *STATE.relock() = None;
     snapshot().store(Arc::new(Snapshot::default()));
 }
 
-fn save(loader: &Loader) {
+fn save() {
     let Some((key, bytes)) = with_state(|state| {
         if !state.saved_changed {
             return None;
@@ -896,7 +889,7 @@ fn save(loader: &Loader) {
     }) else {
         return;
     };
-    let path = file(loader, &key);
+    let path = file(&key);
     if let Err(error) = enshwick::files::write_atomically(&path, &bytes) {
         crate::log!(WARN, "stats: {} not written: {error}", path.display());
     }

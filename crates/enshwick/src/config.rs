@@ -566,7 +566,7 @@ pub enum Scope {
     /// The game's own, in the settings file `mod-configs/<id>.toml`, for
     /// every world: the `client` and `restart` stages.
     User,
-    /// The world's, kept with it in `mod-data/<id>/worlds/<key>/`; a new
+    /// The world's, kept beside its save in `<stem>-mod-settings/<id>/`; a new
     /// world starts from the settings file. The `startup`, `runtime` and
     /// `sync` stages.
     #[default]

@@ -17,13 +17,8 @@ use crate::item_records::file::{self, Saved};
 use crate::locks::Relock;
 
 /// The file of world `key`'s values.
-fn file(loader: &Loader, key: &str) -> PathBuf {
-    loader
-        .data_dir
-        .join("enshwick")
-        .join("worlds")
-        .join(key)
-        .join(FILE)
+fn file(key: &str) -> PathBuf {
+    crate::world_folders::loader_data(key, FILE)
 }
 
 /// The records a world's file holds, each waiting for its entity, and the
@@ -140,10 +135,9 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     match event {
         Event::WORLD_LOADED => {
             let key = crate::saves::world_key(loader).map(str::to_owned);
-            let read = key.as_deref().map_or_else(
-                || Ok(Default::default()),
-                |key| read_world(&file(loader, key)),
-            );
+            let read = key
+                .as_deref()
+                .map_or_else(|| Ok(Default::default()), |key| read_world(&file(key)));
             let (pending, unopened) = match read {
                 Ok(records) => records,
                 Err(why) => {
@@ -353,7 +347,7 @@ fn save(loader: &Loader, after_game_save: bool) {
             "mod data: {anchorless} item values sit where neither a load nor a join can find them; after a restart they stay aside unless the item is in a placed container or a player's inventory when the world saves"
         );
     }
-    let path = file(loader, &key);
+    let path = file(&key);
     if let Err(error) = enshwick::files::write_atomically(&path, &bytes) {
         unwritten(&mut SERVER.relock(), &key);
         crate::log!(

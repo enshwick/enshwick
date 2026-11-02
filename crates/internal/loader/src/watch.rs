@@ -155,7 +155,7 @@ pub(crate) fn start(loader: &'static Loader) {
                 for file in &mut worlds {
                     let path = key.as_deref().and_then(|key| {
                         let record = loader.mods.get(file.owner.get())?;
-                        Some(crate::worlds::world_file(&loader.data_dir, &record.id, key))
+                        Some(crate::worlds::world_file(&record.id, key))
                     });
                     let now = path.as_deref().and_then(stamp);
                     if file.changed(key.as_deref(), path.as_deref(), now) {
@@ -184,7 +184,7 @@ fn note_shadowed(loader: &Loader, index: usize) {
     if !per_world {
         return;
     }
-    let world = crate::worlds::world_file(&loader.data_dir, &record.id, &key);
+    let world = crate::worlds::world_file(&record.id, &key);
     crate::log::write(
         Level::INFO,
         &record.id,
@@ -204,7 +204,7 @@ fn changed(loader: &Loader, owner: Option<usize>) {
         return;
     }
     let path = loader.configs_dir.join(format!("{LOADER_ID}.toml"));
-    let (settings, problems) = Settings::read(&path, crate::allowlist::listed(&loader.data_dir));
+    let (settings, problems) = Settings::read(&path, crate::allowlist::listed(&loader.mods_dir));
     if problems.lines.is_empty() {
         crate::diag::configure(&settings);
         crate::greeting::configure(&settings.motd);

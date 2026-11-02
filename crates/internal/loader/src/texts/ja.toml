@@ -168,7 +168,7 @@
 "ui-demo.player" = "{name} という名前のプレイヤーはオンラインではありません。"
 "ui-demo.opening" = "{name} のインターフェースデモを開いています。"
 "ui-demo.no-client" = "{name} のクライアントは Enshwick を実行していないか、まだ応答していません。"
-"ui-demo.off" = "開発者ツールはオフです。オンにするには、サーバーとプレイヤーのクライアントに空のファイル mod-data/enshwick/developer-tools を作成し、両方を再起動してください。"
+"ui-demo.off" = "開発者ツールはオフです。オンにするには、サーバーとプレイヤーのクライアントに空のファイル mods/enshwick/developer-tools を作成し、両方を再起動してください。"
 "console.not-run" = "実行されませんでした（{status}）。"
 "usage.entity" = "enshwick entity <番号>"
 "usage.placed" = "enshwick placed [数]"
@@ -314,7 +314,7 @@
 "resistance_shroud.name" = "シュラウド耐性"
 "resistance_lightning.name" = "雷耐性"
 "resistance_poison.name" = "毒耐性"
-"mods.developer.off" = "開発者ツールです。ファイル mod-data/enshwick/developer-tools がある間だけ動作します"
+"mods.developer.off" = "開発者ツールです。ファイル mods/enshwick/developer-tools がある間だけ動作します"
 
 "mods.waiting" = "{name} {version}（待機中）"
 "mods.waiting.why" = "このModが変更するコードからゲームが抜けるのを待っています。まもなく再試行し、その後1分おきにあと3回試します。それでもだめならオフになります。"

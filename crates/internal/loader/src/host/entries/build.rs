@@ -156,12 +156,32 @@ pub(crate) extern "system" fn data_dir(me: ModHandle, out: *mut Str) -> Status {
         let Some((_, record)) = loader.record(me) else {
             return Status::BAD_ARGS;
         };
-        let dir = loader.data_dir.join(&record.id);
+        let Some(key) = crate::saves::world_key(loader) else {
+            return Status::MISSING;
+        };
+        let dir = crate::world_folders::data_of(key).join(&record.id);
         if std::fs::create_dir_all(&dir).is_err() {
             return Status::REFUSED;
         }
         // The path lives for the process: the mod keeps it as long as it likes.
         // SAFETY: `HostApi::data_dir` has the mod pass `out` null or pointing
+        // at a writable, aligned `Str` that no other thread touches during the
+        // call.
+        unsafe { put(out, Str::new(keep(&dir.to_string_lossy()))) }
+    })
+}
+
+pub(crate) extern "system" fn mod_dir(me: ModHandle, out: *mut Str) -> Status {
+    entry("mod_dir", || {
+        let Some(loader) = loader() else {
+            return Status::BAD_ARGS;
+        };
+        let Some((_, record)) = loader.record(me) else {
+            return Status::BAD_ARGS;
+        };
+        let dir = loader.mods_dir.join(record.folder());
+        // The path lives for the process: the mod keeps it as long as it likes.
+        // SAFETY: `HostApi::mod_dir` has the mod pass `out` null or pointing
         // at a writable, aligned `Str` that no other thread touches during the
         // call.
         unsafe { put(out, Str::new(keep(&dir.to_string_lossy()))) }

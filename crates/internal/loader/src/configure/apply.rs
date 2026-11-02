@@ -63,7 +63,7 @@ pub(crate) fn apply(
     // The mod checks what it would read with the change.
     let read = match &destination {
         Destination::Global | Destination::NewWorlds => {
-            crate::worlds::effective(loader, record, &change.text)
+            crate::worlds::effective(record, &change.text)
         }
         Destination::World(_) => crate::worlds::compose(&change.text, &global, &schema),
         Destination::Next => crate::worlds::overlay(&global, &change.text, None),

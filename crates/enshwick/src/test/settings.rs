@@ -20,18 +20,37 @@ impl FakeHost {
         self
     }
 
-    /// The path `Load::data_dir` returns; `mod-data/test` by default. The
-    /// fake creates nothing there.
+    /// The path `Load::data_dir` and `World::data_dir` return while a world
+    /// runs, that is once [`world_key`](Self::world_key) is set;
+    /// `world0-mod-data/test` by default. The fake creates nothing there.
     ///
     /// # Examples
     ///
     /// ```
-    /// let loader = enshwick::test::FakeHost::new().data_dir("target/mod-data/bonus").install();
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .world_key("world0")
+    ///     .data_dir("target/world0-mod-data/bonus")
+    ///     .install();
     /// # let _ = loader;
     /// ```
     #[must_use]
     pub fn data_dir(mut self, path: &str) -> Self {
         path.clone_into(&mut self.data_dir);
+        self
+    }
+
+    /// The path `Load::mod_dir` returns; `mods/test` by default. The fake
+    /// creates nothing there.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().mod_dir("target/mods/bonus").install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn mod_dir(mut self, path: &str) -> Self {
+        path.clone_into(&mut self.mod_dir);
         self
     }
 

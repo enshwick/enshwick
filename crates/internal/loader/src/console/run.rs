@@ -16,10 +16,10 @@ use super::{Line, Source, Tool, command_files, log_query, parse, submit, take};
 /// Starts reading the command files and the console input of a dedicated
 /// server.
 pub(crate) fn start(loader: &'static Loader) {
-    let Some(game) = loader.data_dir.parent() else {
+    let Some(game) = loader.mods_dir.parent() else {
         return;
     };
-    let files: Vec<Watched> = command_files(&loader.data_dir)
+    let files: Vec<Watched> = command_files(&loader.mods_dir)
         .into_iter()
         .map(Watched::new)
         .collect();

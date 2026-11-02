@@ -591,7 +591,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
                 SESSION.relock().begin();
             }
             crate::worlds::load(loader);
-            crate::start::record::write_for_world(loader);
+            crate::start::record::write_for_world();
             loader.emit(Event::WORLD_LOADED, None, core::ptr::null());
         }
         STATE_SHUTDOWN if old != STATE_SHUTDOWN => {
@@ -627,6 +627,7 @@ unsafe extern "system" fn save(out: *mut u8, save: *mut u8, context: *mut u8) ->
     let done = !out.is_null() && unsafe { read_at::<u8>(out, 0) } == 0;
     if done && let Some((loader, _)) = loaded() {
         guarded(&SAVE_FUSE, "the save link", || {
+            crate::saves::saved(loader);
             loader.emit(Event::WORLD_SAVED, None, core::ptr::null());
         });
     }

@@ -168,7 +168,7 @@
 "ui-demo.player" = "No player named {name} is online."
 "ui-demo.opening" = "Opening the interface demo for {name}."
 "ui-demo.no-client" = "{name}'s client does not run Enshwick, or has not answered yet."
-"ui-demo.off" = "Developer tools are off. To turn them on, create the empty file mod-data/enshwick/developer-tools on the server and on the player's client, then restart both."
+"ui-demo.off" = "Developer tools are off. To turn them on, create the empty file mods/enshwick/developer-tools on the server and on the player's client, then restart both."
 "console.not-run" = "Not run ({status})."
 "usage.entity" = "enshwick entity <number>"
 "usage.placed" = "enshwick placed [number]"
@@ -316,7 +316,7 @@
 "resistance_shroud.name" = "Shroud Resistance" # text tag 0x9c80d874
 "resistance_lightning.name" = "Shock Resistance" # text tag 0x5ac47d26
 "resistance_poison.name" = "Poison Resistance" # text tag 0x4b140014
-"mods.developer.off" = "a developer tool: it runs only while the file mod-data/enshwick/developer-tools exists"
+"mods.developer.off" = "a developer tool: it runs only while the file mods/enshwick/developer-tools exists"
 
 "mods.waiting" = "{name} {version} (waiting)"
 "mods.waiting.why" = "Waiting for the game to leave the code this mod changes. It tries again soon, then three more times a minute apart. Then it turns off."

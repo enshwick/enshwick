@@ -115,13 +115,10 @@ pub(crate) fn init(loader: &'static Loader) {
 }
 
 /// The world's own recipe file, while a world runs.
-fn world_path(loader: &Loader) -> Option<PathBuf> {
+fn world_path() -> Option<PathBuf> {
     crate::worlds::current().map(|key| {
-        loader
-            .data_dir
+        crate::world_folders::settings_of(&key)
             .join(LOADER_ID)
-            .join("worlds")
-            .join(key)
             .join(WORLD_FILE)
     })
 }
@@ -138,7 +135,7 @@ pub(crate) fn poll(loader: &Loader) {
         return;
     }
     let global = stamp(&loader.configs_dir.join(FILE));
-    let world = world_path(loader);
+    let world = world_path();
     let world_stamp = world.as_deref().and_then(stamp);
     let seen = (global, world, world_stamp);
     let moved = live(|l| {
@@ -316,9 +313,8 @@ fn apply(loader: &Loader, index: &Index) {
         let mut problems = Vec::new();
         let mut files = Vec::new();
         let global = format!("mod-configs/{FILE}");
-        let world = world_path(loader);
-        let world_shown = crate::worlds::current()
-            .map(|key| format!("mod-data/{LOADER_ID}/worlds/{key}/{WORLD_FILE}"));
+        let world = world_path();
+        let world_shown = world.as_ref().map(|path| path.display().to_string());
         for (path, shown) in [
             (Some(loader.configs_dir.join(FILE)), Some(global)),
             (world, world_shown),
@@ -707,12 +703,12 @@ fn change(
     if let Err(why) = resolve(&probe, index, names) {
         return texts::fill("recipes.unwritten", &[("why", &why.to_string())]);
     }
-    let (path, shown) = match (world_path(loader), crate::worlds::current()) {
-        (Some(path), Some(key)) => (
-            path,
-            format!("mod-data/{LOADER_ID}/worlds/{key}/{WORLD_FILE}"),
-        ),
-        _ => (loader.configs_dir.join(FILE), format!("mod-configs/{FILE}")),
+    let (path, shown) = match world_path() {
+        Some(path) => {
+            let shown = path.display().to_string();
+            (path, shown)
+        }
+        None => (loader.configs_dir.join(FILE), format!("mod-configs/{FILE}")),
     };
     // A file that does not read is never replaced by one with this rule alone.
     let written = enshwick::files::read_to_string_if_present(&path)

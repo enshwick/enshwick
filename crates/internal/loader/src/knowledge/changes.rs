@@ -13,7 +13,7 @@
 //! machine: the server holds it only while the player is in the game, from
 //! the moment the save has loaded into the player's record. Changes for an
 //! account that is not in the game wait in the world's folder,
-//! `mod-data/enshwick/worlds/<key>/knowledge.toml`, and apply once the
+//! `<stem>-mod-data/enshwick/knowledge.toml` beside its save, and apply once the
 //! account's next character has loaded in that world.
 
 use std::path::PathBuf;
@@ -292,19 +292,14 @@ static QUEUE: Mutex<Queue> = Mutex::new(Queue {
 /// Whether changes wait for accounts.
 static WAITING: AtomicBool = AtomicBool::new(false);
 
-fn file(loader: &Loader, key: &str) -> PathBuf {
-    loader
-        .data_dir
-        .join("enshwick")
-        .join("worlds")
-        .join(key)
-        .join(FILE)
+fn file(key: &str) -> PathBuf {
+    crate::world_folders::loader_data(key, FILE)
 }
 
 /// The changes waiting in world `key`; none for a missing file, `None` for
 /// one that does not read, which then stays as it is.
-fn read_queue(loader: &Loader, key: &str) -> Option<Vec<Waiting>> {
-    let path = file(loader, key);
+fn read_queue(key: &str) -> Option<Vec<Waiting>> {
+    let path = file(key);
     let read = enshwick::files::read_to_string_if_present(&path)
         .map_err(|e| e.to_string())
         .and_then(|text| {
@@ -325,8 +320,8 @@ fn read_queue(loader: &Loader, key: &str) -> Option<Vec<Waiting>> {
     }
 }
 
-fn write_queue(loader: &Loader, key: &str, waiting: &[Waiting]) {
-    let path = file(loader, key);
+fn write_queue(key: &str, waiting: &[Waiting]) {
+    let path = file(key);
     let written = if waiting.is_empty() {
         match std::fs::remove_file(&path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
@@ -415,7 +410,7 @@ pub(crate) fn for_account(
         return Ok(());
     }
     queue.waiting.push(change);
-    write_queue(loader, &world, &queue.waiting);
+    write_queue(&world, &queue.waiting);
     WAITING.store(true, Ordering::Release);
     Ok(())
 }
@@ -426,7 +421,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     match event {
         Event::WORLD_LOADED => {
             let mut key = crate::saves::world_key(loader).map(str::to_owned);
-            let waiting = match key.as_deref().map(|key| read_queue(loader, key)) {
+            let waiting = match key.as_deref().map(|key| read_queue(key)) {
                 Some(Some(waiting)) => waiting,
                 // A world without a key queues nothing, so nothing is written.
                 Some(None) => {
@@ -508,7 +503,7 @@ fn settle(loader: &Loader) {
             queue.waiting.len()
         );
         if let Some(world) = queue.key.clone() {
-            write_queue(loader, &world, &queue.waiting);
+            write_queue(&world, &queue.waiting);
         }
         WAITING.store(!queue.waiting.is_empty(), Ordering::Release);
     }

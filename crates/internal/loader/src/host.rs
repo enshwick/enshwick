@@ -74,6 +74,14 @@ pub(crate) struct ModRecord {
 }
 
 impl ModRecord {
+    /// Its folder in `mods/`, which holds its installation hold.
+    pub(crate) fn folder(&self) -> &str {
+        let file = self.file.strip_prefix("mods/").unwrap_or(&self.file);
+        file.split('/').next().unwrap_or(file)
+    }
+}
+
+impl ModRecord {
     /// Whether its manifest requires the mod `id`.
     pub(crate) fn requires(&self, id: &str) -> bool {
         // SAFETY: a record's manifest is the loader's copy, kept for the
@@ -200,8 +208,6 @@ pub(crate) struct Loader {
     pub(crate) stub: u32,
     /// The `mod-configs` folder.
     pub(crate) configs_dir: PathBuf,
-    /// The `mod-data` folder.
-    pub(crate) data_dir: PathBuf,
     /// Whether developer tools are on, by the marker file read at start.
     pub(crate) developer_tools: bool,
     /// Loaded mods, in load order; handle `n` is index `n - 1`.

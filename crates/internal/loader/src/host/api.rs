@@ -3,8 +3,8 @@
 use enshwick::abi::{Header, HostApi, Str};
 
 use super::entries::build::{
-    build, caller_frame, constant, data_dir, event_types, field_offset, log_level, symbol, system,
-    type_hash, type_size,
+    build, caller_frame, constant, data_dir, event_types, field_offset, log_level, mod_dir, symbol,
+    system, type_hash, type_size,
 };
 use super::entries::calls::{call, find_call, serve_call};
 use super::entries::content::{
@@ -234,4 +234,5 @@ pub(crate) static API: HostApi = HostApi {
     use_content,
     chat_mute_set,
     chat_mute_has,
+    mod_dir,
 };

@@ -307,8 +307,9 @@ pub(crate) extern "system" fn world_key(me: ModHandle, out: *mut Str) -> Status 
             // SAFETY: `HostApi::world_key` has the mod pass `out` null or
             // pointing at a writable, aligned `Str` that no other thread
             // touches during the call.
-            crate::saves::world_key(loader)
-                .map_or(Status::MISSING, |key| unsafe { put(out, Str::new(key)) })
+            crate::saves::world_key(loader).map_or(Status::MISSING, |key| unsafe {
+                put(out, Str::new(crate::saves::stem(key)))
+            })
         }
         Err(status) => status,
     })

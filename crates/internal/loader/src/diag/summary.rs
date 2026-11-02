@@ -152,9 +152,6 @@ pub struct Summary {
     pub conflicts: Vec<String>,
     /// What the knowledge guard does and has counted, once it runs.
     pub knowledge_guard: Option<String>,
-    /// Other world keys of the running world's save name that hold mod
-    /// data, such as the world before its save moved; empty for none.
-    pub world_folders: Vec<String>,
     /// What became of mod messages that did not arrive as sent, once any
     /// did not.
     pub messages: Option<String>,
@@ -311,14 +308,6 @@ services and events:"
         }
         if let Some(messages) = &self.messages {
             let _w = writeln!(out, "mod messages: {messages}");
-        }
-        if !self.world_folders.is_empty() {
-            let _w = writeln!(
-                out,
-                "mod data of other worlds of this save name: {}; a moved world takes it over \
-                 only when one is left (see mod-data/<mod>/worlds/)",
-                self.world_folders.join(", ")
-            );
         }
         let _w = writeln!(out, "hooks: {} functions armed", self.targets);
         match &self.hooks {

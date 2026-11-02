@@ -168,7 +168,7 @@
 "ui-demo.player" = "沒有名為 {name} 的線上玩家。"
 "ui-demo.opening" = "正在為 {name} 開啟介面示範。"
 "ui-demo.no-client" = "{name} 的用戶端沒有執行 Enshwick，或尚未回應。"
-"ui-demo.off" = "開發者工具已關閉。若要開啟，請在伺服器和該玩家的用戶端上建立空白檔案 mod-data/enshwick/developer-tools，然後重新啟動兩者。"
+"ui-demo.off" = "開發者工具已關閉。若要開啟，請在伺服器和該玩家的用戶端上建立空白檔案 mods/enshwick/developer-tools，然後重新啟動兩者。"
 "console.not-run" = "未執行（{status}）。"
 "usage.entity" = "enshwick entity <編號>"
 "usage.placed" = "enshwick placed [數量]"
@@ -314,7 +314,7 @@
 "resistance_shroud.name" = "霧幕抗性"
 "resistance_lightning.name" = "電擊抗性"
 "resistance_poison.name" = "抗毒性"
-"mods.developer.off" = "開發者工具：僅在檔案 mod-data/enshwick/developer-tools 存在時執行"
+"mods.developer.off" = "開發者工具：僅在檔案 mods/enshwick/developer-tools 存在時執行"
 
 "mods.waiting" = "{name} {version}（等待中）"
 "mods.waiting.why" = "正在等待遊戲離開此模組變更的程式碼。稍後會重試，之後每隔一分鐘再試三次。仍不成功則關閉。"

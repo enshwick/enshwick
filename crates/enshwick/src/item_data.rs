@@ -23,8 +23,8 @@
 //! keeps a player's character, the value goes aside at the leave, kept but
 //! attached to nothing.
 //!
-//! The server keeps the values, in `mod-data/enshwick/worlds/<key>/`, never
-//! in the game's save, and sends every change to the clients that run
+//! The server keeps the values, in `<stem>-mod-data/enshwick/` beside the
+//! world's save, never in it, and sends every change to the clients that run
 //! Enshwick; a client reads what it got. Any mod can open any kind by its
 //! full id: kinds are how mods share item data without depending on each
 //! other. A value is encoded with `postcard`, at most [`MAX_VALUE`] bytes.

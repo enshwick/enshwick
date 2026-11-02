@@ -1,4 +1,5 @@
-//! State that outlives a session, in the mod's data folder.
+//! State that outlives a session: a world's in the mod's data folder beside
+//! the world's save, and holds on the game.
 
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -7,8 +8,8 @@ use std::sync::atomic::Ordering;
 use crate::Off;
 use crate::locks::Relock;
 
-/// Why a [`Store`], [`WorldStore`] or [`Hold`] could not read or write its
-/// file at run time.
+/// Why a [`WorldStore`] or [`Hold`] could not read or write its file at run
+/// time.
 ///
 /// # Examples
 ///
@@ -68,42 +69,18 @@ impl From<StoreError> for Off {
     }
 }
 
-/// A value kept in a TOML file under the mod's data folder, written atomically
-/// so a crash never leaves half a file.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::state::Store;
-///
-/// #[derive(Default, serde::Deserialize, serde::Serialize, PartialEq, Debug)]
-/// struct Progress {
-///     highest_experience: u64,
-/// }
-///
-/// # fn main() -> Result<(), enshwick::Off> {
-/// let dir = std::env::temp_dir().join("enshwick-store-doc");
-/// let store: Store<Progress> = Store::new(&dir, "progress");
-/// store.save(&Progress { highest_experience: 42 })?;
-/// assert_eq!(store.load()?.highest_experience, 42);
-/// # Ok(())
-/// # }
-/// ```
+/// A value kept in a TOML file, written atomically so a crash never leaves
+/// half a file: one world's file of a [`WorldStore`].
 #[derive(Debug, Clone)]
-pub struct Store<T> {
+pub(crate) struct Store<T> {
     path: PathBuf,
     _value: PhantomData<T>,
 }
 
 impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
-    /// A store for `<dir>/<name>.toml`; get `dir` from
-    /// [`Load::data_dir`](crate::Load::data_dir).
-    ///
-    /// # Examples
-    ///
-    /// See [`Store`].
+    /// A store for `<dir>/<name>.toml`.
     #[must_use]
-    pub fn new(dir: &Path, name: &str) -> Self {
+    pub(crate) fn new(dir: &Path, name: &str) -> Self {
         Self {
             path: dir.join(format!("{name}.toml")),
             _value: PhantomData,
@@ -121,11 +98,7 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
     ///
     /// [`StoreError`] when the file exists but cannot be read or does not
     /// parse into `T`.
-    ///
-    /// # Examples
-    ///
-    /// See [`Store`].
-    pub fn load(&self) -> Result<T, StoreError> {
+    pub(crate) fn load(&self) -> Result<T, StoreError> {
         match std::fs::read_to_string(&self.path) {
             Ok(text) => with_defaults(&text).map_err(|e| StoreError::Parse {
                 path: self.path.clone(),
@@ -143,11 +116,7 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
     ///
     /// [`StoreError`] when the value cannot be serialised or the file
     /// written.
-    ///
-    /// # Examples
-    ///
-    /// See [`Store`].
-    pub fn save(&self, value: &T) -> Result<(), StoreError> {
+    pub(crate) fn save(&self, value: &T) -> Result<(), StoreError> {
         write_atomically(&self.path, &self.text(value)?)
     }
 
@@ -192,12 +161,8 @@ fn write_atomically(path: &Path, text: &str) -> Result<(), StoreError> {
     crate::files::write_atomically(path, text).map_err(|e| StoreError::io(path, e))
 }
 
-/// The file a [`Hold`] keeps in its mod's data folder.
+/// The file a [`Hold`] keeps in the folder it holds from.
 pub const HOLD_FILE: &str = "hold.txt";
-
-/// The folder in a mod's data folder that keeps one folder per world, named
-/// by the world's key.
-pub const WORLDS_DIR: &str = "worlds";
 
 /// A hold on the game for a world the vanilla game cannot open safely, such
 /// as one with more altars than the game groups.
@@ -206,26 +171,31 @@ pub const WORLDS_DIR: &str = "worlds";
 /// without that mod: when the game build is unknown (the loader would leave
 /// the game vanilla), or the mod is missing, skipped or off, it logs the
 /// reason and stops the game before the world loads. The hold is a file,
-/// `mod-data/<id>/hold.txt`, holding the reason on its first line and, from
+/// `hold.txt`, holding the reason on its first line and, from
 /// [`Hold::set_text`], the same reason as a text of the mod's texts on the
-/// second; a player who accepts the risk deletes it. A hold of one world, [`Hold::for_world`], stops the
-/// game only as that world loads, where the loader runs; a build it leaves
-/// vanilla stops for every hold, since no world is known there.
+/// second; a player who accepts the risk deletes it.
+///
+/// A hold in the mod's folder, [`Load::mod_dir`](crate::Load::mod_dir),
+/// holds every world and counts as the loader starts, on every build. A
+/// hold in the mod's data folder of one world,
+/// [`World::data_dir`](crate::world::World::data_dir), stops the game only
+/// as that world loads, where the loader runs; a build it leaves vanilla
+/// learns no world, so it does not stop for such a hold.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::state::{Hold, holds};
 ///
-/// let data = std::env::temp_dir().join("enshwick-hold-doc");
-/// let hold = Hold::new(&data.join("you.lanterns"));
+/// let mods = std::env::temp_dir().join("enshwick-hold-doc");
+/// let hold = Hold::new(&mods.join("you.lanterns"));
 /// hold.set("the world has 20 lit lanterns")?;
 /// assert_eq!(
-///     holds(&data),
+///     holds(&mods),
 ///     vec![("you.lanterns".to_owned(), "the world has 20 lit lanterns".to_owned())]
 /// );
 /// hold.clear()?;
-/// assert!(holds(&data).is_empty());
+/// assert!(holds(&mods).is_empty());
 /// # Ok::<(), enshwick::state::StoreError>(())
 /// ```
 #[derive(Debug, Clone)]
@@ -234,8 +204,10 @@ pub struct Hold {
 }
 
 impl Hold {
-    /// The hold of the mod whose data folder is `dir`, from
-    /// [`Load::data_dir`](crate::Load::data_dir).
+    /// The hold kept in `dir`: the mod's folder from
+    /// [`Load::mod_dir`](crate::Load::mod_dir) for every world, or its data
+    /// folder of one world from
+    /// [`World::data_dir`](crate::world::World::data_dir).
     ///
     /// # Examples
     ///
@@ -245,28 +217,6 @@ impl Hold {
         Self {
             path: dir.join(HOLD_FILE),
         }
-    }
-
-    /// The hold of the mod whose data folder is `dir` on the world whose key
-    /// is `world`, from `World::key`:
-    /// `mod-data/<id>/worlds/<key>/hold.txt`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::state::{Hold, world_holds};
-    ///
-    /// let data = std::env::temp_dir().join("enshwick-world-hold-doc");
-    /// let hold = Hold::for_world(&data.join("you.lanterns"), "world0-aa");
-    /// hold.set("the world has 20 lit lanterns")?;
-    /// assert_eq!(world_holds(&data, "world0-aa").len(), 1);
-    /// assert!(world_holds(&data, "world1-bb").is_empty());
-    /// hold.clear()?;
-    /// # Ok::<(), enshwick::state::StoreError>(())
-    /// ```
-    #[must_use]
-    pub fn for_world(dir: &Path, world: &str) -> Self {
-        Self::new(&dir.join(WORLDS_DIR).join(world))
     }
 
     /// Sets the hold with `reason`, one line the loader logs; written to a
@@ -371,15 +321,16 @@ fn first_line(text: &str) -> &str {
     text.lines().next().unwrap_or_default()
 }
 
-/// Every hold under the `mod-data` folder `mod_data`, as `(mod id, reason)`,
-/// ordered by id.
+/// Every hold in the folders directly in `dir`, as `(folder, reason)`,
+/// ordered by folder: in `mods/`, by the mods' folders; in a world's data
+/// folder, by the mods' ids.
 ///
 /// # Examples
 ///
 /// See [`Hold`].
 #[must_use]
-pub fn holds(mod_data: &Path) -> Vec<(String, String)> {
-    let Ok(entries) = std::fs::read_dir(mod_data) else {
+pub fn holds(dir: &Path) -> Vec<(String, String)> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
     let mut found: Vec<(String, String)> = entries
@@ -394,54 +345,16 @@ pub fn holds(mod_data: &Path) -> Vec<(String, String)> {
     found
 }
 
-/// Every hold on the world whose key is `world` under the `mod-data` folder
-/// `mod_data`, as `(mod id, reason)`, ordered by id.
-///
-/// # Examples
-///
-/// See [`Hold::for_world`].
-#[must_use]
-pub fn world_holds(mod_data: &Path, world: &str) -> Vec<(String, String)> {
-    let Ok(entries) = std::fs::read_dir(mod_data) else {
-        return Vec::new();
-    };
-    let mut found: Vec<(String, String)> = entries
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let id = entry.file_name().into_string().ok()?;
-            let reason = Hold::for_world(&entry.path(), world).reason()?;
-            Some((id, reason))
-        })
-        .collect();
-    found.sort();
-    found
-}
-
-/// The key of every world some mod under `mod_data` holds, sorted, each
-/// once.
-///
-/// # Examples
-///
-/// ```
-/// let data = std::env::temp_dir().join("enshwick-no-world-holds");
-/// assert!(enshwick::state::held_worlds(&data).is_empty());
-/// ```
-#[must_use]
-pub fn held_worlds(mod_data: &Path) -> Vec<String> {
-    let Ok(mods) = std::fs::read_dir(mod_data) else {
-        return Vec::new();
-    };
-    let mut worlds: Vec<String> = mods
-        .filter_map(Result::ok)
-        .filter_map(|entry| std::fs::read_dir(entry.path().join(WORLDS_DIR)).ok())
-        .flatten()
-        .filter_map(Result::ok)
-        .filter(|world| world.path().join(HOLD_FILE).is_file())
-        .filter_map(|world| world.file_name().into_string().ok())
-        .collect();
-    worlds.sort();
-    worlds.dedup();
-    worlds
+/// The mod's data folder in the world that runs, from the loader; `None`
+/// while no world runs.
+pub(crate) fn data_dir(host: crate::Host) -> Option<PathBuf> {
+    let mut out = crate::abi::Str::EMPTY;
+    if !(host.api().data_dir)(host.handle(), &raw mut out).is_ok() {
+        return None;
+    }
+    // SAFETY: `data_dir` returned OK, and the loader keeps the path's bytes
+    // alive and unchanged for the process, which outlives the copy here.
+    unsafe { out.as_str() }.map(PathBuf::from)
 }
 
 /// The key of the world the server runs, from the loader.
@@ -456,9 +369,10 @@ pub(crate) fn world_key(host: crate::Host) -> Option<String> {
     unsafe { out.as_str() }.map(str::to_owned)
 }
 
-/// A value kept per world, in `mod-data/<id>/worlds/<key>/<name>.toml`,
-/// never inside the game's save: removing the mod leaves the world vanilla.
-/// The value is a TOML table, such as a struct.
+/// A value kept per world, in `<stem>-mod-data/<id>/<name>.toml` beside the
+/// world's save, never inside the save: removing the mod leaves the world
+/// vanilla, and copying the save folder takes the value along. The value is
+/// a TOML table, such as a struct.
 ///
 /// A field the type gains in an update reads from `Default` while a world's
 /// file lacks it, as [`Store::load`] reads.
@@ -466,9 +380,8 @@ pub(crate) fn world_key(host: crate::Host) -> Option<String> {
 /// Get it from [`Load::world_store`](crate::Load::world_store). It reads the
 /// running world's file when the world has loaded and writes it, when
 /// changed, as the world saves and at shutdown, so the mod's state and the
-/// world's save move together. The key names the world's save file and
-/// folder (see `World::key`), so a hosted game
-/// switching worlds switches files.
+/// world's save move together. A hosted game switching worlds switches
+/// files.
 ///
 /// # Examples
 ///
@@ -531,10 +444,8 @@ impl<T> core::fmt::Debug for WorldStore<T> {
     }
 }
 
-/// What a [`WorldStore`] holds: where its files go and the open world's
-/// value.
+/// What a [`WorldStore`] holds: its file's name and the open world's value.
 struct WorldSlot<T> {
-    worlds: PathBuf,
     name: String,
     open: Option<OpenWorld<T>>,
     /// Why the running world's file did not read.
@@ -549,12 +460,7 @@ struct OpenWorld<T> {
     changed: bool,
 }
 
-/// Names whose `<name>.toml` the loader keeps in a world's folder: the
-/// world's settings, and in the loader's own folder the note naming the save.
-const LOADER_FILE_NAMES: [&str; 2] = ["settings", "save"];
-
-/// Checks that `name` may name a store's file: 1 to 64 of `[a-z0-9_-]`,
-/// and not the name of a file the loader keeps beside it.
+/// Checks that `name` may name a store's file: 1 to 64 of `[a-z0-9_-]`.
 fn check_store_name(name: &str) -> Result<(), Off> {
     let well_formed = (1..=64).contains(&name.len())
         && name
@@ -565,11 +471,6 @@ fn check_store_name(name: &str) -> Result<(), Off> {
             "world store {name:?}: a name is 1 to 64 of [a-z0-9_-]"
         )));
     }
-    if LOADER_FILE_NAMES.contains(&name) {
-        return Err(Off::new(format!(
-            "world store {name:?}: the name is kept for the loader's {name}.toml in the world's folder"
-        )));
-    }
     Ok(())
 }
 
@@ -577,18 +478,16 @@ impl<T> WorldStore<T>
 where
     T: serde::de::DeserializeOwned + serde::Serialize + Default + Send + 'static,
 {
-    /// A store named `name` under the mod's data folder `dir`; the file of
-    /// the world with `key` is `<dir>/worlds/<key>/<name>.toml`.
+    /// A store named `name`; a world's file is `<name>.toml` in the mod's
+    /// data folder of that world.
     ///
     /// # Errors
     ///
-    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]`, or is `settings`
-    /// or `save`, which name files the loader keeps beside the store's.
-    pub(crate) fn new(dir: &Path, name: &str) -> Result<Self, Off> {
+    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]`.
+    pub(crate) fn new(name: &str) -> Result<Self, Off> {
         check_store_name(name)?;
         Ok(Self {
             slot: std::sync::Arc::new(std::sync::Mutex::new(WorldSlot {
-                worlds: dir.join(WORLDS_DIR),
                 name: name.to_owned(),
                 open: None,
                 shut: None,
@@ -598,17 +497,18 @@ where
         })
     }
 
-    /// Reads the file of the world with `key`, writing the open one first.
-    /// A file that does not parse stays as it is and the store stays shut.
+    /// Reads the file of the world with `key` in the mod's data folder `dir`
+    /// of that world, writing the open one first. A file that does not parse
+    /// stays as it is and the store stays shut.
     ///
     /// # Errors
     ///
     /// [`StoreError`] when the open world's file cannot be written or the
     /// new one does not parse.
-    pub(crate) fn open(&self, key: &str) -> Result<(), StoreError> {
+    pub(crate) fn open(&self, key: &str, dir: &Path) -> Result<(), StoreError> {
         self.close()?;
         let mut slot = self.relock();
-        let store = Store::new(&slot.worlds.join(key), &slot.name);
+        let store = Store::new(dir, &slot.name);
         let value = store
             .load()
             .inspect_err(|error| slot.shut = Some(error.to_string()))?;

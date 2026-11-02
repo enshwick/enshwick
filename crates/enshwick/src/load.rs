@@ -330,42 +330,63 @@ impl Load<'_> {
         Ok(scheduler)
     }
 
-    /// The mod's own data folder, `mod-data/<id>` beside the game, for state
-    /// that outlives a session.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the folder cannot be created.
+    /// The mod's data folder in the world that runs, `<stem>-mod-data/<id>`
+    /// beside the world's save; `None` while no world runs, as during init
+    /// before a hosted game or a dedicated server's world loads. A world's
+    /// state belongs there; [`WorldStore`](crate::state::WorldStore) keeps
+    /// it for you, and [`World::data_dir`](crate::world::World::data_dir)
+    /// answers the same once the world runs.
     ///
     /// # Examples
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let dir = load.data_dir()?;
-    ///     assert!(dir.ends_with("my-mod"));
+    ///     if let Some(dir) = load.data_dir() {
+    ///         enshwick::info!("this world's data: {}", dir.display());
+    ///     }
     ///     Ok(())
     /// }
     /// ```
-    pub fn data_dir(&self) -> Result<std::path::PathBuf, Off> {
+    #[must_use]
+    pub fn data_dir(&self) -> Option<std::path::PathBuf> {
+        crate::state::data_dir(self.host)
+    }
+
+    /// The mod's folder in `mods/`, which holds its installation, such as an
+    /// installation [`Hold`](crate::state::Hold).
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader names no folder or a path that is not UTF-8.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let hold = enshwick::state::Hold::new(&load.mod_dir()?);
+    ///     let _ = hold.reason();
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn mod_dir(&self) -> Result<std::path::PathBuf, Off> {
         let mut out = Str::EMPTY;
-        let status = (self.api().data_dir)(self.host.handle(), &raw mut out);
-        ok(status, (), || "data folder".to_owned())?;
+        let status = (self.api().mod_dir)(self.host.handle(), &raw mut out);
+        ok(status, (), || "mod folder".to_owned())?;
         // SAFETY: the loader keeps the path alive for the process.
-        let path = unsafe { out.as_str() }.ok_or_else(|| Off::new("data folder: not UTF-8"))?;
+        let path = unsafe { out.as_str() }.ok_or_else(|| Off::new("mod folder: not UTF-8"))?;
         Ok(std::path::PathBuf::from(path))
     }
 
-    /// A value of type `T` kept per world under the mod's data folder,
-    /// opened when the world loads and written when it saves; see
+    /// A value of type `T` kept per world in the mod's data folder of that
+    /// world, opened when the world loads and written when it saves; see
     /// [`WorldStore`](crate::state::WorldStore). A world file that does not
     /// read keeps the store shut, with the reason in the status summary and
     /// on the Mods screen, as the feature `world store <name>` off.
     ///
     /// # Errors
     ///
-    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]` or is `settings`
-    /// or `save`, which the loader keeps for its own files, the data folder
-    /// cannot be created or the world events are refused.
+    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]` or the world
+    /// events are refused.
     ///
     /// # Examples
     ///
@@ -374,13 +395,19 @@ impl Load<'_> {
     where
         T: serde::de::DeserializeOwned + serde::Serialize + Default + Send + 'static,
     {
-        let store = crate::state::WorldStore::new(&self.data_dir()?, name)?;
+        let store = crate::state::WorldStore::new(name)?;
         let host = self.host;
         let opened = store.clone();
         let feature = format!("world store {name}");
-        self.on::<crate::events::WorldLoaded>(move |()| match crate::state::world_key(host) {
-            Some(key) => {
-                let shut = opened.open(&key).err().map(|error| error.to_string());
+        let world = move || {
+            Some((
+                crate::state::world_key(host)?,
+                crate::state::data_dir(host)?,
+            ))
+        };
+        self.on::<crate::events::WorldLoaded>(move |()| match world() {
+            Some((key, dir)) => {
+                let shut = opened.open(&key, &dir).err().map(|error| error.to_string());
                 if let Some(error) = &shut {
                     crate::error!("world store kept shut: {error}");
                 }

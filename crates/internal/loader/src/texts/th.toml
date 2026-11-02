@@ -168,7 +168,7 @@
 "ui-demo.player" = "ไม่มีผู้เล่นชื่อ {name} ออนไลน์"
 "ui-demo.opening" = "กำลังเปิดเดโมอินเทอร์เฟซให้ {name}"
 "ui-demo.no-client" = "ไคลเอนต์ของ {name} ไม่ได้รัน Enshwick หรือยังไม่ตอบกลับ"
-"ui-demo.off" = "เครื่องมือนักพัฒนาปิดอยู่ หากต้องการเปิด ให้สร้างไฟล์ว่าง mod-data/enshwick/developer-tools บนเซิร์ฟเวอร์และบนไคลเอนต์ของผู้เล่น แล้วรีสตาร์ททั้งสอง"
+"ui-demo.off" = "เครื่องมือนักพัฒนาปิดอยู่ หากต้องการเปิด ให้สร้างไฟล์ว่าง mods/enshwick/developer-tools บนเซิร์ฟเวอร์และบนไคลเอนต์ของผู้เล่น แล้วรีสตาร์ททั้งสอง"
 "console.not-run" = "ไม่ได้รัน ({status})"
 "usage.entity" = "enshwick entity <หมายเลข>"
 "usage.placed" = "enshwick placed [จำนวน]"
@@ -314,7 +314,7 @@
 "resistance_shroud.name" = "ความต้านทานชราวด์"
 "resistance_lightning.name" = "ความต้านทานสายฟ้า"
 "resistance_poison.name" = "ความต้านทานพิษ"
-"mods.developer.off" = "เครื่องมือนักพัฒนา: ทำงานเฉพาะเมื่อมีไฟล์ mod-data/enshwick/developer-tools"
+"mods.developer.off" = "เครื่องมือนักพัฒนา: ทำงานเฉพาะเมื่อมีไฟล์ mods/enshwick/developer-tools"
 
 "mods.waiting" = "{name} {version} (รออยู่)"
 "mods.waiting.why" = "กำลังรอให้เกมออกจากโค้ดที่ม็อดนี้เปลี่ยน จะลองอีกครั้งเร็วๆ นี้ แล้วลองอีกสามครั้งห่างกันครั้งละหนึ่งนาที หลังจากนั้นม็อดจะปิด"
