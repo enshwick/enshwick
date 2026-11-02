@@ -8,8 +8,8 @@ use enshwick::abi::Event;
 use rustc_hash::FxHashSet;
 
 use super::{
-    FILE, FINDING, JOINING, JOINS, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game,
-    kind_of, scope, serves, take_destroyed, template_id, wanted,
+    FILE, FINDING, JOINS, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game, kind_of,
+    scope, serves, take_destroyed, template_id, wanted,
 };
 use crate::host::Loader;
 use crate::item_records::anchor::{Anchor, Pending};
@@ -165,7 +165,6 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             );
             KEPT.store(false, Ordering::Relaxed);
             UNREAD.store(false, Ordering::Relaxed);
-            JOINING.relock().clear();
             JOINS.store(false, Ordering::Relaxed);
             FINDING.store(!pending.is_empty(), Ordering::Relaxed);
             let _earlier_world = take_destroyed();
@@ -174,6 +173,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 values: Values::default(),
                 pending,
                 unopened,
+                joining: Vec::new(),
                 changed: false,
             });
         }
