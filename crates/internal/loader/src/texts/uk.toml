@@ -316,3 +316,4 @@
 "resistance_shroud.name" = "Опір Савану"
 "resistance_lightning.name" = "Опір шоку"
 "resistance_poison.name" = "Стійкість до отрут"
+"mods.developer.off" = "інструмент розробника: працює лише тоді, коли існує файл mod-data/enshwick/developer-tools"

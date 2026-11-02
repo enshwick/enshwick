@@ -316,3 +316,4 @@
 "resistance_shroud.name" = "Résistance au Shroud"
 "resistance_lightning.name" = "Résistance aux chocs"
 "resistance_poison.name" = "Résistance au poison"
+"mods.developer.off" = "un outil de développement : il ne fonctionne que tant que le fichier mod-data/enshwick/developer-tools existe"

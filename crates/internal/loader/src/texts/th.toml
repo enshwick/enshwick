@@ -316,3 +316,4 @@
 "resistance_shroud.name" = "ความต้านทานชราวด์"
 "resistance_lightning.name" = "ความต้านทานสายฟ้า"
 "resistance_poison.name" = "ความต้านทานพิษ"
+"mods.developer.off" = "เครื่องมือนักพัฒนา: ทำงานเฉพาะเมื่อมีไฟล์ mod-data/enshwick/developer-tools"

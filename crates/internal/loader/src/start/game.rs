@@ -135,7 +135,7 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     crate::allowlist::configure(&settings);
     crate::ui::configure_actions_key(&settings.actions_key);
     crate::texts::configure(&settings.language, side == Some(Side::SERVER));
-    let dev_reload_held = side.is_some() && settings.dev_reload && !developer_tools;
+    let dev_reload_held = settings.dev_reload && !developer_tools;
     builds::configure(settings.build_patterns);
     let motd = settings.motd.clone();
     log::set_levels(settings);
