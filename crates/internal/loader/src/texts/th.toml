@@ -319,3 +319,4 @@
 "mods.developer.off" = "เครื่องมือนักพัฒนา: ทำงานเฉพาะเมื่อมีไฟล์ mod-data/enshwick/developer-tools"
 "reload.done" = "โหลด {name} ใหม่แล้ว"
 "reload.waits" = "{name} เปลี่ยนแล้ว แต่ต้องรีสตาร์ทก่อนจึงจะมีผล: {why}"
+"mods.demo" = "ตัวอย่างอินเทอร์เฟซ"

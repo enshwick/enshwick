@@ -319,3 +319,4 @@
 "mods.developer.off" = "開發者工具：僅在檔案 mod-data/enshwick/developer-tools 存在時執行"
 "reload.done" = "已重新載入 {name}。"
 "reload.waits" = "{name} 已變更，需重新啟動後生效：{why}"
+"mods.demo" = "介面示範"

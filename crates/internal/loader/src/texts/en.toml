@@ -321,3 +321,4 @@
 "mods.developer.off" = "a developer tool: it runs only while the file mod-data/enshwick/developer-tools exists"
 "reload.done" = "{name} reloaded."
 "reload.waits" = "{name} changed and waits for a restart: {why}"
+"mods.demo" = "Interface demo"

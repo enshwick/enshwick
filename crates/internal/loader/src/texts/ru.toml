@@ -319,3 +319,4 @@
 "mods.developer.off" = "инструмент разработчика: работает только пока существует файл mod-data/enshwick/developer-tools"
 "reload.done" = "{name} перезагружен."
 "reload.waits" = "{name} изменился и ждёт перезапуска: {why}"
+"mods.demo" = "Демонстрация интерфейса"
