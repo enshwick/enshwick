@@ -37,8 +37,10 @@ pub const FIRST_TIMEOUT: Duration = Duration::from_millis(200);
 /// survives.
 pub const LAST_TIMEOUT: Duration = Duration::from_secs(1);
 /// How long a peer may stay silent, while fragments wait for its ack,
-/// before it counts as gone. Any packet that reads counts as speaking, so a
-/// lossy link whose acks still come through now and then stays up.
+/// before it counts as gone.
+///
+/// Any packet that reads counts as speaking, so a lossy link whose acks
+/// still come through now and then stays up.
 pub const SILENCE: Duration = Duration::from_secs(20);
 
 /// Flag: the packet carries a fragment.
@@ -387,8 +389,8 @@ impl Link {
             self.spoke = false;
             self.heard = Some(now);
         }
-        let heard = *self.heard.get_or_insert(now);
-        if now.saturating_duration_since(heard) >= SILENCE {
+        let spoken = *self.heard.get_or_insert(now);
+        if now.saturating_duration_since(spoken) >= SILENCE {
             return false;
         }
         let (ack, acks) = self.acks();
