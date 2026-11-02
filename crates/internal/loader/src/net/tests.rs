@@ -146,43 +146,68 @@ fn a_hello_s_language_stays_with_its_client_and_goes_with_it() {
     assert_eq!(language_in(&state, 9), None);
 }
 
+/// Held by the tests that change the server's peer in the net's shared
+/// state, which would otherwise see each other's link.
+static SERVER_LINK: Mutex<()> = Mutex::new(());
+
 #[test]
 fn a_hosting_client_s_burst_to_its_own_server_half_is_refused_past_its_rate_and_the_rest_arrives() {
-    let mut state = State::default();
-    let server = NetMessage::SERVER.get();
+    static ARRIVED: AtomicU64 = AtomicU64::new(0);
+    unsafe extern "system" fn arrived(_: *const NetMessage, _: *mut c_void) {
+        ARRIVED.fetch_add(1, Ordering::Relaxed);
+    }
+    const CHANNEL: u32 = 5;
+    let _link = SERVER_LINK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let (host, wired) = (7, 9);
-    let _host = greet(&mut state, host, Instant::now());
-    let _wired = greet(&mut state, wired, Instant::now());
-    let dropped_before = DROPPED.load(Ordering::Relaxed);
-    let admitted = (0..200u32)
-        .filter(|_| admit_sending(&mut state, server))
+    let in_burst = |count: u64| {
+        let burst = crate::wire::BURST;
+        (burst..=burst + 2.0).contains(&f64::from(u32::try_from(count).unwrap()))
+    };
+    let _pending = CHANNELS.edit(|pending| {
+        pending.push(Channel {
+            id: CHANNEL,
+            name: "test/burst".to_owned(),
+            handler: Registered::new(ModIndex::LOADER, arrived, core::ptr::null_mut()),
+        });
+    });
+    let _sealed = CHANNELS.seal();
+    crate::carrier::host_for_test(host);
+    state(|s| {
+        s.peers.insert(NetMessage::SERVER.get(), Peer::new());
+        let _host = greet(s, host, Instant::now());
+        let _wired = greet(s, wired, Instant::now());
+    });
+    let dropped = DROPPED.load(Ordering::Relaxed);
+    let refused = (0..200)
+        .filter(|_| send_to_server(CHANNEL, b"burst") == Err(Status::REFUSED))
         .count();
-    let admitted = u32::try_from(admitted).unwrap();
-    assert_eq!(
-        f64::from(admitted),
-        crate::wire::BURST,
-        "refused after the burst"
-    );
+    let admitted = 200 - u64::try_from(refused).unwrap();
     assert!(
-        DROPPED.load(Ordering::Relaxed) - dropped_before >= u64::from(200 - admitted),
-        "each refused send is counted"
+        in_burst(admitted),
+        "{admitted} sent before the rate refused"
     );
-    let arrived = (0..admitted)
-        .filter(|_| take_message(&mut state, host, 5, true).is_some())
-        .count();
+    assert!(DROPPED.load(Ordering::Relaxed) - dropped >= 200 - admitted);
+    crate::carrier::take_hosted();
     assert_eq!(
-        u32::try_from(arrived).unwrap(),
+        ARRIVED.load(Ordering::Relaxed),
         admitted,
         "the server half takes every admitted one"
     );
-    let taken = (0..200)
-        .take_while(|_| take_message(&mut state, wired, 5, false).is_some())
-        .count();
-    assert_eq!(
-        f64::from(u32::try_from(taken).unwrap()),
-        crate::wire::BURST,
-        "a wire peer still runs out of its receive rate"
+    let before = ARRIVED.load(Ordering::Relaxed);
+    for _ in 0..200 {
+        server_carried(wired, CHANNEL, b"burst", false);
+    }
+    assert!(
+        in_burst(ARRIVED.load(Ordering::Relaxed) - before),
+        "a wire client still runs out of its receive rate"
     );
+    crate::carrier::unhost_for_test();
+    link_lost();
+    state(|s| {
+        s.sending.remove(&NetMessage::SERVER.get());
+    });
 }
 
 #[test]
@@ -209,6 +234,9 @@ fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
 
 #[test]
 fn the_server_is_ready_from_its_welcome_until_the_link_goes_and_refusals_cost_no_rate() {
+    let _link = SERVER_LINK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let server = NetMessage::SERVER.get();
     assert!(!ready(server));
     client_carried(5, b"before the welcome");

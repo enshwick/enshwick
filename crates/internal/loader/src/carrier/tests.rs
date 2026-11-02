@@ -13,8 +13,8 @@ fn alone() -> std::sync::MutexGuard<'static, ()> {
 #[test]
 fn a_hosted_message_waits_until_its_half_takes_it_whole() {
     let _alone = alone();
-    assert!(loop_back(true, 5, b"to the server").is_ok());
-    assert!(loop_back(false, 6, b"to the player").is_ok());
+    assert!(loop_back(true, 7, 5, b"to the server").is_ok());
+    assert!(loop_back(false, 7, 6, b"to the player").is_ok());
     let taken = take_looped(true);
     assert_eq!(taken.len(), 1);
     assert_eq!(
@@ -33,12 +33,12 @@ fn a_hosted_message_waits_until_its_half_takes_it_whole() {
 fn the_hosted_queues_are_bounded_and_forget_empties_them() {
     let _alone = alone();
     for _ in 0..MAX_LOOPED {
-        assert!(loop_back(true, 5, b"x").is_ok());
+        assert!(loop_back(true, 7, 5, b"x").is_ok());
     }
-    assert_eq!(loop_back(true, 5, b"x"), Err(Status::REFUSED));
+    assert_eq!(loop_back(true, 7, 5, b"x"), Err(Status::REFUSED));
     CARRIER.host_key.store(9, Ordering::Release);
     CARRIER.hosted_hello.store(true, Ordering::Release);
-    assert!(loop_back(false, 6, b"y").is_ok());
+    assert!(loop_back(false, 7, 6, b"y").is_ok());
     forget();
     assert!(take_looped(true).is_empty() && take_looped(false).is_empty());
     assert_eq!(CARRIER.host_key.load(Ordering::Acquire), 0);
