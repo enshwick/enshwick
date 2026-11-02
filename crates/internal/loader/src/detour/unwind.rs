@@ -7,23 +7,23 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
 
 use super::{BLOCK, CODE, ENTRY, FAR_JUMP, Function, reads};
 use crate::unwind_info::{
-    CHAINED, CODES, RuntimeFunction, SLOT, prologue_code, prologue_offset, slots,
+    CHAIN, CODES, RuntimeFunction, SLOT, TABLE_ENTRY, copies_frame, info_len, parent,
+    prologue_code, prologue_offset, slots,
 };
-
-/// The bytes a [`RuntimeFunction`] takes in the entry, before its unwind info.
-const TABLE_ENTRY: usize = size_of::<RuntimeFunction>();
-/// Where a chained entry holds the next unwind info, after start and end.
-const UNWIND_OF: usize = core::mem::offset_of!(RuntimeFunction, unwind);
 
 /// A hook's moved bytes: `stolen` bytes from `target`, each moved
 /// instruction's start offset in the target paired with its start in the
-/// trampoline, and where they end in the trampoline.
+/// trampoline, and where they end in the trampoline; the target offsets of
+/// the moved instructions that move the stack pointer other than by a call,
+/// and whether one of them is a call.
 #[derive(Clone, Copy)]
 pub(super) struct Span<'a> {
     pub(super) target: usize,
     pub(super) stolen: usize,
     pub(super) moved: &'a [(usize, usize)],
     pub(super) moved_end: usize,
+    pub(super) stack_moves: &'a [usize],
+    pub(super) calls: bool,
 }
 
 /// Writes the function-table entry and unwind info of an entry at `at`, its
@@ -31,10 +31,14 @@ pub(super) struct Span<'a> {
 /// bytes, into `out`, the entry's bytes after its code. The hook stole
 /// `stolen` bytes from `target`.
 ///
-/// A target with no function entry (a leaf, such as generated code) gets no
-/// entry and unwinds as a leaf, as it did before the hook. So does one whose
-/// unwind info cannot be read or copied, with a warning: unwind data is an
-/// aid, never a reason to leave a hook uninstalled.
+/// Only a hook at its function's start gets the function's codes (see
+/// [`copies_frame`]). Any other trampoline gets no entry and unwinds as a
+/// leaf, as it did before the hook: one inside its function, one whose
+/// moved bytes reach an epilogue, one whose target has no function entry
+/// (generated code), and one whose unwind info cannot be read or copied.
+/// The warning comes when a moved call makes that leaf lose the frames of a
+/// stack walk from below it, or when the info cannot be read: unwind data is
+/// an aid, never a reason to leave a hook uninstalled.
 pub(super) fn fill(
     at: usize,
     length: usize,
@@ -46,6 +50,9 @@ pub(super) fn fill(
         return;
     };
     if let Err(error) = function_unwind(span, function, out) {
+        if matches!(error, UnwindError::Inside) && !span.calls {
+            return;
+        }
         crate::log!(
             WARN,
             "hook at {:#x}: {}; a stack walk through its trampoline may be wrong",
@@ -127,23 +134,22 @@ unsafe extern "system" fn entry_of(
 
 /// Writes the unwind info for `function`, whose hook moved the bytes `span`
 /// describes, into `out` after the room for its function-table entry; the
-/// reason when its info cannot be read or copied.
+/// reason when the trampoline gets none.
 ///
 /// The info holds the codes of the function, its chained entries flattened
 /// in, without their epilogue codes or handler: a frame stopped in the relay
 /// or the trampoline unwinds as one stopped at the same place in the
-/// function. The prologue length is set to 255, past the whole entry, so the
-/// unwinder always treats a trampoline address as inside the prologue and
-/// never scans for an epilogue (x64 exception handling, "RIP is within the
-/// prolog if the distance from the function start to the RIP is less than or
-/// equal to the prolog size"; then "the first entry with an offset less than
-/// or equal to the offset of the RIP" and those after it apply). Each code's
-/// offset is where its instruction has run in the trampoline, so a frame
-/// before the moved bytes unwinds as the function's entry and one after them
-/// as past that much of the prologue.
+/// function's prologue. The prologue length is set to 255, past the whole
+/// entry, so the unwinder always treats a trampoline address as inside the
+/// prologue (x64 exception handling, "RIP is within the prolog if the
+/// distance from the function start to the RIP is less than or equal to the
+/// prolog size"; then "the first entry with an offset less than or equal to
+/// the offset of the RIP" and those after it apply). Each code's offset is
+/// where its instruction has run in the trampoline, and 255, never reached,
+/// for one that runs only after the jump back, so a frame on the relay
+/// unwinds as the function's entry and one past the moved bytes as past
+/// that much of the prologue.
 fn function_unwind(span: Span<'_>, function: Function, out: &mut [u8]) -> Result<(), UnwindError> {
-    /// The most chained entries followed, as the crash walk does.
-    const CHAIN: usize = 32;
     let (header, codes) = out
         .get_mut(TABLE_ENTRY..)
         .ok_or(UnwindError::TooLong)?
@@ -157,28 +163,30 @@ fn function_unwind(span: Span<'_>, function: Function, out: &mut [u8]) -> Result
             .ok_or(UnwindError::Unreadable)?;
         // SAFETY: `reads` checked the four bytes at `at`, in the image the
         // function table names, which stays loaded.
-        let [flags, _, count, frame_here]: [u8; 4] =
-            unsafe { enshwick::raw::read_at(at as *const u8, 0) };
+        let head: [u8; 4] = unsafe { enshwick::raw::read_at(at as *const u8, 0) };
+        let [flags, prolog, count, frame_here] = head;
         if !matches!(flags & 7, 1 | 2) {
             return Err(UnwindError::BadVersion);
         }
-        let chained = (flags >> 3) & CHAINED != 0;
-        let count = usize::from(count);
-        let next = CODES + count.next_multiple_of(2) * SLOT;
-        if !reads(at, next + if chained { TABLE_ENTRY } else { 0 }) {
+        if depth == 0 && !copies_frame(span.target == function.begin, prolog, span.stack_moves) {
+            return Err(UnwindError::Inside);
+        }
+        let len = info_len(head);
+        if !reads(at, len) {
             return Err(UnwindError::Unreadable);
         }
+        // SAFETY: `reads` checked the `len` bytes at `at`, in the image that
+        // stays loaded, and the slice is dropped within the loop.
+        let info = unsafe {
+            core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(at), len)
+        };
         if frame == 0 {
             frame = frame_here;
         }
-        let slot = |i: usize| -> [u8; 2] {
-            // SAFETY: `reads` checked every code slot below `count`, the
-            // only ones read, in the image that stays loaded.
-            unsafe { enshwick::raw::read_at(at as *const u8, CODES + i * SLOT) }
-        };
+        let count = usize::from(count);
         let mut i = 0;
         while i < count {
-            let [offset, op] = slot(i);
+            let [offset, op] = [info[CODES + i * SLOT], info[CODES + i * SLOT + 1]];
             let taken = slots(op & 0xf, op >> 4).ok_or(UnwindError::UnknownOp)?;
             if i + taken > count {
                 return Err(UnwindError::Unreadable);
@@ -187,9 +195,7 @@ fn function_unwind(span: Span<'_>, function: Function, out: &mut [u8]) -> Result
                 let room = codes
                     .get_mut(written..written + taken * SLOT)
                     .ok_or(UnwindError::TooLong)?;
-                for (k, pair) in room.as_chunks_mut::<2>().0.iter_mut().enumerate() {
-                    *pair = slot(i + k);
-                }
+                room.copy_from_slice(&info[CODES + i * SLOT..CODES + (i + taken) * SLOT]);
                 // A chained entry's codes describe the primary prologue,
                 // already run on entry to the trampoline: offset zero.
                 room[0] = if depth == 0 {
@@ -208,15 +214,12 @@ fn function_unwind(span: Span<'_>, function: Function, out: &mut [u8]) -> Result
             }
             i += taken;
         }
-        if !chained {
+        let Some(next) = parent(info) else {
             let count = u8::try_from(written / SLOT).map_err(|_| UnwindError::TooLong)?;
             header.copy_from_slice(&[1, u8::MAX, count, frame]);
             return Ok(());
-        }
-        // SAFETY: `reads` checked the chained entry after the codes: a
-        // `RuntimeFunction` whose `unwind` field is the next unwind info, an
-        // offset from the image.
-        rva = unsafe { enshwick::raw::read_at(at as *const u8, next + UNWIND_OF) };
+        };
+        rva = next;
     }
     Err(UnwindError::ChainTooDeep)
 }
@@ -224,6 +227,9 @@ fn function_unwind(span: Span<'_>, function: Function, out: &mut [u8]) -> Result
 /// Why a function's unwind info could not be copied into a trampoline entry.
 #[derive(Clone, Copy, Debug)]
 enum UnwindError {
+    /// The hook is not at its function's start, or its moved bytes reach an
+    /// epilogue.
+    Inside,
     /// A page of the info does not read, or the info stops short.
     Unreadable,
     /// The info is not version 1 or 2.
@@ -239,6 +245,9 @@ enum UnwindError {
 impl UnwindError {
     fn reason(self) -> &'static str {
         match self {
+            Self::Inside => {
+                "a call it moved unwinds as a leaf, since only a hook at its function's start, short of any epilogue, carries the function's unwind codes"
+            }
             Self::Unreadable => "its unwind info does not read",
             Self::BadVersion => "its unwind info is an unknown version",
             Self::UnknownOp => "its unwind info holds an unknown code",

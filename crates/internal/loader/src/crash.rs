@@ -763,9 +763,20 @@ pub(crate) fn walk_here() -> Vec<usize> {
     unsafe {
         windows_sys::Win32::System::Diagnostics::Debug::RtlCaptureContext(&raw mut aligned.0);
     }
+    walk_from(&aligned.0)
+}
+
+/// The return addresses the crash walk finds above a frame stopped as
+/// `context` says, over a stack the caller keeps unchanged, for tests of
+/// code it must pass.
+#[cfg(test)]
+pub(crate) fn walk_from(
+    context: &windows_sys::Win32::System::Diagnostics::Debug::CONTEXT,
+) -> Vec<usize> {
     let mut frames = [0usize; FRAMES];
-    // SAFETY: this thread's own context, its stack unchanged during the walk.
-    let found = unsafe { unwind(&aligned.0, &mut frames) };
+    // SAFETY: the walk reads only committed, readable memory, and the
+    // caller keeps the stack it names unchanged during it.
+    let found = unsafe { unwind(context, &mut frames) };
     frames[..found].to_vec()
 }
 

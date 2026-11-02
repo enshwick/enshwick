@@ -27,19 +27,21 @@
 //! entry, such as generated code. A wrong site then fails only when that
 //! path runs.
 //!
-//! Each relay and trampoline carries unwind data copied from its target's
-//! function, so stack walks and exceptions pass a frame stopped there, such
-//! as one that called out of the moved instructions. The copy sets a
-//! prologue length of 255, past the whole entry, so the unwinder always
-//! treats a trampoline address as inside the prologue and never scans for an
-//! epilogue (x64 exception handling,
+//! The relay and trampoline of a hook at its function's start carry unwind
+//! data copied from that function, so stack walks and exceptions pass a
+//! frame stopped there, such as one that called out of the moved
+//! instructions. The copy sets a prologue length of 255, past the whole
+//! entry, so the unwinder always treats a trampoline address as inside the
+//! prologue (x64 exception handling,
 //! `learn.microsoft.com/cpp/build/exception-handling-x64`); each code's
 //! offset is where its instruction has run in the trampoline, so a frame on
 //! the relay unwinds as the function's entry and one past the moved bytes as
 //! past that much of the prologue. The function's own exception handler is
 //! not copied: an exception raised below a moved call passes that function
-//! by, as if it had no handler. A function whose unwind data cannot be read
-//! is still hooked, without unwind data, as a leaf.
+//! by, as if it had no handler. Every other trampoline unwinds as a leaf, as
+//! before the hook: one inside its function or whose moved bytes reach an
+//! epilogue, where the prologue's codes do not say what has run, and one
+//! whose function's unwind data cannot be read.
 
 // Long file: the inline-hook engine is one tightly-coupled unsafe algorithm
 // (prepare, batched write with threads suspended, thread relocation) over
@@ -51,7 +53,7 @@ use std::sync::Mutex;
 use enshwick::abi::Level;
 use iced_x86::{
     BlockEncoder, BlockEncoderOptions, Code, Decoder, DecoderOptions, FlowControl, Instruction,
-    InstructionBlock,
+    InstructionBlock, Register,
 };
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::System::Diagnostics::Debug::{
@@ -319,11 +321,14 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Prep
     let (code, unwind) = bytes.split_at_mut(CODE);
     code[..FAR_JUMP].copy_from_slice(&far_jump(request.detour));
     code[FAR_JUMP..length].copy_from_slice(&encoded.code_buffer);
+    let (stack_moves, calls) = stack_effects(&instructions[..moved_count], &moved);
     let span = unwind::Span {
         target: request.target,
         stolen,
         moved: &moved,
         moved_end,
+        stack_moves: &stack_moves,
+        calls,
     };
     unwind::fill(entry - base, length, span, function, unwind);
     // SAFETY: `entry` has `ENTRY` writable bytes in a block not yet sealed.
@@ -370,6 +375,27 @@ fn moved_offsets(
             pair
         })
         .collect())
+}
+
+/// The target offsets, from `moved`, of the moved instructions that move the
+/// stack pointer other than by a call, and whether one of them is a call.
+fn stack_effects(instructions: &[Instruction], moved: &[(usize, usize)]) -> (Vec<usize>, bool) {
+    let call = |instruction: &Instruction| {
+        matches!(
+            instruction.flow_control(),
+            FlowControl::Call | FlowControl::IndirectCall
+        )
+    };
+    let stack_moves = instructions
+        .iter()
+        .zip(moved)
+        .filter(|&(instruction, _)| {
+            (instruction.stack_pointer_increment() != 0 && !call(instruction))
+                || instruction.op0_register() == Register::RSP
+        })
+        .map(|(_, &(old, _))| old)
+        .collect();
+    (stack_moves, instructions.iter().any(call))
 }
 
 /// The first direct branch or call of `function` that lands in

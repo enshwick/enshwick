@@ -1,32 +1,68 @@
-//! Shared reading of x64 `UNWIND_INFO`: the function-table entry layout, the
-//! size of an unwind code, the walk over chained entries, and where a moved
-//! prologue instruction's unwind code counts from in a trampoline. Used by
-//! the crash walk ([`crate::crash`]) and the detour engine
-//! ([`crate::detour`]).
+//! Shared reading of x64 `UNWIND_INFO` for the crash walk ([`crate::crash`])
+//! and the detour engine ([`crate::detour`]): the function-table entry
+//! layout, the size of an unwind code, the link to a chained parent, which
+//! trampolines may carry their function's codes, and where a moved prologue
+//! instruction's code counts from in one.
 //!
 //! The layout and the codes are Microsoft's x64 exception handling
 //! (`learn.microsoft.com/cpp/build/exception-handling-x64`).
 
 /// Where an `UNWIND_INFO`'s codes start, each a slot of two bytes.
-#[cfg(windows)]
 pub(crate) const CODES: usize = 4; // bound, not a game offset: a fact of the PE format
 /// One unwind code slot.
-#[cfg(windows)]
 pub(crate) const SLOT: usize = 2; // bound, not a game offset: a fact of the PE format
 /// `UNW_FLAG_CHAININFO`, this info continues a previous entry.
-#[cfg(windows)]
 pub(crate) const CHAINED: u8 = 4; // bound, not a game offset: a fact of the PE format
+/// The bytes a [`RuntimeFunction`] takes, as a chained info's parent entry.
+pub(crate) const TABLE_ENTRY: usize = size_of::<RuntimeFunction>();
+/// Where a chained info's parent entry holds the parent's unwind info.
+pub(crate) const UNWIND_OF: usize = core::mem::offset_of!(RuntimeFunction, unwind);
+/// The most chained entries a walk follows, so a looping chain ends.
+pub(crate) const CHAIN: usize = 32;
 
 /// An entry of a function table for `RtlAddFunctionTable` or
 /// `RtlInstallFunctionTableCallback`: a function's start, end and unwind
 /// info, each an offset from the table's base.
-#[cfg(windows)]
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RuntimeFunction {
     pub(crate) begin: u32,
     pub(crate) end: u32,
     pub(crate) unwind: u32,
+}
+
+/// The bytes of the `UNWIND_INFO` whose header is `head`: the header, the
+/// codes padded to an even count, and the parent entry of a chained info;
+/// a handler and its data are not counted.
+pub(crate) fn info_len(head: [u8; 4]) -> usize {
+    let chained = (head[0] >> 3) & CHAINED != 0;
+    CODES + usize::from(head[2]).next_multiple_of(2) * SLOT + if chained { TABLE_ENTRY } else { 0 }
+}
+
+/// The unwind info, as an offset from the image, that the chained info
+/// `info` continues in; `None` for a primary info or one cut short.
+pub(crate) fn parent(info: &[u8]) -> Option<u32> {
+    let head: [u8; 4] = info.get(..CODES)?.try_into().ok()?;
+    if (head[0] >> 3) & CHAINED == 0 {
+        return None;
+    }
+    let at = info_len(head) - TABLE_ENTRY + UNWIND_OF;
+    Some(u32::from_le_bytes(info.get(at..at + 4)?.try_into().ok()?))
+}
+
+/// Whether a hook's trampoline may carry its function's unwind codes: only
+/// a hook at the start of its function's entry (`at_start`), whose moved
+/// bytes run the prologue as the function does, and only when none of them
+/// past the prologue's `prolog` bytes moves the stack pointer
+/// (`stack_moves`, each such moved instruction's offset from the start).
+///
+/// The codes describe the prologue alone. Past it they hold for the body,
+/// where the function moves the stack pointer only in an epilogue or, with
+/// a frame pointer, a dynamic allocation; inside the function a hook stops
+/// where no code's offset says what has run. Such a trampoline gets no
+/// entry and unwinds as a leaf.
+pub(crate) fn copies_frame(at_start: bool, prolog: u8, stack_moves: &[usize]) -> bool {
+    at_start && stack_moves.iter().all(|&at| at < usize::from(prolog))
 }
 
 /// The slots an unwind code takes, by its operation `op` (the low nibble of
@@ -145,5 +181,32 @@ mod tests {
         let moved = [(0, 0), (5, 11)];
         assert_eq!(prologue_offset(14, 0x2000, 9, &moved, 15, 0x2005), 25); // after the call, 14 + 11
         assert_eq!(prologue_offset(14, 0x2000, 9, &moved, 15, 0x2009), 29); // after the sub, 14 + 15
+    }
+
+    #[test]
+    fn an_info_takes_its_padded_codes_and_a_chained_parent_entry() {
+        assert_eq!(info_len([1, 0, 0, 0]), 4);
+        assert_eq!(info_len([1, 4, 1, 0]), 8); // one code, padded to two
+        assert_eq!(info_len([1, 4, 2, 0]), 8);
+        assert_eq!(info_len([(CHAINED << 3) | 1, 0, 1, 0]), 20);
+    }
+
+    #[test]
+    fn a_chained_info_names_its_parent_and_a_primary_none() {
+        let mut chained = vec![(CHAINED << 3) | 1, 0, 1, 0, 0x00, 0x30, 0, 0];
+        chained.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0, 0x78, 0x56, 0x34, 0x12]);
+        assert_eq!(parent(&chained), Some(0x1234_5678));
+        assert_eq!(parent(&chained[..19]), None, "cut short");
+        assert_eq!(parent(&[1, 4, 1, 0, 4, 0x42, 0, 0]), None, "a primary");
+    }
+
+    #[test]
+    fn only_a_hook_at_the_start_that_moves_no_epilogue_copies_the_frame() {
+        // `push rbx; sub rsp, 0x20`, a 5-byte prologue that moves rsp.
+        assert!(copies_frame(true, 5, &[0, 1]));
+        assert!(copies_frame(true, 5, &[]));
+        assert!(!copies_frame(false, 5, &[]), "inside the function");
+        // `add rsp` at offset 5, past the prologue: an epilogue.
+        assert!(!copies_frame(true, 5, &[0, 1, 5]));
     }
 }

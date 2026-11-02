@@ -158,13 +158,32 @@ fn unwind_codes_say_how_far_a_frame_reads() {
         })
     );
     // rbp as the frame register, offset 2 * 16, set_fpreg plus a large
-    // allocation of 0x1000 bytes in one more slot.
-    let framed = [1, 0x10, 3, 0x25, 0x10, 0x01, 0x00, 0x02, 0x08, 0x03];
+    // allocation of 0x1000 bytes in one more slot, padded to an even count.
+    let framed = [1, 0x10, 3, 0x25, 0x10, 0x01, 0x00, 0x02, 0x08, 0x03, 0, 0];
     assert_eq!(
         reach(&framed, usize::MAX),
         Some(Reach {
             frame: Some((5, 32)),
             bytes: 0x1008,
+            chained: None,
+        })
+    );
+    // Stopped at offset 4, before the set_fpreg (offset 8) has run: rbp still
+    // holds the caller's value, so the frame is read from rsp alone.
+    assert_eq!(
+        reach(&framed, 4),
+        Some(Reach {
+            frame: None,
+            bytes: 8,
+            chained: None,
+        })
+    );
+    // Stopped at offset 8: rbp is set, the allocation (offset 0x10) is not.
+    assert_eq!(
+        reach(&framed, 8),
+        Some(Reach {
+            frame: Some((5, 32)),
+            bytes: 8,
             chained: None,
         })
     );

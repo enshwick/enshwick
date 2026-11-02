@@ -312,22 +312,23 @@ fn scrub() {
 
 #[test]
 fn a_moved_call_out_of_reach_returns_onto_the_jump_back_not_its_data() {
-    // A call about 2 GiB ahead or behind: one is past the reach of a
-    // trampoline near the target, whichever side it lands, so that one
-    // moves in its far form, `call [rip + x]` with the target as data.
+    // `push rbx`, then a call about 2 GiB ahead or behind: one is past the
+    // reach of a trampoline near the target, whichever side it lands, so
+    // that one moves in its far form, `call [rip + x]` with the target as
+    // data.
     let far = [0x7fff_fff0_i32, -0x7fff_fff0].into_iter().find_map(|rel| {
-        let mut code = vec![0xe8];
+        let mut code = vec![0x53, 0xe8];
         code.extend_from_slice(&rel.to_le_bytes());
         code.extend_from_slice(&[0xc3, 0xcc, 0xcc, 0xcc]);
         let target = with_entry(&code);
-        let trampoline = prepare(&[Request {
+        let pending = prepare(&[Request {
             target,
             detour: (plus_hundred as Unary as *const ()).addr(),
             inside: false,
         }])
         .remove(0)
-        .unwrap()
-        .original;
+        .unwrap();
+        let trampoline = pending.original;
         // SAFETY: the trampoline's bytes are readable in its sealed block.
         let bytes =
             unsafe { core::slice::from_raw_parts(trampoline as *const u8, CODE - FAR_JUMP) };
@@ -339,20 +340,177 @@ fn a_moved_call_out_of_reach_returns_onto_the_jump_back_not_its_data() {
             )
         })?;
         (call.flow_control() == FlowControl::IndirectCall).then(|| {
-            // The call returns here: it must be the jump back to target + 5,
+            // The call returns here: it must be the jump back to target + 6,
             // not the 8-byte target data iced lays after the whole block.
             let returns = usize::try_from(call.next_ip()).unwrap();
             let at = returns - trampoline;
             let next =
                 Decoder::with_ip(64, &bytes[at..], returns as u64, DecoderOptions::NONE).decode();
-            (next, bytes[..at + 16].to_vec())
+            (next, bytes[..at + 16].to_vec(), pending.moved)
         })
     });
-    let (next, around) = far.expect("one of the calls moves in its far form");
+    let (next, around, moved) = far.expect("one of the calls moves in its far form");
     assert_eq!(
         next.flow_control(),
         FlowControl::UnconditionalBranch,
         "the call returns onto {around:x?}"
+    );
+    // The far call still starts right after the push, not at the
+    // `u32::MAX` the encoder reports for an instruction it rewrote.
+    assert_eq!(moved, [(0, 0), (1, 1)]);
+}
+
+/// Prepares a hook on `target` without writing it; its trampoline.
+fn trampoline_of(target: usize, inside: bool) -> usize {
+    prepare(&[Request {
+        target,
+        detour: (plus_hundred as Unary as *const ()).addr(),
+        inside,
+    }])
+    .remove(0)
+    .unwrap()
+    .original
+}
+
+/// A return address in code without a function entry, so the walks below
+/// unwind it as a leaf and stop on the zero above it.
+fn caller() -> usize {
+    function(&[0xcc; 16]) + 8
+}
+
+/// What the system unwinder and the crash walk find above a frame stopped
+/// at `rip` with `rsp` and `rsi`: the system's caller and stack pointer, and
+/// the crash walk's return addresses.
+///
+/// The system's is `RtlVirtualUnwind` on the function entry found for `rip`,
+/// or, where there is none, a leaf's return address on top of the stack, as
+/// the unwind procedure of x64 exception handling has it
+/// (`learn.microsoft.com/cpp/build/exception-handling-x64`).
+fn walks(rip: usize, rsp: usize, rsi: usize) -> ((usize, usize), Vec<usize>) {
+    // SAFETY: an all-zero context is a valid value.
+    let mut aligned = ThreadContext(unsafe { core::mem::zeroed() });
+    let context = &mut aligned.0;
+    (context.Rip, context.Rsp, context.Rsi) = (rip as u64, rsp as u64, rsi as u64);
+    let walked = crate::crash::walk_from(context);
+    let mut image = 0;
+    // SAFETY: `RtlLookupFunctionEntry` takes any address, `image` is a
+    // writable `u64` and the history table may be null.
+    let entry =
+        unsafe { RtlLookupFunctionEntry(context.Rip, &raw mut image, core::ptr::null_mut()) };
+    if entry.is_null() {
+        // SAFETY: the test's stack buffer holds the word at `rsp`.
+        let back = unsafe { core::ptr::with_exposed_provenance::<u64>(rsp).read() };
+        return ((usize::try_from(back).unwrap(), rsp + 8), walked);
+    }
+    let (mut handler, mut establisher) = (core::ptr::null_mut(), 0u64);
+    // SAFETY: `entry` is the function entry found for `rip` in the table at
+    // `image`, and the test's stack buffer holds every word its codes read.
+    unsafe {
+        windows_sys::Win32::System::Diagnostics::Debug::RtlVirtualUnwind(
+            windows_sys::Win32::System::Diagnostics::Debug::UNW_FLAG_NHANDLER,
+            image,
+            context.Rip,
+            entry,
+            &raw mut *context,
+            &raw mut handler,
+            &raw mut establisher,
+            core::ptr::null_mut(),
+        );
+    }
+    let caller = (
+        usize::try_from(context.Rip).unwrap(),
+        usize::try_from(context.Rsp).unwrap(),
+    );
+    (caller, walked)
+}
+
+#[test]
+fn a_start_hook_that_moved_part_of_the_prologue_unwinds_only_what_ran() {
+    // `sub rsp, 0x28; call rdx; sub rsp, 0x40; add rsp, 0x68; ret`, with
+    // both allocations in its 10-byte prologue: the jump moves the first
+    // allocation and the call, not the second allocation.
+    let target = with_unwind(
+        &[
+            0x48, 0x83, 0xec, 0x28, 0xff, 0xd2, 0x48, 0x83, 0xec, 0x40, 0x48, 0x83, 0xc4, 0x68,
+            0xc3, 0xcc,
+        ],
+        [1, 10, 2, 0, 10, 0x72, 4, 0x42],
+    );
+    let original = trampoline_of(target, false);
+    let caller = caller();
+    let mut stack = vec![0u64; 32];
+    let rsp = stack.as_mut_ptr().expose_provenance();
+    // Back from the moved call, on the jump back: the first allocation has
+    // run, the second has not.
+    stack[5] = caller as u64;
+    assert_eq!(
+        walks(original + 6, rsp, 0),
+        ((caller, rsp + 0x30), vec![caller])
+    );
+    assert_eq!(
+        walks(original + 4, rsp, 0),
+        ((caller, rsp + 0x30), vec![caller])
+    );
+    // On the relay, before any moved byte: the return address is on top.
+    stack.fill(0);
+    stack[0] = caller as u64;
+    assert_eq!(
+        walks(original - FAR_JUMP, rsp, 0),
+        ((caller, rsp + 8), vec![caller])
+    );
+}
+
+#[test]
+fn a_start_hook_unwinds_through_the_frame_register_only_once_it_is_set() {
+    // `sub rsp, 0x28; lea rsi, [rsp + 0x20]; add rsp, 0x28; ret`, with rsi
+    // as the frame register 0x20 above the allocation: the jump moves the
+    // whole prologue.
+    let target = with_unwind(
+        &[
+            0x48, 0x83, 0xec, 0x28, 0x48, 0x8d, 0x74, 0x24, 0x20, 0x48, 0x83, 0xc4, 0x28, 0xc3,
+            0xcc,
+        ],
+        [1, 9, 2, 0x26, 9, 0x03, 4, 0x42],
+    );
+    let original = trampoline_of(target, false);
+    let (caller, decoy) = (caller(), caller());
+    let mut stack = vec![0u64; 32];
+    let rsp = stack.as_mut_ptr().expose_provenance();
+    stack[5] = decoy as u64;
+    stack[8 + 5] = caller as u64;
+    // After the moved lea, the frame is read from rsi, here 0x40 above rsp.
+    assert_eq!(
+        walks(original + 9, rsp, rsp + 0x40 + 0x20),
+        ((caller, rsp + 0x40 + 0x30), vec![caller])
+    );
+    // Before it, rsi still holds the caller's value, here no stack address
+    // at all: the frame is read from rsp.
+    assert_eq!(
+        walks(original + 4, rsp, 0x10),
+        ((decoy, rsp + 0x30), vec![decoy])
+    );
+}
+
+#[test]
+fn a_mid_function_hook_that_moved_an_epilogue_unwinds_as_a_leaf() {
+    // `add rsp, 0x28; ret` of the framed function.
+    let original = trampoline_of(framed() + 6, true);
+    let mut image = 0;
+    // SAFETY: `RtlLookupFunctionEntry` takes any address, `image` is a
+    // writable `u64` and the history table may be null.
+    let entry =
+        unsafe { RtlLookupFunctionEntry(original as u64, &raw mut image, core::ptr::null_mut()) };
+    assert!(entry.is_null(), "a mid-function trampoline has no entry");
+    let caller = caller();
+    let mut stack = vec![0u64; 32];
+    let rsp = stack.as_mut_ptr().expose_provenance();
+    stack[0] = caller as u64;
+    // On the moved ret, after the moved add: the frame is gone and the
+    // return address is on top, where a copy of the function's prologue
+    // codes would read 0x28 bytes higher.
+    assert_eq!(
+        walks(original + 4, rsp, 0),
+        ((caller, rsp + 8), vec![caller])
     );
 }
 

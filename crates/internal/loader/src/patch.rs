@@ -268,7 +268,10 @@ pub(crate) fn arm(
     // SAFETY: the data pages hold at least `slots_len + counters_len +
     // functions_len + UNWIND.len()` bytes, so this offset stays inside.
     let function_start = unsafe { data_start.add(slots_len + counters_len) };
-    // The counters end on an 8-byte boundary, so the table is aligned.
+    #[expect(
+        clippy::cast_ptr_alignment,
+        reason = "the counters end on an 8-byte boundary"
+    )]
     let function_base = function_start.cast::<RuntimeFunction>();
     // SAFETY: the data pages hold at least `slots_len + counters_len +
     // functions_len + UNWIND.len()` bytes, so this offset stays inside.
