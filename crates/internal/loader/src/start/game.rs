@@ -140,10 +140,15 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     log::open(&game_dir.join(log::LOGS).join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
     crate::greeting::configure(&motd);
-    for problem in &settings_problems {
+    let applies = if settings_problems.unread {
+        "the defaults apply"
+    } else {
+        "the rest of the file applies"
+    };
+    for problem in &settings_problems.lines {
         crate::log!(
             ERROR,
-            "loader settings: {problem}; the rest of the file applies ({})",
+            "loader settings: {problem}; {applies} ({})",
             errors::BAD_SETTINGS
         );
     }
@@ -177,7 +182,7 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     Some(Begun {
         mods_dir,
         report: report.ok(),
-        settings_problems,
+        settings_problems: settings_problems.lines,
     })
 }
 

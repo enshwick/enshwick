@@ -255,6 +255,11 @@ Each entry names the pull request that made the change.
 
 - A poisoned lock's warning names the line that took the lock, not a line
   inside the API (#821).
+- A bad value in `mod-configs/enshwick.toml` holds closed only the
+  protections it could stand for: its own key, or every missing one when the
+  bad key is unknown or a table. A file that is not TOML names the line and
+  column where it stops reading, and the log says the defaults apply
+  instead of the rest of the file.
 - `Load::world_store` refuses the names `settings` and `save`, whose files
   the loader keeps in the same world folder, so a store no longer writes
   over the world's settings (#680).

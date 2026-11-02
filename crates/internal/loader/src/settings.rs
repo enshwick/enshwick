@@ -139,87 +139,117 @@ impl Settings {
     }
 
     /// Reads `path`, writing the commented defaults there first when it is
-    /// missing, with a line per problem for the log.
+    /// missing, with its problems for the log.
     ///
     /// A file that cannot be read or parsed holds every protection closed,
     /// as [`Settings::parse`] describes; `listed` says whether the
     /// allowlist's file exists.
     #[must_use]
-    pub fn read(path: &Path, listed: bool) -> (Self, Vec<String>) {
-        let (settings, problems) = match std::fs::read_to_string(path) {
+    pub fn read(path: &Path, listed: bool) -> (Self, Problems) {
+        let (settings, mut problems) = match std::fs::read_to_string(path) {
             Ok(text) => Self::parse(&text, listed),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => (
                 Self::default(),
-                std::fs::write(path, Self::template())
-                    .err()
-                    .map(|e| e.to_string())
-                    .into_iter()
-                    .collect(),
+                Problems {
+                    lines: std::fs::write(path, Self::template())
+                        .err()
+                        .map(|e| format!("the defaults could not be written there: {e}"))
+                        .into_iter()
+                        .collect(),
+                    unread: false,
+                },
             ),
             Err(e) => Self::closed(listed, e.to_string()),
         };
-        let problems = problems
-            .into_iter()
-            .map(|problem| format!("{}: {problem}", path.display()))
-            .collect();
+        for line in &mut problems.lines {
+            *line = format!("{}: {line}", path.display());
+        }
         (settings, problems)
     }
 
-    /// Parses the settings file's `text` key by key, with a line per problem.
+    /// Parses the settings file's `text` key by key, with its problems.
     ///
     /// Every valid key applies and every bad one is named. A protection
-    /// ([`PROTECTIONS`]) that is bad or missing in a file with problems is
-    /// held closed until the file is fixed: the allowlist on when its file
-    /// exists (`listed`), the migrations dry run on, the join check on and
-    /// the knowledge guard enforcing. Text that is not TOML holds them all.
+    /// ([`PROTECTIONS`]) is held closed until the file is fixed when its
+    /// own key is bad, or when it is missing and a bad key could have held
+    /// it: an unknown key, which may be it misspelled, or a table, which a
+    /// misplaced header fills with the keys after it. Closed is the
+    /// allowlist on when its file exists (`listed`), the migrations dry run
+    /// on, the join check on and the knowledge guard enforcing. Text that is
+    /// not TOML holds them all.
     #[must_use]
-    pub fn parse(text: &str, listed: bool) -> (Self, Vec<String>) {
+    pub fn parse(text: &str, listed: bool) -> (Self, Problems) {
         let table: toml::Table = match toml::from_str(text) {
             Ok(table) => table,
-            Err(e) => return Self::closed(listed, e.message().to_owned()),
+            Err(e) => {
+                let at = match e.span() {
+                    Some(span) => {
+                        let before = text.get(..span.start).unwrap_or(text);
+                        let line = before.matches('\n').count() + 1;
+                        let column =
+                            before.rsplit('\n').next().unwrap_or(before).chars().count() + 1;
+                        format!("line {line}, column {column}: ")
+                    }
+                    None => String::new(),
+                };
+                return Self::closed(listed, format!("{at}{}", e.message()));
+            }
         };
+        let known = toml::Table::try_from(Self::default()).unwrap_or_default();
         let mut good = toml::Table::new();
-        let mut problems = Vec::new();
+        let mut bad = Vec::new();
+        let mut hiding = false;
+        let mut lines = Vec::new();
         for (key, value) in table {
             let alone = toml::Table::from_iter([(key.clone(), value.clone())]);
             match alone.try_into::<Self>() {
                 Ok(_) => {
                     good.insert(key, value);
                 }
-                Err(e) => problems.push(format!("{key}: {}", e.message())),
+                Err(e) => {
+                    hiding |= value.is_table() || !known.contains_key(&key);
+                    lines.push(format!("{key}: {}", e.message()));
+                    bad.push(key);
+                }
             }
         }
         let Ok(mut settings) = good.clone().try_into::<Self>() else {
             return Self::closed(listed, "the keys do not read together".to_owned());
         };
-        if problems.is_empty() {
-            return (settings, problems);
-        }
         let held: Vec<&str> = PROTECTIONS
             .into_iter()
-            .filter(|key| !good.contains_key(*key))
+            .filter(|key| !good.contains_key(*key) && (hiding || bad.iter().any(|b| b == key)))
             .collect();
         for key in &held {
             settings.close(key, listed);
         }
         if !held.is_empty() {
-            problems.push(format!("held closed until fixed: {}", held.join(", ")));
+            lines.push(format!("held closed until fixed: {}", held.join(", ")));
         }
-        (settings, problems)
+        (
+            settings,
+            Problems {
+                lines,
+                unread: false,
+            },
+        )
     }
 
     /// The defaults with every protection closed, and `problem` naming why.
-    fn closed(listed: bool, problem: String) -> (Self, Vec<String>) {
+    fn closed(listed: bool, problem: String) -> (Self, Problems) {
         let mut settings = Self::default();
         for key in PROTECTIONS {
             settings.close(key, listed);
         }
         (
             settings,
-            vec![
-                problem,
-                format!("held closed until fixed: {}", PROTECTIONS.join(", ")),
-            ],
+            Problems {
+                lines: vec![
+                    problem,
+                    format!("held closed until fixed: {}", PROTECTIONS.join(", ")),
+                ],
+                unread: true,
+            },
         )
     }
 
@@ -233,6 +263,16 @@ impl Settings {
             _ => {}
         }
     }
+}
+
+/// What did not read in the settings file.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Problems {
+    /// A line per problem for the log, protections held closed last.
+    pub lines: Vec<String>,
+    /// The file did not read or parse at all, so the defaults apply instead
+    /// of the rest of the file.
+    pub unread: bool,
 }
 
 const ALLOWLIST: &str = "allowlist";
@@ -331,12 +371,12 @@ status_minutes = 0
         let _fresh = std::fs::remove_file(&path);
         assert_eq!(
             Settings::read(&path, true),
-            (Settings::default(), Vec::new())
+            (Settings::default(), Problems::default())
         );
         assert!(path.exists());
         assert_eq!(
             Settings::read(&path, true),
-            (Settings::default(), Vec::new())
+            (Settings::default(), Problems::default())
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -355,7 +395,7 @@ status_minutes = 0
     fn the_template_parses_without_problems() {
         assert_eq!(
             Settings::parse(&Settings::template(), true),
-            (Settings::default(), Vec::new())
+            (Settings::default(), Problems::default())
         );
     }
 
@@ -364,9 +404,10 @@ status_minutes = 0
         let (settings, problems) =
             Settings::parse("allowlist = = true\nlog_level = \"debug\"\n", true);
         assert_eq!(settings, closed(true));
-        assert!(!problems.is_empty());
+        assert!(!problems.lines.is_empty());
         assert!(
             problems
+                .lines
                 .iter()
                 .any(|p| p.contains("allowlist") && p.contains("migrations_dry_run")),
             "{problems:?}"
@@ -390,8 +431,8 @@ status_minutes = 0
         assert!(!settings.migrations_dry_run);
         assert!(!settings.require_enshwick);
         assert_eq!(settings.knowledge_guard, KnowledgeGuard::Off);
-        assert_eq!(problems.len(), 1, "{problems:?}");
-        assert!(problems[0].contains("status_minutes"), "{problems:?}");
+        assert_eq!(problems.lines.len(), 1, "{problems:?}");
+        assert!(problems.lines[0].contains("status_minutes"), "{problems:?}");
     }
 
     #[test]
@@ -405,7 +446,7 @@ status_minutes = 0
         assert_eq!(settings.knowledge_guard, KnowledgeGuard::Enforce);
         for key in ["allowlist", "migrations_dry_run", "knowledge_guard"] {
             assert!(
-                problems.iter().any(|p| p.contains(key)),
+                problems.lines.iter().any(|p| p.contains(key)),
                 "{key}: {problems:?}"
             );
         }
@@ -420,7 +461,41 @@ status_minutes = 0
         assert!(!settings.migrations_dry_run);
         assert_eq!(settings.knowledge_guard, KnowledgeGuard::Watch);
         assert!(
-            problems.iter().any(|p| p.contains("alowlist")),
+            problems.lines.iter().any(|p| p.contains("alowlist")),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
+    fn a_bad_setting_holds_no_protection_it_cannot_be() {
+        let (settings, problems) = Settings::parse("log_level = \"loud\"\n", true);
+        assert_eq!(settings, Settings::default());
+        assert!(!problems.unread);
+        assert_eq!(problems.lines.len(), 1, "{problems:?}");
+        assert!(problems.lines[0].starts_with("log_level: "), "{problems:?}");
+    }
+
+    #[test]
+    fn a_misplaced_table_holds_the_protections_it_may_swallow() {
+        let (settings, problems) = Settings::parse("[log_levels]\nallowlist = false\n", true);
+        assert_eq!(settings, closed(true));
+        assert!(!problems.unread);
+        assert!(
+            problems
+                .lines
+                .iter()
+                .any(|p| p.starts_with("held closed until fixed: allowlist")),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
+    fn a_file_that_does_not_parse_names_where_and_reads_as_the_defaults() {
+        let (settings, problems) = Settings::parse("log_level = \"debug\"\n[[[\n", true);
+        assert_eq!(settings, closed(true));
+        assert!(problems.unread);
+        assert!(
+            problems.lines[0].starts_with("line 2, column "),
             "{problems:?}"
         );
     }
@@ -434,7 +509,7 @@ status_minutes = 0
         std::fs::create_dir_all(&path).unwrap();
         let (settings, problems) = Settings::read(&path, true);
         assert_eq!(settings, closed(true));
-        assert!(!problems.is_empty());
+        assert!(!problems.lines.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
