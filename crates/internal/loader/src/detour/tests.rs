@@ -267,7 +267,7 @@ fn only_instructions_after_the_first_move_and_only_returns_after_calls_count() {
         address: code,
         bytes: &bytes,
     }];
-    assert_eq!(patch_returns(&patch), [code + 2]);
+    assert_eq!(patch_returns(&patch), [(code + 2, 0)]);
 }
 
 /// Whether a thread counting on its own stands still while `threads`

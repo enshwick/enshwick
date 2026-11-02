@@ -351,13 +351,6 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> Commit {
         .map(|c| (c.address, c.address + c.bytes.len()))
         .collect();
     let returns = patch_returns(code);
-    // Each patch's own return addresses, a range of `returns`.
-    let returns_in: Vec<core::ops::Range<usize>> = patched
-        .iter()
-        .map(|&(start, end)| {
-            returns.partition_point(|&at| at <= start)..returns.partition_point(|&at| at < end)
-        })
-        .collect();
     // Nothing below allocates while the other threads stand still: one of
     // them may hold the heap's lock.
     let mut protections = Vec::with_capacity(writes.len());
@@ -365,28 +358,29 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> Commit {
     let mut threads = Threads::new();
     let mut tries = 0;
     let checked = !moved.is_empty() || !patched.is_empty();
-    let (unsettled, blind) = loop {
+    let blind = loop {
         if !threads.suspend() {
             threads.resume();
             return Commit::Failed;
         }
+        stuck.fill(false);
         // A thread whose context Windows does not hand over can be neither
         // checked nor moved: the writes wait for it, then give up.
         let blind = checked
-            .then(|| threads.iter().find(|&thread| control(thread).is_none()))
+            .then(|| {
+                threads.iter().find(|&thread| {
+                    // SAFETY: `suspend` just suspended every other thread of
+                    // the process, `iter` yields each of them, and they stay
+                    // suspended until `resume`.
+                    !unsafe { mark(thread, &patched, &returns, &mut stuck) }
+                })
+            })
             .flatten()
             // SAFETY: `GetThreadId` only reads the id of a thread handle
             // `suspend` opened with `THREAD_QUERY_LIMITED_INFORMATION`.
             .map(|thread| unsafe { GetThreadId(thread) });
-        let busy = !patched.is_empty()
-            && threads
-                .iter()
-                // SAFETY: `suspend` just suspended every other thread of the
-                // process, `iter` yields each of them, and they stay suspended
-                // until `resume`.
-                .any(|thread| unsafe { in_flight(thread, &patched, &returns) });
-        if !(busy || blind.is_some()) || tries == SETTLE_TRIES {
-            break (busy, blind);
+        if !(stuck.contains(&true) || blind.is_some()) || tries == SETTLE_TRIES {
+            break blind;
         }
         threads.resume();
         tries += 1;
@@ -403,25 +397,15 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> Commit {
         );
         return Commit::Failed;
     }
-    if unsettled {
-        for ((stuck, &(start, end)), near) in stuck.iter_mut().zip(&patched).zip(&returns_in) {
-            let near = &returns[near.clone()];
-            *stuck = threads.iter().any(|thread| {
-                // SAFETY: every other thread of the process stays suspended
-                // until `resume`, and `iter` yields each of them.
-                unsafe { in_flight(thread, &[(start, end)], near) }
-            });
-        }
-        if stuck.contains(&true) {
-            threads.resume();
-            return Commit::Busy(
-                stuck
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, &s)| s.then_some(i))
-                    .collect(),
-            );
-        }
+    if stuck.contains(&true) {
+        threads.resume();
+        return Commit::Busy(
+            stuck
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &s)| s.then_some(i))
+                .collect(),
+        );
     }
     let mut writable = true;
     for &(address, bytes) in &writes {
@@ -482,16 +466,20 @@ fn moved_instructions(prepared: &[&Pending]) -> Vec<(usize, usize)> {
 }
 
 /// Addresses inside the code patches that follow a call there in the code
-/// as it is now, sorted: where a thread that called out of a patch returns.
-fn patch_returns(code: &[Bytes<'_>]) -> Vec<usize> {
-    let mut returns: Vec<usize> = code
+/// as it is now, each with its patch's index, sorted: where a thread that
+/// called out of a patch returns.
+fn patch_returns(code: &[Bytes<'_>]) -> Vec<(usize, usize)> {
+    let mut returns: Vec<(usize, usize)> = code
         .iter()
-        .flat_map(|c| {
-            (c.address + 1..c.address + c.bytes.len()).filter(|&at| follows_call(c.address, at))
+        .enumerate()
+        .flat_map(|(i, c)| {
+            (c.address + 1..c.address + c.bytes.len())
+                .filter(|&at| follows_call(c.address, at))
+                .map(move |at| (at, i))
         })
         .collect();
     returns.sort_unstable();
-    returns.dedup();
+    returns.dedup_by_key(|&mut (at, _)| at);
     returns
 }
 
@@ -574,20 +562,20 @@ impl Stack {
         self.first + word * size_of::<usize>()
     }
 
-    /// Whether any word satisfies `test`.
+    /// Hands each word to `visit`.
     ///
     /// # Safety
     ///
     /// - Every thread of the process but the caller stays suspended for the
     ///   call, as `Threads::suspend` leaves them, so the stack's region stays
     ///   committed and no other thread writes it.
-    unsafe fn any(self, mut test: impl FnMut(usize) -> bool) -> bool {
-        (0..self.words).any(|word| {
+    unsafe fn each(self, mut visit: impl FnMut(usize)) {
+        for word in 0..self.words {
             // SAFETY: `word` is below `words`, so its eight bytes lie in the
             // committed read-write region `at` found, which stays committed
             // and unwritten while every other thread stays suspended.
-            test(unsafe { crate::memory::read_stack_word(self.address(word)) })
-        })
+            visit(unsafe { crate::memory::read_stack_word(self.address(word)) });
+        }
     }
 
     /// Replaces each word for which `new` gives a value.
@@ -615,31 +603,45 @@ impl Stack {
     }
 }
 
-/// Whether a suspended thread stands inside a patched range or holds a
-/// return address into one on its stack.
+/// Marks in `stuck` each patched range a suspended thread stands inside or
+/// holds a return address into on its stack, by the index `returns` pairs
+/// with each address; false when the thread's context does not read.
 ///
 /// # Safety
 ///
 /// - Every thread of the process but the caller, `thread` among them, stays
 ///   suspended for the call, as `Threads::suspend` leaves them.
-unsafe fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize]) -> bool {
+unsafe fn mark(
+    thread: HANDLE,
+    patched: &[(usize, usize)],
+    returns: &[(usize, usize)],
+    stuck: &mut [bool],
+) -> bool {
     let Some(ThreadContext(context)) = control(thread) else {
         return false;
     };
     let rip = usize::try_from(context.Rip).unwrap_or(0);
-    if patched.iter().any(|&(start, end)| start < rip && rip < end) {
-        return true;
+    for (flag, &(start, end)) in stuck.iter_mut().zip(patched) {
+        *flag |= start < rip && rip < end;
     }
-    let (Some(&low), Some(&high)) = (returns.first(), returns.last()) else {
-        return false;
+    let (Some(&(low, _)), Some(&(high, _))) = (returns.first(), returns.last()) else {
+        return true;
     };
-    Stack::at(context.Rsp).is_some_and(|stack| {
+    if let Some(stack) = Stack::at(context.Rsp) {
         // SAFETY: the caller keeps every other thread, the stack's owner
         // among them, suspended for the call.
         unsafe {
-            stack.any(|word| (low..=high).contains(&word) && returns.binary_search(&word).is_ok())
+            stack.each(|word| {
+                if (low..=high).contains(&word)
+                    && let Ok(i) = returns.binary_search_by_key(&word, |&(at, _)| at)
+                    && let Some(flag) = stuck.get_mut(returns[i].1)
+                {
+                    *flag = true;
+                }
+            });
         }
-    })
+    }
+    true
 }
 
 /// Moves a suspended thread standing in replaced bytes into the trampoline,

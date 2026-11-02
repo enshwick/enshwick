@@ -666,7 +666,10 @@ fn write(
         .map(|&(target, _, _)| target)
         .collect();
     // Each round that finds a thread inside a code patch leaves that patch
-    // out, so the rounds end.
+    // out, so the rounds end. Arming settles before each round, since it
+    // logs and so cannot run while the threads stand still; a round that
+    // finds a thread inside writes nothing, so no detour reads it until the
+    // round that writes.
     let committed = loop {
         let (written, writes): (Vec<usize>, Vec<crate::detour::Bytes<'_>>) = patches
             .iter()
@@ -683,15 +686,7 @@ fn write(
             .unzip();
         crate::code::arming(patches, &verdicts, &targets);
         match crate::detour::commit(&hooks, &writes) {
-            Commit::Busy(stuck) => {
-                for i in stuck {
-                    if let Some(&at) = written.get(i) {
-                        verdicts[at] =
-                            Verdict::Skip("a thread stayed inside it through every wait".into());
-                    }
-                }
-                crate::code::skip_with_owner(patches, &mut verdicts);
-            }
+            Commit::Busy(stuck) => leave_out(patches, &mut verdicts, &written, &stuck),
             done => break done,
         }
     };
@@ -714,6 +709,17 @@ fn write(
         }
     }
     verdicts
+}
+
+/// Skips the patches a thread stayed inside, by their index in `written`,
+/// the patches the round tried to write, with the rest of their feature.
+fn leave_out(patches: &[CodePatch], verdicts: &mut [Verdict], written: &[usize], stuck: &[usize]) {
+    for at in stuck.iter().filter_map(|&i| written.get(i)) {
+        if let Some(verdict) = verdicts.get_mut(*at) {
+            *verdict = Verdict::Skip("a thread stayed inside it through every wait".into());
+        }
+    }
+    crate::code::skip_with_feature(patches, verdicts);
 }
 
 /// An entry of a function table for `RtlAddFunctionTable`: offsets from
