@@ -463,9 +463,13 @@ impl Loader {
         self.mods.iter().enumerate().find(|(_, m)| m.id == id)
     }
 
+    /// The mod of handle `me`; the table function it is inside counts
+    /// against it for a reload, whenever it calls.
     fn record(&self, me: ModHandle) -> Option<(ModIndex, &ModRecord)> {
         let index = ModIndex::from_handle(me)?;
-        self.mods.get(index.get()).map(|record| (index, record))
+        let record = self.mods.get(index.get())?;
+        crate::reload::note(index.get());
+        Some((index, record))
     }
 
     /// Turns a mod off: unlinks its hooks and logs why.
@@ -659,9 +663,10 @@ impl Fallback for u64 {
 /// code never unwinds into the mod that called it: the call is refused and
 /// the fault logged.
 fn entry<R: Fallback>(name: &'static str, body: impl FnOnce() -> R) -> R {
-    crate::reload::note(name);
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
-        .unwrap_or_else(|_| entry_fault(name))
+    crate::reload::entered(name, || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
+            .unwrap_or_else(|_| entry_fault(name))
+    })
 }
 
 #[cold]

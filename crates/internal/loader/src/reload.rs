@@ -11,11 +11,13 @@
 //! anything a reload cannot hand over (content, actions, services, patches
 //! and every other registration besides hooks, events, lookups, settings and
 //! logging, and on a client the interface's frame and HUD callbacks and map
-//! markers) is refused with the calls it made; so is a new copy whose
+//! markers), in `init` or at any time after, is refused with the calls it
+//! made; so is a new copy whose
 //! manifest changed beyond its version, or that hooks a function nothing
 //! hooked at start, and on a client a mod the server's join turned off.
 //! Those take a restart.
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -32,10 +34,88 @@ use crate::mod_index::ModIndex;
 /// The folder under `mods/enshwick/` that holds the copies mods run from.
 pub(crate) const COPIES_DIR: &str = "reload";
 
-/// What a mod may have called during `init` and still be reloaded: hooks,
-/// events, lookups, settings and logging, which the loader unlinks or
-/// which keep nothing of the mod.
+/// What a mod may have called, in `init` or after, and still be reloaded:
+/// hooks, events, lookups, settings and logging, which the loader unlinks,
+/// and the queries and one-shot changes that keep nothing of the mod. A call
+/// missing here refuses the reload, so a new call stays out until it is
+/// known to keep nothing.
 const RELOADABLE: &[&str] = &[
+    "account_action",
+    "account_knowledge",
+    "affix_info",
+    "allowlist_has",
+    "allowlist_set",
+    "altars",
+    "apply_buff",
+    "base_limit",
+    "base_zones",
+    "buff_types",
+    "buffs",
+    "build_rights",
+    "call",
+    "chat",
+    "component",
+    "component_write",
+    "destroy",
+    "emit",
+    "entities",
+    "entity_template",
+    "event_types",
+    "find_call",
+    "fog_read",
+    "game_settings",
+    "grant_knowledge",
+    "icons_ready",
+    "item_data_get",
+    "item_data_set",
+    "item_info",
+    "item_lines",
+    "join_missing",
+    "knowledge",
+    "map_frame",
+    "map_marker_types",
+    "map_markers",
+    "net_ready",
+    "net_send",
+    "notify",
+    "player",
+    "players",
+    "quests",
+    "recipe_disabled",
+    "recipe_kind",
+    "remove_buff",
+    "replaced",
+    "revoke_knowledge",
+    "run_console",
+    "run_point",
+    "save_world",
+    "send_event",
+    "server_world",
+    "service",
+    "set_game_settings",
+    "set_label",
+    "set_time_of_day",
+    "set_weather",
+    "spawn",
+    "stat_info",
+    "stat_modify",
+    "stat_sources",
+    "stat_value",
+    "teleport",
+    "terrain_edit",
+    "terrain_materials",
+    "time_of_day",
+    "transaction_commit",
+    "transaction_commit_for",
+    "transaction_entities",
+    "transaction_status",
+    "transaction_undo",
+    "voxel_read",
+    "weather_at",
+    "weather_fronts",
+    "workshop_recipes",
+    "world_key",
+    "world_persists",
     "build",
     "symbol",
     "system",
@@ -110,15 +190,24 @@ fn held(id: &str) -> bool {
     HELD.relock().iter().any(|h| h == id)
 }
 
-/// The mod whose `init` runs now, whose calls are recorded.
+/// The mod whose `init` runs now.
 static INITIALISING: AtomicUsize = AtomicUsize::new(NONE);
+
+thread_local! {
+    /// The table function this thread is inside, which counts against the
+    /// mod whose handle it resolves.
+    static ENTERED: Cell<Option<&'static str>> = const { Cell::new(None) };
+    /// The last call this thread noted, by mod, generation and name, so a
+    /// call a mod repeats each frame skips the lock.
+    static LAST: Cell<(usize, u32, &'static str)> = const { Cell::new((NONE, 0, "")) };
+}
 /// The mod a reload initialises again, whose hooks and events join the
 /// sealed chains and deliveries.
 static REINIT: AtomicUsize = AtomicUsize::new(NONE);
 
 /// Per mod: its reload generation, which its events carry.
 static GENERATIONS: OnceLock<Box<[AtomicU32]>> = OnceLock::new();
-/// Per mod: the table calls it made during `init`.
+/// Per mod: the table calls it made since it was last loaded.
 static CALLS: Mutex<Vec<Vec<&'static str>>> = Mutex::new(Vec::new());
 /// Events reloaded mods subscribed to after the deliveries were sealed.
 static LATE: OnceLock<ArcSwap<Vec<Subscription>>> = OnceLock::new();
@@ -150,7 +239,7 @@ pub(crate) fn prepare(mods: usize) {
     *CALLS.relock() = vec![Vec::new(); mods];
 }
 
-/// Runs `init` of mod `index` with its table calls recorded.
+/// Runs `init` of mod `index`, which [`in_init`] then answers for.
 pub(crate) fn initialising<R>(index: usize, init: impl FnOnce() -> R) -> R {
     INITIALISING.store(index, Ordering::Release);
     let outcome = init();
@@ -158,23 +247,47 @@ pub(crate) fn initialising<R>(index: usize, init: impl FnOnce() -> R) -> R {
     outcome
 }
 
-/// Records that the mod initialising now called the table function `name`.
+/// Runs `body` as the table function `name`; a call nested inside it, as
+/// when one mod's call runs another mod's callback, is its own.
+pub(crate) fn entered<R>(name: &'static str, body: impl FnOnce() -> R) -> R {
+    let outer = ENTERED.replace(Some(name));
+    let outcome = body();
+    ENTERED.set(outer);
+    outcome
+}
+
+/// Records that mod `index` called the table function this thread is in,
+/// while `dev_reload` is on.
 #[inline]
-pub(crate) fn note(name: &'static str) {
-    let index = INITIALISING.load(Ordering::Relaxed);
-    if index != NONE {
-        note_cold(index, name);
+pub(crate) fn note(index: usize) {
+    if WANTED.load(Ordering::Relaxed) {
+        note_cold(index);
     }
 }
 
 #[cold]
-fn note_cold(index: usize, name: &'static str) {
+fn note_cold(index: usize) {
+    let Some(name) = ENTERED.get() else {
+        return;
+    };
+    let key = (index, generation(index), name);
+    if LAST.replace(key) == key {
+        return;
+    }
     let mut calls = CALLS.relock();
     if let Some(calls) = calls.get_mut(index)
         && !calls.contains(&name)
     {
         calls.push(name);
     }
+}
+
+/// The calls among `calls` a reload cannot hand over.
+fn holding<'a>(calls: &'a [&'static str]) -> impl Iterator<Item = &'static str> + 'a {
+    calls
+        .iter()
+        .copied()
+        .filter(|call| !RELOADABLE.contains(call))
 }
 
 /// Whether mod `index` is running its `init` now.
@@ -364,15 +477,9 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, ReloadM
         return Err(ReloadModError::JoinHeld);
     }
     let calls = CALLS.relock().get(index).cloned().unwrap_or_default();
-    let held: Vec<&str> = calls
-        .iter()
-        .copied()
-        .filter(|call| !RELOADABLE.contains(call))
-        .collect();
+    let held: Vec<String> = holding(&calls).map(str::to_owned).collect();
     if !held.is_empty() {
-        return Err(ReloadModError::Holds {
-            calls: held.into_iter().map(str::to_owned).collect(),
-        });
+        return Err(ReloadModError::Holds { calls: held });
     }
     let copy = copy_path(&loader.mods_dir, &mod_.original, mod_.copies + 1)
         .ok_or(ReloadModError::NoPath)?;
@@ -518,6 +625,56 @@ mod tests {
         ] {
             assert!(!RELOADABLE.contains(&call));
         }
+    }
+
+    fn calls_of(index: usize) -> Vec<&'static str> {
+        CALLS.lock().unwrap()[index].clone()
+    }
+
+    #[test]
+    fn a_registration_after_init_holds_the_mod_that_made_it() {
+        prepare(3);
+        configure(true);
+        entered("actions", || note(2));
+        entered("component", || note(1));
+        entered("actions", || note(2));
+        assert_eq!(calls_of(2), ["actions"]);
+        assert_eq!(calls_of(1), ["component"]);
+        assert!(calls_of(0).is_empty());
+        assert_eq!(holding(&calls_of(2)).collect::<Vec<_>>(), ["actions"]);
+        assert_eq!(holding(&calls_of(1)).count(), 0);
+    }
+
+    #[test]
+    fn a_nested_call_counts_as_its_own_and_the_outer_one_resumes() {
+        prepare(2);
+        configure(true);
+        entered("call", || {
+            entered("net_channel", || note(1));
+            note(0);
+        });
+        assert_eq!(calls_of(1), ["net_channel"]);
+        assert_eq!(calls_of(0), ["call"]);
+    }
+
+    #[test]
+    fn a_call_repeated_after_a_reload_counts_for_the_new_copy() {
+        prepare(1);
+        configure(true);
+        entered("actions", || note(0));
+        CALLS.lock().unwrap()[0].clear();
+        GENERATIONS.get().unwrap()[0].fetch_add(1, Ordering::AcqRel);
+        entered("actions", || note(0));
+        assert_eq!(calls_of(0), ["actions"]);
+    }
+
+    #[test]
+    fn nothing_is_noted_without_dev_reload_or_outside_a_table_call() {
+        prepare(1);
+        entered("actions", || note(0));
+        configure(true);
+        note(0);
+        assert!(calls_of(0).is_empty());
     }
 
     #[test]
