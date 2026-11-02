@@ -123,4 +123,3 @@ static-is-registry-fuse-or-state crates/internal/loader/src/watch.rs static WRIT
 static-is-registry-fuse-or-state crates/internal/loader/src/weather.rs static CHUNK_EVENTS: Mutex<Vec<(Event, ChunkData)>> = Mutex::new(Vec::new());
 # The key of the world this process runs; it moves into the worlds
 # domain's state struct.
-static-is-registry-fuse-or-state crates/internal/loader/src/worlds.rs static CURRENT: Mutex<Option<String>> = Mutex::new(None);
