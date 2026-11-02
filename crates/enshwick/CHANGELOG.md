@@ -317,7 +317,7 @@ Each entry names the pull request that made the change.
 - `files::write_atomically` tries the backup and the rename again for
   about 50 ms while another program or writer briefly holds the file, and
   writers of one file at the same time no longer refuse each other's
-  writes (#PR).
+  writes (#900).
 - A poisoned lock's warning names the line that took the lock, not a line
   inside the API (#821).
 - The command file runs no line again when it does not read for a while,
