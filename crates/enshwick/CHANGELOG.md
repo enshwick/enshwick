@@ -367,6 +367,13 @@ Each entry names the pull request that made the change.
   unwind data, so a stack walk or exception passes a frame stopped in one; a
   function whose unwind data cannot be read is still hooked, without it, and
   the loader logs why (#872, #873).
+- A mod whose binary holds declarations that do not read, such as a
+  dependency's built with another enshwick, or damaged ones, gives the
+  loader its manifest without schemas and stays off with the reason: the
+  log, the status report and the Mods screen name the mod and say to
+  rebuild it, in the loader's texts. Before, the loader got no manifest and
+  could not name the mod. `ReadSectionError::Format` no longer gives advice
+  in its message (#906).
 - Dev reload counts every call a mod makes since it loaded, by its own
   handle: a mod that registers actions, channels, filters or other state
   in `ready` or a callback is refused a reload with those calls named,

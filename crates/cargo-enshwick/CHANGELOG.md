@@ -63,6 +63,9 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `cargo enshwick manifest` fails with the reason for a DLL whose
+  declarations do not read, which the loader keeps off; before, it showed
+  the mod as if it worked (#906).
 - `cargo enshwick pin --report` writes the report before the tables, so a
   report that cannot be written leaves every file as it was (#694).
 - `cargo enshwick install` builds a Windows DLL on every host, through
