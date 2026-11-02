@@ -203,8 +203,8 @@ fn sell(item: u32, price: u32) {
 }
 ```
 
-The definer lists the event in `declare_mod!(TradingPost, events: [Sold])`,
-so its manifest carries the event's schema. Other mods take the declaration
+The definer's manifest carries the event's schema, since the event is
+declared without `of`. Other mods take the declaration
 from it: [`cargo enshwick deps`](extending.md#getting-a-points-definition)
 writes it into `src/deps/trading_post.rs`, with the definer's points and
 calls, as `#[enshwick::event(name = "sold", of = trading_post)]`. They

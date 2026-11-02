@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `declare_mod!` and `declare_test_mod!` take no `points`,
+  `events` or `calls` lists. `#[point]`, `#[event]` and `#[call]` without
+  `of` write their schemas through `__schema_entry!` when the crate's mod
+  owns and exports them, and another mod's in a test build only;
+  `__declare_exports!` takes a `__private::Manifested` (#868).
+
 - **Breaking:** `texts!()` refuses an empty text in any language. It takes
   every language rule from `Language::REQUIRED` and names the languages a
   key lacks. Its error for different values lists each language's values.

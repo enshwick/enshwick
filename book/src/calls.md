@@ -16,11 +16,10 @@ several functions stays the way for Rust mods that share a crate.
 
 The server declares the input with
 [`#[call]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/services/calls.rs)
-and the answer's type with `output`. Listed in `declare_mod!` under `calls`,
-the schema goes into the server's DLL. A listed call is for other mods, so
-its name goes into `exports` in the
+and the answer's type with `output`. Its schema goes into the server's DLL.
+Its name goes into `exports` in the
 [manifest](concepts/loader-and-abi.md#what-other-mods-may-use) too, else the
-build fails:
+loader refuses it to callers:
 
 ```toml
 [package.metadata.enshwick]
@@ -48,7 +47,7 @@ impl enshwick::Mod for TradingPost {
     }
 }
 
-enshwick::declare_mod!(TradingPost, calls: [PriceOf]);
+enshwick::declare_mod!(TradingPost);
 ```
 
 - Name it after the serving mod, `<id>:<call>`. The loader refuses other names.

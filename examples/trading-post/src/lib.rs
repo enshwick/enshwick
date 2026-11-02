@@ -143,7 +143,7 @@ impl Mod for TradingPost {
     }
 }
 
-enshwick::declare_mod!(TradingPost, points: [Price], events: [Sold]);
+enshwick::declare_mod!(TradingPost);
 
 #[cfg(test)]
 mod tests {
@@ -165,10 +165,10 @@ mod tests {
 
     #[test]
     fn the_published_schema_is_the_manifest_s() {
-        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-        // `declare_mod!`, which no thread writes.
+        // SAFETY: `enshwick_mod_query` returns the manifest of
+        // `declare_mod!`, valid until its shutdown.
         let manifest = unsafe { &*super::enshwick_mod_query() };
-        // SAFETY: the manifest's static text.
+        // SAFETY: the schema text lives as long as the manifest, until a shutdown no test runs.
         let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
         assert_eq!(text, include_str!("../points.toml"));
     }
