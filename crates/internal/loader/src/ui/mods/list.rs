@@ -48,7 +48,7 @@ fn about(paint: &Painter<'_>, record: &crate::host::ModRecord) {
 /// tools on, features this build lacks, parts a panic turned off, a broken
 /// settings file and discovery off.
 fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
-    if crate::developer_tools::warned(loader) {
+    if loader.developer_tools {
         paint.label(
             crate::developer_tools::warning().as_bytes(),
             UiWidget::STYLE_NEGATIVE,

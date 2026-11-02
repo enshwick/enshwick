@@ -69,7 +69,8 @@ pub(crate) fn lines(developer: Option<String>, motd: &Motd, off: Option<String>)
 #[cfg(windows)]
 #[must_use]
 pub(crate) fn of(loader: &crate::host::Loader) -> Vec<String> {
-    let developer = crate::developer_tools::warned(loader)
+    let developer = loader
+        .developer_tools
         .then(|| crate::developer_tools::warning().to_owned());
     let off = crate::off_line::line(&crate::off_line::names(loader));
     lines(developer, &motd(), off)

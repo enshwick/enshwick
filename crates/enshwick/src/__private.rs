@@ -421,6 +421,11 @@ impl<M> Default for Slot<M> {
     }
 }
 
+/// The end of the loader's line for a mod it turned off, its `MOD_OFF`
+/// code, so the fake host writes the same line; a loader test holds the
+/// two equal.
+pub const MOD_OFF: &str = "E2003, see https://enshwick.com/errors/e2003/";
+
 /// # Safety
 ///
 /// - `api` is null, or points at an aligned [`HostApi`] readable for the size its

@@ -435,7 +435,10 @@ pub(crate) fn refuses_developer(api: *const HostApi, manifest: &crate::abi::Mani
             }
             let reason = crate::mods::DEVELOPER_TOOL_OFF;
             s.faults.push(reason.to_owned());
-            s.logs.push((Level::ERROR, format!("off: {reason}")));
+            s.logs.push((
+                Level::ERROR,
+                format!("off: {reason} ({})", crate::__private::MOD_OFF),
+            ));
             true
         })
 }

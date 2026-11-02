@@ -437,13 +437,12 @@ fn arm_watched(loader: &Loader, frame: Option<FrameSlot>, watching: Option<&mut 
 /// Calls every mod's `init` in load order, putting game code each one
 /// changes outside the API down to it.
 fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching>) {
-    let flags = loader.mods.iter().map(|record| record.manifest.flags);
-    for (index, why) in crate::developer_tools::off(loader.developer_tools, flags) {
-        loader.turn_off(ModIndex::new(index), why);
-    }
     for (index, library) in order.iter().enumerate() {
         let record = &loader.mods[index];
-        if record.off.load(Ordering::Acquire) {
+        if let Some(why) =
+            crate::developer_tools::refused(loader.developer_tools, record.manifest.flags)
+        {
+            loader.turn_off(ModIndex::new(index), why);
             continue;
         }
         // SAFETY: `library.init` is the mod's `INIT` export, typed `InitFn`
