@@ -6,7 +6,7 @@
 //! Every packet carries a cumulative ack and a bitmap of the 64 fragments
 //! after it, so a lost fragment goes again alone. Sizes, the fragments in
 //! flight and the bytes a message gathers are bounded; a peer that stops
-//! acknowledging is given up on. The link reads only the clock it is handed.
+//! speaking is given up on. The link reads only the clock it is handed.
 //!
 //! Each side numbers its stream by an epoch, which only grows, and names
 //! the peer's epoch its acks refer to. A packet from a newer epoch that does
@@ -32,11 +32,14 @@ pub const WINDOW: u32 = 64;
 pub const BACKLOG: u32 = 512;
 /// How long a fragment waits for its ack before it goes again, at first.
 pub const FIRST_TIMEOUT: Duration = Duration::from_millis(200);
-/// The longest wait for an ack, after backing off.
-pub const LAST_TIMEOUT: Duration = Duration::from_secs(2);
-/// How often one fragment goes before the peer counts as gone: about 19
-/// seconds of silence with the timeouts above.
-pub const MAX_TRIES: u8 = 12;
+/// The longest wait for an ack, after backing off: short enough that a
+/// silent spell of [`SILENCE`] takes about 20 tries, which a lossy link
+/// survives.
+pub const LAST_TIMEOUT: Duration = Duration::from_secs(1);
+/// How long a peer may stay silent, while fragments wait for its ack,
+/// before it counts as gone. Any packet that reads counts as speaking, so a
+/// lossy link whose acks still come through now and then stays up.
+pub const SILENCE: Duration = Duration::from_secs(20);
 
 /// Flag: the packet carries a fragment.
 const DATA: u8 = 1;
@@ -105,7 +108,6 @@ struct Outgoing {
     last: bool,
     acked: bool,
     sent: Option<Instant>,
-    tries: u8,
     timeout: Duration,
 }
 
@@ -159,6 +161,10 @@ pub struct Link {
     gathered: Vec<u8>,
     ack_due: bool,
     packet: Vec<u8>,
+    /// A packet that read came since the last poll.
+    spoke: bool,
+    /// When the peer last spoke, or nothing waited for it, by the polls.
+    heard: Option<Instant>,
     /// How often the link started over because the peer did.
     restarts: u32,
 }
@@ -197,6 +203,8 @@ impl Link {
             ack_due: false,
             packet: Vec::with_capacity(packet),
             restarts: 0,
+            spoke: false,
+            heard: None,
         })
     }
 
@@ -266,7 +274,6 @@ impl Link {
             slot.last = index + 1 == count;
             slot.acked = false;
             slot.sent = None;
-            slot.tries = 0;
             slot.timeout = FIRST_TIMEOUT;
             self.next += 1;
         }
@@ -320,6 +327,7 @@ impl Link {
                 self.theirs = Some(head.epoch);
             }
         }
+        self.spoke = true;
         if mine {
             self.acknowledged(head.ack, head.acks);
         }
@@ -362,8 +370,9 @@ impl Link {
     /// Hands `transmit` the packets due at `now`, at most `budget`: new and
     /// timed-out fragments within the window, then an ack when one is owed
     /// and no fragment carried it. `transmit` answers false when it could
-    /// not send, which leaves that packet due and ends the poll. False once a
-    /// fragment went [`MAX_TRIES`] times unacknowledged: the peer is gone.
+    /// not send, which leaves that packet due and ends the poll. False once
+    /// the peer stayed silent for [`SILENCE`] while fragments waited for its
+    /// ack: the peer is gone.
     ///
     /// # Examples
     ///
@@ -374,6 +383,14 @@ impl Link {
         budget: usize,
         mut transmit: impl FnMut(&[u8]) -> bool,
     ) -> bool {
+        if self.spoke || self.is_idle() {
+            self.spoke = false;
+            self.heard = Some(now);
+        }
+        let heard = *self.heard.get_or_insert(now);
+        if now.saturating_duration_since(heard) >= SILENCE {
+            return false;
+        }
         let (ack, acks) = self.acks();
         let yours = self.theirs.unwrap_or(0);
         let end = self.next.min(self.base.saturating_add(WINDOW));
@@ -390,9 +407,6 @@ impl Link {
             {
                 continue;
             }
-            if slot.tries == MAX_TRIES {
-                return false;
-            }
             let head = Head {
                 version: LINK,
                 epoch: self.epoch,
@@ -408,7 +422,6 @@ impl Link {
             if slot.sent.is_some() {
                 slot.timeout = (slot.timeout * 2).min(LAST_TIMEOUT);
             }
-            slot.tries += 1;
             slot.sent = Some(now);
             sent += 1;
             self.ack_due = false;
