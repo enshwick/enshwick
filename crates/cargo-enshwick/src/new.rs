@@ -392,8 +392,9 @@ const README: &str = "# {id}
 An Enshrouded mod built on [Enshwick](https://github.com/enshwick/enshwick).
 
 `cargo enshwick install --game <game folder>` builds it and copies it into the
-game's `mods/{id}/` folder. Its settings are `mod-configs/{id}.toml`, written on first
-start; its log is `logs/enshwick/mods/{id}.log`.
+game's `mods/{id}/` folder. Each world keeps its settings in
+`<stem>-mod-settings/{id}/settings.toml` beside its save, written as the world loads; its
+log is `logs/enshwick/mods/{id}.log`.
 ";
 
 #[cfg(test)]

@@ -1,7 +1,6 @@
 //! The server's `enshwick` rules, asked over the Steam query protocol and
 //! read.
 
-use std::collections::BTreeMap;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
 
@@ -135,102 +134,6 @@ pub fn mods_complete(reply: &[u8]) -> bool {
         .and_then(|count| count.parse::<usize>().ok())
         .is_none_or(|count| entries(&mod_rules_value(reply)).count() >= count)
 }
-
-/// The join values a server advertises for mod `id` across its rules, `None`
-/// when it advertises none.
-///
-/// # Examples
-///
-/// ```
-/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
-/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
-/// #     for (key, value) in rules {
-/// #         reply.extend_from_slice(key.as_bytes());
-/// #         reply.push(0);
-/// #         reply.extend_from_slice(value.as_bytes());
-/// #         reply.push(0);
-/// #     }
-/// #     reply
-/// # }
-/// use enshwick_loader::join::sync_value;
-///
-/// let reply = reply(&[("enshwick.sync.you.trading-post", "{ cost_multiplier = 2 }")]);
-/// assert_eq!(sync_value(&reply, "you.trading-post").as_deref(), Some("{ cost_multiplier = 2 }"));
-/// ```
-#[must_use]
-pub fn sync_value(reply: &[u8], id: &str) -> Option<String> {
-    let base = format!("{}.{id}", crate::advertise::RULE_SYNC);
-    let value: String = (0..crate::advertise::SYNC_RULES)
-        .map_while(|i| rule(reply, &crate::advertise::part_name(&base, i)))
-        .collect();
-    (!value.is_empty()).then_some(value)
-}
-
-/// The join values a server advertises for each of the mods `ids`.
-///
-/// # Examples
-///
-/// ```
-/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
-/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
-/// #     for (key, value) in rules {
-/// #         reply.extend_from_slice(key.as_bytes());
-/// #         reply.push(0);
-/// #         reply.extend_from_slice(value.as_bytes());
-/// #         reply.push(0);
-/// #     }
-/// #     reply
-/// # }
-/// use enshwick_loader::join::server_values;
-///
-/// let reply = reply(&[("enshwick.sync.you.trading-post", "{ cost_multiplier = 2 }")]);
-/// let values = server_values(&reply, ["you.trading-post", "camera"]);
-/// assert_eq!(values.len(), 1);
-/// ```
-#[must_use]
-pub fn server_values<'a>(
-    reply: &[u8],
-    ids: impl IntoIterator<Item = &'a str>,
-) -> BTreeMap<String, String> {
-    ids.into_iter()
-        .filter_map(|id| Some((id.to_owned(), sync_value(reply, id)?)))
-        .collect()
-}
-
-/// The mods whose join values change on joining a server with `incoming`, from
-/// each mod's id (empty for a mod that does not join) and the server values it
-/// runs with now.
-///
-/// The mod's index and the values it runs with next, `None` for its settings
-/// file's.
-///
-/// # Examples
-///
-/// ```
-/// use std::collections::BTreeMap;
-///
-/// use enshwick_loader::join::changes;
-///
-/// let incoming = BTreeMap::from([("you.trading-post".to_owned(), "{ cost_multiplier = 2 }".to_owned())]);
-/// let changed = changes([("you.trading-post", None), ("", None)], &incoming);
-/// assert_eq!(changed, [(0, Some("{ cost_multiplier = 2 }".to_owned()))]);
-/// ```
-#[must_use]
-pub fn changes<'a>(
-    current: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
-    incoming: &BTreeMap<String, String>,
-) -> Vec<(usize, Option<String>)> {
-    current
-        .into_iter()
-        .enumerate()
-        .filter(|(_, (id, _))| !id.is_empty())
-        .filter_map(|(index, (id, held))| {
-            let next = incoming.get(id).map(String::as_str);
-            (next != held).then(|| (index, next.map(str::to_owned)))
-        })
-        .collect()
-}
-
 /// The value of `key` in an `A2S_RULES` reply.
 ///
 /// # Examples
@@ -508,45 +411,6 @@ mod tests {
             }
         }
         reply
-    }
-
-    #[test]
-    fn join_values_are_read_across_rules_per_mod() {
-        let advertised = crate::advertise::sync_rules("count", &"x".repeat(200)).unwrap();
-        let mut rules: Vec<(&str, &str)> = advertised
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-        rules.push(("enshwick.sync.zones", "{ a = 1 }"));
-        rules.push(("enshwick.sync.gone", ""));
-        let reply = reply(&rules);
-        assert_eq!(sync_value(&reply, "count"), Some("x".repeat(200)));
-        assert_eq!(sync_value(&reply, "gone"), None);
-        assert_eq!(sync_value(&reply, "missing"), None);
-        assert_eq!(
-            server_values(&reply, ["zones", "gone", "other"]),
-            BTreeMap::from([("zones".to_owned(), "{ a = 1 }".to_owned())])
-        );
-    }
-
-    #[test]
-    fn only_mods_whose_join_values_change_are_told() {
-        let incoming = BTreeMap::from([
-            ("a".to_owned(), "{ x = 1 }".to_owned()),
-            ("b".to_owned(), "{ y = 2 }".to_owned()),
-        ]);
-        let current = [
-            ("a", Some("{ x = 1 }")),
-            ("b", None),
-            ("c", Some("{ z = 3 }")),
-            ("", None),
-            ("d", None),
-        ];
-        assert_eq!(
-            changes(current, &incoming),
-            [(1, Some("{ y = 2 }".to_owned())), (2, None)]
-        );
-        assert!(changes([("a", None)], &BTreeMap::new()).is_empty());
     }
 
     #[test]

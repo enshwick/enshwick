@@ -57,7 +57,7 @@ pub enum PackSide {
 #[non_exhaustive]
 pub struct PackManifest {
     /// The pack id, `<author>.<name>` like a mod's; it names the folder, the
-    /// namespace of the pack's content and its texts override file.
+    /// namespace of the pack's content and its settings folder in each world.
     pub id: String,
     /// Its SemVer version.
     pub version: String,

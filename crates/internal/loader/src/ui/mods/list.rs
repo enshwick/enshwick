@@ -8,6 +8,7 @@ use super::MODS_PER_PAGE;
 use crate::host::Loader;
 use crate::listing::Listing;
 use crate::locks::Relock;
+use crate::mods_screen;
 use crate::texts;
 use crate::ui::{Painter, actions};
 
@@ -107,6 +108,16 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         done = Listed::Actions(None);
     }
     loader_notes(loader, paint);
+    let world = crate::worlds::running();
+    let away = mods.iter().any(|m| m.server_values.relock().is_some());
+    if !world && !away && mods.iter().any(|m| !m.settings_files.relock().is_empty()) {
+        paint.label(
+            texts::text("mods.settings.in-world").as_bytes(),
+            UiWidget::STYLE_SECONDARY,
+            true,
+            false,
+        );
+    }
     let listing = listing(paint, MODS_PER_PAGE);
     *first = listing.clamp_first(*first, mods.len());
     let shown = listing.shown(*first, mods.len());
@@ -134,17 +145,14 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             done = Listed::Actions(Some(record.id.clone()));
         }
         let settings = record
-            .schema
-            .relock()
-            .as_ref()
+            .settings_schema()
             .is_some_and(|s| !s.fields.is_empty());
-        if settings {
-            if paint.button(texts::text("mods.settings").as_bytes(), true) {
-                done = Listed::Settings(index);
-            }
-        } else {
-            let note = texts::fill("mods.settings.file", &[("id", &record.id)]);
-            paint.label(note.as_bytes(), UiWidget::STYLE_SECONDARY, false, false);
+        let sent = record.server_values.relock().is_some();
+        if settings
+            && mods_screen::gear(world, sent)
+            && paint.button(texts::text("mods.settings").as_bytes(), true)
+        {
+            done = Listed::Settings(index);
         }
     }
     let beside = crate::others::loaded(&loader.others);

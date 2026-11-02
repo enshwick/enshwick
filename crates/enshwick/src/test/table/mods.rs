@@ -138,23 +138,20 @@ pub(crate) extern "system" fn config_schema(
     _me: ModHandle,
     file: Str,
     schema: Str,
-    template: Str,
+    _template: Str,
 ) -> Status {
-    // SAFETY: the mod passes texts valid for the call.
-    let (Some(file), Some(text), Some(_)) =
-        (unsafe { (file.as_str(), schema.as_str(), template.as_str()) })
-    else {
-        return Status::BAD_ARGS;
-    };
-    if !crate::config::__file_name(file) || crate::config::Schema::parse(text).is_err() {
+    let (file, text) = (text(file), text(schema));
+    if !crate::config::__file_name(&file) || crate::config::Schema::parse(&text).is_err() {
         return Status::BAD_ARGS;
     }
     with(Status::REFUSED, |s| {
-        match s.config_schemas.get(file) {
-            Some(known) if known != text => return Status::REFUSED,
-            _ => {}
+        if s.config_schemas
+            .get(&file)
+            .is_some_and(|known| *known != text)
+        {
+            return Status::REFUSED;
         }
-        s.config_schemas.insert(file.to_owned(), text.to_owned());
+        s.config_schemas.insert(file, text);
         Status::OK
     })
 }

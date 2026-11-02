@@ -74,7 +74,7 @@ pub(super) fn server_settings(
                 texts,
                 language: texts::language(),
             });
-            *rows = rows::rows(&heard_schema, &text, None, words);
+            *rows = rows::rows(&heard_schema, &text, words);
             if !admin {
                 mods_screen::lock_to_server(rows);
             }

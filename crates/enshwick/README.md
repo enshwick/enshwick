@@ -42,17 +42,22 @@ impl Default for Settings {
     }
 }
 
+static EXTRA: AtomicU8 = AtomicU8::new(0);
+
 struct Hello;
 
 impl enshwick::Mod for Hello {
     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-        let settings: Settings = load.config()?;
-        let extra = settings.extra_altars;
-        load.on_altar_limit(move |limit| limit.allowed = limit.allowed.saturating_add(extra))?;
-        enshwick::info!("{extra} more altars per Flame level");
+        // Each world's settings arrive as it loads; the hook reads them.
+        load.on_settings(|settings: &Settings| EXTRA.store(settings.extra_altars, Relaxed))?;
+        load.on_altar_limit(|limit| {
+            limit.allowed = limit.allowed.saturating_add(EXTRA.load(Relaxed));
+        })?;
         Ok(Self)
     }
 }
+
+use std::sync::atomic::{AtomicU8, Ordering::Relaxed};
 
 enshwick::declare_mod!(Hello);
 ```

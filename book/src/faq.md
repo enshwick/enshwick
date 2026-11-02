@@ -131,7 +131,7 @@ The mod's log has `off: <reason>` at `warn`, then the loader's
 | ------------------------------------------------------ | ---------------------------------------------------------------------- |
 | `symbol quest.reward: missing on this game build`      | Neither the mod nor the loader pins the symbol for this build          |
 | `constant ecs.context_row: missing on this game build` | The same for an engine constant                                        |
-| `settings: <parse error>`                              | `mod-configs/<id>.toml` does not parse into the settings type          |
+| `settings.toml: <reason>; the default applies`         | A value in the world's settings file does not read; its default runs   |
 | `hook REWARD: refused by the loader`                   | Another mod holds the function exclusively, or the mod hooked it twice |
 | `service <name> v<major>: <reason>`                    | No running mod publishes it, or its table lacks or changed a field     |
 

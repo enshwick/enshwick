@@ -944,10 +944,11 @@ typedef struct EnshwickEntityPlace {
 // Something the loader tells subscribed mods about, with
 // `HostApi::subscribe`.
 typedef uint32_t EnshwickEvent;
-// The mod's settings changed: its file on disk, a setting set by
-// the console or the Mods screen, or a client's join values; no data. The
-// thread is not fixed: a loader thread about a second after a file
-// edit, the thread that made any other change.
+// The mod's settings changed while a world runs: its file on disk, a
+// setting set by the console or the Mods screen, or the values the
+// server of another's world sent; no data. The thread is not fixed: a
+// loader thread about a second after a file edit, the thread that made
+// any other change.
 #define EnshwickEvent_SETTINGS_CHANGED 1
 // The loader's settings changed, log levels among them; no data. Raised
 // on a loader thread.
@@ -1015,10 +1016,11 @@ typedef uint32_t EnshwickEvent;
 // entities are gone; data is a `ChunkData`. Raised on the game thread
 // after the step. Server only.
 #define EnshwickEvent_CHUNK_UNLOADED 18
-// The settings a mod reads were replaced whole, as a world loads in this
-// process (its own settings from then on) or stops (the settings file
-// again); no data. The settings that wait for a start apply too.
-// Raised on the server's game thread.
+// The settings a mod reads were replaced whole: a world loaded in this
+// process (its settings from then on) or stopped (the defaults again),
+// or on a client the server of another's world sent its settings or the
+// client left it; no data. Raised on the game thread as a world loads
+// or stops, else on the thread that took the server's message.
 #define EnshwickEvent_SETTINGS_REPLACED 19
 // A player died, from a hit, a fall, the shroud or drowning; data is a
 // `PlayerDeathData`. Raised on the game thread after the step.

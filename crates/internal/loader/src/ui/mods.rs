@@ -1,11 +1,12 @@
 //! The Mods screen: a "Mods" entry in the title screen's main menu and in the
 //! pause menu, beside Settings, opens a screen of the loader's own that lists
-//! the mods. Each mod's Settings button opens its settings as the game's
-//! settings rows, built from the schema the mod handed the loader: each
-//! player's own, then the world's. In a world this process runs those are
-//! the world's; in the main menu, the defaults of new worlds. Joined to
-//! another's server, the server's settings of the mod are a page of their
-//! own, which only its administrators change.
+//! the mods. In a world this process runs, each mod's Settings button opens
+//! that world's settings of the mod as the game's settings rows, built from
+//! the schema the mod handed the loader. In another's world the button shows
+//! the values its server sent, read-only, and the server's settings of the
+//! mod are a page of their own, which only its administrators change. In the
+//! main menu there is no button: settings belong to each world, and the
+//! screen says so once.
 //!
 //! The entries are drawn from two hooks inside the menus' drawing: in the
 //! main menu before its Credits entry, in the pause menu right after its
@@ -17,9 +18,8 @@
 //!
 //! A change is written at once, as the game applies its own settings rows:
 //! checked against the schema and by the mod, written with the file's
-//! comments kept, and the mod told. While the client is joined to a server
-//! that sets a mod's join values, those rows show the server's values and
-//! take no changes.
+//! comments kept, and the mod told; it applies when the world loads again,
+//! or at once for a mod that follows changes.
 //!
 //! Long lists scroll in the game's own scroll area, and a text setting
 //! takes typed text in the game's own text field, set on Enter; typing left
@@ -543,15 +543,7 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
                 );
                 return Next::Stay;
             }
-            match settings(
-                loader,
-                paint,
-                *index,
-                first,
-                rows,
-                entries,
-                place.world || place.away,
-            ) {
+            match settings(loader, paint, *index, first, rows, entries, place.world) {
                 Some(message) => {
                     *rows = page_rows(loader, *index, *place);
                     Next::Message(message)
@@ -611,17 +603,11 @@ fn place(from: u8, joined: bool) -> mods_screen::Place {
     mods_screen::Place::new(from == FROM_PAUSE, crate::worlds::running(), joined)
 }
 
-/// The id of mod `index` when the joined server at `place` keeps its world
-/// settings on a page of its own.
+/// The id of mod `index` when the joined server at `place` keeps its
+/// settings on a page of its own, which its administrators change.
 fn server_id(loader: &Loader, index: usize, place: mods_screen::Place) -> Option<String> {
     let record = loader.mods.get(index)?;
-    (place.joined
-        && record
-            .schema
-            .relock()
-            .as_ref()
-            .is_some_and(mods_screen::has_world_settings))
-    .then(|| record.id.clone())
+    (place.joined && !record.settings_files.relock().is_empty()).then(|| record.id.clone())
 }
 
 /// Frames between two looks at whether the joined server takes messages,

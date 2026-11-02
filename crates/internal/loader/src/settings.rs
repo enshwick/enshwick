@@ -17,7 +17,7 @@ pub const JOIN_HELLO_SECONDS: u32 = 30;
 pub const JOIN_NOTE_SECONDS: u32 = 10;
 
 /// Enshwick loader settings.
-#[enshwick::config(default)]
+#[enshwick::config]
 #[derive(Debug, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,

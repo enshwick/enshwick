@@ -14,8 +14,9 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 - `new <id>` creates a mod crate for the id `<author>.<name>` in
   `<dir>/<name>` (`--dir`, default the current folder) for `--side server`,
   `client` or `both`. The crate has a toolchain file, build flags, lints,
-  texts and tests. It builds and loads as it is: settings in
-  `mod-configs/<id>.toml`, a line in `logs/enshwick/mods/<id>.log`. It pins
+  texts and tests. It builds and loads as it is: settings in each world's
+  `<stem>-mod-settings/<id>/settings.toml`, a line in
+  `logs/enshwick/mods/<id>.log`. It pins
   the `enshwick` release the tool was built with; `--enshwick-rev <commit>`
   takes a commit of this repository's `main` branch from git instead.
   Inside a Cargo workspace the crate joins it: its folder goes into the

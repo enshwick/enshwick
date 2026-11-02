@@ -126,8 +126,8 @@ A key the table does not take, a side, an id or an alias that is wrong fails
 the build with its name. A changed `Cargo.toml` rebuilds the mod.
 
 - `id` is `<author>.<name>`, each part of `[a-z0-9-]`, at most 64 characters
-  in all. It names the mod in logs, its settings file `mod-configs/<id>.toml`
-  and its data folder `<stem>-mod-data/<id>` in each world, and is the namespace of its content,
+  in all. It names the mod in logs, and its settings folder
+  `<stem>-mod-settings/<id>` and data folder `<stem>-mod-data/<id>` in each world, and is the namespace of its content,
   stats, points, services and events (`you.trading-post:prices`). An invalid
   id fails the build; `enshwick` is the loader's own and is refused.
 - `side`: see [Sides and hosting](sides-and-hosting.md).

@@ -67,7 +67,6 @@ pub(crate) use runtime::{discovery_on, host_runs_enshwick, poll, register};
 #[cfg(windows)]
 mod runtime {
     use core::ffi::{CStr, c_char, c_void};
-    use std::collections::BTreeMap;
     use std::ffi::CString;
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -365,7 +364,7 @@ mod runtime {
             "joining a game hosted with Enshwick {version}: mods {host}"
         );
         crate::net::joining(false);
-        crate::host::apply_join_values(&BTreeMap::new());
+        crate::host::forget_server_values();
         let ours = crate::advertise::mod_list(&crate::host::join_mods());
         let names = crate::join::names();
         let (turn_off, note) = super::plan(&host, &ours, &names);

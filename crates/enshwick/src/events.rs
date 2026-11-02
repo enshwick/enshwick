@@ -214,8 +214,8 @@ macro_rules! with_data {
 
 without_data! {
     /// [`Event::SETTINGS_CHANGED`], on no fixed thread;
-    /// [`Load::on_config_change`](crate::Load::on_config_change) re-reads the
-    /// settings for you.
+    /// [`Load::on_settings_change`](crate::Load::on_settings_change) re-reads
+    /// the settings for you.
     SettingsChanged = SETTINGS_CHANGED;
     /// [`Event::LOADER_SETTINGS_CHANGED`].
     LoaderSettingsChanged = LOADER_SETTINGS_CHANGED;
@@ -233,8 +233,8 @@ without_data! {
     DayStarted = DAY_STARTED;
     /// [`Event::NIGHT_STARTED`].
     NightStarted = NIGHT_STARTED;
-    /// [`Event::SETTINGS_REPLACED`]; [`Load::on_config_change`](crate::Load::on_config_change)
-    /// re-reads the settings for you, the ones that wait for a start too.
+    /// [`Event::SETTINGS_REPLACED`]; [`Load::on_settings`](crate::Load::on_settings)
+    /// re-reads the settings for you.
     SettingsReplaced = SETTINGS_REPLACED;
 }
 

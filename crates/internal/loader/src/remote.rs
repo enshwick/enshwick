@@ -1,5 +1,7 @@
-//! Mod settings across the wire: a server pushes changed join values to the
-//! clients joined to it, and an administrator's client reads and changes a
+//! Mod settings across the wire, between a server and its joined clients.
+//!
+//! A server sends its world's settings to each client that joins it and
+//! again after a change, and an administrator's client reads and changes a
 //! dedicated server's settings from its Mods screen.
 //!
 //! The messages ride the loader's control frames. The server decides
@@ -52,11 +54,12 @@ pub const QUERY_BURST: f64 = 8.0;
 /// A message between a client's loader and its server's.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Message {
-    /// The server's new join values of mod `id`, an inline TOML table.
+    /// The server's settings of mod `id`, every file seen as one, as TOML,
+    /// without a secret.
     Sync {
         /// The mod.
         id: String,
-        /// Its join values.
+        /// Its settings.
         values: String,
     },
     /// A client asks for mod `id`'s settings.
@@ -64,9 +67,8 @@ pub enum Message {
         /// The mod.
         id: String,
     },
-    /// The server's settings of mod `id`, with its schema without secret
-    /// fields: the whole file without them for an administrator, the join
-    /// values alone for anyone else. For an empty `id`, the mods with
+    /// The server's settings of mod `id`, every file seen as one, with its
+    /// schema, both without secret fields. For an empty `id`, the mods with
     /// settings, a line `id<TAB>name` each.
     Snapshot {
         /// The mod.
@@ -343,18 +345,6 @@ pub fn redacted(schema: &Schema, text: &str) -> String {
     doc.to_string()
 }
 
-/// The join values `values`, an inline table, as a settings text.
-#[must_use]
-pub fn values_text(values: &str) -> String {
-    format!("v = {values}")
-        .parse::<toml::Table>()
-        .ok()
-        .and_then(|mut t| t.remove("v"))
-        .and_then(|v| v.as_table().cloned())
-        .and_then(|t| toml::to_string(&t).ok())
-        .unwrap_or_default()
-}
-
 /// Why a remote change is refused before it reaches the settings file.
 ///
 /// # Errors
@@ -466,7 +456,7 @@ impl Queries {
     }
 }
 
-/// One [`Message::Sync`] per mod of `values`, its join values by mod id.
+/// One [`Message::Sync`] per mod of `values`, its settings by mod id.
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "messages go out only in the game")

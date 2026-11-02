@@ -7,7 +7,7 @@ use std::time::Instant;
 use enshwick::abi::PlayerInfo;
 use enshwick::config::Schema;
 
-use super::{AdmitEditError, Gate, Message, Queries, admit, redacted, texts, values_text};
+use super::{AdmitEditError, Gate, Message, Queries, admit, redacted, texts};
 use crate::host::Loader;
 
 /// When each player last changed a setting.
@@ -55,7 +55,8 @@ pub(crate) fn forget() {
     heard.result = None;
 }
 
-/// Pushes mod `id`'s new join values to every client that runs Enshwick.
+/// Pushes mod `id`'s settings, every file seen as one without a secret, to
+/// every client that runs Enshwick.
 pub(crate) fn push_sync(id: &str, values: &str) {
     crate::net::broadcast_control(&Message::Sync {
         id: id.to_owned(),
@@ -63,11 +64,20 @@ pub(crate) fn push_sync(id: &str, values: &str) {
     });
 }
 
-/// Sends the client of `key`, which just said hello, the join values
-/// of every running join mod: the values it read before it joined may
-/// be older, and a hosted game advertises none.
+/// Sends the client of `key`, which just said hello, the settings of every
+/// running join mod, without a secret: the client plays this world with
+/// them.
 pub(crate) fn sync_to(key: u64) -> bool {
-    super::sync_messages(crate::host::join_values())
+    let Some(loader) = crate::host::loader() else {
+        return true;
+    };
+    let values = loader
+        .mods
+        .iter()
+        .filter(|m| m.joins())
+        .filter_map(|m| Some((m.id.clone(), crate::worlds::sent_view(m)?)))
+        .collect();
+    super::sync_messages(values)
         .iter()
         .all(|message| crate::net::to_player(key, message))
 }
@@ -152,8 +162,8 @@ fn answer(loader: &Loader, key: u64, message: Message) {
             for record in loader
                 .mods
                 .iter()
-                .filter(|m| m.schema.relock().is_some())
-                .filter(|m| admin || m.synced.relock().is_some())
+                .filter(|m| !m.settings_files.relock().is_empty())
+                .filter(|m| admin || m.joins())
             {
                 text.push_str(&record.id);
                 text.push('\t');
@@ -215,26 +225,16 @@ pub(crate) fn forget_player(key: u64) {
     }
 }
 
-/// Sends mod `id`'s settings to the client of `key`: the file without
-/// secrets for an administrator, the join values for anyone else.
+/// Sends mod `id`'s settings to the client of `key`, without secrets: to
+/// change for an administrator, to read for anyone else.
 fn snapshot(loader: &Loader, key: u64, id: &str, admin: bool) {
     let Some((_, record)) = loader.find_mod(id) else {
         return;
     };
-    let Some(schema) = record.schema.relock().clone() else {
+    let Some(schema) = record.settings_schema() else {
         return;
     };
-    let text = if admin {
-        let file = crate::worlds::show_text(loader, record);
-        redacted(&schema, &file)
-    } else {
-        record
-            .synced
-            .relock()
-            .clone()
-            .map(|values| values_text(&values))
-            .unwrap_or_default()
-    };
+    let text = redacted(&schema, &crate::worlds::show_text(record));
     let mut shown = schema.clone();
     shown.fields.retain(|f| !f.secret);
     let mut message = Message::Snapshot {
@@ -260,7 +260,10 @@ fn snapshot(loader: &Loader, key: u64, id: &str, admin: bool) {
             key,
             &Message::Result {
                 ok: false,
-                text: texts::fill("remote.too-long", &[("id", id)]),
+                text: texts::fill(
+                    "remote.too-long",
+                    &[("id", id), ("file", &format!("{id}/settings.toml"))],
+                ),
             },
         );
         return;
@@ -280,9 +283,7 @@ fn edit(
         .find_mod(id)
         .ok_or_else(|| EditSettingError::UnknownMod { id: id.to_owned() })?;
     let schema = record
-        .schema
-        .relock()
-        .clone()
+        .settings_schema()
         .ok_or_else(|| EditSettingError::NoSchema { id: id.to_owned() })?;
     let now = Instant::now();
     {

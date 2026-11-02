@@ -1,6 +1,5 @@
-//! The mods a server's join needs, and the join values it applies to a client.
+//! The mods a server's join needs, and the settings it sends a client.
 
-use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 
@@ -40,27 +39,9 @@ pub(crate) fn join_mods_off() -> Vec<String> {
     })
 }
 
-/// The join values of the running join mods, by id, as their settings files
-/// hold them.
-pub(crate) fn join_values() -> BTreeMap<String, String> {
-    let Some(loader) = loader() else {
-        return BTreeMap::new();
-    };
-    loader
-        .mods
-        .iter()
-        .filter(|m| m.joins())
-        .filter_map(|m| Some((m.id.clone(), m.synced.relock().clone()?)))
-        .collect()
-}
-
-/// On a client joining a server: makes `values`, the server's join values by
-/// mod id, the ones each join mod runs with, and raises
-/// [`Event::SETTINGS_CHANGED`] for every mod whose values change, so its
-/// handler reads its settings again. A mod the server sends none for runs
-/// with its file's.
-/// On a client, takes the joined server's new join values of mod `id`, which
-/// it pushed after a change, and tells the mod.
+/// On a client in another's world, takes `values`, the settings its server
+/// sent for mod `id`, every file seen as one: the mod reads them as the
+/// world's the first time, and as a change after.
 pub(crate) fn apply_server_value(id: &str, values: &str) {
     // A hosting client's own server: its file's values are the server's.
     let Some(loader) = loader().filter(|_| !crate::world::hosting()) else {
@@ -74,23 +55,45 @@ pub(crate) fn apply_server_value(id: &str, values: &str) {
     else {
         return;
     };
-    let now = Some(values.to_owned());
-    {
-        let mut held = record.server_synced.relock();
-        if *held == now {
+    let first = {
+        let mut held = record.server_values.relock();
+        if held.as_deref() == Some(values) {
             return;
         }
-        held.clone_from(&now);
-    }
+        held.replace(values.to_owned()).is_none()
+    };
+    let (line, event) = if first {
+        ("the server's settings apply", Event::SETTINGS_REPLACED)
+    } else {
+        ("the server changed its settings", Event::SETTINGS_CHANGED)
+    };
     crate::log::write(
         Level::INFO,
         &record.id,
-        &format!("the server changed its join values: {}", shown(values)),
+        &format!("{line}: {}", shown(values)),
     );
-    loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
+    loader.emit(event, Some(index), core::ptr::null());
 }
 
-/// Join values a server sent, as a log line shows them: on one line, cut
+/// On a client leaving another's world or joining one: forgets every value a
+/// server sent, and each mod that had some runs on its defaults again.
+pub(crate) fn forget_server_values() {
+    let Some(loader) = loader() else {
+        return;
+    };
+    for (index, record) in loader.mods.iter().enumerate() {
+        if record.server_values.relock().take().is_some() {
+            crate::log::write(
+                Level::INFO,
+                &record.id,
+                "the server's settings no longer apply",
+            );
+            loader.emit(Event::SETTINGS_REPLACED, Some(index), core::ptr::null());
+        }
+    }
+}
+
+/// Settings a server sent, as a log line shows them: on one line, cut
 /// at [`SHOWN_VALUES`] characters, so a server writes no lines of its own
 /// into the log.
 pub(crate) fn shown(values: &str) -> String {
@@ -108,50 +111,8 @@ pub(crate) fn shown(values: &str) -> String {
     shown
 }
 
-/// The most characters of a server's join values a log line shows.
+/// The most characters of a server's settings a log line shows.
 pub(crate) const SHOWN_VALUES: usize = 512;
-
-pub(crate) fn apply_join_values(values: &BTreeMap<String, String>) {
-    let Some(loader) = loader() else {
-        return;
-    };
-    let current: Vec<(String, Option<String>)> = loader
-        .mods
-        .iter()
-        .map(|m| {
-            let held = m.server_synced.relock().clone();
-            (
-                if m.joins() {
-                    m.id.clone()
-                } else {
-                    String::new()
-                },
-                held,
-            )
-        })
-        .collect();
-    let changes = crate::join::changes(
-        current
-            .iter()
-            .map(|(id, held)| (id.as_str(), held.as_deref())),
-        values,
-    );
-    for (index, now) in changes {
-        let Some(record) = loader.mods.get(index) else {
-            continue;
-        };
-        {
-            let mut held = record.server_synced.relock();
-            held.clone_from(&now);
-        }
-        let line = match &now {
-            Some(values) => format!("the server's join values apply: {}", shown(values)),
-            None => "the settings file's join values apply again".to_owned(),
-        };
-        crate::log::write(Level::INFO, &record.id, &line);
-        loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
-    }
-}
 
 /// The server's join mods the last refused join found missing.
 pub(crate) static JOIN_MISSING: Mutex<Vec<Missing>> = Mutex::new(Vec::new());

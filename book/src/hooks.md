@@ -217,7 +217,7 @@ enshwick::declare_mod!(MyMod);
 mod's hooks and handlers instead.
 
 State that changes while the game runs, such as settings applied by
-`on_config_change`, goes in atomics or an `ArcSwap` instead; see
+`on_settings`, goes in atomics or an `ArcSwap` instead; see
 [Code in the game's frame](game-frame.md).
 
 ## Panics

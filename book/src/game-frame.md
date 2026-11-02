@@ -61,7 +61,7 @@ or swapped whole:
 - `std::sync::OnceLock` for what `init` resolves once, such as function
   pointers and offsets;
 - an `ArcSwap` from the `arc-swap` crate for a table that changes as a whole,
-  such as settings applied by `on_config_change`: readers load it without a
+  such as settings applied by `on_settings`: readers load it without a
   lock, the writer stores a new one.
 
 [`enshwick-better-altars`](https://github.com/enshwick/mods/blob/main/better-altars/src/count.rs)

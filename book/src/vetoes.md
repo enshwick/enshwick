@@ -54,7 +54,7 @@ build. Keep it quick: no allocation, no lock, no log, and no world reads,
 which belong on the game thread. The server's answer decides. A client that
 runs the mod too shows the cursor as not allowed, so give the same answer on
 both sides: base it on what both know, the item and the place, or on
-[join values](settings.md#join-values) the server shares. A client without the
+[settings](settings.md#on-a-joined-server) the server sends. A client without the
 mod shows the placement as allowed, and the server places nothing.
 
 ## Interactions

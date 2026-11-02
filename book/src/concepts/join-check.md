@@ -17,18 +17,18 @@ running join mods (the ones that are on):
 - `[mods: 6]`, the count of its join mods, at the end of the server's Steam
   name, so players see in the server browser that it runs mods;
 - the Steam rule `enshwick`: the fingerprint, eight hex digits over the loader
-  version, every `id@version` and every mod's join values;
+  version and every `id@version`;
 - `enshwick.mods`, `enshwick.mods.1`, ...: the mods, `id@version`, sorted and
   split to fit Steam's rule length; a [data pack](../content/packs.md)'s
   version carries the hash of its files, `lanterns@1.0.0+3f2a9c1e`;
-- `enshwick.sync.<id>`: a mod's join values, as an inline TOML table;
 - `enshwick.page.<id>`: a mod's homepage, where a player who lacks it gets
   it;
 - `enshwick.name.<id>`: a mod's name, so a client's notes name a mod it lacks
   as players know it.
 
 The loader sets the name and rules again now and then, since the game sets its
-name once at start and the join values may change with the settings.
+name once at start. The rules carry no settings: the server sends them to
+each player once the player joined ([Settings](#settings)).
 
 ## Games a client hosts
 
@@ -39,9 +39,9 @@ lobby's data: `enshwick`, the loader version, and `enshwick.mods`, the running
 join mods as `id@version,...`.
 
 A friend's modded client that enters such a lobby compares the lists. The
-host's join values follow over the loader's messages once the friend's game
-has connected, as on a dedicated server, until then the friend's own values
-apply. The check is weaker than a dedicated server's, since the game has
+host's settings follow over the loader's messages once the friend's game has
+connected, as on a dedicated server; until then the friend's mods run on
+their defaults. The check is weaker than a dedicated server's, since the game has
 already chosen to join when the client reads the lobby:
 
 - **The host does not run some of the player's join mods.** They are turned
@@ -51,7 +51,7 @@ already chosen to join when the client reads the lobby:
   raised. The host's own check then removes the player, as a dedicated server
   does.
 - **The host runs no Enshwick**, or a lobby without the keys. Nothing is
-  checked and the client keeps its own values, since the client cannot tell
+  checked and the client's mods run on their defaults, since the client cannot tell
   such a host from a dedicated server, whose check already ran.
 
 ## What a player sees
@@ -109,12 +109,12 @@ every other player.
 The check keeps games with different mods apart; it does not stop cheating. A
 game that lies about its mods passes it.
 
-## Join values
+## Settings
 
-A field of a mod's settings marked `#[config(sync)]` is a join value: the
-server advertises it, it counts in the fingerprint, and a joining client runs
-with the server's value over its own file, which stays as it is. See
-[Settings](../settings.md).
+Once a player's game has connected and said hello, the server sends it every
+setting of its join mods, without a `secret`, and again after each change.
+The player's mods run on those values for that world, and the player's game
+never writes them to disk. See [Settings](../settings.md#on-a-joined-server).
 
 ## Mods the player lacks
 

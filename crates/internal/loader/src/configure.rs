@@ -5,7 +5,7 @@
 //! The answer and the file edit are pure logic here; the console runs the
 //! line, writes the file and raises the mod's settings event.
 
-use enshwick::config::{Field, Kind, Schema, Stage};
+use enshwick::config::{Field, Kind, Schema};
 use toml_edit::DocumentMut;
 
 use crate::texts;
@@ -53,28 +53,6 @@ fn current(text: &str, field: &Field) -> String {
         .ok()
         .and_then(|table| enshwick::config::value_at(&table, &field.key).map(ToString::to_string))
         .unwrap_or_else(|| field.default.clone())
-}
-
-/// The stage as the field's attribute names it, such as `startup, sync`.
-fn stage_name(field: &Field) -> &'static str {
-    if field.synced {
-        "startup, sync"
-    } else {
-        field.stage.name()
-    }
-}
-
-/// How a setting's stage reads in a list.
-fn stage_note(field: &Field) -> String {
-    let key = match field.stage {
-        Stage::Startup if field.synced => "stage.startup-sync",
-        Stage::Startup => "stage.startup",
-        Stage::Restart => "stage.restart",
-        Stage::Client => "stage.client",
-        Stage::Sync => "stage.sync",
-        _ => "stage.runtime",
-    };
-    texts::fill(key, &[])
 }
 
 /// What `field` accepts, in the game's language: `1 to 16`, `at least 0`,
@@ -153,11 +131,10 @@ pub fn list(id: &str, schema: &Schema, text: &str) -> String {
     let mut lines = vec![texts::fill("config.list", &[("id", id)])];
     lines.extend(schema.fields.iter().map(|field| {
         format!(
-            "{} = {} ({}; {})",
+            "{} = {} ({})",
             field.key,
             current(text, field),
-            accepts(field),
-            stage_note(field)
+            accepts(field)
         )
     }));
     lines.join("\n")
@@ -191,14 +168,7 @@ pub fn get(id: &str, schema: &Schema, text: &str, key: &str) -> Result<String, F
     if !field.doc.is_empty() {
         lines.push(field.doc.clone());
     }
-    lines.push(texts::fill(
-        "config.takes",
-        &[
-            ("accepts", &accepts(field)),
-            ("stage", &stage_note(field)),
-            ("name", stage_name(field)),
-        ],
-    ));
+    lines.push(texts::fill("config.takes", &[("accepts", &accepts(field))]));
     Ok(lines.join("\n"))
 }
 
@@ -259,14 +229,8 @@ fn typed(field: &Field, value: &str) -> Result<toml_edit::Value, ChangeSettingEr
 pub struct Change {
     /// The settings file with the new value, comments kept.
     pub text: String,
-    /// The setting's stage.
-    pub stage: Stage,
-    /// A `startup` setting joined players take from the server.
-    pub synced: bool,
     /// The value as written.
     pub value: String,
-    /// Where it was written.
-    pub destination: crate::worlds::Destination,
 }
 
 /// Sets `key` to `value` in the settings file `text`, checked against
@@ -309,10 +273,7 @@ pub fn set(
     };
     Ok(Change {
         text: doc.to_string(),
-        stage: field.stage,
-        synced: field.synced,
         value,
-        destination: crate::worlds::Destination::Global,
     })
 }
 
@@ -441,10 +402,10 @@ impl ChangeSettingError {
             Self::Find(error) => error.reply(),
             Self::Secret { key } => texts::fill("remote.secret", &[("key", key)]),
             Self::Toml { id, source } => {
-                texts::fill("refused.toml", &[("id", id), ("error", source.message())])
+                texts::fill("refused.toml", &[("file", id), ("error", source.message())])
             }
             Self::Unwritable { id, key } => {
-                texts::fill("refused.toml", &[("id", id), ("error", key)])
+                texts::fill("refused.toml", &[("file", id), ("error", key)])
             }
             Self::BadValue { field, value } => texts::fill(
                 "config.bad-value",
@@ -466,21 +427,14 @@ impl ChangeSettingError {
     }
 }
 
-/// The reply to a change of `id`'s `key`, on a game server or not.
+/// The reply to a change of `id`'s `key`: saved for the world, applied when
+/// it loads again.
 #[must_use]
 pub fn changed(id: &str, key: &str, change: &Change) -> String {
-    use crate::worlds::Destination;
-    let args = [("id", id), ("key", key), ("value", change.value.as_str())];
-    match (&change.destination, change.stage) {
-        (Destination::Next, _) => texts::fill("change.next", &args),
-        (Destination::NewWorlds, _) => texts::fill("change.new-worlds", &args),
-        (_, Stage::Startup) if change.synced => texts::fill("change.startup-sync", &args),
-        (_, Stage::Startup) => texts::fill("change.startup", &args),
-        (_, Stage::Restart) => texts::fill("change.restart", &args),
-        (_, Stage::Sync) => texts::fill("change.sync", &args),
-        (_, Stage::Client) => texts::fill("change.client", &args),
-        _ => texts::fill("change.runtime", &args),
-    }
+    texts::fill(
+        "change.saved",
+        &[("id", id), ("key", key), ("value", change.value.as_str())],
+    )
 }
 
 #[cfg(test)]
@@ -492,14 +446,14 @@ mod tests {
             "Safe settings.",
             "config",
             vec![
-                Field::new("limit", Stage::Startup, &4)
+                Field::new("limit", &4)
                     .with_range(Some(1.0), Some(16.0))
                     .with_doc("How many stalls a player may own.", ""),
-                Field::new("radius", Stage::Runtime, &8.5),
-                Field::new("language", Stage::Runtime, "en").with_choices(&["en", "uk"]),
-                Field::new("note", Stage::Client, "hi"),
-                Field::new("token", Stage::Runtime, "").with_secret(true),
-                Field::new("shared", Stage::Runtime, "letmein").with_secret(true),
+                Field::new("radius", &8.5),
+                Field::new("language", "en").with_choices(&["en", "uk"]),
+                Field::new("note", "hi"),
+                Field::new("token", "").with_secret(true),
+                Field::new("shared", "letmein").with_secret(true),
             ],
         )
     }
@@ -600,16 +554,11 @@ mod tests {
     }
 
     #[test]
-    fn lists_and_gets_show_values_ranges_and_stages() {
+    fn lists_and_gets_show_values_and_ranges() {
         let text = list("you.trading-post", &schema(), FILE);
-        assert!(
-            text.contains("limit = 4 (1 to 16; when the world loads)"),
-            "{text}"
-        );
-        assert!(
-            text.contains("language = \"en\" (one of \"en\", \"uk\"; the world's, applied live)")
-        );
-        assert!(text.contains("note = \"hi\" (text in quotes; each player's own)"));
+        assert!(text.contains("limit = 4 (1 to 16)"), "{text}");
+        assert!(text.contains("language = \"en\" (one of \"en\", \"uk\")"));
+        assert!(text.contains("note = \"hi\" (text in quotes)"));
         let one = get("you.trading-post", &schema(), FILE, "limit").unwrap();
         assert!(one.starts_with("you.trading-post limit = 4 (default 4)\nHow many stalls"));
         assert!(
@@ -617,57 +566,6 @@ mod tests {
                 .unwrap_err()
                 .reply()
                 .contains("it has limit")
-        );
-    }
-
-    #[test]
-    fn a_startup_sync_setting_says_joined_players_get_it_when_the_world_loads() {
-        let schema = Schema::new(
-            "",
-            "config",
-            vec![Field::new("rule", Stage::Startup, &true).with_synced(true)],
-        );
-        let text = list("rules", &schema, "rule = true\n");
-        assert!(
-            text.contains(
-                "rule = true (true or false; when the world loads, joined players get it)"
-            ),
-            "{text}"
-        );
-        let one = get("rules", &schema, "rule = true\n", "rule").unwrap();
-        assert!(one.contains("(startup, sync)"), "{one}");
-        let change = set("rules", &schema, "rule = true\n", "rule", "false").unwrap();
-        assert!(change.synced);
-        assert!(
-            changed("rules", "rule", &change).contains("joined players get it then"),
-            "{}",
-            changed("rules", "rule", &change)
-        );
-    }
-
-    #[test]
-    fn a_world_setting_changed_with_no_world_says_it_is_for_new_worlds() {
-        let schema = Schema::new(
-            "",
-            "config",
-            vec![Field::new("rule", Stage::Runtime, &true)],
-        );
-        let mut change = set("rules", &schema, "rule = true\n", "rule", "false").unwrap();
-        change.destination = crate::worlds::Destination::NewWorlds;
-        assert_eq!(
-            changed("rules", "rule", &change),
-            texts::fill(
-                "change.new-worlds",
-                &[("id", "rules"), ("key", "rule"), ("value", "false")]
-            )
-        );
-        change.destination = crate::worlds::Destination::World("w".into());
-        assert_ne!(
-            changed("rules", "rule", &change),
-            texts::fill(
-                "change.new-worlds",
-                &[("id", "rules"), ("key", "rule"), ("value", "false")]
-            )
         );
     }
 
@@ -697,7 +595,6 @@ mod tests {
     #[test]
     fn a_change_is_checked_and_keeps_the_comments() {
         let change = set("you.trading-post", &schema(), FILE, "limit", "6").unwrap();
-        assert_eq!(change.stage, Stage::Startup);
         assert!(
             change.text.contains("# How many.\nlimit = 6 # four\n"),
             "{}",
@@ -732,8 +629,7 @@ mod tests {
             .unwrap_err()
             .reply();
         assert!(
-            broken
-                .starts_with("Not changed: mod-configs/you.trading-post.toml is not valid TOML: ")
+            broken.starts_with("Not changed: you.trading-post is not valid TOML: ")
                 && broken.len() > 55,
             "{broken}"
         );
@@ -747,11 +643,7 @@ mod tests {
 
     #[test]
     fn a_grouped_setting_is_set_in_its_table() {
-        let schema = Schema::new(
-            "",
-            "config",
-            vec![Field::new("comfort.multiplier", Stage::Runtime, &1.0)],
-        );
+        let schema = Schema::new("", "config", vec![Field::new("comfort.multiplier", &1.0)]);
         let change = set(
             "you.rates",
             &schema,
@@ -769,10 +661,7 @@ mod tests {
         let schema = Schema::new(
             "",
             "config",
-            vec![
-                Field::new("per_level", Stage::Startup, &[2, 4, 8])
-                    .with_range(Some(1.0), Some(32.0)),
-            ],
+            vec![Field::new("per_level", &[2, 4, 8]).with_range(Some(1.0), Some(32.0))],
         );
         let file = "# Altars.\nper_level = [2, 4, 8]\n";
         let change = set("you.altars", &schema, file, "per_level[1]", "12").unwrap();

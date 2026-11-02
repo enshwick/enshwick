@@ -436,7 +436,7 @@ pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::config`](crate::Load::config).
+/// The safe layer wraps it in [`Load::on_settings`](crate::Load::on_settings).
 pub type ConfigCheckFn =
     unsafe extern "system" fn(text: Str, why: *mut Str, user: *mut c_void) -> Status;
 

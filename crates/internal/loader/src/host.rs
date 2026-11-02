@@ -25,8 +25,8 @@ mod memory;
 pub(crate) use api::API;
 pub(crate) use entries::mods::{CheckSettingsError, check_settings};
 pub(crate) use join::{
-    apply_join_values, apply_server_value, join_mods, join_mods_off, join_values,
-    report_join_missing, turn_off_mod,
+    apply_server_value, forget_server_values, join_mods, join_mods_off, report_join_missing,
+    turn_off_mod,
 };
 pub(crate) use memory::{find, slice};
 
@@ -55,16 +55,13 @@ pub(crate) struct ModRecord {
     pub(crate) waiting: AtomicBool,
     /// The settings texts handed to the mod.
     pub(crate) settings: Kept,
-    /// The join values the mod last reported, as its settings file holds them.
-    pub(crate) synced: Mutex<Option<String>>,
-    /// On a client, the joined server's join values for the mod.
-    pub(crate) server_synced: Mutex<Option<String>>,
-    /// The texts `sync` handed to the mod.
-    pub(crate) sync_out: Kept,
-    /// The settings schema the mod handed the loader.
-    pub(crate) schema: Mutex<Option<enshwick::config::Schema>>,
-    /// The mod's check of new settings texts: callback and pointer.
-    pub(crate) check: OnceLock<(api_frame::ConfigCheckFn, usize)>,
+    /// On a client in another's world, the settings its server sent for the
+    /// mod, every file seen as one.
+    pub(crate) server_values: Mutex<Option<String>>,
+    /// The settings files the mod declared, in the order it declared them.
+    pub(crate) settings_files: Mutex<Vec<crate::worlds::SettingsFile>>,
+    /// The mod's checks of new settings texts, by file: callback and pointer.
+    pub(crate) checks: Mutex<Vec<(String, api_frame::ConfigCheckFn, usize)>>,
     /// The texts the mod handed the loader, for its settings' labels.
     pub(crate) texts: Mutex<Option<enshwick::i18n::Texts>>,
     /// Whether it is a data pack, a folder of data the loader runs.
@@ -74,6 +71,12 @@ pub(crate) struct ModRecord {
 }
 
 impl ModRecord {
+    /// Its settings files seen as one, as the console and the Mods screen
+    /// show them; `None` for a mod without settings.
+    pub(crate) fn settings_schema(&self) -> Option<enshwick::config::Schema> {
+        crate::worlds::view_schema(&self.settings_files.relock())
+    }
+
     /// Its folder in `mods/`, which holds its installation hold.
     pub(crate) fn folder(&self) -> &str {
         let file = self.file.strip_prefix("mods/").unwrap_or(&self.file);

@@ -1,25 +1,27 @@
 # Settings
 
-A mod's settings live in `mod-configs/<id>.toml` beside the game. The loader
-writes the file from the mod's defaults on first start. The mod reads it
-during `init`, through a typed `#[enshwick::config]` struct or plain serde
-over a defaults string.
+A mod's settings belong to each world, beside its save in
+`<stem>-mod-settings/<id>/`, one file per settings type. The loader writes the
+files from the mod's types as the world loads, and the mod gets the values
+then.
 
-## Typed settings
+## Declare settings
 
 Put `#[enshwick::config]` on a struct with named fields that implements
-`Default`, and call
-[`load.config()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs).
-The attribute derives serde's `Deserialize` and `Serialize` through the API,
-so the mod needs no serde of its own, and derives `enshwick::Config`:
+`Default`. The attribute derives serde's `Deserialize` and `Serialize`
+through the API, so the mod needs no serde of its own, and derives
+`enshwick::Config`. Every field has its default: a key the file lacks reads
+from `Default`.
 
 ```rust
+use enshwick::config::Config;
+
 /// Furniture comfort settings.
 #[enshwick::config]
 #[derive(Debug)]
 struct Settings {
     /// Comfort each piece of furniture gives inside a base, times this factor.
-    #[config(runtime, range = 0.0..=100.0)]
+    #[config(range = 0.0..=100.0)]
     multiplier: f32,
 }
 
@@ -29,11 +31,8 @@ impl Default for Settings {
     }
 }
 
-fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let settings: Settings = load.config()?;
-    enshwick::info!("furniture comfort x{}", settings.multiplier);
-    Ok(())
-}
+assert_eq!(Settings::FILE, "settings");
+assert!(Settings::template().contains("multiplier = 2.0"));
 ```
 
 The file a player sees is written from the type:
@@ -52,58 +51,60 @@ For the struct above the file reads:
 multiplier = 2.0
 ```
 
-`Settings::template()` returns that text, so a unit test can check that the
-defaults parse.
+A key the struct does not name is refused by the console and the Mods screen
+with its name, so a misspelt setting never passes unread.
 
-A key the struct does not name is refused with its name, so a misspelt
-setting never passes unread. `#[enshwick::config(default)]` fills the keys a
-file leaves out from `Default`.
+## Several files
 
-Every read checks each field's `range` and `choices` (below), then
-`#[enshwick::config(validate = path)]`, a `fn(&Self) -> Result<(), E>` for checks of
-your own, `E` any `Display` such as a `String`. A refusal is a `ConfigError`:
-`Parse` for text that does not fit the type, `Value` for a field out of its
-range or choices, `Invalid` for your own check. At init it turns the mod off
-with the message, such as `settings: multiplier is 0 to 100`; at run time it
-skips the changed file.
+A mod with more than one settings type names a file for each with
+`#[enshwick::config(file = "name")]`: lowercase letters, digits, `-` and `_`,
+without `.toml`. A type without `file` writes `settings.toml`. Two types of
+one mod with the same file turn the mod off with a message naming the file.
 
-## Stages, ranges and texts
+```rust
+use enshwick::config::Config;
 
-Each field says when a change takes effect, which values it takes and how a
-settings menu names it:
+/// Altar rules.
+#[enshwick::config(file = "altars")]
+#[derive(Default)]
+struct Altars {
+    /// Altars allowed at each Flame level.
+    #[config(range = 1..=64)]
+    per_level: Vec<u8>,
+}
+
+assert_eq!(Altars::FILE, "altars");
+```
+
+The console and the Mods screen show a mod's files as one: the fields of
+`settings.toml` by their keys, those of another file under its name, such as
+`altars.per_level`.
+
+## Field attributes
 
 | Attribute        | Meaning                                                                                                                          |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `startup`        | Read when a world loads; `on_config_change` gets the world's values, and a change waits for the next load                        |
-| `restart`        | Read once as the game starts, for every world; a change waits for the next start. For what only `init` can set up                |
-| `runtime`        | The default: applied while the game runs, through `on_config_change`                                                             |
-| `client`         | Each player's own: never sent to or taken from a server; the console of a dedicated server leaves it alone                       |
-| `sync`           | The server's value: a joined client runs with it ([Join values](#join-values))                                                   |
-| `startup, sync`  | Read when a world loads, as `startup`; a joined client runs with the server's value, the same while the world runs               |
 | `range = a..=b`  | Numbers from `a` to `b`, each element of a list of numbers too; `a..` and `..=b` leave one end open. Constants work              |
 | `choices = [..]` | One of these values; any type serde writes, such as an enum's variants                                                           |
 | `text = "key"`   | The key of the field's label in the mod's [texts](content/texts.md), `config.<field>` by default; its description is `<key>.doc` |
-| `secret`         | A value such as a password: never sent to a client, and changed in the file only; never with `sync`                              |
+| `first = n`      | For a list, the number its first element shows with on the Mods screen, 1 by default                                             |
+| `secret`         | A value such as a password: never shown, sent to a client, changed in game or logged                                            |
 | `group`          | On a field that is a `Config` of its own: a table of the file; see [Groups](#groups)                                             |
 
-A number outside its range in the settings file, a list's element too, is
-held to the range when the file is read, with a warning naming the key and
-the value in the mod's log; the console and the Mods screen refuse it.
-
-A field takes one stage, or the pair `startup, sync`; any other two fail the
-build. On the struct,
-`#[enshwick::config(text = "key")]` names the key of the set's title, `config` by
-default. The field's doc comment is its English description wherever no
+On the struct, `#[enshwick::config(text = "key")]` names the key of the
+set's title, `config` by default, and `validate = path` names a
+`fn(&Self) -> Result<(), E>` for checks of your own, `E` any `Display` such
+as a `String`. The field's doc comment is its English description wherever no
 translation exists.
 
 ```rust
-use enshwick::config::{Config, Stage};
+use enshwick::config::Config;
 
 /// Locker settings.
 #[enshwick::config]
 struct Settings {
     /// The locker costs the wooden chest's ingredients times this.
-    #[config(startup, range = 1..=100)]
+    #[config(range = 1..=100)]
     cost_multiplier: u32,
     /// When the locker opens for administrators.
     #[config(choices = ["never", "always"])]
@@ -118,9 +119,7 @@ impl Default for Settings {
 
 let schema = Settings::schema();
 let cost = schema.field("cost_multiplier").ok_or("no field")?;
-assert_eq!(cost.stage, Stage::Startup);
 assert_eq!(cost.accepts(), "1 to 100");
-assert!(Settings::template().contains("# Takes effect when the world loads."));
 # Ok::<(), &str>(())
 ```
 
@@ -128,16 +127,16 @@ assert!(Settings::template().contains("# Takes effect when the world loads."));
 
 A field marked `group` holds settings of their own, written as a table of the
 file and shown together on the Mods screen, each row's label after the
-group's title. Its fields keep their own stages, ranges and texts; the
-console and the Mods screen name them by dotted keys, such as
-`comfort.multiplier`, and their text keys are `config.comfort.multiplier`
-by default. The group's own title is `config.comfort`.
+group's title. Its fields keep their own ranges and texts; the console and
+the Mods screen name them by dotted keys, such as `comfort.multiplier`, and
+their text keys are `config.comfort.multiplier` by default. The group's own
+title is `config.comfort`.
 
 ```rust
 use enshwick::config::Config;
 
 /// Comfort rules.
-#[enshwick::config(default)]
+#[enshwick::config]
 #[derive(Default)]
 struct Comfort {
     /// Comfort per piece of furniture, times this factor.
@@ -146,11 +145,11 @@ struct Comfort {
 }
 
 /// Rates of the game.
-#[enshwick::config(default)]
+#[enshwick::config]
 #[derive(Default)]
 struct Rates {
     /// Recipes cost this many times their price.
-    #[config(startup, range = 1..=5)]
+    #[config(range = 1..=5)]
     cost: u32,
     /// How furniture adds comfort.
     #[config(group)]
@@ -161,157 +160,14 @@ assert!(Rates::template().contains("# How furniture adds comfort.\n[comfort]\n")
 assert!(Rates::schema().field("comfort.multiplier").is_some());
 ```
 
-## Settings per world
+## When a mod gets its settings
 
-A setting lives in one of two places, its scope, which its stage decides and
-the schema states (`Field::scope`, `Scope`):
-
-| Scope   | Stages                       | Where                                                                     |
-| ------- | ---------------------------- | ------------------------------------------------------------------------- |
-| `user`  | `client`, `restart`          | the settings file `mod-configs/<id>.toml`, every world                    |
-| `world` | `startup`, `runtime`, `sync` | `<stem>-mod-settings/<id>/settings.toml`, beside the world's save         |
-
-The settings file is also the template: a world that loads for the first time
-in single player, hosted or on a dedicated server gets a copy of it as its
-own settings, never inside the game's save. While a world runs in the
-process, a mod reads that world's settings with its own `client` settings
-over them; with no world, as in the main menu, the template. A mod reads its
-settings as before: when a world loads or stops, the loader raises
-[`Event::SETTINGS_REPLACED`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs),
-and `on_config_change` gets the world's settings, its `startup` values too:
-they apply when the world loads, with no restart of the game, so a mod applies
-them in its handler: a recipe added with `add_recipe_with` and rebuilt, drops
-replaced with `loot::replace_drops`, a flag behind a hook linked whatever the
-value. A value only `init` can use, such as hooks it links or not, or content
-whose shape it fixes, is a `restart` value instead: the handler always gets
-the one the game started with, and the settings file holds it for every
-world.
-
-A newer version of a mod that adds a setting finds it at its template value
-in each world. A change to a world setting while a game client runs no
-world, as from the main menu, goes into the settings file: worlds made from
-then on start with it, and a world that has its own file keeps its values.
-On a dedicated server before its world loads, the change waits in
-`mod-configs/<id>.next.toml` and goes into that world as it loads.
-
-While a world runs, the loader watches its settings file as it watches the
-settings file, and an edit reaches `on_config_change` about a second after it
-is saved. An edit of the settings file then changes only the `client`
-settings the mod reads, and the mod's log says where the world's settings
-are.
-
-## The schema and the console
-
-[`Config::schema()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/config.rs)
-describes every field: key, stage, scope, type, default, range, choices, doc
-comment and text key. `load.config()` hands it to the loader, which keeps it
-for the process; it is the description the loader's screens build on, and
-what the loader checks values against before it writes them.
-
-Players and administrators change settings on the Mods screen. The server's
-[console](chat.md#the-console), such as the server's
-[command file](chat.md#the-command-file), reads and
-changes them too:
-
-| Line                                  | Answer                                                                           |
-| ------------------------------------- | -------------------------------------------------------------------------------- |
-| `enshwick config`                     | the mods that describe their settings                                            |
-| `enshwick config <mod>`               | each setting with its value, what it takes and where and when a change applies   |
-| `enshwick config <mod> <key>`         | one setting with its default and description                                     |
-| `enshwick config <mod> <key> <value>` | checks the value and writes it to the running world's settings, comments kept    |
-
-On a dedicated server, `enshwick config` edits the world it runs; before its
-world loads, the change waits for it. A key names one element of a list with
-its index, `per_level[2]`, and a grouped setting with its dotted key,
-`comfort.multiplier`.
-
-A mod's Settings button on the Mods screen opens its settings page: each
-player's own settings under "Your settings", then the world's. In a world
-this process runs, single player or hosted, those are the world's ("This
-world"); in the main menu they are the settings new worlds start with ("New
-worlds"). The game's own world settings show no mod rows. Every row is the
-game's own, built from the schema: a toggle for `bool`, a slider for a number with a range (in stops
-for whole numbers up to 32 values), a slider per element for a list of up to
-16 numbers with a range (numbered from 1, or from the field's `first = n`,
-and labelled by the mod's text `<key>.element`, `{n}` standing for the
-number, such as `Flame level {n}`), a dropdown for `choices`, and the value with the
-file's name for the rest (text, longer lists, tables, numbers without a
-range). A list's length changes in the file. In another's world, a hosted
-game or a server, the page shows the world settings the server sends at
-join, read-only, with the server's values once it sent them; when the server
-runs Enshwick, its "Server settings" button opens the server's settings of
-the mod, which its administrators change. The screen that creates a world
-offers no mod settings: set them in the main menu under "New worlds" first.
-
-Rows speak the player's language through the mod's
-[texts](content/texts.md), which `load.texts` hands the loader: the label is
-the field's text key (`config.<field>` or its `text`), the description under
-it `<key>.doc`, a choice `<key>.<choice>`; without a text, the label is the
-key in words and the description the doc comment. `startup` rows say "when the
-world loads": they apply when the world loads again; `restart` rows say "when
-the game starts again". A change is
-written at once, as the game applies its own settings.
-
-On the settings page a text setting shows the game's own text field, and its value goes through the same
-checks as any other change. A text longer than 256 bytes, and any text on a
-game build where the loader cannot draw the text field, shows as a line with
-the file's name instead. A `secret` shows only its mark, never its value.
-
-On a client joined to a dedicated server, an administrator changes the
-server's settings from the Mods screen. The server checks the permission on
-its own record of the player, runs the same checks as the console, writes its
-world's settings, and answers with the outcome and the new values. Other
-players see the join values only, without changes. Fields marked `secret`
-never leave the server, and a player changes at most a few settings a
-second. What a player clicks for each of these is in
-[Change a mod's settings](https://enshwick.com/guides/change-mod-settings/).
-
-Before anything writes, the loader runs the mod's own check: `load.config()`
-hands it over, and it parses what the mod would read and runs the type's
-`validate`; a refusal keeps the file and shows its reason. A `validate` that
-returns `ConfigError::text("config.too-few", &[("min", "2")])` names a text
-of the mod's [texts](content/texts.md): each player reads it in their own
-language, with `{min}` filled in. A `String` reason shows as written.
-
-A value is TOML (`5`, `true`, `"text"`, `[1, 2]`); text settings also take
-plain words. After a write the loader raises the mod's settings event at once:
-`runtime` and `sync` values apply through `on_config_change` (joined players
-get `sync` values at once), `startup` values apply when the world loads
-again, and `restart` values, written to the settings file, when the game
-starts again. `client` values are refused on a dedicated server.
-
-The loader never rewrites a settings file for a new version of a mod. A
-version that renames or changes a setting reads the old key or value itself.
-
-A file that does not parse turns the mod off at init with serde's message; so
-does a misspelt key. Use `#[enshwick::config(default)]` if a file written by
-an older version of the mod, without a newer key, should still load.
-
-[`enshwick-game-rates`](https://github.com/enshwick/mods/tree/main/game-rates)
-reads this setting as `multiplier` in its `[comfort]` group, beside its recipe rates.
-
-## Changes while the game runs
-
-[`load.on_config_change(|settings: Settings| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
-applies an edited file without a restart:
-
-- the loader looks at every settings file once a second, so the handler runs
-  about a second after the file changes;
-- it also runs at once after the console or the Mods screen changes a setting,
-  and as a world loads or stops;
-- its thread is not fixed: the settings watcher for an edited file, the thread
-  that made the change for the console or the Mods screen, the game thread as a
-  world loads or stops;
-- the file is parsed and validated first. A file that no longer parses or
-  validates is logged as skipped, the handler is not called, and the running
-  values stay;
-- after the handler returns, the mod's log says `settings reloaded`.
-
-Register the handler during `init`, like every subscription.
-
-A hook can run on a game thread at the moment the handler replaces a value,
-so keep what hooks read in atomics, or swapped whole in an
-[`ArcSwap`](https://docs.rs/arc-swap). Never hold a lock a hook also takes.
+[`load.on_settings(|settings: &Settings| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load/settings.rs)
+calls the handler with the defaults at once, during `init`, and again with
+the world's values each time a world loads, before
+[`WorldLoaded`](events.md). When the world stops, the handler gets the
+defaults again. A mod has one code path: it runs on whatever the handler
+last stored.
 
 ```rust
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -328,86 +184,142 @@ struct Settings {
 static MULTIPLIER: AtomicU32 = AtomicU32::new(0);
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.apply_config(|settings: &Settings| {
+    load.on_settings(|settings: &Settings| {
         MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
-    })?;
-    Ok(())
+    })
 }
 ```
 
-`apply_config` runs the closure now and after every change, then returns
-the settings it read. The mod writes those lines once instead of after
-`config` and again in `on_config_change`.
+A change to a world's settings applies at the next load of the world: on a
+dedicated server, when the server starts again; on a client, when the world
+loads again. A mod whose values may change while the world runs registers
+[`load.on_settings_change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load/settings.rs)
+instead. Its handler also runs about a second after a person saves the file,
+at once after the console or the Mods screen changes a value, and when the
+server of another's world sends new values. Its thread is not fixed.
 
+Settings never change what a mod registers in `init`. Install hooks, add
+content and change game data there whatever the settings say, and let the
+handler set the values they read: a staff's charges applied to each item,
+not baked into the item; a hook that checks a flag, not a hook linked or
+not. This holds in single player, in a hosted game and on a dedicated
+server, and it is why a client that registered its content before it knew
+the server's values agrees with the server.
+
+A hook can run on a game thread at the moment the handler replaces a value,
+so keep what hooks read in atomics, or swapped whole in an
+[`ArcSwap`](https://docs.rs/arc-swap). Never hold a lock a hook also takes.
 A table too large for an atomic goes into an `ArcSwap` in the mod's state, as
 [`enshwick-better-altars`](https://github.com/enshwick/mods/blob/main/better-altars/src/count.rs)
 does with its altar table.
 
-## Join values
+## How a world's file is kept
 
-Some values must be equal on the server and its players, such as a table the
-client's interface also reads. Mark such a field `#[config(sync)]`:
+As each world loads, for every settings type of every mod that runs:
 
-```rust
-use enshwick::config::Config;
+- a missing file is written from the defaults with the doc comments;
+- a file that exists gets the keys the type added, at their defaults with
+  their comments, and loses the keys the type no longer has. Before the
+  first change the loader copies the file to `<file>.toml.bak`, one backup
+  replaced each time. Each key added or removed is one line in the mod's log,
+  such as `settings.toml: removed colour, which you.lockers 1.2.0 does not
+  have`;
+- the comment lines right above each key are refreshed from the type's doc
+  comments. Values, comments at the end of a line, and comment lines a blank
+  line apart from the key stay.
 
-/// Altar settings.
-#[enshwick::config]
-#[derive(Default)]
-struct Settings {
-    /// Altars allowed at each Flame level. A joined player runs with the
-    /// server's table.
-    #[config(sync)]
-    altars: Vec<u8>,
-    /// Log every placed altar; this side's own business.
-    verbose: bool,
-}
+The loader never renames a key. A mod that renames a key gets the new key at
+its default and loses the old one, with both lines in the log.
 
-let settings = Settings { altars: vec![2, 4], verbose: true };
-assert_eq!(settings.synced().as_deref(), Some("{ altars = [2, 4] }"));
-```
+## How values read
 
-Join values only work for a mod with `join: true` in its manifest, the mods
-that count in the [join check](concepts/join-check.md). Then:
+A file a person wrote keeps working:
 
-- **On the server.** Each time the mod reads its settings, the loader takes
-  the marked fields as an inline TOML table. It advertises them in the Steam
-  rules `enshwick.sync.<id>` (and `.1`, `.2`, ... for long values), and they
-  count in the mod set's fingerprint. Values that need more than 8 rules of
-  127 bytes are left out of both, with a warning.
-- **On a client that joins.** The join check reads the server's join values.
-  When they change what the mod runs with, the loader calls the mod's
-  `on_config_change` handler with its settings file and the server's join
-  values over it, validated again. The file stays as it is. Joining a server
-  without join values for the mod calls the handler with the file's values
-  again. Server values that do not fit the fields or do not validate are
-  refused with a warning, and the file's values apply. The server sends its
-  join values again over the loader's messages once the client's game has
-  connected, so a value that changed since the client read the rules
-  arrives too.
-- **On a client that joins a hosted game.** A hosting client has no rules;
-  the joining client learns from the game's Steam lobby that the host runs
-  Enshwick, and the host sends its join values once the game has connected
-  (see [Games a client hosts](concepts/join-check.md#games-a-client-hosts)).
+- a value that does not read as its field's type, such as text for a number
+  or an unknown enum value, takes the default for this run, with a line in
+  the log naming the key and the default. The file keeps what the person
+  wrote;
+- a number outside its range, a list's element too, is held to the range,
+  with a line in the log;
+- a value outside its choices takes the default, with a line in the log;
+- when `validate` refuses the values, the mod keeps the values it had, the
+  defaults as a world loads, with a line naming the reason;
+- a file that is no TOML reads as the defaults, with the parser's reason.
 
-Apply join values in `on_config_change`. A mod without a handler runs with its
-file's values until the next start.
+Settings never turn a mod off. No log line holds the value of a `secret`.
 
-A rule of the world that its players must share and that must not change
-under a running world, such as whether survivors keep a copy per altar, is
-`#[config(startup, sync)]`. The server applies it when the world loads and
-advertises the value in force: a change to its file waits for the next load
-and reaches no player before then. A joined client runs with the server's
-value from the join on, whatever its own file says, and with its own again
-after it leaves. The console and the rows say "when the world loads, joined
-players get it", and on a joined client the row shows the server's value,
-locked.
+## On a joined server
 
-A server's edited join values are advertised once the mod has read them, that
-is, once its `on_config_change` handler has run, and pushed at the same moment
-to every joined player whose client runs Enshwick: their mod's
-`on_config_change` runs with the new values, without joining again.
+On a client in a dedicated server's world or another player's hosted game,
+the server sends every setting of its join mods, without a `secret`, once
+the client joined, and again after each change. The client's mods read those
+values for the world they play in, and the client never writes them to its
+disk. When the client leaves, its mods run on their defaults again.
 
-[`enshwick-better-altars`](https://github.com/enshwick/mods/tree/main/better-altars)
-keeps its altar table as a join value: the client's building interface asks
-the same function as the server's check.
+## The schema and the console
+
+[`Config::schema()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/config.rs)
+describes every field: key, type, default, range, choices, doc comment and
+text key. `on_settings` hands it to the loader with the file's template; it
+is what the loader writes the file from, and what it checks values against
+before it writes them.
+
+The server's [console](chat.md#the-console) reads and changes the running
+world's settings:
+
+| Line                                  | Answer                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------- |
+| `enshwick config`                     | the mods that describe their settings                                     |
+| `enshwick config <mod>`               | each setting with its value and what it takes                             |
+| `enshwick config <mod> <key>`         | one setting with its default and description                              |
+| `enshwick config <mod> <key> <value>` | checks the value and writes it to the running world's file, comments kept |
+
+With no world running, a change is refused: settings belong to each world. A
+key names one element of a list with its index, `per_level[2]`, and a grouped
+setting with its dotted key, `comfort.multiplier`. A value is TOML (`5`,
+`true`, `"text"`, `[1, 2]`); text settings also take plain words.
+
+## The Mods screen
+
+In a world the process runs, single player or hosted, a mod's Settings
+button opens that world's settings of the mod. In the main menu there is no
+button, and the screen says once that mod settings belong to each world. The
+game's own world settings show no mod rows.
+
+Every row is the game's own, built from the schema: a toggle for `bool`, a
+slider for a number with a range (in stops for whole numbers up to 32
+values), a slider per element for a list of up to 16 numbers with a range
+(numbered from 1, or from the field's `first = n`, and labelled by the mod's
+text `<key>.element`, `{n}` standing for the number, such as
+`Flame level {n}`), a dropdown for `choices`, a text field for text up to 256
+bytes, and the value with the file's name for the rest (longer text, longer
+lists, tables, numbers without a range). A list's length changes in the
+file. A `secret` shows only its mark, never its value.
+
+Rows speak the player's language through the mod's
+[texts](content/texts.md), which `load.texts` hands the loader: the label is
+the field's text key (`config.<field>` or its `text`), the description under
+it `<key>.doc`, a choice `<key>.<choice>`; without a text, the label is the
+key in words and the description the doc comment.
+
+A change is written at once, with the file's comments kept, and the screen
+says it applies when the world loads again. Before it writes, the loader runs
+the mod's own check: it parses the file with the change and runs the type's
+`validate`; a refusal keeps the file and shows its reason. A `validate` that
+returns `ConfigError::text("config.too-few", &[("min", "2")])` names a text
+of the mod's [texts](content/texts.md): each player reads it in their own
+language, with `{min}` filled in. A `String` reason shows as written.
+
+In another's world the page shows the values the server sent, read-only.
+When the server runs Enshwick, its "Server settings" button opens the
+server's settings of the mod, which only its administrators change. The
+server checks the permission on its own record of the player, runs the same
+checks as the console, writes its world's file, and answers with the outcome
+and the new values. Fields marked `secret` never leave the server, and a
+player changes at most a few settings a second. What a player clicks for
+each of these is in
+[Change a mod's settings](https://enshwick.com/guides/change-mod-settings/).
+
+[`enshwick-game-rates`](https://github.com/enshwick/mods/tree/main/game-rates)
+reads its comfort setting as `multiplier` in its `[comfort]` group, beside
+its recipe rates.

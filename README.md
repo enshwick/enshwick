@@ -79,21 +79,15 @@ of each DLL, to `<save>-mod-data/enshwick/mods.lock` beside the world's save.
 
 ### Settings
 
-Each mod writes its settings to `mod-configs/<id>.toml` on first start. These
-are the settings a new world starts with, plus a few that belong to each player
-or to the game as a whole.
+Mod settings belong to each world. As a world loads, the loader writes each
+mod's settings beside its save, in `<save>-mod-settings/<id>/settings.toml`,
+from the mod's defaults, and adds the settings a newer mod version brings.
 
-A world takes a copy of the file when it first loads and keeps it beside its
-save, in `<save>-mod-settings/<id>/settings.toml`. From then on the world uses its
-copy. An edit of `mod-configs/<id>.toml` reaches only new worlds, each player's
-own settings and the settings read at start.
-
-Change settings in the game with a mod's Settings button on the Mods screen:
-in a world, that world's; in the main menu, the settings new worlds start
-with. On a dedicated server, an administrator changes the server's from the
-same page. The server's command file, `mods/enshwick/commands.txt`, also takes
-`enshwick config <mod> <key> <value>`. A change applies at once, unless the
-mod's page says it waits for the world or the game to start again.
+Change settings in the game with a mod's Settings button on the Mods screen,
+in a world: that world's. On a dedicated server, an administrator changes the
+server's from the same page. The server's command file,
+`mods/enshwick/commands.txt`, also takes `enshwick config <mod> <key> <value>`.
+A change applies when the world loads again.
 
 `mod-configs/enshwick.recipes.toml` takes recipes out of the game
 ([Disabling recipes](book/src/content/disabled-recipes.md)). The logs are in

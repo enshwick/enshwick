@@ -36,27 +36,24 @@ pub(crate) fn read<T: Config>(text: &str, log: &dyn Fn(Level, &str)) -> T {
     // Each round takes one key out; a key it cannot name ends the reading.
     loop {
         let error = match toml::Value::Table(table.clone()).try_into::<T>() {
-            Ok(settings) => return settings,
+            Ok(settings) => break settings,
             Err(error) => error,
         };
         let why = reason(None, &error);
         let key = key_path(&error).map(|key| key.split('[').next().unwrap_or_default().to_owned());
-        match key.filter(|key| !key.is_empty() && super::value_at(&table, key).is_some()) {
-            Some(key) => {
-                log(
-                    Level::WARN,
-                    &format!("{file}.toml: {why}; the default applies"),
-                );
-                remove_at(&mut table, &key);
-            }
-            None => {
-                log(
-                    Level::WARN,
-                    &format!("{file}.toml: {why}; the defaults apply"),
-                );
-                return T::default();
-            }
-        }
+        let Some(key) = key.filter(|key| !key.is_empty() && super::value_at(&table, key).is_some())
+        else {
+            log(
+                Level::WARN,
+                &format!("{file}.toml: {why}; the defaults apply"),
+            );
+            break T::default();
+        };
+        log(
+            Level::WARN,
+            &format!("{file}.toml: {why}; the default applies"),
+        );
+        remove_at(&mut table, &key);
     }
 }
 

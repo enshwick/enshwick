@@ -1,33 +1,19 @@
 //! The loader's own texts, such as the Mods screen's words and the
-//! stand-ins' names: a file per language in `texts/` beside this file, with
-//! `mod-configs/enshwick.texts.toml` over them, read once, the first time a
-//! text is needed after the loader is installed.
+//! stand-ins' names: a file per language in `texts/` beside this file, read
+//! once, the first time a text is needed.
 
 use std::cell::Cell;
-use std::path::Path;
 use std::sync::OnceLock;
 
 use enshwick::i18n::{Language, Texts};
 
 /// The texts the loader ships, a file per language.
 const EMBEDDED: &[&str] = include!(concat!(env!("OUT_DIR"), "/texts.rs"));
-/// The file in `mod-configs/` that overrides or adds to them.
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "overrides are read only in the game")
-)]
-const OVERRIDES: &str = "enshwick.texts.toml";
 
 static TEXTS: OnceLock<Texts> = OnceLock::new();
 
 fn texts() -> &'static Texts {
-    TEXTS.get_or_init(|| {
-        #[cfg(windows)]
-        let overrides = crate::host::loader().map(|loader| loader.configs_dir.join(OVERRIDES));
-        #[cfg(not(windows))]
-        let overrides = None::<std::path::PathBuf>;
-        read(overrides.as_deref())
-    })
+    TEXTS.get_or_init(shipped)
 }
 
 thread_local! {
@@ -153,27 +139,6 @@ fn shipped() -> Texts {
     texts
 }
 
-/// The shipped texts with the file at `overrides` over them, when it is
-/// there and reads.
-fn read(overrides: Option<&Path>) -> Texts {
-    let mut texts = shipped();
-    let Some(path) = overrides else {
-        return texts;
-    };
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return texts;
-    };
-    match Texts::parse(&text) {
-        Ok(overrides) => texts.merge(overrides),
-        Err(off) => crate::log!(
-            WARN,
-            "{}: {off}; the loader's own texts stay as shipped",
-            path.display()
-        ),
-    }
-    texts
-}
-
 /// The text of `key` in the game's language.
 #[cfg(windows)]
 pub(crate) fn text(key: &'static str) -> &'static str {
@@ -200,7 +165,7 @@ pub(crate) fn translations(key: &'static str) -> impl Iterator<Item = (Language,
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use super::*;
 
@@ -423,26 +388,5 @@ mod tests {
         assert_eq!(own_language(" UK "), Ok(Some(Language::UK_UA)));
         assert_eq!(own_language("pt-br"), Ok(Some(Language::PT_BR)));
         assert!(own_language("klingon").is_err());
-    }
-
-    #[test]
-    fn an_override_file_changes_and_adds_texts_and_a_broken_one_is_ignored() {
-        let dir = std::env::temp_dir().join(format!("enshwick-texts-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join(OVERRIDES);
-        std::fs::write(
-            &path,
-            "[uk]\n\"mods.back\" = \"Повернутися\"\n[de]\n\"mods.back\" = \"Zurück\"\n",
-        )
-        .unwrap();
-        let texts = read(Some(&path));
-        assert_eq!(texts.get("mods.back", Language::UK_UA), Some("Повернутися"));
-        assert_eq!(texts.get("mods.back", Language::DE_DE), Some("Zurück"));
-        assert_eq!(texts.get("mods.title", Language::UK_UA), Some("Моди"));
-        std::fs::write(&path, "[xx]\n").unwrap();
-        let texts = read(Some(&path));
-        assert_eq!(texts.get("mods.back", Language::UK_UA), Some("Назад"));
-        assert_eq!(read(None).get("mods.back", Language::EN_US), Some("Back"));
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -1,6 +1,6 @@
-//! A mod's settings page, behind its gear on the Mods screen: each player's
-//! own settings, then the running world's, or with no world the defaults of
-//! new worlds; and each settings row drawn with its text field.
+//! A mod's settings page, behind its gear on the Mods screen: the running
+//! world's settings, or in another's world those its server sent,
+//! read-only; and each settings row drawn with its text field.
 
 use enshwick::abi::UiWidget;
 
@@ -14,40 +14,32 @@ use crate::texts;
 use crate::ui::Painter;
 
 /// The rows of mod `index`'s settings page at `place`: in another's world,
-/// its world rows hold the server's join values, read-only.
+/// the values its server sent, read-only, and none before it sent them.
 pub(super) fn page_rows(loader: &Loader, index: usize, place: mods_screen::Place) -> Vec<Row> {
     let Some(record) = loader.mods.get(index) else {
         return Vec::new();
     };
-    let Some(schema) = record
-        .schema
-        .relock()
-        .clone()
-        .and_then(|schema| mods_screen::page_settings(schema, place.away))
-    else {
+    let Some(schema) = record.settings_schema() else {
         return Vec::new();
     };
-    let file = crate::worlds::show_text(loader, record);
     let texts = record.texts.relock().clone();
     let words = texts.as_ref().map(|texts| rows::Words {
         texts,
         language: texts::language(),
     });
     if !place.away {
-        return rows::rows(&schema, &file, None, words);
+        return rows::rows(&schema, &crate::worlds::show_text(record), words);
     }
-    let server = record
-        .server_synced
+    record
+        .server_values
         .relock()
         .clone()
-        .and_then(|values| mods_screen::server_table(&values));
-    let mut rows = rows::rows(&schema, &file, server.as_ref(), words);
-    mods_screen::lock_world_rows(&schema, &mut rows, server.is_some());
-    rows
+        .map(|values| mods_screen::server_rows(schema, &values, words))
+        .unwrap_or_default()
 }
 
-/// Draws a page of mod `index`'s settings, the world's those of the world
-/// this process runs (`world`) or of new worlds; the outcome of a change.
+/// Draws a page of mod `index`'s settings, those of the world this process
+/// runs (`world`) or of another's; the outcome of a change.
 pub(super) fn settings(
     loader: &Loader,
     paint: &Painter<'_>,
@@ -67,36 +59,26 @@ pub(super) fn settings(
             false,
         );
     }
-    let schema = record.schema.relock().clone()?;
+    let schema = record.settings_schema()?;
+    if world {
+        paint.label(
+            texts::text("mods.settings.world").as_bytes(),
+            UiWidget::STYLE_H3,
+            false,
+            false,
+        );
+        paint.label(
+            texts::text("world.belongs").as_bytes(),
+            UiWidget::STYLE_SECONDARY,
+            true,
+            false,
+        );
+    }
     let mut changed = None;
     let listing = listing(paint, ROWS_PER_PAGE);
     *first = listing.clamp_first(*first, rows.len());
     let shown = listing.shown(*first, rows.len());
-    let mut section = None;
     for row in rows.iter().take(shown.end).skip(shown.start) {
-        let scope = schema
-            .field(crate::configure::element(&row.key).0)
-            .map(|f| f.scope);
-        if let Some(scope) = scope
-            && section != Some(scope)
-        {
-            section = Some(scope);
-            let (heading, note) = mods_screen::section(scope, world);
-            paint.label(
-                texts::text(heading).as_bytes(),
-                UiWidget::STYLE_H3,
-                false,
-                false,
-            );
-            if let Some(note) = note {
-                paint.label(
-                    texts::text(note).as_bytes(),
-                    UiWidget::STYLE_SECONDARY,
-                    true,
-                    false,
-                );
-            }
-        }
         if let Some(value) = draw_row(paint, &record.id, &schema, row, entries) {
             changed = Some((row.key.clone(), value));
         }
@@ -125,6 +107,12 @@ pub(super) fn draw_row(
 ) -> Option<String> {
     let label = mods_screen::row_label(row);
     let read_only = row.lock != Lock::Open;
+    let file = crate::host::loader()
+        .and_then(|loader| loader.find_mod(id))
+        .map_or_else(
+            || format!("{id}/settings.toml"),
+            |(_, record)| crate::worlds::shown_file(id, &record.settings_files.relock(), &row.key),
+        );
     match &row.widget {
         Widget::Toggle(on) => paint
             .toggle(label.as_bytes(), *on, read_only)
@@ -158,7 +146,7 @@ pub(super) fn draw_row(
             } else {
                 texts::fill(
                     "row.text",
-                    &[("label", &label), ("value", toml), ("id", id)],
+                    &[("label", &label), ("value", toml), ("file", &file)],
                 )
             };
             paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
@@ -167,7 +155,7 @@ pub(super) fn draw_row(
         Widget::Text(value) => {
             let line = texts::fill(
                 "row.text",
-                &[("label", &label), ("value", value), ("id", id)],
+                &[("label", &label), ("value", value), ("file", &file)],
             );
             paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
             None

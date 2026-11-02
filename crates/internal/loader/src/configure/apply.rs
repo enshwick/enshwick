@@ -1,28 +1,25 @@
-//! Writes one setting of a mod: checked against its schema and by the mod's
-//! own check, written atomically with the file's comments kept, and the
-//! mod told at once. Each player's own settings go to the settings file,
-//! the others to the running world's settings. With no world running they go
-//! on a game client to the settings file, the template of new worlds, and on
-//! a dedicated server to the changes waiting for its world. The console's
-//! `enshwick config` and the Mods screen both change settings through here.
-
-use enshwick::abi::Event;
-use enshwick::config::Stage;
+//! Writes one setting of a mod into the running world's settings file:
+//! checked against its schema and by the mod's own check, written
+//! atomically with the file's comments kept, and the mod told. It applies
+//! when the world loads again, or at once for a mod that follows changes.
+//! With no world running nothing is written: settings belong to each world.
+//! The console's `enshwick config`, the Mods screen and a server's
+//! administrators all change settings through here.
 
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::texts;
-use crate::worlds::Destination;
 
 use super::{Change, ChangeSettingError, refused};
 
-/// Sets mod `index`'s setting `key` to `value`, TOML or for a text setting
-/// the words as typed; `who` names the player for the log.
+/// Sets mod `index`'s setting `key`, a key of its settings files seen as
+/// one, to `value`, TOML or for a text setting the words as typed; `who`
+/// names the player for the log.
 ///
 /// # Errors
 ///
-/// [`ApplySettingError`]: the mod, setting or value refused, or the file
-/// not written.
+/// [`ApplySettingError`]: no world, the mod, setting or value refused, or
+/// the file not written.
 pub(crate) fn apply(
     loader: &Loader,
     index: usize,
@@ -32,43 +29,25 @@ pub(crate) fn apply(
 ) -> Result<Change, ApplySettingError> {
     let record = loader.mods.get(index).ok_or(ApplySettingError::NoMod)?;
     let id = record.id.as_str();
-    let schema = record
-        .schema
-        .relock()
-        .clone()
-        .ok_or_else(|| ApplySettingError::NoSchema { id: id.to_owned() })?;
-    let field = schema.field(super::element(key).0);
-    if loader.side == enshwick::abi::Side::SERVER && field.is_some_and(|f| f.stage == Stage::Client)
-    {
-        return Err(ApplySettingError::Client {
-            id: id.to_owned(),
-            key: key.to_owned(),
-        });
+    let files = record.settings_files.relock().clone();
+    if files.is_empty() {
+        return Err(ApplySettingError::NoSchema { id: id.to_owned() });
     }
-    let stage = field.map_or(Stage::Runtime, |f| f.stage);
-    let destination = crate::worlds::destination(
-        stage,
-        crate::worlds::current().as_deref(),
-        loader.side == enshwick::abi::Side::SERVER,
-    );
-    let global_path = loader.configs_dir.join(format!("{id}.toml"));
-    let global =
-        std::fs::read_to_string(&global_path).map_err(|source| ApplySettingError::Missing {
-            id: id.to_owned(),
-            source,
-        })?;
-    let (path, text) = crate::worlds::target_text(loader, record, &destination)
-        .map_err(|(path, source)| ApplySettingError::Write { path, source })?;
-    let mut change = super::set(id, &schema, &text, key, value)?;
-    // The mod checks what it would read with the change.
-    let read = match &destination {
-        Destination::Global | Destination::NewWorlds => {
-            crate::worlds::effective(record, &change.text)
-        }
-        Destination::World(_) => crate::worlds::compose(&change.text, &global, &schema),
-        Destination::Next => crate::worlds::overlay(&global, &change.text, None),
+    let world = crate::worlds::current().ok_or(ApplySettingError::NoWorld)?;
+    let (file, inner) = crate::worlds::split_key(key, &files);
+    let Some(settings) = files.iter().find(|f| f.file == file) else {
+        return Err(ApplySettingError::NoSchema { id: id.to_owned() });
     };
-    crate::host::check_settings(index, &read)?;
+    let path = crate::worlds::world_file(id, file, &world);
+    let text = enshwick::files::read_to_string_if_present(&path)
+        .map_err(|source| ApplySettingError::Write {
+            path: path.clone(),
+            source,
+        })?
+        .unwrap_or_else(|| settings.template.clone());
+    let shown = crate::worlds::shown_file(id, &files, key);
+    let change = super::set(&shown, &settings.schema, &text, inner, value)?;
+    crate::host::check_settings(index, file, &change.text)?;
     crate::watch::write_noted(&path, || crate::worlds::write_target(&path, &change.text)).map_err(
         |source| ApplySettingError::Write {
             path: path.clone(),
@@ -76,14 +55,9 @@ pub(crate) fn apply(
         },
     )?;
     crate::log!(INFO, "{who} set {id} {key} = {}", change.value);
-    change.destination = destination.clone();
-    if destination != Destination::Next {
-        // The change is not the asking player's: the mod's handler reads
-        // no reader's language.
-        texts::for_nobody(|| {
-            loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
-        });
-    }
+    // The change is not the asking player's: the mod's handler reads no
+    // reader's language.
+    texts::for_nobody(|| crate::worlds::changed(loader, index));
     Ok(change)
 }
 
@@ -96,16 +70,9 @@ pub(crate) enum ApplySettingError {
     /// The mod has no settings.
     #[error("{id} has no settings")]
     NoSchema { id: String },
-    /// A player's own setting, which a server does not change.
-    #[error("{id} {key} is each player's own")]
-    Client { id: String, key: String },
-    /// The mod's settings file is not there.
-    #[error("mod-configs/{id}.toml does not read: {source}")]
-    Missing {
-        id: String,
-        #[source]
-        source: std::io::Error,
-    },
+    /// No world runs, and settings belong to each world.
+    #[error("no world runs")]
+    NoWorld,
     /// The file the change goes to was not read or written.
     #[error("{} was not written: {source}", path.display())]
     Write {
@@ -126,9 +93,8 @@ impl ApplySettingError {
     pub(crate) fn reply(&self) -> String {
         match self {
             Self::NoMod => texts::fill("refused.no-mod", &[]),
-            Self::NoSchema { id } => texts::fill("config.no-schema", &[("id", id)]),
-            Self::Client { id, key } => texts::fill("refused.client", &[("id", id), ("key", key)]),
-            Self::Missing { id, .. } => texts::fill("config.missing", &[("id", id)]),
+            Self::NoSchema { id } => texts::fill("remote.no-schema", &[("id", id)]),
+            Self::NoWorld => texts::fill("mods.settings.in-world", &[]),
             Self::Write { path, source } => texts::fill(
                 "refused.write",
                 &[
