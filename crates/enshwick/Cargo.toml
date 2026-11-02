@@ -103,6 +103,10 @@ name = "pattern_scan"
 harness = false
 
 [[bench]]
+name = "channel_encode"
+harness = false
+
+[[bench]]
 name = "rates"
 harness = false
 required-features = ["unstable"]

@@ -8,6 +8,8 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `net::MAX_MESSAGE` is 8192 bytes, up from 4096, and `Channel::send` and
+  `broadcast` encode into a stack buffer instead of allocating (#PR).
 - Channel messages travel on the loader's own channel of the game's
   connection instead of hidden chat lines: reliable and in order, and
   refused when they start like executable code. `SendError::OverRate` also

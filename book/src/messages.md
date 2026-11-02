@@ -59,7 +59,7 @@ messages now. Both send from any thread and fail with a `SendError`:
 | Error | When |
 | --- | --- |
 | `NotReady` | the peer takes no messages: a client without Enshwick, a player who left, a server that has not answered yet |
-| `TooLarge` | the message is over 4096 bytes encoded |
+| `TooLarge` | the message is over 8192 bytes encoded |
 | `OverRate` | the side sent more than about twenty messages a second to that peer, or its link to that peer holds too much |
 | `LooksLikeCode` | the encoded message starts like executable code, which a channel never carries |
 | `Encode` | the message does not encode |

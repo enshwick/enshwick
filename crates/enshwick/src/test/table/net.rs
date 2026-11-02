@@ -35,6 +35,9 @@ pub(crate) extern "system" fn net_send(
     data: *const u8,
     size: u32,
 ) -> Status {
+    if size as usize > crate::net::MAX_MESSAGE {
+        return Status::BAD_ARGS;
+    }
     let bytes = if size == 0 || data.is_null() {
         Vec::new()
     } else {
