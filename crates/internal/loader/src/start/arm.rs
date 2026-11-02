@@ -113,6 +113,11 @@ fn report_patches(
                     patch.address
                 );
                 if !patch.owner.is_loader() {
+                    // Known window: the hooks of a mod whose patch a thread
+                    // kept out were written in the same batch and run against
+                    // the unpatched code until this rewires them past it. Only
+                    // a patch left out while a thread stood in it opens it; a
+                    // later change wires such a mod off before its hooks go in.
                     loader.turn_off(
                         patch.owner,
                         &format!("its code patch at {:#x} was skipped", patch.address),

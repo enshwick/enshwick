@@ -494,6 +494,9 @@ fn allocate_near(target: usize) -> Option<usize> {
         })
 }
 
+/// The warning for a thread whose stack the settle could not unwind.
+const SCANNED: &str = "a thread's stack did not unwind during the settle; its return addresses into code patches were found by a conservative stack scan";
+
 /// Writes every hook jump and code patch with the other threads suspended,
 /// or none of them.
 ///
@@ -522,6 +525,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit 
     // them may hold the heap's lock.
     let mut protections = Vec::with_capacity(writes.len());
     let mut stuck = vec![false; code.len()];
+    let mut scanned = false;
     let mut threads = Threads::new();
     let mut tries = 0;
     let checked = !moved.is_empty() || !patched.is_empty();
@@ -538,7 +542,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit 
                 // SAFETY: `suspend` just suspended every other thread of the
                 // process, `iter` yields each of them, and they stay
                 // suspended until `resume`.
-                if !unsafe { mark(thread, &patched, &returns, &mut stuck) } {
+                if !unsafe { mark(thread, &patched, &returns, &mut stuck, &mut scanned) } {
                     // A thread whose context Windows does not hand over can be
                     // neither checked nor moved: the writes wait for it, then
                     // give up.
@@ -576,6 +580,9 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit 
     if stuck.contains(&true) {
         disarm();
         threads.resume();
+        if scanned {
+            crate::log::write(Level::WARN, LOADER_ID, SCANNED);
+        }
         return Commit::Busy(
             code.iter()
                 .zip(&stuck)
@@ -617,6 +624,9 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit 
         }
     }
     threads.resume();
+    if scanned {
+        crate::log::write(Level::WARN, LOADER_ID, SCANNED);
+    }
     if writable {
         Commit::Written
     } else {
@@ -780,26 +790,45 @@ impl Stack {
 }
 
 /// Marks in `stuck` each patched range a suspended thread stands inside or
-/// holds a return address into on its stack, by the index `returns` pairs
-/// with each address; false when the thread's context does not read.
+/// returns into, found by unwinding its real frames over the game's and the
+/// loader's unwind tables. A thread whose stack does not unwind to the top
+/// falls back to a conservative scan of every stack word against the return
+/// addresses `returns` pairs with each patch's index, and sets `scanned`,
+/// for a warning once the threads resume. False when the context does not
+/// read.
 ///
 /// # Safety
 ///
 /// - Every thread of the process but the caller, `thread` among them, stays
-///   suspended for the call, as `Threads::suspend` leaves them.
+///   suspended for the call, as `Threads::suspend` leaves them, so its stack
+///   does not change while this walks or scans it.
 unsafe fn mark(
     thread: HANDLE,
     patched: &[(usize, usize)],
     returns: &[(usize, usize)],
     stuck: &mut [bool],
+    scanned: &mut bool,
 ) -> bool {
     let Some(ThreadContext(context)) = control(thread) else {
         return false;
     };
-    let rip = usize::try_from(context.Rip).unwrap_or(0);
-    for (flag, &(start, end)) in stuck.iter_mut().zip(patched) {
-        *flag |= start < rip && rip < end;
+    let mut hit = |address: usize| {
+        for (flag, &(start, end)) in stuck.iter_mut().zip(patched) {
+            *flag |= start < address && address < end;
+        }
+    };
+    hit(usize::try_from(context.Rip).unwrap_or(0));
+    let mut frames = [0usize; crate::crash::FRAMES];
+    // SAFETY: the caller keeps `thread` suspended, so its stack stays put for
+    // the walk, which reads only committed stack and the loaded images.
+    let (found, complete) = unsafe { crate::crash::unwind::unwind(&context, &mut frames) };
+    if complete {
+        frames[..found].iter().for_each(|&address| hit(address));
+        return true;
     }
+    // The stack did not unwind; every word that looks like a return address
+    // into a patch counts, lest one be missed.
+    *scanned = true;
     let (Some(&(low, _)), Some(&(high, _))) = (returns.first(), returns.last()) else {
         return true;
     };

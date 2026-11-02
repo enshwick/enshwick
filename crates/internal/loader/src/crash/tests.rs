@@ -180,12 +180,13 @@ fn the_bounded_walk_unwinds_a_live_stack_and_stops_on_a_broken_one() {
     let context = aligned.0;
     let mut frames = [0usize; FRAMES];
     // SAFETY: this thread's own context.
-    let found = unsafe { unwind(&context, &mut frames) };
+    let (found, complete) = unsafe { unwind(&context, &mut frames) };
     assert!(found >= 2, "{found} frames");
+    assert!(complete, "a live stack walks to its top");
     let mut broken = context;
     broken.Rsp = 0x10;
     // SAFETY: a context whose stack does not read; the walk checks it.
-    assert_eq!(unsafe { unwind(&broken, &mut frames) }, 0);
+    assert_eq!(unsafe { unwind(&broken, &mut frames) }, (0, false));
 }
 
 #[test]

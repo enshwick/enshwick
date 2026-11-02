@@ -183,27 +183,31 @@ pub(super) fn fits(
     within(rsp) && frame.is_none_or(within)
 }
 
-/// The return addresses of the faulting thread's stack, innermost first,
-/// unwound from `context`; how many were found. Every read stays in the
-/// committed, readable region of the stack, so a broken stack ends the
-/// walk instead of faulting, on whichever thread reports.
+/// The return addresses of a suspended or faulting thread's stack, innermost
+/// first, unwound from `context`: how many were found and whether the walk
+/// reached the top of the stack rather than stopping on a frame it could not
+/// unwind. Every read stays in the committed, readable region of the stack,
+/// so a broken stack ends the walk instead of faulting, on whichever thread
+/// reports or settles.
 ///
 /// # Safety
 ///
-/// - `context` is the context of a thread stopped in the fault or of the
-///   thread running this, so its stack does not change during the walk.
-pub(super) unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> usize {
+/// - `context` is the context of a thread stopped in the fault, suspended by
+///   the caller, or of the thread running this, so its stack does not change
+///   during the walk.
+pub(crate) unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> (usize, bool) {
     let mut aligned = crate::detour::ThreadContext(*context);
     let context = &mut aligned.0;
     let mut found = 0;
     while found < FRAMES {
         let rip = context.Rip;
+        if rip == 0 {
+            // The return address above the entry frame: the stack's top.
+            return (found, true);
+        }
         let Ok(rsp) = usize::try_from(context.Rsp) else {
             break;
         };
-        if rip == 0 {
-            break;
-        }
         let Some((low, end)) = readable(rsp) else {
             break;
         };
@@ -263,13 +267,16 @@ pub(super) unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> 
                 break;
             }
         }
-        if context.Rip == rip || context.Rip == 0 {
+        if context.Rip == rip {
             break;
+        }
+        if context.Rip == 0 {
+            return (found, true);
         }
         frames[found] = usize::try_from(context.Rip).unwrap_or(0);
         found += 1;
     }
-    found
+    (found, false)
 }
 
 /// `address` as a context register holds it.

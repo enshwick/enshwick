@@ -47,8 +47,9 @@ use crate::mod_index::ModIndex;
 
 /// Keeps looking for another handler: the default ends the process.
 const CONTINUE_SEARCH: i32 = 0;
-/// Frames the filter unwinds looking for a mod's code.
-const FRAMES: usize = 48;
+/// Frames the filter unwinds looking for a mod's code, and the settle walk
+/// for return addresses into a code patch.
+pub(crate) const FRAMES: usize = 48;
 /// The longest name kept for a range.
 const NAME: usize = 64;
 /// The crash line's room.
@@ -712,7 +713,7 @@ unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line
     } else {
         // SAFETY: `context` is the faulting thread's, which by the caller's
         // contract is stopped in the fault or runs this.
-        unsafe { unwind(context, &mut frames) }
+        unsafe { unwind(context, &mut frames).0 }
     };
     let callback = noted(thread, at).map(|(owner, f)| (owner, f.name()));
     let blame = blame(&state.ranges, at, callback, &frames[..found]);
@@ -765,10 +766,10 @@ pub(crate) fn walk_here() -> Vec<usize> {
     }
     let mut frames = [0usize; FRAMES];
     // SAFETY: this thread's own context, its stack unchanged during the walk.
-    let found = unsafe { unwind(&aligned.0, &mut frames) };
+    let (found, _) = unsafe { unwind(&aligned.0, &mut frames) };
     frames[..found].to_vec()
 }
 
 #[cfg(test)]
 mod tests;
-mod unwind;
+pub(crate) mod unwind;
