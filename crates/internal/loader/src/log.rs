@@ -5,9 +5,9 @@
 //! line the full channel cannot take is counted and the count logged once
 //! there is room. The writer also keeps the latest lines in memory for
 //! `enshwick log` on the console. The writer keeps the two runs before as `<name>.1.log`
-//! and `<name>.2.log`, each at most [`KEPT_BYTES`]. A file that passes its cap
-//! during a run ([`ALL_CAP`], [`SOURCE_CAP`]) rolls over the same way, so the
-//! logs never hold more than three times the caps.
+//! and `<name>.2.log`, each cut to [`KEPT_BYTES`]. A file that would pass its
+//! cap during a run ([`ALL_CAP`], [`SOURCE_CAP`]) moves aside whole as run 1
+//! the same way, so each log holds at most three times its cap.
 
 use std::collections::VecDeque;
 use std::fmt::Write as _;
@@ -39,9 +39,9 @@ const KEPT_BYTES: u64 = 8 << 20;
 /// Earlier runs kept beside the current one.
 const KEPT_RUNS: usize = 2;
 /// The most bytes `all.log` holds before it rolls over.
-const ALL_CAP: u64 = 64 << 20;
+const ALL_CAP: u64 = 32 << 20;
 /// The most bytes `loader.log` or a mod's file holds before it rolls over.
-const SOURCE_CAP: u64 = 16 << 20;
+const SOURCE_CAP: u64 = 8 << 20;
 
 /// One line as written, with its level and where its source sits in it, so
 /// the source costs no copy of its own.
@@ -202,12 +202,12 @@ pub fn open(dir: &Path) {
     }
 }
 
-/// A log file of the writer that rolls over, as [`rotate`] moves an earlier
-/// run aside, once it would pass its cap, so a server running for weeks never
-/// fills its disk.
+/// A log file of the writer that moves aside whole as its latest earlier run
+/// once it would pass its cap, so a server running for weeks never fills its
+/// disk.
 struct Capped {
     path: PathBuf,
-    /// `None` while the file could not be made again after a roll.
+    /// `None` while the file could not be opened again; each write tries.
     file: Option<std::fs::File>,
     written: u64,
     cap: u64,
@@ -232,6 +232,9 @@ impl Capped {
         if self.written > 0 && self.written.saturating_add(len) > self.cap {
             self.roll();
         }
+        if self.file.is_none() {
+            self.file = Self::append(&self.path);
+        }
         // Flush per line: after a crash the last lines are the useful ones.
         if let Some(file) = &mut self.file
             && file.write_all(bytes).and_then(|()| file.flush()).is_ok()
@@ -240,33 +243,50 @@ impl Capped {
         }
     }
 
-    /// Moves the file aside as the latest earlier run and starts it again
-    /// with a line that says where the lines before went.
+    /// Moves the file aside whole as run 1 and starts it again with a line
+    /// saying so. When it cannot move, the file grows on and the next roll
+    /// waits for another cap's worth of lines.
     #[cold]
     fn roll(&mut self) {
         // Closed before the rename, which Windows needs.
         self.file = None;
-        rotate(&self.path);
         self.written = 0;
-        self.file = std::fs::File::create(&self.path).ok();
-        let name = |path: &Path| path.file_name().map(|n| n.to_string_lossy().into_owned());
-        let (Some(current), Some(earlier)) = (
-            name(&self.path),
-            run_path(&self.path, 1).as_deref().and_then(name),
-        ) else {
+        let moved =
+            make_room(&self.path).is_some_and(|first| std::fs::rename(&self.path, first).is_ok());
+        if !moved {
             return;
-        };
+        }
+        self.file = Self::append(&self.path);
+        if !enabled(Level::INFO, LOADER_ID) {
+            return;
+        }
+        let name = self
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned());
         let note = Line::new(
             now(),
             Level::INFO,
             LOADER_ID,
-            &format!("{current} is full; its earlier lines of this run are in {earlier}"),
+            &format!(
+                "{} reached its cap; the lines of this run before this one are in the file one run older",
+                name.unwrap_or_default()
+            ),
         );
         if let Some(file) = &mut self.file
             && file.write_all(note.text.as_bytes()).is_ok()
         {
             self.written = u64::try_from(note.text.len()).unwrap_or(u64::MAX);
         }
+    }
+
+    /// The file at `path` opened to append to, made when missing.
+    fn append(path: &Path) -> Option<std::fs::File> {
+        std::fs::File::options()
+            .create(true)
+            .append(true)
+            .open(path)
+            .ok()
     }
 }
 
@@ -305,28 +325,34 @@ fn run_path(current: &Path, run: usize) -> Option<PathBuf> {
 }
 
 /// Moves `current` aside as run 1, run 1 to run 2 and so on up to
-/// [`KEPT_RUNS`]; a file over [`KEPT_BYTES`] keeps its last lines that fit.
+/// [`KEPT_RUNS`], at start; a file over [`KEPT_BYTES`] keeps its last lines
+/// that fit, or all of them when those cannot be written.
 fn rotate(current: &Path) {
     if !current.is_file() {
         return;
     }
-    let Some(runs) = (1..=KEPT_RUNS)
-        .map(|run| run_path(current, run))
-        .collect::<Option<Vec<_>>>()
-    else {
+    let Some(first) = make_room(current) else {
         return;
     };
+    let size = std::fs::metadata(current).map_or(0, |m| m.len());
+    if size > KEPT_BYTES && keep_tail(current, &first, KEPT_BYTES).is_ok() {
+        let _removed = std::fs::remove_file(current);
+    } else {
+        let _moved = std::fs::rename(current, &first);
+    }
+}
+
+/// Moves run 1 of `current` to run 2 and so on up to [`KEPT_RUNS`], dropping
+/// the oldest; run 1's path, now free.
+fn make_room(current: &Path) -> Option<PathBuf> {
+    let runs = (1..=KEPT_RUNS)
+        .map(|run| run_path(current, run))
+        .collect::<Option<Vec<_>>>()?;
     let _oldest = runs.last().map(std::fs::remove_file);
     for pair in runs.windows(2).rev() {
         let _moved = std::fs::rename(&pair[0], &pair[1]);
     }
-    let size = std::fs::metadata(current).map_or(0, |m| m.len());
-    if size <= KEPT_BYTES {
-        let _moved = std::fs::rename(current, &runs[0]);
-    } else {
-        let _kept = keep_tail(current, &runs[0], KEPT_BYTES);
-        let _removed = std::fs::remove_file(current);
-    }
+    runs.into_iter().next()
 }
 
 /// Writes the last whole lines of `from` that fit in `bytes` to `to`.
@@ -591,37 +617,44 @@ mod tests {
     }
 
     #[test]
-    fn a_file_past_its_cap_rolls_over_with_its_earlier_lines_kept() {
+    fn a_file_past_its_cap_rolls_over_whole_and_loses_no_line() {
         let dir = std::env::temp_dir().join(format!("enshwick-log-cap-{}", std::process::id()));
         let _fresh = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("all.log");
-        let mut file = Capped::create(path.clone(), 200).unwrap();
-        for i in 0..20 {
+        let mut file = Capped::create(path.clone(), 400).unwrap();
+        for i in 0..40 {
             file.write(format!("line {i:02} of the run\n").as_bytes());
         }
-        let current = std::fs::read_to_string(&path).unwrap();
-        let earlier = std::fs::read_to_string(dir.join("all.1.log")).unwrap();
-        assert!(current.len() <= 200, "{current}");
-        let mut lines = current.lines();
-        assert!(
-            lines.next().is_some_and(|note| note.ends_with(
-                "[enshwick] all.log is full; its earlier lines of this run are in all.1.log"
-            )),
-            "{current}"
-        );
-        assert!(current.ends_with("line 19 of the run\n"), "{current}");
-        let first: u32 = lines.next().unwrap()[5..7].parse().unwrap();
-        assert!(
-            earlier.ends_with(&format!("line {:02} of the run\n", first - 1)),
-            "no line is lost at the roll: {earlier}"
-        );
-        assert!(
-            std::fs::read_to_string(dir.join("all.2.log")).is_ok(),
-            "the second roll moved the first one to run 2"
+        drop(file);
+        let read = |name: &str| std::fs::read_to_string(dir.join(name)).unwrap();
+        let numbers = |text: &str| -> Vec<u32> {
+            text.lines()
+                .filter_map(|line| line.strip_prefix("line ")?.get(..2)?.parse().ok())
+                .collect()
+        };
+        let (oldest, earlier, current) = (read("all.2.log"), read("all.1.log"), read("all.log"));
+        for text in [&earlier, &current] {
+            assert!(text.len() <= 400, "{text}");
+            assert!(
+                text.lines().next().is_some_and(|note| note.ends_with(
+                    "[enshwick] all.log reached its cap; the lines of this run before this one are in the file one run older"
+                )),
+                "{text}"
+            );
+        }
+        let kept: Vec<u32> = [&oldest, &earlier, &current]
+            .into_iter()
+            .flat_map(|text| numbers(text))
+            .collect();
+        let last = *kept.last().unwrap();
+        assert_eq!(last, 39);
+        assert_eq!(
+            kept,
+            (last + 1 - u32::try_from(kept.len()).unwrap()..=last).collect::<Vec<_>>(),
+            "the kept runs hold every line from the oldest kept one on"
         );
         assert!(!dir.join("all.3.log").exists());
-        drop(file);
         let _clean = std::fs::remove_dir_all(&dir);
     }
 

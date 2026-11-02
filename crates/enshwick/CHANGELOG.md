@@ -290,7 +290,7 @@ Each entry names the pull request that made the change.
   part way. A record or store that does not read turns the mod off with
   the reason instead of being skipped or read as empty (#670).
 - The loader's log files roll over during a run as they do at start, once
-  `all.log` passes 64 MiB or `loader.log` or a mod's file passes 16 MiB, so
+  `all.log` would pass 32 MiB or `loader.log` or a mod's file 8 MiB, so
   a server that runs for weeks no longer fills its disk with logs; the new
   file's first line says where the earlier lines went (#876).
 
