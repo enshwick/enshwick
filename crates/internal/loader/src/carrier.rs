@@ -124,7 +124,16 @@ struct Probe {
 #[derive(Debug, Default)]
 struct Inbox {
     bytes: Vec<u8>,
-    items: Vec<(u64, u32, usize, usize)>,
+    items: Vec<Item>,
+}
+
+/// One message in an [`Inbox`]: who sent it on which channel, and where its
+/// bytes lie.
+#[derive(Clone, Copy, Debug)]
+struct Item {
+    from: u64,
+    channel: u32,
+    span: (usize, usize),
 }
 
 /// A message between a hosting client's two halves.
@@ -273,7 +282,7 @@ pub(crate) fn send_many(
     if !sealable(payload) {
         return Err(Status::BAD_ARGS);
     }
-    let hosting = crate::world::hosting();
+    let hosting = client_hosts();
     let host = CARRIER.host_key.load(Ordering::Acquire);
     let looped = |key: u64| hosting && (key == SERVER || (host != 0 && key == host));
     for &key in keys.iter().filter(|&&key| looped(key)) {
@@ -305,6 +314,26 @@ pub(crate) fn send_many(
         }
     }
     Ok(())
+}
+
+/// Whether this client runs the game's server itself, in single player or
+/// a game it hosts: its two halves then talk in process. A dedicated
+/// server runs a server too, but no client half.
+fn client_hosts() -> bool {
+    crate::world::hosting()
+        && CARRIER
+            .game
+            .get()
+            .is_some_and(|game| game.local_machine_kind().is_some())
+}
+
+/// Notes the account key of the player of a client that hosts; a new one
+/// makes the client half say hello to its server half again.
+fn set_host(key: u64) {
+    let old = CARRIER.host_key.swap(key, Ordering::AcqRel);
+    if old != key {
+        CARRIER.hosted_hello.store(false, Ordering::Release);
+    }
 }
 
 /// Holds a message between a hosting client's halves until the other half
@@ -351,11 +380,8 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
     let Some(game) = CARRIER.game.get() else {
         return;
     };
-    let host = CARRIER.host_key.load(Ordering::Acquire);
-    if host != 0 {
-        for message in take_looped(true) {
-            crate::net::server_carried(host, message.channel, &message.data);
-        }
+    if client_hosts() {
+        hosted_step(loader);
     }
     let Ok(server) = crate::world::server() else {
         return;
@@ -377,9 +403,10 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
         }
         let developer = loader.developer_tools;
         let State { peers, inbox, .. } = state;
+        let share = INBOX_BYTES / peers.len().max(1);
         peers.retain(|&key, peer| {
             let kept = game.holds(peer.socket, peer.slot) && {
-                receive(game, session, key, peer, inbox, now);
+                receive(game, session, key, peer, inbox, share, now);
                 if developer {
                     probe_step(peer);
                     nudge(game, session, key, peer, now);
@@ -394,12 +421,32 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
         });
         core::mem::take(inbox)
     };
-    for &(key, channel, start, end) in &inbox.items {
-        crate::net::server_carried(key, channel, &inbox.bytes[start..end]);
+    for item in &inbox.items {
+        let (start, end) = item.span;
+        crate::net::server_carried(item.from, item.channel, &inbox.bytes[start..end]);
     }
     give_back(&CARRIER.server, session, inbox);
     for key in gone {
         crate::net::forget_peer(key);
+    }
+}
+
+/// A hosting client's server half, after its step: finds its own player
+/// while it has none, which needs no network session (single player has
+/// one player alone), and takes what its client half sent.
+fn hosted_step(loader: &Loader) {
+    if CARRIER.host_key.load(Ordering::Acquire) == 0
+        && let Ok(machines) = crate::world::machines(loader)
+        && let [(key, _)] = machines.as_slice()
+    {
+        set_host(*key);
+    }
+    let host = CARRIER.host_key.load(Ordering::Acquire);
+    if host == 0 {
+        return;
+    }
+    for message in take_looped(true) {
+        crate::net::server_carried(host, message.channel, &message.data);
     }
 }
 
@@ -414,7 +461,7 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
             .iter()
             .find(|&&(_, machine)| machine == host && machine != 0)
     {
-        CARRIER.host_key.store(key, Ordering::Release);
+        set_host(key);
     }
     state.peers.retain(|&key, peer| {
         let live = machines.iter().any(|&(k, m)| k == key && m == peer.machine);
@@ -456,7 +503,7 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
 /// - `client` is null or the game client, on the thread that sends its chat.
 unsafe fn client_frame(client: *mut u8, now: Instant) {
     crate::lobby::poll();
-    if crate::world::hosting() {
+    if client_hosts() {
         for message in take_looped(false) {
             crate::net::client_carried(message.channel, &message.data);
         }
@@ -492,8 +539,9 @@ unsafe fn client_frame(client: *mut u8, now: Instant) {
         let change = pump_client(game, loader, session, state, now);
         (core::mem::take(&mut state.inbox), change)
     };
-    for &(_, channel, start, end) in &inbox.items {
-        crate::net::client_carried(channel, &inbox.bytes[start..end]);
+    for item in &inbox.items {
+        let (start, end) = item.span;
+        crate::net::client_carried(item.channel, &inbox.bytes[start..end]);
     }
     give_back(&CARRIER.client, session, inbox);
     match change {
@@ -563,7 +611,7 @@ fn pump_client(
     let State { peers, inbox, .. } = state;
     let peer = peers.get_mut(&SERVER)?;
     let restarts = peer.link.restarts();
-    receive(game, session, SERVER, peer, inbox, now);
+    receive(game, session, SERVER, peer, inbox, INBOX_BYTES, now);
     if peer.link.restarts() != restarts {
         // The server started its link over and forgot this client.
         change = Some(Change::Opened);
@@ -633,13 +681,15 @@ fn fresh(guard: &mut Option<State>, session: usize) -> &mut State {
 }
 
 /// Takes the packets that came on `peer`'s socket and gathers the messages
-/// they complete in `inbox`.
+/// they complete in `inbox`, at most `share` bytes of them this step, so
+/// every peer gets its turn; the rest wait in the game's socket.
 fn receive(
     game: &Game,
     session: usize,
     key: u64,
     peer: &mut Peer,
     inbox: &mut Inbox,
+    share: usize,
     now: Instant,
 ) {
     let Peer {
@@ -651,8 +701,9 @@ fn receive(
         ..
     } = peer;
     let mut packet = [0u8; LARGEST_PACKET];
+    let start = inbox.bytes.len();
     for _ in 0..RECEIVES_PER_STEP {
-        if inbox.bytes.len() >= INBOX_BYTES {
+        if inbox.bytes.len() >= INBOX_BYTES || inbox.bytes.len() - start >= share {
             return;
         }
         let Some(taken) = game.take(session, *socket, &mut packet) else {
@@ -724,7 +775,11 @@ fn delivered(key: u64, message: &[u8], probe: &mut Probe, inbox: &mut Inbox) {
     }
     let start = inbox.bytes.len();
     inbox.bytes.extend_from_slice(payload);
-    inbox.items.push((key, channel, start, inbox.bytes.len()));
+    inbox.items.push(Item {
+        from: key,
+        channel,
+        span: (start, inbox.bytes.len()),
+    });
 }
 
 /// Counts and logs probe `id` from `key`, the first [`PROBES`] only.

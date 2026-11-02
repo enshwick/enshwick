@@ -49,6 +49,24 @@ fn the_hosted_queues_are_bounded_and_forget_empties_them() {
 }
 
 #[test]
+fn a_new_host_makes_the_client_half_say_hello_again() {
+    let _alone = alone();
+    set_host(7);
+    CARRIER.hosted_hello.store(true, Ordering::Release);
+    set_host(7);
+    assert!(
+        CARRIER.hosted_hello.load(Ordering::Acquire),
+        "the same host"
+    );
+    set_host(8);
+    assert!(
+        !CARRIER.hosted_hello.load(Ordering::Acquire),
+        "another world's host"
+    );
+    assert!(!client_hosts(), "no game calls, no hosting");
+}
+
+#[test]
 fn a_payload_that_may_not_travel_is_refused_before_any_link() {
     let _alone = alone();
     assert_eq!(send(7, 5, b"MZ\x90\0"), Err(Status::BAD_ARGS));
@@ -78,7 +96,11 @@ fn an_inbox_goes_back_emptied_only_to_its_own_session() {
     drop(guard);
     let mut inbox = Inbox::default();
     inbox.bytes.extend_from_slice(&[1; 100]);
-    inbox.items.push((7, 5, 0, 100));
+    inbox.items.push(Item {
+        from: 7,
+        channel: 5,
+        span: (0, 100),
+    });
     give_back(&CARRIER.server, 2, inbox);
     let guard = CARRIER.server.relock();
     assert_eq!(guard.as_ref().map(|s| s.inbox.bytes.capacity()), Some(0));

@@ -77,6 +77,9 @@ static STATE: Mutex<Option<State>> = Mutex::new(None);
 /// Set on a client while the server it joined advertises Enshwick, which
 /// opens the own channel to it.
 static SERVER_RUNS_ENSHWICK: AtomicBool = AtomicBool::new(false);
+/// Set on a client while its server's answer holds, so a frame takes no
+/// lock once it is welcomed.
+static ANSWERED: AtomicBool = AtomicBool::new(false);
 /// Messages dropped: over a rate, or unreadable.
 static DROPPED: AtomicU64 = AtomicU64::new(0);
 
@@ -156,11 +159,12 @@ fn carry(key: u64, channel: u32, data: &[u8]) -> bool {
 /// a hello it has no room for. Waits on no lock but for a new link.
 pub(crate) fn client_tick(opened: bool) {
     let server = NetMessage::SERVER.get();
+    if opened {
+        link_lost();
+    } else if ANSWERED.load(Ordering::Acquire) {
+        return;
+    }
     let due = |s: &mut State| {
-        if opened {
-            s.peers.remove(&server);
-            s.sending.remove(&server);
-        }
         let due = !s.peers.contains_key(&server)
             && (opened || s.hello_at.is_none_or(|at| at.elapsed() >= HELLO_AGAIN));
         if due {
@@ -191,6 +195,7 @@ pub(crate) fn client_tick(opened: bool) {
 
 /// Forgets the server's answer when the client's link went.
 pub(crate) fn link_lost() {
+    ANSWERED.store(false, Ordering::Release);
     state(|s| {
         s.peers.remove(&NetMessage::SERVER.get());
         s.sending.remove(&NetMessage::SERVER.get());
@@ -336,6 +341,7 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
                 .insert(NetMessage::SERVER.get(), Peer::new())
                 .is_none()
         });
+        ANSWERED.store(true, Ordering::Release);
         if fresh {
             crate::log!(INFO, "mod messages: the server answered");
             crate::actions::joined();
@@ -380,6 +386,7 @@ pub(crate) fn server_runs_enshwick() -> bool {
 /// ends.
 pub(crate) fn forget() {
     crate::carrier::forget();
+    ANSWERED.store(false, Ordering::Release);
     let mut guard = STATE.relock();
     *guard = None;
     crate::item_data::forget_client();
@@ -498,7 +505,9 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         failed.push((key, status));
     })
     .inspect_err(|_| refund(&keys))?;
-    refund(&failed.iter().map(|&(key, _)| key).collect::<Vec<_>>());
+    if !failed.is_empty() {
+        refund(&failed.iter().map(|&(key, _)| key).collect::<Vec<_>>());
+    }
     match failed.first() {
         Some(&(_, status)) if peer != 0 => Err(status),
         _ => Ok(()),

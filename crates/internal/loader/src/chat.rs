@@ -318,6 +318,18 @@ unsafe extern "system" fn post(
     hash: u64,
     extra: *const [u64; 2],
 ) -> *mut u8 {
+    let old = CHAT_FUSE.run("the old frame check", || {
+        // SAFETY: `out` and `text` are the game's own arguments at the entry
+        // of `chat.post`, by this function's `# Safety`.
+        unsafe { old_frame(out, kind, text) }
+    });
+    if old == Some(true) {
+        // SAFETY: `old_frame` returned true only for a non-null `out`, a
+        // result record of at least 8 writable bytes by this function's
+        // `# Safety`.
+        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
+        return out;
+    }
     let muted = CHAT_FUSE.run("the chat mute check", || {
         // SAFETY: `out` is the game's own argument at the entry of
         // `chat.post`, by this function's `# Safety`.
@@ -337,6 +349,47 @@ unsafe extern "system" fn post(
         Some(next) => unsafe { next(out, store, kind, text, loca1, loca2, handle, hash, extra) },
         None => out,
     }
+}
+
+/// The start of the hidden lines an older loader's client sends its server.
+const OLD_FRAME: &[u8] = b"/enshwick-net ";
+
+/// Whether the game posts a line a player's client sent that starts like an
+/// older loader's hidden frame line, which no other player should read.
+///
+/// # Safety
+///
+/// - Called at the entry of the loader's link on `chat.post`, on the game's
+///   calling thread.
+/// - `text` is null or the game's span of pointer and byte length, its bytes
+///   readable and unchanged for the call.
+unsafe fn old_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> bool {
+    let Some((loader, layout)) = LOADED.get() else {
+        return false;
+    };
+    if kind != 0 || out.is_null() || text.is_null() {
+        return false;
+    }
+    let frame = (loader.caller_frame)();
+    // SAFETY: `frame.rsp` is non-zero, checked first, and `caller_frame`
+    // took the frame at the entry of this chain on this thread, linked with
+    // `HookFlags::CALLER_FRAME`, so it points at the live return address.
+    if frame.rsp == 0 || unsafe { frame.return_address() } != layout.post_return {
+        return false;
+    }
+    // SAFETY: `text` is non-null, checked by the guard before it, and is the
+    // game's span of two words, readable for the call by this function's
+    // `# Safety`.
+    let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
+    if ptr == 0 || len < OLD_FRAME.len() {
+        return false;
+    }
+    let mut start = [0u8; OLD_FRAME.len()];
+    // SAFETY: `ptr` is non-null and the span holds at least `start`'s bytes,
+    // checked before, readable and unchanged for the call by this
+    // function's `# Safety`.
+    unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut start) };
+    start == OLD_FRAME
 }
 
 /// Whether the game posts a line the player of account `key` typed while

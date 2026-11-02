@@ -174,9 +174,10 @@ fn the_server_is_ready_from_its_welcome_until_the_link_goes() {
     assert!(!ready(server));
     client_carried(5, b"before the welcome");
     client_carried(CONTROL, &control(WELCOME));
-    assert!(ready(server));
+    assert!(ready(server) && ANSWERED.load(Ordering::Acquire));
     link_lost();
     assert!(!ready(server), "a new link waits for its own welcome");
+    assert!(!ANSWERED.load(Ordering::Acquire), "a frame looks again");
 }
 
 #[test]
