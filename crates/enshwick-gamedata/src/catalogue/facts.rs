@@ -1519,6 +1519,13 @@ pub const FACTS: &[(&str, Fact)] = &[
         },
     ),
     (
+        ids::GAME_MESSAGE_CHANNEL_VOICE_CHAT,
+        Fact::Constant {
+            ty: "keen::GameMessageChannelId",
+            name: "VoiceChat",
+        },
+    ),
+    (
         ids::MAP_MARKER_REGISTRY,
         Fact::Type("keen::MapMarkerRegistryResource"),
     ),

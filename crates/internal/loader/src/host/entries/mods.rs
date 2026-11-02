@@ -101,7 +101,12 @@ pub(crate) extern "system" fn migrate(
         }
         // SAFETY: a mod passes null or its version of the set, and all of the
         // set, its migration function included, is required.
-        match unsafe { get_headed(set, size_of::<api_frame::MigrationSet>()) } {
+        match unsafe {
+            get_headed(
+                set,
+                <api_frame::MigrationSet as enshwick::abi::Headed>::BORN,
+            )
+        } {
             Some(set) => crate::migrations::register(loader, index.get(), &set),
             None => Status::BAD_ARGS,
         }

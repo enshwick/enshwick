@@ -38,34 +38,27 @@ mod tests {
 
     #[test]
     fn typed_effects_lay_out_their_events_and_teleports_their_requests() {
-        let npc = "npc_command_event";
-        let threat = "add_threat_target_event";
-        let ping = "ui_ping_event";
-        let world = FakeHost::new().world();
-        let at = |fact: Fact| world.offset(fact.id()).unwrap();
+        let host = FakeHost::new().world().effect_events();
+        let at = |fact: Fact| host.offset(fact.id()).unwrap();
         let (position, orientation, scale) = (
             at(facts::WORLD_TRANSFORM_POSITION),
             at(facts::WORLD_TRANSFORM_ORIENTATION),
             at(facts::WORLD_TRANSFORM_SCALE),
         );
-        let loader = FakeHost::new()
-            .world()
-            .type_hash(npc, 1)
-            .type_size(npc, 72)
-            .constant("npc_command_event.type", 8)
-            .constant("npc_command_event.npc_id", 12)
-            .constant("npc_command_event.target_transform", 16)
-            .type_hash(threat, 2)
-            .type_size(threat, 24)
-            .constant("add_threat_target_event.attacker_id", 8)
-            .constant("add_threat_target_event.target_id", 12)
-            .constant("add_threat_target_event.threat_value", 16)
-            .type_hash(ping, 3)
-            .type_size(ping, 40)
-            .constant("ui_ping_event.sender_entity_id", 8)
-            .constant("ui_ping_event.position", 16)
-            .template(Entity(5), [5; 16])
-            .install();
+        let (kind, npc, target) = (
+            at(facts::NPC_COMMAND_EVENT_TYPE),
+            at(facts::NPC_COMMAND_EVENT_NPC_ID),
+            at(facts::NPC_COMMAND_EVENT_TARGET_TRANSFORM),
+        );
+        let (attacker, victim, threat) = (
+            at(facts::ADD_THREAT_TARGET_EVENT_ATTACKER_ID),
+            at(facts::ADD_THREAT_TARGET_EVENT_TARGET_ID),
+            at(facts::ADD_THREAT_TARGET_EVENT_THREAT_VALUE),
+        );
+        let pinged_at = at(facts::UI_PING_EVENT_POSITION);
+        let npc_event = host.hash(facts::NPC_COMMAND_EVENT.id()).unwrap();
+        let npc_size = host.size(facts::NPC_COMMAND_EVENT.id()).unwrap();
+        let loader = host.template(Entity(5), [5; 16]).install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
@@ -84,25 +77,29 @@ mod tests {
         let emits = loader.emits();
         assert_eq!(emits.len(), 3);
         let (ty, order) = &emits[0];
-        assert_eq!((*ty, order.len(), order[8]), (1, 72, 1));
-        assert_eq!(u32::from_le_bytes(word(order, 12)), 42);
-        assert_eq!(i64::from_le_bytes(word(order, 16 + position)), 1 << 32);
+        assert_eq!((*ty, order.len(), order[kind]), (npc_event, npc_size, 1));
+        assert_eq!(u32::from_le_bytes(word(order, npc)), 42);
+        assert_eq!(i64::from_le_bytes(word(order, target + position)), 1 << 32);
         assert_eq!(
-            i64::from_le_bytes(word(order, 16 + position + 16)),
+            i64::from_le_bytes(word(order, target + position + 16)),
             -3 << 32
         );
         assert_eq!(
-            word::<4>(order, 16 + orientation + 12),
+            word::<4>(order, target + orientation + 12),
             1.0f32.to_le_bytes(),
             "w of the quaternion"
         );
-        assert_eq!(word::<4>(order, 16 + scale), 1.0f32.to_le_bytes(), "scale");
+        assert_eq!(
+            word::<4>(order, target + scale),
+            1.0f32.to_le_bytes(),
+            "scale"
+        );
         let (_, aggro) = &emits[1];
-        assert_eq!(u32::from_le_bytes(word(aggro, 8)), 5);
-        assert_eq!(u32::from_le_bytes(word(aggro, 12)), 6);
-        assert_eq!(word::<4>(aggro, 16), 2.5f32.to_le_bytes());
+        assert_eq!(u32::from_le_bytes(word(aggro, attacker)), 5);
+        assert_eq!(u32::from_le_bytes(word(aggro, victim)), 6);
+        assert_eq!(word::<4>(aggro, threat), 2.5f32.to_le_bytes());
         let (_, pinged) = &emits[2];
-        assert_eq!(i64::from_le_bytes(word(pinged, 16)), 1 << 31);
+        assert_eq!(i64::from_le_bytes(word(pinged, pinged_at)), 1 << 31);
 
         effects
             .teleport(

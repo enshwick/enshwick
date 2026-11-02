@@ -135,6 +135,7 @@ fn link_features(loader: &'static Loader) {
     crate::item_data::link(loader);
     crate::net::link();
     crate::chat::link(loader);
+    crate::carrier::link(loader);
     crate::label::link(loader);
     crate::altars::link(loader);
     crate::survivors::link(loader);
@@ -260,6 +261,7 @@ fn start_services(loader: &'static Loader) {
         pages(loader).into_iter().collect(),
     );
     crate::allowlist::start(loader, crate::admission::can_kick());
+    crate::chat_mute::start(loader);
 }
 
 /// Starts what only a dedicated server runs: the advertised join mods and

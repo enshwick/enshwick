@@ -151,6 +151,8 @@ mod tests {
                 // The client's placement cursor context holds more before
                 // its balancing.
                 "bases.cursor_balancing" => 0x180,
+                // The client numbers its own sockets' kinds first.
+                "net.socket_kind_machine" => 4,
                 _ => *value,
             };
             assert_eq!(client.constant(id), Some(expected), "{id}");

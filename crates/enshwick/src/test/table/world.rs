@@ -7,7 +7,7 @@ use crate::abi::{
     PlayerInfo, RenameCallFn, Side, SpawnRequest, Status, StatusFn, Str, TeleportRequest,
     TerrainEdit, TerrainMaterialInfo, Voxel, WeatherFront,
 };
-use crate::test::table::{found, put, put_list, text, with};
+use crate::test::table::{found, put, text, with};
 
 pub(crate) extern "system" fn component(
     _me: ModHandle,
@@ -40,7 +40,7 @@ pub(crate) extern "system" fn player(
     let player = with(None, |s| {
         s.host.players.iter().find(|p| p.entity == entity).copied()
     });
-    found(player, out)
+    super::found_headed(player, out)
 }
 
 pub(crate) extern "system" fn players(
@@ -50,12 +50,7 @@ pub(crate) extern "system" fn players(
     count: *mut u32,
 ) -> Status {
     let players = with(Vec::new(), |s| s.host.players.clone());
-    let capacity = usize::try_from(capacity).unwrap_or(0);
-    for (i, player) in players.iter().take(capacity).enumerate() {
-        // SAFETY: the safe layer passes room for `capacity` players.
-        unsafe { out.wrapping_add(i).write(*player) };
-    }
-    put(count, u32::try_from(players.len()).unwrap_or(u32::MAX))
+    super::put_headed_list(&players, out, capacity, count)
 }
 
 pub(crate) extern "system" fn hosting() -> u8 {
@@ -201,7 +196,7 @@ pub(crate) extern "system" fn event_types(
             })
             .collect()
     });
-    put_list(&found, out, capacity, count)
+    super::put_headed_list(&found, out, capacity, count)
 }
 
 pub(crate) extern "system" fn entities(
@@ -323,8 +318,7 @@ pub(crate) extern "system" fn emit(
 }
 
 pub(crate) extern "system" fn teleport(_me: ModHandle, request: *const TeleportRequest) -> Status {
-    // SAFETY: the safe layer passes a valid request for the call.
-    let Some(request) = (unsafe { request.as_ref() }).copied() else {
+    let Some(request) = super::get_headed(request) else {
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
@@ -361,8 +355,7 @@ pub(crate) extern "system" fn spawn(
     request: *const SpawnRequest,
     out: *mut crate::Entity,
 ) -> Status {
-    // SAFETY: the safe layer passes a valid request for the call.
-    let Some(request) = (unsafe { request.as_ref() }).copied() else {
+    let Some(request) = super::get_headed(request) else {
         return Status::BAD_ARGS;
     };
     if request.template == [0; 16] {
@@ -534,24 +527,7 @@ pub(crate) extern "system" fn weather_fronts(
     let Some(fronts) = with(None, |s| s.weather.as_ref().map(|w| w.1.clone())) else {
         return Status::MISSING;
     };
-    if count.is_null() {
-        return Status::BAD_ARGS;
-    }
-    if !out.is_null() {
-        for (i, front) in fronts.iter().take(capacity as usize).enumerate() {
-            // SAFETY: `i` is below `capacity` and the safe layer passes a
-            // non-null `out` with room for `capacity` fronts, so the offset
-            // stays inside that array.
-            let slot = unsafe { out.add(i) };
-            // SAFETY: `slot` is inside the `capacity` writable, aligned
-            // fronts the safe layer passes at `out`.
-            unsafe { slot.write(*front) };
-        }
-    }
-    // SAFETY: `count` is non-null, checked at the top; the safe layer passes
-    // it pointing at a writable, aligned `u32` for the call.
-    unsafe { count.write(u32::try_from(fronts.len()).unwrap_or(u32::MAX)) };
-    Status::OK
+    super::put_headed_list(&fronts, out, capacity, count)
 }
 
 pub(crate) extern "system" fn set_weather(_me: ModHandle, effect: u32, duration: i64) -> Status {
@@ -573,24 +549,7 @@ pub(crate) extern "system" fn terrain_materials(
     let Some(materials) = with(None, |s| s.terrain.clone()) else {
         return Status::MISSING;
     };
-    if count.is_null() {
-        return Status::BAD_ARGS;
-    }
-    if !out.is_null() {
-        for (i, material) in materials.iter().take(capacity as usize).enumerate() {
-            // SAFETY: `i` is below `capacity` and the safe layer passes a
-            // non-null `out` with room for `capacity` entries, so the offset
-            // stays inside that array.
-            let slot = unsafe { out.add(i) };
-            // SAFETY: `slot` is inside the `capacity` writable, aligned
-            // entries the safe layer passes at `out`.
-            unsafe { slot.write(*material) };
-        }
-    }
-    // SAFETY: `count` is non-null, checked at the top; the safe layer passes
-    // it pointing at a writable, aligned `u32` for the call.
-    unsafe { count.write(u32::try_from(materials.len()).unwrap_or(u32::MAX)) };
-    Status::OK
+    super::put_headed_list(&materials, out, capacity, count)
 }
 
 pub(crate) extern "system" fn terrain_edit(
@@ -598,8 +557,7 @@ pub(crate) extern "system" fn terrain_edit(
     edit: *const TerrainEdit,
     amount: *mut f32,
 ) -> Status {
-    // SAFETY: the safe layer passes a valid edit for the call.
-    let Some(edit) = (unsafe { edit.as_ref() }).copied() else {
+    let Some(edit) = super::get_headed(edit) else {
         return Status::BAD_ARGS;
     };
     if amount.is_null() {
@@ -700,10 +658,7 @@ pub(crate) extern "system" fn build_rights(
     check: *mut crate::abi::BuildRights,
 ) -> Status {
     use crate::abi::BuildRights;
-    // SAFETY: the safe layer passes `check` null or pointing at a live
-    // `BuildRights` for the call, readable for the size its header states.
-    let Some(mut request) = (unsafe { crate::abi::read_headed(check, size_of::<BuildRights>()) })
-    else {
+    let Some(mut request) = super::get_headed::<BuildRights>(check.cast_const()) else {
         return Status::BAD_ARGS;
     };
     let finite = request
@@ -898,6 +853,56 @@ pub(crate) extern "system" fn allowlist_has(
     });
     match has {
         Some(has) => put(listed, u8::from(has)),
+        None => Status::MISSING,
+    }
+}
+
+/// Whether the fake runs a server, the dedicated one or one a client hosts.
+fn serving(s: &super::State) -> bool {
+    s.host.side == Side::SERVER || s.host.hosting
+}
+
+pub(crate) extern "system" fn chat_mute_set(
+    _me: ModHandle,
+    account: crate::PlayerKey,
+    muted: u8,
+) -> Status {
+    if account == crate::PlayerKey::new(0) || muted > 1 {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if !serving(s) {
+            return Status::MISSING;
+        }
+        let admin = s
+            .host
+            .players
+            .iter()
+            .any(|p| p.key == account && p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
+        let at = s.muted.iter().position(|&k| k == account);
+        match (muted == 1, at) {
+            (true, _) if admin || s.host.host_key == Some(account) => return Status::REFUSED,
+            (true, None) => s.muted.push(account),
+            (false, Some(at)) => {
+                s.muted.remove(at);
+            }
+            _ => {}
+        }
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn chat_mute_has(
+    _me: ModHandle,
+    account: crate::PlayerKey,
+    muted: *mut u8,
+) -> Status {
+    if account == crate::PlayerKey::new(0) || muted.is_null() {
+        return Status::BAD_ARGS;
+    }
+    let has = with(None, |s| serving(s).then(|| s.muted.contains(&account)));
+    match has {
+        Some(has) => put(muted, u8::from(has)),
         None => Status::MISSING,
     }
 }

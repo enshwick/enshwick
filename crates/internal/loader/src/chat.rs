@@ -387,6 +387,8 @@ fn link_client(loader: &'static Loader) {
 
 /// The switch of the chat lines and mod messages.
 static CHAT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat lines and mod messages");
+/// The switch of the own channel on a client.
+static CARRIER_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("the own channel");
 
 /// The loader's link on the client's chat send: queues the client's frame
 /// lines before the game sends.
@@ -401,6 +403,11 @@ unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
         // client, on the thread that sends its chat, by this function's
         // `# Safety`.
         unsafe { queue_frames(client) };
+    });
+    let _carried = CARRIER_FUSE.run("the own channel", || {
+        // SAFETY: `client` is the game's own argument, null or the game
+        // client, on the thread that sends its chat.
+        unsafe { crate::carrier::client_frame(client, std::time::Instant::now()) };
     });
     // SAFETY: `CLIENT_SEND_NEXT` holds the rest of `chat.client_send`'s chain
     // while this detour runs, and `client` is the game's own argument, passed
@@ -505,6 +512,18 @@ unsafe extern "system" fn post(
         let _outcome = CHAT_FUSE.run("the chat queue", drain);
         return out;
     }
+    let muted = CHAT_FUSE.run("the chat mute check", || {
+        // SAFETY: `out` is the game's own argument at the entry of
+        // `chat.post`, by this function's `# Safety`.
+        unsafe { muted_line(out, kind, hash) }
+    });
+    if muted == Some(true) {
+        // SAFETY: `muted_line` returned true only for a non-null `out`, a
+        // result record of at least 8 writable bytes by this function's
+        // `# Safety`.
+        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
+        return out;
+    }
     match next() {
         // SAFETY: `next` is the rest of `chat.post`'s chain, wired while this
         // detour runs, and the arguments are the game's own, passed on
@@ -597,6 +616,30 @@ unsafe fn posted_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> Optio
     // function's `# Safety`.
     unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes) };
     client_frame(&bytes).map(str::to_owned)
+}
+
+/// Whether the game posts a line the player of account `key` typed while
+/// muted, which the server then drops before any other player reads it.
+///
+/// # Safety
+///
+/// - Called at the entry of the loader's link on `chat.post`, on the game's
+///   calling thread.
+unsafe fn muted_line(out: *mut u8, kind: u8, key: u64) -> bool {
+    let Some((loader, layout)) = LOADED.get() else {
+        return false;
+    };
+    if kind != 0 || out.is_null() {
+        return false;
+    }
+    let frame = (loader.caller_frame)();
+    // SAFETY: `frame.rsp` is non-zero, checked first, and `caller_frame`
+    // took the frame at the entry of this chain on this thread, linked with
+    // `HookFlags::CALLER_FRAME`, so it points at the live return address.
+    if frame.rsp == 0 || unsafe { frame.return_address() } != layout.post_return {
+        return false;
+    }
+    crate::chat_mute::drops(loader, key)
 }
 
 /// The frame a line from a player's client carries, which the server takes

@@ -65,8 +65,7 @@ pub(crate) struct FakeCalls {
 
 /// The declaration a spec carries; `None` for a bad one.
 fn declared(spec: *const CallSpec) -> Option<Declared> {
-    // SAFETY: the safe layer passes a valid spec.
-    let spec = unsafe { spec.as_ref() }?;
+    let spec = super::table::get_headed(spec)?;
     // SAFETY: the safe layer passes the spec's name borrowed and unchanged
     // for the call.
     let name = unsafe { spec.name.as_str() }?.to_owned();

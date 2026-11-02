@@ -175,6 +175,12 @@ let item_hash = host.hash(types::ITEM_INFO.id())?;
 | `ui_images()`     | `ImageLayout`, with the UI image type.                                       |
 | `world()`         | The current transform and used item types `World` needs, and the transform's fields. |
 | `inventory()`     | What `Inventories` reads: setups, sub-inventories, stacks, durability, fuel, owner. |
+| `game_events()`   | The hit, death and equipment events, the hit history and kill credit, damage bits and a slot. |
+| `map_waypoints()` | Each player's waypoint beside the map's markers.                             |
+| `effect_events()` | The NPC command, threat and ping events `Effects` raises.                    |
+| `loot()`          | The components loot from destroyed things checks; the loot slot stays the test's. |
+| `meters()`        | `MeterLayout`: an item meter's component and the templates it is cloned into. |
+| `container_kinds()` | The markers `ContainerKinds` tells holders apart by.                       |
 
 Where no layout type is public, `test::facts` names each fact a test lays its
 blobs out by:

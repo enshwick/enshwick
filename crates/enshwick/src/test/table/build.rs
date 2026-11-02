@@ -6,7 +6,7 @@ use crate::test::table::{found, put, text, with};
 
 pub(crate) extern "system" fn build(out: *mut BuildInfo) {
     let host = with(FakeHost::new(), |s| s.host.clone());
-    let _written = put(
+    let _written = crate::test::table::put_headed(
         out,
         BuildInfo {
             header: Header::of::<BuildInfo>(),

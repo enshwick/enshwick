@@ -500,6 +500,9 @@ ids! {
     MAP_MARKER_REGISTRY_TYPES = "map_marker_registry.types";
     /// The id of the visibility of a marker the map shows.
     MAP_MARKER_VISIBILITY_TYPE_VISIBLE = "map_marker_visibility_type.visible";
+    /// The id of the game's message channel for voice chat, which no game
+    /// socket uses, so Enshwick's own messages travel on it.
+    GAME_MESSAGE_CHANNEL_VOICE_CHAT = "game_message_channel.voice_chat";
     /// The id of the marker type registry's resource type, of which the
     /// client's archive holds one.
     MAP_MARKER_REGISTRY = "map_marker_registry";

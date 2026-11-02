@@ -130,7 +130,7 @@ pub(crate) fn text_bytes(base: u64) -> Option<&'static [u8]> {
 
 /// The bytes the stub writes over the server's entry point while it holds
 /// it, `jmp [rip+0]` and the target, and writes back once released.
-const ENTRY_HOLD: usize = 14;
+pub(crate) const ENTRY_HOLD: usize = 14;
 
 /// The game's code while the loader starts: the copy each mod's load, init
 /// and ready is compared against.
@@ -224,7 +224,7 @@ impl Watching {
 }
 
 /// The game's entry point, from its mapped PE header, relative to `base`.
-fn entry_rva(base: u64) -> Option<usize> {
+pub(crate) fn entry_rva(base: u64) -> Option<usize> {
     let base = usize::try_from(base).ok().filter(|&b| b != 0)?;
     // SAFETY: `base` is the game executable's non-zero image base, where
     // Windows maps its PE headers as one readable page for the process.
@@ -446,6 +446,9 @@ fn stop_replacement(stop: usize, next: usize, len: usize) -> Option<Box<[u8]>> {
 /// The lift of the workshop limit, as the log and the Mods screen name it.
 const LIFT_FEATURE: &str = "workshop recipe limit";
 
+/// The per-workshop list lookup, as the log and the Mods screen name it.
+const LOOKUP_FEATURE: &str = "recipe list lookup";
+
 /// Why the lift is off, by the table entry it names.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 enum LiftLimitError {
@@ -603,8 +606,7 @@ fn lookup_address(loader: &'static Loader) -> Option<u64> {
         let lookup = match checked(loader, pinned::recipe::LIST_LOOKUP) {
             Ok(at) => at as u64,
             Err(off) => {
-                let id = off.entry();
-                crate::log!(WARN, "the recipe list lookup is not found: {id} {off}");
+                let _off = loader.feature_off(LOOKUP_FEATURE, off.entry(), &off.to_string());
                 return None;
             }
         };

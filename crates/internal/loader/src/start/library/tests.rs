@@ -313,7 +313,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         Level::WARN,
         &format!(
             "old-abi.dll skipped: {} ({})",
-            enshwick::abi::check_abi(HASHED_ABI, 0).unwrap_err(),
+            enshwick::abi::check_major(HASHED_ABI).unwrap_err(),
             errors::OTHER_ABI
         ),
     );

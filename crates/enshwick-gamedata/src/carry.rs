@@ -1,5 +1,7 @@
 //! A carried table saved for the next start on the same code.
 
+use core::ops::Range;
+
 use rustc_hash::FxHashMap;
 use twox_hash::XxHash3_128;
 
@@ -24,8 +26,9 @@ const HEADER: &str = "enshwick carried table 1";
 ///     age = 2
 ///     "#,
 /// )?;
-/// assert_eq!(table.carry_key(&[0xc3], 0x1000), table.carry_key(&[0xc3], 0x1000));
-/// assert_ne!(table.carry_key(&[0xc3], 0x1000), table.carry_key(&[0xcc], 0x1000));
+/// assert_eq!(table.carry_key(&[0xc3], 0x1000, 0..0), table.carry_key(&[0xc3], 0x1000, 0..0));
+/// assert_ne!(table.carry_key(&[0xc3], 0x1000, 0..0), table.carry_key(&[0xcc], 0x1000, 0..0));
+/// assert_eq!(table.carry_key(&[0xc3, 1], 0x1000, 1..2), table.carry_key(&[0xc3, 2], 0x1000, 1..2));
 /// # Ok::<(), enshwick_gamedata::TableError>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -39,13 +42,17 @@ impl core::fmt::Display for CarryKey {
 
 impl Table {
     /// The key a table carried to `code`, the code section that starts at
-    /// `code_rva`, is saved and found under.
+    /// `code_rva`, is saved and found under; the bytes of `code` in `skip`,
+    /// which change from start to start, are left out.
     #[must_use]
-    pub fn carry_key(&self, code: &[u8], code_rva: u64) -> CarryKey {
+    pub fn carry_key(&self, code: &[u8], code_rva: u64, skip: Range<usize>) -> CarryKey {
+        let end = skip.end.min(code.len());
+        let start = skip.start.min(end);
         let mut hasher = XxHash3_128::new();
         hasher.write(&self.digest.to_le_bytes());
         hasher.write(&code_rva.to_le_bytes());
-        hasher.write(code);
+        hasher.write(&code[..start]);
+        hasher.write(&code[end..]);
         CarryKey(hasher.finish_128())
     }
 
@@ -69,11 +76,11 @@ impl Table {
     ///     "#,
     /// )?;
     /// let code = [0x90, 0xcc, 0xc3];
-    /// let key = table.carry_key(&code, 0x2000);
+    /// let key = table.carry_key(&code, 0x2000, 0..0);
     /// let carried = table.fall_back(&code, 0x2000, |_| None);
     /// let saved = carried.to_saved(key).ok_or("not carried")?;
     /// assert_eq!(table.restore(&saved, key), Some(carried));
-    /// assert_eq!(table.restore(&saved, table.carry_key(&[0xc3], 0x2000)), None);
+    /// assert_eq!(table.restore(&saved, table.carry_key(&[0xc3], 0x2000, 0..0)), None);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[must_use]
@@ -192,7 +199,7 @@ mod tests {
     fn a_saved_carried_table_restores_equal_for_the_same_code() {
         let table = Table::parse(TABLE).unwrap();
         let code = code();
-        let key = table.carry_key(&code, 0x5000);
+        let key = table.carry_key(&code, 0x5000, 0..0);
         let carried = table.fall_back(&code, 0x5000, |_| None);
         let saved = carried.to_saved(key).unwrap();
         assert_eq!(table.restore(&saved, key), Some(carried));
@@ -202,27 +209,27 @@ mod tests {
     fn other_code_another_rva_or_another_table_misses_the_saved_one() {
         let table = Table::parse(TABLE).unwrap();
         let mut code = code();
-        let key = table.carry_key(&code, 0x5000);
+        let key = table.carry_key(&code, 0x5000, 0..0);
         let saved = table
             .fall_back(&code, 0x5000, |_| None)
             .to_saved(key)
             .unwrap();
-        assert_ne!(table.carry_key(&code, 0x6000), key);
+        assert_ne!(table.carry_key(&code, 0x6000, 0..0), key);
         let edited = Table::parse(&TABLE.replace("0x1010", "0x1011")).unwrap();
-        assert_ne!(edited.carry_key(&code, 0x5000), key);
+        assert_ne!(edited.carry_key(&code, 0x5000, 0..0), key);
         assert_eq!(
-            edited.restore(&saved, edited.carry_key(&code, 0x5000)),
+            edited.restore(&saved, edited.carry_key(&code, 0x5000, 0..0)),
             None
         );
         code[63] = 1;
-        assert_ne!(table.carry_key(&code, 0x5000), key);
+        assert_ne!(table.carry_key(&code, 0x5000, 0..0), key);
     }
 
     #[test]
     fn a_damaged_or_incomplete_save_is_not_read() {
         let table = Table::parse(TABLE).unwrap();
         let code = code();
-        let key = table.carry_key(&code, 0x5000);
+        let key = table.carry_key(&code, 0x5000, 0..0);
         let saved = table
             .fall_back(&code, 0x5000, |_| None)
             .to_saved(key)
@@ -253,6 +260,9 @@ mod tests {
     #[test]
     fn a_table_made_for_its_build_is_not_saved() {
         let table = Table::parse(TABLE).unwrap();
-        assert_eq!(table.resolve().to_saved(table.carry_key(&[], 0)), None);
+        assert_eq!(
+            table.resolve().to_saved(table.carry_key(&[], 0, 0..0)),
+            None
+        );
     }
 }

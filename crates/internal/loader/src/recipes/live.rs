@@ -108,7 +108,7 @@ pub(crate) fn init(loader: &'static Loader) {
     if !crate::code::link_recipe_lookup(loader) {
         crate::log!(
             WARN,
-            "disabled recipes stay in the crafting menus: the recipe list lookup is not found"
+            "disabled recipes stay in the crafting menus: the recipe list lookup is off"
         );
     }
     DIRTY.store(true, Ordering::Release);

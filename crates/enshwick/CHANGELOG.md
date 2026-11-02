@@ -20,6 +20,14 @@ Each entry names the pull request that made the change.
   `abi_version`, `enshwick_mod_abi` returns the major, `abi::OTHER_ABI` is
   gone, and the C header defines `ENSHWICK_ABI_MAJOR` and
   `ENSHWICK_ABI_MINOR`. Rebuild every mod once (#852).
+- **Breaking:** `abi::Headed` has the constant `BORN`, the end of the fields
+  every writer of the ABI major knows, which the loader requires of a mod's
+  struct; `impl_headed!(T, born = N)` sets it once a minor appends to `T`.
+  `abi::check_major` checks the value of `enshwick_mod_abi`, and
+  `check_abi` takes the manifest header's `u16` major. `CheckAbiError`
+  gains `BeforeMajors` for a DLL built before ABI majors, and its
+  `OtherMajor` holds a `u16`. The ABI major moves only to the next one
+  (#865).
 - **Breaking:** a mod does not build when a key of its texts lacks a text
   in a language of the new `Language::REQUIRED`, `en` and `uk`; add the
   missing Ukrainian texts (#838).
@@ -111,6 +119,14 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `World::set_muted` and `World::muted` mute a player in chat and lift the
+  mute, on a dedicated server or in a game a client hosts. The server drops
+  every line a muted player types before another player reads it and tells
+  that player with a notice at most every 30 seconds; lines mods send pass.
+  The loader keeps the mutes in `mod-data/enshwick/muted.txt` and never
+  mutes an administrator online or the host. `HostApi` gains
+  `chat_mute_set` and `chat_mute_has` as ABI 5.1; the fake keeps the list
+  (`Installed::muted`) (#881).
 - `enshwick::deps!()` makes `src/deps/<alias>.rs`, which
   `cargo enshwick deps` writes, the public module `deps::<alias>` when the
   file exists (#803).
@@ -135,6 +151,24 @@ Each entry names the pull request that made the change.
   meters by. `test::facts` names each fact a test lays its blobs out by, and
   `FakeHost::without_fact` drops one, so a world or inventory test copies no
   type hash or offset of its own (#809).
+
+- `FakeHost::game_events` sets the hit, death and equipment change events,
+  the hit history and experience credit a death reads its killer from, and
+  damage bits, an attack category and an equipment slot numbered unlike the
+  API's; `FakeHost::map_waypoints` sets each player's waypoint;
+  `FakeHost::effect_events` sets the NPC command, threat and ping events
+  `Effects` raises; `FakeHost::loot` sets the components loot from destroyed
+  things checks. `test::facts` names their facts, and the loot slot's, so a
+  test of these areas lays out and reads its events by them (#871).
+
+- `FakeHost::vanilla_items` lists items in the game's item registry by
+  their debug names, so a mod's test finds them with
+  `content::vanilla::item` as in the game (#880).
+
+- `FakeHost::meters` sets what `MeterLayout` resolves, and
+  `FakeHost::container_kinds` the markers `ContainerKinds` tells holders
+  apart by, which `test::facts` names, so a mod's test of item meters or
+  containers copies no type hash or offset of its own (#877).
 
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`
   name the running game's content by its debug names, so a mod's code holds

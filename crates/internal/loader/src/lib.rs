@@ -32,10 +32,13 @@ pub mod builds;
 #[cfg(windows)]
 mod calls;
 #[cfg(windows)]
+mod carrier;
+#[cfg(windows)]
 mod catalogue;
 pub mod chains;
 #[cfg(windows)]
 mod chat;
+pub mod chat_mute;
 #[cfg(windows)]
 mod clones;
 #[cfg(windows)]

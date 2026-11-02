@@ -1,14 +1,14 @@
-abi 5.0
+abi 5.1
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
-ActionCall size 144 align 8
+ActionCall size 144 align 8 born 144
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     language at 12 size 4 type u32
     player at 16 size 96 type PlayerInfo
     action at 112 size 16 type Str
     args at 128 size 16 type Str
-ActiveBuff size 40 align 8
+ActiveBuff size 40 align 8 born 40
     header at 0 size 8 type Header
     id at 8 size 4 type BuffTypeId
     entity at 12 size 4 type Entity
@@ -16,7 +16,7 @@ ActiveBuff size 40 align 8
     level at 20 size 4 type u32
     duration at 24 size 8 type i64
     remaining at 32 size 8 type i64
-AffixDefData size 64 align 8
+AffixDefData size 64 align 8 born 64
     header at 0 size 8 type Header
     text at 8 size 16 type Str
     group at 24 size 16 type Str
@@ -33,7 +33,7 @@ AffixModifierData size 20 align 4
     min at 8 size 4 type f32
     max at 12 size 4 type f32
     step at 16 size 4 type f32
-AffixRoll size 32 align 8
+AffixRoll size 32 align 8 born 32
     header at 0 size 8 type Header
     pide at 8 size 4 type Entity
     item at 12 size 4 type ItemId
@@ -42,7 +42,7 @@ AffixRoll size 32 align 8
     max_rarity at 18 size 1 type u8
     flags at 19 size 1 type u8
     seed at 24 size 8 type u64
-AltarInfo size 856 align 8
+AltarInfo size 856 align 8 born 856
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     level at 12 size 1 type u8
@@ -52,20 +52,20 @@ AltarInfo size 856 align 8
     zone at 16 size 48 type Bounds
     levels at 64 size 768 type [Bounds; 16]
     position at 832 size 24 type [f64; 3]
-AltarLimit size 16 align 4
+AltarLimit size 16 align 4 born 16
     header at 0 size 8 type Header
     flame_level at 8 size 4 type u32
     vanilla at 12 size 1 type u8
     allowed at 13 size 1 type u8
     reserved at 14 size 2 type [u8; 2]
-AltarZone size 32 align 8
+AltarZone size 32 align 8 born 32
     header at 0 size 8 type Header
     altar at 8 size 4 type Entity
     level at 12 size 1 type u8
     reserved at 13 size 3 type [u8; 3]
     grow at 16 size 8 type i64
     height at 24 size 8 type i64
-BaseLimitInfo size 36 align 4
+BaseLimitInfo size 36 align 4 born 36
     header at 0 size 8 type Header
     zones at 8 size 4 type u32
     bases at 12 size 4 type u32
@@ -74,14 +74,14 @@ BaseLimitInfo size 36 align 4
     vanilla_bases at 24 size 4 type u32
     max_zones at 28 size 4 type u32
     max_bases at 32 size 4 type u32
-BedCheck size 72 align 8
+BedCheck size 72 align 8 born 72
     header at 0 size 8 type Header
     npc_id at 8 size 4 type NpcId
     entity at 12 size 4 type Entity
     bed_id at 16 size 4 type Entity
     home at 24 size 24 type [i64; 3]
     bed_at at 48 size 24 type [i64; 3]
-BlockPlace size 56 align 8
+BlockPlace size 56 align 8 born 56
     header at 0 size 8 type Header
     shape at 8 size 4 type ItemId
     material at 12 size 4 type ItemId
@@ -90,7 +90,7 @@ BlockPlace size 56 align 8
 Bounds size 48 align 8
     min at 0 size 24 type [i64; 3]
     max at 24 size 24 type [i64; 3]
-BuffRequest size 32 align 8
+BuffRequest size 32 align 8 born 32
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     id at 12 size 4 type BuffTypeId
@@ -99,25 +99,25 @@ BuffRequest size 32 align 8
     duration at 24 size 8 type i64
 BuffTypeId size 4 align 4
     0 at 0 size 4 type u32
-BuffTypeInfo size 32 align 8
+BuffTypeInfo size 32 align 8 born 32
     header at 0 size 8 type Header
     id at 8 size 4 type BuffTypeId
     slot at 12 size 2 type u16
     flags at 14 size 2 type u16
     name at 16 size 4 type u32
     duration at 24 size 8 type i64
-BuildCheck size 40 align 8
+BuildCheck size 40 align 8 born 40
     header at 0 size 8 type Header
     player at 8 size 4 type Entity
     item at 12 size 4 type ItemId
     position at 16 size 24 type [i64; 3]
-BuildInfo size 48 align 8
+BuildInfo size 48 align 8 born 48
     header at 0 size 8 type Header
     side at 8 size 1 type Side
     base at 16 size 8 type u64
     fingerprint at 24 size 20 type Fingerprint
     table at 44 size 1 type BuildTable
-BuildRights size 64 align 8
+BuildRights size 64 align 8 born 64
     header at 0 size 8 type Header
     player at 8 size 4 type Entity
     refusal at 12 size 4 type u32
@@ -132,7 +132,7 @@ BuildRow size 56 align 8
     constant_count at 48 size 8 type usize
 BuildTable size 1 align 1
     0 at 0 size 1 type u8
-BuildingData size 52 align 4
+BuildingData size 52 align 4 born 52
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     player at 12 size 4 type Entity
@@ -141,13 +141,13 @@ BuildingData size 52 align 4
     replay at 21 size 1 type u8
     template at 22 size 16 type [u8; 16]
     position at 40 size 12 type [f32; 3]
-BuildingZoneCheck size 80 align 8
+BuildingZoneCheck size 80 align 8 born 80
     header at 0 size 8 type Header
     zones at 8 size 8 type *const Bounds
     zone_count at 16 size 8 type usize
     object at 24 size 48 type Bounds
     margin at 72 size 8 type i64
-CallSpec size 64 align 8
+CallSpec size 64 align 8 born 64
     header at 0 size 8 type Header
     name at 8 size 16 type Str
     major at 24 size 4 type u32
@@ -167,25 +167,25 @@ ChangeId size 4 align 4
     0 at 0 size 4 type u32
 ChangeOp size 4 align 4
     0 at 0 size 4 type u32
-ChunkData size 24 align 4
+ChunkData size 24 align 4 born 24
     header at 0 size 8 type Header
     index at 8 size 4 type u32
     x at 12 size 4 type u32
     z at 16 size 4 type u32
     size at 20 size 4 type u32
-Comfort size 28 align 4
+Comfort size 28 align 4 born 28
     header at 0 size 8 type Header
     category at 8 size 4 type u32
     value at 12 size 4 type i32
     position at 16 size 12 type [f32; 3]
-CraftCheck size 24 align 4
+CraftCheck size 24 align 4 born 24
     header at 0 size 8 type Header
     crafting_operator_id at 8 size 4 type Entity
     crafting_station_id at 12 size 4 type Entity
     recipe_id at 16 size 4 type RecipeId
     recipe_amount at 20 size 2 type u16
     reserved at 22 size 2 type u16
-DamageCheck size 80 align 4
+DamageCheck size 80 align 4 born 80
     header at 0 size 8 type Header
     cause at 8 size 4 type u32
     target at 12 size 4 type Entity
@@ -193,7 +193,7 @@ DamageCheck size 80 align 4
     attacker at 20 size 4 type Entity
     amounts at 24 size 52 type [f32; 13]
     total at 76 size 4 type f32
-DataChange size 80 align 8
+DataChange size 80 align 8 born 80
     header at 0 size 8 type Header
     entry at 8 size 16 type [u8; 16]
     field at 24 size 4 type DataField
@@ -207,7 +207,7 @@ DataField size 4 align 4
     0 at 0 size 4 type u32
 DataSelect size 4 align 4
     0 at 0 size 4 type u32
-DaytimeInfo size 56 align 8
+DaytimeInfo size 56 align 8 born 56
     header at 0 size 8 type Header
     time at 8 size 8 type i64
     day_start at 16 size 8 type i64
@@ -230,16 +230,16 @@ EntityPlace size 32 align 8
     position at 8 size 24 type [i64; 3]
 Event size 4 align 4
     0 at 0 size 4 type u32
-EventSpec size 40 align 8
+EventSpec size 40 align 8 born 40
     header at 0 size 8 type Header
     name at 8 size 16 type Str
     layout at 24 size 16 type Layout
-EventTypeInfo size 32 align 8
+EventTypeInfo size 32 align 8 born 32
     header at 0 size 8 type Header
     name at 8 size 16 type Str
     hash at 24 size 4 type u32
     size at 28 size 4 type u32
-ExperiencePass size 48 align 8
+ExperiencePass size 48 align 8 born 48
     header at 0 size 8 type Header
     rows at 8 size 8 type *mut ExperienceRow
     row_count at 16 size 8 type usize
@@ -255,7 +255,7 @@ ExperienceRow size 20 align 4
 Fingerprint size 20 align 4
     guid at 0 size 16 type [u8; 16]
     age at 16 size 4 type u32
-FogInfo size 40 align 8
+FogInfo size 40 align 8 born 40
     header at 0 size 8 type Header
     width at 8 size 4 type u32
     height at 12 size 4 type u32
@@ -263,7 +263,7 @@ FogInfo size 40 align 8
     size_z at 20 size 4 type f32
     version at 24 size 8 type u64
     session at 32 size 8 type u64
-GameEventData size 24 align 8
+GameEventData size 24 align 8 born 24
     header at 0 size 8 type Header
     type_hash at 8 size 4 type u32
     size at 12 size 4 type u32
@@ -280,7 +280,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1432 align 8
+HostApi size 1448 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -459,7 +459,9 @@ HostApi size 1432 align 8
     request_base_limits at 1408 size 8 type extern "system" fn(ModHandle, u32, u32) -> Status
     map_marker_types at 1416 size 8 type extern "system" fn(ModHandle, *mut MapMarkerTypeInfo, u32, u32, *mut u32) -> Status
     use_content at 1424 size 8 type extern "system" fn(ModHandle, Str) -> Status
-Interaction size 56 align 8
+    chat_mute_set at 1432 size 8 type extern "system" fn(ModHandle, PlayerKey, u8) -> Status
+    chat_mute_has at 1440 size 8 type extern "system" fn(ModHandle, PlayerKey, *mut u8) -> Status
+Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     player at 12 size 4 type Entity
@@ -478,19 +480,19 @@ InventoryOp size 32 align 8
 InventoryOpResult size 8 align 4
     error at 0 size 4 type u32
     remaining at 4 size 4 type u32
-InventoryRequest size 32 align 8
+InventoryRequest size 32 align 8 born 32
     header at 0 size 8 type Header
     flags at 8 size 4 type u32
     actor at 12 size 4 type Entity
     ops at 16 size 8 type *const InventoryOp
     op_count at 24 size 4 type u32
     reserved at 28 size 4 type u32
-InventoryResult size 24 align 8
+InventoryResult size 24 align 8 born 24
     header at 0 size 8 type Header
     outcome at 8 size 4 type u32
     op_count at 12 size 4 type u32
     ops at 16 size 8 type *const InventoryOpResult
-ItemData size 36 align 4
+ItemData size 36 align 4 born 36
     header at 0 size 8 type Header
     id at 8 size 4 type ItemId
     max_stack at 12 size 2 type u16
@@ -503,14 +505,14 @@ ItemId size 4 align 4
 ItemLine size 16 align 4
     modifier at 0 size 12 type StatModifierData
     affix at 12 size 4 type u32
-KnowledgeData size 20 align 4
+KnowledgeData size 20 align 4 born 20
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     id at 12 size 4 type KnowledgeId
     value at 16 size 4 type u32
 KnowledgeId size 4 align 4
     0 at 0 size 4 type u32
-KnowledgeInfo size 24 align 4
+KnowledgeInfo size 24 align 4 born 24
     header at 0 size 8 type Header
     id at 8 size 4 type KnowledgeId
     kind at 12 size 1 type u8
@@ -518,7 +520,7 @@ KnowledgeInfo size 24 align 4
     reserved at 14 size 2 type u16
     value at 16 size 4 type u32
     flags at 20 size 4 type u32
-KnowledgeInput size 32 align 4
+KnowledgeInput size 32 align 4 born 32
     header at 0 size 8 type Header
     player at 8 size 4 type Entity
     id at 12 size 4 type KnowledgeId
@@ -537,14 +539,14 @@ LayoutField size 24 align 8
     hash at 16 size 8 type u64
 Level size 1 align 1
     0 at 0 size 1 type u8
-LoopWaitData size 24 align 8
+LoopWaitData size 24 align 8 born 24
     header at 0 size 8 type Header
     ms at 8 size 4 type u32
     reserved at 12 size 4 type u32
     left_ns at 16 size 8 type i64
 LoopWaitSites size 4 align 4
     0 at 0 size 4 type u32
-Manifest size 192 align 8
+Manifest size 192 align 8 born 192
     header at 0 size 8 type Header
     id at 8 size 16 type Str
     version at 24 size 16 type Str
@@ -565,17 +567,17 @@ Manifest size 192 align 8
     export_count at 184 size 8 type usize
 ManifestFlags size 4 align 4
     0 at 0 size 4 type u32
-MapFrameInfo size 48 align 8
+MapFrameInfo size 48 align 8 born 48
     header at 0 size 8 type Header
     origin at 8 size 16 type [f64; 2]
     size at 24 size 16 type [f64; 2]
     metres_per_cell at 40 size 8 type f64
-MapMarkerInfo size 64 align 8
+MapMarkerInfo size 64 align 8 born 64
     header at 0 size 8 type Header
     position at 8 size 24 type [f64; 3]
     marker_type at 32 size 16 type [u8; 16]
     label at 48 size 16 type [u8; 16]
-MapMarkerTypeInfo size 36 align 4
+MapMarkerTypeInfo size 36 align 4 born 36
     header at 0 size 8 type Header
     type_name at 8 size 16 type [u8; 16]
     marker_id at 24 size 4 type u32
@@ -597,7 +599,7 @@ Migration size 32 align 8
     id at 0 size 16 type Str
     steps at 16 size 8 type *const MigrationStep
     count at 24 size 4 type u32
-MigrationSet size 40 align 8
+MigrationSet size 40 align 8 born 40
     header at 0 size 8 type Header
     migrations at 8 size 8 type *const Migration
     count at 16 size 4 type u32
@@ -611,7 +613,7 @@ MigrationStep size 72 align 8
     to_guid at 56 size 16 type [u8; 16]
 ModHandle size 8 align 8
     0 at 0 size 8 type usize
-ModInfo size 168 align 8
+ModInfo size 168 align 8 born 168
     header at 0 size 8 type Header
     id at 8 size 16 type Str
     version at 24 size 16 type Str
@@ -626,7 +628,7 @@ ModInfo size 168 align 8
     license at 120 size 16 type Str
     homepage at 136 size 16 type Str
     replaced_by at 152 size 16 type Str
-NetMessage size 40 align 8
+NetMessage size 40 align 8 born 40
     header at 0 size 8 type Header
     channel at 8 size 4 type u32
     reserved at 12 size 4 type u32
@@ -636,12 +638,12 @@ NetMessage size 40 align 8
     reserved_tail at 36 size 4 type u32
 NpcId size 4 align 4
     0 at 0 size 4 type u32
-PlayerData size 24 align 8
+PlayerData size 24 align 8 born 24
     header at 0 size 8 type Header
     slot at 8 size 4 type u32
     entity at 12 size 4 type Entity
     key at 16 size 8 type PlayerKey
-PlayerDeathData size 64 align 8
+PlayerDeathData size 64 align 8 born 64
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     cause at 12 size 4 type u32
@@ -653,7 +655,7 @@ PlayerDeathData size 64 align 8
     reserved at 54 size 2 type u16
     killer_entity at 56 size 4 type Entity
     reserved_tail at 60 size 4 type u32
-PlayerInfo size 96 align 8
+PlayerInfo size 96 align 8 born 96
     header at 0 size 8 type Header
     slot at 8 size 4 type u32
     entity at 12 size 4 type Entity
@@ -665,11 +667,11 @@ PlayerKey size 8 align 8
     0 at 0 size 8 type u64
 PointFlags size 4 align 4
     0 at 0 size 4 type u32
-PointHandle size 24 align 8
+PointHandle size 24 align 8 born 24
     header at 0 size 8 type Header
     id at 8 size 4 type u32
     live at 16 size 8 type *const Atomic<u32>
-PointLink size 48 align 8
+PointLink size 48 align 8 born 48
     header at 0 size 8 type Header
     point at 8 size 8 type *const PointSpec
     before at 16 size 8 type *const Str
@@ -679,7 +681,7 @@ PointLink size 48 align 8
     priority at 40 size 4 type i32
 PointMode size 4 align 4
     0 at 0 size 4 type u32
-PointSpec size 64 align 8
+PointSpec size 64 align 8 born 64
     header at 0 size 8 type Header
     name at 8 size 16 type Str
     mode at 24 size 4 type PointMode
@@ -688,17 +690,17 @@ PointSpec size 64 align 8
     output at 48 size 16 type Layout
 PointVerdict size 4 align 4
     0 at 0 size 4 type u32
-PropPlace size 56 align 8
+PropPlace size 56 align 8 born 56
     header at 0 size 8 type Header
     item at 8 size 4 type ItemId
     reserved at 12 size 4 type u32
     position at 16 size 24 type [f64; 3]
     orientation at 40 size 16 type [f32; 4]
-PropRemove size 16 align 4
+PropRemove size 16 align 4 born 16
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     flags at 12 size 4 type u32
-QuestData size 16 align 4
+QuestData size 16 align 4 born 16
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     quest at 12 size 4 type KnowledgeId
@@ -730,7 +732,7 @@ Registers size 136 align 8
     rflags at 128 size 8 type u64
 Relation size 1 align 1
     0 at 0 size 1 type u8
-RenameCall size 128 align 8
+RenameCall size 128 align 8 born 128
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     known at 12 size 1 type u8
@@ -740,14 +742,14 @@ ResourceKey size 24 align 4
     guid at 0 size 16 type [u8; 16]
     type_hash at 16 size 4 type u32
     part at 20 size 4 type u32
-ServiceFound size 72 align 8
+ServiceFound size 72 align 8 born 72
     header at 0 size 8 type Header
     table at 8 size 8 type *const c_void
     fields at 16 size 4 type u32
     owner at 24 size 16 type Str
     owner_version at 40 size 16 type Str
     reason at 56 size 16 type Str
-ServiceSpec size 56 align 8
+ServiceSpec size 56 align 8 born 56
     header at 0 size 8 type Header
     name at 8 size 16 type Str
     major at 24 size 4 type u32
@@ -755,7 +757,7 @@ ServiceSpec size 56 align 8
     table at 48 size 8 type *const c_void
 Side size 1 align 1
     0 at 0 size 1 type u8
-SkillCheck size 20 align 4
+SkillCheck size 20 align 4 born 20
     header at 0 size 8 type Header
     node at 8 size 4 type SkillNode
     gate at 12 size 4 type u32
@@ -763,7 +765,7 @@ SkillCheck size 20 align 4
     reserved at 17 size 3 type [u8; 3]
 SkillNode size 4 align 4
     0 at 0 size 4 type u32
-SpawnRequest size 80 align 8
+SpawnRequest size 80 align 8 born 80
     header at 0 size 8 type Header
     template at 8 size 16 type [u8; 16]
     position at 24 size 24 type [i64; 3]
@@ -771,14 +773,14 @@ SpawnRequest size 80 align 8
     level at 64 size 4 type u32
     reserved at 68 size 4 type u32
     lifetime_ns at 72 size 8 type u64
-StatChange size 32 align 4
+StatChange size 32 align 4 born 32
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     stat at 12 size 8 type StatRef
     old at 20 size 4 type f32
     new at 24 size 4 type f32
     reserved at 28 size 4 type u32
-StatDefData size 40 align 8
+StatDefData size 40 align 8 born 40
     header at 0 size 8 type Header
     ty at 8 size 1 type u8
     format at 9 size 1 type u8
@@ -792,7 +794,7 @@ StatModifierData size 12 align 4
     op at 4 size 1 type u8
     reserved at 5 size 3 type [u8; 3]
     value at 8 size 4 type f32
-StatModify size 40 align 8
+StatModify size 40 align 8 born 40
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     key at 12 size 4 type u32
@@ -815,7 +817,7 @@ Status size 4 align 4
 Str size 16 align 8
     ptr at 0 size 8 type *const u8
     len at 8 size 8 type usize
-Summon size 80 align 8
+Summon size 80 align 8 born 80
     header at 0 size 8 type Header
     item at 8 size 4 type ItemId
     ammo at 12 size 4 type ItemId
@@ -826,7 +828,7 @@ Summon size 80 align 8
     meter at 68 size 4 type [u16; 2]
     consumed at 72 size 1 type u8
     reserved at 73 size 3 type [u8; 3]
-SurvivorLookup size 64 align 8
+SurvivorLookup size 64 align 8 born 64
     header at 0 size 8 type Header
     survivor at 8 size 4 type NpcId
     vanilla at 12 size 4 type Entity
@@ -838,13 +840,13 @@ SurvivorLookup size 64 align 8
 Symbol size 24 align 8
     name at 0 size 16 type Str
     rva at 16 size 8 type u64
-TeleportRequest size 56 align 8
+TeleportRequest size 56 align 8 born 56
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     flags at 12 size 4 type u32
     position at 16 size 24 type [i64; 3]
     orientation at 40 size 16 type [f32; 4]
-TerrainEdit size 60 align 4
+TerrainEdit size 60 align 4 born 60
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     shape at 12 size 4 type u32
@@ -854,7 +856,7 @@ TerrainEdit size 60 align 4
     radius at 36 size 4 type f32
     height at 40 size 4 type f32
     protect at 44 size 16 type [u8; 16]
-TerrainMaterialInfo size 20 align 4
+TerrainMaterialInfo size 20 align 4 born 20
     header at 0 size 8 type Header
     id at 8 size 1 type u8
     flags at 9 size 1 type u8
@@ -862,7 +864,7 @@ TerrainMaterialInfo size 20 align 4
     reserved at 11 size 1 type u8
     item at 12 size 4 type ItemId
     health at 16 size 4 type i32
-TickData size 56 align 8
+TickData size 56 align 8 born 56
     header at 0 size 8 type Header
     step at 8 size 8 type u64
     elapsed_steps at 16 size 8 type u64
@@ -872,7 +874,7 @@ TickData size 56 align 8
     game at 48 size 8 type u64
 TickHandle size 4 align 4
     0 at 0 size 4 type u32
-TransactionInfo size 48 align 8
+TransactionInfo size 48 align 8 born 48
     header at 0 size 8 type Header
     state at 8 size 4 type u32
     reason at 12 size 4 type Status
@@ -887,25 +889,25 @@ TransactionOp size 16 align 8
     kind at 0 size 4 type u32
     reserved at 4 size 4 type u32
     data at 8 size 8 type *const c_void
-UiDialog size 64 align 8
+UiDialog size 64 align 8 born 64
     header at 0 size 8 type Header
     title at 8 size 16 type Str
     message at 24 size 16 type Str
     detail at 40 size 16 type Str
     buttons at 56 size 4 type u32
     flags at 60 size 4 type u32
-UiFrame size 24 align 8
+UiFrame size 24 align 8 born 24
     header at 0 size 8 type Header
     token at 8 size 8 type u64
     screen at 16 size 4 type u32
     reserved at 20 size 4 type u32
-UiMarker size 56 align 8
+UiMarker size 56 align 8 born 56
     header at 0 size 8 type Header
     position at 8 size 24 type [i64; 3]
     label at 32 size 16 type Str
     color at 48 size 4 type u32
     marker_type at 52 size 4 type u32
-UiWidget size 96 align 8
+UiWidget size 96 align 8 born 96
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     flags at 12 size 4 type u32
@@ -927,17 +929,17 @@ Voxel size 4 align 1
     material at 1 size 1 type u8
     fill at 2 size 1 type u8
     reserved at 3 size 1 type u8
-VoxelRegion size 32 align 4
+VoxelRegion size 32 align 4 born 32
     header at 0 size 8 type Header
     min at 8 size 12 type [u32; 3]
     size at 20 size 12 type [u32; 3]
-VoxelWrite size 48 align 8
+VoxelWrite size 48 align 8 born 48
     header at 0 size 8 type Header
     min at 8 size 12 type [u32; 3]
     size at 20 size 12 type [u32; 3]
     voxels at 32 size 8 type *const Voxel
     count at 40 size 8 type u64
-WeatherFront size 56 align 8
+WeatherFront size 56 align 8 born 56
     header at 0 size 8 type Header
     layer at 8 size 4 type u32
     effect at 12 size 4 type u32

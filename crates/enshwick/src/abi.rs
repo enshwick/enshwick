@@ -169,18 +169,32 @@ impl Header {
 /// }
 /// assert_eq!(size_of_headed::<TickData>(), Header::of::<TickData>().size as usize);
 /// ```
-pub unsafe trait Headed: bytemuck::Zeroable + Copy {}
+pub unsafe trait Headed: bytemuck::Zeroable + Copy {
+    /// Where the fields every writer of this [`ABI_MAJOR`] knows end: the
+    /// struct's size at minor 0 of the major. A reader of a struct the other
+    /// side wrote requires this much, and reads a later field only where
+    /// [`Header::covers`] it; the layout tests hold it to the golden file.
+    const BORN: usize;
+}
 
 /// Implements [`Headed`] for an ABI struct beside its definition and checks at
-/// compile time that its [`Header`] sits at offset 0.
+/// compile time that its [`Header`] sits at offset 0. `born` is the struct's
+/// size at minor 0 of this major, once a minor appended a field to it.
 macro_rules! impl_headed {
     ($ty:ty) => {
+        impl_headed!($ty, born = size_of::<$ty>());
+    };
+    ($ty:ty, born = $born:expr) => {
         // SAFETY: the struct is `repr(C)`, its first field is the `Header`
         // checked at offset 0 below, and its other fields are integers,
         // pointers and `Option`s of function pointers, valid for any bytes
         // the other side writes.
-        unsafe impl $crate::abi::Headed for $ty {}
+        unsafe impl $crate::abi::Headed for $ty {
+            const BORN: usize = $born;
+        }
         const _: () = assert!(core::mem::offset_of!($ty, header) == 0);
+        const _: () =
+            assert!($born >= size_of::<$crate::abi::Header>() && $born <= size_of::<$ty>());
     };
 }
 
@@ -707,7 +721,9 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 123 * 8);
-    assert!(size_of::<HostApi>() == 24 + 176 * 8);
+    assert!(size_of::<HostApi>() == 24 + 178 * 8);
+    assert!(core::mem::offset_of!(HostApi, chat_mute_has) == 24 + 177 * 8);
+    assert!(core::mem::offset_of!(HostApi, chat_mute_set) == 24 + 176 * 8);
     assert!(core::mem::offset_of!(HostApi, use_content) == 24 + 175 * 8);
     assert!(core::mem::offset_of!(HostApi, map_marker_types) == 24 + 174 * 8);
     assert!(size_of::<MapMarkerTypeInfo>() == 8 + 16 + 4 + 1 + 4 + 3);

@@ -9,6 +9,7 @@
 //! its code pattern, and what it cannot find stays missing: the features and
 //! mods that need it turn off, the rest runs.
 
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -179,13 +180,15 @@ pub fn load() -> Vec<Table> {
 /// section and its RVA), with `cell` reading the `u32` the game's image
 /// holds at an RVA for the constants the game keeps in data cells. A carried table is read from its file under
 /// `data_dir` while the code and the table stay the same, and saved there
-/// otherwise.
+/// otherwise; the bytes of the code in `hold`, which the stub holds the
+/// entry point with, do not count.
 #[must_use]
 pub fn select(
     tables: &[Table],
     running: Side,
     fingerprint: Fingerprint,
     code: Option<(&[u8], u64)>,
+    hold: Range<usize>,
     cell: impl Fn(u64) -> Option<u32> + Sync,
     data_dir: Option<&Path>,
 ) -> Option<KnownBuild> {
@@ -204,7 +207,7 @@ pub fn select(
     let (code, code_rva) = code?;
     let base = tables::newest(tables, side)?;
     let table = match data_dir.and_then(|dir| carried_file(dir, running)) {
-        Some(path) => carry(base, code, code_rva, cell, &path),
+        Some(path) => carry(base, code, code_rva, hold, cell, &path),
         None => base.fall_back(code, code_rva, cell),
     };
     Some(KnownBuild {
@@ -232,10 +235,11 @@ fn carry(
     base: &Table,
     code: &[u8],
     code_rva: u64,
+    hold: Range<usize>,
     cell: impl Fn(u64) -> Option<u32> + Sync,
     path: &Path,
 ) -> Resolved {
-    let key = base.carry_key(code, code_rva);
+    let key = base.carry_key(code, code_rva, hold);
     if let Some(table) = std::fs::read_to_string(path)
         .ok()
         .and_then(|text| base.restore(&text, key))

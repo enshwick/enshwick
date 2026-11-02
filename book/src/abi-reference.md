@@ -43,7 +43,10 @@ one:
   A reader takes a field only when
   [`Header::covers`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
   it, so a mod of an older minor and a loader of a newer one read the
-  fields both know.
+  fields both know. The loader requires of a mod's struct only
+  `Headed::BORN`, where the fields of the major's minor 0 end; the
+  golden file records it for every headed type, and the layout tests fail
+  when an append moves it within a major.
 
 A mod keeps loading across every release of its major, so a mod author
 rebuilds only for a new major. Pin `enshwick` with `=` in a mod's

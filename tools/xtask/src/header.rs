@@ -263,7 +263,9 @@ fn parse_layout(text: &str) -> Result<Vec<Shape>, String> {
                 .fields
                 .push((name.to_owned(), offset));
         } else {
-            let [name, "size", size, "align", align] = words[..] else {
+            let ([name, "size", size, "align", align]
+            | [name, "size", size, "align", align, "born", _]) = words[..]
+            else {
                 return Err(bad());
             };
             shapes.push(Shape {
@@ -383,7 +385,7 @@ fn compile_asserts(header: &Path, source: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
-    const GOLDEN: &str = "abi 5.2\nPair size 8 align 4\n    left at 0 size 4 type u32\n    right at 4 size 4 type extern \"system\" fn(u32)\nStatus size 4 align 4\n    0 at 0 size 4 type i32\n";
+    const GOLDEN: &str = "abi 5.2\nPair size 8 align 4 born 8\n    left at 0 size 4 type u32\n    right at 4 size 4 type extern \"system\" fn(u32)\nStatus size 4 align 4\n    0 at 0 size 4 type i32\n";
 
     #[test]
     fn the_layout_file_reads_into_shapes() {

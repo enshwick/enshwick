@@ -31,10 +31,37 @@ struct Field {
     ty: String,
 }
 
-/// The layout of the whole ABI at one version.
+/// The layout of the whole ABI at one version, with the
+/// [`Headed::BORN`](crate::abi::Headed::BORN) of each headed type.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Snapshot {
     types: BTreeMap<String, Shape>,
+    born: BTreeMap<String, usize>,
+}
+
+/// A type the macro `shapes!` asks for its [`Headed::BORN`](crate::abi::Headed::BORN): through
+/// [`BornOfHeaded`] for a headed type, else through [`BornOfOther`], chosen
+/// by autoref on `&&Probe`.
+struct Probe<T>(core::marker::PhantomData<T>);
+
+trait BornOfHeaded {
+    fn born(&self) -> Option<usize>;
+}
+
+impl<T: crate::abi::Headed> BornOfHeaded for &Probe<T> {
+    fn born(&self) -> Option<usize> {
+        Some(T::BORN)
+    }
+}
+
+trait BornOfOther {
+    fn born(&self) -> Option<usize>;
+}
+
+impl<T> BornOfOther for Probe<T> {
+    fn born(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// The field `name` at `offset`, of the type the accessor `_field` picks out
@@ -89,8 +116,14 @@ macro_rules! shapes {
     ($($ty:ident { $($field:tt),* }),* $(,)?) => {
         fn current() -> Snapshot {
             let mut types = BTreeMap::new();
-            $(types.insert(stringify!($ty).to_owned(), shape!($ty { $($field),* }));)*
-            Snapshot { types }
+            let mut born = BTreeMap::new();
+            $(
+                types.insert(stringify!($ty).to_owned(), shape!($ty { $($field),* }));
+                if let Some(end) = (&&Probe::<$ty>(core::marker::PhantomData)).born() {
+                    born.insert(stringify!($ty).to_owned(), end);
+                }
+            )*
+            Snapshot { types, born }
         }
 
         const LISTED: &[(&str, &[&str])] = &[$((stringify!($ty), &[$(stringify!($field)),*])),*];
@@ -204,7 +237,7 @@ shapes! {
         MapFrameInfo { header, origin, size, metres_per_cell },
         MapMarkerTypeInfo { header, type_name, marker_id, sorting_category, is_fast_travel_destination, is_custom_marker_type, show_above_fog_of_war, show_label, reserved },
         MarkerTypeSorting { 0 },
-        HostApi { header, host_version, build, symbol, system, field_offset, type_size, hook, caller_frame, fault, log, settings, publish, service, constant, data_dir, log_level, subscribe, type_hash, component, entity_template, player, players, serve_resource, add_text, mods, sync, code_range, patch_code, workshop_recipes, hosting, server_world, chat, set_label, rename_filter, join_missing, hook_at, inventory_open, item_info, inventory_submit, status, run_console, altars_open, altars, building_zone_check_filter, survivor_lookup, survivor_bed_check, summon_filter, summon_item, survivor_status, interaction_filter, skill_override, comfort_filter, experience_filter, raise_base_limit, base_zones, game_event, entities, destroy, save_world, world_key, component_write, emit, teleport, spawn, craft_filter, build_filter, net_channel, net_send, net_ready, notify, time_of_day, set_time_of_day, time_speed_control, set_time_speed, game_settings, set_game_settings, damage_filter, buff_types, buffs, apply_buff, remove_buff, knowledge, grant_knowledge, quests, weather_at, weather_fronts, set_weather, terrain_materials, terrain_edit, config_schema, summoned, item_data_open, item_data_get, item_data_set, ui_frame, ui_widget, ui_dialog, ui_hud, ui_markers, config_check, texts, content_serve, content_read, icons_ready, stat_open, stat_info, stat_value, stat_modify, stat_buff, stats_changed, stat_sources, stat_watch, define_event, subscribe_event, send_event, affix_open, affix_roll, item_lines, affix_info, migrate, declare_content, entity_data_open, replaced, knowledge_input_filter, language, keep_game_settings, forget_game_settings, revoke_knowledge, account_knowledge, resource_read, game_text, rebuild_resource, recipe_rule, recipe_disabled, define_point, attach_point, run_point, actions, event_types, recipe_kind, feature, rate, set_rate, change_data, loop_wait, server_wait, task_workers, altar_zone_filter, altar_zones_changed, altar_limit_filter, base_limit, voxel_read, declare_change, set_change, build_rights, transaction_commit, transaction_undo, transaction_status, transaction_commit_for, world_quiet, fog_open, fog_read, serve_call, find_call, call, transaction_entities, world_persists, map_markers, account_action, allowlist_set, allowlist_has, subscribe_tick, set_tick_every, map_frame, request_base_limits, map_marker_types, use_content },
+        HostApi { header, host_version, build, symbol, system, field_offset, type_size, hook, caller_frame, fault, log, settings, publish, service, constant, data_dir, log_level, subscribe, type_hash, component, entity_template, player, players, serve_resource, add_text, mods, sync, code_range, patch_code, workshop_recipes, hosting, server_world, chat, set_label, rename_filter, join_missing, hook_at, inventory_open, item_info, inventory_submit, status, run_console, altars_open, altars, building_zone_check_filter, survivor_lookup, survivor_bed_check, summon_filter, summon_item, survivor_status, interaction_filter, skill_override, comfort_filter, experience_filter, raise_base_limit, base_zones, game_event, entities, destroy, save_world, world_key, component_write, emit, teleport, spawn, craft_filter, build_filter, net_channel, net_send, net_ready, notify, time_of_day, set_time_of_day, time_speed_control, set_time_speed, game_settings, set_game_settings, damage_filter, buff_types, buffs, apply_buff, remove_buff, knowledge, grant_knowledge, quests, weather_at, weather_fronts, set_weather, terrain_materials, terrain_edit, config_schema, summoned, item_data_open, item_data_get, item_data_set, ui_frame, ui_widget, ui_dialog, ui_hud, ui_markers, config_check, texts, content_serve, content_read, icons_ready, stat_open, stat_info, stat_value, stat_modify, stat_buff, stats_changed, stat_sources, stat_watch, define_event, subscribe_event, send_event, affix_open, affix_roll, item_lines, affix_info, migrate, declare_content, entity_data_open, replaced, knowledge_input_filter, language, keep_game_settings, forget_game_settings, revoke_knowledge, account_knowledge, resource_read, game_text, rebuild_resource, recipe_rule, recipe_disabled, define_point, attach_point, run_point, actions, event_types, recipe_kind, feature, rate, set_rate, change_data, loop_wait, server_wait, task_workers, altar_zone_filter, altar_zones_changed, altar_limit_filter, base_limit, voxel_read, declare_change, set_change, build_rights, transaction_commit, transaction_undo, transaction_status, transaction_commit_for, world_quiet, fog_open, fog_read, serve_call, find_call, call, transaction_entities, world_persists, map_markers, account_action, allowlist_set, allowlist_has, subscribe_tick, set_tick_every, map_frame, request_base_limits, map_marker_types, use_content, chat_mute_set, chat_mute_has },
         AccountActionType { 0 },
         LoopWaitData { header, ms, reserved, left_ns },
         LoopWaitSites { 0 },
@@ -239,7 +272,11 @@ impl Snapshot {
     fn render(&self) -> String {
         let mut text = String::new();
         for (name, shape) in &self.types {
-            let _ = writeln!(text, "{name} size {} align {}", shape.size, shape.align);
+            let _ = write!(text, "{name} size {} align {}", shape.size, shape.align);
+            if let Some(born) = self.born.get(name) {
+                let _ = write!(text, " born {born}");
+            }
+            text.push('\n');
             for Field {
                 name,
                 offset,
@@ -256,6 +293,7 @@ impl Snapshot {
     fn parse(text: &str) -> Option<Self> {
         let mut layout = Self {
             types: BTreeMap::new(),
+            born: BTreeMap::new(),
         };
         let mut last = None;
         for line in text.lines() {
@@ -274,8 +312,13 @@ impl Snapshot {
                     ty: ty.to_owned(),
                 });
             } else {
-                let [name, "size", size, "align", align] = words[..] else {
-                    return None;
+                let (name, size, align) = match words[..] {
+                    [name, "size", size, "align", align] => (name, size, align),
+                    [name, "size", size, "align", align, "born", born] => {
+                        layout.born.insert(name.to_owned(), born.parse().ok()?);
+                        (name, size, align)
+                    }
+                    _ => return None,
                 };
                 let shape = Shape {
                     size: size.parse().ok()?,
@@ -328,24 +371,28 @@ fn appends(old: &Snapshot, new: &Snapshot) -> bool {
 }
 
 /// Why `now` is the wrong version for the layout `new`, when the golden
-/// file holds `old` at `was`; `None` when it fits. A higher major fits any
-/// change, since a lower one could match mods of an earlier major; within a
-/// major, an unchanged layout keeps the minor, an append takes the next one,
-/// and any other change fits no minor.
+/// file holds `old` at `was`; `None` when it fits. The next major at minor 0
+/// fits any change; a lower or a skipped one could match mods of an earlier
+/// major. Within a major, an unchanged layout keeps the minor, an append
+/// takes the next one, and any other change fits no minor.
 fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Option<String> {
     let (major, minor) = was;
     let rewrite = "then run the tests with ENSHWICK_ABI_LAYOUT=update";
-    if now.0 < major {
-        return Some(format!(
-            "the ABI major only grows: set ABI_MAJOR to {} or more",
-            major + 1
-        ));
+    if now.0 != major {
+        if now.0 != major + 1 {
+            return Some(format!(
+                "the ABI major after {major} is {}: set ABI_MAJOR to it, {rewrite}",
+                major + 1
+            ));
+        }
+        if now.1 != 0 {
+            return Some(format!(
+                "a new ABI major starts at minor 0: set ABI_MINOR to 0, {rewrite}"
+            ));
+        }
+        return wrong_born(old, new, true);
     }
-    if now.0 > major {
-        return (now.1 != 0)
-            .then(|| format!("a new ABI major starts at minor 0: set ABI_MINOR to 0, {rewrite}"));
-    }
-    let needed = if old == new {
+    let needed = if old.types == new.types {
         minor
     } else if appends(old, new) {
         minor + 1
@@ -356,13 +403,60 @@ fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Opt
             major + 1
         ));
     };
-    (now.1 != needed).then(|| {
-        format!(
-            "the layout from ABI {major}.{minor} needs ABI {major}.{needed}: set ABI_MINOR to \
-             {needed}, keep what readers require of an older writer at its old size and read \
-             the appended fields only where Header::covers them, {rewrite}"
-        )
+    if now.1 != needed {
+        return Some(format!(
+            "the layout from ABI {major}.{minor} needs ABI {major}.{needed}: \
+             set ABI_MINOR to {needed}, {rewrite}"
+        ));
+    }
+    wrong_born(old, new, false)
+}
+
+/// Why a headed type's [`Headed::BORN`](crate::abi::Headed::BORN) in `new`
+/// is wrong, or `None`: in a new major and for a new type it is the type's
+/// size; within a major it keeps what the golden file `old` holds, or the old
+/// size of a type that becomes headed, so a writer of an older minor still
+/// covers what readers require, and a type stays headed for the rest of its
+/// major.
+fn wrong_born(old: &Snapshot, new: &Snapshot, new_major: bool) -> Option<String> {
+    if !new_major {
+        let lost = old.born.keys().find(|name| !new.born.contains_key(*name));
+        if let Some(name) = lost {
+            return Some(format!(
+                "{name} stopped being headed within an ABI major: older writers still send \
+                 it with a header, so keep impl_headed!({name}) or set a new ABI_MAJOR"
+            ));
+        }
+    }
+    new.born.iter().find_map(|(name, &born)| {
+        let size = new.types.get(name).map_or(born, |shape| shape.size);
+        let kept = (!new_major)
+            .then(|| {
+                old.born
+                    .get(name)
+                    .copied()
+                    .or_else(|| old.types.get(name).map(|shape| shape.size))
+            })
+            .flatten();
+        let want = kept.unwrap_or(size);
+        (born != want).then(|| {
+            format!(
+                "{name} has Headed::BORN {born} and needs {want}, the end of what every \
+                 writer of this ABI major knows: write impl_headed!({name}, born = {want})"
+            )
+        })
     })
+}
+
+/// The golden file's text, `None` only when it does not exist; any other
+/// error, such as a lock or a denied read, is an error, so the update mode
+/// never writes over a file it could not read.
+fn read_golden(path: &Path) -> std::io::Result<Option<String>> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 fn golden_path() -> std::path::PathBuf {
@@ -373,15 +467,32 @@ fn golden_path() -> std::path::PathBuf {
 fn the_abi_layout_and_version_match_the_golden_file() {
     let new = current();
     let path = golden_path();
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
-    let (was, old) = parse_golden(&text)
-        .unwrap_or_else(|| panic!("{} does not read as a golden file", path.display()));
     let now = (ABI_MAJOR, ABI_MINOR);
+    let rendered = render_golden(now, &new);
+    let update = std::env::var_os("ENSHWICK_ABI_LAYOUT").is_some_and(|value| value == "update");
+    let read = read_golden(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let Some(text) = read else {
+        // A missing file holds no version to bump from.
+        assert!(
+            update,
+            "{} is missing: run the tests with ENSHWICK_ABI_LAYOUT=update",
+            path.display()
+        );
+        std::fs::write(&path, rendered).unwrap();
+        return;
+    };
+    // A broken file, such as one left by a merge conflict, is mended by hand
+    // so the bump check sees both sides.
+    let (was, old) = parse_golden(&text).unwrap_or_else(|| {
+        panic!(
+            "{} does not read as a golden file: resolve it by hand, keeping its version line",
+            path.display()
+        )
+    });
     if let Some(why) = wrong_bump(was, &old, &new, now) {
         panic!("{why}");
     }
-    let rendered = render_golden(now, &new);
-    if std::env::var_os("ENSHWICK_ABI_LAYOUT").is_some_and(|value| value == "update") {
+    if update {
         std::fs::write(&path, rendered).unwrap();
         return;
     }
@@ -443,6 +554,20 @@ fn every_abi_type_and_field_is_listed() {
         })
         .collect();
     assert_eq!(listed, structs_in_source());
+}
+
+#[test]
+fn only_a_missing_golden_file_counts_as_missing() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    assert!(matches!(
+        read_golden(&src.join("abi/no-such-layout.txt")),
+        Ok(None)
+    ));
+    assert!(matches!(read_golden(&golden_path()), Ok(Some(_))));
+    assert!(
+        read_golden(&src).is_err(),
+        "a folder reads as an error, not as missing"
+    );
 }
 
 #[test]
@@ -518,7 +643,14 @@ fn layout(types: &[(&str, Shape)]) -> Snapshot {
             .iter()
             .map(|(name, shape)| ((*name).to_owned(), shape.clone()))
             .collect(),
+        born: BTreeMap::new(),
     }
+}
+
+/// `layout` with `Fixture`'s [`Headed::BORN`](crate::abi::Headed::BORN) at `born`.
+fn born_at(mut layout: Snapshot, born: usize) -> Snapshot {
+    layout.born.insert("Fixture".to_owned(), born);
+    layout
 }
 
 /// Whether `now` fits the change of one type `Fixture` from `old` at ABI
@@ -577,10 +709,78 @@ fn a_field_appended_into_the_old_tail_padding_needs_a_new_major() {
 }
 
 #[test]
-fn the_major_never_goes_down() {
+fn the_major_moves_only_to_the_next_one() {
     let headed = || shape!(Headed { header, value });
     assert!(!fits(headed(), headed(), (4, 0)));
     assert!(!fits(headed(), headed(), (1, 0)));
+    assert!(!fits(headed(), headed(), (7, 0)), "a skipped major fails");
+}
+
+#[test]
+fn an_append_keeps_what_readers_require_of_older_writers() {
+    let old = born_at(layout(&[("Fixture", shape!(Headed { header, value }))]), 12);
+    let grown = layout(&[(
+        "Fixture",
+        shape!(HeadedGrown {
+            header,
+            value,
+            added
+        }),
+    )]);
+    assert_eq!(
+        wrong_bump((5, 2), &old, &born_at(grown.clone(), 12), (5, 3)),
+        None
+    );
+    let moved = wrong_bump((5, 2), &old, &born_at(grown.clone(), 16), (5, 3)).unwrap();
+    assert!(
+        moved.contains("impl_headed!(Fixture, born = 12)"),
+        "{moved}"
+    );
+    assert_eq!(
+        wrong_bump((5, 2), &old, &born_at(grown.clone(), 16), (6, 0)),
+        None
+    );
+    assert!(
+        wrong_bump((5, 2), &old, &born_at(grown, 12), (6, 0)).is_some(),
+        "a new major starts again at the size"
+    );
+}
+
+#[test]
+fn a_type_that_becomes_headed_in_an_append_is_born_at_its_old_size() {
+    let old = layout(&[("Fixture", shape!(Headed { header, value }))]);
+    let grown = layout(&[(
+        "Fixture",
+        shape!(HeadedGrown {
+            header,
+            value,
+            added
+        }),
+    )]);
+    assert!(wrong_bump((5, 2), &old, &born_at(grown.clone(), 16), (5, 3)).is_some());
+    assert_eq!(wrong_bump((5, 2), &old, &born_at(grown, 12), (5, 3)), None);
+}
+
+#[test]
+fn a_type_stays_headed_for_the_rest_of_its_major() {
+    let headed = || layout(&[("Fixture", shape!(Headed { header, value }))]);
+    let old = born_at(headed(), 12);
+    assert!(wrong_bump((5, 2), &old, &headed(), (5, 2)).is_some());
+    assert_eq!(wrong_bump((5, 2), &old, &headed(), (6, 0)), None);
+}
+
+#[test]
+fn the_born_sizes_are_those_of_the_headed_types() {
+    let layout = current();
+    assert!(
+        layout.born.len() > 50,
+        "{} headed types found",
+        layout.born.len()
+    );
+    for name in layout.born.keys() {
+        let first = layout.types[name].fields.first();
+        assert!(first.is_some_and(|field| field.ty == "Header"), "{name}");
+    }
 }
 
 #[test]

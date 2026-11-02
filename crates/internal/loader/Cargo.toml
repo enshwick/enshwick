@@ -79,6 +79,14 @@ name = "registry_read"
 harness = false
 
 [[bench]]
+name = "envelope"
+harness = false
+
+[[bench]]
+name = "link"
+harness = false
+
+[[bench]]
 name = "item_kinds"
 harness = false
 
