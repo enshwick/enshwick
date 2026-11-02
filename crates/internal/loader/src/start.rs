@@ -122,6 +122,9 @@ pub(crate) fn start(
     if STARTED.swap(true, Ordering::AcqRel) {
         return;
     }
+    // The caller frame needs TLS indices below 64, which the client's own
+    // start uses up within seconds, so they are taken before anything else.
+    let frame = *FRAME.get_or_init(FrameSlot::allocate);
     let began = std::time::Instant::now();
     let Some(game::Begun {
         mods_dir,
@@ -158,7 +161,6 @@ pub(crate) fn start(
     if let Some(w) = watching.as_mut() {
         w.check("", Stage::Skip);
     }
-    let frame = *FRAME.get_or_init(FrameSlot::allocate);
     let side = game.side;
     let loader = Loader {
         side,
