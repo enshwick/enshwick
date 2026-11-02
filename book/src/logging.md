@@ -47,7 +47,11 @@ The loader writes to `logs/enshwick/` beside the game:
 
 A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. At start the
 files of the two sessions before are kept as `<name>.1.log` (the last) and
-`<name>.2.log`, each cut to its last 8 MiB, and older ones are deleted. A background thread writes them and
+`<name>.2.log`, each cut to its last 8 MiB, and older ones are deleted. During
+a session, `all.log` moves aside the same way once it would pass 32 MiB, and
+`loader.log` or a mod's file once it would pass 8 MiB, so `<name>.1.log` can
+hold the start of the same session; the new file's first line says so. A log
+never takes more than three times its cap. A background thread writes them and
 flushes every line, so a hook never waits on the disk and the last lines
 before a crash are kept. Up to 4096 lines wait for it; a line that finds the
 queue full is dropped rather than making the game wait, and the next line

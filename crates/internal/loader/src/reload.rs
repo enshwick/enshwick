@@ -377,7 +377,7 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, ReloadM
     let copy = copy_path(&loader.mods_dir, &mod_.original, mod_.copies + 1)
         .ok_or(ReloadModError::NoPath)?;
     std::fs::copy(&mod_.original, &copy).map_err(ReloadModError::Copy)?;
-    let Some(new) = crate::start::load_copy(&copy) else {
+    let Some(new) = crate::start::load_copy(&copy, &mod_.original) else {
         let _gone = std::fs::remove_file(&copy);
         return Err(ReloadModError::NotAMod);
     };

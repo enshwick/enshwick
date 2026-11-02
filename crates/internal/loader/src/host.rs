@@ -449,6 +449,7 @@ impl Loader {
     /// Mods screen and in the status summary. Always false, for the caller
     /// to return.
     pub(crate) fn feature_off(&self, feature: &str, id: &str, reason: &str) -> bool {
+        let reason = self.build.reason(id, reason);
         crate::log!(
             WARN,
             "{}",

@@ -247,9 +247,8 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
     else {
         crate::log!(
             ERROR,
-            "unknown game build {}/{}; the game runs vanilla until Enshwick has its build table ({})",
-            hex(&fingerprint.guid()),
-            fingerprint.age(),
+            "unknown game build {}; the game runs vanilla until Enshwick has its build table ({})",
+            builds::fingerprint_name(fingerprint),
             errors::UNKNOWN_BUILD
         );
         crate::holds::enforce(data_dir, &[], true, None);
@@ -277,9 +276,8 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
         builds::Kind::Exact => crate::log!(INFO, "game: {}", build.name),
         builds::Kind::Fallback => crate::log!(
             WARN,
-            "game build {}/{} has no build table yet: {} entries found by their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table ({})",
-            hex(&fingerprint.guid()),
-            fingerprint.age(),
+            "game build {} has no build table yet: {} entries found by their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table ({})",
+            builds::fingerprint_name(fingerprint),
             build.entries(),
             build.missing().len(),
             errors::FEATURES_OFF
@@ -313,17 +311,6 @@ fn warn_lacking(build: &builds::KnownBuild) {
             );
         }
     }
-}
-
-/// `bytes` as lowercase hex digits, for the log.
-fn hex(bytes: &[u8]) -> String {
-    use std::fmt::Write as _;
-    bytes
-        .iter()
-        .fold(String::with_capacity(bytes.len() * 2), |mut out, b| {
-            let _written = write!(out, "{b:02x}");
-            out
-        })
 }
 
 /// The path of the game's executable.
@@ -383,9 +370,8 @@ fn reflection_read(reflection: &Reflection<'_>, fingerprint: Fingerprint, data_d
     }
     crate::log!(
         ERROR,
-        "game build {}/{} reflects no types or no systems: its reflection format is new; the game runs vanilla until Enshwick reads it ({})",
-        hex(&fingerprint.guid()),
-        fingerprint.age(),
+        "game build {} reflects no types or no systems: its reflection format is new; the game runs vanilla until Enshwick reads it ({})",
+        builds::fingerprint_name(fingerprint),
         errors::UNKNOWN_BUILD
     );
     crate::holds::enforce(data_dir, &[], true, None);

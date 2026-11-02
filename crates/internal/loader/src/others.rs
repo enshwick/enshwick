@@ -42,12 +42,11 @@ pub(crate) fn by_microsoft(company: &str) -> bool {
 }
 
 /// Other mods' proxies in `game_dir`, as [`proxies`] finds them against the
-/// system folder, `%SystemRoot%\System32` for a 64-bit game, leaving out
-/// Microsoft's own DLLs; none when either folder does not read.
+/// system folder, leaving out Microsoft's own DLLs; none when either folder
+/// does not read.
 #[cfg(windows)]
 pub(crate) fn beside_game(game_dir: &Path) -> Vec<String> {
-    let Some(system) = std::env::var_os("SystemRoot").map(|root| Path::new(&root).join("System32"))
-    else {
+    let Some(system) = crate::module::system_dir() else {
         return Vec::new();
     };
     let Ok(entries) = std::fs::read_dir(game_dir) else {
