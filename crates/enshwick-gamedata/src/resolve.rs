@@ -27,6 +27,9 @@ pub struct Resolved {
     pub(crate) attributes: Vec<(String, String)>,
     pub(crate) heads: Vec<(String, Pattern, u64)>,
     pub(crate) bodies: Vec<(String, Body)>,
+    /// For a carried table, where each pattern it searched for matched once
+    /// in the code, which [`Resolved::to_saved`] keeps; empty otherwise.
+    pub(crate) starts: Vec<Option<usize>>,
 }
 
 impl Resolved {

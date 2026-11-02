@@ -2,13 +2,12 @@
 
 use core::ops::Range;
 
-use rustc_hash::FxHashMap;
 use twox_hash::XxHash3_128;
 
 use crate::{Kind, Resolved, Table};
 
 /// The first line of a saved carried table; a file without it is not read.
-const HEADER: &str = "enshwick carried table 1";
+const HEADER: &str = "enshwick carried table 2";
 
 /// Which code and which table a carried table was found for: the XXH3-128
 /// of the table's text, the code's RVA and every byte of the code.
@@ -56,9 +55,13 @@ impl Table {
         CarryKey(hasher.finish_128())
     }
 
-    /// The table carried to the code `key` was made for, from the text
-    /// [`Resolved::to_saved`] wrote; `None` for another key, another table
-    /// or a damaged file, which [`Table::fall_back`] then replaces.
+    /// The table carried to `code`, the code section that starts at
+    /// `code_rva`, from the text [`Resolved::to_saved`] wrote for `key`:
+    /// [`Table::fall_back`] without its search, since the text says where
+    /// each pattern matched. Every entry is checked against `code` as the
+    /// search would check it, and `cell` reads the cells again. `None` for
+    /// another key, another table, a damaged file or a pattern that does not
+    /// match where the text says, which [`Table::fall_back`] then replaces.
     ///
     /// # Examples
     ///
@@ -79,52 +82,45 @@ impl Table {
     /// let key = table.carry_key(&code, 0x2000, 0..0);
     /// let carried = table.fall_back(&code, 0x2000, |_| None);
     /// let saved = carried.to_saved(key).ok_or("not carried")?;
-    /// assert_eq!(table.restore(&saved, key), Some(carried));
-    /// assert_eq!(table.restore(&saved, table.carry_key(&[0xc3], 0x2000, 0..0)), None);
+    /// assert_eq!(table.restore(&saved, key, &code, 0x2000, |_| None), Some(carried));
+    /// let other = table.carry_key(&[0xc3], 0x2000, 0..0);
+    /// assert_eq!(table.restore(&saved, other, &code, 0x2000, |_| None), None);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[must_use]
-    pub fn restore(&self, saved: &str, key: CarryKey) -> Option<Resolved> {
+    pub fn restore(
+        &self,
+        saved: &str,
+        key: CarryKey,
+        code: &[u8],
+        code_rva: u64,
+        cell: impl Fn(u64) -> Option<u32> + Sync,
+    ) -> Option<Resolved> {
         let mut lines = saved.lines();
         if lines.next()? != HEADER || lines.next()? != format!("key {key}") {
             return None;
         }
-        let mut found: FxHashMap<&str, (Entry, Option<u64>)> = FxHashMap::default();
-        for line in lines {
-            let mut words = line.split(' ');
-            let (entry, id) = (words.next()?, words.next()?);
-            let (entry, value) = match entry {
-                "symbol" => (Entry::Symbol, Some(hex(words.next()?)?)),
-                "constant" => (Entry::Constant, Some(hex(words.next()?)?)),
-                "missing" => (Entry::Missing, None),
-                _ => return None,
-            };
-            if words.next().is_some() || found.insert(id, (entry, value)).is_some() {
-                return None;
-            }
-        }
-        let carried: Vec<_> = self.constants.iter().filter(|c| c.carried).collect();
-        if found.len() != self.symbols.len() + carried.len() {
+        let patterns = self.carry_patterns();
+        let lines: Vec<&str> = lines.collect();
+        if lines.len() != patterns.len() {
             return None;
         }
-        let mut symbols = Vec::new();
-        let mut constants = Vec::new();
-        let mut missing = Vec::new();
-        for symbol in &self.symbols {
-            match found.get(symbol.id.as_str())? {
-                (Entry::Symbol, Some(rva)) => symbols.push((symbol.id.clone(), *rva)),
-                (Entry::Missing, _) => missing.push(symbol.id.clone()),
-                _ => return None,
-            }
-        }
-        for constant in carried {
-            match found.get(constant.id.as_str())? {
-                (Entry::Constant, Some(value)) => constants.push((constant.id.clone(), *value)),
-                (Entry::Missing, _) => missing.push(constant.id.clone()),
-                _ => return None,
-            }
-        }
-        Some(self.carried(symbols, constants, missing))
+        // shortcut: a start is checked to match, not to match once; the key
+        // pins these very code bytes, where the search found it once, so only
+        // a deliberate edit could name a second match. Proving it once costs
+        // the search the save is there to spare.
+        let starts = lines
+            .iter()
+            .zip(&patterns)
+            .map(|(line, pattern)| match line.strip_prefix("start ") {
+                Some(at) => {
+                    let at = usize::from_str_radix(at, 16).ok()?;
+                    pattern.matches(code.get(at..)?).then_some(Some(at))
+                }
+                None => (*line == "none").then_some(None),
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(self.carried_at(code, code_rva, starts, cell))
     }
 }
 
@@ -136,36 +132,18 @@ impl Resolved {
         if self.kind != Kind::Fallback {
             return None;
         }
-        let symbols = self
-            .symbols
-            .iter()
-            .map(|(id, rva)| format!("symbol {id} {rva:x}"));
-        let constants = self
-            .constants
-            .iter()
-            .map(|(id, value)| format!("constant {id} {value:x}"));
-        let missing = self.missing.iter().map(|id| format!("missing {id}"));
+        let starts = self.starts.iter().map(|start| match start {
+            Some(at) => format!("start {at:x}"),
+            None => "none".to_owned(),
+        });
         let lines: Vec<String> = [HEADER.to_owned(), format!("key {key}")]
             .into_iter()
-            .chain(symbols)
-            .chain(constants)
-            .chain(missing)
+            .chain(starts)
             .collect();
         let mut text = lines.join("\n");
         text.push('\n');
         Some(text)
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Entry {
-    Symbol,
-    Constant,
-    Missing,
-}
-
-fn hex(word: &str) -> Option<u64> {
-    u64::from_str_radix(word, 16).ok()
 }
 
 #[cfg(test)]
@@ -195,6 +173,11 @@ mod tests {
         code
     }
 
+    /// `table` restored from `saved` for `key` on [`code`] at `0x5000`.
+    fn restore(table: &Table, saved: &str, key: CarryKey) -> Option<Resolved> {
+        table.restore(saved, key, &code(), 0x5000, |_| None)
+    }
+
     #[test]
     fn a_saved_carried_table_restores_equal_for_the_same_code() {
         let table = Table::parse(TABLE).unwrap();
@@ -202,7 +185,11 @@ mod tests {
         let key = table.carry_key(&code, 0x5000, 0..0);
         let carried = table.fall_back(&code, 0x5000, |_| None);
         let saved = carried.to_saved(key).unwrap();
-        assert_eq!(table.restore(&saved, key), Some(carried));
+        assert_eq!(
+            saved,
+            format!("{HEADER}\nkey {key}\nstart 8\nnone\nnone\nstart 28\n")
+        );
+        assert_eq!(restore(&table, &saved, key), Some(carried));
     }
 
     #[test]
@@ -218,7 +205,7 @@ mod tests {
         let edited = Table::parse(&TABLE.replace("0x1010", "0x1011")).unwrap();
         assert_ne!(edited.carry_key(&code, 0x5000, 0..0), key);
         assert_eq!(
-            edited.restore(&saved, edited.carry_key(&code, 0x5000, 0..0)),
+            restore(&edited, &saved, edited.carry_key(&code, 0x5000, 0..0)),
             None
         );
         code[63] = 1;
@@ -234,27 +221,53 @@ mod tests {
             .fall_back(&code, 0x5000, |_| None)
             .to_saved(key)
             .unwrap();
-        let without = |line: &str| saved.replace(&format!("{line}\n"), "");
-        assert!(table.restore(&saved, key).is_some());
-        assert_eq!(table.restore(&without("missing f.twice"), key), None);
+        assert!(restore(&table, &saved, key).is_some());
+        assert_eq!(restore(&table, &saved.replacen("none\n", "", 1), key), None);
+        assert_eq!(restore(&table, &format!("{saved}none\n"), key), None);
         assert_eq!(
-            table.restore(&format!("{saved}missing f.twice\n"), key),
+            restore(&table, &saved.replace("start 8", "start 8 9"), key),
             None
         );
         assert_eq!(
-            table.restore(&format!("{saved}missing c.only\n"), key),
+            restore(&table, &saved.replace("start 8", "start z8"), key),
             None
         );
         assert_eq!(
-            table.restore(&saved.replace("symbol f.found", "constant f.found"), key),
+            restore(&table, &saved.replace("start 8", "start ffffff"), key),
             None
         );
         assert_eq!(
-            table.restore(&saved.replace(HEADER, "enshwick carried table 0"), key),
+            restore(&table, &saved.replacen("none", "None", 1), key),
             None
         );
-        assert_eq!(table.restore(&saved.replace(" 5009", " 50z9"), key), None);
-        assert_eq!(table.restore("", key), None);
+        assert_eq!(
+            restore(
+                &table,
+                &saved.replace(HEADER, "enshwick carried table 1"),
+                key
+            ),
+            None
+        );
+        assert_eq!(restore(&table, "", key), None);
+    }
+
+    #[test]
+    fn a_save_whose_symbol_or_constant_the_code_does_not_hold_is_not_read() {
+        let table = Table::parse(TABLE).unwrap();
+        let code = code();
+        let key = table.carry_key(&code, 0x5000, 0..0);
+        let saved = table
+            .fall_back(&code, 0x5000, |_| None)
+            .to_saved(key)
+            .unwrap();
+        assert_eq!(
+            restore(&table, &saved.replace("start 8", "start 9"), key),
+            None
+        );
+        assert_eq!(
+            restore(&table, &saved.replace("start 28", "start 29"), key),
+            None
+        );
     }
 
     #[test]

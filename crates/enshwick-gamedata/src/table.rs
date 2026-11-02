@@ -508,6 +508,7 @@ impl Table {
             attributes: self.attributes(),
             heads: self.heads(),
             bodies: self.bodies(),
+            starts: Vec::new(),
         }
     }
 
@@ -560,34 +561,50 @@ impl Table {
         code_rva: u64,
         cell: impl Fn(u64) -> Option<u32> + Sync,
     ) -> Resolved {
-        let carried: Vec<&Constant> = self.constants.iter().filter(|c| c.carried).collect();
-        let patterns: Vec<&Pattern> = self
-            .symbols
+        let starts = find_each_unique(&self.carry_patterns(), code)
+            .into_iter()
+            .map(Result::ok)
+            .collect();
+        self.carried_at(code, code_rva, starts, cell)
+    }
+
+    /// The patterns [`Table::fall_back`] searches for, each once: the
+    /// symbols' in table order, then the carried constants' searched alone.
+    pub(crate) fn carry_patterns(&self) -> Vec<&Pattern> {
+        self.symbols
             .iter()
             .filter_map(|s| s.pattern.as_ref())
             .chain(
-                carried
+                self.constants
                     .iter()
-                    .filter(|c| c.searched_alone())
+                    .filter(|c| c.carried && c.searched_alone())
                     .filter_map(|c| c.pattern.as_ref()),
             )
-            .collect();
-        let mut starts = find_each_unique(&patterns, code)
-            .into_iter()
-            .map(Result::ok);
+            .collect()
+    }
+
+    /// [`Table::fall_back`] once its patterns are found: `starts` holds, in
+    /// [`Table::carry_patterns`] order, where each matched once in `code`.
+    pub(crate) fn carried_at(
+        &self,
+        code: &[u8],
+        code_rva: u64,
+        starts: Vec<Option<usize>>,
+        cell: impl Fn(u64) -> Option<u32> + Sync,
+    ) -> Resolved {
+        let carried: Vec<&Constant> = self.constants.iter().filter(|c| c.carried).collect();
+        let mut each = starts.iter().copied();
         let symbols_at: Vec<(&Symbol, Option<usize>)> = self
             .symbols
             .iter()
-            .map(|s| (s, s.pattern.as_ref().and_then(|_| starts.next().flatten())))
+            .map(|s| (s, s.pattern.as_ref().and_then(|_| each.next().flatten())))
             .collect();
         let constants_at: Vec<(&Constant, Option<usize>)> = carried
             .iter()
             .map(|&c| {
                 (
                     c,
-                    c.searched_alone()
-                        .then(|| starts.next().flatten())
-                        .flatten(),
+                    c.searched_alone().then(|| each.next().flatten()).flatten(),
                 )
             })
             .collect();
@@ -635,7 +652,9 @@ impl Table {
                 None => missing.push(constant.id.clone()),
             }
         }
-        self.carried(symbols, constants, missing)
+        let mut resolved = self.carried(symbols, constants, missing);
+        resolved.starts = starts;
+        resolved
     }
 
     /// The table carried with what its patterns found.
@@ -662,6 +681,7 @@ impl Table {
             attributes: self.attributes(),
             heads: self.heads(),
             bodies: self.bodies(),
+            starts: Vec::new(),
         }
     }
 
