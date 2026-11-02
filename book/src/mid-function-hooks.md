@@ -75,9 +75,12 @@ the instructions that were there; after the handlers the moved instructions
 run and the function goes on.
 
 - `address` must start an instruction.
-- Nothing may jump into those 5 bytes from elsewhere, such as a loop head or a
-  branch target. The loader cannot check this. Pick an address inside a
-  straight run of instructions.
+- Nothing may jump into those 5 bytes after their first, such as to a loop
+  head or a branch target. The loader refuses the address when a direct jump
+  or call of the same function lands there, by the function's bounds in the
+  unwind data of its module. It cannot see a jump through a table or a
+  computed address, a jump from another function, or one in code without
+  unwind data. Pick an address inside a straight run of instructions.
 - Control must not leave within those bytes: a return, an unconditional or
   indirect jump, or an interrupt among them makes the loader refuse the address.
 - The bytes must not overlap another hook's jump. Function hooks keep their

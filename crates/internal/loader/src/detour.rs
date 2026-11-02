@@ -19,7 +19,9 @@
 //! Code may also jump into the replaced bytes after the first, where it
 //! would land inside the jump. A target is refused when a direct branch or
 //! call of its own function, as the image's function table bounds it, lands
-//! there. Not seen: indirect jumps (switch tables, computed addresses),
+//! there, decoding the function from its start. Not seen: indirect jumps
+//! (switch tables, computed addresses), a branch hidden by data inside the
+//! function's bounds that the decoder reads as instructions,
 //! branches from other functions or from parts of the same function the
 //! compiler split into entries of their own, and code without a function
 //! entry, such as generated code. A wrong site then fails only when that
@@ -304,8 +306,9 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Prep
 
 /// The first direct branch or call of the function around `target` that
 /// lands in `target + 1..target + stolen`, by the function's bounds in the
-/// unwind data of its image. Code without a function entry, a leaf such as
-/// generated code, is not checked.
+/// unwind data of its image. A branch among the moved instructions moves
+/// with them, its target in the trampoline. Code without a function entry,
+/// a leaf such as generated code, is not checked.
 fn jumped_into(target: usize, stolen: usize) -> Option<usize> {
     let (begin, end) = function_around(target)?;
     let len = end.checked_sub(begin)?;
@@ -313,14 +316,16 @@ fn jumped_into(target: usize, stolen: usize) -> Option<usize> {
         return None;
     }
     // SAFETY: `hookable` checked that the function's bytes lie in committed,
-    // readable pages; the slice lives for this function only, while no patch
-    // writes them.
+    // readable pages of an image that stays loaded: hooks arm while the
+    // loader holds the game's and the mods' images, which it never unloads.
+    // The slice lives for this function only, while no patch writes them.
     let code = unsafe { core::slice::from_raw_parts(begin as *const u8, len) };
+    let moved = target as u64..(target + stolen) as u64;
     let inside = target as u64 + 1..(target + stolen) as u64;
     let mut decoder = Decoder::with_ip(64, code, begin as u64, DecoderOptions::NONE);
     decoder
         .iter()
-        .find(|instruction| inside.contains(&instruction.near_branch_target()))
+        .find(|i| !moved.contains(&i.ip()) && inside.contains(&i.near_branch_target()))
         .and_then(|instruction| usize::try_from(instruction.ip()).ok())
 }
 
@@ -337,8 +342,9 @@ fn function_around(address: usize) -> Option<(usize, usize)> {
     }
     let image = usize::try_from(image).ok()?;
     // SAFETY: a non-null entry is a readable `IMAGE_RUNTIME_FUNCTION_ENTRY`
-    // of a loaded image or a registered table, whose first two `u32` are the
-    // function's start and end, offsets from `image`.
+    // of a loaded image or a registered table, kept while the image is, and
+    // its first two `u32` are the function's start and end, offsets from
+    // `image`. Hooks arm while the game's and the mods' images stay loaded.
     let [begin, end]: [u32; 2] = unsafe { enshwick::raw::read_at(entry.cast(), 0) };
     Some((image + begin as usize, image + end as usize))
 }
