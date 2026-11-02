@@ -6,8 +6,9 @@
 //!
 //! Entries are UTF-8 text separated by NULs, and a linker may pad between
 //! them with more NULs. A head starts with `schema = ` and names its mod;
-//! an entry starts with its table and holds its `name`. A table this reader
-//! does not know is left out, so a newer kind reads in an older reader.
+//! an entry starts with its table and holds its `name`. A new kind of
+//! table comes with a new [`FORMAT`], so a table this reader does not know
+//! is damage.
 
 use crate::__private::is_own;
 
@@ -248,8 +249,7 @@ pub enum ReadSectionError {
 }
 
 impl<'a> Section<'a> {
-    /// Splits `bytes` into heads and entries, leaving out tables of a kind
-    /// this reader does not know.
+    /// Splits `bytes` into heads and entries.
     ///
     /// # Errors
     ///
@@ -262,12 +262,11 @@ impl<'a> Section<'a> {
     /// use enshwick::schema_section::{Kind, Section};
     ///
     /// let section = Section::parse(
-    ///     b"\0schema = 2\nmod = \"you.a\"\n\0\0[[event]]\nname = \"you.a:sold\"\n\0[[future]]\nname = \"you.a:x\"\n",
+    ///     b"\0schema = 2\nmod = \"you.a\"\n\0\0[[event]]\nname = \"you.a:sold\"\n\0",
     /// )?;
     /// assert_eq!(section.heads()[0].id, "you.a");
-    /// assert_eq!(section.entries().len(), 1);
     /// assert_eq!(section.entries()[0].kind, Kind::Event);
-    /// assert!(Section::parse(b"[[type]]\n").is_err());
+    /// assert!(Section::parse(b"[[future]]\nname = \"you.a:x\"\n").is_err());
     /// # Ok::<(), enshwick::schema_section::ReadSectionError>(())
     /// ```
     pub fn parse(bytes: &'a [u8]) -> Result<Self, ReadSectionError> {
@@ -293,12 +292,13 @@ impl<'a> Section<'a> {
             let name = value(own, "name")
                 .filter(|name| text.starts_with("[[") && !name.is_empty())
                 .ok_or(ReadSectionError::Damaged(start))?;
-            if let Some(&(kind, _)) = Kind::TABLES
+            // A new kind comes with a new format, which the head reports, so
+            // an unknown table of this format is damage.
+            let &(kind, _) = Kind::TABLES
                 .iter()
                 .find(|(_, table)| text.starts_with(table))
-            {
-                section.entries.push(Entry { kind, name, text });
-            }
+                .ok_or(ReadSectionError::Damaged(start))?;
+            section.entries.push(Entry { kind, name, text });
         }
         Ok(section)
     }
@@ -412,9 +412,16 @@ mod tests {
     use super::Section;
 
     #[test]
-    fn a_table_of_an_unknown_kind_is_left_out_and_a_nameless_one_is_damaged() {
-        let section = Section::parse(b"[[future]]\nname = \"you.a:x\"\nwhat = 1\n").unwrap();
-        assert!(section.entries().is_empty());
+    fn the_macros_know_every_export_kind_and_no_other() {
+        assert_eq!(
+            enshwick_macros::__export_kinds!(),
+            super::Kind::ALL.map(super::Kind::word)
+        );
+    }
+
+    #[test]
+    fn a_table_of_an_unknown_kind_or_without_a_name_is_damaged() {
+        assert!(Section::parse(b"[[future]]\nname = \"you.a:x\"\nwhat = 1\n").is_err());
         assert!(Section::parse(b"[[future]]\nwhat = 1\n").is_err());
     }
 

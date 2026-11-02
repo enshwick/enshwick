@@ -297,14 +297,8 @@ pub fn unexported(kind: Kind, name: &str, asker: &str, exports: &[&str]) -> Opti
     if owner == asker || enshwick::__private::rules::exports_name(exports, kind, what) {
         return None;
     }
-    let offered = if exports.is_empty() {
-        "it exports nothing".to_owned()
-    } else {
-        format!("it exports {}", exports.join(", "))
-    };
-    Some(format!(
-        "{} {name}: {owner} does not export {what}; {offered}",
-        kind.label()
+    Some(enshwick::__private::rules::unexported_reason(
+        kind, name, exports,
     ))
 }
 
@@ -683,7 +677,7 @@ mod tests {
         assert_eq!(
             unexported(Kind::Point, "you.trading-post:margin", asker, &exports).as_deref(),
             Some(
-                "point you.trading-post:margin: you.trading-post does not export margin; \
+                "point you.trading-post:margin: you.trading-post does not export point:margin; \
                  it exports call:price-of, event:sold"
             )
         );
@@ -727,7 +721,7 @@ mod tests {
         assert_eq!(
             unexported(Kind::Content, "you.lockers:key", asker, &exports).as_deref(),
             Some(
-                "content id you.lockers:key: you.lockers does not export key; \
+                "content id you.lockers:key: you.lockers does not export content:key; \
                  it exports content:locker, stat:charm"
             )
         );

@@ -23,8 +23,13 @@ fn schemas(from: &Path, unread: &mut Vec<String>) -> anyhow::Result<Vec<(PathBuf
     for dll in dlls(from)? {
         match from_dll(&read(&dll)?) {
             Ok(Some(text)) => found.push((dll, text)),
-            Err(e @ cargo_enshwick::points::Error::Section(_)) => {
+            // A DLL of a folder whose section does not read; the one DLL asked
+            // for by name still fails the run.
+            Err(e @ cargo_enshwick::points::Error::Section(_)) if dll != from => {
                 unread.push(format!("{}: {e}", dll.display()));
+            }
+            Err(e @ cargo_enshwick::points::Error::Section(_)) => {
+                return Err(e).with_context(|| dll.display().to_string());
             }
             // A DLL that is no mod's, such as the game's own, carries none.
             Ok(None) | Err(_) => {}

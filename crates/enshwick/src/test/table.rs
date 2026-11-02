@@ -387,17 +387,11 @@ impl ManifestFacts {
 /// Logs the loader's warning for a mod refused the `kind` `id`,
 /// `<owner>:<what>`, whose owner does not export it.
 pub(crate) fn warn_unexported(s: &mut State, kind: crate::schema_section::Kind, id: &str) {
-    let (owner, what) = id.split_once(':').unwrap_or_default();
-    let offered = match s.host.exports.get(owner) {
-        Some(names) if !names.is_empty() => format!("it exports {}", names.join(", ")),
-        _ => "it exports nothing".to_owned(),
-    };
+    let owner = id.split_once(':').map_or(id, |(owner, _)| owner);
+    let offered = s.host.exports.get(owner).cloned().unwrap_or_default();
     s.logs.push((
         Level::WARN,
-        format!(
-            "{} {id}: {owner} does not export {what}; {offered}",
-            kind.label()
-        ),
+        crate::rules::unexported_reason(kind, id, &offered),
     ));
 }
 

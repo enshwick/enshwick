@@ -178,7 +178,7 @@ loader refuses the same; define a required owner's point with
 
 An owner that is loaded but does not export the point refuses every link to
 it, required or not, and the log says
-`point you.trading-post:price: you.trading-post does not export price; it exports ...`.
+`point you.trading-post:price: you.trading-post does not export point:price; it exports ...`.
 What a refused export does, in the game and in a test, is in
 [What other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use).
 
