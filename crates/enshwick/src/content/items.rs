@@ -637,7 +637,7 @@ impl Load<'_> {
         if let Some(meter) = item.meter {
             self.declare(meter.template)?;
         }
-        for old in crate::migrations::old_guids(item.id.guid()) {
+        for old in crate::content::renames::old_guids(item.id.guid()) {
             let debug_name = format!("{} (renamed)", item.debug_name);
             self.add_one_item(item.clone(), old, debug_name)?;
         }

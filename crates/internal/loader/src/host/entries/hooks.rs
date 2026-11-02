@@ -39,12 +39,7 @@ pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Stat
             flags: spec.flags,
             hop: None,
         };
-        let mut chains = loader.chains.relock();
-        if crate::reload::reinitialising(index.get()) {
-            chains.relink(spec.target, link)
-        } else {
-            chains.add(spec.target, link)
-        }
+        loader.chains.relock().add(spec.target, link)
     })
 }
 

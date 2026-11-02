@@ -597,8 +597,7 @@ impl TickData {
 /// [`HostApi::subscribe_tick`](super::HostApi::subscribe_tick), for
 /// [`HostApi::set_tick_every`](super::HostApi::set_tick_every).
 ///
-/// Valid for the mod that subscribed it until that mod reloads, after which
-/// the loader answers [`Status::MISSING`](super::Status::MISSING).
+/// Valid for the mod that subscribed it, for the process.
 ///
 /// # Examples
 ///

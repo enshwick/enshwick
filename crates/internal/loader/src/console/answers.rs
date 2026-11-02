@@ -2,7 +2,6 @@
 //! read.
 
 use std::fmt::Write as _;
-use std::path::Path;
 
 use enshwick::abi::Side;
 use enshwick::content::Guid;
@@ -185,29 +184,6 @@ pub fn mods(loaded: &[Loaded<'_>]) -> String {
         .join("\n")
 }
 
-/// Makes mod `id` read its settings again; the reply.
-///
-/// While the world `world` runs, its own copy,
-/// `mod-data/<id>/worlds/<world>/settings.toml`, is in force over
-/// `mod-configs/<id>.toml`; that file otherwise. The file's modified time
-/// moves to now, and the loader's watcher raises the mod's settings change
-/// within a second.
-#[must_use]
-pub fn reload(game: &Path, id: &str, world: Option<&str>) -> String {
-    let world_file = world
-        .map(|key| format!("mod-data/{id}/worlds/{key}/settings.toml"))
-        .filter(|file| game.join(file).is_file());
-    let shown = world_file.unwrap_or_else(|| format!("mod-configs/{id}.toml"));
-    let touched = std::fs::File::options()
-        .append(true)
-        .open(game.join(&shown))
-        .and_then(|opened| opened.set_modified(std::time::SystemTime::now()));
-    match touched {
-        Ok(()) => format!("{id} reads {shown} again within a second"),
-        Err(e) => format!("{id}: {shown}: {e}"),
-    }
-}
-
 /// `x, y, z` in metres to one decimal, or `-`.
 #[must_use]
 pub fn place(position: Option<[f64; 3]>) -> String {
@@ -318,45 +294,5 @@ mod tests {
     #[test]
     fn a_fixed_point_position_reads_in_metres() {
         assert_eq!(metres([1 << 32, -(3 << 31), 0]), [1.0, -1.5, 0.0]);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
-    fn reload_touches_the_running_world_s_own_settings_or_else_the_template() {
-        let game = std::env::temp_dir().join(format!("enshwick-reload-{}", std::process::id()));
-        let world = game.join("mod-data/you.safes/worlds/world0-1a2b/settings.toml");
-        let template = game.join("mod-configs/you.safes.toml");
-        std::fs::create_dir_all(world.parent().unwrap()).unwrap();
-        std::fs::create_dir_all(game.join("mod-configs")).unwrap();
-        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
-        for path in [&world, &template] {
-            std::fs::write(path, "enabled = true\n").unwrap();
-            std::fs::File::options()
-                .append(true)
-                .open(path)
-                .unwrap()
-                .set_modified(old)
-                .unwrap();
-        }
-        assert_eq!(
-            reload(&game, "you.safes", Some("world0-1a2b")),
-            "you.safes reads mod-data/you.safes/worlds/world0-1a2b/settings.toml again within a second"
-        );
-        assert!(std::fs::metadata(&world).unwrap().modified().unwrap() > old);
-        assert_eq!(
-            std::fs::metadata(&template).unwrap().modified().unwrap(),
-            old,
-            "the template stays"
-        );
-        assert_eq!(
-            reload(&game, "you.safes", None),
-            "you.safes reads mod-configs/you.safes.toml again within a second"
-        );
-        assert_eq!(
-            std::fs::read_to_string(&template).unwrap(),
-            "enabled = true\n"
-        );
-        assert!(reload(&game, "you.missing", None).starts_with("you.missing: "));
-        std::fs::remove_dir_all(&game).unwrap();
     }
 }

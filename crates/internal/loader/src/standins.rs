@@ -25,8 +25,8 @@ pub(crate) type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
 pub(crate) type StandIn = (ResourceKey, ResourceKey, Builder);
 
 /// The recorded items no mod serves: `(item GUID, vanilla GUID)` from
-/// `recorded`, leaving out those `served` holds and those a migration
-/// renamed (`renamed`, whose new GUID the game reads instead).
+/// `recorded`, leaving out those `served` holds and those a mod renamed
+/// (`renamed`, whose new GUID the game reads instead).
 #[must_use]
 pub(crate) fn orphans(
     recorded: &[([u8; 16], [u8; 16])],

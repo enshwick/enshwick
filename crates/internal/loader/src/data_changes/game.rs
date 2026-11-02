@@ -52,8 +52,7 @@ struct Changes {
     stacks: Mutex<Option<FxHashMap<Guid, (u16, u16)>>>,
 }
 
-/// What the end of init fixed for the process; the changes themselves
-/// change only in a development reload.
+/// What the end of init fixed for the process.
 struct Sealed {
     loader: &'static Loader,
     /// Every change in force, in load order.
@@ -435,57 +434,6 @@ pub(crate) fn serve(
     patches
 }
 
-/// Takes `changes` and the changes of every item and recipe the selections
-/// pick as mod `owner`'s changes from now on, for a development reload:
-/// merges every change again, reports the overridden sets, and builds each
-/// resource the loader patches again in place; how many it rebuilt.
-///
-/// # Errors
-///
-/// What takes a restart: a change of an entry the loader did not patch at
-/// start, a recipe's station, or a rebuild that changes a resource's
-/// length, such as an ingredient taken out or added.
-pub(crate) fn reload(
-    owner: ModIndex,
-    changes: Vec<(Change, String)>,
-    items: Vec<(ItemsChange, String)>,
-    recipes: Vec<(RecipesChange, String)>,
-) -> Result<usize, ReloadChangesError> {
-    let sealed = CHANGES
-        .sealed
-        .get()
-        .ok_or(ReloadChangesError::NoneAtStart)?;
-    let one = changes.into_iter().map(|(change, source)| {
-        Pending::One(Declared {
-            owner,
-            change,
-            source,
-            live: None,
-        })
-    });
-    let each = items.into_iter().map(|(change, source)| Pending::Each {
-        owner,
-        change,
-        source,
-        live: None,
-    });
-    let of_recipes = recipes
-        .into_iter()
-        .map(|(change, source)| Pending::Recipes {
-            owner,
-            change,
-            source,
-        });
-    let pending: Vec<Pending> = one.chain(each).chain(of_recipes).collect();
-    let (mine, _) = expand_from_game(sealed.loader, pending);
-    let patched = {
-        let mut declared = sealed.declared.relock();
-        let next = super::replace_owner(&declared, owner, mine);
-        apply(sealed, &mut declared, next)?
-    };
-    rebuild(&patched)
-}
-
 /// Expands `pending` over the vanilla items and recipes the game's data
 /// holds, reading only what its selections need.
 fn expand_from_game(loader: &Loader, pending: Vec<Pending>) -> (Vec<Declared>, Vec<Picked>) {
@@ -530,7 +478,7 @@ fn apply(
     sealed: &Sealed,
     declared: &mut Vec<Declared>,
     next: Vec<Declared>,
-) -> Result<Vec<ResourceKey>, ReloadChangesError> {
+) -> Result<Vec<ResourceKey>, ApplyChangesError> {
     let loader = sealed.loader;
     let patched = sealed.patched.get().cloned().unwrap_or_default();
     let (merged, conflicts) = merge(&next, |a, b| requires(loader, a, b));
@@ -538,15 +486,15 @@ fn apply(
         .into_iter()
         .find(|item| !patched.contains(&item.key_by_hash(crate::catalogue::types::ITEM_INFO)))
     {
-        return Err(ReloadChangesError::Values { item });
+        return Err(ApplyChangesError::Values { item });
     }
     let recipes = RECIPE_REGISTRY.key_by_hash(crate::catalogue::types::RECIPE_REGISTRY);
     if !merged.entries(Entry::Recipe).is_empty() && !patched.contains(&recipes) {
-        return Err(ReloadChangesError::Recipes);
+        return Err(ApplyChangesError::Recipes);
     }
     let stations = |merged: &Merged| stations(merged, |_| true);
     if stations(&merged) != stations(&sealed.merged()) {
-        return Err(ReloadChangesError::Station);
+        return Err(ApplyChangesError::Station);
     }
     let templates = sealed.templates.get();
     let slotted = merged
@@ -555,20 +503,20 @@ fn apply(
         .filter(|item| merged.keys(*item).iter().any(|k| k.field == Field::Slots));
     for item in slotted {
         if !templates.is_some_and(|t| t.contains_key(&item)) {
-            return Err(ReloadChangesError::Slots { item });
+            return Err(ApplyChangesError::Slots { item });
         }
     }
     let looted = sealed.loot_items.get();
     for item in merged.loot_items() {
         if !looted.is_some_and(|items| items.contains(&item)) {
-            return Err(ReloadChangesError::Loot { item });
+            return Err(ApplyChangesError::Loot { item });
         }
     }
     let fill = catalogue::type_hash(catalogue::ids::LOOT_FILL_TABLE);
     for (table, _) in merged.table_items() {
         let key = fill.map(|hash| table.key_by_hash(hash));
         if !key.is_some_and(|key| patched.contains(&key)) {
-            return Err(ReloadChangesError::Table { table });
+            return Err(ApplyChangesError::Table { table });
         }
     }
     report(loader, &conflicts);
@@ -583,7 +531,7 @@ fn apply(
 ///
 /// The resources that did not build again: their base was not kept, or
 /// their length changed, such as an ingredient taken out or added.
-fn rebuild(patched: &[ResourceKey]) -> Result<usize, ReloadChangesError> {
+fn rebuild(patched: &[ResourceKey]) -> Result<usize, ApplyChangesError> {
     let mut failed = Vec::new();
     for key in patched {
         let status = crate::content::rebuild(ModIndex::LOADER, *key);
@@ -594,16 +542,13 @@ fn rebuild(patched: &[ResourceKey]) -> Result<usize, ReloadChangesError> {
     if failed.is_empty() {
         Ok(patched.len())
     } else {
-        Err(ReloadChangesError::Rebuild { failed })
+        Err(ApplyChangesError::Rebuild { failed })
     }
 }
 
-/// Why a development reload's changes of values take a restart.
+/// Why a change of values set while the game runs takes a restart.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum ReloadChangesError {
-    /// No changes were sealed at start.
-    #[error("no changes were in force at start")]
-    NoneAtStart,
+pub(crate) enum ApplyChangesError {
     /// An item's values change, which the loader did not patch at start.
     #[error("the values of {item} change for the first time, which takes a restart")]
     Values { item: Guid },

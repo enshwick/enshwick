@@ -250,8 +250,8 @@ impl Inner {
     }
 
     /// The emitter table of the mod event `event` describes: defined with
-    /// the loader once `main.luau` ran at start, or the one defined then
-    /// for a reload.
+    /// the loader once `main.luau` ran at start, or the one defined before
+    /// under its name.
     fn define_event(&self, lua: &Lua, event: &Table) -> mlua::Result<Table> {
         let mut desc = EventDesc::parse_definition(event)?;
         if !desc.event.name.contains(':') {
@@ -312,8 +312,8 @@ impl Inner {
     }
 
     /// The function that runs the call `call` describes: asked for with the
-    /// loader once `main.luau` ran at start, or the one asked for then for
-    /// a reload.
+    /// loader once `main.luau` ran at start, or the one asked for before
+    /// under its name and major.
     fn caller(&self, lua: &Lua, call: &Table) -> mlua::Result<Function> {
         let desc = CallDesc::parse(call)?;
         let caller = {

@@ -54,8 +54,6 @@ pub enum Feature {
     Status,
     /// Building served resources.
     Resources,
-    /// Migrations.
-    Migrations,
     /// Links on other mods' extension points.
     Points,
     /// Calls the mod serves to others.
@@ -63,7 +61,7 @@ pub enum Feature {
 }
 
 /// How many features there are.
-pub const FEATURES: usize = 20;
+pub const FEATURES: usize = 19;
 
 impl Feature {
     /// The feature in the report.
@@ -87,7 +85,6 @@ impl Feature {
             Self::Inventory => "inventory",
             Self::Status => "status lines",
             Self::Resources => "resources",
-            Self::Migrations => "migrations",
             Self::Points => "extension points",
             Self::Calls => "calls",
         }
@@ -111,7 +108,6 @@ impl Feature {
         Self::Inventory,
         Self::Status,
         Self::Resources,
-        Self::Migrations,
         Self::Points,
         Self::Calls,
     ];

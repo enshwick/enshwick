@@ -168,34 +168,4 @@ mod tests {
             loader.logs()
         );
     }
-
-    #[test]
-    fn a_reload_cannot_change_an_asked_call() {
-        let (loader, status) = run(CALLING, FEE);
-        assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        let runtime = RUNTIME.lock().unwrap().clone().unwrap();
-        let changed = FEE.replacen("read = \"u64\"", "read = \"i64\"", 1);
-        let failed = runtime
-            .reload(
-                Scripts::new()
-                    .with("main.luau", CALLING)
-                    .with("calls/fee.luau", changed),
-            )
-            .unwrap_err();
-        assert!(
-            failed
-                .to_string()
-                .contains("you.lockers:fee v1 is described differently than at the start"),
-            "{failed}"
-        );
-        assert!(
-            runtime
-                .reload(
-                    Scripts::new()
-                        .with("main.luau", CALLING)
-                        .with("calls/fee.luau", FEE)
-                )
-                .is_ok()
-        );
-    }
 }

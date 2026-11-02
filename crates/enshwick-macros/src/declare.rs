@@ -18,12 +18,11 @@ pub(crate) use deps::expand_deps;
 pub(crate) const EXPORT_KINDS: [&str; 6] = ["point", "event", "call", "service", "content", "stat"];
 
 /// The keys of the table, the identity the platform reads.
-const KEYS: [&str; 13] = [
+const KEYS: [&str; 12] = [
     "id",
     "name",
     "side",
     "join",
-    "reload",
     "developer",
     "exports",
     "replaces",
@@ -133,7 +132,6 @@ struct Metadata {
     name: String,
     side: Side,
     join: bool,
-    reload: bool,
     developer: bool,
     /// The content and stat kinds other mods may use, each
     /// `content:<name>` or `stat:<name>`.
@@ -427,7 +425,6 @@ impl Metadata {
             name,
             side,
             join: flag(table, "join")?,
-            reload: flag(table, "reload")?,
             developer: flag(table, "developer")?,
             exports: exports_of(table)?,
             dependencies,
@@ -757,18 +754,14 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
 /// The manifest's flags expression.
 fn flags_of(metadata: &Metadata) -> TokenStream {
     let abi = quote!(::enshwick::abi);
-    let flags: Vec<TokenStream> = [
-        (metadata.join, "JOIN"),
-        (metadata.reload, "RELOAD"),
-        (metadata.developer, "DEVELOPER"),
-    ]
-    .into_iter()
-    .filter(|(on, _)| *on)
-    .map(|(_, flag)| {
-        let flag = Ident::new(flag, Span::call_site());
-        quote!(#abi::ManifestFlags::#flag.0)
-    })
-    .collect();
+    let flags: Vec<TokenStream> = [(metadata.join, "JOIN"), (metadata.developer, "DEVELOPER")]
+        .into_iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, flag)| {
+            let flag = Ident::new(flag, Span::call_site());
+            quote!(#abi::ManifestFlags::#flag.0)
+        })
+        .collect();
     if flags.is_empty() {
         quote!(#abi::ManifestFlags::NONE)
     } else {
@@ -824,7 +817,7 @@ mod tests {
         .unwrap();
         assert_eq!(metadata.id, "you.market-stalls");
         assert_eq!(metadata.side, Side::Both);
-        assert!(metadata.join && !metadata.reload && !metadata.developer);
+        assert!(metadata.join && !metadata.developer);
         assert_eq!(metadata.exports, ["content:stall", "stat:luck"]);
         let relations: Vec<(&str, &str, &str)> = metadata
             .dependencies

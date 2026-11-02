@@ -23,7 +23,7 @@ unsafe extern "system" fn handler(_: Event, data: *const c_void, _: *mut c_void)
 /// One handler on a period of `every`, past its first call.
 fn one(every: u64) -> Ticks {
     let ticks = Ticks::new();
-    let _added = ticks.add(ModIndex::new(0), 0, every, handler, core::ptr::null_mut());
+    let _added = ticks.add(ModIndex::new(0), every, handler, core::ptr::null_mut());
     let time = ticks.advance(STEP);
     let _first = ticks.run(1, STEP, time, |_| true, |_, _| {});
     ticks

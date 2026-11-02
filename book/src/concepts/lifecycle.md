@@ -39,16 +39,14 @@ state type:
 
 - `init(load)` registers hooks, settings, events and content, and returns the
   state or an [`Off`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs);
-- `ready(&'static self, host)`, optional, runs once the hooks are armed;
-- `shutdown(&'static self)`, optional, runs before a development reload
-  unloads a mod with `reload = true`.
+- `ready(&'static self, host)`, optional, runs once the hooks are armed.
 
 `Off::new(reason)` turns the mod off with a reason for the log. Every fallible
 call on `Load` returns `Result<_, Off>`, so `?` is the usual way out.
 
 `declare_mod!` exports the type with the manifest: `enshwick_mod_abi`,
-`enshwick_mod_query`, `enshwick_mod_init`, `enshwick_mod_ready` and
-`enshwick_mod_shutdown`, each catching panics. It also adds `instance()`, the
+`enshwick_mod_query`, `enshwick_mod_init` and `enshwick_mod_ready`, each
+catching panics. It also adds `instance()`, the
 mod's state once `init` has returned it; a hook reads its settings there (see
 [The mod's state in a hook](../hooks.md#the-mods-state-in-a-hook)).
 

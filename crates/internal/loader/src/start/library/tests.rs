@@ -489,7 +489,7 @@ fn a_mods_import_never_resolves_from_the_current_directory() {
     );
 
     std::fs::rename(current.join(&dependency), mods.join(&dependency)).unwrap();
-    let library = super::load_from(&imports, None).expect("an import beside the mod resolves");
+    let library = super::load(&imports).expect("an import beside the mod resolves");
     super::unload(&library);
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -502,6 +502,6 @@ fn imports_load_in_this_process() {
     let Some(path) = std::env::var_os(IMPORTS_MOD) else {
         return;
     };
-    let library = super::load_from(Path::new(&path), None);
+    let library = super::load(Path::new(&path));
     println!("{LOADED}{}", library.is_some());
 }

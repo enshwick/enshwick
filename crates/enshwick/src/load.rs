@@ -126,7 +126,6 @@ off_from!(
     crate::content::vanilla::VanillaError,
     crate::inventory::BatchError,
     crate::item_data::SetError,
-    crate::migrations::MigrationError,
     crate::net::SendError,
     crate::packs::PackError,
     crate::packs::ReadPackError,
@@ -179,12 +178,6 @@ pub trait Mod: Sized + Send + Sync + 'static {
 
     /// Runs once the hooks are armed; start background work here.
     fn ready(&'static self, _host: Host) {}
-
-    /// Runs before a development reload unloads the mod (only for a mod
-    /// with `reload: true` in its manifest): stop every thread and timer
-    /// the mod started and write what the next copy reads back. The loader
-    /// has unlinked the mod's hooks and events already.
-    fn shutdown(&'static self) {}
 }
 
 /// The loader during a mod's initialisation: lookups, hooks, settings and

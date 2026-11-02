@@ -345,9 +345,7 @@ fn a_build_names_the_loader_features_it_lacks_once() {
         Side::SERVER,
         unknown,
         Some((&code, 0x1000)),
-        0..0,
         |_| None,
-        None,
     )
     .unwrap();
     let lacking = carried.lacking(crate::TABLE_IDS);
@@ -371,32 +369,12 @@ fn a_known_build_resolves_its_symbols() {
         .find(|t| t.name() == server.name)
         .unwrap()
         .fingerprint();
-    let found = select(
-        &tables,
-        Side::SERVER,
-        fingerprint,
-        None,
-        0..0,
-        |_| None,
-        None,
-    )
-    .unwrap();
+    let found = select(&tables, Side::SERVER, fingerprint, None, |_| None).unwrap();
     assert_eq!(found.kind, Kind::Exact);
     assert_eq!(found.symbol("npc.lookup"), Some(0x20_3d30));
     assert_eq!(found.symbol("npc.nope"), None);
     assert!(!found.checks().is_empty());
-    assert!(
-        select(
-            &tables,
-            Side::CLIENT,
-            fingerprint,
-            None,
-            0..0,
-            |_| None,
-            None
-        )
-        .is_none()
-    );
+    assert!(select(&tables, Side::CLIENT, fingerprint, None, |_| None,).is_none());
 }
 
 #[test]
@@ -409,26 +387,18 @@ fn an_unknown_build_falls_back_only_when_allowed_and_given_code() {
         Side::SERVER,
         unknown,
         Some((&code, 0x1000)),
-        0..0,
         |_| None,
-        None,
     )
     .unwrap();
     assert_eq!(found.kind, Kind::Fallback);
     assert_eq!(found.symbol("npc.lookup"), None);
     assert!(found.checks().is_empty());
     assert!(!found.missing().is_empty());
-    assert!(select(&tables, Side::SERVER, unknown, None, 0..0, |_| None, None).is_none());
+    assert!(select(&tables, Side::SERVER, unknown, None, |_| None).is_none());
     assert!(
-        select(
-            &tables,
-            Side::BOTH,
-            unknown,
-            Some((&code, 0x1000)),
-            0..0,
-            |_| None,
+        select(&tables, Side::BOTH, unknown, Some((&code, 0x1000)), |_| {
             None
-        )
+        },)
         .is_none()
     );
 }
@@ -446,9 +416,7 @@ fn a_build_without_a_table_names_itself_and_the_carried_table() {
         Side::SERVER,
         Fingerprint::new([0xee; 16], 1),
         Some((&code, 0x1000)),
-        0..0,
         |_| None,
-        None,
     )
     .unwrap();
     assert_eq!(
@@ -470,192 +438,6 @@ fn a_build_without_a_table_names_itself_and_the_carried_table() {
     let moved = Unhooked::Moved.to_string();
     assert_eq!(found.reason("npc.lookup", &moved), moved);
     assert_eq!(embedded(Side::SERVER).reason("npc.nope", &absent), absent);
-}
-
-fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("enshwick-carried-{name}-{}", std::process::id()));
-    let _fresh = std::fs::remove_dir_all(&dir);
-    dir
-}
-
-fn patterned_code() -> Vec<u8> {
-    let tables = load();
-    let base = tables::newest(&tables, enshwick_gamedata::Side::Server).unwrap();
-    let mut code = vec![0u8; 4096];
-    let (pattern, _) = base.symbols().iter().find_map(|s| s.pattern()).unwrap();
-    for i in 0..pattern.len() {
-        code[16 + i] = if pattern.is_fixed(i) == Some(true) {
-            0
-        } else {
-            0x5a
-        };
-    }
-    code
-}
-
-#[test]
-fn a_carried_table_is_saved_and_read_back_while_the_code_stays() {
-    let tables = load();
-    let unknown = Fingerprint::new([0xee; 16], 1);
-    let dir = scratch("same");
-    let saved = carried_file(&dir, Side::SERVER).unwrap();
-    let code = patterned_code();
-    let first = select(
-        &tables,
-        Side::SERVER,
-        unknown,
-        Some((&code, 0x1000)),
-        0..0,
-        |_| None,
-        Some(&dir),
-    )
-    .unwrap();
-    let backup = enshwick::files::backup_path(&saved);
-    let text = std::fs::read_to_string(&saved).unwrap();
-    let again = select(
-        &tables,
-        Side::SERVER,
-        unknown,
-        Some((&code, 0x1000)),
-        0..0,
-        |_| None,
-        Some(&dir),
-    )
-    .unwrap();
-    assert_eq!(again.table, first.table);
-    assert!(
-        !backup.exists(),
-        "read from the save, not searched and saved again"
-    );
-    std::fs::write(&saved, format!("{text}none\n")).unwrap();
-    let edited = select(
-        &tables,
-        Side::SERVER,
-        unknown,
-        Some((&code, 0x1000)),
-        0..0,
-        |_| None,
-        Some(&dir),
-    )
-    .unwrap();
-    assert_eq!(edited.table, first.table, "searched again");
-    assert_eq!(std::fs::read_to_string(&saved).unwrap(), text);
-    assert!(backup.exists(), "the edited save was replaced");
-    std::fs::remove_dir_all(dir).unwrap();
-}
-
-/// The stub's hold on the entry point jumps to wherever the stub loaded, so
-/// those bytes differ from start to start and must not turn the save away.
-#[test]
-fn a_carried_table_is_read_back_when_only_the_entry_hold_differs() {
-    let tables = load();
-    let unknown = Fingerprint::new([0xee; 16], 1);
-    let dir = scratch("hold");
-    let saved = carried_file(&dir, Side::SERVER).unwrap();
-    let hold = 1000..1014;
-    let mut code = patterned_code();
-    code[hold.clone()].fill(0x11);
-    let first = select(
-        &tables,
-        Side::SERVER,
-        unknown,
-        Some((&code, 0x1000)),
-        hold.clone(),
-        |_| None,
-        Some(&dir),
-    )
-    .unwrap();
-    code[hold.clone()].fill(0x22);
-    let again = select(
-        &tables,
-        Side::SERVER,
-        unknown,
-        Some((&code, 0x1000)),
-        hold,
-        |_| None,
-        Some(&dir),
-    )
-    .unwrap();
-    assert_eq!(again.table, first.table);
-    assert!(
-        !enshwick::files::backup_path(&saved).exists(),
-        "read from the save, not searched and saved again"
-    );
-    std::fs::remove_dir_all(dir).unwrap();
-}
-
-#[test]
-fn a_save_for_other_code_or_a_damaged_one_is_replaced() {
-    let tables = load();
-    let unknown = Fingerprint::new([0xee; 16], 1);
-    let dir = scratch("other");
-    let saved = carried_file(&dir, Side::SERVER).unwrap();
-    let code = patterned_code();
-    let base = tables::newest(&tables, enshwick_gamedata::Side::Server).unwrap();
-    std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
-    std::fs::write(&saved, "not a carried table").unwrap();
-    let found = select(
-        &tables,
-        Side::SERVER,
-        unknown,
-        Some((&code, 0x1000)),
-        0..0,
-        |_| None,
-        Some(&dir),
-    )
-    .unwrap();
-    assert_eq!(found.table, base.fall_back(&code, 0x1000, |_| None));
-    let key = base.carry_key(&code, 0x1000, 0..0);
-    assert!(
-        std::fs::read_to_string(&saved)
-            .unwrap()
-            .contains(&key.to_string())
-    );
-    let other = vec![0u8; 4096];
-    let found = select(
-        &tables,
-        Side::SERVER,
-        unknown,
-        Some((&other, 0x1000)),
-        0..0,
-        |_| None,
-        Some(&dir),
-    )
-    .unwrap();
-    assert_eq!(found.table, base.fall_back(&other, 0x1000, |_| None));
-    let key = base.carry_key(&other, 0x1000, 0..0);
-    assert!(
-        std::fs::read_to_string(&saved)
-            .unwrap()
-            .contains(&key.to_string())
-    );
-    std::fs::remove_dir_all(dir).unwrap();
-}
-
-#[test]
-fn a_build_with_its_own_table_saves_nothing() {
-    let tables = load();
-    let server = embedded(Side::SERVER);
-    let fingerprint = tables
-        .iter()
-        .find(|t| t.name() == server.name)
-        .unwrap()
-        .fingerprint();
-    let dir = scratch("exact");
-    let saved = carried_file(&dir, Side::SERVER).unwrap();
-    let code = patterned_code();
-    let found = select(
-        &tables,
-        Side::SERVER,
-        fingerprint,
-        Some((&code, 0x1000)),
-        0..0,
-        |_| None,
-        Some(&dir),
-    )
-    .unwrap();
-    assert_eq!(found.kind, Kind::Exact);
-    assert!(!saved.exists());
 }
 
 /// Every symbol with a `.bytes` constant reads those bytes in the client

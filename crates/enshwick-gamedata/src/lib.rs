@@ -6,9 +6,7 @@
 //! For the running build it takes the table
 //! made for it ([`exact`], [`Table::resolve`]); on a build without one, the
 //! newest table of the same side ([`newest`]) finds each entry by its pattern
-//! ([`Table::fall_back`]), and what no pattern finds stays missing; the
-//! loader saves that carried table and restores it while the code stays the
-//! same ([`Table::restore`]). The
+//! ([`Table::fall_back`]), and what no pattern finds stays missing. The
 //! game's own archive reads with [`archive::Archive`], and the engine's
 //! reflection data with [`reflect::Reflection`].
 //! The [`catalogue`] maps the ids the API asks engine facts by to the
@@ -17,7 +15,6 @@
 #![forbid(unsafe_code)]
 
 pub mod archive;
-mod carry;
 pub mod catalogue;
 mod entries;
 #[cfg(test)]
@@ -29,7 +26,6 @@ mod resolve;
 mod table;
 mod version;
 
-pub use carry::CarryKey;
 pub use parts::{Part, PartState};
 
 pub use entries::{Body, Constant, Locate, Operand, Symbol};
@@ -813,37 +809,6 @@ age = 1
         ));
         let unknown = format!("extra = 1\n{TABLE}");
         assert!(Table::parse(&unknown).is_err());
-    }
-
-    /// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
-    /// skipped without it), the newest table of their side carried to their
-    /// code reads back from its save equal to the search.
-    #[test]
-    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
-    fn a_carried_table_reads_back_equal_on_a_real_build() {
-        let tables = tables();
-        for (var, side) in [
-            ("ENSH_SERVER_EXE", Side::Server),
-            ("ENSH_CLIENT_EXE", Side::Client),
-        ] {
-            let Ok(path) = std::env::var(var) else {
-                continue;
-            };
-            let bytes = std::fs::read(path).unwrap();
-            let image = reflect::Image::parse(&bytes, reflect::Layout::File, None).unwrap();
-            let table = newest(&tables, side).unwrap();
-            let range = image.range(image.section(".text").unwrap());
-            let code = image.read(range.start, range.end - range.start).unwrap();
-            let code_rva = range.start - image.base();
-            let key = table.carry_key(code, code_rva, 0..0);
-            let carried = table.fall_back(code, code_rva, |_| None);
-            let saved = carried.to_saved(key).unwrap();
-            assert_eq!(
-                table.restore(&saved, key, code, code_rva, |_| None),
-                Some(carried),
-                "{var}"
-            );
-        }
     }
 
     /// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each

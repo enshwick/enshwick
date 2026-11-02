@@ -9,8 +9,6 @@
 //! its code pattern, and what it cannot find stays missing: the features and
 //! mods that need it turn off, the rest runs.
 
-use std::ops::Range;
-use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -19,11 +17,6 @@ use enshwick_gamedata::reflect::Fingerprint;
 use enshwick_gamedata::{self as tables, Part, PartState, Resolved, Table};
 
 pub use enshwick_gamedata::Kind;
-
-use crate::settings::LOADER_ID;
-
-/// The name a carried table is saved under, before its side.
-const CARRIED_FILE: &str = "carried";
 
 /// Whether a build without a table runs on patterns; set from the settings.
 static PATTERNS: AtomicBool = AtomicBool::new(true);
@@ -192,19 +185,14 @@ pub fn load() -> Vec<Table> {
 /// Its own when there is one; else, unless the settings turned it off, the
 /// newest table of its side carried over by patterns in `code` (the code
 /// section and its RVA), with `cell` reading the `u32` the game's image
-/// holds at an RVA for the constants the game keeps in data cells. A carried table is read from its file under
-/// `data_dir` while the code and the table stay the same, and saved there
-/// otherwise; the bytes of the code in `hold`, which the stub holds the
-/// entry point with, do not count.
+/// holds at an RVA for the constants the game keeps in data cells.
 #[must_use]
 pub fn select(
     tables: &[Table],
     running: Side,
     fingerprint: Fingerprint,
     code: Option<(&[u8], u64)>,
-    hold: Range<usize>,
     cell: impl Fn(u64) -> Option<u32> + Sync,
-    data_dir: Option<&Path>,
 ) -> Option<KnownBuild> {
     let side = side(running)?;
     if let Some(table) = tables::exact(tables, side, fingerprint) {
@@ -220,10 +208,7 @@ pub fn select(
     }
     let (code, code_rva) = code?;
     let base = tables::newest(tables, side)?;
-    let table = match data_dir.and_then(|dir| carried_file(dir, running)) {
-        Some(path) => carry(base, code, code_rva, hold, cell, &path),
-        None => base.fall_back(code, code_rva, cell),
-    };
+    let table = base.fall_back(code, code_rva, cell);
     Some(KnownBuild {
         name: format!(
             "build {}, carried table {}",
@@ -250,52 +235,6 @@ pub fn fingerprint_name(fingerprint: Fingerprint) -> String {
         });
     let _written = write!(name, "/{}", fingerprint.age());
     name
-}
-
-/// The file under the game's `mod-data` a build of `running`'s side without
-/// a table keeps its carried table in.
-fn carried_file(data_dir: &Path, running: Side) -> Option<PathBuf> {
-    let side = side(running)?;
-    Some(
-        data_dir
-            .join(LOADER_ID)
-            .join(format!("{CARRIED_FILE}-{}.txt", side.as_str())),
-    )
-}
-
-/// `base` carried to `code`: read from `path` when it was saved for this
-/// code and table, else found by patterns and saved there.
-fn carry(
-    base: &Table,
-    code: &[u8],
-    code_rva: u64,
-    hold: Range<usize>,
-    cell: impl Fn(u64) -> Option<u32> + Sync,
-    path: &Path,
-) -> Resolved {
-    let key = base.carry_key(code, code_rva, hold);
-    let saved = std::fs::read_to_string(path).ok();
-    if let Some(text) = &saved {
-        if let Some(table) = base.restore(text, key, code, code_rva, &cell) {
-            return table;
-        }
-        crate::log!(
-            INFO,
-            "the carried build table saved in {} is not for this code or does not match it, so it is searched again",
-            path.display()
-        );
-    }
-    let table = base.fall_back(code, code_rva, cell);
-    if let Some(text) = table.to_saved(key)
-        && let Err(e) = enshwick::files::write_atomically(path, &text)
-    {
-        crate::log!(
-            WARN,
-            "the carried build table could not be saved to {}, so the next start searches again: {e}",
-            path.display()
-        );
-    }
-    table
 }
 
 /// The newest table of `running`'s side carried over by patterns in `code`

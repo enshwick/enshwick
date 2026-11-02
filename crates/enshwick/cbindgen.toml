@@ -35,8 +35,6 @@ ENSHWICK_EXPORT const EnshwickManifest *enshwick_mod_query(void);
 ENSHWICK_EXPORT EnshwickStatus enshwick_mod_init(const EnshwickHostApi *host, EnshwickModHandle me);
 // Runs after every chain is armed.
 ENSHWICK_EXPORT void enshwick_mod_ready(const EnshwickHostApi *host, EnshwickModHandle me);
-// Optional: stops what the mod started before a development reload unloads it.
-ENSHWICK_EXPORT void enshwick_mod_shutdown(void);
 
 #ifdef __cplusplus
 }

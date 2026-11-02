@@ -63,7 +63,6 @@ you remove it.
 ## Next
 
 [Data packs](packs.md) lists every change a pack can make: recipe costs and
-times, chest slots, item stats, new items, workshops and loot. With
-`dev_reload = true`, changed values apply while the game runs. The
+times, chest slots, item stats, new items, workshops and loot. The
 repository's `examples/you.material-stacks/` is a finished pack of this kind
 for five materials.

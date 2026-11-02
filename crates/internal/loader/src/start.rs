@@ -29,7 +29,6 @@ mod lock;
 
 pub use dry_run::{DryMod, DryRun, DryRunError, dry_run};
 pub(crate) use join_check::TABLE_IDS;
-pub(crate) use library::load_copy;
 
 use arm::arm;
 use game::{begin, game, wait_for_window};
@@ -208,7 +207,6 @@ pub(crate) fn start(
         enshwick::__private::install_host(&raw const host::API, host::LOADER_HANDLE);
     }
     attribute_crashes(loader, &order);
-    crate::reload::prepare(loader.mods.len());
     initialise(loader, &order, watching.as_mut());
     seal(loader);
     link_features(loader);
@@ -229,7 +227,6 @@ pub(crate) fn start(
     if let Some(w) = watching {
         w.finish();
     }
-    watch_copies(loader, &order);
     write_lock(loader, lock_files);
     start_services(loader);
 }
@@ -322,22 +319,6 @@ fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
         })
         .collect();
     modlist::set_replaced(replaced);
-}
-
-/// With dev reload, watches the DLLs of the mods that run from copies.
-fn watch_copies(loader: &'static Loader, order: &[&Library]) {
-    if !crate::reload::copies() {
-        return;
-    }
-    let copied = order
-        .iter()
-        .enumerate()
-        .filter_map(|(index, library)| {
-            let (original, copy) = library.copied.clone()?;
-            Some((index, original, copy, library.module))
-        })
-        .collect();
-    crate::reload::start(loader, copied);
 }
 
 /// The records of the mods `plan` loads, in load order, with their notes
@@ -449,7 +430,7 @@ fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Wat
         // SAFETY: `library.init` is the mod's `INIT` export, typed `InitFn`
         // as `enshwick::abi::exports` documents, called with the static host
         // table and the mod's own handle.
-        let status = crate::reload::initialising(index, || unsafe {
+        let status = host::initialising(index, || unsafe {
             (library.init)(&raw const host::API, host::handle(ModIndex::new(index)))
         });
         if let Some(w) = watching.as_deref_mut() {

@@ -170,14 +170,6 @@ fn a_drop_s_meter_follows_its_items() {
 }
 
 #[test]
-fn loot_alone_keeps_the_same_content() {
-    let a = Pack::parse("p", &PackFiles::new()).unwrap();
-    let b = Pack::parse("p", &PackFiles::new().with(TEXTS_FILE, "[en]\na = \"b\"\n")).unwrap();
-    assert!(a.same_content(&a.clone()));
-    assert!(!a.same_content(&b));
-}
-
-#[test]
 fn a_manifest_names_its_problem_line() {
     let error = PackManifest::parse("version = \"1.0.0\"\nid = \"Bad Id\"\n").unwrap_err();
     assert_eq!((error.line, error.column), (2, 1), "{error}");

@@ -264,14 +264,12 @@ fn arrive(loader: &Loader, key: &str, path: &str) {
                 INFO,
                 "world {key}: its save moved, so it took over the mod data of world {from}"
             );
-            crate::migrations::world_arrived(loader, &from, key, false);
         }
         Ok(Arrival::Copied { from }) => {
             crate::log!(
                 INFO,
                 "world {key}: a copy of world {from}, whose save is still there, got a copy of its mod data"
             );
-            crate::migrations::world_arrived(loader, &from, key, true);
         }
         Ok(Arrival::Unclear(others)) => crate::log!(
             WARN,

@@ -374,7 +374,6 @@ mod runtime {
                 id,
                 "the host does not run it; restart the game to use it again",
             );
-            crate::reload::hold(id);
         }
         if let Some(text) = note {
             crate::ui::show("Enshwick", &text, "", 1 << UiDialog::OK, |_| {});

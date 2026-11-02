@@ -161,11 +161,6 @@ assert!(Rates::template().contains("# How furniture adds comfort.\n[comfort]\n")
 assert!(Rates::schema().field("comfort.multiplier").is_some());
 ```
 
-A mod that used to keep a setting at the top of the file moves it into a
-group with a [migration](migrations.md): `rename_setting("cost",
-"recipes.cost")`, and `take_setting` brings another mod's flat key into a
-dotted one.
-
 ## Settings per world
 
 A setting lives in one of two places, its scope, which its stage decides and
@@ -285,9 +280,8 @@ get `sync` values at once), `startup` values apply when the world loads
 again, and `restart` values, written to the settings file, when the game
 starts again. `client` values are refused on a dedicated server.
 
-When a new version renames or changes a setting, declare a
-[migration](migrations.md): the loader carries old files and every world's
-settings over once.
+The loader never rewrites a settings file for a new version of a mod. A
+version that renames or changes a setting reads the old key or value itself.
 
 A file that does not parse turns the mod off at init with serde's message; so
 does a misspelt key. Use `#[enshwick::config(default)]` if a file written by

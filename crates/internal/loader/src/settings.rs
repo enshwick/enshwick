@@ -39,17 +39,10 @@ pub struct Settings {
     /// Minutes between status summaries in `logs/enshwick/status.log`;
     /// 0 writes one only when the console asks with enshwick status.
     pub status_minutes: u32,
-    /// Only log what mods' migrations would change, without changing their
-    /// files or recording them in mod-data/enshwick/migrations.toml.
-    pub migrations_dry_run: bool,
     /// On a game build without a build table yet, find the table's entries
     /// by their code patterns and run what they cover; false leaves such a
     /// build vanilla until its table arrives. Read at start.
     pub build_patterns: bool,
-    /// Watch the mod DLLs in mods/ and reload one that changes, when the mod
-    /// allows it (`reload: true` in its manifest). For developing mods, on
-    /// the dedicated server or the client. Read at start.
-    pub dev_reload: bool,
     /// What the server does with knowledge a client asks for in its input
     /// that a vanilla client never asks for: ids of the world's, counters,
     /// flag bits other than the seen bit, ids that give experience or skill
@@ -113,9 +106,7 @@ impl Default for Settings {
             diagnostics: false,
             diagnostics_timing: false,
             status_minutes: STATUS_MINUTES,
-            migrations_dry_run: false,
             build_patterns: true,
-            dev_reload: false,
             knowledge_guard: KnowledgeGuard::Watch,
             actions_key: "F7".to_owned(),
             require_enshwick: true,
@@ -174,8 +165,8 @@ impl Settings {
     /// own key is bad, or when it is missing and a bad key could have held
     /// it: an unknown key, which may be it misspelled, or a table, which a
     /// misplaced header fills with the keys after it. Closed is the
-    /// allowlist on when its file exists (`listed`), the migrations dry run
-    /// on, the join check on and the knowledge guard enforcing. Text that is
+    /// allowlist on when its file exists (`listed`), the join check on and
+    /// the knowledge guard enforcing. Text that is
     /// not TOML holds them all.
     #[must_use]
     pub fn parse(text: &str, listed: bool) -> (Self, Problems) {
@@ -257,7 +248,6 @@ impl Settings {
     fn close(&mut self, key: &str, listed: bool) {
         match key {
             ALLOWLIST => self.allowlist = listed,
-            MIGRATIONS_DRY_RUN => self.migrations_dry_run = true,
             REQUIRE_ENSHWICK => self.require_enshwick = true,
             KNOWLEDGE_GUARD => self.knowledge_guard = KnowledgeGuard::Enforce,
             _ => {}
@@ -276,18 +266,11 @@ pub struct Problems {
 }
 
 const ALLOWLIST: &str = "allowlist";
-const MIGRATIONS_DRY_RUN: &str = "migrations_dry_run";
 const REQUIRE_ENSHWICK: &str = "require_enshwick";
 const KNOWLEDGE_GUARD: &str = "knowledge_guard";
 
-/// The settings that keep players out or data unchanged; a broken file
-/// never opens them.
-pub const PROTECTIONS: [&str; 4] = [
-    ALLOWLIST,
-    MIGRATIONS_DRY_RUN,
-    REQUIRE_ENSHWICK,
-    KNOWLEDGE_GUARD,
-];
+/// The settings that keep players out; a broken file never opens them.
+pub const PROTECTIONS: [&str; 3] = [ALLOWLIST, REQUIRE_ENSHWICK, KNOWLEDGE_GUARD];
 
 #[cfg(test)]
 mod tests {
@@ -384,7 +367,6 @@ status_minutes = 0
     fn closed(listed: bool) -> Settings {
         Settings {
             allowlist: listed,
-            migrations_dry_run: true,
             require_enshwick: true,
             knowledge_guard: KnowledgeGuard::Enforce,
             ..Settings::default()
@@ -409,7 +391,7 @@ status_minutes = 0
             problems
                 .lines
                 .iter()
-                .any(|p| p.contains("allowlist") && p.contains("migrations_dry_run")),
+                .any(|p| p.contains("allowlist") && p.contains("knowledge_guard")),
             "{problems:?}"
         );
     }
@@ -423,12 +405,11 @@ status_minutes = 0
     #[test]
     fn a_bad_value_keeps_the_valid_keys_and_names_the_bad_one() {
         let text = "log_level = \"warn\"\nstatus_minutes = \"ten\"\nallowlist = true\n\
-                    migrations_dry_run = false\nrequire_enshwick = false\nknowledge_guard = \"off\"\n";
+                    require_enshwick = false\nknowledge_guard = \"off\"\n";
         let (settings, problems) = Settings::parse(text, false);
         assert_eq!(settings.log_level, Level::WARN);
         assert_eq!(settings.status_minutes, STATUS_MINUTES);
         assert!(settings.allowlist);
-        assert!(!settings.migrations_dry_run);
         assert!(!settings.require_enshwick);
         assert_eq!(settings.knowledge_guard, KnowledgeGuard::Off);
         assert_eq!(problems.lines.len(), 1, "{problems:?}");
@@ -437,14 +418,12 @@ status_minutes = 0
 
     #[test]
     fn a_bad_protection_value_holds_that_protection_closed() {
-        let text = "allowlist = \"yes\"\nmigrations_dry_run = 1\nrequire_enshwick = false\n\
-                    knowledge_guard = \"loud\"\n";
+        let text = "allowlist = \"yes\"\nrequire_enshwick = false\nknowledge_guard = \"loud\"\n";
         let (settings, problems) = Settings::parse(text, true);
         assert!(settings.allowlist);
-        assert!(settings.migrations_dry_run);
         assert!(!settings.require_enshwick);
         assert_eq!(settings.knowledge_guard, KnowledgeGuard::Enforce);
-        for key in ["allowlist", "migrations_dry_run", "knowledge_guard"] {
+        for key in ["allowlist", "knowledge_guard"] {
             assert!(
                 problems.lines.iter().any(|p| p.contains(key)),
                 "{key}: {problems:?}"
@@ -454,11 +433,9 @@ status_minutes = 0
 
     #[test]
     fn a_misspelled_protection_holds_it_closed() {
-        let text = "alowlist = false\nmigrations_dry_run = false\nrequire_enshwick = true\n\
-                    knowledge_guard = \"watch\"\n";
+        let text = "alowlist = false\nrequire_enshwick = true\nknowledge_guard = \"watch\"\n";
         let (settings, problems) = Settings::parse(text, true);
         assert!(settings.allowlist);
-        assert!(!settings.migrations_dry_run);
         assert_eq!(settings.knowledge_guard, KnowledgeGuard::Watch);
         assert!(
             problems.lines.iter().any(|p| p.contains("alowlist")),

@@ -102,8 +102,8 @@ pub unsafe fn read(raw: *const Manifest) -> Result<&'static Manifest, ManifestEr
 }
 
 /// `manifest` with every string and list it points at copied into the
-/// loader's memory, so it outlives its DLL, which a development reload
-/// unloads. A string that is not UTF-8 keeps pointing into the DLL; the
+/// loader's memory, so it outlives its DLL, which the loader unloads when
+/// another mod replaces it. A string that is not UTF-8 keeps pointing into the DLL; the
 /// checks refuse such a mod.
 ///
 /// # Safety

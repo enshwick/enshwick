@@ -129,13 +129,11 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     crate::diag::configure(&settings);
     let side = identify().map(|(side, _, _)| side);
     let developer_tools = crate::developer_tools::marked(&game_dir);
-    crate::reload::configure(settings.dev_reload && developer_tools);
     crate::knowledge::guard::configure(settings.knowledge_guard);
     crate::admission::configure(&settings);
     crate::allowlist::configure(&settings);
     crate::ui::configure_actions_key(&settings.actions_key);
     crate::texts::configure(&settings.language, side == Some(Side::SERVER));
-    let dev_reload_held = settings.dev_reload && !developer_tools;
     builds::configure(settings.build_patterns);
     let motd = settings.motd.clone();
     log::set_levels(settings);
@@ -145,13 +143,6 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
         crate::log!(
             WARN,
             "developer tools are on: {} exists; never on a game players join",
-            enshwick::mods::DEVELOPER_TOOLS
-        );
-    }
-    if dev_reload_held {
-        crate::log!(
-            WARN,
-            "dev_reload is on but reloads stay off: mods reload only while the file {} exists",
             enshwick::mods::DEVELOPER_TOOLS
         );
     }
@@ -203,17 +194,6 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     })
 }
 
-/// Where in `code`, the game's `.text` and its RVA, the stub holds the entry
-/// point: its jump goes to wherever the stub loaded, so a carried table's key
-/// leaves those bytes out; empty when the entry is not in `.text`.
-fn entry_hold(base: u64, code: Option<(&[u8], u64)>) -> core::ops::Range<usize> {
-    code.and_then(|(bytes, rva)| {
-        let at = crate::code::entry_rva(base)?.checked_sub(usize::try_from(rva).ok()?)?;
-        (at < bytes.len()).then_some(at..at + crate::code::ENTRY_HOLD)
-    })
-    .unwrap_or(0..0)
-}
-
 /// Identifies the running game and its build table; `None`, logged, when the
 /// loader cannot serve it. On a build it has no table for, a mod's hold under
 /// `data_dir` stops the game.
@@ -257,11 +237,8 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
             .read(range.start, range.end - range.start)
             .map(|bytes| (bytes, range.start - base))
     });
-    let hold = entry_hold(base, code);
     let cell = |rva| image.u32(base + rva);
-    let Some(mut build) =
-        builds::select(&tables, side, fingerprint, code, hold, cell, Some(data_dir))
-    else {
+    let Some(mut build) = builds::select(&tables, side, fingerprint, code, cell) else {
         crate::log!(
             ERROR,
             "unknown game build {}; the game runs vanilla until Enshwick has its build table ({})",

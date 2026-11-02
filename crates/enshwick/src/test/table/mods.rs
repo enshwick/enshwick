@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{ConfigCheckFn, Level, MigrationSet, ModHandle, ModInfo, Status, Str};
+use crate::abi::{ConfigCheckFn, ContentRename, Level, ModHandle, ModInfo, Status, Str};
 use crate::test::table::{found, put, text, with};
 
 pub(crate) extern "system" fn fault(_me: ModHandle, reason: Str) {
@@ -38,41 +38,29 @@ pub(crate) extern "system" fn settings(_me: ModHandle, defaults: Str, out: *mut 
     found(served, out)
 }
 
-pub(crate) extern "system" fn migrate(_me: ModHandle, set: *const MigrationSet) -> Status {
-    let Some(set) = super::get_headed(set) else {
-        return Status::BAD_ARGS;
+pub(crate) extern "system" fn rename_content(
+    _me: ModHandle,
+    renames: *const ContentRename,
+    count: u32,
+) -> Status {
+    let renames: Vec<([u8; 16], [u8; 16])> = match count {
+        0 => Vec::new(),
+        _ if renames.is_null() => return Status::BAD_ARGS,
+        // SAFETY: `renames` is non-null, checked just before, and the ABI has
+        // the mod keep `count` aligned entries there for the call.
+        _ => unsafe { core::slice::from_raw_parts(renames, count as usize) }
+            .iter()
+            .map(|r| (r.from, r.to))
+            .collect(),
     };
-    let Some(map) = set.map else {
-        return Status::BAD_ARGS;
-    };
-    let mut migrations = Vec::new();
-    for index in 0..set.count as usize {
-        // SAFETY: the set holds `count` migrations.
-        let migration = unsafe { set.migrations.add(index) };
-        // SAFETY: `index` is below the set's `count`, so `migration` points at
-        // one of its live, aligned entries.
-        let migration = unsafe { &*migration };
-        let steps = (0..migration.count as usize)
-            .map(|i| {
-                // SAFETY: the migration holds `count` steps.
-                let step = unsafe { migration.steps.add(i) };
-                // SAFETY: `i` is below the migration's `count`, so `step`
-                // points at one of its live, aligned steps.
-                let step = unsafe { &*step };
-                (step.kind, text(step.from), text(step.to))
-            })
-            .collect();
-        migrations.push((text(migration.id), steps));
+    if renames.iter().any(|(from, to)| from == to) {
+        return Status::REFUSED;
     }
     with(Status::MISSING, |s| {
-        if s.migrations.is_some() {
+        if s.content_renames.is_some() {
             return Status::REFUSED;
         }
-        s.migrations = Some(crate::test::FakeMigrations {
-            list: migrations,
-            map,
-            user: set.user.expose_provenance(),
-        });
+        s.content_renames = Some(renames);
         Status::OK
     })
 }

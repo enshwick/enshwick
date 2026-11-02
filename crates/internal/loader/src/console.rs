@@ -262,8 +262,6 @@ pub enum Tool<'a> {
     Entity(&'a str),
     /// `enshwick placed [n]`: the pieces placed lately.
     Placed(&'a str),
-    /// `enshwick reload <mod id>`: a mod reads its settings again.
-    Reload(&'a str),
     /// `enshwick kick|ban|unban <player or account>`: the game's account
     /// actions.
     Account(accounts::Act, &'a str),
@@ -333,7 +331,6 @@ pub fn parse(line: &str) -> Line<'_> {
         "world" => Tool::World,
         "entity" => Tool::Entity(args),
         "placed" => Tool::Placed(args),
-        "reload" => Tool::Reload(args),
         "kick" => Tool::Account(accounts::Act::Kick, args),
         "ban" => Tool::Account(accounts::Act::Ban, args),
         "unban" => Tool::Account(accounts::Act::Unban, args),
@@ -419,10 +416,6 @@ mod tests {
             Line::Loader(Tool::Entity("12"))
         );
         assert_eq!(parse("enshwick placed"), Line::Loader(Tool::Placed("")));
-        assert_eq!(
-            parse("enshwick reload you.safes"),
-            Line::Loader(Tool::Reload("you.safes"))
-        );
         assert_eq!(
             parse("enshwick ban Ann Lee"),
             Line::Loader(Tool::Account(accounts::Act::Ban, "Ann Lee"))

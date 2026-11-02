@@ -391,68 +391,6 @@ mod tests {
         assert!(logged(&loader, "one\t2"), "{:?}", loader.logs());
     }
 
-    fn main(source: &str) -> Scripts {
-        Scripts::new().with("main.luau", source)
-    }
-
-    fn count(loader: &Installed, text: &str) -> usize {
-        loader
-            .logs()
-            .iter()
-            .filter(|(_, line)| line.contains(text))
-            .count()
-    }
-
-    #[test]
-    fn a_reload_moves_the_handlers_to_the_new_scripts() {
-        let loader = run(r#"enshwick.on("WorldSaved", function() print("first") end)"#);
-        runtime()
-            .reload(main(
-                r#"enshwick.on("WorldSaved", function() print("second") end)"#,
-            ))
-            .unwrap();
-        let _handled = loader.raise::<WorldSaved>(&());
-        assert!(logged(&loader, "second"), "{:?}", loader.logs());
-        assert!(!logged(&loader, "first"));
-    }
-
-    #[test]
-    fn a_failing_reload_keeps_the_old_scripts() {
-        let loader = run(r#"enshwick.on("WorldSaved", function() print("first") end)"#);
-        let error = runtime().reload(main("local x = ")).unwrap_err();
-        assert!(error.to_string().contains("main.luau:1"), "{error}");
-        let _handled = loader.raise::<WorldSaved>(&());
-        assert!(logged(&loader, "first"));
-        assert!(loader.faults().is_empty());
-    }
-
-    #[test]
-    fn a_reload_stops_the_old_tasks_without_a_fault() {
-        let loader =
-            run(r#"enshwick.scheduler.every(0, function() print("old task") return true end)"#);
-        tick(&loader);
-        assert_eq!(count(&loader, "old task"), 1);
-        runtime().reload(main("")).unwrap();
-        tick(&loader);
-        tick(&loader);
-        assert_eq!(count(&loader, "old task"), 1);
-        assert!(loader.faults().is_empty(), "{:?}", loader.faults());
-        assert!(!runtime().is_off());
-    }
-
-    #[test]
-    fn a_handler_of_a_new_event_waits_for_the_next_start() {
-        let loader = run(r#"enshwick.on("WorldSaved", function() end)"#);
-        runtime()
-            .reload(main(r#"enshwick.on("PlayerJoined", function() end)"#))
-            .unwrap();
-        assert!(
-            logged(&loader, "handlers of PlayerJoined run from the next start"),
-            "{:?}",
-            loader.logs()
-        );
-    }
-
     #[test]
     fn the_status_shows_the_vm_s_cost() {
         let _loader = run("local t = {} for i = 1, 1000 do t[i] = i end");
@@ -696,32 +634,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_reload_moves_game_event_handlers_and_a_new_one_waits() {
-        let (loader, status) = run_full(
-            r#"enshwick.on("LevelUpEvent", function() print("first") end)"#,
-            Limits::default(),
-            Scripts::new(),
-            None,
-            game_host(),
-        );
-        assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        runtime()
-            .reload(main(
-                r#"enshwick.on("LevelUpEvent", function() print("second") end)
-                enshwick.on("XpGainedEvent", function() end)"#,
-            ))
-            .unwrap();
-        let _handled = loader.raise_game_event(LEVEL_UP, &[0u8; 16]);
-        assert!(logged(&loader, "second"), "{:?}", loader.logs());
-        assert!(!logged(&loader, "first"));
-        assert!(
-            logged(&loader, "handlers of XpGainedEvent run from the next start"),
-            "{:?}",
-            loader.logs()
-        );
-    }
-
     #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Price {
@@ -903,46 +815,6 @@ mod tests {
         assert_eq!(loader.sent_events(), ["you.luau:greeted"]);
         assert!(logged(&loader, "bad name false"), "{:?}", loader.logs());
         assert!(logged(&loader, "is no local name"), "{:?}", loader.logs());
-    }
-
-    #[test]
-    fn a_reload_keeps_a_defined_event_and_a_new_one_waits() {
-        let (loader, status) = run_full(
-            r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "u32" } } })"#,
-            Limits::default(),
-            Scripts::new(),
-            None,
-            FakeHost::new(),
-        );
-        assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        runtime()
-            .reload(main(
-                r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "u32" } } })
-                greeted.send({ n = 4 })
-                local ok = pcall(enshwick.define_event, { name = "you.luau:waved", fields = {} })
-                print(`waved {ok}`)"#,
-            ))
-            .unwrap();
-        assert_eq!(loader.sent_event_data(), [vec![4, 0, 0, 0]]);
-        assert!(logged(&loader, "waved false"), "{:?}", loader.logs());
-    }
-
-    #[test]
-    fn a_reload_cannot_change_a_defined_event_s_fields() {
-        let (loader, status) = run_full(
-            r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "u32" } } })"#,
-            Limits::default(),
-            Scripts::new(),
-            None,
-            FakeHost::new(),
-        );
-        assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        let failed = runtime().reload(main(
-            r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "f32" } } })
-            greeted.send({ n = 4 })"#,
-        ));
-        assert!(failed.is_err());
-        assert!(loader.sent_event_data().is_empty());
     }
 
     #[test]

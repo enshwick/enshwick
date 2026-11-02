@@ -134,7 +134,7 @@ pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 /// );
 ///
 /// // SAFETY: `enshwick_mod_query` returns the manifest of
-/// // `declare_mod!`, valid until its shutdown.
+/// // `declare_mod!`, valid for the process.
 /// let manifest = unsafe { &*enshwick_mod_query() };
 /// // SAFETY: `declare_mod!` points the id at a string literal, alive for the process.
 /// assert_eq!(unsafe { manifest.id.as_str() }, Some("you.lockers"));
@@ -148,12 +148,6 @@ pub use enshwick_macros::declare_test_mod as declare_mod;
 #[expect(dead_code, reason = "the doc comment carries the chapter")]
 struct BookTesting;
 
-/// The modding book's chapter on migrations, which ends with a test.
-#[cfg(doctest)]
-#[doc = include_str!("../../../book/src/migrations.md")]
-#[expect(dead_code, reason = "the doc comment carries the chapter")]
-struct BookMigrations;
-
 use std::sync::MutexGuard;
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -165,7 +159,6 @@ use crate::abi::{
 };
 
 use players::{FakeService, ask, console};
-use settings::FakeMigrations;
 
 /// A mod's `enshwick_mod_init` export, as [`declare_mod!`](crate::declare_mod)
 /// writes it.
@@ -272,7 +265,6 @@ pub struct FakeHost {
     type_hashes: FxHashMap<String, u32>,
     event_types: Vec<(&'static str, u32, u32)>,
     settings: Option<String>,
-    other_settings: FxHashMap<String, String>,
     server_synced: Option<String>,
     data_dir: String,
     log_level: Level,
@@ -363,7 +355,6 @@ impl FakeHost {
             type_hashes: FxHashMap::default(),
             event_types: Vec::new(),
             settings: None,
-            other_settings: FxHashMap::default(),
             server_synced: None,
             data_dir: "mod-data/test".to_owned(),
             log_level: Level::INFO,
@@ -594,8 +585,7 @@ impl Installed {
     ///
     /// See [`crate`].
     pub unsafe fn start(&self, query: QueryFn, init: InitFn, ready: ReadyFn) -> Status {
-        // SAFETY: `query` returns null or a manifest valid until the mod's
-        // shutdown, which no caller runs before start returns.
+        // SAFETY: `query` returns null or a manifest valid for the process.
         if let Some(manifest) = unsafe { query().as_ref() }
             && table::refuses_developer(self.api(), manifest)
         {

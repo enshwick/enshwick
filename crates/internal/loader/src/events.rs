@@ -494,10 +494,7 @@ fn periodic_ticks(step: u64, now: u64, time: StepTime, game: u64) -> usize {
         step,
         now,
         time,
-        |tick| {
-            !crate::host::is_off(tick.owner())
-                && tick.generation() == crate::reload::generation(tick.owner().get())
-        },
+        |tick| !crate::host::is_off(tick.owner()),
         |tick, mut data| {
             data.game = game;
             data.cost_nanos = crate::profile::events_reading(tick.owner())

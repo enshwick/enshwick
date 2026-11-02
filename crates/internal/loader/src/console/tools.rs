@@ -1,5 +1,5 @@
-//! The server administration tools: players, entities, placed pieces, mods,
-//! settings reloads and the game's account actions, on the game thread.
+//! The server administration tools: players, entities, placed pieces, mods
+//! and the game's account actions, on the game thread.
 
 use std::sync::atomic::Ordering;
 
@@ -95,18 +95,6 @@ pub(crate) fn mods(loader: &Loader) -> String {
             })
             .collect::<Vec<_>>(),
     )
-}
-
-/// `enshwick reload <mod id>`: the mod reads its settings again.
-pub(crate) fn reload(loader: &Loader, args: &str) -> String {
-    let id = args.trim();
-    let Some((_, record)) = loader.find_mod(&id.to_ascii_lowercase()) else {
-        return texts::fill("enshwick.unknown", &[("id", id)]);
-    };
-    let Some(game) = loader.data_dir.parent() else {
-        return texts::fill("enshwick.unknown", &[("id", id)]);
-    };
-    answers::reload(game, &record.id, crate::worlds::current().as_deref())
 }
 
 /// `enshwick kick|ban|unban <player or account>`: asks the game for its

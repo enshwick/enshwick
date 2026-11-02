@@ -321,7 +321,6 @@ mod host_api;
 mod ids;
 mod inventory;
 mod manifest;
-mod migrations;
 mod mods;
 mod net;
 mod pacing;
@@ -346,7 +345,6 @@ pub use host_api::*;
 pub use ids::*;
 pub use inventory::*;
 pub use manifest::*;
-pub use migrations::*;
 pub use mods::*;
 pub use net::*;
 pub use pacing::*;
@@ -660,7 +658,7 @@ pub mod exports {
     ///
     /// Any thread may call it any number of times; the first call builds the
     /// manifest and allocates, and a panic there returns null. The manifest
-    /// stays valid until [`SHUTDOWN`]: copy what is kept.
+    /// stays valid for the process.
     pub const QUERY: &str = "enshwick_mod_query";
     /// `extern "system" fn(*const HostApi, ModHandle) -> Status`: registers
     /// hooks, services and settings.
@@ -668,9 +666,6 @@ pub mod exports {
     /// `extern "system" fn(*const HostApi, ModHandle)`: after every chain is
     /// armed.
     pub const READY: &str = "enshwick_mod_ready";
-    /// `extern "system" fn()`: before a development reload unloads the DLL;
-    /// the mod stops what it started. Optional.
-    pub const SHUTDOWN: &str = "enshwick_mod_shutdown";
 }
 
 const _: () = {
@@ -800,12 +795,10 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, knowledge_input_filter) == 24 + 122 * 8);
     assert!(core::mem::offset_of!(HostApi, forget_game_settings) == 24 + 125 * 8);
     assert!(size_of::<KnowledgeInput>() == 8 + 24);
-    assert!(core::mem::offset_of!(HostApi, migrate) == 24 + 118 * 8);
+    assert!(core::mem::offset_of!(HostApi, rename_content) == 24 + 118 * 8);
     assert!(core::mem::offset_of!(HostApi, declare_content) == 24 + 119 * 8);
-    // Frozen: written as arrays.
-    assert!(size_of::<MigrationStep>() == 8 + 16 + 16 + 16 + 16);
-    assert!(size_of::<Migration>() == 16 + 8 + 8);
-    assert!(size_of::<MigrationSet>() == 8 + 8 + 8 + 8 + 8);
+    // Frozen: written as an array.
+    assert!(size_of::<ContentRename>() == 16 + 16);
     assert!(core::mem::offset_of!(HostApi, define_event) == 24 + 111 * 8);
     assert!(core::mem::offset_of!(HostApi, define_point) == 24 + 133 * 8);
     assert!(size_of::<PointSpec>() == 8 + 16 + 4 + 4 + 16 + 16);

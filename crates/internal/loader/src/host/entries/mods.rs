@@ -4,11 +4,13 @@ use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
 use enshwick::abi as api_frame;
-use enshwick::abi::{Header, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str};
+use enshwick::abi::{
+    ContentRename, Header, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str,
+};
 use enshwick::mods::LOADER_FILE;
 
 use crate::host::join::JOIN_MISSING;
-use crate::host::memory::{get_headed, put, text};
+use crate::host::memory::{put, slice, text};
 use crate::host::{LOADER_HANDLE, ModRecord, calling, entry, loader};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -45,7 +47,7 @@ pub(crate) extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut S
         let (Some(loader), Some(defaults)) = (loader(), text(defaults)) else {
             return Status::BAD_ARGS;
         };
-        let Some((index, record)) = loader.record(me) else {
+        let Some((_, record)) = loader.record(me) else {
             return Status::BAD_ARGS;
         };
         let path = loader.configs_dir.join(format!("{}.toml", record.id));
@@ -62,12 +64,8 @@ pub(crate) extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut S
                         &record.id,
                         "could not write the default settings",
                     );
-                    defaults.to_owned()
-                } else {
-                    crate::migrations::settings_written(loader, index.get());
-                    // Its migrations may have brought in other mods' settings.
-                    std::fs::read_to_string(&path).unwrap_or_else(|_| defaults.to_owned())
                 }
+                defaults.to_owned()
             }
             // The player's file stays as it is, for them to fix.
             Err(e) => {
@@ -88,11 +86,12 @@ pub(crate) extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut S
     })
 }
 
-pub(crate) extern "system" fn migrate(
+pub(crate) extern "system" fn rename_content(
     me: ModHandle,
-    set: *const api_frame::MigrationSet,
+    renames: *const ContentRename,
+    count: u32,
 ) -> Status {
-    entry("migrate", || {
+    entry("rename_content", || {
         let (loader, index, _) = match calling(me) {
             Ok(found) => found,
             Err(status) => return status,
@@ -100,17 +99,14 @@ pub(crate) extern "system" fn migrate(
         if loader.delivery.get().is_some() {
             return Status::TOO_LATE;
         }
-        // SAFETY: a mod passes null or its version of the set, and all of the
-        // set, its migration function included, is required.
-        match unsafe {
-            get_headed(
-                set,
-                <api_frame::MigrationSet as enshwick::abi::Headed>::BORN,
-            )
-        } {
-            Some(set) => crate::migrations::register(loader, index.get(), &set),
-            None => Status::BAD_ARGS,
+        if renames.is_null() && count != 0 {
+            return Status::BAD_ARGS;
         }
+        // SAFETY: `HostApi::rename_content` has the mod pass `count` aligned
+        // renames at `renames`, readable and unchanged for the call; they are
+        // copied before it returns.
+        let renames = unsafe { slice(renames, count as usize) };
+        crate::content_renames::declare(index, renames)
     })
 }
 
@@ -355,7 +351,7 @@ pub(crate) extern "system" fn config_check(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("config_check", || match calling(me) {
-        Ok((_, index, _)) if !crate::reload::in_init(index.get()) => Status::TOO_LATE,
+        Ok((_, index, _)) if !crate::host::in_init(index.get()) => Status::TOO_LATE,
         Ok((_, _, record)) => {
             if record
                 .check

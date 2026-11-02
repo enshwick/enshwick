@@ -106,9 +106,7 @@ The keys of `mod-configs/enshwick.toml`:
 | `status_minutes`     | `10`      | minutes between status summaries; `0` writes one only on request                                                        |
 | `diagnostics`        | `false`   | count the calls of every hooked function; read at start                                                                 |
 | `diagnostics_timing` | `false`   | with `diagnostics`, also time every 256th call; read at start                                                           |
-| `migrations_dry_run` | `false`   | only log what mods' [migrations](migrations.md) would change                                                            |
 | `build_patterns`     | `true`    | run a build without its table on patterns; read at start                                                                |
-| `dev_reload`         | `false`   | reload changed mods that allow it, on the server or the client, while developer tools are on; read at start             |
 | `knowledge_guard`    | `"watch"` | watch, enforce or turn off the [knowledge guard](knowledge.md#what-clients-ask-for); read at start                      |
 | `require_enshwick`   | `true`    | kick players whose game lacks the [join mods](concepts/join-check.md); read at start                                    |
 | `join_hello_seconds` | `30`      | seconds a joining player's game has to name its join mods; read at start                                                |
@@ -209,7 +207,7 @@ thunks count nothing and a hooked call runs as before.
 With `diagnostics = true` the loader also times every call it makes into a
 mod: event, game event and mod event handlers, actions, messages, interface
 frames, filters and vetoes, survivor and altar callbacks, stat changes,
-inventory results, status lines, resource patches, migrations and links on
+inventory results, status lines, resource patches and links on
 extension points, each link apart. A
 callback's time leaves out the callbacks it causes in other mods, which count
 for those. With `diagnostics_timing = true` as well, every link and every

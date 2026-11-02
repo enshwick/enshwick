@@ -27,6 +27,7 @@ mod config_groups;
 mod config_lists;
 #[cfg(feature = "unstable")]
 mod containers;
+mod content_renames;
 #[cfg(feature = "unstable")]
 mod damage;
 mod daytime;
@@ -73,7 +74,6 @@ mod map;
 #[cfg(feature = "unstable")]
 mod map_marker_types;
 mod mid_hook;
-mod migrations;
 mod mod_index;
 mod net;
 mod no_inventories;

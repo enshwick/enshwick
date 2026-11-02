@@ -46,7 +46,6 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
         ],
     ),
     ("link_packets", &["crates/internal/loader/src/wire"]),
-    ("migrations", &["crates/internal/loader/src/migrations"]),
     (
         "mod_manifests",
         &[

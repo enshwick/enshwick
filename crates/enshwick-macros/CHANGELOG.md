@@ -66,6 +66,12 @@ Each entry names the pull request that made the change.
   debug names; the table refuses a dependency with the alias `vanilla`
   (#780).
 
+### Removed
+
+- **Breaking:** the `reload` key of `[package.metadata.enshwick]` is gone;
+  `declare_mod!` refuses a table that still has it, and writes no
+  `enshwick_mod_shutdown`. Delete the key (#912).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Changed

@@ -180,7 +180,6 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
             id,
             "the server does not run it; restart the game to use it again",
         );
-        crate::reload::hold(id);
     }
     if plan.joins() {
         if let Some(note) = plan.note(&names) {

@@ -190,14 +190,6 @@ impl Manifested {
         .ok()
     }
 
-    /// Frees the manifest [`query`](Self::query) built, before a
-    /// development reload unloads the mod; the loader holds its own copy.
-    pub fn release(&self) {
-        use crate::locks::Relock as _;
-        let _freed =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.built.relock().take()));
-    }
-
     /// The manifest with the mod's schema text and exports; when the section
     /// does not read, with neither, keeping why.
     fn build(&self) -> Built {
@@ -616,8 +608,8 @@ pub unsafe fn init<M: Mod>(
     }) else {
         return Status::FAULTED;
     };
-    // SAFETY: the built manifest stays valid until `release`, which only
-    // the mod's shutdown calls, never during its init.
+    // SAFETY: the built manifest is never freed once built, so it stays
+    // valid for the process.
     let manifest = unsafe { &*manifest };
     // SAFETY: `Host::new` needs `api` null or a table readable for its
     // header's size that outlives the process; this function's `# Safety`
@@ -721,17 +713,6 @@ pub unsafe fn install_host(api: *const HostApi, me: ModHandle) {
     // bullets guarantee both.
     if let Some(host) = unsafe { Host::new(api, me) } {
         MAX_LEVEL.store(host.install().log_level().0, Ordering::Relaxed);
-    }
-}
-
-pub fn shutdown<M: Mod>(slot: &'static Slot<M>) {
-    let Some(state) = slot.get() else {
-        return;
-    };
-    if let Err(payload) =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.shutdown()))
-    {
-        crate::host::fault_with("panic in shutdown", payload.as_ref());
     }
 }
 

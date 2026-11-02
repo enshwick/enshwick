@@ -4,6 +4,7 @@ use crate::abi::Header;
 use crate::abi::ItemData;
 use crate::abi::ResourceKey;
 use crate::abi::Status;
+use crate::content::Guid;
 
 use super::FakeHost;
 use super::Installed;
@@ -140,7 +141,7 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn vanilla_items(self, named: &[(crate::content::Guid, &str)]) -> Self {
+    pub fn vanilla_items(self, named: &[(Guid, &str)]) -> Self {
         use crate::content::items::{ITEM_REGISTRY, ItemLayout};
         use crate::content::{Blob, EngineFacts, types};
 
@@ -208,7 +209,7 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn disabled_recipe(mut self, recipe: crate::content::Guid) -> Self {
+    pub fn disabled_recipe(mut self, recipe: Guid) -> Self {
         self.disabled_recipes.insert(recipe.fnv1a());
         self
     }
@@ -230,11 +231,7 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn recipe_kind(
-        mut self,
-        item: crate::content::Guid,
-        kind: crate::content::recipes::RecipeKind,
-    ) -> Self {
+    pub fn recipe_kind(mut self, item: Guid, kind: crate::content::recipes::RecipeKind) -> Self {
         self.recipe_kinds.insert(item.fnv1a(), kind.into());
         self
     }
@@ -503,6 +500,23 @@ impl Installed {
     #[must_use]
     pub fn content_ids(&self) -> Vec<String> {
         table::with(Vec::new(), |s| s.content_ids.clone())
+    }
+
+    /// The content renames the mod declared, old GUID to new, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.content_renames().is_empty());
+    /// ```
+    #[must_use]
+    pub fn content_renames(&self) -> Vec<(Guid, Guid)> {
+        table::with(None, |s| s.content_renames.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(from, to)| (Guid(from), Guid(to)))
+            .collect()
     }
 }
 

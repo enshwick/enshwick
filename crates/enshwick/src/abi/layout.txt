@@ -1,4 +1,4 @@
-abi 6.0
+abi 7.0
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 144 align 8 born 144
@@ -178,6 +178,9 @@ Comfort size 28 align 4 born 28
     category at 8 size 4 type u32
     value at 12 size 4 type i32
     position at 16 size 12 type [f32; 3]
+ContentRename size 32 align 1
+    from at 0 size 16 type [u8; 16]
+    to at 16 size 16 type [u8; 16]
 CraftCheck size 24 align 4 born 24
     header at 0 size 8 type Header
     crafting_operator_id at 8 size 4 type Entity
@@ -401,7 +404,7 @@ HostApi size 1448 align 8
     affix_roll at 944 size 8 type extern "system" fn(ModHandle, *const AffixRoll, *mut u32) -> Status
     item_lines at 952 size 8 type extern "system" fn(ModHandle, Entity, ItemId, *mut ItemLine, u32, *mut u32) -> Status
     affix_info at 960 size 8 type extern "system" fn(ModHandle, u32, *mut Str, *mut u8) -> Status
-    migrate at 968 size 8 type extern "system" fn(ModHandle, *const MigrationSet) -> Status
+    rename_content at 968 size 8 type extern "system" fn(ModHandle, *const ContentRename, u32) -> Status
     declare_content at 976 size 8 type extern "system" fn(ModHandle, Str, *mut [u8; 16]) -> Status
     entity_data_open at 984 size 8 type extern "system" fn(ModHandle, Str, EntityDataFlags, *mut u32) -> Status
     replaced at 992 size 8 type extern "system" fn(ModHandle, *mut ModInfo, u32, u32, *mut u32) -> Status
@@ -595,22 +598,6 @@ MidHookSpec size 32 align 8
     user at 16 size 8 type *mut c_void
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-Migration size 32 align 8
-    id at 0 size 16 type Str
-    steps at 16 size 8 type *const MigrationStep
-    count at 24 size 4 type u32
-MigrationSet size 40 align 8 born 40
-    header at 0 size 8 type Header
-    migrations at 8 size 8 type *const Migration
-    count at 16 size 4 type u32
-    map at 24 size 8 type Option<unsafe extern "system" fn(*mut c_void, u32, u32, Str, *mut Str) -> Status>
-    user at 32 size 8 type *mut c_void
-MigrationStep size 72 align 8
-    kind at 0 size 4 type u32
-    from at 8 size 16 type Str
-    to at 24 size 16 type Str
-    from_guid at 40 size 16 type [u8; 16]
-    to_guid at 56 size 16 type [u8; 16]
 ModHandle size 8 align 8
     0 at 0 size 8 type usize
 ModInfo size 168 align 8 born 168

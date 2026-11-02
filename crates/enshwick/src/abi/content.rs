@@ -25,6 +25,28 @@ pub struct ResourceKey {
     pub part: u32,
 }
 
+/// One content rename for [`HostApi::rename_content`](super::HostApi::rename_content):
+/// content saved under `from` reads as the content now under `to`.
+///
+/// Frozen: written as an array.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::ContentRename;
+///
+/// let rename = ContentRename { from: [1; 16], to: [2; 16] };
+/// assert_ne!(rename.from, rename.to);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ContentRename {
+    /// The GUID the content had, in memory order.
+    pub from: [u8; 16],
+    /// The GUID the content has now, in memory order.
+    pub to: [u8; 16],
+}
+
 /// Builds a served resource from its base: `base` is the base resource's bytes,
 /// valid for the call.
 ///

@@ -514,7 +514,7 @@ fn unarmed(chains: &mut Chains, mids: &Mids, patches: &[CodePatch], reason: &str
         failures: chains
             .iter_mut()
             .map(|c| {
-                // Never armed: a reload must not link into it.
+                // Never armed: a rewire must not write into it.
                 c.head = None;
                 Failure::chain(c.target, reason)
             })

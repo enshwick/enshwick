@@ -6,38 +6,23 @@ use std::path::{Path, PathBuf};
 
 use windows_sys::Win32::Foundation::HMODULE;
 use windows_sys::Win32::System::LibraryLoader::{
-    AddDllDirectory, GET_MODULE_HANDLE_EX_FLAG_PIN, GetModuleHandleExW, GetProcAddress,
+    GET_MODULE_HANDLE_EX_FLAG_PIN, GetModuleHandleExW, GetProcAddress,
     LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LoadLibraryExW,
-    RemoveDllDirectory,
 };
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 
 /// Loads the DLL at `path` and keeps it, with its imports resolved only from
-/// its own folder, `beside` (the original's folder of a dev reload copy), the
-/// game's folder and the system folder, never from the current directory or
-/// `PATH`.
+/// its own folder, the game's folder and the system folder, never from the
+/// current directory or `PATH`.
 ///
 /// # Errors
 ///
-/// When `path` or `beside` has no absolute form, or the DLL or one of its
-/// imports does not load; the error is the system's.
-pub(crate) fn load_library(path: &Path, beside: Option<&Path>) -> std::io::Result<HMODULE> {
+/// When `path` has no absolute form, or the DLL or one of its imports does
+/// not load; the error is the system's.
+pub(crate) fn load_library(path: &Path) -> std::io::Result<HMODULE> {
     // The folder flag takes only a full path; `absolute` also turns `/` into
     // `\`, which the system loader needs.
     let path = wide(std::path::absolute(path)?.as_os_str());
-    let added = match beside {
-        Some(dir) => {
-            let dir = wide(std::path::absolute(dir)?.as_os_str());
-            // SAFETY: `dir` is a live NUL-terminated absolute path; the cookie
-            // is removed below once the load is done.
-            let cookie = unsafe { AddDllDirectory(dir.as_ptr()) };
-            if cookie.is_null() {
-                return Err(std::io::Error::last_os_error());
-            }
-            Some(cookie)
-        }
-        None => None,
-    };
     // SAFETY: `path` is a live NUL-terminated UTF-16 string; the DLL runs its
     // `DllMain` as it would from any loader.
     let module = unsafe {
@@ -47,16 +32,11 @@ pub(crate) fn load_library(path: &Path, beside: Option<&Path>) -> std::io::Resul
             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
         )
     };
-    let loaded = if module.is_null() {
+    if module.is_null() {
         Err(std::io::Error::last_os_error())
     } else {
         Ok(module)
-    };
-    if let Some(cookie) = added {
-        // SAFETY: `cookie` came from `AddDllDirectory` above and is removed once.
-        unsafe { RemoveDllDirectory(cookie) };
     }
-    loaded
 }
 
 /// The system folder, `System32` for the 64-bit game.
@@ -101,7 +81,7 @@ impl Module {
     /// path, so a DLL of that name in the game's folder is never taken for
     /// it; kept for the process.
     pub(crate) fn system(name: &str) -> Option<Self> {
-        load_library(&system_dir()?.join(name), None).ok().map(Self)
+        load_library(&system_dir()?.join(name)).ok().map(Self)
     }
 
     /// The module behind `handle`.

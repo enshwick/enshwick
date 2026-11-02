@@ -39,7 +39,6 @@
 - [Messages between server and client](messages.md)
 - [The interface](interface.md)
 - [State and data folders](state.md)
-- [Migrations](migrations.md)
 - [Services between mods](services.md)
 - [Calls between mods](calls.md)
 - [Extending other mods](extending.md)

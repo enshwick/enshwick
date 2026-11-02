@@ -57,7 +57,6 @@ macro_rules! headed {
             MapMarkerInfo,
             MapMarkerTypeInfo,
             Manifest,
-            MigrationSet,
             ModInfo,
             NetMessage,
             PlayerData,
