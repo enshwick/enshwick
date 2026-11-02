@@ -11,7 +11,7 @@ Each entry names the pull request that made the change.
 - **Breaking:** every export names its kind: `Manifest::exports`, a pack's
   `exports` and `FakeHost::exports` hold `<kind>:<local name>`, the kind one
   of `point`, `event`, `call`, `service`, `content` and `stat`
-  (`rules::EXPORT_KINDS`). The loader and the fake match kind and name, so
+  (`schema_section::Kind::ALL`, hidden, which the loader and the fake share). The loader and the fake match kind and name, so
   an exported point opens no content, stat kind or event of the same name;
   content and stat kinds still export their parts. A call, point, service
   or event is exported by `export` on its declaration, as

@@ -177,9 +177,10 @@ pub(crate) fn run(
     for (dll, text) in schemas(from, &mut unread)? {
         match Schema::parse(&text) {
             Ok(schema) => found.push(schema),
-            // A mod DLL of another schema format: its owner or this tool
-            // needs another release, which the line names.
-            Err(e @ cargo_enshwick::points::Error::Format(_)) => {
+            // One DLL of a folder in another schema format: its owner or
+            // this tool needs another release, which the error names. A
+            // schema file asked for by name still fails the run.
+            Err(e @ cargo_enshwick::points::Error::Format(_)) if dll != from => {
                 unread.push(format!("{}: {e}", dll.display()));
             }
             Err(e) => return Err(e).with_context(|| dll.display().to_string()),
@@ -187,7 +188,7 @@ pub(crate) fn run(
     }
     let mut lines: Vec<String> = unread
         .iter()
-        .map(|why| format!("left out, rebuild its mod: {why}"))
+        .map(|why| format!("left out: {why}"))
         .collect();
     let mut written = 0;
     for (alias, id) in wanted {

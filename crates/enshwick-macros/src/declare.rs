@@ -461,6 +461,8 @@ fn exports_of(table: &toml::Table) -> syn::Result<Vec<String>> {
             let name = name.as_str().ok_or_else(|| refuse(TAKES))?;
             let local = match name.split_once(':') {
                 Some(("content" | "stat", local)) => local,
+                // This crate cannot depend on the API's `schema_section::Kind`,
+                // whose words these are.
                 Some(("point" | "call" | "event" | "service", _)) => {
                     return Err(refuse(format!(
                         "`exports`: {name:?}: a point, call, event or service is exported by `export` on its declaration"
@@ -710,7 +712,6 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
             }
         }
     });
-    let exports = export_items(metadata);
     let listed = format!(
         "exports = [{}]\n",
         metadata
@@ -722,7 +723,6 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
     );
     quote! {{
         #tracked
-        #exports
         static DEPENDENCIES: &[#abi::Dependency] = &[#(#dependencies),*];
         const AUTHOR_COUNT: usize = ::enshwick::__private::author_count(::core::env!("CARGO_PKG_AUTHORS"));
         static AUTHORS: [#abi::Str; AUTHOR_COUNT] =
@@ -753,10 +753,10 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
                 &[::core::env!("CARGO_PKG_HOMEPAGE"), ::core::env!("CARGO_PKG_REPOSITORY")],
             )),
             points: #abi::Str::EMPTY,
-            exports: EXPORTS.as_ptr(),
-            export_count: EXPORTS.len(),
+            exports: ::core::ptr::null(),
+            export_count: 0,
         };
-        ::enshwick::__private::Manifested::new(&MANIFEST, #id, HEAD, EXPORT_NAMES)
+        ::enshwick::__private::Manifested::new(&MANIFEST, #id, HEAD)
     }}
 }
 
@@ -779,17 +779,6 @@ fn flags_of(metadata: &Metadata) -> TokenStream {
         quote!(#abi::ManifestFlags::NONE)
     } else {
         quote!(#abi::ManifestFlags(#(#flags)|*))
-    }
-}
-
-/// The static `EXPORTS` of the manifest, and its names as `EXPORT_NAMES`.
-fn export_items(metadata: &Metadata) -> TokenStream {
-    let abi = quote!(::enshwick::abi);
-    let exports = &metadata.exports;
-    let count = exports.len();
-    quote! {
-        const EXPORT_NAMES: &[&str] = &[#(#exports),*];
-        static EXPORTS: [#abi::Str; #count] = [#(#abi::Str::new(#exports)),*];
     }
 }
 

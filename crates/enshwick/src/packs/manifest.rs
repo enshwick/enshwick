@@ -417,17 +417,14 @@ impl PackManifest {
     fn check_exports(&self, text: &str) -> Result<(), PackError> {
         let mut seen = std::collections::BTreeSet::new();
         for name in &self.exports {
-            let parts = name.split_once(':');
-            let problem = if parts.is_none_or(|(kind, _)| {
-                crate::schema_section::Kind::of_word(kind)
-                    .is_none_or(|kind| !Self::EXPORT_KINDS.contains(&kind))
-            }) {
+            let parsed = crate::schema_section::Kind::of_export(name);
+            let problem = if parsed.is_none_or(|(kind, _)| !Self::EXPORT_KINDS.contains(&kind)) {
                 let kinds: Vec<&str> = Self::EXPORT_KINDS.iter().map(|kind| kind.word()).collect();
                 format!(
                     "exports: {name:?} is not `<kind>:<name>`, the kind one a pack declares: {}",
                     kinds.join(", ")
                 )
-            } else if !parts
+            } else if !parsed
                 .is_some_and(|(_, local)| crate::content::is_id(&format!("{}:{local}", self.id)))
             {
                 format!(

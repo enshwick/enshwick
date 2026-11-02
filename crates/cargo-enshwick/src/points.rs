@@ -155,10 +155,9 @@ pub struct Schema {
     /// The format, [`FORMAT`].
     #[serde(rename = "schema")]
     format: u32,
-    /// The content and stat kinds the owner's `exports` lists, each
-    /// `<kind>:<name>`, read and kept so a schema of the owner's DLL parses
-    /// whole; no declaration is written from them, since its exported
-    /// declarations are the tables below.
+    /// The content and stat kinds the owner's `exports` lists, which the
+    /// owner's manifest reads from its head; no declaration is written from
+    /// them, so this tool accepts and drops the key.
     #[serde(default)]
     exports: Ignored,
     /// The owner's id.
@@ -273,18 +272,19 @@ impl Schema {
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
     pub fn parse(text: &str) -> Result<Self, Error> {
-        /// The head's format alone, read before the rest, whose keys another
-        /// format may change.
-        #[derive(Deserialize)]
-        struct Head {
-            #[serde(rename = "schema")]
-            format: u32,
+        let table: toml::Table = toml::from_str(text).map_err(|e| Error::Toml(e.to_string()))?;
+        // The format first: another format may change any other key.
+        let format = table
+            .get("schema")
+            .and_then(toml::Value::as_integer)
+            .and_then(|format| u32::try_from(format).ok())
+            .ok_or_else(|| Error::Toml("the schema names no format".to_owned()))?;
+        if format != FORMAT {
+            return Err(Error::Format(format));
         }
-        let head: Head = toml::from_str(text).map_err(|e| Error::Toml(e.to_string()))?;
-        if head.format != FORMAT {
-            return Err(Error::Format(head.format));
-        }
-        let schema: Self = toml::from_str(text).map_err(|e| Error::Toml(e.to_string()))?;
+        let schema: Self = toml::Value::Table(table)
+            .try_into()
+            .map_err(|e: toml::de::Error| Error::Toml(e.to_string()))?;
         schema.check()?;
         Ok(schema)
     }

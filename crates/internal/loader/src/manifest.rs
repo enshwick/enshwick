@@ -36,7 +36,8 @@ pub enum ManifestError {
     /// An export names no kind the loader knows, as one of a mod built
     /// before exports named their kind.
     #[error(
-        "the export {0:?} lacks its kind: write <kind>:<name>, the kind one of point, event, call, service, content, stat"
+        "the export {0:?} lacks its kind: write <kind>:<name>, the kind one of {kinds}",
+        kinds = Kind::words()
     )]
     ExportWithoutKind(String),
     /// The version does not parse.
@@ -243,10 +244,9 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     }
     // SAFETY: the caller guarantees the manifest's lists and strings
     // readable and unchanged for the call.
-    let bare = unsafe { exports(manifest) }.into_iter().find(|name| {
-        name.split_once(':')
-            .is_none_or(|(kind, _)| Kind::of_word(kind).is_none())
-    });
+    let bare = unsafe { exports(manifest) }
+        .into_iter()
+        .find(|name| Kind::of_export(name).is_none());
     if let Some(bare) = bare {
         return Err(ManifestError::ExportWithoutKind(bare.to_owned()));
     }
