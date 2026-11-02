@@ -63,6 +63,12 @@ required-features = ["test"]
 name = "call_schema"
 required-features = ["test", "unstable"]
 
+# Its binary's section holds a head of another format, which would turn off
+# every mod of `main`.
+[[test]]
+name = "section_unread"
+required-features = ["test"]
+
 [lints]
 workspace = true
 

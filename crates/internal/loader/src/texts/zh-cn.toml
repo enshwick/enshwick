@@ -15,6 +15,8 @@
 "mods.title" = "模组"
 "mods.back" = "返回"
 "mods.off" = "{name} {version}（已关闭）"
+"mods.off.section.format" = "其声明格式为 {format}，而此 Enshwick 读取格式 {reads}：请用此 Enshwick 重新构建"
+"mods.off.section.damaged" = "其声明在字节 {byte} 处损坏：请用此 Enshwick 重新构建"
 "mods.points" = "扩展点：{points}"
 "mods.feature.off" = "{feature} 已关闭：{reason}"
 "mods.part.off" = "出错后关闭的 Enshwick 部分：{part}（{reason}）"

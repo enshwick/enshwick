@@ -186,6 +186,12 @@ pub(crate) fn fill(key: &str, args: &[(&str, &str)]) -> String {
     texts().fill(key, language(), args)
 }
 
+/// A reason given as a text of the loader's, filled in the game's language;
+/// `None` when its key names no text here.
+pub(crate) fn reason(why: &str) -> Option<String> {
+    texts().reason(why, language())
+}
+
 /// Every language with a text for `key`, and the text.
 #[cfg(windows)]
 pub(crate) fn translations(key: &'static str) -> impl Iterator<Item = (Language, &'static str)> {

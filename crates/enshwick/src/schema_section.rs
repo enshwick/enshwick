@@ -220,10 +220,7 @@ pub enum ReadSectionError {
     Damaged(usize),
     /// A head states another [`FORMAT`]: an older one is its mod's to
     /// rebuild, a newer one the reader's to update.
-    #[error(
-        "the point section is format {0}; this enshwick reads {FORMAT}: {fix}",
-        fix = if *.0 < FORMAT { "rebuild its mod with this enshwick" } else { "update cargo-enshwick" }
-    )]
+    #[error("the point section is format {0}; this enshwick reads {FORMAT}")]
     Format(u32),
 }
 
@@ -412,21 +409,17 @@ mod tests {
 
     #[test]
     fn a_head_of_another_format_is_reported_before_any_table() {
-        use super::ReadSectionError;
+        use super::{FORMAT, ReadSectionError};
         let newer = b"[[future]]\nname = \"you.a:x\"\n\0schema = 3\nmod = \"you.a\"\n";
         let error = Section::parse(newer).unwrap_err();
         assert_eq!(error, ReadSectionError::Format(3));
-        assert!(
-            error.to_string().ends_with("update cargo-enshwick"),
-            "{error}"
+        assert_eq!(
+            error.to_string(),
+            format!("the point section is format 3; this enshwick reads {FORMAT}")
         );
         let older = Section::parse(b"schema = 1\nmod = \"you.a\"\n[[point]]\nname = \"you.a:p\"\n")
-            .unwrap_err()
-            .to_string();
-        assert!(
-            older.ends_with("rebuild its mod with this enshwick"),
-            "{older}"
-        );
+            .unwrap_err();
+        assert_eq!(older, ReadSectionError::Format(1));
     }
 
     #[test]

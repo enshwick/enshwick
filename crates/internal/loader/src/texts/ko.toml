@@ -15,6 +15,8 @@
 "mods.title" = "모드"
 "mods.back" = "뒤로"
 "mods.off" = "{name} {version} (꺼짐)"
+"mods.off.section.format" = "선언 형식은 {format}이지만 이 Enshwick은 {reads} 형식을 읽습니다: 이 Enshwick으로 다시 빌드하세요"
+"mods.off.section.damaged" = "선언이 바이트 {byte}에서 손상되었습니다: 이 Enshwick으로 다시 빌드하세요"
 "mods.points" = "확장 지점: {points}"
 "mods.feature.off" = "{feature} 꺼짐: {reason}"
 "mods.part.off" = "오류로 꺼진 Enshwick 부분: {part} ({reason})"

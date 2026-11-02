@@ -124,8 +124,7 @@ pub enum Error {
     /// The point section ends before its header says.
     #[error("the point section is cut short")]
     CutShort,
-    /// A part of the point section is damaged, or the owner was built with
-    /// an older enshwick.
+    /// A part of the point section is damaged.
     #[error(transparent)]
     Section(#[from] ReadSectionError),
 }

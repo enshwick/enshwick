@@ -15,6 +15,8 @@
 "mods.title" = "Моды"
 "mods.back" = "Назад"
 "mods.off" = "{name} {version} (отключён)"
+"mods.off.section.format" = "его объявления в формате {format}, а этот Enshwick читает {reads}: пересоберите его с этим Enshwick"
+"mods.off.section.damaged" = "его объявления повреждены на байте {byte}: пересоберите его с этим Enshwick"
 "mods.points" = "Точки расширения: {points}"
 "mods.feature.off" = "{feature} отключено: {reason}"
 "mods.part.off" = "Часть Enshwick отключена после ошибки: {part} ({reason})"

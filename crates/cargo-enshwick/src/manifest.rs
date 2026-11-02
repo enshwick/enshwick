@@ -14,12 +14,29 @@ pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String>
     // SAFETY: `query` copied the manifest out of a DLL it never unloads and
     // never shuts down, so its strings stay valid.
     let version = unsafe { manifest.version.as_str() }.unwrap_or_default();
+    if let Some(why) = unread(dll) {
+        return Err(format!(
+            "{} stays off: its declarations do not read: {why}\n{text}",
+            dll.display()
+        ));
+    }
     match expected {
         Some(expected) if expected != version => Err(format!(
             "{} is version {version}, expected {expected}\n{text}",
             dll.display()
         )),
         _ => Ok(text),
+    }
+}
+
+/// Why the declarations in the `.enshpt` section of `dll` do not read, for
+/// which the loader keeps the mod off; `None` when they read or the file
+/// does not.
+fn unread(dll: &Path) -> Option<String> {
+    use cargo_enshwick::points::{Error, from_dll};
+    match from_dll(&std::fs::read(dll).ok()?) {
+        Err(why @ (Error::Format(_) | Error::Section(_))) => Some(why.to_string()),
+        _ => None,
     }
 }
 

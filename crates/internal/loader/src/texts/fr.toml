@@ -15,6 +15,8 @@
 "mods.title" = "Mods"
 "mods.back" = "Retour"
 "mods.off" = "{name} {version} (désactivé)"
+"mods.off.section.format" = "ses déclarations sont au format {format} et cet Enshwick lit {reads} : recompilez-le avec cet Enshwick"
+"mods.off.section.damaged" = "ses déclarations sont endommagées à l'octet {byte} : recompilez-le avec cet Enshwick"
 "mods.points" = "Points d'extension : {points}"
 "mods.feature.off" = "{feature} est désactivé : {reason}"
 "mods.part.off" = "Partie d'Enshwick désactivée après une erreur : {part} ({reason})"

@@ -117,13 +117,23 @@ pub fn refused(why: &str) -> String {
 /// off, in the reader's language.
 ///
 /// A reason the mod gave as a text of its `texts` is filled in that
-/// language; a reason no text has shows as the mod gave it.
+/// language, as is one the API gives in the loader's texts, such as for a
+/// schema section that does not read; a reason no text has shows as the
+/// mod gave it.
 #[must_use]
 pub fn mod_reason(texts: Option<&enshwick::i18n::Texts>, why: &str) -> String {
     texts
         .and_then(|texts| texts.reason(why, texts::language()))
+        .or_else(|| {
+            why.starts_with(LOADER_REASONS)
+                .then(|| texts::reason(why))
+                .flatten()
+        })
         .unwrap_or_else(|| why.replace('\t', " "))
 }
+
+/// The start of the keys of reasons the API gives in the loader's texts.
+const LOADER_REASONS: &str = "mods.off.section.";
 
 /// A mod's settings: one line per setting.
 #[must_use]
@@ -535,6 +545,30 @@ mod tests {
             "Щонайменше 2 ятки."
         );
         assert_eq!(mod_reason(None, sent), "stalls.min min=2");
+    }
+
+    #[test]
+    fn a_section_that_does_not_read_is_told_in_the_loader_s_texts() {
+        let uk = Some(enshwick::i18n::Language::UK_UA);
+        let format = "mods.off.section.format\tformat=99\treads=3";
+        assert_eq!(
+            mod_reason(None, format),
+            "its declarations are format 99, and this Enshwick reads 3: rebuild it with this Enshwick"
+        );
+        assert_eq!(
+            texts::for_reader(uk, || mod_reason(None, format)),
+            "його оголошення мають формат 99, а цей Enshwick читає 3: зберіть його заново з цим Enshwick"
+        );
+        let damaged = "mods.off.section.damaged\tbyte=26";
+        assert_eq!(
+            mod_reason(None, damaged),
+            "its declarations are damaged at byte 26: rebuild it with this Enshwick"
+        );
+        assert_eq!(
+            texts::for_reader(uk, || mod_reason(None, damaged)),
+            "його оголошення пошкоджено на байті 26: зберіть його заново з цим Enshwick"
+        );
+        assert_eq!(mod_reason(None, "mods.back"), "mods.back");
     }
 
     #[test]

@@ -15,6 +15,8 @@
 "mods.title" = "MOD"
 "mods.back" = "戻る"
 "mods.off" = "{name} {version}（オフ）"
+"mods.off.section.format" = "宣言の形式は {format} ですが、この Enshwick は {reads} を読みます：この Enshwick で再ビルドしてください"
+"mods.off.section.damaged" = "宣言がバイト {byte} で破損しています：この Enshwick で再ビルドしてください"
 "mods.points" = "拡張ポイント：{points}"
 "mods.feature.off" = "{feature} はオフです：{reason}"
 "mods.part.off" = "エラーのためオフになった Enshwick の部分：{part}（{reason}）"
