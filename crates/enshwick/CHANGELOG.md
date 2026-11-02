@@ -16,7 +16,12 @@ Each entry names the pull request that made the change.
   server's settings of the mod. The game's world settings show no mod rows
   any more. A dedicated server still keeps a world setting changed before
   its world loads in `mod-data/<id>/worlds/next.toml` for that world. Nothing
-  changes for mod authors (#878).
+  changes for mod authors (#878). The screen that creates a world no
+  longer offers mod settings; set them for new worlds in the main menu. In
+  another's world the page shows the world settings the server sends,
+  read-only, also on a server without Enshwick, and it follows a world that
+  starts or stops while it is open. A world that loads takes a
+  `next.toml` left from an older version once and logs it (#899).
 - **Breaking:** the ABI version is a major and a minor, `abi::ABI_MAJOR`
   and `abi::ABI_MINOR`, starting at 5.0, instead of the layout hash
   `ABI_VERSION`. A field appended to a struct that starts with a `Header`, a

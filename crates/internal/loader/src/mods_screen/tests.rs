@@ -74,16 +74,60 @@ fn a_mods_page_shows_the_players_own_settings_first_then_the_worlds() {
 }
 
 #[test]
-fn joined_to_another_game_a_mods_page_keeps_only_the_players_own_settings() {
+fn in_another_s_world_a_mods_page_shows_only_the_world_values_the_server_sends() {
     assert_eq!(
         keys(&page_settings(schema(), true).unwrap()),
-        ["lamps", "note"]
+        ["lamps", "note", "radius"]
     );
-    let world_only = Schema::new("", "config", vec![field("a", Stage::Sync, Scope::World)]);
-    assert!(has_world_settings(&world_only));
-    assert!(page_settings(world_only, true).is_none());
+    let startup = Schema::new("", "config", vec![field("a", Stage::Startup, Scope::World)]);
+    assert!(has_world_settings(&startup));
+    assert!(page_settings(startup, true).is_none());
     let user_only = Schema::new("", "config", vec![field("b", Stage::Client, Scope::User)]);
     assert!(!has_world_settings(&user_only));
+}
+
+#[test]
+fn in_another_s_world_only_the_world_rows_take_no_changes() {
+    let schema = schema();
+    for (sent, locked) in [(true, Lock::Server), (false, Lock::File)] {
+        let mut shown = rows(&schema, "", None, None);
+        lock_world_rows(&schema, &mut shown, sent);
+        for row in &shown {
+            let world = schema.field(&row.key).unwrap().scope == Scope::World;
+            let want = if world { locked } else { Lock::Open };
+            assert_eq!(row.lock, want, "{} sent {sent}", row.key);
+        }
+    }
+    let synced = Schema::new(
+        "",
+        "config",
+        vec![field("rule", Stage::Startup, Scope::World).with_synced(true)],
+    );
+    assert_eq!(keys(&page_settings(synced, true).unwrap()), ["rule"]);
+}
+
+#[test]
+fn the_place_comes_from_the_menu_and_the_world_this_process_runs() {
+    let main_menu = Place::new(false, false, false);
+    assert_eq!(
+        main_menu,
+        Place {
+            world: false,
+            away: false,
+            joined: false
+        }
+    );
+    let own_world = Place::new(true, true, false);
+    assert!(own_world.world && !own_world.away);
+    let elsewhere = Place::new(true, false, false);
+    assert!(elsewhere.away, "a vanilla server, or before the handshake");
+    assert!(!elsewhere.joined);
+    let modded = Place::new(true, false, true);
+    assert!(modded.away && modded.joined);
+    assert!(
+        !Place::new(true, true, true).joined,
+        "the host keeps its own"
+    );
 }
 
 #[test]

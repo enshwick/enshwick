@@ -241,9 +241,12 @@ for whole numbers up to 32 values), a slider per element for a list of up to
 and labelled by the mod's text `<key>.element`, `{n}` standing for the
 number, such as `Flame level {n}`), a dropdown for `choices`, and the value with the
 file's name for the rest (text, longer lists, tables, numbers without a
-range). A list's length changes in the file. Joined to another's game, the
-page keeps each player's own settings, and its "Server settings" button
-opens the server's settings of the mod.
+range). A list's length changes in the file. In another's world, a hosted
+game or a server, the page shows the world settings the server sends at
+join, read-only, with the server's values once it sent them; when the server
+runs Enshwick, its "Server settings" button opens the server's settings of
+the mod, which its administrators change. The screen that creates a world
+offers no mod settings: set them in the main menu under "New worlds" first.
 
 Rows speak the player's language through the mod's
 [texts](content/texts.md), which `load.texts` hands the loader: the label is

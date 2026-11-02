@@ -13,9 +13,9 @@ use crate::mods_screen;
 use crate::texts;
 use crate::ui::Painter;
 
-/// The rows of mod `index`'s settings page, for a player in another's
-/// world (`away`) or not.
-pub(super) fn page_rows(loader: &Loader, index: usize, away: bool) -> Vec<Row> {
+/// The rows of mod `index`'s settings page at `place`: in another's world,
+/// its world rows hold the server's join values, read-only.
+pub(super) fn page_rows(loader: &Loader, index: usize, place: mods_screen::Place) -> Vec<Row> {
     let Some(record) = loader.mods.get(index) else {
         return Vec::new();
     };
@@ -23,7 +23,7 @@ pub(super) fn page_rows(loader: &Loader, index: usize, away: bool) -> Vec<Row> {
         .schema
         .relock()
         .clone()
-        .and_then(|schema| mods_screen::page_settings(schema, away))
+        .and_then(|schema| mods_screen::page_settings(schema, place.away))
     else {
         return Vec::new();
     };
@@ -33,7 +33,17 @@ pub(super) fn page_rows(loader: &Loader, index: usize, away: bool) -> Vec<Row> {
         texts,
         language: texts::language(),
     });
-    rows::rows(&schema, &file, None, words)
+    if !place.away {
+        return rows::rows(&schema, &file, None, words);
+    }
+    let server = record
+        .server_synced
+        .relock()
+        .clone()
+        .and_then(|values| mods_screen::server_table(&values));
+    let mut rows = rows::rows(&schema, &file, server.as_ref(), words);
+    mods_screen::lock_world_rows(&schema, &mut rows, server.is_some());
+    rows
 }
 
 /// Draws a page of mod `index`'s settings, the world's those of the world
@@ -87,7 +97,7 @@ pub(super) fn settings(
                 );
             }
         }
-        if let Some(value) = draw_row(paint, &record.id, &schema, row, Some(entries)) {
+        if let Some(value) = draw_row(paint, &record.id, &schema, row, entries) {
             changed = Some((row.key.clone(), value));
         }
         if !row.doc.is_empty() {
@@ -104,14 +114,14 @@ pub(super) fn settings(
     )
 }
 
-/// Draws one row, its text field kept in `entries` where the page has
-/// them; the TOML of the player's change.
+/// Draws one row, its text field kept in `entries`; the TOML of the
+/// player's change.
 pub(super) fn draw_row(
     paint: &Painter<'_>,
     id: &str,
     schema: &enshwick::config::Schema,
     row: &Row,
-    entries: Option<&mut Entries>,
+    entries: &mut Entries,
 ) -> Option<String> {
     let label = mods_screen::row_label(row);
     let read_only = row.lock != Lock::Open;
@@ -138,24 +148,22 @@ pub(super) fn draw_row(
             )?;
             rows::picked(schema.field(&row.key)?, picked as usize)
         }
-        Widget::Entry { text, toml } => match entries {
-            Some(entries) if !read_only && paint.engine.types_text() => {
+        Widget::Entry { text, toml } => {
+            if !read_only && paint.engine.types_text() {
                 paint.label(label.as_bytes(), UiWidget::STYLE_BODY, true, false);
-                text_row(paint, &row.key, text, entries)
+                return text_row(paint, &row.key, text, entries);
             }
-            _ => {
-                let line = if read_only {
-                    texts::fill("row.value", &[("label", &label), ("value", text)])
-                } else {
-                    texts::fill(
-                        "row.text",
-                        &[("label", &label), ("value", toml), ("id", id)],
-                    )
-                };
-                paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
-                None
-            }
-        },
+            let line = if read_only {
+                texts::fill("row.value", &[("label", &label), ("value", text)])
+            } else {
+                texts::fill(
+                    "row.text",
+                    &[("label", &label), ("value", toml), ("id", id)],
+                )
+            };
+            paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
+            None
+        }
         Widget::Text(value) => {
             let line = texts::fill(
                 "row.text",

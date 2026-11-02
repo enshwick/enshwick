@@ -96,7 +96,7 @@ pub(super) fn server_settings(
     *first = listing.clamp_first(*first, rows.len());
     let shown = listing.shown(*first, rows.len());
     for row in rows.iter().take(shown.end).skip(shown.start) {
-        if let Some(value) = draw_row(paint, id, known, row, Some(entries)) {
+        if let Some(value) = draw_row(paint, id, known, row, entries) {
             changed = Some((row.key.clone(), value));
         }
         if !row.doc.is_empty() {

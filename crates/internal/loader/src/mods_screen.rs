@@ -80,17 +80,61 @@ pub const fn back(kind: Kind) -> Back {
     }
 }
 
-/// The settings of `schema` a mod's page edits, each player's own first.
+/// The settings of `schema` a mod's page shows, each player's own first.
 ///
-/// The world's follow, unless the client is `joined` to another's game,
-/// which keeps them on the server's page; `None` when none are left.
+/// The world's follow; in another's world (`away`) only those the server
+/// sends at join, which the page shows read-only. `None` when none are left.
 #[must_use]
-pub fn page_settings(mut schema: Schema, joined: bool) -> Option<Schema> {
-    if joined {
-        schema.fields.retain(|f| f.scope == Scope::User);
+pub fn page_settings(mut schema: Schema, away: bool) -> Option<Schema> {
+    if away {
+        schema
+            .fields
+            .retain(|f| f.scope == Scope::User || f.follows_server());
     }
     schema.fields.sort_by_key(|f| f.scope != Scope::User);
     (!schema.fields.is_empty()).then_some(schema)
+}
+
+/// Where the Mods screen shows a mod's settings, from the game's state as
+/// the page opens: the page is built again when it changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Place {
+    /// This process runs a world, single player or hosted: the world's
+    /// settings are that world's.
+    pub world: bool,
+    /// The player is in another's world, which keeps its settings: they
+    /// show read-only.
+    pub away: bool,
+    /// The joined server takes messages, so its administrators change its
+    /// settings on its own page.
+    pub joined: bool,
+}
+
+impl Place {
+    /// The place of a screen open over the pause menu (`paused`) or the
+    /// main menu, while this process runs a world (`world`) or not, joined
+    /// to a server that takes messages (`joined`) or not.
+    #[must_use]
+    pub const fn new(paused: bool, world: bool, joined: bool) -> Self {
+        Self {
+            world,
+            away: paused && !world,
+            joined: joined && !world,
+        }
+    }
+}
+
+/// Makes the world's rows of `rows`, whose fields `schema` describes,
+/// read-only in another's world: set by the server once it sent its join
+/// values (`sent`), else plainly read-only.
+pub fn lock_world_rows(schema: &Schema, rows: &mut [Row], sent: bool) {
+    let lock = if sent { Lock::Server } else { Lock::File };
+    for row in rows {
+        let key = crate::configure::element(&row.key).0;
+        if schema.field(key).is_some_and(|f| f.scope == Scope::World) {
+            row.lock = lock;
+        }
+    }
 }
 
 /// Whether `schema` has settings of the world, which a server keeps.
