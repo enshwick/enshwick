@@ -34,6 +34,18 @@ pub(crate) fn warning() -> &'static str {
 #[cfg(windows)]
 const WARNING: &str = "developer.on";
 
+/// Why a developer mod is off, in the player's language, for the Mods
+/// screen and the log.
+#[cfg(windows)]
+#[must_use]
+pub(crate) fn off_reason() -> &'static str {
+    crate::texts::text(OFF_REASON)
+}
+
+/// The key of a developer mod's off reason, whose English text is
+/// [`enshwick::mods::DEVELOPER_TOOL_OFF`].
+const OFF_REASON: &str = "mods.developer.off";
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -316,3 +316,4 @@
 "resistance_shroud.name" = "어둠의 장막 저항"
 "resistance_lightning.name" = "충격 저항"
 "resistance_poison.name" = "독 저항"
+"mods.developer.off" = "개발자 도구입니다. mod-data/enshwick/developer-tools 파일이 있을 때만 작동합니다"

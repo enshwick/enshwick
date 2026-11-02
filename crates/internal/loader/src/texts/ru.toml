@@ -316,3 +316,4 @@
 "resistance_shroud.name" = "Сопротивление Пелене"
 "resistance_lightning.name" = "Сопротивление молнии"
 "resistance_poison.name" = "Сопротивление ядам"
+"mods.developer.off" = "инструмент разработчика: работает только пока существует файл mod-data/enshwick/developer-tools"

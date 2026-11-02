@@ -318,3 +318,4 @@
 "resistance_shroud.name" = "Shroud Resistance" # text tag 0x9c80d874
 "resistance_lightning.name" = "Shock Resistance" # text tag 0x5ac47d26
 "resistance_poison.name" = "Poison Resistance" # text tag 0x4b140014
+"mods.developer.off" = "a developer tool: it runs only while the file mod-data/enshwick/developer-tools exists"
