@@ -18,6 +18,8 @@
 
 pub mod archive;
 pub mod catalogue;
+#[cfg(test)]
+mod classes;
 mod entries;
 #[cfg(test)]
 mod game_names;
