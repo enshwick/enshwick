@@ -31,7 +31,7 @@ pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
             quote! {
                 /// The dependency's content id `<dependency>:<name>`, once
                 /// the loader lets this mod name it: the dependency's
-                /// `exports` list `<name>` or the name it is a part of.
+                /// `exports` list `content:<name>` or the name it is a part of.
                 /// Ask once, at init, and keep the id.
                 ///
                 /// # Errors

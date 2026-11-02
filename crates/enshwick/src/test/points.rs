@@ -207,10 +207,9 @@ pub(crate) extern "system" fn attach_point(
             .manifest
             .as_ref()
             .is_some_and(|manifest| manifest.requires_owner_of(&attached.declared.name));
-        let unexported = s
-            .manifest
-            .as_ref()
-            .is_some_and(|manifest| manifest.unexported(&attached.declared.name, &s.host.exports));
+        let unexported = s.manifest.as_ref().is_some_and(|manifest| {
+            manifest.unexported("point", &attached.declared.name, &s.host.exports)
+        });
         if unexported
             || (required
                 && !s

@@ -9,20 +9,17 @@ use syn::{Ident, Type};
 use crate::shape::toml_string;
 use crate::{declare, schema_doc};
 
-/// The `.enshpt` entry of a declaration, `declared` being `<Type as
-/// Trait>`. The mod's own, marked `export`, ships its schema, or a service
-/// its name; an event that a schema cannot describe fails the build. The
-/// mod's own without the flag ships `[[own]]` with its name and kind, so
-/// the manifest exports no other declaration of that local name. Another
-/// mod's ships nothing, and `export` on it fails the build, except in a
-/// test build, where a test binary declares mods of other ids and an event
-/// a schema cannot describe ships nothing.
+/// The `.enshpt` entry of a declaration marked `export`, `declared` being
+/// `<Type as Trait>`; none without the flag. The mod's own ships its
+/// schema, or a service its name; an event that a schema cannot describe
+/// fails the build. Another mod's, a full name of another id, fails the
+/// build, except in a test build, where a test binary declares mods of
+/// other ids and an event a schema cannot describe ships nothing.
 ///
 /// # Errors
 ///
 /// When `export` comes with `of`, which names a dependency's declaration,
-/// when the crate's `Cargo.toml` does not read, or when its `exports` lists
-/// the local name of a declaration without `export`.
+/// or the crate's `Cargo.toml` does not read.
 pub(crate) fn schema_entry(
     name: Option<&syn::LitStr>,
     owner: &declare::Owner,
@@ -31,30 +28,10 @@ pub(crate) fn schema_entry(
     declared: &TokenStream,
     kind: Kind,
 ) -> syn::Result<TokenStream> {
-    let Some(name) = name else {
+    let (Some(name), Some(export)) = (name, export) else {
         return Ok(TokenStream::new());
     };
     let full = name.value();
-    let Some(export) = export else {
-        return match owner {
-            declare::Owner::Own { listed: true } => Err(syn::Error::new_spanned(
-                name,
-                format!(
-                    "`exports` in Cargo.toml lists the local name of `{full}`, a {}: mark the declaration `export` and take the name out of `exports`, which lists content and stat kinds alone",
-                    kind.label(),
-                ),
-            )),
-            declare::Owner::Own { listed: false } => {
-                let text = format!(
-                    "[[own]]\nname = {}\nkind = \"{}\"\n",
-                    toml_string(&full),
-                    kind.label()
-                );
-                Ok(quote!(::enshwick::__schema_entry!(#text);))
-            }
-            declare::Owner::Other | declare::Owner::Unread(_) => Ok(TokenStream::new()),
-        };
-    };
     if of.is_some() {
         return Err(syn::Error::new_spanned(
             export,
@@ -66,7 +43,7 @@ pub(crate) fn schema_entry(
             let text = format!("[[service]]\nname = {}\n", toml_string(&full));
             quote!(#text)
         }
-        Kind::Event if !matches!(owner, declare::Owner::Own { .. }) => {
+        Kind::Event if !matches!(owner, declare::Owner::Own) => {
             quote!(if #declared::DESCRIBED { #declared::SCHEMA } else { "" })
         }
         Kind::Point | Kind::Call | Kind::Event => quote!(#declared::SCHEMA),
@@ -86,7 +63,7 @@ pub(crate) fn schema_entry(
                 };
             })
         }
-        declare::Owner::Own { .. } => {
+        declare::Owner::Own => {
             let check = matches!(kind, Kind::Event).then(|| {
                 quote! {
                     const _: () = ::core::assert!(
@@ -111,18 +88,6 @@ pub(crate) enum Kind {
     Event,
     /// A service table, whose entry is its name alone.
     Service,
-}
-
-impl Kind {
-    /// The kind's name in a schema's `[[own]]` entry and in messages.
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Point => "point",
-            Self::Call => "call",
-            Self::Event => "event",
-            Self::Service => "service",
-        }
-    }
 }
 
 /// The `SCHEMA` of a mod event: its `[[event]]` table with the layout

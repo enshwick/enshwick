@@ -51,11 +51,13 @@ mod with the same name share that text, so give them different names.
 
 `load.define_stat(id!("luck"), &def)` defines a kind of the mod's own during
 `init`, and a malformed name fails the build. `load.open_stat(id)` opens a
-built-in kind or another mod's: `deps::<alias>::id("luck")` names a kind of
-a dependency. The dependency's
-[`exports`](concepts/loader-and-abi.md#what-other-mods-may-use) must list its
-name or the name it is a part of (`charm` for `charm.fire`), or the loader
-refuses it and names what the dependency exports. Every mod that
+built-in kind or another mod's: `Id::of(deps::<alias>::ID, "luck")` names a
+kind of a dependency. The dependency's
+[`exports`](concepts/loader-and-abi.md#what-other-mods-may-use) must list
+`stat:` with its name or the name it is a part of (`stat:charm` for
+`charm.fire`), or `open_stat` refuses it and the loader names what the
+dependency exports. `deps::<alias>::id` names content, which `content:`
+exports. Every mod that
 opens one id shares its values. A kind no mod defines reads 0, and the
 loader logs it. `stats.info(stat)` gives a kind's id, text key and
 definition, for a menu or a tooltip.

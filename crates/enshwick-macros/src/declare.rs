@@ -131,7 +131,8 @@ struct Metadata {
     join: bool,
     reload: bool,
     developer: bool,
-    /// The local names other mods may use.
+    /// The content and stat kinds other mods may use, each
+    /// `content:<name>` or `stat:<name>`.
     exports: Vec<String>,
     dependencies: Vec<Dependency>,
     builds: Vec<Build>,
@@ -170,24 +171,16 @@ pub(crate) fn expand_id(name: &LitStr) -> syn::Result<TokenStream> {
     }
     let (metadata, shown) = cargo_metadata()?;
     let full = format!("{}:{local}", metadata.id);
-    let own = format!(
-        "[[own]]\nname = {}\nkind = \"content\"\n",
-        crate::shape::toml_string(&full)
-    );
     Ok(quote! {{
         const _: &[u8] = ::core::include_bytes!(#shown);
-        ::enshwick::__schema_entry!(#own);
         ::enshwick::content::Id::new(#full)
     }})
 }
 
 /// Whose a declaration's name is, by the crate's `Cargo.toml`.
 pub(crate) enum Owner {
-    /// The crate's mod's own; `listed` when `exports` lists its local name.
-    Own {
-        /// Whether `exports` lists the local name.
-        listed: bool,
-    },
+    /// The crate's mod's own.
+    Own,
     /// Another mod's.
     Other,
     /// Unknown: the crate's `Cargo.toml` does not read as a mod's.
@@ -198,9 +191,7 @@ impl Owner {
     /// Whose `full`, `<mod id>:<what>`, is by `metadata`.
     fn of(metadata: &Metadata, full: &str) -> Self {
         match full.split_once(':') {
-            Some((id, local)) if id == metadata.id => Self::Own {
-                listed: metadata.exports.iter().any(|e| e == local),
-            },
+            Some((id, _)) if id == metadata.id => Self::Own,
             _ => Self::Other,
         }
     }
@@ -454,22 +445,36 @@ fn string(table: &toml::Table, key: &str) -> syn::Result<Option<String>> {
         .transpose()
 }
 
-/// The local names of `exports`, each a name once.
+/// The entries of `exports`, each `content:<name>` or `stat:<name>` and
+/// given once; a call, point, service or event is exported by `export` on
+/// its declaration instead.
 fn exports_of(table: &toml::Table) -> syn::Result<Vec<String>> {
+    const TAKES: &str = "`exports` is a list of `content:<name>` and `stat:<name>`";
     let Some(value) = table.get("exports") else {
         return Ok(Vec::new());
     };
-    let names = value
-        .as_array()
-        .ok_or_else(|| refuse("`exports` is a list of local names"))?;
+    let names = value.as_array().ok_or_else(|| refuse(TAKES))?;
     let mut seen = BTreeSet::new();
     names
         .iter()
         .map(|name| {
-            let name = name.as_str().ok_or_else(|| refuse("`exports` is a list of local names"))?;
-            if !is_content_name(name) {
+            let name = name.as_str().ok_or_else(|| refuse(TAKES))?;
+            let local = match name.split_once(':') {
+                Some(("content" | "stat", local)) => local,
+                Some(("point" | "call" | "event" | "service", _)) => {
+                    return Err(refuse(format!(
+                        "`exports`: {name:?}: a point, call, event or service is exported by `export` on its declaration"
+                    )));
+                }
+                _ => {
+                    return Err(refuse(format!(
+                        "`exports`: {name:?} is not `content:<name>` or `stat:<name>`"
+                    )));
+                }
+            };
+            if !is_content_name(local) {
                 return Err(refuse(format!(
-                    "`exports`: {name:?} is not a local name, 1 to 128 of [a-z0-9_./-] without the mod's id"
+                    "`exports`: {name:?}: the name is 1 to 128 of [a-z0-9_./-], without the mod's id"
                 )));
             }
             if !seen.insert(name) {
@@ -706,6 +711,15 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
         }
     });
     let exports = export_items(metadata);
+    let listed = format!(
+        "exports = [{}]\n",
+        metadata
+            .exports
+            .iter()
+            .map(|e| crate::shape::toml_string(e))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     quote! {{
         #tracked
         #exports
@@ -716,7 +730,7 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
         static BUILDS: &[#abi::BuildRow] = &[#(#builds),*];
         const VERSION: &str = ::core::env!("CARGO_PKG_VERSION");
         const HEAD: &str = ::enshwick::__private::concatcp!(
-            "schema = 1\nmod = \"", #id, "\"\nversion = \"", VERSION, "\"\n",
+            "schema = 2\nmod = \"", #id, "\"\nversion = \"", VERSION, "\"\n", #listed,
         );
         ::enshwick::__schema_entry!(HEAD);
         static MANIFEST: #abi::Manifest = #abi::Manifest {
@@ -802,7 +816,7 @@ mod tests {
             name = "Market Stalls"
             side = "both"
             join = true
-            exports = ["price-of", "sold"]
+            exports = ["content:stall", "stat:luck"]
             replaces = ["stalls"]
 
             [requires]
@@ -827,7 +841,7 @@ mod tests {
         assert_eq!(metadata.id, "you.market-stalls");
         assert_eq!(metadata.side, Side::Both);
         assert!(metadata.join && !metadata.reload && !metadata.developer);
-        assert_eq!(metadata.exports, ["price-of", "sold"]);
+        assert_eq!(metadata.exports, ["content:stall", "stat:luck"]);
         let relations: Vec<(&str, &str, &str)> = metadata
             .dependencies
             .iter()
@@ -857,12 +871,22 @@ mod tests {
         assert!(refused("id = \"lanterns\"\nside = \"both\"").contains("<author>.<name>"));
         assert!(refused("side = \"both\"").contains("`id`"));
         assert!(
-            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"you.a:sold\"]")
-                .contains("not a local name")
+            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"sold\"]")
+                .contains("is not `content:<name>` or `stat:<name>`")
         );
         assert!(
-            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"sold\", \"sold\"]")
-                .contains("given twice")
+            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"event:sold\"]")
+                .contains("by `export` on its declaration")
+        );
+        assert!(
+            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"content:you.a:sold\"]")
+                .contains("without the mod's id")
+        );
+        assert!(
+            refused(
+                "id = \"you.a\"\nside = \"both\"\nexports = [\"content:sold\", \"content:sold\"]"
+            )
+            .contains("given twice")
         );
         assert!(
             refused("id = \"you.a\"\nside = \"both\"\n[requires]\nOther = \"you.b\"")

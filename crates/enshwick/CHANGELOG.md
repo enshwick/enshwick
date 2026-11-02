@@ -8,15 +8,20 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
-- **Breaking:** a call, point, service or event is exported by `export` on
-  its declaration, as `#[enshwick::point(name = "price", export, ..)]`, and
-  ships its schema only then; `exports` in `[package.metadata.enshwick]`
-  lists content and stat kinds alone, and a declaration whose local name it
-  lists without `export` fails the build. The manifest's exports join both,
-  less a name that would also open a declaration or content id the mod
-  keeps, since the loader matches exports by name. `export` with `of`, or on
-  a full name of another mod's id outside a test, fails the build. Move each
-  such name from `exports` onto its declaration (#883).
+- **Breaking:** every export names its kind: `Manifest::exports`, a pack's
+  `exports` and `FakeHost::exports` hold `<kind>:<local name>`, the kind one
+  of `point`, `event`, `call`, `service`, `content` and `stat`
+  (`rules::EXPORT_KINDS`). The loader and the fake match kind and name, so
+  an exported point opens no content, stat kind or event of the same name;
+  content and stat kinds still export their parts. A call, point, service
+  or event is exported by `export` on its declaration, as
+  `#[enshwick::point(name = "price", export, ..)]`, and ships its schema
+  only then; `exports` in `[package.metadata.enshwick]` takes
+  `content:<name>` and `stat:<name>` alone. `export` with `of`, or on a full
+  name of another mod's id outside a test, fails the build. A dependency's
+  stat kind is named `Id::of(deps::<alias>::ID, "<name>")`, since
+  `deps::<alias>::id` checks a content export. Write each export with its
+  kind, and move declarations onto `export` (#883).
 - **Breaking:** `declare_mod!(Type)` takes no `points`, `events` or `calls`
   lists. Each exported `#[point]`, `#[event]` and `#[call]` writes its schema into the DLL's
   `.enshpt` section; the manifest collects them from there at the loader's

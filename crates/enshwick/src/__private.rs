@@ -115,8 +115,8 @@ pub fn section() -> &'static [u8] {
 /// loader's first query.
 ///
 /// The section gives the schemas of the mod's exported points, events and
-/// calls, and their names and its exported services' join the content names
-/// of its `Cargo.toml` among its exports.
+/// calls, and their exports and its exported services', `<kind>:<local
+/// name>`, join the content and stat exports of its `Cargo.toml`.
 #[derive(Debug)]
 pub struct Manifested {
     base: &'static crate::abi::Manifest,
@@ -132,11 +132,12 @@ struct Built {
     manifest: Box<crate::abi::Manifest>,
     _text: Box<str>,
     _exports: Box<[crate::abi::Str]>,
+    _names: Box<[Box<str>]>,
 }
 
 // SAFETY: `Send` is missing only for the raw pointers inside `Manifest` and
 // `Str`. Each points at memory no thread writes once `build` returns: the
-// text and exports boxes this `Built` owns, whose heap addresses stay put
+// text, exports and name boxes this `Built` owns, whose heap addresses stay put
 // when it moves, the section and the `declare_mod!` statics of the mod's
 // image (`Manifested::build`). Moving `Built` to another thread therefore
 // moves only read-only views, and the mutex in `Manifested` orders its one
@@ -144,8 +145,8 @@ struct Built {
 unsafe impl Send for Built {}
 
 impl Manifested {
-    /// The manifest `base` of the mod `id`, exporting the local names
-    /// `exports`, its schema text to start with `head`.
+    /// The manifest `base` of the mod `id`, exporting `exports`, each
+    /// `<kind>:<local name>`, its schema text to start with `head`.
     #[must_use]
     pub const fn new(
         base: &'static crate::abi::Manifest,
@@ -196,9 +197,20 @@ impl Manifested {
     /// does not read.
     fn build(&self) -> Option<Built> {
         let section = crate::schema_section::Section::parse(section()).ok()?;
-        let names = section.exports(self.id, self.exports);
-        let text = section.schema(self.head, self.id, &names).into_boxed_str();
-        let exports: Box<[crate::abi::Str]> = names.into_iter().map(crate::abi::Str::new).collect();
+        let text = section.schema(self.head, self.id).into_boxed_str();
+        let declared: Box<[Box<str>]> = section
+            .exports(self.id)
+            .into_iter()
+            .filter(|name| !self.exports.contains(&name.as_str()))
+            .map(String::into_boxed_str)
+            .collect();
+        let exports: Box<[crate::abi::Str]> = self
+            .exports
+            .iter()
+            .copied()
+            .chain(declared.iter().map(|name| &**name))
+            .map(crate::abi::Str::new)
+            .collect();
         let manifest = Box::new(crate::abi::Manifest {
             points: crate::abi::Str::new(&text),
             exports: exports.as_ptr(),
@@ -209,6 +221,7 @@ impl Manifested {
             manifest,
             _text: text,
             _exports: exports,
+            _names: declared,
         })
     }
 }

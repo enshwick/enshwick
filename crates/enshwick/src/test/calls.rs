@@ -128,7 +128,7 @@ pub(crate) extern "system" fn find_call(
         let unexported = s
             .manifest
             .as_ref()
-            .is_some_and(|manifest| manifest.unexported(&declared.name, &s.host.exports));
+            .is_some_and(|manifest| manifest.unexported("call", &declared.name, &s.host.exports));
         if unexported || (required && !s.calls.others.iter().any(|o| o.declared == declared)) {
             return None;
         }

@@ -71,7 +71,7 @@ workspace = true
 id = "you.hello"
 side = "both"
 join = true
-exports = ["locker"]
+exports = ["content:locker"]
 
 [package.metadata.enshwick.requires]
 lockers = { id = "you.lockers", version = ">=0.1, <1.0" }

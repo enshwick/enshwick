@@ -700,13 +700,18 @@ fn a_setting_that_cannot_hold_is_a_problem_at_its_key() {
 }
 
 #[test]
-fn an_export_that_is_not_a_local_name_or_given_twice_is_a_problem() {
+fn an_export_without_its_kind_with_a_full_name_or_given_twice_is_a_problem() {
     let head = "id = \"you.greeter\"\nversion = \"1.0.0\"\n";
     let cases = [
-        ("exports = [\"you.greeter:hi\"]\n", "is not a local name"),
+        ("exports = [\"hi\"]\n", "is not `<kind>:<name>`"),
+        ("exports = [\"greeting:hi\"]\n", "is not `<kind>:<name>`"),
         (
-            "exports = [\"hi\", \"bye\", \"hi\"]\n",
-            "\"hi\" is given twice",
+            "exports = [\"event:you.greeter:hi\"]\n",
+            "without the pack's id",
+        ),
+        (
+            "exports = [\"event:hi\", \"content:bye\", \"event:hi\"]\n",
+            "\"event:hi\" is given twice",
         ),
     ];
     for (exports, problem) in cases {

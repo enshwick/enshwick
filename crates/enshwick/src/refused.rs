@@ -222,17 +222,6 @@
 /// }
 /// ```
 ///
-/// A point without `export` whose local name `exports` in the crate's
-/// `Cargo.toml` lists, `locker`; `exports` names content alone:
-///
-/// ```compile_fail
-/// #[enshwick::point(name = "locker", mode = Override, output = u32)]
-/// #[derive(Clone, Copy, Debug)]
-/// pub struct Locker {
-///     pub item: u32,
-/// }
-/// ```
-///
 /// `export` on a dependency's declaration, which only its owner exports:
 ///
 /// ```compile_fail

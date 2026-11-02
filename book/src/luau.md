@@ -262,7 +262,7 @@ event differs or is smaller. `define_event` takes the event's local name:
 Rust mod. An event a script defines has primitive fields only. `define_event` raises an error for a new event, or for changed
 fields, after the start: either takes the next start. A `send` before
 `main.luau` has finished reaches no one. Other mods hear the event only when
-`pack.toml` exports it, as `exports = ["greeted"]`.
+`pack.toml` exports it, as `exports = ["event:greeted"]`.
 
 ## Calling another mod
 

@@ -65,8 +65,10 @@ mod tests {
 
     #[test]
     fn what_another_mod_exports_reaches_the_mod() {
-        let host =
-            enshwick::test::FakeHost::new().exports("you.lockers", &["price", "opened", "keys"]);
+        let host = enshwick::test::FakeHost::new().exports(
+            "you.lockers",
+            &["point:price", "event:opened", "service:keys"],
+        );
         let (_loader, status) = start(host);
         assert_eq!(status, Status::OK);
         assert!(Haggler::instance().is_some_and(|haggler| haggler.0));
@@ -74,7 +76,24 @@ mod tests {
 
     #[test]
     fn a_point_another_mod_does_not_export_turns_the_mod_off() {
-        let host = enshwick::test::FakeHost::new().exports("you.lockers", &["opened", "keys"]);
+        let host = enshwick::test::FakeHost::new()
+            .exports("you.lockers", &["event:opened", "service:keys"]);
+        let (loader, status) = start(host);
+        assert_ne!(status, Status::OK);
+        assert!(loader.attached_points().is_empty());
+    }
+
+    #[test]
+    fn an_export_of_another_kind_by_the_point_s_name_opens_no_point() {
+        let host = enshwick::test::FakeHost::new().exports(
+            "you.lockers",
+            &[
+                "content:price",
+                "event:price",
+                "event:opened",
+                "service:keys",
+            ],
+        );
         let (loader, status) = start(host);
         assert_ne!(status, Status::OK);
         assert!(loader.attached_points().is_empty());
@@ -82,14 +101,16 @@ mod tests {
 
     #[test]
     fn an_event_another_mod_does_not_export_turns_the_mod_off() {
-        let host = enshwick::test::FakeHost::new().exports("you.lockers", &["price", "keys"]);
+        let host = enshwick::test::FakeHost::new()
+            .exports("you.lockers", &["point:price", "service:keys"]);
         let (_loader, status) = start(host);
         assert_ne!(status, Status::OK);
     }
 
     #[test]
     fn a_service_another_mod_does_not_export_is_not_found() {
-        let host = enshwick::test::FakeHost::new().exports("you.lockers", &["price", "opened"]);
+        let host = enshwick::test::FakeHost::new()
+            .exports("you.lockers", &["point:price", "event:opened"]);
         let (_loader, status) = start(host);
         assert_eq!(status, Status::OK);
         assert!(Haggler::instance().is_some_and(|haggler| !haggler.0));
@@ -139,12 +160,13 @@ mod tests {
 
         #[test]
         fn a_call_another_mod_does_not_export_turns_the_mod_off() {
-            assert_ne!(start(&["price"]).1, Status::OK);
+            assert_ne!(start(&["point:price"]).1, Status::OK);
+            assert_ne!(start(&["point:rent", "content:rent"]).1, Status::OK);
         }
 
         #[test]
         fn a_call_another_mod_exports_reaches_it() {
-            let (_loader, status) = start(&["rent"]);
+            let (_loader, status) = start(&["call:rent"]);
             assert_eq!(status, Status::OK);
             let renter = Renter::instance().map(|renter| renter.0.call(&Rent { locker: 2 }));
             assert_eq!(renter, Some(Ok(6)));

@@ -2,8 +2,8 @@
 //! `export`, its schema reaches its owner's manifest and no other mod's,
 //! its name the owner's exports, and another mod links to it; a point
 //! without the flag ships nothing and another mod's link to it is refused,
-//! and an exported point whose local name an internal event shares is not
-//! exported.
+//! and an exported point opens no event the owner keeps by the same local
+//! name, since each export names its kind.
 //! This crate's `Cargo.toml` gives the owner's id, `you.hello`.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,7 +25,7 @@ pub(crate) struct Hidden {
 }
 
 /// A point of the owner marked `export`, whose local name an event the
-/// owner keeps shares: exporting it would open the event, so neither is.
+/// owner keeps shares: the export, `point:fee`, opens the point alone.
 #[enshwick::point(name = "fee", export, mode = Override, output = u32)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FeePoint {
@@ -44,8 +44,8 @@ pub(crate) struct FeeEvent {
 /// Whether the extender's link to [`Hidden`] was refused.
 static HIDDEN_REFUSED: AtomicBool = AtomicBool::new(false);
 
-/// Whether the extender's link to [`FeePoint`] was refused.
-static FEE_REFUSED: AtomicBool = AtomicBool::new(false);
+/// Whether the extender's subscription to [`FeeEvent`] was refused.
+static FEE_EVENT_REFUSED: AtomicBool = AtomicBool::new(false);
 
 /// The mod that owns the points.
 mod owner {
@@ -107,10 +107,11 @@ mod extender {
                 Verdict::Set(*so_far)
             });
             super::HIDDEN_REFUSED.store(hidden.is_err(), Ordering::Relaxed);
-            let fee = load.extend_point(&Order::new(), |_: &super::FeePoint, so_far: &u32| {
-                Verdict::Set(*so_far)
-            });
-            super::FEE_REFUSED.store(fee.is_err(), Ordering::Relaxed);
+            load.extend_point(&Order::new(), |fee: &super::FeePoint, so_far: &u32| {
+                Verdict::Set(so_far + fee.item)
+            })?;
+            let kept = load.on_mod_event(|_: &super::FeeEvent| {});
+            super::FEE_EVENT_REFUSED.store(kept.is_err(), Ordering::Relaxed);
             Ok(Self)
         }
     }
@@ -175,8 +176,11 @@ mod tests {
             .iter()
             .filter_map(|p| p["name"].as_str())
             .collect();
-        assert_eq!(names, ["you.hello:price"], "`fee` would open the event");
-        assert_eq!(exports(owner::enshwick_mod_query()), ["price"]);
+        assert_eq!(names, ["you.hello:fee", "you.hello:price"]);
+        assert_eq!(
+            exports(owner::enshwick_mod_query()),
+            ["point:fee", "point:price"]
+        );
     }
 
     #[test]
@@ -203,11 +207,14 @@ mod tests {
         let status =
             unsafe { loader.start(extender::enshwick_mod_init, extender::enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        assert_eq!(loader.attached_points(), ["you.hello:price"]);
+        assert_eq!(
+            loader.attached_points(),
+            ["you.hello:price", "you.hello:fee"]
+        );
         assert!(HIDDEN_REFUSED.load(Ordering::Relaxed));
         assert!(
-            FEE_REFUSED.load(Ordering::Relaxed),
-            "`fee` would open the event"
+            FEE_EVENT_REFUSED.load(Ordering::Relaxed),
+            "`point:fee` opens no event `fee`"
         );
         assert_eq!(
             loader.ask_point(&Price { item: 2 }, 3),
