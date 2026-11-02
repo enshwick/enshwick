@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `#[point]`, `#[call]`, `#[event]` and `#[service]` take
+  `export`, which writes the declaration's `.enshpt` entry; a declaration
+  without it ships nothing, and `exports` no longer decides it (#883).
+
 - **Breaking:** `declare_mod!` and `declare_test_mod!` take no `points`,
   `events` or `calls` lists. `#[point]`, `#[event]` and `#[call]` without
   `of` write their schemas through `__schema_entry!` when the crate's mod
