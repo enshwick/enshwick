@@ -165,8 +165,8 @@ mod tests {
 
     #[test]
     fn the_published_schema_is_the_manifest_s() {
-        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-        // `declare_mod!`, which no thread writes.
+        // SAFETY: `enshwick_mod_query` returns the manifest of
+        // `declare_mod!`, valid until its shutdown.
         let manifest = unsafe { &*super::enshwick_mod_query() };
         // SAFETY: the manifest's static text.
         let text = unsafe { manifest.points.as_str() }.unwrap_or_default();

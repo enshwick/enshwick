@@ -272,13 +272,14 @@ as `exports` in its `pack.toml`.
 
 Each [extension point](../extending.md#defining-a-point),
 [event](../services.md) and [call](../calls.md) the mod declares without
-`of` puts its schema into the DLL's `.enshpt` section. `declare_mod!` takes
-nothing but the mod's type: when the loader first asks for the manifest, it
-collects the schemas from that section into the manifest, once.
-`cargo enshwick deps` reads the same section from the DLL file, without
-running the mod, to write other mods' declarations. Another mod may link to
-a name only when `exports` lists it. With `exports = ["price"]` in the
-mod's `Cargo.toml`:
+`of` and lists in `exports` puts its schema into the DLL's `.enshpt`
+section; one left out of `exports` stays the mod's own and ships nothing.
+`declare_mod!` takes nothing but the mod's type: when the loader first asks
+for the manifest, it collects the schemas from that section into the
+manifest. `cargo enshwick deps` reads the same section from the DLL file,
+without running the mod, to write other mods' declarations. An exported
+event or point whose fields a schema cannot describe fails the build. With
+`exports = ["price"]` in the mod's `Cargo.toml`:
 
 ```rust,standalone_crate
 #[enshwick::point(name = "price", mode = Override, output = u32)]

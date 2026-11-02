@@ -112,94 +112,94 @@ pub fn section() -> &'static [u8] {
 }
 
 /// A mod's manifest, completed at the loader's first query with the
-/// schemas of the mod's own points, events and calls from the binary's
-/// `.enshpt` section.
+/// schemas of the mod's own exported points, events and calls from the
+/// binary's `.enshpt` section.
 #[derive(Debug)]
 pub struct Manifested {
     base: &'static crate::abi::Manifest,
     id: &'static str,
     head: &'static str,
-    full: OnceLock<&'static crate::abi::Manifest>,
+    exports: &'static [&'static str],
+    built: std::sync::Mutex<Option<Built>>,
 }
 
+/// The completed manifest and the schema text it points at.
+#[derive(Debug)]
+struct Built {
+    manifest: Box<crate::abi::Manifest>,
+    _text: Box<str>,
+}
+
+// SAFETY: `Built` owns its manifest and the text that manifest points at,
+// and nothing writes either after they are built; the manifest's other
+// pointers lead to the mod's immutable statics.
+unsafe impl Send for Built {}
+
 impl Manifested {
-    /// The manifest `base` of the mod `id`, its schema text to start with
-    /// `head`.
+    /// The manifest `base` of the mod `id`, exporting the local names
+    /// `exports`, its schema text to start with `head`.
     #[must_use]
     pub const fn new(
         base: &'static crate::abi::Manifest,
         id: &'static str,
         head: &'static str,
+        exports: &'static [&'static str],
     ) -> Self {
         Self {
             base,
             id,
             head,
-            full: OnceLock::new(),
+            exports,
+            built: std::sync::Mutex::new(None),
         }
     }
 
-    /// The manifest; the section is read at the first call only.
-    pub fn get(&self) -> &'static crate::abi::Manifest {
-        self.full.get_or_init(|| {
-            let text = own_schemas(self.head, self.id, section());
-            if text.is_empty() {
-                return self.base;
+    /// The manifest, built at the first call after the start or a
+    /// [`release`](Self::release): the section is read and the schema text
+    /// allocated then, never on later calls. Any thread may call it; it
+    /// takes a lock and calls nothing that could call it again.
+    ///
+    /// Null when building panicked or the section does not read, which
+    /// leaves the mod off and the game running. The manifest stays valid
+    /// until [`release`](Self::release).
+    pub fn query(&self) -> *const crate::abi::Manifest {
+        use crate::locks::Relock as _;
+        let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut built = self.built.relock();
+            if built.is_none() {
+                *built = Some(self.build()?);
             }
-            let text: &'static str = Box::leak(text.into_boxed_str());
-            Box::leak(Box::new(crate::abi::Manifest {
-                points: crate::abi::Str::new(text),
-                ..*self.base
-            }))
-        })
+            built
+                .as_ref()
+                .map(|b| core::ptr::from_ref::<crate::abi::Manifest>(&b.manifest))
+        }));
+        built.ok().flatten().unwrap_or(core::ptr::null())
     }
-}
 
-/// The schema text of the mod `id`: `head`, then the entries of `section`
-/// that declare its own points, events and calls, in that order and by
-/// name; empty when it declares none.
-///
-/// Entries are separated by NULs, and a linker may pad between them with
-/// more; entries of other mods in the same binary, as in a test, are left
-/// out.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::__private::own_schemas;
-///
-/// let section = b"\0[[event]]\nname = \"you.a:sold\"\n\0\0[[point]]\nname = \"you.b:price\"\n\0";
-/// assert_eq!(
-///     own_schemas("schema = 1\n", "you.a", section),
-///     "schema = 1\n[[event]]\nname = \"you.a:sold\"\n",
-/// );
-/// assert_eq!(own_schemas("schema = 1\n", "you.c", section), "");
-/// ```
-#[must_use]
-pub fn own_schemas(head: &str, id: &str, section: &[u8]) -> String {
-    let rank = |entry: &str| {
-        ["[[point]]", "[[event]]", "[[call]]"]
-            .iter()
-            .position(|kind| entry.starts_with(kind))
-    };
-    let mut own: Vec<(usize, &str, &str)> = section
-        .split(|&b| b == 0)
-        .filter_map(|entry| core::str::from_utf8(entry).ok())
-        .filter_map(|entry| {
-            let name = entry.split_once("\nname = \"")?.1.split_once('"')?.0;
-            Some((rank(entry)?, name, entry))
+    /// Frees the manifest [`query`](Self::query) built, before a
+    /// development reload unloads the mod; the loader holds its own copy.
+    pub fn release(&self) {
+        use crate::locks::Relock as _;
+        let _freed =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.built.relock().take()));
+    }
+
+    /// The manifest with the mod's schema text, or `None` when the section
+    /// does not read.
+    fn build(&self) -> Option<Built> {
+        let section = crate::schema_section::Section::parse(section()).ok()?;
+        let text = section
+            .schema(self.head, self.id, Some(self.exports))
+            .into_boxed_str();
+        let manifest = Box::new(crate::abi::Manifest {
+            points: crate::abi::Str::new(&text),
+            ..*self.base
+        });
+        Some(Built {
+            manifest,
+            _text: text,
         })
-        .filter(|(_, name, _)| is_own(id, name))
-        .collect();
-    if own.is_empty() {
-        return String::new();
     }
-    own.sort_unstable();
-    let mut text = head.to_owned();
-    for (_, _, entry) in own {
-        text.push_str(entry);
-    }
-    text
 }
 
 /// The first non-empty text of `texts`, or empty.
@@ -540,13 +540,18 @@ impl<M> Default for Slot<M> {
 ///   header states.
 /// - That table stays valid and unchanged for the rest of the process,
 ///   as the loader's process-wide table does.
+/// - `manifest` is null, or points at a manifest valid for the call.
 pub unsafe fn init<M: Mod>(
     api: *const HostApi,
     me: ModHandle,
-    manifest: &'static crate::abi::Manifest,
+    manifest: *const crate::abi::Manifest,
     texts: Option<&'static str>,
     slot: &Slot<M>,
 ) -> Status {
+    // SAFETY: the caller guarantees `manifest` null or valid for the call.
+    let Some(manifest) = (unsafe { manifest.as_ref() }) else {
+        return Status::FAULTED;
+    };
     // SAFETY: `Host::new` needs `api` null or a table readable for its
     // header's size that outlives the process; this function's `# Safety`
     // bullets guarantee both.

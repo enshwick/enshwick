@@ -332,6 +332,36 @@ pub(crate) fn full_name(
     ))
 }
 
+/// Whether a declaration ships its schema with the crate's mod.
+pub(crate) enum Shipping {
+    /// The mod's own, and `exports` lists its local name.
+    Exported,
+    /// The mod's own, for the mod alone.
+    Internal,
+    /// Another mod's, or the crate names no mod.
+    Foreign,
+}
+
+/// How the declaration named `full`, `<mod id>:<what>`, ships, read from
+/// the crate's `Cargo.toml`, with its path when it was read, for build
+/// tracking.
+pub(crate) fn shipping(full: &str) -> (Shipping, Option<String>) {
+    let Ok((metadata, shown)) = cargo_metadata() else {
+        return (Shipping::Foreign, None);
+    };
+    let shipping = match full.split_once(':') {
+        Some((id, local)) if id == metadata.id => {
+            if metadata.exports.iter().any(|e| e == local) {
+                Shipping::Exported
+            } else {
+                Shipping::Internal
+            }
+        }
+        _ => Shipping::Foreign,
+    };
+    (shipping, Some(shown))
+}
+
 /// Whether `name` is the name side of a content id: 1 to 128 of
 /// `[a-z0-9_./-]`, as the API's `content::is_id` reads it.
 fn is_content_name(name: &str) -> bool {
@@ -799,7 +829,7 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
             exports: EXPORTS.as_ptr(),
             export_count: EXPORTS.len(),
         };
-        ::enshwick::__private::Manifested::new(&MANIFEST, #id, HEAD)
+        ::enshwick::__private::Manifested::new(&MANIFEST, #id, HEAD, EXPORT_NAMES)
     }}
 }
 
@@ -825,12 +855,13 @@ fn flags_of(metadata: &Metadata) -> TokenStream {
     }
 }
 
-/// The static `EXPORTS` of the manifest.
+/// The static `EXPORTS` of the manifest, and its names as `EXPORT_NAMES`.
 fn export_items(metadata: &Metadata) -> TokenStream {
     let abi = quote!(::enshwick::abi);
     let exports = &metadata.exports;
     let count = exports.len();
     quote! {
+        const EXPORT_NAMES: &[&str] = &[#(#exports),*];
         static EXPORTS: [#abi::Str; #count] = [#(#abi::Str::new(#exports)),*];
     }
 }

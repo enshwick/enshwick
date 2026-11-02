@@ -10,12 +10,16 @@ pub(crate) struct Price {
     pub(crate) item: u32,
 }
 
+/// A point of the owner for itself, which `exports` leaves out.
+#[enshwick::point(name = "hidden", mode = Override, output = u32)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Hidden {
+    /// The item.
+    pub(crate) item: u32,
+}
+
 /// The mod that owns the point.
 mod owner {
-    #[expect(
-        dead_code,
-        reason = "the test reads its manifest alone; the mod never starts"
-    )]
     pub(super) struct Hello;
 
     impl enshwick::Mod for Hello {
@@ -70,10 +74,11 @@ mod tests {
 
     /// The schema text of a manifest.
     fn points(manifest: *const enshwick::abi::Manifest) -> String {
-        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
-        // `declare_mod!`, which no thread writes.
+        // SAFETY: `enshwick_mod_query` returns the manifest of
+        // `declare_mod!`, valid until its shutdown, which runs only after
+        // this call.
         let manifest = unsafe { &*manifest };
-        // SAFETY: the manifest's schema text lives for the process.
+        // SAFETY: the manifest's schema text lives as long as the manifest.
         unsafe { manifest.points.as_str() }
             .unwrap_or_default()
             .to_owned()
@@ -91,7 +96,14 @@ mod tests {
             .iter()
             .filter_map(|p| p["name"].as_str())
             .collect();
-        assert_eq!(names, ["you.hello:price"]);
+        assert_eq!(names, ["you.hello:price"], "the internal point stays out");
+    }
+
+    #[test]
+    fn a_shutdown_frees_the_manifest_and_the_next_query_builds_it_again() {
+        let before = points(owner::enshwick_mod_query());
+        owner::enshwick_mod_shutdown();
+        assert_eq!(points(owner::enshwick_mod_query()), before);
     }
 
     #[test]
