@@ -435,6 +435,19 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     part!("chat sending", crate::chat::drain());
     part!("own channel", crate::carrier::after_step(loader, now));
     crate::transactions::after_step(loader);
+    // SAFETY: `server` is null or the game's live server, and this runs on
+    // the game thread after its step, both by this function's `# Safety`.
+    unsafe { joins(loader, offsets, server) };
+}
+
+/// Emits a join for each player slot that reached the game since the last
+/// step, and forgets the slots that emptied.
+///
+/// # Safety
+///
+/// As [`after_step`]: `server` is null or the game's live server, read on
+/// the game thread after its step.
+unsafe fn joins(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
     if server.is_null() {
         return;
     }
