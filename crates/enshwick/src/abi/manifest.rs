@@ -257,8 +257,8 @@ impl ManifestFlags {
     /// `shutdown` and uses only what a reload can unlink (hooks, events,
     /// lookups, settings, logging); see the modding book.
     pub const RELOAD: Self = Self(2);
-    /// The mod is a developer tool, never for real play: while it runs,
-    /// every player reads a warning that developer tools are on.
+    /// The mod is a developer tool, never for real play: it runs only while
+    /// [`DEVELOPER_TOOLS`](crate::mods::DEVELOPER_TOOLS) exists, and every player reads that developer tools are on.
     pub const DEVELOPER: Self = Self(4);
 
     /// Whether every flag of `other` is set.

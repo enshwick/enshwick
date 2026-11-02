@@ -3,13 +3,6 @@
 use crate::Host;
 use crate::abi::{ManifestFlags, ModInfo, Side, Str};
 
-/// The loader's id as a literal, for the paths built from it.
-macro_rules! loader_id {
-    () => {
-        "enshwick"
-    };
-}
-
 /// The id the loader lists itself under in [`all`]; no mod may take it.
 ///
 /// # Examples
@@ -21,7 +14,7 @@ macro_rules! loader_id {
 /// let others = mods.iter().filter(|m| m.id != LOADER_ID);
 /// assert!(others.count() <= mods.len());
 /// ```
-pub const LOADER_ID: &str = loader_id!();
+pub const LOADER_ID: &str = "enshwick";
 
 /// The file, relative to the game's folder, that turns developer tools on.
 ///
@@ -32,9 +25,11 @@ pub const LOADER_ID: &str = loader_id!();
 /// # Examples
 ///
 /// ```
-/// assert_eq!(enshwick::mods::DEVELOPER_TOOLS, "mod-data/enshwick/developer-tools");
+/// use enshwick::mods::{DEVELOPER_TOOLS, LOADER_ID};
+///
+/// assert_eq!(DEVELOPER_TOOLS, format!("mod-data/{LOADER_ID}/developer-tools"));
 /// ```
-pub const DEVELOPER_TOOLS: &str = concat!("mod-data/", loader_id!(), "/developer-tools");
+pub const DEVELOPER_TOOLS: &str = "mod-data/enshwick/developer-tools";
 
 /// Why the loader turns a mod with `developer: true` off before its `init`
 /// when [`DEVELOPER_TOOLS`] is missing, as its log and the Mods screen say.
@@ -42,13 +37,15 @@ pub const DEVELOPER_TOOLS: &str = concat!("mod-data/", loader_id!(), "/developer
 /// # Examples
 ///
 /// ```
-/// assert!(enshwick::mods::DEVELOPER_TOOL_OFF.contains(enshwick::mods::DEVELOPER_TOOLS));
+/// use enshwick::mods::{DEVELOPER_TOOL_OFF, DEVELOPER_TOOLS};
+///
+/// assert_eq!(
+///     DEVELOPER_TOOL_OFF,
+///     format!("a developer tool: it runs only while the file {DEVELOPER_TOOLS} exists")
+/// );
 /// ```
-pub const DEVELOPER_TOOL_OFF: &str = concat!(
-    "a developer tool: it runs only while the file mod-data/",
-    loader_id!(),
-    "/developer-tools exists"
-);
+pub const DEVELOPER_TOOL_OFF: &str =
+    "a developer tool: it runs only while the file mod-data/enshwick/developer-tools exists";
 
 /// The stub that starts the loader, in the game's folder.
 ///

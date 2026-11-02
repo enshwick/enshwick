@@ -37,8 +37,9 @@ mod tests {
 
     #[test]
     fn without_developer_tools_a_developer_mod_is_off_before_init() {
-        for side in [Side::SERVER, Side::CLIENT] {
-            let (status, loader) = start(FakeHost::new().side(side));
+        let hosted = FakeHost::new().side(Side::CLIENT).hosting(true);
+        for host in [FakeHost::new(), FakeHost::new().side(Side::CLIENT), hosted] {
+            let (status, loader) = start(host);
             assert_eq!(status, Status::REFUSED);
             assert!(!ran(&loader));
             assert_eq!(loader.faults(), [enshwick::mods::DEVELOPER_TOOL_OFF]);
@@ -47,7 +48,12 @@ mod tests {
                     .logs()
                     .iter()
                     .any(|(level, line)| *level == enshwick::abi::Level::ERROR
-                        && line == &format!("off: {}", enshwick::mods::DEVELOPER_TOOL_OFF)),
+                        && line
+                            == &format!(
+                                "off: {} ({})",
+                                enshwick::mods::DEVELOPER_TOOL_OFF,
+                                enshwick::__private::MOD_OFF
+                            )),
                 "{:?}",
                 loader.logs()
             );
