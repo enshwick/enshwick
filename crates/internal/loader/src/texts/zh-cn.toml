@@ -317,3 +317,5 @@
 "resistance_lightning.name" = "电击抗性"
 "resistance_poison.name" = "毒素抗性"
 "mods.developer.off" = "开发者工具：仅当文件 mod-data/enshwick/developer-tools 存在时运行"
+"reload.done" = "已重新加载 {name}。"
+"reload.waits" = "{name} 已更改，需重启后生效：{why}"

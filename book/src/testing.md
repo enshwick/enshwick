@@ -324,7 +324,10 @@ A mod opts in with `reload = true` in its
   rows changed, or that hooks a function nothing hooked at start, is refused
   or turned off; its version may change.
 
-The log says `<id> reloaded` or why not. Reloads are for development only,
+The log says `<id> reloaded` or why not. A dedicated server also says it in
+every player's chat, such as `Lanterns reloaded.` or `Lanterns changed and
+waits for a restart:` with the reason, and while developer tools are on the
+Mods screen shows the last result under the mod. Reloads are for development only,
 and nothing is reloaded unless the setting is on.
 
 A mod that keeps the contract, with an event, a thread it stops in

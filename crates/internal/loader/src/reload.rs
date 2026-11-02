@@ -204,10 +204,27 @@ static REINIT: AtomicUsize = AtomicUsize::new(NONE);
 
 /// Per mod: its reload generation, which its events carry.
 static GENERATIONS: OnceLock<Box<[AtomicU32]>> = OnceLock::new();
-/// Per mod: the calls it made since it loaded that a reload cannot hand
-/// over. They stay across a reload, so one the old copy made late refuses
-/// the next.
-static CALLS: Mutex<Vec<Vec<&'static str>>> = Mutex::new(Vec::new());
+/// The reload state of the loaded mods.
+#[derive(Debug)]
+struct State {
+    /// Per mod: what its reloads hold and said.
+    mods: Mutex<Vec<Reloads>>,
+}
+
+static STATE: State = State {
+    mods: Mutex::new(Vec::new()),
+};
+
+/// What the reloads of one mod hold and said.
+#[derive(Clone, Debug, Default)]
+struct Reloads {
+    /// The calls it made since it loaded that a reload cannot hand over.
+    /// They stay across a reload, so one the old copy made late refuses
+    /// the next.
+    holding: Vec<&'static str>,
+    /// What its last reload did, in the player's language.
+    last: Option<String>,
+}
 /// Events reloaded mods subscribed to after the deliveries were sealed.
 static LATE: OnceLock<ArcSwap<Vec<Subscription>>> = OnceLock::new();
 
@@ -235,7 +252,7 @@ unsafe impl Send for Watched {}
 /// Readies the per-mod state for `mods` mods.
 pub(crate) fn prepare(mods: usize) {
     let _first = GENERATIONS.set((0..mods).map(|_| AtomicU32::new(0)).collect());
-    *CALLS.relock() = vec![Vec::new(); mods];
+    *STATE.mods.relock() = vec![Reloads::default(); mods];
 }
 
 /// Runs `init` of mod `index`, which [`in_init`] then answers for.
@@ -280,8 +297,8 @@ fn note_cold(index: usize) {
     if RELOADABLE.binary_search(&name).is_ok() {
         return;
     }
-    let mut calls = CALLS.relock();
-    if let Some(calls) = calls.get_mut(index)
+    let mut mods = STATE.mods.relock();
+    if let Some(calls) = mods.get_mut(index).map(|m| &mut m.holding)
         && !calls.contains(&name)
     {
         calls.push(name);
@@ -408,15 +425,44 @@ fn poll(loader: &'static Loader, mod_: &mut Watched) {
     }
     mod_.seen = now;
     mod_.changing = None;
-    let id = loader
-        .mods
-        .get(mod_.index)
-        .map(|m| m.id.clone())
-        .unwrap_or_default();
-    match reload(loader, mod_) {
-        Ok(note) => crate::log!(INFO, "{id} reloaded{note}"),
-        Err(why) => crate::log!(WARN, "{id} changed but was not reloaded: {why}"),
+    let outcome = reload(loader, mod_);
+    report(loader, mod_.index, &outcome);
+}
+
+/// Tells the author what a reload of mod `index` did: in the log, in every
+/// player's chat on a dedicated server, and under the mod on the Mods
+/// screen.
+fn report(loader: &Loader, index: usize, outcome: &Result<String, ReloadModError>) {
+    let Some(record) = loader.mods.get(index) else {
+        return;
+    };
+    match outcome {
+        Ok(note) => crate::log!(INFO, "{} reloaded{note}", record.id),
+        Err(why) => crate::log!(WARN, "{} changed but was not reloaded: {why}", record.id),
     }
+    let line = line(&record.label(), outcome);
+    if loader.side == enshwick::abi::Side::SERVER {
+        let _sent = crate::chat::send(0, &line);
+    }
+    if let Some(reloads) = STATE.mods.relock().get_mut(index) {
+        reloads.last = Some(line);
+    }
+}
+
+/// The line the author reads about a reload of the mod `name`.
+fn line(name: &str, outcome: &Result<String, ReloadModError>) -> String {
+    match outcome {
+        Ok(_) => crate::texts::fill("reload.done", &[("name", name)]),
+        Err(why) => {
+            crate::texts::fill("reload.waits", &[("name", name), ("why", &why.to_string())])
+        }
+    }
+}
+
+/// What the last reload of mod `index` did, for the Mods screen; `None`
+/// before its first.
+pub(crate) fn last(index: usize) -> Option<String> {
+    STATE.mods.relock().get(index).and_then(|m| m.last.clone())
 }
 
 /// Why a changed mod DLL was not reloaded.
@@ -474,7 +520,12 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, ReloadM
     if held(&record.id) {
         return Err(ReloadModError::JoinHeld);
     }
-    let held = CALLS.relock().get(index).cloned().unwrap_or_default();
+    let held = STATE
+        .mods
+        .relock()
+        .get(index)
+        .map(|m| m.holding.clone())
+        .unwrap_or_default();
     if !held.is_empty() {
         return Err(ReloadModError::Holds {
             calls: held.into_iter().map(str::to_owned).collect(),
@@ -636,7 +687,7 @@ mod tests {
     }
 
     fn calls_of(index: usize) -> Vec<&'static str> {
-        CALLS.lock().unwrap()[index].clone()
+        STATE.mods.lock().unwrap()[index].holding.clone()
     }
 
     #[test]
@@ -686,6 +737,28 @@ mod tests {
         configure(true);
         note(0);
         assert!(calls_of(0).is_empty());
+    }
+
+    #[test]
+    fn the_author_reads_what_was_reloaded_and_why_a_change_waits() {
+        assert_eq!(line("Lanterns", &Ok(String::new())), "Lanterns reloaded.");
+        let waits = line(
+            "Lanterns",
+            &Err(ReloadModError::Holds {
+                calls: vec!["actions".into()],
+            }),
+        );
+        assert_eq!(
+            waits,
+            "Lanterns changed and waits for a restart: it holds what a reload cannot hand \
+             over (actions); restart the game"
+        );
+    }
+
+    #[test]
+    fn no_result_shows_before_a_mod_s_first_reload() {
+        let _one = fresh(true);
+        assert_eq!(last(1), None);
     }
 
     #[test]
