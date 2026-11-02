@@ -819,6 +819,7 @@ age = 1
     #[test]
     #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
     fn a_carried_table_reads_back_equal_on_a_real_build() {
+        let tables = tables();
         for (var, side) in [
             ("ENSH_SERVER_EXE", Side::Server),
             ("ENSH_CLIENT_EXE", Side::Client),
@@ -828,7 +829,6 @@ age = 1
             };
             let bytes = std::fs::read(path).unwrap();
             let image = reflect::Image::parse(&bytes, reflect::Layout::File, None).unwrap();
-            let tables = tables();
             let table = newest(&tables, side).unwrap();
             let range = image.range(image.section(".text").unwrap());
             let code = image.read(range.start, range.end - range.start).unwrap();

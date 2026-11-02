@@ -134,7 +134,8 @@ changed does not.
   describe them). It saves where each pattern matched in
   `mod-data/enshwick/carried-<side>.txt`, so the next start on the same code
   checks every entry there instead of searching again; a save that does not
-  match the code is searched again and replaced. What no
+  match the code is searched again and replaced, the old one kept as
+  `carried-<side>.txt.bak`. What no
   pattern finds is missing, so only the loader features and the mods that
   need it turn off, and the log names the build. With `build_patterns =
   false` in `mod-configs/enshwick.toml` such a build stays vanilla instead,

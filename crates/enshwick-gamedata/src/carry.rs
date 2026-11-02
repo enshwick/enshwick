@@ -8,6 +8,12 @@ use crate::{Kind, Resolved, Table};
 
 /// The first line of a saved carried table; a file without it is not read.
 const HEADER: &str = "enshwick carried table 2";
+/// The first word of a line for an entry whose pattern matched once, before
+/// its id and where, in hex.
+const START: &str = "start";
+/// The first word of a line for an entry whose pattern did not match once,
+/// before its id.
+const NONE: &str = "none";
 
 /// Which code and which table a carried table was found for: the XXH3-128
 /// of the table's text, the code's RVA and every byte of the code.
@@ -100,24 +106,32 @@ impl Table {
         if lines.next()? != HEADER || lines.next()? != format!("key {key}") {
             return None;
         }
-        let patterns = self.carry_patterns();
         let lines: Vec<&str> = lines.collect();
-        if lines.len() != patterns.len() {
+        if lines.len() != self.carry_patterns().count() {
             return None;
         }
-        // shortcut: a start is checked to match, not to match once; the key
-        // pins these very code bytes, where the search found it once, so only
-        // a deliberate edit could name a second match. Proving it once costs
+        // shortcut: a start is checked to match, not to match once. The key
+        // pins every code byte but the entry hold, where the search found it
+        // once, so only a deliberate edit, or a second match inside the few
+        // bytes of the hold, could name a second match; proving it once costs
         // the search the save is there to spare.
         let starts = lines
             .iter()
-            .zip(&patterns)
-            .map(|(line, pattern)| match line.strip_prefix("start ") {
-                Some(at) => {
-                    let at = usize::from_str_radix(at, 16).ok()?;
-                    pattern.matches(code.get(at..)?).then_some(Some(at))
+            .zip(self.carry_patterns())
+            .map(|(line, (id, pattern))| {
+                let (word, rest) = line.split_once(' ')?;
+                let (named, at) = rest.split_once(' ').unwrap_or((rest, ""));
+                if named != id {
+                    return None;
                 }
-                None => (*line == "none").then_some(None),
+                match word {
+                    START if !at.is_empty() && at.bytes().all(|b| b.is_ascii_hexdigit()) => {
+                        let at = usize::from_str_radix(at, 16).ok()?;
+                        pattern.matches(code.get(at..)?).then_some(Some(at))
+                    }
+                    NONE if at.is_empty() => Some(None),
+                    _ => None,
+                }
             })
             .collect::<Option<Vec<_>>>()?;
         Some(self.carried_at(code, code_rva, starts, cell))
@@ -132,9 +146,9 @@ impl Resolved {
         if self.kind != Kind::Fallback {
             return None;
         }
-        let starts = self.starts.iter().map(|start| match start {
-            Some(at) => format!("start {at:x}"),
-            None => "none".to_owned(),
+        let starts = self.starts.iter().map(|(id, start)| match start {
+            Some(at) => format!("{START} {id} {at:x}"),
+            None => format!("{NONE} {id}"),
         });
         let lines: Vec<String> = [HEADER.to_owned(), format!("key {key}")]
             .into_iter()
@@ -187,7 +201,9 @@ mod tests {
         let saved = carried.to_saved(key).unwrap();
         assert_eq!(
             saved,
-            format!("{HEADER}\nkey {key}\nstart 8\nnone\nnone\nstart 28\n")
+            format!(
+                "{HEADER}\nkey {key}\nstart f.found 8\nnone f.twice\nnone c.gone\nstart c.read 28\n"
+            )
         );
         assert_eq!(restore(&table, &saved, key), Some(carried));
     }
@@ -221,34 +237,38 @@ mod tests {
             .fall_back(&code, 0x5000, |_| None)
             .to_saved(key)
             .unwrap();
+        let edited = |from: &str, to: &str| restore(&table, &saved.replace(from, to), key);
         assert!(restore(&table, &saved, key).is_some());
-        assert_eq!(restore(&table, &saved.replacen("none\n", "", 1), key), None);
-        assert_eq!(restore(&table, &format!("{saved}none\n"), key), None);
+        assert_eq!(edited("none f.twice\n", ""), None);
         assert_eq!(
-            restore(&table, &saved.replace("start 8", "start 8 9"), key),
+            restore(&table, &format!("{saved}none f.twice\n"), key),
             None
         );
-        assert_eq!(
-            restore(&table, &saved.replace("start 8", "start z8"), key),
-            None
-        );
-        assert_eq!(
-            restore(&table, &saved.replace("start 8", "start ffffff"), key),
-            None
-        );
-        assert_eq!(
-            restore(&table, &saved.replacen("none", "None", 1), key),
-            None
-        );
-        assert_eq!(
-            restore(
-                &table,
-                &saved.replace(HEADER, "enshwick carried table 1"),
-                key
-            ),
-            None
-        );
+        assert_eq!(edited("start f.found 8", "start f.found 8 9"), None);
+        assert_eq!(edited("start f.found 8", "start f.found z8"), None);
+        assert_eq!(edited("start f.found 8", "start f.found +8"), None);
+        assert_eq!(edited("start f.found 8", "start f.found"), None);
+        assert_eq!(edited("start f.found 8", "start f.found ffffff"), None);
+        assert_eq!(edited("none f.twice", "none f.twice 4"), None);
+        assert_eq!(edited("none f.twice", "None f.twice"), None);
+        assert_eq!(edited(HEADER, "enshwick carried table 1"), None);
         assert_eq!(restore(&table, "", key), None);
+    }
+
+    #[test]
+    fn a_save_whose_lines_name_other_entries_is_not_read() {
+        let table = Table::parse(TABLE).unwrap();
+        let code = code();
+        let key = table.carry_key(&code, 0x5000, 0..0);
+        let saved = table
+            .fall_back(&code, 0x5000, |_| None)
+            .to_saved(key)
+            .unwrap();
+        let swapped = saved
+            .replace("none f.twice", "none X")
+            .replace("none c.gone", "none f.twice")
+            .replace("none X", "none c.gone");
+        assert_eq!(restore(&table, &swapped, key), None);
     }
 
     #[test]
@@ -260,14 +280,9 @@ mod tests {
             .fall_back(&code, 0x5000, |_| None)
             .to_saved(key)
             .unwrap();
-        assert_eq!(
-            restore(&table, &saved.replace("start 8", "start 9"), key),
-            None
-        );
-        assert_eq!(
-            restore(&table, &saved.replace("start 28", "start 29"), key),
-            None
-        );
+        let edited = |from: &str, to: &str| restore(&table, &saved.replace(from, to), key);
+        assert_eq!(edited("start f.found 8", "start f.found 9"), None);
+        assert_eq!(edited("start c.read 28", "start c.read 29"), None);
     }
 
     #[test]

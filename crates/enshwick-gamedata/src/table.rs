@@ -561,26 +561,27 @@ impl Table {
         code_rva: u64,
         cell: impl Fn(u64) -> Option<u32> + Sync,
     ) -> Resolved {
-        let starts = find_each_unique(&self.carry_patterns(), code)
+        let patterns: Vec<&Pattern> = self.carry_patterns().map(|(_, p)| p).collect();
+        let starts = find_each_unique(&patterns, code)
             .into_iter()
             .map(Result::ok)
             .collect();
         self.carried_at(code, code_rva, starts, cell)
     }
 
-    /// The patterns [`Table::fall_back`] searches for, each once: the
-    /// symbols' in table order, then the carried constants' searched alone.
-    pub(crate) fn carry_patterns(&self) -> Vec<&Pattern> {
+    /// The patterns [`Table::fall_back`] searches for, each once, with the
+    /// id of its entry: the symbols' in table order, then the carried
+    /// constants' searched alone.
+    pub(crate) fn carry_patterns(&self) -> impl Iterator<Item = (&str, &Pattern)> {
         self.symbols
             .iter()
-            .filter_map(|s| s.pattern.as_ref())
+            .filter_map(|s| Some((s.id.as_str(), s.pattern.as_ref()?)))
             .chain(
                 self.constants
                     .iter()
                     .filter(|c| c.carried && c.searched_alone())
-                    .filter_map(|c| c.pattern.as_ref()),
+                    .filter_map(|c| Some((c.id.as_str(), c.pattern.as_ref()?))),
             )
-            .collect()
     }
 
     /// [`Table::fall_back`] once its patterns are found: `starts` holds, in
@@ -653,7 +654,11 @@ impl Table {
             }
         }
         let mut resolved = self.carried(symbols, constants, missing);
-        resolved.starts = starts;
+        resolved.starts = self
+            .carry_patterns()
+            .map(|(id, _)| id.to_owned())
+            .zip(starts)
+            .collect();
         resolved
     }
 
