@@ -463,12 +463,14 @@ impl Loader {
         self.mods.iter().enumerate().find(|(_, m)| m.id == id)
     }
 
-    /// The mod of handle `me`; the table function it is inside counts
-    /// against it for a reload, whenever it calls.
+    /// The mod of handle `me`; while it is on, the table function it is
+    /// inside counts against it for a reload, whenever it calls.
     fn record(&self, me: ModHandle) -> Option<(ModIndex, &ModRecord)> {
         let index = ModIndex::from_handle(me)?;
         let record = self.mods.get(index.get())?;
-        crate::reload::note(index.get());
+        if !record.off.load(Ordering::Relaxed) {
+            crate::reload::note(index.get());
+        }
         Some((index, record))
     }
 
@@ -692,6 +694,7 @@ fn calling(me: ModHandle) -> Result<(&'static Loader, ModIndex, &'static ModReco
 /// loader's own handle passes too.
 fn caller(me: ModHandle) -> Result<&'static Loader, Status> {
     if me == LOADER_HANDLE {
+        crate::reload::note_initialising();
         return loader().ok_or(Status::BAD_ARGS);
     }
     calling(me).map(|(loader, _, _)| loader)
