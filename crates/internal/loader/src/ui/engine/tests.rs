@@ -30,7 +30,6 @@ fn the_tables_layouts_fit_the_loader_s_buffers() {
         let layout = Layout::read(&lookup).unwrap();
         assert_eq!(layout.nav, [0, 0x20, 0x24, 0x28, 0x30, 0x34, 0x48]);
         DialogLayout::read(&lookup).unwrap();
-        ViewLayout::read(&lookup).unwrap();
         let grown = |id: &str| {
             if id == pinned::ui::LABEL_EXTENT.id() {
                 Some(0x200)
@@ -64,12 +63,11 @@ fn constant(table: &enshwick_gamedata::Table, id: &str) -> Option<u64> {
 }
 
 /// Which optional parts of the interface read on a build whose constants
-/// `lookup` gives: the dialogs, the world settings' Mods rows, the scroll
-/// area's highlight and extents, and the text field.
-fn optional_parts(lookup: Lookup<'_>) -> [bool; 5] {
+/// `lookup` gives: the dialogs, the scroll area's highlight and extents,
+/// and the text field.
+fn optional_parts(lookup: Lookup<'_>) -> [bool; 4] {
     [
         DialogLayout::read(lookup).is_ok(),
-        ViewLayout::read(lookup).is_ok(),
         scroll::nav_highlight(lookup).is_ok(),
         scroll::extents(lookup).is_ok(),
         text_field::TextLayout::read(lookup).is_ok(),
@@ -82,7 +80,6 @@ fn optional_parts(lookup: Lookup<'_>) -> [bool; 5] {
 fn each_optional_part_turns_off_alone() {
     let parts = [
         pinned::ui::POPUP_TITLE.id(),
-        pinned::ui::VIEW_TAB.id(),
         pinned::ui::NAV_HIGHLIGHT.id(),
         pinned::ui::SCROLL_EXTENT.id(),
         pinned::ui::TEXT_FIELD_EXTENT.id(),
@@ -90,7 +87,7 @@ fn each_optional_part_turns_off_alone() {
     let mut checked = 0;
     for table in client_tables() {
         let lookup = |id: &str| constant(&table, id);
-        if optional_parts(&lookup) != [true; 5] {
+        if optional_parts(&lookup) != [true; 4] {
             continue;
         }
         for (off, part) in parts.into_iter().enumerate() {

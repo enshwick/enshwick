@@ -250,7 +250,6 @@ revision = 1
 "ui.legal_line_site" = { rva = 0xc0_958b, pattern = "48 8B 1D ?? ?? ?? ?? 48 8B 9B C8 00 00 00 48 8D 8B ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B D0 48 8D 4C 24 ?? E8", at = 7 }
 "ui.main_menu_site" = { rva = 0xc1_c360, pattern = "75 04 C6 46 ?? 01 33 C0 C7 44 24 ?? 01 00 00 00 49 8D 8E ?? ?? ?? ??", at = 6 }
 "ui.pause_menu_site" = { rva = 0xcc_3517, pattern = "41 C7 04 24 01 00 00 00 48 8B 05 ?? ?? ?? ?? 4C 8B B0 ?? ?? ?? ?? 49 8D 8E ?? ?? ?? ??", at = 8 }
-"ui.world_settings_site" = { rva = 0xb8_4dab, pattern = "48 8D 8D ?? ?? ?? ?? 49 8B D6 E8 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? F3 0F 10 44 24 ??", at = 15 }
 "ui.node_id_get" = { rva = 0x119_aef0, pattern = "E8 ?? ?? ?? ?? 49 8B CE 0F 10 38 E8 ?? ?? ?? ?? 4C 8B F8 48 8B CE E8 ?? ?? ?? ?? 84 C0", rel = 12 }
 # The scroll area the world settings, the server list and its details
 # panel scroll in. `ui.persist` and `ui.no_construct` are pinned at the
@@ -838,7 +837,6 @@ revision = 1
 "ui.legal_line_site.bytes" = 0x4800_0000_c89b_8b48
 "ui.main_menu_site.bytes" = 0x1_4824_44c7_c033
 "ui.pause_menu_site.bytes" = 0x4c01_b5af_7a05_8b48
-"ui.world_settings_site.bytes" = "0xe800_0017_588d_8d48"
 "ui.persist.bytes" = 0x4c89_4c10_245c_8948
 "ui.first_use.bytes" = "0xcccc_ccc3_f041_b60f"
 "ui.scroll_config.bytes" = "0x8d48_5510_245c_8948"
@@ -955,8 +953,6 @@ revision = 1
 "ui.action_node" = { value = 0x40, pattern = "66 44 89 53 ?? F2 0F 11 4B ?? 4C 89 53 ?? 44 88 0B 44 88 43 ??", at = 13, size = 1 }
 "ui.action_bound" = { value = 0x1b, pattern = "48 B8 25 23 22 84 E4 9C F2 CB 44 88 53 ?? 48 89 44 24 ??", at = 13, size = 1 }
 "ui.action_extent" = { value = 0x48, pattern = "66 44 89 53 ?? F2 0F 11 4B ?? 4C 89 53 ?? 44 88 0B 44 88 43 ??", at = 13, size = 1, plus = 8 }
-"ui.view_read_only" = { value = 0x91, pattern = "48 8D 95 ?? ?? ?? ?? 66 89 BD ?? ?? ?? ?? E8 ?? ?? ?? ?? 80 BE ?? ?? ?? ?? 00 66 89 BD ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 0F 28 C6", at = 21, size = 4 }
-"ui.view_tab" = { value = 0x8, pattern = "0F 29 44 24 ?? E8 ?? ?? ?? ?? 41 0F B6 4F ?? 85 C9 74 4B 83 E9 01", at = 14, size = 1 }
 # Fields the loader reads in bases, weather pools, saved buffs, pickup
 # targets and knowledge requests; a request's layout is confirmed where
 # the game builds one from a player's input.

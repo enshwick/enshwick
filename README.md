@@ -88,9 +88,10 @@ A world takes a copy of the file when it first loads and keeps it in
 copy. An edit of `mod-configs/<id>.toml` reaches only new worlds, each player's
 own settings and the settings read at start.
 
-Change a world's settings in the game, in the world settings, under the last
-tab. On a dedicated server, an administrator uses "Server settings" on the Mods
-screen. The server's command file, `mod-data/enshwick/commands.txt`, also takes
+Change settings in the game with a mod's Settings button on the Mods screen:
+in a world, that world's; in the main menu, the settings new worlds start
+with. On a dedicated server, an administrator changes the server's from the
+same page. The server's command file, `mod-data/enshwick/commands.txt`, also takes
 `enshwick config <mod> <key> <value>`. A change applies at once, unless the
 mod's page says it waits for the world or the game to start again.
 

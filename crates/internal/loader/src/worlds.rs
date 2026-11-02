@@ -8,9 +8,10 @@
 //! this process, a mod reads that world's settings with its own `client`
 //! settings over them; with no world, the template.
 //!
-//! Changes to world settings made before any world runs, as on the screen
-//! that creates or starts a world, wait in `mod-data/<id>/worlds/next.toml`
-//! and go into the next world that loads.
+//! A change to a world setting while no world runs goes, on a game client
+//! as from the main menu, into the template: the defaults of worlds made
+//! from then on. On a dedicated server, which runs one world, it waits in
+//! `mod-data/<id>/worlds/next.toml` and goes into the world as it loads.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -53,22 +54,26 @@ pub fn next_file(data_dir: &Path, id: &str) -> PathBuf {
 /// Where a change of a setting at `stage` goes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Destination {
-    /// The settings file: each player's own settings, and the template.
+    /// The settings file, for each player's own settings.
     Global,
     /// The settings of the world with this key.
     World(String),
-    /// The changes waiting for the next world.
+    /// The changes waiting for the next world, on a dedicated server.
     Next,
+    /// The settings file, for a world setting while a game client runs no
+    /// world: the template new worlds start from.
+    NewWorlds,
 }
 
 /// Where a change of a setting at `stage` goes while the world `current`
-/// runs, or none.
+/// runs, or none, on a dedicated `server` or a game client.
 #[must_use]
-pub fn destination(stage: Stage, current: Option<&str>) -> Destination {
-    match (stage, current) {
-        (stage, _) if stage.scope() == Scope::User => Destination::Global,
-        (_, Some(key)) => Destination::World(key.to_owned()),
-        (_, None) => Destination::Next,
+pub fn destination(stage: Stage, current: Option<&str>, server: bool) -> Destination {
+    match (stage.scope(), current) {
+        (Scope::World, Some(key)) => Destination::World(key.to_owned()),
+        (Scope::World, None) if server => Destination::Next,
+        (Scope::World, None) => Destination::NewWorlds,
+        _ => Destination::Global,
     }
 }
 
@@ -310,7 +315,7 @@ mod live {
         destination: &Destination,
     ) -> Result<(PathBuf, String), (PathBuf, std::io::Error)> {
         let path = match destination {
-            Destination::Global => global_path(loader, record),
+            Destination::Global | Destination::NewWorlds => global_path(loader, record),
             Destination::World(key) => world_file(&loader.data_dir, &record.id, key),
             Destination::Next => next_file(&loader.data_dir, &record.id),
         };
@@ -483,13 +488,34 @@ workers = 6
 
     #[test]
     fn changes_go_by_scope_and_world() {
-        assert_eq!(destination(Stage::Client, Some("w")), Destination::Global);
-        assert_eq!(destination(Stage::Restart, Some("w")), Destination::Global);
+        for server in [false, true] {
+            assert_eq!(
+                destination(Stage::Client, Some("w"), server),
+                Destination::Global
+            );
+            assert_eq!(
+                destination(Stage::Restart, Some("w"), server),
+                Destination::Global
+            );
+            assert_eq!(
+                destination(Stage::Client, None, server),
+                Destination::Global
+            );
+            assert_eq!(
+                destination(Stage::Runtime, Some("w"), server),
+                Destination::World("w".into())
+            );
+        }
         assert_eq!(
-            destination(Stage::Runtime, Some("w")),
-            Destination::World("w".into())
+            destination(Stage::Sync, None, false),
+            Destination::NewWorlds,
+            "a client with no world sets the defaults of new worlds"
         );
-        assert_eq!(destination(Stage::Sync, None), Destination::Next);
+        assert_eq!(
+            destination(Stage::Sync, None, true),
+            Destination::Next,
+            "a server's change waits for the world it runs"
+        );
         assert_eq!(client_keys(&schema()), ["labels"]);
         let file = world_file(Path::new("d"), "you.trading-post", "w-1");
         assert!(file.ends_with("you.trading-post/worlds/w-1/settings.toml"));

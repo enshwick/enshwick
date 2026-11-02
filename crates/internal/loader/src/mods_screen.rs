@@ -1,6 +1,6 @@
-//! What the Mods screen and the world settings' Mods rows decide apart from
-//! drawing: where Back goes, when the screen closes with its menu, which
-//! settings each place shows and how a settings row reads.
+//! What the Mods screen decides apart from drawing: where Back goes, when
+//! the screen closes with its menu, which settings a mod's page shows under
+//! which heading and how a settings row reads.
 
 use enshwick::config::{Schema, Scope, Stage};
 
@@ -9,8 +9,6 @@ use crate::texts;
 
 /// A menu hook saw Back while the screen showed.
 pub const BACK_PRESSED: u8 = 1;
-/// The pause menu opened its world settings, as the screen asked.
-pub const WORLD_SETTINGS_OPENED: u8 = 2;
 
 /// Whether something last drawn in frame `seen` missed the frame before
 /// `frame`: its menu or view went away.
@@ -25,8 +23,6 @@ pub const fn missed_frame(seen: u64, frame: u64) -> bool {
 pub enum Heard {
     /// Nothing: the page draws.
     Nothing,
-    /// The world settings opened over the pause menu: the screen goes.
-    WorldSettings,
     /// Back while a text field has the caret: the typing ends, the page
     /// stays.
     EndTyping,
@@ -39,7 +35,6 @@ pub enum Heard {
 #[must_use]
 pub const fn heard(back: u8, editing: bool) -> Heard {
     match back {
-        WORLD_SETTINGS_OPENED => Heard::WorldSettings,
         BACK_PRESSED if editing => Heard::EndTyping,
         BACK_PRESSED => Heard::Back,
         _ => Heard::Nothing,
@@ -85,24 +80,37 @@ pub const fn back(kind: Kind) -> Back {
     }
 }
 
-/// The settings of `schema` each player keeps, the ones the Mods screen
-/// edits; `None` when it has none.
+/// The settings of `schema` a mod's page edits, each player's own first.
+///
+/// The world's follow, unless the client is `joined` to another's game,
+/// which keeps them on the server's page; `None` when none are left.
 #[must_use]
-pub fn user_settings(mut schema: Schema) -> Option<Schema> {
-    schema.fields.retain(|f| f.scope == Scope::User);
+pub fn page_settings(mut schema: Schema, joined: bool) -> Option<Schema> {
+    if joined {
+        schema.fields.retain(|f| f.scope == Scope::User);
+    }
+    schema.fields.sort_by_key(|f| f.scope != Scope::User);
     (!schema.fields.is_empty()).then_some(schema)
 }
 
-/// The settings of `schema` the world settings show: the world's, and of
-/// those only the ones a server sends at join while the client is `joined`
-/// to another's game; `None` when none are left.
+/// Whether `schema` has settings of the world, which a server keeps.
 #[must_use]
-pub fn world_settings(mut schema: Schema, joined: bool) -> Option<Schema> {
-    schema.fields.retain(|f| f.scope == Scope::World);
-    if joined {
-        schema.fields.retain(|f| f.stage == Stage::Sync);
+pub fn has_world_settings(schema: &Schema) -> bool {
+    schema.fields.iter().any(|f| f.scope == Scope::World)
+}
+
+/// The text keys of the heading over a mod's settings of `scope` and of the
+/// note under it.
+///
+/// While this process runs a world (`world`) its settings are that world's;
+/// with none they are the defaults of new worlds.
+#[must_use]
+pub fn section(scope: Scope, world: bool) -> (&'static str, Option<&'static str>) {
+    match scope {
+        Scope::World if world => ("mods.settings.world", Some("world.belongs")),
+        Scope::World => ("mods.settings.new-worlds", Some("world.new")),
+        _ => ("mods.settings.yours", None),
     }
-    (!schema.fields.is_empty()).then_some(schema)
 }
 
 /// Marks every row as set by the server, which takes no changes here.
@@ -110,16 +118,6 @@ pub fn lock_to_server(rows: &mut [Row]) {
     for row in rows {
         row.lock = Lock::Server;
     }
-}
-
-/// `row` as a player who may not change the world reads it: a row open to
-/// changes shows read-only.
-#[must_use]
-pub fn read_only(mut row: Row) -> Row {
-    if row.lock == Lock::Open {
-        row.lock = Lock::File;
-    }
-    row
 }
 
 /// The label of `row`, marked with when a change takes effect and with the

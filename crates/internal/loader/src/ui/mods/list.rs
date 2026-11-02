@@ -3,10 +3,8 @@
 use std::sync::atomic::Ordering;
 
 use enshwick::abi::UiWidget;
-use enshwick::config::Scope;
 
-use super::settings::client_schema;
-use super::{JUMP, JUMP_SHOWN, MODS_PER_PAGE};
+use super::MODS_PER_PAGE;
 use crate::host::Loader;
 use crate::listing::Listing;
 use crate::locks::Relock;
@@ -99,24 +97,6 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
     if actions::any_offered() && paint.button(texts::text("actions").as_bytes(), true) {
         done = Listed::Actions(None);
     }
-    if crate::world::hosting() && JUMP_SHOWN.load(Ordering::Relaxed) != 0 {
-        paint.label(
-            texts::text("mods.world.here").as_bytes(),
-            UiWidget::STYLE_SECONDARY,
-            true,
-            false,
-        );
-        if paint.button(texts::text("mods.world.open").as_bytes(), true) {
-            JUMP.store(1, Ordering::Relaxed);
-        }
-    } else {
-        paint.label(
-            texts::text("mods.world.elsewhere").as_bytes(),
-            UiWidget::STYLE_SECONDARY,
-            true,
-            false,
-        );
-    }
     loader_notes(loader, paint);
     let listing = listing(paint, MODS_PER_PAGE);
     *first = listing.clamp_first(*first, mods.len());
@@ -144,16 +124,16 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         if actions::offers(&record.id) && paint.button(texts::text("actions").as_bytes(), true) {
             done = Listed::Actions(Some(record.id.clone()));
         }
-        let world = record
+        let settings = record
             .schema
             .relock()
             .as_ref()
-            .is_some_and(|s| s.fields.iter().any(|f| f.scope == Scope::World));
-        if client_schema(record).is_some() {
-            if paint.button(texts::text("mods.settings.yours").as_bytes(), true) {
+            .is_some_and(|s| !s.fields.is_empty());
+        if settings {
+            if paint.button(texts::text("mods.settings").as_bytes(), true) {
                 done = Listed::Settings(index);
             }
-        } else if !world {
+        } else {
             let note = texts::fill("mods.settings.file", &[("id", &record.id)]);
             paint.label(note.as_bytes(), UiWidget::STYLE_SECONDARY, false, false);
         }

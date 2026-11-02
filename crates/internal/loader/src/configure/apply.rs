@@ -1,9 +1,10 @@
 //! Writes one setting of a mod: checked against its schema and by the mod's
 //! own check, written atomically with the file's comments kept, and the
 //! mod told at once. Each player's own settings go to the settings file,
-//! the others to the running world's settings, or with no world running to
-//! the changes waiting for the next world. The console's `enshwick config` and the Mods screen both change settings
-//! through here.
+//! the others to the running world's settings. With no world running they go
+//! on a game client to the settings file, the template of new worlds, and on
+//! a dedicated server to the changes waiting for its world. The console's
+//! `enshwick config` and the Mods screen both change settings through here.
 
 use enshwick::abi::Event;
 use enshwick::config::Stage;
@@ -45,7 +46,11 @@ pub(crate) fn apply(
         });
     }
     let stage = field.map_or(Stage::Runtime, |f| f.stage);
-    let destination = crate::worlds::destination(stage, crate::worlds::current().as_deref());
+    let destination = crate::worlds::destination(
+        stage,
+        crate::worlds::current().as_deref(),
+        loader.side == enshwick::abi::Side::SERVER,
+    );
     let global_path = loader.configs_dir.join(format!("{id}.toml"));
     let global =
         std::fs::read_to_string(&global_path).map_err(|source| ApplySettingError::Missing {
@@ -57,7 +62,9 @@ pub(crate) fn apply(
     let mut change = super::set(id, &schema, &text, key, value)?;
     // The mod checks what it would read with the change.
     let read = match &destination {
-        Destination::Global => crate::worlds::effective(loader, record, &change.text),
+        Destination::Global | Destination::NewWorlds => {
+            crate::worlds::effective(loader, record, &change.text)
+        }
         Destination::World(_) => crate::worlds::compose(&change.text, &global, &schema),
         Destination::Next => crate::worlds::overlay(&global, &change.text, None),
     };
@@ -71,8 +78,8 @@ pub(crate) fn apply(
     crate::log!(INFO, "{who} set {id} {key} = {}", change.value);
     change.destination = destination.clone();
     if destination != Destination::Next {
-        // The change is the world's, not the asking player's: the mod's
-        // handler reads no reader's language.
+        // The change is not the asking player's: the mod's handler reads
+        // no reader's language.
         texts::for_nobody(|| {
             loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
         });

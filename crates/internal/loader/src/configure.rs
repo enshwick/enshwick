@@ -451,6 +451,7 @@ pub fn changed(id: &str, key: &str, change: &Change) -> String {
     let args = [("id", id), ("key", key), ("value", change.value.as_str())];
     match (&change.destination, change.stage) {
         (Destination::Next, _) => texts::fill("change.next", &args),
+        (Destination::NewWorlds, _) => texts::fill("change.new-worlds", &args),
         (_, Stage::Startup) if change.synced => texts::fill("change.startup-sync", &args),
         (_, Stage::Startup) => texts::fill("change.startup", &args),
         (_, Stage::Restart) => texts::fill("change.restart", &args),
@@ -579,6 +580,32 @@ mod tests {
             changed("rules", "rule", &change).contains("joined players get it then"),
             "{}",
             changed("rules", "rule", &change)
+        );
+    }
+
+    #[test]
+    fn a_world_setting_changed_with_no_world_says_it_is_for_new_worlds() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![Field::new("rule", Stage::Runtime, &true)],
+        );
+        let mut change = set("rules", &schema, "rule = true\n", "rule", "false").unwrap();
+        change.destination = crate::worlds::Destination::NewWorlds;
+        assert_eq!(
+            changed("rules", "rule", &change),
+            texts::fill(
+                "change.new-worlds",
+                &[("id", "rules"), ("key", "rule"), ("value", "false")]
+            )
+        );
+        change.destination = crate::worlds::Destination::World("w".into());
+        assert_ne!(
+            changed("rules", "rule", &change),
+            texts::fill(
+                "change.new-worlds",
+                &[("id", "rules"), ("key", "rule"), ("value", "false")]
+            )
         );
     }
 

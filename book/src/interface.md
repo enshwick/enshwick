@@ -220,16 +220,17 @@ off.
 The loader adds a "Mods" entry to the title screen's main menu and to the
 pause menu, beside Settings. It opens a screen of the loader's own that lists
 every mod, with the [extension points](extending.md) it defines and the ones
-it extends, and edits each player's own settings of each mod that derives
-`Config`; a world's settings are edited in the game's world settings, under
-their last tab, with nothing to write in the mod. See
-[Settings per world](settings.md#settings-per-world). Back, Escape or the
+it extends. Each mod that derives `Config` has a Settings button there, with
+nothing to write in the mod: it opens the mod's settings, each player's own
+first, then the world's (see
+[Settings per world](settings.md#settings-per-world)). Mod settings show
+nowhere else; the game's world settings have no mod rows. Back, Escape or the
 gamepad's B steps back from a mod's settings to the list, and from the list
 out. While a text field has the caret, Back takes the caret from the field
 and leaves the page open; the next Back steps back.
 
 The list of mods, a mod's settings and the server's settings scroll in the
-game's own scroll area, with its scrollbar, as the game's world settings do.
+game's own scroll area, with its scrollbar, as the game's own settings do.
 On a game build where the loader cannot draw that scroll area, the screen
 shows a few at a time with "Next Page" and "Previous Page" buttons, and the
 log says why.

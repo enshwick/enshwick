@@ -202,13 +202,10 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::TOGGLE_EXPLAINER.id(),
     pinned::ui::TOGGLE_EXTENT.id(),
     pinned::ui::TOGGLE_LABEL.id(),
-    pinned::ui::VIEW_READ_ONLY.id(),
-    pinned::ui::VIEW_TAB.id(),
     pinned::ui::WINDOW_BEGIN.id(),
     pinned::ui::WINDOW_END.id(),
     pinned::ui::WINDOW_EXTENT.id(),
     pinned::ui::WINDOW_NODE.id(),
-    pinned::ui::WORLD_SETTINGS_SITE.id(),
 ];
 
 // SAFETY: `PopupFn` is the signature of the game's `ui.popup`, and `link`

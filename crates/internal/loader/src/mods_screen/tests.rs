@@ -53,8 +53,6 @@ fn back_ends_the_typing_before_it_leaves_the_page() {
     assert_eq!(heard(0, true), Heard::Nothing);
     assert_eq!(heard(BACK_PRESSED, false), Heard::Back);
     assert_eq!(heard(BACK_PRESSED, true), Heard::EndTyping);
-    assert_eq!(heard(WORLD_SETTINGS_OPENED, false), Heard::WorldSettings);
-    assert_eq!(heard(WORLD_SETTINGS_OPENED, true), Heard::WorldSettings);
 }
 
 #[test]
@@ -67,22 +65,44 @@ fn back_steps_from_each_page_towards_the_list_and_closes_from_it() {
 }
 
 #[test]
-fn the_mods_screen_edits_only_each_players_own_settings() {
-    let user = user_settings(schema()).unwrap();
-    assert_eq!(keys(&user), ["lamps", "note"]);
+fn a_mods_page_shows_the_players_own_settings_first_then_the_worlds() {
+    let page = page_settings(schema(), false).unwrap();
+    assert_eq!(keys(&page), ["lamps", "note", "altars", "radius"]);
     let world_only = Schema::new("", "config", vec![field("a", Stage::Runtime, Scope::World)]);
-    assert!(user_settings(world_only).is_none());
+    assert_eq!(keys(&page_settings(world_only, false).unwrap()), ["a"]);
+    assert!(page_settings(Schema::new("", "config", Vec::new()), false).is_none());
 }
 
 #[test]
-fn the_world_settings_show_only_join_values_when_joined_elsewhere() {
+fn joined_to_another_game_a_mods_page_keeps_only_the_players_own_settings() {
     assert_eq!(
-        keys(&world_settings(schema(), false).unwrap()),
-        ["altars", "radius"]
+        keys(&page_settings(schema(), true).unwrap()),
+        ["lamps", "note"]
     );
-    assert_eq!(keys(&world_settings(schema(), true).unwrap()), ["radius"]);
-    let startup = Schema::new("", "config", vec![field("a", Stage::Startup, Scope::World)]);
-    assert!(world_settings(startup, true).is_none());
+    let world_only = Schema::new("", "config", vec![field("a", Stage::Sync, Scope::World)]);
+    assert!(has_world_settings(&world_only));
+    assert!(page_settings(world_only, true).is_none());
+    let user_only = Schema::new("", "config", vec![field("b", Stage::Client, Scope::User)]);
+    assert!(!has_world_settings(&user_only));
+}
+
+#[test]
+fn world_settings_are_this_worlds_while_one_runs_else_the_defaults_of_new_worlds() {
+    assert_eq!(
+        section(Scope::World, true),
+        ("mods.settings.world", Some("world.belongs"))
+    );
+    assert_eq!(
+        section(Scope::World, false),
+        ("mods.settings.new-worlds", Some("world.new"))
+    );
+    assert_eq!(section(Scope::User, true), ("mods.settings.yours", None));
+    assert_eq!(section(Scope::User, false), ("mods.settings.yours", None));
+    for (heading, note) in [section(Scope::World, true), section(Scope::World, false)] {
+        assert_ne!(texts::fill(heading, &[]), heading, "{heading} has a text");
+        let note = note.unwrap();
+        assert_ne!(texts::fill(note, &[]), note, "{note} has a text");
+    }
 }
 
 #[test]
@@ -90,16 +110,6 @@ fn a_servers_rows_take_no_changes() {
     let mut shown = rows(&schema(), "", None, None);
     lock_to_server(&mut shown);
     assert!(shown.iter().all(|r| r.lock == Lock::Server));
-}
-
-#[test]
-fn a_player_who_may_not_change_the_world_reads_open_rows_only() {
-    assert_eq!(read_only(row(Stage::Runtime, Lock::Open)).lock, Lock::File);
-    assert_eq!(
-        read_only(row(Stage::Runtime, Lock::Server)).lock,
-        Lock::Server
-    );
-    assert_eq!(read_only(row(Stage::Runtime, Lock::File)).lock, Lock::File);
 }
 
 #[test]

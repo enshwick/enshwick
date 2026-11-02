@@ -8,6 +8,15 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** mod settings show only behind each mod's Settings button on
+  the Mods screen: the player's own settings, then the world's. In a world
+  the game runs, single player or hosted, those are that world's; in the
+  main menu they are the settings new worlds start with, written to
+  `mod-configs/<id>.toml`. Joined to another's server, the page opens the
+  server's settings of the mod. The game's world settings show no mod rows
+  any more. A dedicated server still keeps a world setting changed before
+  its world loads in `mod-data/<id>/worlds/next.toml` for that world. Nothing
+  changes for mod authors (#878).
 - **Breaking:** the ABI version is a major and a minor, `abi::ABI_MAJOR`
   and `abi::ABI_MINOR`, starting at 5.0, instead of the layout hash
   `ABI_VERSION`. A field appended to a struct that starts with a `Header`, a
