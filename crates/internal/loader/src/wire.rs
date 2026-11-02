@@ -242,6 +242,89 @@ pub fn demo_position(bytes: &[u8]) -> Option<[i64; 3]> {
     }
 }
 
+/// A list the server sends a client in parts, gathered up to `CAP` items.
+///
+/// A list that goes past the bound is dropped, and parts are ignored until
+/// the next first part, so a server cannot grow a client's memory without
+/// end.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::Gathered;
+///
+/// let mut ids = Gathered::<u32, 3>::default();
+/// assert_eq!(ids.add(true, false, [1, 2]), None);
+/// assert_eq!(ids.add(false, true, [3]), Some(vec![1, 2, 3]));
+/// assert_eq!(ids.add(true, true, [1, 2, 3, 4]), None, "over the bound");
+/// ```
+#[derive(Debug)]
+pub struct Gathered<T, const CAP: usize> {
+    items: Vec<T>,
+    spoiled: bool,
+}
+
+impl<T, const CAP: usize> Default for Gathered<T, CAP> {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            spoiled: false,
+        }
+    }
+}
+
+impl<T, const CAP: usize> Gathered<T, CAP> {
+    /// Adds a part; the whole list once its last part came within the
+    /// bound, `None` before or for a list past it.
+    ///
+    /// # Examples
+    ///
+    /// See [`Gathered`].
+    pub fn add(
+        &mut self,
+        first: bool,
+        last: bool,
+        part: impl IntoIterator<Item = T>,
+    ) -> Option<Vec<T>> {
+        if first {
+            self.clear();
+        }
+        if !self.spoiled {
+            for item in part {
+                if self.items.len() == CAP {
+                    self.items = Vec::new();
+                    self.spoiled = true;
+                    break;
+                }
+                self.items.push(item);
+            }
+        }
+        if !last {
+            return None;
+        }
+        let spoiled = core::mem::take(&mut self.spoiled);
+        let items = core::mem::take(&mut self.items);
+        (!spoiled).then_some(items)
+    }
+
+    /// Drops what came so far.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::wire::Gathered;
+    ///
+    /// let mut ids = Gathered::<u32, 3>::default();
+    /// ids.add(true, false, [1]);
+    /// ids.clear();
+    /// assert_eq!(ids.add(false, true, [2]), Some(vec![2]));
+    /// ```
+    pub fn clear(&mut self) {
+        self.items.clear();
+        self.spoiled = false;
+    }
+}
+
 /// Probe number `id`: [`PROBE_SIZE`] bytes of filler that depends on the
 /// number, after the hash of that filler.
 ///
@@ -318,6 +401,21 @@ mod tests {
             cut.mods.split(',').all(|entry| entry.ends_with("@1.0.0")),
             "cut at an entry"
         );
+    }
+
+    #[test]
+    fn a_list_past_its_bound_is_dropped_until_the_next_first_part() {
+        let mut ids = Gathered::<u32, 4>::default();
+        assert_eq!(ids.add(true, false, [1, 2, 3]), None);
+        assert_eq!(ids.add(false, false, [4, 5]), None);
+        assert_eq!(ids.add(false, false, [6; 1000]), None);
+        assert!(ids.items.capacity() <= 4, "nothing kept past the bound");
+        assert_eq!(
+            ids.add(false, true, [7]),
+            None,
+            "a spoiled list never lands"
+        );
+        assert_eq!(ids.add(true, true, [1, 2, 3, 4]), Some(vec![1, 2, 3, 4]));
     }
 
     #[test]
