@@ -29,14 +29,31 @@ pub(crate) fn schema_entry(
     declared: &TokenStream,
     kind: Kind,
 ) -> syn::Result<TokenStream> {
-    let (Some(name), Some(export)) = (name, export) else {
+    let Some(export) = export else {
         return Ok(TokenStream::new());
     };
-    let full = name.value();
     if of.is_some() {
         return Err(syn::Error::new_spanned(
             export,
             "`export` marks the mod's own declaration; one with `of` is a dependency's",
+        ));
+    }
+    let Some(name) = name else {
+        return Err(syn::Error::new_spanned(
+            export,
+            "`export` needs the declaration's `name = \"<what>\"`",
+        ));
+    };
+    let full = name.value();
+    let local = full
+        .split_once(':')
+        .map_or(full.as_str(), |(_, local)| local);
+    if !declare::is_content_name(local) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!(
+                "`export`: the local name {local:?} is not 1 to 128 of [a-z0-9_./-], which the loader refuses"
+            ),
         ));
     }
     let schema = match kind {

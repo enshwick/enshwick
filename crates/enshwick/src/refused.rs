@@ -222,6 +222,26 @@
 /// }
 /// ```
 ///
+/// `export` on a name the loader would refuse, here in upper case:
+///
+/// ```compile_fail
+/// #[enshwick::event(name = "Sold", export)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Sold {
+///     pub item: u32,
+/// }
+/// ```
+///
+/// `export` without the declaration's name:
+///
+/// ```compile_fail
+/// #[enshwick::point(export, mode = Override, output = u32)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Price {
+///     pub item: u32,
+/// }
+/// ```
+///
 /// `export` on a dependency's declaration, which only its owner exports:
 ///
 /// ```compile_fail

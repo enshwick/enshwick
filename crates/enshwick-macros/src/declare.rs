@@ -271,7 +271,7 @@ pub(crate) fn full_name(
 
 /// Whether `name` is the name side of a content id: 1 to 128 of
 /// `[a-z0-9_./-]`, as the API's `content::is_id` reads it.
-fn is_content_name(name: &str) -> bool {
+pub(crate) fn is_content_name(name: &str) -> bool {
     (1..=128).contains(&name.len())
         && name.bytes().all(|b| {
             b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'/' | b'-')
