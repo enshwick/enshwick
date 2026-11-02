@@ -196,6 +196,30 @@ fn a_hook_whose_bytes_a_branch_of_its_function_jumps_into_is_refused() {
     assert_eq!(callable(original)(3), 3);
 }
 
+#[test]
+fn a_mid_function_hook_takes_a_loop_head_but_not_the_bytes_after_it() {
+    let looped = with_entry(&[
+        0x31, 0xc0, // xor eax, eax
+        0x90, // nop
+        0xff, 0xc0, // inc eax <- the loop's head
+        0x39, 0xc8, // cmp eax, ecx
+        0x72, 0xfa, // jb -6
+        0xc3, // ret
+    ]);
+    let at = |target: usize| {
+        prepare(&[Request {
+            target,
+            detour: (plus_hundred as Unary as *const ()).addr(),
+            inside: true,
+        }])
+        .remove(0)
+        .map(|pending| pending.span())
+    };
+    assert_eq!(at(looped + 2), Err(PrepareError::JumpedInto(looped + 7)));
+    // The back edge is among the moved bytes and lands on the jump's start.
+    assert_eq!(at(looped + 3), Ok((looped + 3, 6)));
+}
+
 /// Sets `flags[1]`, then waits for `flags[0]` and returns; `r8` points at
 /// the flags. Touches no stack, so any alignment does.
 const SPIN: [u8; 16] = [
