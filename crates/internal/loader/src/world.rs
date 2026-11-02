@@ -611,9 +611,18 @@ pub(crate) fn character_entities(loader: &Loader) -> Result<ArrayVec<u32, MAX_PL
 
 /// The character `entity` plays, as [`characters`] reads it.
 pub(crate) fn character_of(loader: &Loader, entity: Entity) -> Option<CharacterId> {
-    characters(loader)
-        .into_iter()
-        .find_map(|(e, character)| (e == entity).then_some(character))
+    character_in(&characters(loader), entity)
+}
+
+/// The character `entity` plays among `characters`, as [`characters`]
+/// lists them.
+pub(crate) fn character_in(
+    characters: &[(Entity, CharacterId)],
+    entity: Entity,
+) -> Option<CharacterId> {
+    characters
+        .iter()
+        .find_map(|&(e, character)| (e == entity).then_some(character))
 }
 
 /// The character of each player slot that names a character entity, a
@@ -626,7 +635,7 @@ pub(crate) fn characters(loader: &Loader) -> ArrayVec<(Entity, CharacterId), MAX
     let (Some(at), Ok(server)) = (
         layout
             .slot_character
-            .filter(|&at| at + 16 <= layout.slot_size),
+            .filter(|&at| at + size_of::<CharacterId>() <= layout.slot_size),
         reader(),
     ) else {
         return ArrayVec::new();
@@ -636,7 +645,6 @@ pub(crate) fn characters(loader: &Loader) -> ArrayVec<(Entity, CharacterId), MAX
     // `server.player_slot_character` offset holds the GUID inside a slot
     // (`at + 16 <= slot_size`, checked above).
     unsafe { guids(layout.player_slots(), server, at) }
-        .map(|(entity, guid)| (Entity(entity), CharacterId(guid)))
         .take(MAX_PLAYERS)
         .collect()
 }
@@ -671,15 +679,19 @@ unsafe fn occupied(slots: Slots, server: usize) -> impl Iterator<Item = (usize, 
 ///
 /// # Safety
 ///
-/// As [`occupied`]; each slot also holds a 16-byte GUID at `at`, with
-/// `at + 16 <= slots.size`.
-unsafe fn guids(slots: Slots, server: usize, at: usize) -> impl Iterator<Item = (u32, [u8; 16])> {
+/// As [`occupied`]; each slot also holds a [`CharacterId`] at `at`, with
+/// `at + size_of::<CharacterId>() <= slots.size`.
+unsafe fn guids(
+    slots: Slots,
+    server: usize,
+    at: usize,
+) -> impl Iterator<Item = (Entity, CharacterId)> {
     // SAFETY: the caller's guarantees are `occupied`'s.
     unsafe { occupied(slots, server) }.filter_map(move |(_, slot, _, entity)| {
         // SAFETY: `slot` is one of the caller's player slots, which holds the
-        // 16-byte GUID at `at`, inside the slot.
-        let guid: [u8; 16] = unsafe { read(slot, at) };
-        (guid != [0; 16]).then_some((entity, guid))
+        // GUID's bytes at `at`, inside the slot.
+        let guid: [u8; size_of::<CharacterId>()] = unsafe { read(slot, at) };
+        (guid != [0; size_of::<CharacterId>()]).then_some((Entity(entity), CharacterId(guid)))
     })
 }
 
@@ -864,8 +876,14 @@ mod tests {
         fill(2, 0, 0, 9, 0xc3);
         // SAFETY: `server` holds the three slots `slots` describes, owned by
         // this test, each with its GUID at `guid_at`, inside the slot.
-        let found: Vec<(u32, [u8; 16])> =
+        let found: Vec<(Entity, CharacterId)> =
             unsafe { guids(slots, server.as_ptr().expose_provenance(), guid_at) }.collect();
-        assert_eq!(found, [(7, [0xa1; 16]), (8, [0xb2; 16])]);
+        assert_eq!(
+            found,
+            [
+                (Entity(7), CharacterId([0xa1; 16])),
+                (Entity(8), CharacterId([0xb2; 16]))
+            ]
+        );
     }
 }

@@ -7,9 +7,10 @@ use enshwick::Entity;
 use enshwick::abi::Event;
 use rustc_hash::FxHashSet;
 
+use super::carried::set_aside_older;
 use super::{
     FILE, FINDING, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game, kind_of, scope,
-    serves, set_aside_older, take_destroyed, template_id, wanted,
+    serves, take_destroyed, template_id, wanted,
 };
 use crate::host::Loader;
 use crate::item_records::anchor::{Anchor, Pending};
@@ -197,11 +198,7 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
         .and_then(|ty| crate::entities::with_component(loader, ty).ok())
         .map(|places| places.iter().map(|p| p.entity.0).collect());
     let characters = crate::world::characters(loader);
-    let character_of = |root: Entity| {
-        characters
-            .iter()
-            .find_map(|&(e, character)| (e == root).then_some(character))
-    };
+    let character_of = |root| crate::world::character_in(&characters, root);
     let before = server.values.len();
     let mut anchorless = 0;
     let mut gone = Vec::new();
@@ -257,6 +254,31 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
     anchorless
 }
 
+/// Reads afresh where each value's item lies when a player in game carries
+/// it, at shutdown, so the next join finds it by its slot now. A value
+/// whose item does not read, or holds another item, keeps its anchor.
+fn refresh_carried(loader: &Loader, server: &mut Server) {
+    let characters = crate::world::characters(loader);
+    if characters.is_empty() || !game::readable(loader) {
+        return;
+    }
+    let character_of = |root| crate::world::character_in(&characters, root);
+    let mut changed = false;
+    for (&(kind, pide), record) in &mut server.values {
+        if scope(kind, record.anchor) != Some(Scope::Item) {
+            continue;
+        }
+        let Some(anchor @ Anchor::Carried { .. }) = game::held(loader, pide, character_of)
+            .filter(|held| held.item == record.item)
+            .and_then(|held| held.anchor)
+        else {
+            continue;
+        };
+        changed |= record.anchor.replace(anchor) != Some(anchor);
+    }
+    server.changed |= changed;
+}
+
 /// Writes the values when they changed, under their anchors as the world
 /// holds them now.
 fn save(loader: &Loader, after_game_save: bool) {
@@ -267,11 +289,15 @@ fn save(loader: &Loader, after_game_save: bool) {
         };
         // Before the first step the records wait as read, and the values set
         // since carry the anchors they were set with. At shutdown the world
-        // is being torn down: the anchors of its last save stand.
-        let anchorless = if FINDING.load(Ordering::Relaxed) || !after_game_save {
+        // is being torn down: the anchors of its last save stand, but for
+        // the items players carry, whose slots change all the time.
+        let anchorless = if FINDING.load(Ordering::Relaxed) {
             0
-        } else {
+        } else if after_game_save {
             refresh(loader, server)
+        } else {
+            refresh_carried(loader, server);
+            0
         };
         // A carried value set on a slot a record from an earlier leave still
         // waits on counts: written so, the next load would name it twice.

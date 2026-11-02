@@ -263,9 +263,10 @@ pub(crate) fn resolve(
 /// item lies in the same slot. One whose slot holds another item or none
 /// keeps waiting: the inventories may still fill, and a guess never sets a
 /// carried value aside. One whose item already has a value of the kind is
-/// aside, replaced; of two records on one slot the later, newer one counts
-/// and the earlier is aside, ambiguous. Every other record passes through
-/// untouched.
+/// aside, replaced. Records that name one slot twice are all aside,
+/// ambiguous: the file does not say which is newer, and the server sets an
+/// older one aside before it writes a newer one (`set_aside_older`). Every
+/// other record passes through untouched.
 pub(crate) fn resolve_carried(
     pending: Vec<Pending>,
     character: CharacterId,
@@ -280,19 +281,17 @@ pub(crate) fn resolve_carried(
         } if c == character && !record.aside => Some((link, slot)),
         _ => None,
     };
-    let mut newest: FxHashMap<(u32, Anchor), usize> = FxHashMap::default();
-    for (at, record) in pending.iter().enumerate() {
-        if mine(record).is_some() {
-            newest.insert((record.kind, record.anchor), at);
-        }
+    let mut uses: FxHashMap<(u32, Anchor), usize> = FxHashMap::default();
+    for record in pending.iter().filter(|record| mine(record).is_some()) {
+        *uses.entry((record.kind, record.anchor)).or_default() += 1;
     }
     let mut outcome = Outcome::default();
-    for (at, mut record) in pending.into_iter().enumerate() {
+    for mut record in pending {
         let Some((link, slot)) = mine(&record) else {
             outcome.left.push(record);
             continue;
         };
-        if newest[&(record.kind, record.anchor)] != at {
+        if uses[&(record.kind, record.anchor)] > 1 {
             outcome.ambiguous += 1;
             record.aside = true;
             outcome.left.push(record);
@@ -701,13 +700,11 @@ mod tests {
     }
 
     #[test]
-    fn of_two_records_on_one_carried_slot_the_newer_attaches_and_the_older_goes_aside() {
+    fn two_records_on_one_carried_slot_both_go_aside_and_neither_attaches() {
         let records = vec![carried(ANN, 0, 1, 77, 1), carried(ANN, 0, 1, 77, 2)];
         let outcome = resolve_carried(records, ANN, |_, _| Some((2001, 77)), |_, _| false);
-        let found: Vec<u8> = outcome.found.iter().map(|(_, _, r)| r.value[0]).collect();
-        assert_eq!(found, [2]);
-        assert_eq!(outcome.ambiguous, 1);
-        assert_eq!(outcome.left.len(), 1);
-        assert!(outcome.left[0].aside && outcome.left[0].value[0] == 1);
+        assert!(outcome.found.is_empty());
+        assert_eq!(outcome.ambiguous, 2);
+        assert!(outcome.left.iter().all(|r| r.aside));
     }
 }
