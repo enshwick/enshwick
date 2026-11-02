@@ -389,6 +389,9 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- A dedicated server where no mod subscribes to `WorldLoaded`,
+  `ShutdownStarted` or data that needs them now loads each world's settings
+  and record and raises `WorldLoaded` again (#916).
 - A mid-function hook is refused when the loader cannot move its first bytes
   cleanly: a branch of its own function lands inside them, or the encoder
   would split one of them into several. Relays and trampolines now carry

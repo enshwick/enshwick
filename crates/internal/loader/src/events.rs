@@ -1,7 +1,8 @@
 //! Game events on the server, raised from the loader's own links: tick, world
 //! loaded and saved, player joined and left, shutdown, building placed and
 //! removed. The post-step link is always made, since it also tells the world
-//! reads which thread is the game's; the others only when a mod subscribed to
+//! reads which thread is the game's, and so is the state link, which loads
+//! each world's settings and record; the others only when a mod subscribed to
 //! one of their events.
 //!
 //! A client runs the same server code on its `GameServer` thread while it
@@ -217,6 +218,13 @@ fn guarded(fuse: &Fuse, link: &str, work: impl FnOnce()) {
     let _ran = fuse.run(link, work);
 }
 
+/// Whether the loader's own work needs the link to `symbol` with no mod
+/// subscribed to its events: the step tells the world reads the game's
+/// thread, and the state change loads each world's settings and record.
+fn own_link(symbol: Symbol) -> bool {
+    symbol == pinned::server::POST_STEP || symbol == pinned::server::SET_STATE
+}
+
 /// Runs one part of the post-step work under a fuse of its own, so a panic
 /// in one feature's step leaves the others and the tick running.
 macro_rules! part {
@@ -275,11 +283,8 @@ pub(crate) fn link(loader: &'static Loader) {
     if LOADED.set((loader, offsets)).is_err() {
         return;
     }
-    // A client follows every hosted game's start and stop.
-    let client = loader.side == Side::CLIENT;
     let link = |events: &[Event], symbol: Symbol| -> Option<Target<'static>> {
-        let session = client && symbol == pinned::server::SET_STATE;
-        (events.is_empty() || wants(events) || session).then_some(Target::Pinned(symbol))
+        (wants(events) || own_link(symbol)).then_some(Target::Pinned(symbol))
     };
     let none = HookFlags::NONE;
     let feature = "server events";
@@ -801,6 +806,13 @@ mod tests {
             part!("test part after it", later += 1);
         }
         assert_eq!(later, 3);
+    }
+
+    #[test]
+    fn a_world_loads_its_settings_on_a_server_whose_mods_subscribe_to_nothing() {
+        assert!(own_link(pinned::server::SET_STATE));
+        assert!(own_link(pinned::server::POST_STEP));
+        assert!(!own_link(pinned::server::SAVE_STEP));
     }
 
     #[test]
