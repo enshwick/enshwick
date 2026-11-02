@@ -449,7 +449,7 @@ fn a_join_that_never_fills_stops_at_the_cap_and_its_records_keep_waiting() {
 }
 
 #[test]
-fn a_leaving_character_s_records_whose_slot_lost_their_item_go_aside_and_others_stay() {
+fn a_leaving_character_s_records_whose_slot_holds_another_item_go_aside_and_others_stay() {
     let record = |character, slot, aside| Pending {
         kind: 0,
         anchor: Anchor::Carried {
@@ -464,17 +464,23 @@ fn a_leaving_character_s_records_whose_slot_lost_their_item_go_aside_and_others_
     let mut pending = vec![
         record(0xa1, 1, false),
         record(0xa1, 2, false),
+        record(0xa1, 4, false),
         record(0xa1, 3, true),
         record(0xb2, 1, false),
     ];
-    // Slot 1 is empty now; slot 2 holds an item of the record's id.
-    let item_in = |_, slot| (slot == 2).then_some(77);
+    // Slot 1 holds another item, slot 2 one of the record's id, slot 4
+    // reads empty or not at all.
+    let item_in = |_, slot| match slot {
+        1 => Some(90),
+        2 => Some(77),
+        _ => None,
+    };
     assert_eq!(
         set_aside_waiting(&mut pending, CharacterId([0xa1; 16]), item_in),
         1
     );
     let aside: Vec<bool> = pending.iter().map(|r| r.aside).collect();
-    assert_eq!(aside, [true, false, true, false]);
+    assert_eq!(aside, [true, false, false, true, false]);
 }
 
 #[test]

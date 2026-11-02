@@ -254,9 +254,10 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
     anchorless
 }
 
-/// Reads afresh where each value's item lies when a player in game carries
-/// it, at shutdown, so the next join finds it by its slot now. A value
-/// whose item does not read, or holds another item, keeps its anchor.
+/// Reads afresh where each value's item lies while players are in game, at
+/// shutdown, so the next join or load finds it where it is now. A value
+/// whose item does not read, holds another item or lies in no place keeps
+/// its anchor.
 fn refresh_carried(loader: &Loader, server: &mut Server) {
     let characters = crate::world::characters(loader);
     if characters.is_empty() || !game::readable(loader) {
@@ -268,7 +269,7 @@ fn refresh_carried(loader: &Loader, server: &mut Server) {
         if scope(kind, record.anchor) != Some(Scope::Item) {
             continue;
         }
-        let Some(anchor @ Anchor::Carried { .. }) = game::held(loader, pide, character_of)
+        let Some(anchor) = game::held(loader, pide, character_of)
             .filter(|held| held.item == record.item)
             .and_then(|held| held.anchor)
         else {

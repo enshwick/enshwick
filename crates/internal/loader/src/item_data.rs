@@ -581,6 +581,14 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         let server = server.as_mut().ok_or(Status::MISSING)?;
         if value.is_empty() {
             server.values.remove(&(kind, pide));
+            // A carried value still waiting for this item goes with it.
+            if let Some(slot @ Anchor::Carried { .. }) = anchor {
+                let before = server.pending.len();
+                server.pending.retain(|record| {
+                    record.aside || (record.kind, record.anchor, record.check) != (kind, slot, item)
+                });
+                server.changed |= server.pending.len() != before;
+            }
         } else {
             let record = Record {
                 item,
