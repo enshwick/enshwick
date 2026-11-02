@@ -204,7 +204,7 @@ pub struct Head<'a> {
     pub id: &'a str,
 }
 
-impl<'a> Head<'a> {
+impl Head<'_> {
     /// The content and stat kinds its `exports = [..]` line names, each
     /// `<kind>:<name>`; empty without the line.
     ///
@@ -212,14 +212,17 @@ impl<'a> Head<'a> {
     ///
     /// See [`Head`].
     #[must_use]
-    pub fn exports(&self) -> Vec<&'a str> {
-        self.text
-            .lines()
-            .find_map(|line| line.strip_prefix("exports = [")?.strip_suffix(']'))
-            .map(|list| {
-                list.split(", ")
-                    .filter_map(|quoted| quoted.strip_prefix('"')?.strip_suffix('"'))
-                    .collect()
+    pub fn exports(&self) -> Vec<String> {
+        toml::from_str::<toml::Table>(self.text)
+            .ok()
+            .and_then(|head| match head.get("exports")? {
+                toml::Value::Array(names) => Some(
+                    names
+                        .iter()
+                        .filter_map(|name| name.as_str().map(str::to_owned))
+                        .collect(),
+                ),
+                _ => None,
             })
             .unwrap_or_default()
     }

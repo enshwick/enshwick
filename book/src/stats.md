@@ -51,8 +51,8 @@ mod with the same name share that text, so give them different names.
 
 `load.define_stat(id!("luck"), &def)` defines a kind of the mod's own during
 `init`, and a malformed name fails the build. `load.open_stat(id)` opens a
-built-in kind or another mod's: `Id::of(deps::<alias>::ID, "luck")` names a
-kind of a dependency. The dependency's
+built-in kind or another mod's: `deps::<alias>::stat("luck")` names a kind of
+a dependency. The dependency's
 [`exports`](concepts/loader-and-abi.md#what-other-mods-may-use) must list
 `stat:` with its name or the name it is a part of (`stat:charm` for
 `charm.fire`), or `open_stat` refuses it and the loader names what the

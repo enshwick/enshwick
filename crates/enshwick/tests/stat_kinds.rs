@@ -214,7 +214,7 @@ mod dependency {
     impl Mod for Reader {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let id = match KIND.get().copied().unwrap_or(Kind::Dependency("luck")) {
-                Kind::Dependency(name) => Id::of(deps::lockers::ID, name),
+                Kind::Dependency(name) => deps::lockers::stat(name),
                 Kind::Full(id) => Id::new(id),
             };
             let opened = load.open_stat(id)?;

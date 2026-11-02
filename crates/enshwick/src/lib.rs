@@ -456,7 +456,8 @@ pub use enshwick_macros::declare_mod;
 /// gives them: `deps!()` writes `pub mod deps`, one module per alias in
 /// `requires`, `after` and `recommends`.
 ///
-/// Each module holds `ID`, the dependency's mod id, and `id("<name>")`, its
+/// Each module holds `ID`, the dependency's mod id, `stat("<name>")`, its
+/// stat kind for [`Load::open_stat`], which checks a `stat:` export, and `id("<name>")`, its
 /// content id `<dependency>:<name>`, once the loader lets this mod name it:
 /// the dependency's `exports` list `content:<name>` or the name it is a part of. A
 /// required dependency's `id` returns [`Off`] for a name it does not export.
