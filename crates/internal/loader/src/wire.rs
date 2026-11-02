@@ -1,15 +1,13 @@
-//! The wire format of the messages between a join mod's server part and its
-//! client part: frames in chat lines, and the protocol's own control
-//! messages.
+//! The wire format of the own channel between server and clients.
 //!
-//! A frame is base64 of a small header and up to one line's worth of the
-//! message; a message of up to [`MAX_MESSAGE`] bytes takes up to
-//! [`MAX_PARTS`] frames. Everything here reads what another player's game
-//! sent, so it never trusts a size or a count.
+//! The envelope of each message, the reliable link that carries it, and the
+//! protocol's own control messages.
+//!
+//! Everything here reads what another player's game sent, so it never
+//! trusts a size or a count.
 
 mod delivery;
 mod envelope;
-mod frame;
 mod link;
 mod peer;
 
@@ -18,9 +16,6 @@ pub use envelope::{
     ENVELOPE, MAX_HEADER, MAX_PAYLOAD, MAX_SEALED, ReadMessageError, is_executable, open, seal,
     sealed_size,
 };
-#[cfg(all(windows, test))]
-pub(crate) use frame::Partial;
-pub use frame::{Frame, assemble, frames, parse};
 pub use link::{
     BACKLOG, FIRST_TIMEOUT, LAST_TIMEOUT, LINK, Link, MAX_LINK_HEADER, QueueMessageError,
     ReadPacketError, SILENCE, WINDOW,
@@ -32,19 +27,12 @@ use enshwick::i18n::Language;
 use crate::admission::Hello;
 use crate::remote::Message;
 
-/// The prefix of a frame line, both ways.
-pub const PREFIX: &str = "/enshwick-net ";
-/// The version of the frame protocol.
-pub const PROTOCOL: u8 = 2;
+/// The version of the control messages, their second byte.
+pub const PROTOCOL: u8 = 3;
 pub use enshwick::net::MAX_MESSAGE;
-/// The most frames one message takes.
-pub const MAX_PARTS: usize = 8;
-/// Message bytes in one frame: a line holds 1024 bytes, less the prefix,
-/// as base64 of the header and the part.
-pub const PART_BYTES: usize = 720;
 /// The longest control message, in bytes, with its kind and version.
-pub const MAX_CONTROL: usize = PART_BYTES * MAX_PARTS - 2;
-/// The channel of the protocol's own frames.
+pub const MAX_CONTROL: usize = MAX_PAYLOAD;
+/// The channel of the protocol's own messages.
 pub const CONTROL: u32 = 0;
 /// A control message from a client: its hello.
 pub const HELLO: u8 = 1;
@@ -298,43 +286,13 @@ fn probe_hash(bytes: &[u8]) -> u64 {
         (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
     })
 }
-
-/// Whether `text` is a frame line, which no chat shows.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_loader::wire::is_frame;
-///
-/// assert!(is_frame(b"/enshwick-net AQ"));
-/// assert!(!is_frame(b"hello"));
-/// ```
-#[must_use]
-pub fn is_frame(text: &[u8]) -> bool {
-    text.starts_with(PREFIX.as_bytes())
-}
-
-/// The frame a frame line carries, after its prefix.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_loader::wire::frame_body;
-///
-/// assert_eq!(frame_body("/enshwick-net AQ "), Some("AQ"));
-/// assert_eq!(frame_body("hello"), None);
-/// ```
-#[must_use]
-pub fn frame_body(line: &str) -> Option<&str> {
-    line.strip_prefix(PREFIX).map(str::trim)
-}
-
+#[cfg(test)]
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn a_hello_names_the_join_mods_within_its_frames() {
+    fn a_hello_names_the_join_mods_within_a_control_message() {
         let said = read_hello(&hello(
             "you.trading-post@0.3.0,zones@0.1.0",
             9,
@@ -354,7 +312,7 @@ mod tests {
         let many: Vec<String> = (0..1000).map(|i| format!("mod-{i:04}@1.0.0")).collect();
         let long = hello(&many.join(","), 0, Language::DE_DE);
         assert_eq!(read_hello(&long).unwrap().language, Some(Language::DE_DE));
-        assert!(frames(CONTROL, 1, &long).is_some());
+        assert!(long.len() <= MAX_CONTROL);
         let cut = read_hello(&long).unwrap();
         assert!(!cut.complete, "a cut list says so");
         assert!(

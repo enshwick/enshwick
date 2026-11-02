@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Channel messages travel on the loader's own channel of the game's
+  connection instead of hidden chat lines: reliable and in order, and
+  refused when they start like executable code. `SendError::OverRate` also
+  means the link to the peer holds too much. A client and server must both
+  run this loader to talk (#PR).
 - **Breaking:** mod settings show only behind each mod's Settings button on
   the Mods screen: the player's own settings, then the world's. In a world
   the game runs, single player or hosted, those are that world's; in the

@@ -1,20 +1,17 @@
 //! Messages between a mod's server part and its client part.
 //!
 //! A join mod opens a channel by name and version during `init`, on both
-//! sides; the loader carries its messages in chat lines no player sees, and
-//! only to clients that run Enshwick, so a vanilla client never gets one.
-//! A message is a value of the channel's type, encoded with `postcard`, of
-//! at most [`MAX_MESSAGE`] bytes; each side sends at most about twenty
-//! messages a second to each peer and drops what is over.
-//!
-//! Delivery is best effort: nothing confirms a message, and one lost on the
-//! way does not come again. Send whole values, not changes, and send
-//! important state again once the peer is ready.
+//! sides; the loader carries its messages on its own channel of the game's
+//! connection, reliable and in order, and only to clients that run
+//! Enshwick, so a vanilla client never gets one. A message is a value of
+//! the channel's type, encoded with `postcard`, of at most [`MAX_MESSAGE`]
+//! bytes; each side sends at most about twenty messages a second to each
+//! peer and refuses what is over.
 //!
 //! On the server the handler runs on the game thread, with the player's
-//! account key; on a client on the thread that takes the server's chat. A
-//! client that hosts a game is both: its server part talks to the clients,
-//! itself among them, and its client part to its own server.
+//! account key; on a client on the thread that sends its chat. A client
+//! that hosts a game is both: its server part talks to the clients, itself
+//! among them, and its client part to its own server.
 //!
 //! # Examples
 //!
@@ -103,8 +100,8 @@ pub enum SendError {
     /// who left, or a server that has not answered yet.
     #[error("the peer takes no messages now")]
     NotReady,
-    /// The peer's rate is spent for now, or too many lines wait on the
-    /// server.
+    /// The peer's rate is spent for now, or the link to the peer holds too
+    /// much.
     #[error("over the rate of messages to the peer")]
     OverRate,
     /// The message does not encode.

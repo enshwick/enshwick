@@ -1,5 +1,5 @@
 //! Chat on the server, the dedicated one or the one a client hosts: lines
-//! mods send, and the links that carry mod messages.
+//! mods send.
 //!
 //! The loader links the game's chat post, which every line a player's
 //! client sends passes through on the game thread. Lines mods send from any
@@ -8,12 +8,6 @@
 //! connection; once a line reaches another connection all the same, lines
 //! for one player stay off. What players type, `/` lines included, the game posts as it
 //! would without the loader.
-//!
-//! The same links carry mod messages (see the net module): the server takes
-//! a client's frame lines out of the chat, and a client takes the server's
-//! frame lines where it posts what the server sent, before its chat shows
-//! them, and puts its own frames into its chat queue before the game sends
-//! it.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -29,9 +23,6 @@ use crate::wire::{Drops, Outbox, strays};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    pinned::chat::CLIENT_QUEUE.id(),
-    pinned::chat::CLIENT_SEND.id(),
-    pinned::chat::CLIENT_STORE.id(),
     pinned::chat::HANDLE_SLOT.id(),
     pinned::chat::LINE_OVERHEAD.id(),
     pinned::chat::MARK_DELIVERED.id(),
@@ -39,8 +30,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::chat::NODE_DELIVERED.id(),
     pinned::chat::POST.id(),
     pinned::chat::POST_RETURN.id(),
-    pinned::chat::RECEIVE_RETURN_A.id(),
-    pinned::chat::RECEIVE_RETURN_B.id(),
     pinned::chat::REPLY_TYPE.id(),
     pinned::chat::STORE_SLOT_COUNT.id(),
     pinned::chat::STORE_SLOT_SIZE.id(),
@@ -80,9 +69,8 @@ struct Line {
 /// The game functions and offsets chat uses, from the build table.
 #[derive(Debug, Clone, Copy)]
 struct Layout {
+    /// Where the server posts what a player typed.
     post_return: u64,
-    /// Where a client posts what the server sent; 0 on the server.
-    receive_returns: [u64; 2],
     mark: MarkFn,
     store: usize,
     slots: usize,
@@ -141,32 +129,11 @@ type PostFn = unsafe extern "system" fn(
     extra: *const [u64; 2],
 ) -> *mut u8;
 type MarkFn = unsafe extern "system" fn(store: *mut u8, node: *mut u8, slot: u32, bytes: u32);
-type ClientSendFn = unsafe extern "system" fn(client: *mut u8) -> u64;
-type ClientQueueFn = unsafe extern "system" fn(
-    out: *mut u8,
-    store: *mut u8,
-    kind: u8,
-    text: *const [usize; 2],
-    loca1: u32,
-    loca2: u32,
-) -> *mut u8;
-
-/// The client's own chat queue, from the build table.
-#[derive(Debug, Clone, Copy)]
-struct ClientLayout {
-    queue: ClientQueueFn,
-    store: usize,
-}
 
 static LOADED: OnceLock<(&'static Loader, Layout)> = OnceLock::new();
 // SAFETY: `PostFn` is the signature of the game's `chat.post`, and `link`
 // uses this slot only as the `next` of `post`, its link on that function.
 static POST_NEXT: Next<PostFn> = unsafe { Next::new() };
-// SAFETY: `ClientSendFn` is the signature of the game's `chat.client_send`,
-// and `link_client` uses this slot only as the `next` of `client_send`, its
-// link on that function.
-static CLIENT_SEND_NEXT: Next<ClientSendFn> = unsafe { Next::new() };
-static CLIENT: OnceLock<ClientLayout> = OnceLock::new();
 static OUTBOX: Mutex<Outbox<Line>> = Mutex::new(Outbox::new(MAX_WAITING));
 /// Set while the outbox holds anything, so an idle step takes no lock.
 static WAITING: AtomicBool = AtomicBool::new(false);
@@ -197,12 +164,6 @@ pub(crate) fn delivery() -> (u64, u64) {
     (DELIVERY.dropped.total(), DELIVERY.strayed.total())
 }
 
-/// Whether lines for one player still go: no such line has reached
-/// another player.
-pub(crate) fn one_player_on() -> bool {
-    !DELIVERY.one_player_off.load(Ordering::Relaxed)
-}
-
 /// Queues `text` for the player with account key `to`, or for everyone.
 pub(crate) fn send(to: u64, text: &str) -> Status {
     if LOADED.get().is_none() {
@@ -211,30 +172,6 @@ pub(crate) fn send(to: u64, text: &str) -> Status {
     let to = if to == 0 { To::All } else { To::Key(to) };
     queue(to, text);
     Status::OK
-}
-
-/// Queues the frame lines of one message, `lines`, for the player with
-/// account key `to`, all of them or none: the one way a line a client takes
-/// as the server's frame leaves the server. False when none were queued;
-/// a full queue, or lines for one player turned off, counts them as
-/// dropped.
-pub(crate) fn send_frames(to: u64, lines: &[String]) -> bool {
-    if LOADED.get().is_none() || to == 0 || lines.is_empty() {
-        return false;
-    }
-    let queued = !DELIVERY.one_player_off.load(Ordering::Relaxed) && {
-        let mut outbox = OUTBOX.relock();
-        let queued = outbox.push_whole(lines.iter().map(|text| Line {
-            to: To::Key(to),
-            text: text.clone(),
-        }));
-        WAITING.store(!outbox.is_empty(), Ordering::Release);
-        queued
-    };
-    if !queued {
-        dropped(lines.len());
-    }
-    queued
 }
 
 /// Counts `count` lines for one player dropped, and logs the first and every
@@ -270,9 +207,7 @@ fn cut(text: &str, max: usize) -> &str {
     &text[..end]
 }
 
-/// Queues the lines of `text`, a mod's message, leaving out any
-/// a client would take for a frame of the server's: such a line may carry
-/// what a player typed.
+/// Queues the lines of `text`, a mod's message.
 fn queue(to: To, text: &str) {
     let mut outbox = OUTBOX.relock();
     for line in replied(text) {
@@ -287,11 +222,11 @@ fn queue(to: To, text: &str) {
     WAITING.store(!outbox.is_empty(), Ordering::Release);
 }
 
-/// The lines of `text` the chat shows: none empty, none a frame, at most
+/// The lines of `text` the chat shows: none empty, at most
 /// [`LINES_PER_REPLY`].
 fn replied(text: &str) -> impl Iterator<Item = &str> {
     text.lines()
-        .filter(|l| !l.trim().is_empty() && !crate::net::is_frame(l.as_bytes()))
+        .filter(|l| !l.trim().is_empty())
         .take(LINES_PER_REPLY)
 }
 
@@ -309,10 +244,6 @@ pub(crate) fn link(loader: &'static Loader) {
         let mark = usize::try_from(symbol(pinned::chat::MARK_DELIVERED)?).ok()?;
         Some(Layout {
             post_return: symbol(pinned::chat::POST_RETURN)?,
-            receive_returns: [
-                symbol(pinned::chat::RECEIVE_RETURN_A).unwrap_or(0),
-                symbol(pinned::chat::RECEIVE_RETURN_B).unwrap_or(0),
-            ],
             // SAFETY: `mark` is the build table's `chat.mark_delivered` in
             // the loaded executable, the game function `MarkFn` types.
             mark: unsafe { core::mem::transmute::<usize, MarkFn>(mark) },
@@ -347,126 +278,29 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     // Linked first: without the post, mods' lines must stay refused.
     let target = Target::Pinned(pinned::chat::POST);
-    let flags = HookFlags::CALLER_FRAME;
-    if !loader.link_feature("chat lines", target, &POST_NEXT, post, flags)
-        || LOADED.set((loader, layout)).is_err()
+    if !loader.link_feature(
+        "chat lines",
+        target,
+        &POST_NEXT,
+        post,
+        HookFlags::CALLER_FRAME,
+    ) || LOADED.set((loader, layout)).is_err()
     {
         return;
     }
-    crate::log!(INFO, "chat lines and mod messages on");
-    if loader.side == enshwick::abi::Side::CLIENT {
-        link_client(loader);
-    }
+    crate::log!(INFO, "chat lines on");
 }
 
-/// Links the client's chat send, so its own frames go with what it sends.
-fn link_client(loader: &'static Loader) {
-    let (Some(queue), Some(store)) = (
-        loader.address(pinned::chat::CLIENT_QUEUE),
-        loader.offset(pinned::chat::CLIENT_STORE),
-    ) else {
-        return;
-    };
-    let Ok(queue) = usize::try_from(queue) else {
-        return;
-    };
-    let _first = CLIENT.set(ClientLayout {
-        // SAFETY: `queue` is the build table's `chat.client_queue` in the
-        // loaded executable, the game function `ClientQueueFn` types.
-        queue: unsafe { core::mem::transmute::<usize, ClientQueueFn>(queue) },
-        store,
-    });
-    loader.link_feature(
-        "mod messages to the server",
-        Target::Pinned(pinned::chat::CLIENT_SEND),
-        &CLIENT_SEND_NEXT,
-        client_send as ClientSendFn,
-        HookFlags::NONE,
-    );
-}
-
-/// The switch of the chat lines and mod messages.
-static CHAT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat lines and mod messages");
-/// The switch of the own channel on a client.
-static CARRIER_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("the own channel");
-
-/// The loader's link on the client's chat send: queues the client's frame
-/// lines before the game sends.
-///
-/// # Safety
-///
-/// - Called only by the game through the chain on `chat.client_send`, on the
-///   thread that sends the client's chat, with the game client or null.
-unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
-    let _caught = CHAT_FUSE.run("the client send", || {
-        // SAFETY: `client` is the game's own argument, null or the game
-        // client, on the thread that sends its chat, by this function's
-        // `# Safety`.
-        unsafe { queue_frames(client) };
-    });
-    let _carried = CARRIER_FUSE.run("the own channel", || {
-        // SAFETY: `client` is the game's own argument, null or the game
-        // client, on the thread that sends its chat.
-        unsafe { crate::carrier::client_frame(client, std::time::Instant::now()) };
-    });
-    // SAFETY: `CLIENT_SEND_NEXT` holds the rest of `chat.client_send`'s chain
-    // while this detour runs, and `client` is the game's own argument, passed
-    // on unchanged.
-    unsafe { CLIENT_SEND_NEXT.get()(client) }
-}
-
-/// Puts the client's waiting frame lines into its chat queue.
-///
-/// # Safety
-///
-/// - `client` is null or the game client, whose chat store pointer sits at
-///   `chat.client_store`.
-/// - Called on the thread that sends the client's chat.
-unsafe fn queue_frames(client: *mut u8) {
-    let Some(layout) = CLIENT.get() else {
-        return;
-    };
-    if client.is_null() {
-        return;
-    }
-    let lines = crate::net::client_lines();
-    if lines.is_empty() {
-        return;
-    }
-    // SAFETY: `client` is non-null, checked by the guard before it, and is the
-    // game client by this function's `# Safety`; its chat store pointer sits at
-    // the table's `chat.client_store`.
-    let store: usize = unsafe { crate::memory::read(client.expose_provenance(), layout.store) };
-    if store == 0 {
-        return;
-    }
-    for line in lines {
-        let span = [line.as_ptr().expose_provenance(), line.len()];
-        let mut result = [0u8; 16];
-        // SAFETY: `layout.queue` is the table's `chat.client_queue`, on the
-        // non-zero chat store checked by the guard before it, on the thread
-        // that sends the client's chat by this function's `# Safety`; `result`
-        // is 16 writable bytes, and `span` names the live `line`, which the
-        // game copies before the call returns.
-        unsafe {
-            (layout.queue)(
-                result.as_mut_ptr(),
-                core::ptr::with_exposed_provenance_mut(store),
-                0,
-                &raw const span,
-                0,
-                0,
-            );
-        };
-    }
-}
+/// The switch of the chat lines and the chat mute.
+static CHAT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat lines");
 
 fn next() -> Option<PostFn> {
     POST_NEXT.wired()
 }
 
-/// The loader's link on the game's chat post: takes frame lines out of the
-/// chat and hands them to the net.
+/// The loader's link on the game's chat post: drops what a muted player
+/// typed and hands every other post on; it gives the queue's drain the rest
+/// of the chain to post through.
 ///
 /// # Safety
 ///
@@ -484,34 +318,6 @@ unsafe extern "system" fn post(
     hash: u64,
     extra: *const [u64; 2],
 ) -> *mut u8 {
-    let frame = CHAT_FUSE.run("the frame check", || {
-        // SAFETY: `out` and `text` are the game's own arguments at the entry
-        // of `chat.post`, by this function's `# Safety`.
-        unsafe { server_frame(out, kind, text) }
-    });
-    if frame.unwrap_or(false) {
-        // SAFETY: `server_frame` returned true only for a non-null `out`, a
-        // result record of at least 8 writable bytes by this function's
-        // `# Safety`.
-        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
-        return out;
-    }
-    let caught = CHAT_FUSE.run("the client frame check", || {
-        // SAFETY: `out` and `text` are the game's own arguments at the entry
-        // of `chat.post`, by this function's `# Safety`.
-        unsafe { posted_frame(out, kind, text) }
-    });
-    if let Some(Some(frame)) = caught {
-        // SAFETY: `posted_frame` returned a frame only for a non-null `out`, a
-        // result record of at least 8 writable bytes by this function's
-        // `# Safety`.
-        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
-        let _outcome = CHAT_FUSE.run("a client frame", || {
-            crate::net::server_received(hash, &frame);
-        });
-        let _outcome = CHAT_FUSE.run("the chat queue", drain);
-        return out;
-    }
     let muted = CHAT_FUSE.run("the chat mute check", || {
         // SAFETY: `out` is the game's own argument at the entry of
         // `chat.post`, by this function's `# Safety`.
@@ -531,91 +337,6 @@ unsafe extern "system" fn post(
         Some(next) => unsafe { next(out, store, kind, text, loca1, loca2, handle, hash, extra) },
         None => out,
     }
-}
-
-/// Whether the client is posting a frame line the server sent, which it
-/// then hands to the net instead of the chat.
-///
-/// # Safety
-///
-/// - Called at the entry of the loader's link on `chat.post`, on the game's
-///   calling thread.
-/// - `text` is null or the game's span of pointer and byte length, its bytes
-///   readable and unchanged for the call.
-unsafe fn server_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> bool {
-    let Some((loader, layout)) = LOADED.get() else {
-        return false;
-    };
-    if kind != layout.reply_type
-        || out.is_null()
-        || text.is_null()
-        || layout.receive_returns[0] == 0
-    {
-        return false;
-    }
-    let frame = (loader.caller_frame)();
-    if frame.rsp == 0 {
-        return false;
-    }
-    // SAFETY: `frame.rsp` is non-zero, checked by the guard before it, and
-    // `caller_frame` took the frame at the entry of this chain on this thread,
-    // linked with `HookFlags::CALLER_FRAME`, so it points at the live return
-    // address.
-    let caller = unsafe { frame.return_address() };
-    if !layout.receive_returns.contains(&caller) {
-        return false;
-    }
-    // SAFETY: `text` is non-null, checked by the guard before it, and is the
-    // game's span of two words, readable for the call by this function's
-    // `# Safety`.
-    let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
-    if ptr == 0 || len == 0 || len > layout.max_text {
-        return false;
-    }
-    let mut bytes = vec![0; len];
-    // SAFETY: `ptr` is non-null, checked by the guard before it, and the
-    // span's `len` bytes are readable and unchanged for the call by this
-    // function's `# Safety`.
-    unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes) };
-    if !crate::net::is_frame(&bytes) {
-        return false;
-    }
-    core::str::from_utf8(&bytes).is_ok_and(crate::net::client_received)
-}
-
-/// The frame when the game posts a frame line from a player's client.
-///
-/// # Safety
-///
-/// - Called at the entry of the loader's link on `chat.post`, on the game's
-///   calling thread.
-/// - `text` is null or the game's span of pointer and byte length, its bytes
-///   readable and unchanged for the call.
-unsafe fn posted_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> Option<String> {
-    let (loader, layout) = LOADED.get()?;
-    if kind != 0 || out.is_null() || text.is_null() {
-        return None;
-    }
-    let frame = (loader.caller_frame)();
-    // SAFETY: `frame.rsp` is non-zero, checked first, and `caller_frame`
-    // took the frame at the entry of this chain on this thread, linked with
-    // `HookFlags::CALLER_FRAME`, so it points at the live return address.
-    if frame.rsp == 0 || unsafe { frame.return_address() } != layout.post_return {
-        return None;
-    }
-    // SAFETY: `text` is non-null, checked by the guard before it, and is the
-    // game's span of two words, readable for the call by this function's
-    // `# Safety`.
-    let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
-    if ptr == 0 || len == 0 || len > layout.max_text {
-        return None;
-    }
-    let mut bytes = vec![0; len];
-    // SAFETY: `ptr` is non-null, checked by the guard before it, and the
-    // span's `len` bytes are readable and unchanged for the call by this
-    // function's `# Safety`.
-    unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes) };
-    client_frame(&bytes).map(str::to_owned)
 }
 
 /// Whether the game posts a line the player of account `key` typed while
@@ -640,14 +361,6 @@ unsafe fn muted_line(out: *mut u8, kind: u8, key: u64) -> bool {
         return false;
     }
     crate::chat_mute::drops(loader, key)
-}
-
-/// The frame a line from a player's client carries, which the server takes
-/// out of the chat; `None` for every other line, `/` lines included.
-fn client_frame(line: &[u8]) -> Option<&str> {
-    core::str::from_utf8(line)
-        .ok()
-        .and_then(crate::net::frame_body)
 }
 
 /// Drops the lines waiting for a hosted game that stops.
@@ -854,16 +567,8 @@ mod tests {
     }
 
     #[test]
-    fn a_typed_slash_line_stays_in_the_chat_and_only_frames_are_taken() {
-        assert_eq!(client_frame(b"/safe list"), None);
-        assert_eq!(client_frame(b"/enshwick status"), None);
-        assert_eq!(client_frame(b"hello"), None);
-        assert_eq!(client_frame(b"/enshwick-net AQAB"), Some("AQAB"));
-    }
-
-    #[test]
-    fn no_reply_or_mod_line_passes_for_a_frame() {
-        let text = "said: hi\n/enshwick-net AQAAAAAAAAAAAQE\n\n/enshwick ok";
+    fn a_reply_keeps_its_lines_that_are_not_empty_up_to_a_bound() {
+        let text = "said: hi\n\n  \n/enshwick ok";
         assert_eq!(
             replied(text).collect::<Vec<_>>(),
             ["said: hi", "/enshwick ok"]

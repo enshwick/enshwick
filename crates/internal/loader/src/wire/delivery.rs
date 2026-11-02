@@ -1,6 +1,6 @@
-//! What the frame lines need on their way out: a bounded queue that takes a
-//! message whole or not at all, a count of what was dropped, and the check
-//! that a line for one player reached no one else.
+//! What mods' chat lines need on their way out: a bounded queue that takes
+//! a message whole or not at all, a count of what was dropped, and the
+//! check that a line for one player reached no one else.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};

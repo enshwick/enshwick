@@ -1,13 +1,7 @@
-//! A peer's messages on their way in, and its rate.
-#![expect(
-    clippy::disallowed_types,
-    reason = "the partial messages are keyed by ids the peer sends, so they keep std's keyed hasher"
-)]
+//! A peer's rate, language and join data.
 
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use super::frame::Partial;
 use super::{BURST, RATE};
 
 /// How long after a peer got the data a hello of its brings it again.
@@ -19,7 +13,7 @@ use super::{BURST, RATE};
 /// again sooner than this gets nothing new.
 pub const DATA_AGAIN: Duration = Duration::from_secs(15);
 
-/// A peer's messages on their way in, and its rate.
+/// A peer's rate, language and join data.
 ///
 /// # Examples
 ///
@@ -31,9 +25,6 @@ pub const DATA_AGAIN: Duration = Duration::from_secs(15);
 /// ```
 #[derive(Debug)]
 pub struct Peer {
-    /// Keyed by channel and message id as the peer sends them, so the map
-    /// keeps std's keyed hasher.
-    pub(crate) partial: HashMap<(u32, u16), Partial>,
     /// Messages the peer may still send now.
     pub(crate) tokens: f64,
     seen: Instant,
@@ -77,7 +68,6 @@ impl Peer {
     #[must_use]
     pub fn with_tokens(tokens: f64) -> Self {
         Self {
-            partial: HashMap::new(),
             tokens,
             seen: Instant::now(),
             language: None,

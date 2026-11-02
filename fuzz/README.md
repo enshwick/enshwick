@@ -8,7 +8,6 @@ built by cargo-fuzz with the nightly compiler and AddressSanitizer.
 | --- | --- |
 | `channel_messages` | a message from another player's game on Enshwick's own socket, and the control messages it carries |
 | `link_packets` | packets from another player's game, read by the reliable link, with its answers |
-| `wire_frames` | frame lines from another player's game, put back together, and the control messages they carry |
 | `remote_message` | a settings or actions message from another player |
 | `remote_edit` | a remote settings edit, applied to a settings file |
 | `join_lists` | the mod lists in a server's advertisement and a player's hello |
