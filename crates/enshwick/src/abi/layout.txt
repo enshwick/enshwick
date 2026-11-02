@@ -1,4 +1,4 @@
-abi 5.0
+abi 5.1
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 144 align 8 born 144
@@ -280,7 +280,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1432 align 8
+HostApi size 1448 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -459,6 +459,8 @@ HostApi size 1432 align 8
     request_base_limits at 1408 size 8 type extern "system" fn(ModHandle, u32, u32) -> Status
     map_marker_types at 1416 size 8 type extern "system" fn(ModHandle, *mut MapMarkerTypeInfo, u32, u32, *mut u32) -> Status
     use_content at 1424 size 8 type extern "system" fn(ModHandle, Str) -> Status
+    chat_mute_set at 1432 size 8 type extern "system" fn(ModHandle, PlayerKey, u8) -> Status
+    chat_mute_has at 1440 size 8 type extern "system" fn(ModHandle, PlayerKey, *mut u8) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32

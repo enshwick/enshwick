@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 0
+#define ENSHWICK_ABI_MINOR 1
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -4264,6 +4264,28 @@ typedef struct EnshwickHostApi {
   // other, with the id and the owner's exports logged;
   // `Status::BAD_ARGS` for a malformed id. Any thread.
   EnshwickStatus (*use_content)(EnshwickModHandle me, struct EnshwickStr id);
+  // Mutes `account` in chat when `muted` is 1, or lifts its mute when 0.
+  // The server drops every line the account's player types before any
+  // other player reads it, and tells that player with one of the game's
+  // notices at most every 30 seconds; lines mods send and mod messages
+  // pass. The mutes are the file `mod-data/enshwick/muted.txt`, written
+  // at once and read again at every start. `Status::OK` also when the
+  // list already says so; `Status::BAD_ARGS` for account 0 or `muted`
+  // above 1; `Status::REFUSED` for a mute of an administrator online
+  // or of a hosted game's host, whose lines pass even when muted before,
+  // and when the file is not written;
+  // `Status::MISSING` outside a server, the dedicated one or the one a
+  // client hosts. Any thread, also while another call changes the list:
+  // changes take turns and the file is replaced whole. A panic in the
+  // loader returns `Status::REFUSED`.
+  EnshwickStatus (*chat_mute_set)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t muted);
+  // Writes 1 to `muted` when `account` is muted in chat, 0 when not.
+  // `muted` is the caller's, writable for one byte for the call, and
+  // written only on `Status::OK`. `Status::BAD_ARGS` for account 0
+  // or a null `muted`; `Status::MISSING` outside a server, the
+  // dedicated one or the one a client hosts. Any thread. A panic in the
+  // loader returns `Status::REFUSED`.
+  EnshwickStatus (*chat_mute_has)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t *muted);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

@@ -261,6 +261,7 @@ fn start_services(loader: &'static Loader) {
         pages(loader).into_iter().collect(),
     );
     crate::allowlist::start(loader, crate::admission::can_kick());
+    crate::chat_mute::start(loader);
 }
 
 /// Starts what only a dedicated server runs: the advertised join mods and

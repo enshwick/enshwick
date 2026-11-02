@@ -155,6 +155,78 @@ mod tests {
     }
 
     #[test]
+    fn players_are_muted_and_heard_again_but_never_administrators_or_the_host() {
+        let loader = enshwick::test::FakeHost::new()
+            .world()
+            .host_key(enshwick::PlayerKey::new(9))
+            .player(player(10, 7, 0))
+            .player(player(11, 8, PlayerInfo::CAN_KICK_BAN))
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = *WORLD.get().unwrap();
+        let key = enshwick::PlayerKey::new;
+
+        assert_eq!(world.muted(key(7)), Ok(false));
+        assert_eq!(world.set_muted(key(7), true), Ok(()));
+        assert_eq!(world.set_muted(key(7), true), Ok(()));
+        let away = std::thread::spawn(move || world.set_muted(key(99), true))
+            .join()
+            .unwrap();
+        assert_eq!(away, Ok(()), "an account not online is muted too");
+        assert_eq!(loader.muted(), [key(7), key(99)]);
+        assert_eq!(world.muted(key(7)), Ok(true));
+
+        assert_eq!(world.set_muted(key(8), true), Err(WorldError::Refused));
+        assert_eq!(world.set_muted(key(9), true), Err(WorldError::Refused));
+        assert_eq!(world.set_muted(key(0), true), Err(WorldError::Refused));
+        assert_eq!(world.muted(key(0)), Err(WorldError::Refused));
+
+        assert_eq!(world.set_muted(key(7), false), Ok(()));
+        assert_eq!(world.set_muted(key(7), false), Ok(()));
+        assert_eq!(world.set_muted(key(8), false), Ok(()));
+        assert_eq!(loader.muted(), [key(99)]);
+    }
+
+    #[test]
+    fn chat_mutes_are_missing_on_a_client_that_hosts_no_game() {
+        let loader = enshwick::test::FakeHost::new()
+            .side(enshwick::abi::Side::CLIENT)
+            .world()
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = *WORLD.get().unwrap();
+        let key = enshwick::PlayerKey::new;
+
+        assert_eq!(world.set_muted(key(7), true), Err(WorldError::Missing));
+        assert_eq!(world.muted(key(7)), Err(WorldError::Missing));
+        assert!(loader.muted().is_empty());
+    }
+
+    #[test]
+    fn chat_mutes_hold_on_a_game_a_client_hosts() {
+        let loader = enshwick::test::FakeHost::new()
+            .side(enshwick::abi::Side::CLIENT)
+            .hosting(true)
+            .host_key(enshwick::PlayerKey::new(9))
+            .world()
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = *WORLD.get().unwrap();
+        let key = enshwick::PlayerKey::new;
+
+        assert_eq!(world.set_muted(key(7), true), Ok(()));
+        assert_eq!(world.muted(key(7)), Ok(true));
+        assert_eq!(world.set_muted(key(9), true), Err(WorldError::Refused));
+        assert_eq!(loader.muted(), [key(7)]);
+    }
+
+    #[test]
     fn the_host_is_never_kicked_or_banned_and_a_second_ban_is_no_error() {
         let loader = enshwick::test::FakeHost::new()
             .world()

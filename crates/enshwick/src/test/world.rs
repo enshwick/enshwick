@@ -211,6 +211,19 @@ impl Installed {
         table::with(Vec::new(), |s| s.allowlisted.clone())
     }
 
+    /// The accounts muted in the fake server's chat, in the order muted.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.muted().is_empty());
+    /// ```
+    #[must_use]
+    pub fn muted(&self) -> Vec<crate::PlayerKey> {
+        table::with(Vec::new(), |s| s.muted.clone())
+    }
+
     /// Stops the world, as between two worlds: the world's reads answer
     /// that none runs.
     ///

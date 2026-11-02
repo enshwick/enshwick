@@ -869,3 +869,52 @@ pub(crate) extern "system" fn allowlist_has(
         unsafe { put(listed, u8::from(has)) }
     })
 }
+
+/// `HostApi::chat_mute_set`: mutes `account` in chat or lifts its mute.
+pub(crate) extern "system" fn chat_mute_set(
+    me: ModHandle,
+    account: enshwick::PlayerKey,
+    muted: u8,
+) -> Status {
+    entry("chat_mute_set", || {
+        if account == enshwick::PlayerKey::new(0) || muted > 1 {
+            return Status::BAD_ARGS;
+        }
+        let (loader, record) = match calling(me) {
+            Ok((loader, _, record)) if crate::chat_mute::serving(loader) => (loader, record),
+            Ok(_) => return Status::MISSING,
+            Err(status) => return status,
+        };
+        let who = format!("the mod {}", record.id);
+        match crate::chat_mute::set(loader, account.get(), muted == 1, &who) {
+            Ok(()) => Status::OK,
+            Err(crate::chat_mute::SetMuteError::Protected) => Status::REFUSED,
+            Err(e) => {
+                crate::log!(WARN, "chat mutes: {who} changed nothing: {e}");
+                Status::REFUSED
+            }
+        }
+    })
+}
+
+/// `HostApi::chat_mute_has`: whether `account` is muted in chat.
+pub(crate) extern "system" fn chat_mute_has(
+    me: ModHandle,
+    account: enshwick::PlayerKey,
+    muted: *mut u8,
+) -> Status {
+    entry("chat_mute_has", || {
+        if account == enshwick::PlayerKey::new(0) || muted.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let loader = match caller(me) {
+            Ok(loader) if crate::chat_mute::serving(loader) => loader,
+            Ok(_) => return Status::MISSING,
+            Err(status) => return status,
+        };
+        let has = crate::chat_mute::has(loader, account.get());
+        // SAFETY: the caller passes `muted` writable for one byte for the
+        // call, as `HostApi::chat_mute_has` states; `put` refuses null.
+        unsafe { put(muted, u8::from(has)) }
+    })
+}

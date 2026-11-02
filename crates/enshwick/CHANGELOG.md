@@ -119,6 +119,14 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `World::set_muted` and `World::muted` mute a player in chat and lift the
+  mute, on a dedicated server or in a game a client hosts. The server drops
+  every line a muted player types before another player reads it and tells
+  that player with a notice at most every 30 seconds; lines mods send pass.
+  The loader keeps the mutes in `mod-data/enshwick/muted.txt` and never
+  mutes an administrator online or the host. `HostApi` gains
+  `chat_mute_set` and `chat_mute_has` as ABI 5.1; the fake keeps the list
+  (`Installed::muted`) (#881).
 - `enshwick::deps!()` makes `src/deps/<alias>.rs`, which
   `cargo enshwick deps` writes, the public module `deps::<alias>` when the
   file exists (#803).

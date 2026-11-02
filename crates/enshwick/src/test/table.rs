@@ -68,13 +68,14 @@ use ui::{
     fog_open, fog_read, map_marker_types, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget,
 };
 use world::{
-    account_action, actions, allowlist_has, allowlist_set, build_rights, chat, component,
-    component_write, destroy, emit, entities, entity_template, event_types, feature,
-    forget_game_settings, game_event, game_settings, hosting, keep_game_settings, map_frame,
-    map_markers, notify, player, players, rename_filter, run_console, save_world, server_world,
-    set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather, spawn, status,
-    teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control, voxel_read,
-    weather_at, weather_fronts, world_key, world_persists, world_quiet,
+    account_action, actions, allowlist_has, allowlist_set, build_rights, chat, chat_mute_has,
+    chat_mute_set, component, component_write, destroy, emit, entities, entity_template,
+    event_types, feature, forget_game_settings, game_event, game_settings, hosting,
+    keep_game_settings, map_frame, map_markers, notify, player, players, rename_filter,
+    run_console, save_world, server_world, set_game_settings, set_label, set_time_of_day,
+    set_time_speed, set_weather, spawn, status, teleport, terrain_edit, terrain_materials,
+    time_of_day, time_speed_control, voxel_read, weather_at, weather_fronts, world_key,
+    world_persists, world_quiet,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -153,6 +154,8 @@ pub(crate) struct State {
     pub(crate) removed: Vec<u64>,
     /// The accounts on the fake server's allowlist, in the order listed.
     pub(crate) allowlisted: Vec<crate::PlayerKey>,
+    /// The accounts muted in the fake server's chat, in the order muted.
+    pub(crate) muted: Vec<crate::PlayerKey>,
     /// The components the mod asked to write, `(entity, type hash)`.
     pub(crate) writes: Vec<(u32, u32)>,
     /// The game events the mod raised: type hash and bytes.
@@ -545,6 +548,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         banned: Vec::new(),
         removed: Vec::new(),
         allowlisted: Vec::new(),
+        muted: Vec::new(),
         writes: Vec::new(),
         emits: Vec::new(),
         teleports: Vec::new(),
@@ -937,4 +941,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     request_base_limits,
     map_marker_types,
     use_content,
+    chat_mute_set,
+    chat_mute_has,
 };
