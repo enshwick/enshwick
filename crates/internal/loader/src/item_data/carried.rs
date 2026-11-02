@@ -7,8 +7,8 @@ use enshwick::Entity;
 use rustc_hash::FxHashSet;
 
 use super::{
-    KEPT, SERVER, Scope, Server, UNREAD, game, insert_found, kind, messages_for, scope, send,
-    serves, wanted,
+    KEPT, SERVER, Scope, Server, UNREAD, game, insert_found, kind, messages_for, push_encoded,
+    scope, send, serves, wanted,
 };
 use crate::fuse::Fuse;
 use crate::host::Loader;
@@ -92,45 +92,70 @@ fn left(loader: &Loader, entity: Entity) {
     }
     let characters = crate::world::characters(loader);
     let character_of = |root| crate::world::character_in(&characters, root);
-    let mut server = SERVER.relock();
-    let Some(server) = server.as_mut() else {
-        return;
-    };
-    server.joining.retain(|joining| joining.entity != entity);
-    if let Some(character) = character_of(entity)
-        && !UNREAD.load(Ordering::Relaxed)
-        && game::filled(loader, entity) == Some(true)
-    {
-        // Filled inventories read exactly now: a record whose slot holds
-        // another item will not find its own at a later join either.
-        let gone = set_aside_waiting(&mut server.pending, character, |link, slot| {
-            game::in_slot(loader, entity.0, link, slot).map(|(_, item)| item)
+    let messages = {
+        let mut server = SERVER.relock();
+        let Some(server) = server.as_mut() else {
+            return;
+        };
+        let still_looking = server
+            .joining
+            .iter()
+            .any(|joining| joining.entity == entity);
+        server.joining.retain(|joining| joining.entity != entity);
+        if let Some(character) = character_of(entity)
+            && !still_looking
+            && !UNREAD.load(Ordering::Relaxed)
+            && game::filled(loader, entity) == Some(true)
+        {
+            // Its looks have run on filled inventories, which read exactly
+            // now: a record whose slot holds another item will not find its
+            // own at a later join either.
+            let gone = set_aside_waiting(&mut server.pending, character, |link, slot| {
+                game::in_slot(loader, entity.0, link, slot).map(|(_, item)| item)
+            });
+            server.changed |= gone > 0;
+        }
+        let kept = keep_carried(server, entity, |pide| {
+            game::held(loader, pide, character_of)
         });
-        server.changed |= gone > 0;
+        if kept.waiting + kept.aside > 0 {
+            crate::log!(
+                INFO,
+                "mod data: {} values on a leaving player's items wait for its next join, {} set aside in the world's file",
+                kept.waiting,
+                kept.aside
+            );
+        }
+        removals(&kept.moved)
+    };
+    send(&messages);
+}
+
+/// The messages that tell clients the values of `keys` are gone, for the
+/// kinds clients get.
+fn removals(keys: &[(u32, u32)]) -> Vec<Vec<u8>> {
+    let mut messages = Vec::new();
+    for &(id, pide) in keys {
+        if let Some(spec) = kind(id).filter(|k| k.sent) {
+            push_encoded(&mut messages, &spec.id, pide, 0, &[]);
+        }
     }
-    let (waiting, aside) = keep_carried(server, entity, |pide| {
-        game::held(loader, pide, character_of)
-    });
-    if waiting + aside > 0 {
-        crate::log!(
-            INFO,
-            "mod data: {waiting} values on a leaving player's items wait for its next join, {aside} set aside in the world's file"
-        );
-    }
+    messages
 }
 
 /// Moves the item values of `server` whose item `held` finds in an
 /// inventory of `character` into its pending records: under the
 /// character's GUID, slot and link to wait for its next join where the
-/// anchor names one, else aside under the item's session id. An older
-/// waiting record on the same slot goes aside. The number waiting and the
-/// number aside.
+/// anchor names one, else aside under the item's session id. A value whose
+/// entity now holds another item is dropped, as a save drops it; an older
+/// waiting record on the same slot goes aside.
 pub(super) fn keep_carried(
     server: &mut Server,
     character: Entity,
     held: impl Fn(u32) -> Option<game::Held>,
-) -> (usize, usize) {
+) -> Kept {
     let mut left = Vec::new();
+    let mut moved = Vec::new();
     server.values.retain(|&(kind, pide), record| {
         if scope(kind, record.anchor) != Some(Scope::Item) {
             return true;
@@ -138,6 +163,10 @@ pub(super) fn keep_carried(
         let Some(held) = held(pide).filter(|held| held.root == character.0) else {
             return true;
         };
+        moved.push((kind, pide));
+        if held.item != record.item {
+            return false;
+        }
         let carried = held
             .anchor
             .filter(|anchor| matches!(anchor, Anchor::Carried { .. }));
@@ -157,9 +186,24 @@ pub(super) fn keep_carried(
         .filter(|record| !record.aside)
         .map(|record| (record.kind, record.anchor));
     set_aside_older(&mut server.pending, newer);
-    server.changed |= !left.is_empty();
+    server.changed |= !moved.is_empty();
     server.pending.append(&mut left);
-    (waiting, aside)
+    Kept {
+        moved,
+        waiting,
+        aside,
+    }
+}
+
+/// What [`keep_carried`] did.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct Kept {
+    /// The kinds and item entities whose values left `values`.
+    pub(super) moved: Vec<(u32, u32)>,
+    /// Values that wait for the character's next join.
+    pub(super) waiting: usize,
+    /// Values set aside: no character GUID reads.
+    pub(super) aside: usize,
 }
 
 /// Sets aside every waiting carried record of `pending` on a kind and slot
@@ -340,9 +384,8 @@ pub(super) fn take_back_carried(
     character: CharacterId,
     held: impl Fn(u8, u8) -> Option<(u32, u32)>,
 ) -> TakenBack {
-    let pending = std::mem::take(&mut server.pending);
     let values = &server.values;
-    let outcome = anchor::resolve_carried(pending, character, held, |kind, pide| {
+    let outcome = anchor::resolve_carried(&mut server.pending, character, held, |kind, pide| {
         values.contains_key(&(kind, pide))
     });
     let back = TakenBack {
@@ -351,7 +394,6 @@ pub(super) fn take_back_carried(
         ambiguous: outcome.ambiguous,
         waiting: outcome.waiting,
     };
-    server.pending = outcome.left;
     server.changed |= !back.found.is_empty() || back.replaced + back.ambiguous > 0;
     back
 }

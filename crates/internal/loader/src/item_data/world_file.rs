@@ -254,11 +254,11 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
     anchorless
 }
 
-/// Reads afresh, at shutdown, the slot of each value's item that a player
-/// in game carries, so the next join finds it where it is now. Placed
-/// containers keep the anchors of the game's last save, which a load
-/// rebuilds; a value whose item does not read or holds another item keeps
-/// its anchor.
+/// Reads afresh, at shutdown, the anchor of each value whose item a player
+/// in game carries now or carried at the last save, so the next join finds
+/// it where it is now and no old slot is left naming it. Other values keep
+/// the anchors of the game's last save, which a load rebuilds; a value
+/// whose item does not read or holds another item keeps its anchor.
 fn refresh_carried(loader: &Loader, server: &mut Server) {
     let characters = crate::world::characters(loader);
     if characters.is_empty() || !game::readable(loader) {
@@ -270,13 +270,14 @@ fn refresh_carried(loader: &Loader, server: &mut Server) {
         if scope(kind, record.anchor) != Some(Scope::Item) {
             continue;
         }
-        let Some(anchor @ Anchor::Carried { .. }) = game::held(loader, pide, character_of)
-            .filter(|held| held.item == record.item)
-            .and_then(|held| held.anchor)
+        let Some(held) = game::held(loader, pide, character_of).filter(|h| h.item == record.item)
         else {
             continue;
         };
-        changed |= record.anchor.replace(anchor) != Some(anchor);
+        let carried = |anchor: Option<Anchor>| matches!(anchor, Some(Anchor::Carried { .. }));
+        if carried(held.anchor) || carried(record.anchor) {
+            changed |= core::mem::replace(&mut record.anchor, held.anchor) != held.anchor;
+        }
     }
     server.changed |= changed;
 }
@@ -301,13 +302,16 @@ fn save(loader: &Loader, after_game_save: bool) {
             refresh_carried(loader, server);
             0
         };
-        // A carried value set on a slot a record from an earlier leave still
-        // waits on counts: written so, the next load would name it twice.
-        let newer = server
-            .values
-            .iter()
-            .filter_map(|(&(kind, _), record)| record.anchor.map(|anchor| (kind, anchor)));
-        server.changed |= set_aside_older(&mut server.pending, newer) > 0;
+        // A carried value, its anchor read afresh, on a slot a record from
+        // an earlier leave still waits on counts: written so, the next load
+        // would name the slot twice.
+        if !FINDING.load(Ordering::Relaxed) {
+            let newer = server
+                .values
+                .iter()
+                .filter_map(|(&(kind, _), record)| record.anchor.map(|anchor| (kind, anchor)));
+            server.changed |= set_aside_older(&mut server.pending, newer) > 0;
+        }
         if !server.changed {
             return;
         }

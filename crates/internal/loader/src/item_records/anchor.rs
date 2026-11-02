@@ -257,18 +257,19 @@ pub(crate) fn resolve(
     )
 }
 
-/// Finds the items character `character` carried, after it joined.
-/// `held(link, slot)` is the item entity in that slot of the character's
-/// inventories and the item it holds. A record attaches only where the same
-/// item lies in the same slot. One whose slot holds another item or none
-/// keeps waiting: the inventories may still fill, and a guess never sets a
-/// carried value aside. One whose item already has a value of the kind is
-/// aside, replaced. Records that name one slot twice are all aside,
-/// ambiguous: the file does not say which is newer, and the server sets an
-/// older one aside before it writes a newer one (`set_aside_older`). Every
-/// other record passes through untouched.
+/// Finds the items character `character` carried, after it joined, in
+/// place in `pending`: the game reads all run before any record changes,
+/// so a panic in one leaves `pending` whole. `held(link, slot)` is the item
+/// entity in that slot of the character's inventories and the item it
+/// holds. A record attaches only where the same item lies in the same slot.
+/// One whose slot holds another item or none keeps waiting: the inventories
+/// may still fill, and a guess never sets a carried value aside. One whose
+/// item already has a value of the kind is aside, replaced. Records that
+/// name one slot twice are all aside, ambiguous: the file does not say
+/// which is newer. Every other record stays untouched. `outcome.left` stays
+/// empty.
 pub(crate) fn resolve_carried(
-    pending: Vec<Pending>,
+    pending: &mut Vec<Pending>,
     character: CharacterId,
     held: impl Fn(u8, u8) -> Option<(u32, u32)>,
     taken: impl Fn(u32, u32) -> bool,
@@ -286,30 +287,33 @@ pub(crate) fn resolve_carried(
         *uses.entry((record.kind, record.anchor)).or_default() += 1;
     }
     let mut outcome = Outcome::default();
-    for mut record in pending {
-        let Some((link, slot)) = mine(&record) else {
-            outcome.left.push(record);
+    // What becomes of each of the character's records: its item, or aside.
+    let mut fates: Vec<(usize, Option<u32>)> = Vec::new();
+    for (at, record) in pending.iter().enumerate() {
+        let Some((link, slot)) = mine(record) else {
             continue;
         };
         if uses[&(record.kind, record.anchor)] > 1 {
             outcome.ambiguous += 1;
-            record.aside = true;
-            outcome.left.push(record);
+            fates.push((at, None));
             continue;
         }
         match held(link, slot).filter(|&(_, item)| item == record.check) {
-            Some((pide, _)) if !taken(record.kind, pide) => {
-                outcome.found.push((record.kind, pide, record));
-            }
+            Some((pide, _)) if !taken(record.kind, pide) => fates.push((at, Some(pide))),
             Some(_) => {
                 outcome.replaced += 1;
-                record.aside = true;
-                outcome.left.push(record);
+                fates.push((at, None));
             }
-            None => {
-                outcome.waiting += 1;
-                outcome.left.push(record);
+            None => outcome.waiting += 1,
+        }
+    }
+    for &(at, fate) in fates.iter().rev() {
+        match fate {
+            Some(pide) => {
+                let record = pending.swap_remove(at);
+                outcome.found.push((record.kind, pide, record));
             }
+            None => pending[at].aside = true,
         }
     }
     outcome
@@ -672,7 +676,8 @@ mod tests {
             (0, 2) => Some((2002, 90)),
             _ => None,
         };
-        let outcome = resolve_carried(records, ANN, held, |_, _| false);
+        let mut records = records;
+        let outcome = resolve_carried(&mut records, ANN, held, |_, _| false);
         let found: Vec<(u32, u8)> = outcome
             .found
             .iter()
@@ -680,8 +685,7 @@ mod tests {
             .collect();
         assert_eq!(found, [(2001, 1)]);
         assert_eq!(outcome.waiting, 2, "the changed slot and the empty one");
-        let mut waiting: Vec<u8> = outcome
-            .left
+        let mut waiting: Vec<u8> = records
             .iter()
             .filter(|r| !r.aside)
             .map(|r| r.value[0])
@@ -692,19 +696,19 @@ mod tests {
 
     #[test]
     fn a_carried_record_whose_item_has_a_newer_value_goes_aside() {
-        let records = vec![carried(ANN, 0, 1, 77, 1)];
-        let outcome = resolve_carried(records, ANN, |_, _| Some((2001, 77)), |_, _| true);
+        let mut records = vec![carried(ANN, 0, 1, 77, 1)];
+        let outcome = resolve_carried(&mut records, ANN, |_, _| Some((2001, 77)), |_, _| true);
         assert!(outcome.found.is_empty());
         assert_eq!(outcome.replaced, 1);
-        assert!(outcome.left[0].aside);
+        assert!(records[0].aside);
     }
 
     #[test]
     fn two_records_on_one_carried_slot_both_go_aside_and_neither_attaches() {
-        let records = vec![carried(ANN, 0, 1, 77, 1), carried(ANN, 0, 1, 77, 2)];
-        let outcome = resolve_carried(records, ANN, |_, _| Some((2001, 77)), |_, _| false);
+        let mut records = vec![carried(ANN, 0, 1, 77, 1), carried(ANN, 0, 1, 77, 2)];
+        let outcome = resolve_carried(&mut records, ANN, |_, _| Some((2001, 77)), |_, _| false);
         assert!(outcome.found.is_empty());
         assert_eq!(outcome.ambiguous, 2);
-        assert!(outcome.left.iter().all(|r| r.aside));
+        assert!(records.iter().all(|r| r.aside));
     }
 }
