@@ -18,7 +18,8 @@
 //! under the character and the slot instead: when the player leaves, or the
 //! server stops while they play, the value waits for that character's next
 //! join and then finds the item in that slot again, if it holds the same
-//! item; until then it waits in the world's file. On a game build whose
+//! item; one still missing when the player leaves again goes aside. On a
+//! game build whose
 //! table does not say where the server keeps a player's character, the
 //! value goes aside at the leave, kept but attached to nothing.
 //!

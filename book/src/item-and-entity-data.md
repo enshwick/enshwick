@@ -123,8 +123,9 @@ the same item. An item in a player's inventory is kept under the character,
 which of its inventories, and the slot. When the player leaves, or the
 server stops while they play, the value waits for that character's next
 join. Once its inventories fill, the value finds the item in that slot
-again, if it holds the same item; otherwise it waits for the next join.
-Another character of the same account never gets it. On a game build whose table does not say
+again, if it holds the same item. Until then it waits while the player
+plays, and goes aside when the player leaves with that slot holding
+another item or none. Another character of the same account never gets it. On a game build whose table does not say
 where the server keeps a player's character, the value goes aside in the
 world's file at the leave, kept but attached to nothing. Within a session
 the value stays with the item across moves between inventories and trades.

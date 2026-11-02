@@ -1,6 +1,7 @@
 //! Tests of kind ids, destroy requests, the client's cap and the world file's records.
 
 use super::attach::attach;
+use super::carried::*;
 use super::world_file::{read_file, read_world, unwritten, write_file};
 use super::*;
 use crate::item_records::anchor::{CharacterId, Index};
@@ -445,6 +446,42 @@ fn a_join_that_never_fills_stops_at_the_cap_and_its_records_keep_waiting() {
     assert_eq!(stopped.map(|(at, _)| at), Some(JOIN_LOOKS_CAP));
     assert!(stopped.is_some_and(|(_, why)| why.contains("never")));
     assert_eq!(world.pending, [record], "nothing went aside");
+}
+
+#[test]
+fn a_leaving_character_s_records_that_still_wait_go_aside_and_others_stay() {
+    let record = |character, aside| Pending {
+        kind: 0,
+        anchor: Anchor::Carried {
+            character: CharacterId([character; 16]),
+            link: 0,
+            slot: 1,
+        },
+        check: 77,
+        value: Box::new([1]),
+        aside,
+    };
+    let mut pending = vec![record(0xa1, false), record(0xa1, true), record(0xb2, false)];
+    assert_eq!(set_aside_waiting(&mut pending, CharacterId([0xa1; 16])), 1);
+    let aside: Vec<bool> = pending.iter().map(|r| r.aside).collect();
+    assert_eq!(aside, [true, true, false]);
+}
+
+#[test]
+fn records_batch_into_messages_no_longer_than_the_limit_in_their_order() {
+    let mut messages = Vec::new();
+    let mut whole = Vec::new();
+    for pide in 0..100 {
+        push_encoded(&mut messages, "a:charges", pide, 7, &[3; 20]);
+        encode(&mut whole, "a:charges", pide, 7, &[3; 20]);
+    }
+    assert!(messages.len() > 1);
+    assert!(
+        messages
+            .iter()
+            .all(|m| !m.is_empty() && m.len() <= MESSAGE_BYTES)
+    );
+    assert_eq!(messages.concat(), whole);
 }
 
 #[test]

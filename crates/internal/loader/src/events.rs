@@ -465,7 +465,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
             );
             part!("player joined events", {
                 crate::stats::player_joined(loader, &data);
-                crate::item_data::player_joined(data.entity);
+                crate::item_data::player_joined(loader, data.entity);
                 loader.emit(Event::PLAYER_JOINED, None, (&raw const data).cast());
             });
         }
