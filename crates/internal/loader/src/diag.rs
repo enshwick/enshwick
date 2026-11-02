@@ -35,7 +35,7 @@ static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
 static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
 static ANY_PART_OFF: AtomicBool = AtomicBool::new(false);
 static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
-static PATCHES: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
+static PATCHES: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
 
 /// Takes the diagnostics settings: the period at every call, counting and
 /// timing only at the first, since thunks are written once.
@@ -173,22 +173,26 @@ pub struct Patches {
     pub off: usize,
     /// Skipped: their bytes did not match or they clashed.
     pub skipped: usize,
+    /// Waiting for a thread to leave them, to be tried again.
+    pub waiting: usize,
 }
 
-/// Records what became of the code patches at arming.
+/// Records what became of the code patches at arming or a later try.
 pub fn record_patches(patches: Patches) {
     PATCHES[0].store(patches.written, Ordering::Relaxed);
     PATCHES[1].store(patches.off, Ordering::Relaxed);
     PATCHES[2].store(patches.skipped, Ordering::Relaxed);
+    PATCHES[3].store(patches.waiting, Ordering::Relaxed);
 }
 
-/// What became of the code patches at arming.
+/// What became of the code patches so far.
 #[must_use]
 pub fn patches() -> Patches {
     Patches {
         written: PATCHES[0].load(Ordering::Relaxed),
         off: PATCHES[1].load(Ordering::Relaxed),
         skipped: PATCHES[2].load(Ordering::Relaxed),
+        waiting: PATCHES[3].load(Ordering::Relaxed),
     }
 }
 
@@ -210,6 +214,7 @@ mod tests {
                 credits: "by themaiby; MIT".into(),
                 notes: vec!["recommends you.lanterns, which is not loaded".into()],
                 running: true,
+                waiting: false,
                 lines: vec!["3 zones merged".into()],
                 features: vec![
                     crate::features::Feature {
@@ -229,6 +234,7 @@ mod tests {
                 credits: String::new(),
                 notes: Vec::new(),
                 running: false,
+                waiting: false,
                 lines: Vec::new(),
                 features: Vec::new(),
             },
@@ -317,8 +323,7 @@ mod tests {
             },
             patches: Patches {
                 written: 1,
-                off: 0,
-                skipped: 0,
+                ..Patches::default()
             },
             targets: 2,
             hooks: Some(vec![
@@ -491,6 +496,25 @@ conflicts:
         assert!(busy < quiet);
         // 9000 ticks over 4 calls at 3 GHz.
         assert!(text.contains("750 ns  building.max_altars (you.lanterns)"));
+    }
+
+    #[test]
+    fn the_summary_names_a_mod_and_the_code_patches_that_wait() {
+        let mut s = summary();
+        assert!(!s.render().contains("waiting"));
+        s.mods[0].waiting = true;
+        s.patches.waiting = 2;
+        let text = s.render();
+        assert!(
+            text.contains("  Flame Altar Zones (you.lockers) 0.1.4 (waiting for a code patch)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "code patches: 1 written, 0 left out (mod off), 0 skipped, 2 waiting for a thread to leave them\n"
+            ),
+            "{text}"
+        );
     }
 
     #[test]

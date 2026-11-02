@@ -317,3 +317,7 @@
 "resistance_lightning.name" = "Resistência a Eletricidade"
 "resistance_poison.name" = "Resistência ao veneno"
 "mods.developer.off" = "uma ferramenta de desenvolvedor: só funciona enquanto o arquivo mod-data/enshwick/developer-tools existir"
+
+"mods.waiting" = "{name} {version} (aguardando)"
+"mods.waiting.why" = "Aguardando o jogo sair do código que este mod altera. Tenta de novo quando um mundo carrega e depois a cada minuto."
+"mods.part.waiting" = "Parte do Enshwick aguardando o jogo sair do seu código: {part}"

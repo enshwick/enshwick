@@ -317,3 +317,7 @@
 "resistance_lightning.name" = "Şok Direnci"
 "resistance_poison.name" = "Zehir Direnci"
 "mods.developer.off" = "bir geliştirici aracı: yalnızca mod-data/enshwick/developer-tools dosyası varken çalışır"
+
+"mods.waiting" = "{name} {version} (bekliyor)"
+"mods.waiting.why" = "Oyunun bu modun değiştirdiği koddan çıkmasını bekliyor. Bir dünya yüklenince, sonra her dakika yeniden dener."
+"mods.part.waiting" = "Oyunun kodundan çıkmasını bekleyen Enshwick parçası: {part}"

@@ -193,6 +193,7 @@ pub(crate) fn start(
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
         settings_problems,
+        retry: crate::retry::Retry::default(),
     };
     let Some(loader) = host::install(loader) else {
         return;

@@ -37,6 +37,11 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
             owners.into_iter().map(move |owner| (owner, f.target))
         })
         .collect();
+    let hooked: Vec<u64> = chains
+        .iter()
+        .filter(|c| c.head.is_some())
+        .map(|c| c.target)
+        .collect();
     drop(mids);
     drop(chains);
     crate::inventory::settle(
@@ -68,70 +73,53 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
     } else if crate::diag::counting() {
         crate::log!(INFO, "diagnostics on: hook calls counted");
     }
-    let off = report_patches(loader, &patches, &verdicts);
-    crate::bases::report(loader, &off);
+    let reported = report_patches(loader, &patches, &verdicts);
+    crate::bases::report(loader, &reported);
+    crate::retry::hold(loader, patches, verdicts, hooked);
 }
 
 /// Logs what became of each code patch and turns off the owners of skipped
 /// ones: a mod whole, a loader feature by its name. The loader features
-/// turned off, each once.
+/// turned off or waiting, each once.
 fn report_patches(
     loader: &Loader,
     patches: &[crate::code::CodePatch],
     verdicts: &[crate::code::Verdict],
 ) -> Vec<&'static str> {
-    let mut off: Vec<&'static str> = Vec::new();
-    let mut tally = crate::diag::Patches::default();
-    for verdict in verdicts {
-        match verdict {
-            crate::code::Verdict::Write => tally.written += 1,
-            crate::code::Verdict::Off => tally.off += 1,
-            crate::code::Verdict::Skip(_) | crate::code::Verdict::Wait => tally.skipped += 1,
-        }
-    }
-    crate::diag::record_patches(tally);
+    use crate::code::Verdict;
+
+    let mut reported: Vec<&'static str> = Vec::new();
+    crate::diag::record_patches(crate::code::tally(verdicts));
     for (patch, verdict) in patches.iter().zip(verdicts) {
-        let owner = loader
-            .mods
-            .get(patch.owner.get())
-            .map_or(crate::settings::LOADER_ID, |m| m.id.as_str());
+        let owner = crate::code::owner_id(loader, patch.owner);
         let len = patch.replacement.len();
         match verdict {
-            crate::code::Verdict::Write => crate::log!(
+            Verdict::Write => crate::log!(
                 INFO,
                 "code patch of {owner} at {:#x} written, {len} bytes",
                 patch.address
             ),
-            crate::code::Verdict::Off => crate::log!(
+            Verdict::Off => crate::log!(
                 INFO,
                 "code patch of {owner} at {:#x} left out: the mod is off",
                 patch.address
             ),
-            crate::code::Verdict::Wait => crate::log!(
-                WARN,
-                "code patch of {owner} at {:#x} waits: a thread stayed inside it",
-                patch.address
-            ),
-            crate::code::Verdict::Skip(reason) => {
+            Verdict::Wait => {
                 crate::log!(
-                    ERROR,
-                    "code patch of {owner} at {:#x} skipped: {reason}",
+                    WARN,
+                    "code patch of {owner} at {:#x} waits: a thread stayed inside it; \
+                     tried again when a world loads, then each minute, its hooks off until then",
                     patch.address
                 );
-                if !patch.owner.is_loader() {
-                    loader.turn_off(
-                        patch.owner,
-                        &format!("its code patch at {:#x} was skipped", patch.address),
-                    );
-                } else if !off.contains(&patch.feature) {
-                    off.push(patch.feature);
-                    loader.feature_off(patch.feature, &format!("{:#x}", patch.address), reason);
+                if patch.owner.is_loader() && !reported.contains(&patch.feature) {
+                    reported.push(patch.feature);
                 }
             }
+            Verdict::Skip(reason) => crate::code::skipped(loader, patch, reason, &mut reported),
         }
     }
     if crate::code::lifted() {
         crate::log!(INFO, "workshop recipe limit lifted");
     }
-    off
+    reported
 }

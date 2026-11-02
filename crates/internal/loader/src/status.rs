@@ -115,6 +115,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
                     crate::features::shown(&features, record.texts.relock().as_ref())
                 },
                 running,
+                waiting: running && record.waiting.load(Ordering::Acquire),
                 lines: if running {
                     lines_of(&sources, ModIndex::new(index))
                 } else {

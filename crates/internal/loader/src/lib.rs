@@ -230,6 +230,11 @@ pub mod resolve;
 )]
 mod retire;
 #[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game tries code patches again")
+)]
+mod retry;
+#[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the Windows build asks the game's zones")
 )]

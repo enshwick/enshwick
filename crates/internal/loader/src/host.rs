@@ -223,6 +223,8 @@ pub(crate) struct Loader {
     pub(crate) delivery: OnceLock<Box<[Subscription]>>,
     /// What was wrong in the loader settings file at start, a line each.
     pub(crate) settings_problems: Vec<String>,
+    /// The code patches a thread kept out at arming, tried again later.
+    pub(crate) retry: crate::retry::Retry,
 }
 
 /// The warning line and the status entry of `feature` turned off on `build`

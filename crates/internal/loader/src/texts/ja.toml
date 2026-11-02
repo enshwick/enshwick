@@ -317,3 +317,7 @@
 "resistance_lightning.name" = "雷耐性"
 "resistance_poison.name" = "毒耐性"
 "mods.developer.off" = "開発者ツールです。ファイル mod-data/enshwick/developer-tools がある間だけ動作します"
+
+"mods.waiting" = "{name} {version}（待機中）"
+"mods.waiting.why" = "このModが変更するコードからゲームが抜けるのを待っています。ワールドの読み込み時に再試行し、その後は1分ごとに再試行します。"
+"mods.part.waiting" = "コードからゲームが抜けるのを待っている Enshwick の部分：{part}"

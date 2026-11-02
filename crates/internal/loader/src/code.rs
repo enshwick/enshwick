@@ -373,6 +373,9 @@ pub(crate) fn check(
     verdicts
 }
 
+/// Skips every patch to be written or waiting whose owner's feature has a
+/// skipped one, and sets waiting every patch to be written whose feature has
+/// a waiting one: a feature's patches go in together.
 pub(crate) fn skip_with_feature(patches: &[CodePatch], verdicts: &mut [Verdict]) {
     let key = |patch: &CodePatch| (patch.owner, patch.feature);
     let marked = |verdicts: &[Verdict], wanted: fn(&Verdict) -> bool| -> Vec<(ModIndex, &str)> {
@@ -390,6 +393,53 @@ pub(crate) fn skip_with_feature(patches: &[CodePatch], verdicts: &mut [Verdict])
         } else if *verdict == Verdict::Write && waiting.contains(&key(patch)) {
             *verdict = Verdict::Wait;
         }
+    }
+}
+
+/// How many patches each verdict has, for the status summary.
+pub(crate) fn tally(verdicts: &[Verdict]) -> crate::diag::Patches {
+    let mut tally = crate::diag::Patches::default();
+    for verdict in verdicts {
+        match verdict {
+            Verdict::Write => tally.written += 1,
+            Verdict::Off => tally.off += 1,
+            Verdict::Skip(_) => tally.skipped += 1,
+            Verdict::Wait => tally.waiting += 1,
+        }
+    }
+    tally
+}
+
+/// The id the log names a patch's owner by.
+pub(crate) fn owner_id(loader: &Loader, owner: ModIndex) -> &str {
+    loader
+        .mods
+        .get(owner.get())
+        .map_or(crate::settings::LOADER_ID, |m| m.id.as_str())
+}
+
+/// Logs that `patch` is skipped for `reason` and turns off its owner: a mod
+/// whole, a loader feature by its name, once, kept in `off`.
+pub(crate) fn skipped(
+    loader: &Loader,
+    patch: &CodePatch,
+    reason: &str,
+    off: &mut Vec<&'static str>,
+) {
+    let owner = owner_id(loader, patch.owner);
+    crate::log!(
+        ERROR,
+        "code patch of {owner} at {:#x} skipped: {reason}",
+        patch.address
+    );
+    if !patch.owner.is_loader() {
+        loader.turn_off(
+            patch.owner,
+            &format!("its code patch at {:#x} was skipped", patch.address),
+        );
+    } else if !off.contains(&patch.feature) {
+        off.push(patch.feature);
+        loader.feature_off(patch.feature, &format!("{:#x}", patch.address), reason);
     }
 }
 

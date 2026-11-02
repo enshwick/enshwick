@@ -228,7 +228,31 @@ pub(crate) enum Commit {
 /// all or none. On [`Commit::Busy`], `disarm` runs while the other threads
 /// still stand still, so it must neither allocate, lock nor log.
 pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit {
-    write_all(pending, code, disarm)
+    write_all(pending, code, disarm, SETTLE_TRIES)
+}
+
+/// Writes the `code` patches after one check and no wait, for a thread that
+/// must not stall, such as the game's: a thread inside one, the calling
+/// thread among them, makes it [`Commit::Busy`]. `own` is the address of a
+/// local of the caller; the calling thread's stack is checked from there up.
+pub(crate) fn commit_once(code: &[Bytes<'_>], disarm: fn(), own: usize) -> Commit {
+    let mut stuck = vec![false; code.len()];
+    mark_own(own, &patch_returns(code), &mut stuck);
+    if stuck.contains(&true) {
+        disarm();
+        return busy(code, &stuck);
+    }
+    write_all(&[], code, disarm, 0)
+}
+
+/// The patches of `code` marked in `stuck`, by their [`Bytes::id`].
+fn busy(code: &[Bytes<'_>], stuck: &[bool]) -> Commit {
+    Commit::Busy(
+        code.iter()
+            .zip(stuck)
+            .filter_map(|(patch, &s)| s.then_some(patch.id))
+            .collect(),
+    )
 }
 
 /// Whether `address` is mapped code followed by `len` bytes that read: a
@@ -545,7 +569,8 @@ fn allocate_near(target: usize) -> Option<usize> {
 /// trampoline, so the writes wait, a few times, until no thread stands or
 /// returns inside one; a patch a thread never leaves is never written over
 /// it, since the thread would resume in the middle of other instructions.
-fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit {
+/// The writes wait up to `settle_tries` times.
+fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn(), settle_tries: u32) -> Commit {
     let writes: Vec<(usize, &[u8])> = prepared
         .iter()
         .map(|&p| (p.target, &p.patch[..]))
@@ -573,7 +598,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit 
             return Commit::Failed;
         }
         stuck.fill(false);
-        let last = tries == SETTLE_TRIES;
+        let last = tries == settle_tries;
         let mut blind = None;
         if checked {
             for thread in threads.iter() {
@@ -618,12 +643,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn()) -> Commit 
     if stuck.contains(&true) {
         disarm();
         threads.resume();
-        return Commit::Busy(
-            code.iter()
-                .zip(&stuck)
-                .filter_map(|(patch, &s)| s.then_some(patch.id))
-                .collect(),
-        );
+        return busy(code, &stuck);
     }
     let mut writable = true;
     for &(address, bytes) in &writes {
@@ -784,14 +804,15 @@ impl Stack {
     ///
     /// # Safety
     ///
-    /// - Every thread of the process but the caller stays suspended for the
-    ///   call, as `Threads::suspend` leaves them, so the stack's region stays
-    ///   committed and no other thread writes it.
+    /// - The stack's region stays committed and no other thread writes it
+    ///   for the call: every thread of the process but the caller stays
+    ///   suspended, as `Threads::suspend` leaves them, or the words are the
+    ///   caller's own frames above the one it runs in.
     unsafe fn each(self, mut visit: impl FnMut(usize)) {
         for word in 0..self.words {
             // SAFETY: `word` is below `words`, so its eight bytes lie in the
             // committed read-write region `at` found, which stays committed
-            // and unwritten while every other thread stays suspended.
+            // and unwritten by others for the call, as the caller guarantees.
             visit(unsafe { crate::memory::read_stack_word(self.address(word)) });
         }
     }
@@ -855,16 +876,38 @@ unsafe fn mark(
         // among them, suspended for the call.
         unsafe {
             stack.each(|word| {
-                if (low..=high).contains(&word)
-                    && let Ok(i) = returns.binary_search_by_key(&word, |&(at, _)| at)
-                    && let Some(flag) = stuck.get_mut(returns[i].1)
-                {
-                    *flag = true;
+                if (low..=high).contains(&word) {
+                    mark_return(word, returns, stuck);
                 }
             });
         }
     }
     true
+}
+
+/// Marks in `stuck` each patched range the calling thread holds a return
+/// address into on its stack, from `from`, the address of a caller's local,
+/// up; its own instruction pointer is in this code, never in a patch.
+fn mark_own(from: usize, returns: &[(usize, usize)], stuck: &mut [bool]) {
+    if returns.is_empty() {
+        return;
+    }
+    if let Some(stack) = Stack::at(from as u64) {
+        // SAFETY: the stack is the calling thread's own, from a local of a
+        // frame this call runs below: those frames stay committed, and only
+        // this thread, busy in this call, writes them.
+        unsafe { stack.each(|word| mark_return(word, returns, stuck)) };
+    }
+}
+
+/// Marks in `stuck` the patch `word` returns into, when it is one of
+/// `returns`.
+fn mark_return(word: usize, returns: &[(usize, usize)], stuck: &mut [bool]) {
+    if let Ok(i) = returns.binary_search_by_key(&word, |&(at, _)| at)
+        && let Some(flag) = stuck.get_mut(returns[i].1)
+    {
+        *flag = true;
+    }
 }
 
 /// Moves a suspended thread standing in replaced bytes into the trampoline,

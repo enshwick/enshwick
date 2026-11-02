@@ -317,3 +317,7 @@
 "resistance_lightning.name" = "Сопротивление молнии"
 "resistance_poison.name" = "Сопротивление ядам"
 "mods.developer.off" = "инструмент разработчика: работает только пока существует файл mod-data/enshwick/developer-tools"
+
+"mods.waiting" = "{name} {version} (ожидает)"
+"mods.waiting.why" = "Ожидает, пока игра выйдет из кода, который меняет этот мод. Повторит попытку при загрузке мира, затем каждую минуту."
+"mods.part.waiting" = "Часть Enshwick ожидает, пока игра выйдет из её кода: {part}"
