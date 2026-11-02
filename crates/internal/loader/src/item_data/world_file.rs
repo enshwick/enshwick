@@ -260,21 +260,23 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
 /// the anchors of the game's last save, which a load rebuilds; a value
 /// whose item does not read or holds another item keeps its anchor.
 fn refresh_carried(loader: &Loader, server: &mut Server) {
-    let characters = crate::world::characters(loader);
-    if characters.is_empty() || !game::readable(loader) {
+    if !game::readable(loader) {
         return;
     }
+    let characters = crate::world::characters(loader);
     let character_of = |root| crate::world::character_in(&characters, root);
+    let carried = |anchor: Option<Anchor>| matches!(anchor, Some(Anchor::Carried { .. }));
     let mut changed = false;
     for (&(kind, pide), record) in &mut server.values {
-        if scope(kind, record.anchor) != Some(Scope::Item) {
+        if scope(kind, record.anchor) != Some(Scope::Item)
+            || (characters.is_empty() && !carried(record.anchor))
+        {
             continue;
         }
         let Some(held) = game::held(loader, pide, character_of).filter(|h| h.item == record.item)
         else {
             continue;
         };
-        let carried = |anchor: Option<Anchor>| matches!(anchor, Some(Anchor::Carried { .. }));
         if carried(held.anchor) || carried(record.anchor) {
             changed |= core::mem::replace(&mut record.anchor, held.anchor) != held.anchor;
         }
