@@ -310,7 +310,10 @@ A mod opts in with `reload = true` in its
   resources, services, mod events, extension points it defines or links, code
   patches, mid-function hooks, filters, the interface, stats and the rest) stays with the old copy, so the loader
   refuses to reload a mod that used any of it, naming the calls, and the
-  change waits for a restart.
+  change waits for a restart. This counts every call since the mod was
+  loaded, in `init`, in `ready` or in a callback. Queries and one-shot
+  changes, such as reading a component, sending a chat line or teleporting
+  a player, keep nothing and never stop a reload.
 - **No live state it cannot hand over.** The new copy starts with fresh
   statics. What it needs back, it reads from its settings or its world store.
 - **Its own threads stop in `shutdown`.** A thread still running in the old

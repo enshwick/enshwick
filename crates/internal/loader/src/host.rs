@@ -464,9 +464,15 @@ impl Loader {
         self.mods.iter().enumerate().find(|(_, m)| m.id == id)
     }
 
+    /// The mod of handle `me`; while it is on, the table function it is
+    /// inside counts against it for a reload, whenever it calls.
     fn record(&self, me: ModHandle) -> Option<(ModIndex, &ModRecord)> {
         let index = ModIndex::from_handle(me)?;
-        self.mods.get(index.get()).map(|record| (index, record))
+        let record = self.mods.get(index.get())?;
+        if !record.off.load(Ordering::Relaxed) {
+            crate::reload::note(index.get());
+        }
+        Some((index, record))
     }
 
     /// Turns a mod off: unlinks its hooks and logs why.
@@ -660,9 +666,10 @@ impl Fallback for u64 {
 /// code never unwinds into the mod that called it: the call is refused and
 /// the fault logged.
 fn entry<R: Fallback>(name: &'static str, body: impl FnOnce() -> R) -> R {
-    crate::reload::note(name);
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
-        .unwrap_or_else(|_| entry_fault(name))
+    crate::reload::entered(name, || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
+            .unwrap_or_else(|_| entry_fault(name))
+    })
 }
 
 #[cold]
@@ -688,6 +695,7 @@ fn calling(me: ModHandle) -> Result<(&'static Loader, ModIndex, &'static ModReco
 /// loader's own handle passes too.
 fn caller(me: ModHandle) -> Result<&'static Loader, Status> {
     if me == LOADER_HANDLE {
+        crate::reload::note_initialising();
         return loader().ok_or(Status::BAD_ARGS);
     }
     calling(me).map(|(loader, _, _)| loader)

@@ -299,6 +299,12 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- Dev reload counts every call a mod makes since it loaded, by its own
+  handle: a mod that registers actions, channels, filters or other state
+  in `ready` or a callback is refused a reload with those calls named,
+  instead of leaving them with the old copy. Queries and one-shot changes
+  never stop a reload (#886).
+
 - A poisoned lock's warning names the line that took the lock, not a line
   inside the API (#821).
 - A bad value in `mod-configs/enshwick.toml` holds closed only the
