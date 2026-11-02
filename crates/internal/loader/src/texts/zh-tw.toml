@@ -323,3 +323,4 @@
 
 "mods.waiting" = "{name} {version}（等待中）"
 "mods.waiting.why" = "正在等待遊戲離開此模組變更的程式碼。稍後會重試，之後每隔一分鐘再試三次。仍不成功則關閉。"
+"mods.demo" = "介面示範"
