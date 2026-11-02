@@ -39,8 +39,14 @@ pub(super) fn greet(state: &mut State, key: u64, now: Instant) -> Greeting {
 /// Takes a message on `channel` from the client `key` on the server: whether
 /// `key` is a peer, or `None` when the message is not taken. A client that
 /// is no peer yet may only send control messages, its hello; each message
-/// takes from the client's rate.
-pub(super) fn take_message(state: &mut State, key: u64, channel: u32) -> Option<bool> {
+/// takes from the client's rate, but one `looped` from a hosting client's
+/// own half, whose send took it.
+pub(super) fn take_message(
+    state: &mut State,
+    key: u64,
+    channel: u32,
+    looped: bool,
+) -> Option<bool> {
     if key == 0 {
         return None;
     }
@@ -58,7 +64,7 @@ pub(super) fn take_message(state: &mut State, key: u64, channel: u32) -> Option<
             std::collections::hash_map::Entry::Vacant(_) => return None,
         }
     };
-    if !peer.admit() {
+    if !looped && !peer.admit() {
         dropped();
         return None;
     }
@@ -171,7 +177,7 @@ pub(crate) fn server_carried(key: u64, channel: u32, data: &[u8]) {
     }
     let Some(known) = state(|s| {
         make_greeting_room(s, key, crate::world::live_keys);
-        take_message(s, key, channel)
+        take_message(s, key, channel, crate::carrier::loops(key))
     }) else {
         return;
     };

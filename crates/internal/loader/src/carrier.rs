@@ -295,10 +295,7 @@ pub(crate) fn send_many(
     if !sealable(payload) {
         return Err(Status::BAD_ARGS);
     }
-    let hosting = client_hosts();
-    let host = CARRIER.host_key.load(Ordering::Acquire);
-    let looped = |key: u64| hosting && (key == SERVER || (host != 0 && key == host));
-    for &key in keys.iter().filter(|&&key| looped(key)) {
+    for &key in keys.iter().filter(|&&key| loops(key)) {
         if let Err(status) = loop_back(key == SERVER, channel, payload) {
             failed(key, status);
         }
@@ -306,9 +303,9 @@ pub(crate) fn send_many(
     let wired = |to_server: bool| {
         keys.iter()
             .copied()
-            .filter(move |&key| !looped(key) && (key == SERVER) == to_server)
+            .filter(move |&key| !loops(key) && (key == SERVER) == to_server)
     };
-    if keys.iter().all(|&key| looped(key)) {
+    if keys.iter().all(|&key| loops(key)) {
         return Ok(());
     }
     let mut sealed = [0u8; MAX_SEALED];
@@ -351,6 +348,17 @@ fn send_sealed(
 fn client_hosts() -> bool {
     crate::world::hosting()
         && crate::host::loader().is_some_and(|loader| loader.side == enshwick::abi::Side::CLIENT)
+}
+
+/// Whether a message to `key` stays in process, between a hosting client's
+/// halves: to its server half, or to the host's own player. The receive of
+/// such a message is trusted; its send took the rate.
+pub(crate) fn loops(key: u64) -> bool {
+    client_hosts()
+        && (key == SERVER || {
+            let host = CARRIER.host_key.load(Ordering::Acquire);
+            host != 0 && key == host
+        })
 }
 
 /// Notes the account key of the player of a client that hosts; a new one

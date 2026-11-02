@@ -486,13 +486,7 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         };
         let keys: Vec<u64> = keys
             .into_iter()
-            .filter(|&key| {
-                let admitted = s.sending.entry(key).or_insert_with(Peer::new).admit();
-                if !admitted {
-                    dropped();
-                }
-                admitted
-            })
+            .filter(|&key| admit_sending(s, key))
             .collect();
         if peer != 0 && keys.is_empty() {
             return Err(Status::REFUSED);
@@ -519,13 +513,23 @@ fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
         if !s.peers.contains_key(&server) {
             return Err(Status::MISSING);
         }
-        if !s.sending.entry(server).or_insert_with(Peer::new).admit() {
-            dropped();
+        if !admit_sending(s, server) {
             return Err(Status::REFUSED);
         }
         Ok(())
     })?;
     crate::carrier::send(server, channel, data).inspect_err(|_| refund(&[server]))
+}
+
+/// Takes one message to `key` from its sending rate, which also bounds what
+/// a hosting client's halves hold for each other; counts one over it as
+/// dropped.
+fn admit_sending(s: &mut State, key: u64) -> bool {
+    let admitted = s.sending.entry(key).or_default().admit();
+    if !admitted {
+        dropped();
+    }
+    admitted
 }
 
 /// Gives the rate tokens of a send that did not go back to `keys`.
