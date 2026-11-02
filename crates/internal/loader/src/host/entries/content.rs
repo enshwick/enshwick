@@ -158,9 +158,12 @@ pub(crate) extern "system" fn declare_change(
         // SAFETY: `HostApi::declare_change` has the mod pass null or a
         // record with its header, valid for the call; a mod that knows this
         // entry knows every field of the record.
-        let Some(mut raw) =
-            (unsafe { api_frame::read_headed(change, size_of::<api_frame::DataChange>()) })
-        else {
+        let Some(mut raw) = (unsafe {
+            api_frame::read_headed(
+                change,
+                <api_frame::DataChange as enshwick::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         raw.op = api_frame::ChangeOp::TIMES;

@@ -94,14 +94,20 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::TERRAIN => {
             // SAFETY: the caller guarantees `op.data` for a terrain op.
             let edit = unsafe {
-                enshwick::abi::read_headed(op.data.cast::<TerrainEdit>(), size_of::<TerrainEdit>())
+                enshwick::abi::read_headed(
+                    op.data.cast::<TerrainEdit>(),
+                    <TerrainEdit as enshwick::abi::Headed>::BORN,
+                )
             };
             edit.map(Change::Terrain).ok_or(Status::BAD_ARGS)
         }
         TransactionOp::VOXELS => {
             // SAFETY: the caller guarantees `op.data` for a voxels op.
             let write = unsafe {
-                enshwick::abi::read_headed(op.data.cast::<VoxelWrite>(), size_of::<VoxelWrite>())
+                enshwick::abi::read_headed(
+                    op.data.cast::<VoxelWrite>(),
+                    <VoxelWrite as enshwick::abi::Headed>::BORN,
+                )
             }
             .ok_or(Status::BAD_ARGS)?;
             let most = crate::transactions::LIMITS.bricks as u64 * 512;
@@ -122,7 +128,10 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::ERASE => {
             // SAFETY: the caller guarantees `op.data` for an erase op.
             let region = unsafe {
-                enshwick::abi::read_headed(op.data.cast::<VoxelRegion>(), size_of::<VoxelRegion>())
+                enshwick::abi::read_headed(
+                    op.data.cast::<VoxelRegion>(),
+                    <VoxelRegion as enshwick::abi::Headed>::BORN,
+                )
             }
             .ok_or(Status::BAD_ARGS)?;
             Erase::new(region.min, region.size).map(Change::Erase)
@@ -131,7 +140,10 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::BLOCK => {
             // SAFETY: the caller guarantees `op.data` for a block op.
             let block = unsafe {
-                enshwick::abi::read_headed(op.data.cast::<BlockPlace>(), size_of::<BlockPlace>())
+                enshwick::abi::read_headed(
+                    op.data.cast::<BlockPlace>(),
+                    <BlockPlace as enshwick::abi::Headed>::BORN,
+                )
             }
             .ok_or(Status::BAD_ARGS)?;
             crate::transactions::resolve(loader, &block).map(|block| Change::Block(Box::new(block)))
@@ -140,7 +152,10 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::PLACE_PROP => {
             // SAFETY: the caller guarantees `op.data` for a prop op.
             let prop = unsafe {
-                enshwick::abi::read_headed(op.data.cast::<PropPlace>(), size_of::<PropPlace>())
+                enshwick::abi::read_headed(
+                    op.data.cast::<PropPlace>(),
+                    <PropPlace as enshwick::abi::Headed>::BORN,
+                )
             }
             .ok_or(Status::BAD_ARGS)?;
             crate::transactions::resolve_prop(loader, &prop).map(Change::PlaceProp)
@@ -148,7 +163,10 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::REMOVE_PROP => {
             // SAFETY: the caller guarantees `op.data` for a removal op.
             let remove = unsafe {
-                enshwick::abi::read_headed(op.data.cast::<PropRemove>(), size_of::<PropRemove>())
+                enshwick::abi::read_headed(
+                    op.data.cast::<PropRemove>(),
+                    <PropRemove as enshwick::abi::Headed>::BORN,
+                )
             }
             .ok_or(Status::BAD_ARGS)?;
             if remove.entity == enshwick::Entity(0)

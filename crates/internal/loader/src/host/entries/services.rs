@@ -99,7 +99,12 @@ pub(crate) extern "system" fn publish(
         };
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::ServiceSpec>()) }) else {
+        let Some(spec) = (unsafe {
+            get_headed(
+                spec,
+                <api_frame::ServiceSpec as enshwick::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layout, with its
@@ -140,8 +145,12 @@ pub(crate) extern "system" fn service(
         };
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(wanted) = (unsafe { get_headed(wanted, size_of::<api_frame::ServiceSpec>()) })
-        else {
+        let Some(wanted) = (unsafe {
+            get_headed(
+                wanted,
+                <api_frame::ServiceSpec as enshwick::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layout, with its
@@ -196,7 +205,9 @@ pub(crate) extern "system" fn define_event(
         }
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::EventSpec>()) }) else {
+        let Some(spec) =
+            (unsafe { get_headed(spec, <api_frame::EventSpec as enshwick::abi::Headed>::BORN) })
+        else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layout, with its
@@ -238,7 +249,9 @@ pub(crate) extern "system" fn subscribe_event(
         }
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::EventSpec>()) }) else {
+        let Some(spec) =
+            (unsafe { get_headed(spec, <api_frame::EventSpec as enshwick::abi::Headed>::BORN) })
+        else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layout, with its
@@ -275,7 +288,7 @@ pub(crate) unsafe fn point_parts(
 ) -> Option<crate::points::Declared> {
     // SAFETY: the caller guarantees `spec` null or readable for the size its
     // header gives, with no concurrent writer; all of the spec is required.
-    let spec = unsafe { get_headed(spec, size_of::<api_frame::PointSpec>()) }?;
+    let spec = unsafe { get_headed(spec, <api_frame::PointSpec as enshwick::abi::Headed>::BORN) }?;
     // SAFETY: the caller guarantees the spec's name and layouts readable and
     // unchanged for the call; `spec` is a copy holding the same pointers.
     unsafe { declared(&spec) }
@@ -340,7 +353,9 @@ pub(crate) extern "system" fn define_point(
         }
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::PointSpec>()) }) else {
+        let Some(spec) =
+            (unsafe { get_headed(spec, <api_frame::PointSpec as enshwick::abi::Headed>::BORN) })
+        else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layouts, with
@@ -354,7 +369,9 @@ pub(crate) extern "system" fn define_point(
         // The mod's headed out struct, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let room = (!out.is_null()).then(|| unsafe { out.cast::<Header>().read_unaligned() }.size);
-        if room.is_none_or(|room| (room as usize) < size_of::<api_frame::PointHandle>()) {
+        if room.is_none_or(|room| {
+            (room as usize) < <api_frame::PointHandle as enshwick::abi::Headed>::BORN
+        }) {
             return Status::BAD_ARGS;
         }
         let defined = crate::points::registry().define(index, &record.id, declared);
@@ -396,7 +413,9 @@ pub(crate) extern "system" fn attach_point(
         }
         // SAFETY: a mod passes null or its version of the link, and all of
         // the link is required.
-        let Some(link) = (unsafe { get_headed(link, size_of::<api_frame::PointLink>()) }) else {
+        let Some(link) =
+            (unsafe { get_headed(link, <api_frame::PointLink as enshwick::abi::Headed>::BORN) })
+        else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass `link.point` null or its version of

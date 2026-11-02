@@ -122,14 +122,13 @@ unsafe fn describe(manifest: &Manifest) -> String {
 /// - Its strings and lists stay readable for the rest of the process.
 #[cfg(any(windows, test))]
 unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
-    const REQUIRED: usize = size_of::<Manifest>();
+    const REQUIRED: usize = <Manifest as enshwick::abi::Headed>::BORN;
     // SAFETY: the caller's contract is the one `read_headed` needs: null or
     // readable for the size its header states, no concurrent writer.
     let manifest = unsafe { enshwick::abi::read_headed(raw, REQUIRED) }
         .ok_or("the mod returned no manifest, or a truncated one")?;
     let header = manifest.header;
-    enshwick::abi::check_abi(u32::from(header.abi_major), header.abi_minor)
-        .map_err(|why| why.to_string())?;
+    enshwick::abi::check_abi(header.abi_major, header.abi_minor).map_err(|why| why.to_string())?;
     Ok(manifest)
 }
 
@@ -160,10 +159,8 @@ fn query(dll: &Path) -> Result<Manifest, String> {
     let abi: unsafe extern "system" fn() -> u32 =
         unsafe { core::mem::transmute(export(enshwick::abi::exports::ABI)?) };
     // SAFETY: `abi` is the mod's `exports::ABI`, which takes no arguments and
-    // returns a constant; the export states only the major, which decides how
-    // the manifest reads.
-    enshwick::abi::check_abi(unsafe { abi() }, enshwick::abi::ABI_MINOR)
-        .map_err(|why| why.to_string())?;
+    // returns a constant, the major that decides how the manifest reads.
+    enshwick::abi::check_major(unsafe { abi() }).map_err(|why| why.to_string())?;
     let query = export(enshwick::abi::exports::QUERY)?;
     // SAFETY: the ABI gives `exports::QUERY` the signature
     // `extern "system" fn() -> *const Manifest`.
@@ -235,7 +232,7 @@ mod tests {
         let why = unsafe { copy(&raw const other) }.unwrap_err();
         assert_eq!(
             why,
-            enshwick::abi::check_abi(u32::from(other.header.abi_major), 0)
+            enshwick::abi::check_abi(other.header.abi_major, 0)
                 .unwrap_err()
                 .to_string()
         );

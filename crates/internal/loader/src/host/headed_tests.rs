@@ -108,6 +108,36 @@ macro_rules! each {
     };
 }
 
+macro_rules! each_born {
+    ($($ty:ident),*) => {
+        $(reads_from_born::<api_frame::$ty>(stringify!($ty));)*
+    };
+}
+
+/// A struct of `T` that a writer of this major's minor 0 wrote, ending at
+/// [`Headed::BORN`], reads with every later field zero; one byte shorter it
+/// is refused.
+fn reads_from_born<T: Headed>(name: &str) {
+    let full = size_of::<T>();
+    let mut from = guarded(full + 16);
+    set_size(&mut from, 0, T::BORN);
+    // SAFETY: `from` is readable for `full + 16` bytes and its header states
+    // `T::BORN`, at most `full`.
+    let copy = unsafe { get_headed(from.as_ptr().cast::<T>(), T::BORN) }.expect(name);
+    // SAFETY: `copy` is a live local `T`, readable for its `full` bytes, all
+    // copied or zeroed by `get_headed`.
+    let copied = unsafe { core::slice::from_raw_parts((&raw const copy).cast::<u8>(), full) };
+    assert!(
+        copied[T::BORN..].iter().all(|&b| b == 0),
+        "{name}: a later field"
+    );
+    set_size(&mut from, 0, T::BORN - 1);
+    // SAFETY: `from` is readable for `full + 16` bytes and its header states
+    // `T::BORN - 1`, fewer.
+    let short = unsafe { get_headed(from.as_ptr().cast::<T>(), T::BORN) };
+    assert!(short.is_none(), "{name}: short of what every writer knows");
+}
+
 /// The one struct that starts with a [`Header`] without being [`Headed`]:
 /// the loader hands out its own static table and never copies a mod's.
 const NOT_HEADED: &str = "HostApi";
@@ -157,7 +187,7 @@ fn headed_in_abi() -> Vec<&'static str> {
     let mut found: Vec<&str> = abi_source()
         .split("\nimpl_headed!(")
         .skip(1)
-        .filter_map(|rest| rest.split_once(')').map(|(name, _)| name))
+        .filter_map(|rest| rest.split([')', ',']).next())
         .collect();
     found.sort_unstable();
     found
@@ -314,6 +344,26 @@ fn every_struct_that_starts_with_a_header_is_headed_but_the_host_table() {
 #[test]
 fn every_headed_struct_crosses_only_as_far_as_the_older_side_knows_it() {
     headed!(each);
+}
+
+#[test]
+fn every_headed_struct_from_a_writer_of_minor_0_reads() {
+    headed!(each_born);
+}
+
+/// An entry point requires of a mod's struct only what every writer of the
+/// major knows, so a mod built for an older minor keeps loading.
+#[test]
+fn no_entry_point_requires_more_than_the_born_size_of_a_mod_s_struct() {
+    for name in headed_in_abi() {
+        for path in ["", "api_frame::", "enshwick::abi::"] {
+            let sized = format!("size_of::<{path}{name}>");
+            assert!(
+                !host_source().contains(&sized),
+                "{sized}: require `<{name} as Headed>::BORN` of a mod's struct, not this build's size"
+            );
+        }
+    }
 }
 
 #[test]

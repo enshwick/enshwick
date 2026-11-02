@@ -159,8 +159,9 @@ pub(crate) extern "system" fn stat_open(
         } else {
             // SAFETY: a mod passes its version of the definition, and all of it
             // is required.
-            let Some(data) = (unsafe { get_headed(def, size_of::<api_frame::StatDefData>()) })
-            else {
+            let Some(data) = (unsafe {
+                get_headed(def, <api_frame::StatDefData as enshwick::abi::Headed>::BORN)
+            }) else {
                 return Status::BAD_ARGS;
             };
             Some(data)
@@ -250,8 +251,12 @@ pub(crate) extern "system" fn stat_modify(
     entry("stat_modify", || {
         // SAFETY: a mod passes null or its version of the request, and all of
         // it is required.
-        let Some(request) = (unsafe { get_headed(request, size_of::<api_frame::StatModify>()) })
-        else {
+        let Some(request) = (unsafe {
+            get_headed(
+                request,
+                <api_frame::StatModify as enshwick::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         match caller_index(me)
@@ -350,7 +355,12 @@ pub(crate) extern "system" fn affix_open(
         };
         // SAFETY: a mod passes null or its version of the definition, and all
         // of it is required.
-        let Some(def) = (unsafe { get_headed(def, size_of::<api_frame::AffixDefData>()) }) else {
+        let Some(def) = (unsafe {
+            get_headed(
+                def,
+                <api_frame::AffixDefData as enshwick::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         match caller_index(me)
@@ -377,7 +387,9 @@ pub(crate) extern "system" fn affix_roll(
         };
         // SAFETY: a mod passes null or its version of the request, and all of
         // it is required.
-        let Some(roll) = (unsafe { get_headed(roll, size_of::<api_frame::AffixRoll>()) }) else {
+        let Some(roll) =
+            (unsafe { get_headed(roll, <api_frame::AffixRoll as enshwick::abi::Headed>::BORN) })
+        else {
             return Status::BAD_ARGS;
         };
         match crate::stats::roll(loader, &roll) {
@@ -733,7 +745,10 @@ pub(crate) extern "system" fn apply_buff(
         // SAFETY: the caller passes null or a request with its header; an
         // all-zero request is valid.
         let Some(request) = (unsafe {
-            enshwick::abi::read_headed(request, size_of::<enshwick::abi::BuffRequest>())
+            enshwick::abi::read_headed(
+                request,
+                <enshwick::abi::BuffRequest as enshwick::abi::Headed>::BORN,
+            )
         }) else {
             return Status::BAD_ARGS;
         };

@@ -31,10 +31,37 @@ struct Field {
     ty: String,
 }
 
-/// The layout of the whole ABI at one version.
+/// The layout of the whole ABI at one version, with the
+/// [`Headed::BORN`](crate::abi::Headed::BORN) of each headed type.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Snapshot {
     types: BTreeMap<String, Shape>,
+    born: BTreeMap<String, usize>,
+}
+
+/// A type the macro `shapes!` asks for its [`Headed::BORN`](crate::abi::Headed::BORN): through
+/// [`BornOfHeaded`] for a headed type, else through [`BornOfOther`], chosen
+/// by autoref on `&&Probe`.
+struct Probe<T>(core::marker::PhantomData<T>);
+
+trait BornOfHeaded {
+    fn born(&self) -> Option<usize>;
+}
+
+impl<T: crate::abi::Headed> BornOfHeaded for &Probe<T> {
+    fn born(&self) -> Option<usize> {
+        Some(T::BORN)
+    }
+}
+
+trait BornOfOther {
+    fn born(&self) -> Option<usize>;
+}
+
+impl<T> BornOfOther for Probe<T> {
+    fn born(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// The field `name` at `offset`, of the type the accessor `_field` picks out
@@ -89,8 +116,14 @@ macro_rules! shapes {
     ($($ty:ident { $($field:tt),* }),* $(,)?) => {
         fn current() -> Snapshot {
             let mut types = BTreeMap::new();
-            $(types.insert(stringify!($ty).to_owned(), shape!($ty { $($field),* }));)*
-            Snapshot { types }
+            let mut born = BTreeMap::new();
+            $(
+                types.insert(stringify!($ty).to_owned(), shape!($ty { $($field),* }));
+                if let Some(end) = (&&Probe::<$ty>(core::marker::PhantomData)).born() {
+                    born.insert(stringify!($ty).to_owned(), end);
+                }
+            )*
+            Snapshot { types, born }
         }
 
         const LISTED: &[(&str, &[&str])] = &[$((stringify!($ty), &[$(stringify!($field)),*])),*];
@@ -239,7 +272,11 @@ impl Snapshot {
     fn render(&self) -> String {
         let mut text = String::new();
         for (name, shape) in &self.types {
-            let _ = writeln!(text, "{name} size {} align {}", shape.size, shape.align);
+            let _ = write!(text, "{name} size {} align {}", shape.size, shape.align);
+            if let Some(born) = self.born.get(name) {
+                let _ = write!(text, " born {born}");
+            }
+            text.push('\n');
             for Field {
                 name,
                 offset,
@@ -256,6 +293,7 @@ impl Snapshot {
     fn parse(text: &str) -> Option<Self> {
         let mut layout = Self {
             types: BTreeMap::new(),
+            born: BTreeMap::new(),
         };
         let mut last = None;
         for line in text.lines() {
@@ -274,8 +312,13 @@ impl Snapshot {
                     ty: ty.to_owned(),
                 });
             } else {
-                let [name, "size", size, "align", align] = words[..] else {
-                    return None;
+                let (name, size, align) = match words[..] {
+                    [name, "size", size, "align", align] => (name, size, align),
+                    [name, "size", size, "align", align, "born", born] => {
+                        layout.born.insert(name.to_owned(), born.parse().ok()?);
+                        (name, size, align)
+                    }
+                    _ => return None,
                 };
                 let shape = Shape {
                     size: size.parse().ok()?,
@@ -328,24 +371,28 @@ fn appends(old: &Snapshot, new: &Snapshot) -> bool {
 }
 
 /// Why `now` is the wrong version for the layout `new`, when the golden
-/// file holds `old` at `was`; `None` when it fits. A higher major fits any
-/// change, since a lower one could match mods of an earlier major; within a
-/// major, an unchanged layout keeps the minor, an append takes the next one,
-/// and any other change fits no minor.
+/// file holds `old` at `was`; `None` when it fits. The next major at minor 0
+/// fits any change; a lower or a skipped one could match mods of an earlier
+/// major. Within a major, an unchanged layout keeps the minor, an append
+/// takes the next one, and any other change fits no minor.
 fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Option<String> {
     let (major, minor) = was;
     let rewrite = "then run the tests with ENSHWICK_ABI_LAYOUT=update";
-    if now.0 < major {
-        return Some(format!(
-            "the ABI major only grows: set ABI_MAJOR to {} or more",
-            major + 1
-        ));
+    if now.0 != major {
+        if now.0 != major + 1 {
+            return Some(format!(
+                "the ABI major after {major} is {}: set ABI_MAJOR to it, {rewrite}",
+                major + 1
+            ));
+        }
+        if now.1 != 0 {
+            return Some(format!(
+                "a new ABI major starts at minor 0: set ABI_MINOR to 0, {rewrite}"
+            ));
+        }
+        return wrong_born(old, new, true);
     }
-    if now.0 > major {
-        return (now.1 != 0)
-            .then(|| format!("a new ABI major starts at minor 0: set ABI_MINOR to 0, {rewrite}"));
-    }
-    let needed = if old == new {
+    let needed = if old.types == new.types {
         minor
     } else if appends(old, new) {
         minor + 1
@@ -356,12 +403,48 @@ fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Opt
             major + 1
         ));
     };
-    (now.1 != needed).then(|| {
-        format!(
-            "the layout from ABI {major}.{minor} needs ABI {major}.{needed}: set ABI_MINOR to \
-             {needed}, keep what readers require of an older writer at its old size and read \
-             the appended fields only where Header::covers them, {rewrite}"
-        )
+    if now.1 != needed {
+        return Some(format!(
+            "the layout from ABI {major}.{minor} needs ABI {major}.{needed}: \
+             set ABI_MINOR to {needed}, {rewrite}"
+        ));
+    }
+    wrong_born(old, new, false)
+}
+
+/// Why a headed type's [`Headed::BORN`](crate::abi::Headed::BORN) in `new`
+/// is wrong, or `None`: in a new major and for a new type it is the type's
+/// size; within a major it keeps what the golden file `old` holds, or the old
+/// size of a type that becomes headed, so a writer of an older minor still
+/// covers what readers require, and a type stays headed for the rest of its
+/// major.
+fn wrong_born(old: &Snapshot, new: &Snapshot, new_major: bool) -> Option<String> {
+    if !new_major {
+        let lost = old.born.keys().find(|name| !new.born.contains_key(*name));
+        if let Some(name) = lost {
+            return Some(format!(
+                "{name} stopped being headed within an ABI major: older writers still send \
+                 it with a header, so keep impl_headed!({name}) or set a new ABI_MAJOR"
+            ));
+        }
+    }
+    new.born.iter().find_map(|(name, &born)| {
+        let size = new.types.get(name).map_or(born, |shape| shape.size);
+        let kept = (!new_major)
+            .then(|| {
+                old.born
+                    .get(name)
+                    .copied()
+                    .or_else(|| old.types.get(name).map(|shape| shape.size))
+            })
+            .flatten();
+        let want = kept.unwrap_or(size);
+        (born != want).then(|| {
+            format!(
+                "{name} has Headed::BORN {born} and needs {want}, the end of what every \
+                 writer of this ABI major knows: write impl_headed!({name}, born = {want})"
+            )
+        })
     })
 }
 
@@ -373,15 +456,31 @@ fn golden_path() -> std::path::PathBuf {
 fn the_abi_layout_and_version_match_the_golden_file() {
     let new = current();
     let path = golden_path();
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
-    let (was, old) = parse_golden(&text)
-        .unwrap_or_else(|| panic!("{} does not read as a golden file", path.display()));
     let now = (ABI_MAJOR, ABI_MINOR);
+    let rendered = render_golden(now, &new);
+    let update = std::env::var_os("ENSHWICK_ABI_LAYOUT").is_some_and(|value| value == "update");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        // A missing file holds no version to bump from.
+        assert!(
+            update,
+            "{} is missing: run the tests with ENSHWICK_ABI_LAYOUT=update",
+            path.display()
+        );
+        std::fs::write(&path, rendered).unwrap();
+        return;
+    };
+    // A broken file, such as one left by a merge conflict, is mended by hand
+    // so the bump check sees both sides.
+    let (was, old) = parse_golden(&text).unwrap_or_else(|| {
+        panic!(
+            "{} does not read as a golden file: resolve it by hand, keeping its version line",
+            path.display()
+        )
+    });
     if let Some(why) = wrong_bump(was, &old, &new, now) {
         panic!("{why}");
     }
-    let rendered = render_golden(now, &new);
-    if std::env::var_os("ENSHWICK_ABI_LAYOUT").is_some_and(|value| value == "update") {
+    if update {
         std::fs::write(&path, rendered).unwrap();
         return;
     }
@@ -518,7 +617,14 @@ fn layout(types: &[(&str, Shape)]) -> Snapshot {
             .iter()
             .map(|(name, shape)| ((*name).to_owned(), shape.clone()))
             .collect(),
+        born: BTreeMap::new(),
     }
+}
+
+/// `layout` with `Fixture`'s [`Headed::BORN`](crate::abi::Headed::BORN) at `born`.
+fn born_at(mut layout: Snapshot, born: usize) -> Snapshot {
+    layout.born.insert("Fixture".to_owned(), born);
+    layout
 }
 
 /// Whether `now` fits the change of one type `Fixture` from `old` at ABI
@@ -577,10 +683,78 @@ fn a_field_appended_into_the_old_tail_padding_needs_a_new_major() {
 }
 
 #[test]
-fn the_major_never_goes_down() {
+fn the_major_moves_only_to_the_next_one() {
     let headed = || shape!(Headed { header, value });
     assert!(!fits(headed(), headed(), (4, 0)));
     assert!(!fits(headed(), headed(), (1, 0)));
+    assert!(!fits(headed(), headed(), (7, 0)), "a skipped major fails");
+}
+
+#[test]
+fn an_append_keeps_what_readers_require_of_older_writers() {
+    let old = born_at(layout(&[("Fixture", shape!(Headed { header, value }))]), 12);
+    let grown = layout(&[(
+        "Fixture",
+        shape!(HeadedGrown {
+            header,
+            value,
+            added
+        }),
+    )]);
+    assert_eq!(
+        wrong_bump((5, 2), &old, &born_at(grown.clone(), 12), (5, 3)),
+        None
+    );
+    let moved = wrong_bump((5, 2), &old, &born_at(grown.clone(), 16), (5, 3)).unwrap();
+    assert!(
+        moved.contains("impl_headed!(Fixture, born = 12)"),
+        "{moved}"
+    );
+    assert_eq!(
+        wrong_bump((5, 2), &old, &born_at(grown.clone(), 16), (6, 0)),
+        None
+    );
+    assert!(
+        wrong_bump((5, 2), &old, &born_at(grown, 12), (6, 0)).is_some(),
+        "a new major starts again at the size"
+    );
+}
+
+#[test]
+fn a_type_that_becomes_headed_in_an_append_is_born_at_its_old_size() {
+    let old = layout(&[("Fixture", shape!(Headed { header, value }))]);
+    let grown = layout(&[(
+        "Fixture",
+        shape!(HeadedGrown {
+            header,
+            value,
+            added
+        }),
+    )]);
+    assert!(wrong_bump((5, 2), &old, &born_at(grown.clone(), 16), (5, 3)).is_some());
+    assert_eq!(wrong_bump((5, 2), &old, &born_at(grown, 12), (5, 3)), None);
+}
+
+#[test]
+fn a_type_stays_headed_for_the_rest_of_its_major() {
+    let headed = || layout(&[("Fixture", shape!(Headed { header, value }))]);
+    let old = born_at(headed(), 12);
+    assert!(wrong_bump((5, 2), &old, &headed(), (5, 2)).is_some());
+    assert_eq!(wrong_bump((5, 2), &old, &headed(), (6, 0)), None);
+}
+
+#[test]
+fn the_born_sizes_are_those_of_the_headed_types() {
+    let layout = current();
+    assert!(
+        layout.born.len() > 50,
+        "{} headed types found",
+        layout.born.len()
+    );
+    for name in layout.born.keys() {
+        let first = layout.types[name].fields.first();
+        assert!(first.is_some_and(|field| field.ty == "Header"), "{name}");
+    }
 }
 
 #[test]

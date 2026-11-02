@@ -156,7 +156,10 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::TERRAIN => {
             // SAFETY: the caller guarantees `op.data` for a terrain op.
             let edit = unsafe {
-                crate::abi::read_headed(op.data.cast::<TerrainEdit>(), size_of::<TerrainEdit>())
+                crate::abi::read_headed(
+                    op.data.cast::<TerrainEdit>(),
+                    <TerrainEdit as crate::abi::Headed>::BORN,
+                )
             }?;
             let valid = edit.flags & TerrainEdit::DRY_RUN == 0
                 && crate::test::table::world::terrain_edit_valid(&edit);
@@ -165,7 +168,10 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::VOXELS => {
             // SAFETY: the caller guarantees `op.data` for a voxels op.
             let write = unsafe {
-                crate::abi::read_headed(op.data.cast::<VoxelWrite>(), size_of::<VoxelWrite>())
+                crate::abi::read_headed(
+                    op.data.cast::<VoxelWrite>(),
+                    <VoxelWrite as crate::abi::Headed>::BORN,
+                )
             }?;
             let count =
                 Voxel::read_count(write.min, [1; 3]).and(box_count(write.min, write.size))?;
@@ -188,7 +194,10 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::ERASE => {
             // SAFETY: the caller guarantees `op.data` for an erase op.
             let region = unsafe {
-                crate::abi::read_headed(op.data.cast::<VoxelRegion>(), size_of::<VoxelRegion>())
+                crate::abi::read_headed(
+                    op.data.cast::<VoxelRegion>(),
+                    <VoxelRegion as crate::abi::Headed>::BORN,
+                )
             }?;
             box_count(region.min, region.size)?;
             Some(FakeChange::Erase {
@@ -199,7 +208,10 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::PLACE_PROP => {
             // SAFETY: the caller guarantees `op.data` for a prop op.
             let prop = unsafe {
-                crate::abi::read_headed(op.data.cast::<PropPlace>(), size_of::<PropPlace>())
+                crate::abi::read_headed(
+                    op.data.cast::<PropPlace>(),
+                    <PropPlace as crate::abi::Headed>::BORN,
+                )
             }?;
             let finite = prop.position.iter().all(|v| v.is_finite() && *v >= 0.0)
                 && prop.orientation.iter().all(|v| v.is_finite())
@@ -209,7 +221,10 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::REMOVE_PROP => {
             // SAFETY: the caller guarantees `op.data` for a removal op.
             let remove = unsafe {
-                crate::abi::read_headed(op.data.cast::<PropRemove>(), size_of::<PropRemove>())
+                crate::abi::read_headed(
+                    op.data.cast::<PropRemove>(),
+                    <PropRemove as crate::abi::Headed>::BORN,
+                )
             }?;
             (!remove.entity.is_none() && remove.flags & !PropRemove::DISCARD_STATE == 0)
                 .then_some(FakeChange::RemoveProp(remove))
@@ -217,7 +232,10 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::BLOCK => {
             // SAFETY: the caller guarantees `op.data` for a block op.
             let block = unsafe {
-                crate::abi::read_headed(op.data.cast::<BlockPlace>(), size_of::<BlockPlace>())
+                crate::abi::read_headed(
+                    op.data.cast::<BlockPlace>(),
+                    <BlockPlace as crate::abi::Headed>::BORN,
+                )
             }?;
             let finite = block.position.iter().all(|v| v.is_finite() && *v >= 0.0)
                 && block.rotation.iter().all(|v| v.is_finite())

@@ -46,7 +46,9 @@ pub(crate) extern "system" fn serve_call(
         }
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::CallSpec>()) }) else {
+        let Some(spec) =
+            (unsafe { get_headed(spec, <api_frame::CallSpec as enshwick::abi::Headed>::BORN) })
+        else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layouts, with
@@ -89,7 +91,9 @@ pub(crate) extern "system" fn find_call(
         }
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::CallSpec>()) }) else {
+        let Some(spec) =
+            (unsafe { get_headed(spec, <api_frame::CallSpec as enshwick::abi::Headed>::BORN) })
+        else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layouts, with

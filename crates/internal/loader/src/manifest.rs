@@ -7,9 +7,8 @@ use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
 
-/// Where the fields of a manifest of minor 0 end; every mod of this ABI
-/// major writes them.
-const REQUIRED: usize = size_of::<Manifest>();
+/// Where the fields every mod of this ABI major writes end.
+const REQUIRED: usize = <Manifest as enshwick::abi::Headed>::BORN;
 
 /// Why a mod's manifest is refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -222,7 +221,7 @@ pub(crate) fn enshwick_refusal(requirement: &str) -> Option<String> {
 /// ABI version.
 pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     let header = manifest.header;
-    check_abi(u32::from(header.abi_major), header.abi_minor)?;
+    check_abi(header.abi_major, header.abi_minor)?;
     if !manifest.header.covers(REQUIRED) {
         return Err(ManifestError::Truncated);
     }
