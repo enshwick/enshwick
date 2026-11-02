@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn a_manifest_reads_as_lines() {
         static AUTHORS: [Str; 2] = [Str::new("themaiby"), Str::new("a friend")];
-        static EXPORTS: [Str; 2] = [Str::new("stall"), Str::new("opened")];
+        static EXPORTS: [Str; 2] = [Str::new("content:stall"), Str::new("event:opened")];
         let relation = |id, range, relation| Dependency {
             id: Str::new(id),
             range: Str::new(range),
@@ -292,7 +292,7 @@ mod tests {
             "id: you.market-stalls\nversion: 0.2.0\nname: Market Stalls\n\
              description: Stalls that sell what players craft\nauthors: themaiby, a friend\n\
              license: MIT\nhomepage: https://github.com/enshwick/enshwick\n\
-             exports: stall, opened\nside: both\njoin check: yes\n\
+             exports: content:stall, event:opened\nside: both\njoin check: yes\n\
              requires: you.trading-post >=0.1, <1.0\nafter: you.lanterns\n\
              recommends: you.lanterns\nbreaks: old-stalls <0.3\n\
              replaces: stalls"

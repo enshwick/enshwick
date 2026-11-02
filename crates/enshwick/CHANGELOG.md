@@ -20,8 +20,11 @@ Each entry names the pull request that made the change.
   `content:<name>` and `stat:<name>` alone. `export` with `of`, or on a full
   name of another mod's id outside a test, fails the build. A dependency's
   stat kind is named `Id::of(deps::<alias>::ID, "<name>")`, since
-  `deps::<alias>::id` checks a content export. Write each export with its
-  kind, and move declarations onto `export` (#883).
+  `deps::<alias>::id` checks a content export. Since this changes what
+  `Manifest::exports` means, the ABI is 6.0: the loader refuses a mod built
+  for 5.x with "rebuild it for Enshwick" and its version. Write each export
+  with its kind, move declarations onto `export`, and rebuild every mod
+  (#883).
 - **Breaking:** `declare_mod!(Type)` takes no `points`, `events` or `calls`
   lists. Each exported `#[point]`, `#[event]` and `#[call]` writes its schema into the DLL's
   `.enshpt` section; the manifest collects them from there at the loader's

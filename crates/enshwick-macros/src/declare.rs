@@ -730,7 +730,8 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
         static BUILDS: &[#abi::BuildRow] = &[#(#builds),*];
         const VERSION: &str = ::core::env!("CARGO_PKG_VERSION");
         const HEAD: &str = ::enshwick::__private::concatcp!(
-            "schema = 2\nmod = \"", #id, "\"\nversion = \"", VERSION, "\"\n", #listed,
+            "schema = ", ::enshwick::schema_section::FORMAT, "\nmod = \"", #id,
+            "\"\nversion = \"", VERSION, "\"\n", #listed,
         );
         ::enshwick::__schema_entry!(HEAD);
         static MANIFEST: #abi::Manifest = #abi::Manifest {

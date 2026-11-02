@@ -365,7 +365,7 @@ impl ManifestFacts {
     /// refuses the mod.
     pub(crate) fn unexported(
         &self,
-        kind: &str,
+        kind: crate::schema_section::Kind,
         name: &str,
         exports: &rustc_hash::FxHashMap<String, Vec<String>>,
     ) -> bool {
@@ -386,7 +386,7 @@ impl ManifestFacts {
 
 /// Logs the loader's warning for a mod refused the `kind` `id`,
 /// `<owner>:<what>`, whose owner does not export it.
-pub(crate) fn warn_unexported(s: &mut State, kind: &str, id: &str) {
+pub(crate) fn warn_unexported(s: &mut State, kind: crate::schema_section::Kind, id: &str) {
     let (owner, what) = id.split_once(':').unwrap_or_default();
     let offered = match s.host.exports.get(owner) {
         Some(names) if !names.is_empty() => format!("it exports {}", names.join(", ")),
@@ -394,7 +394,10 @@ pub(crate) fn warn_unexported(s: &mut State, kind: &str, id: &str) {
     };
     s.logs.push((
         Level::WARN,
-        format!("{kind} {id}: {owner} does not export {what}; {offered}"),
+        format!(
+            "{} {id}: {owner} does not export {what}; {offered}",
+            kind.label()
+        ),
     ));
 }
 

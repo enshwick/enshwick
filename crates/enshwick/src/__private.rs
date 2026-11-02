@@ -201,7 +201,6 @@ impl Manifested {
         let declared: Box<[Box<str>]> = section
             .exports(self.id)
             .into_iter()
-            .filter(|name| !self.exports.contains(&name.as_str()))
             .map(String::into_boxed_str)
             .collect();
         let exports: Box<[crate::abi::Str]> = self

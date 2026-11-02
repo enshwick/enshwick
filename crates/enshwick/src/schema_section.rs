@@ -14,7 +14,8 @@ use crate::__private::is_own;
 /// The schema format a head states, which `cargo enshwick` checks.
 pub const FORMAT: u32 = 2;
 
-/// What an entry declares; entries of a schema text go in this order.
+/// What a mod exports, and what an entry declares; entries of a schema text
+/// go in this order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[non_exhaustive]
 pub enum Kind {
@@ -26,25 +27,83 @@ pub enum Kind {
     Call,
     /// A service table, whose entry carries no schema.
     Service,
+    /// A content id, exported by `exports` and never an entry.
+    Content,
+    /// A stat kind, exported by `exports` and never an entry.
+    Stat,
 }
 
 impl Kind {
-    /// Each kind with the table its entry starts with and the word before
-    /// `:` in an export of it.
-    const TABLES: [(Self, &'static str, &'static str); 4] = [
-        (Self::Point, "[[point]]\n", "point"),
-        (Self::Event, "[[event]]\n", "event"),
-        (Self::Call, "[[call]]\n", "call"),
-        (Self::Service, "[[service]]\n", "service"),
+    /// Every kind, in order.
+    pub const ALL: [Self; 6] = [
+        Self::Point,
+        Self::Event,
+        Self::Call,
+        Self::Service,
+        Self::Content,
+        Self::Stat,
+    ];
+
+    /// Each kind of an entry with the table it starts with.
+    const TABLES: [(Self, &'static str); 4] = [
+        (Self::Point, "[[point]]\n"),
+        (Self::Event, "[[event]]\n"),
+        (Self::Call, "[[call]]\n"),
+        (Self::Service, "[[service]]\n"),
     ];
 
     /// The word before `:` in an export of this kind, as `point:price`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::schema_section::Kind;
+    ///
+    /// assert_eq!(Kind::Content.word(), "content");
+    /// ```
     #[must_use]
-    pub fn word(self) -> &'static str {
-        Self::TABLES
-            .iter()
-            .find(|(kind, _, _)| *kind == self)
-            .map_or("", |&(_, _, word)| word)
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Point => "point",
+            Self::Event => "event",
+            Self::Call => "call",
+            Self::Service => "service",
+            Self::Content => "content",
+            Self::Stat => "stat",
+        }
+    }
+
+    /// What a message calls a name of this kind, as
+    /// `content id you.lockers:key`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::schema_section::Kind;
+    ///
+    /// assert_eq!(Kind::Content.label(), "content id");
+    /// ```
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Content => "content id",
+            other => other.word(),
+        }
+    }
+
+    /// The kind whose word is `word`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::schema_section::Kind;
+    ///
+    /// assert_eq!(Kind::of_word("stat"), Some(Kind::Stat));
+    /// assert_eq!(Kind::of_word("greeting"), None);
+    /// ```
+    #[must_use]
+    pub fn of_word(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.word() == word)
     }
 }
 
@@ -151,9 +210,9 @@ impl<'a> Section<'a> {
             let name = value(text, "name")
                 .filter(|name| text.starts_with("[[") && !name.is_empty())
                 .ok_or(ReadSectionError::Damaged(start))?;
-            if let Some(&(kind, _, _)) = Kind::TABLES
+            if let Some(&(kind, _)) = Kind::TABLES
                 .iter()
-                .find(|(_, table, _)| text.starts_with(table))
+                .find(|(_, table)| text.starts_with(table))
             {
                 section.entries.push(Entry { kind, name, text });
             }

@@ -175,7 +175,15 @@ pub(crate) fn run(
     let mut found = Vec::new();
     let mut unread = Vec::new();
     for (dll, text) in schemas(from, &mut unread)? {
-        found.push(Schema::parse(&text).with_context(|| dll.display().to_string())?);
+        match Schema::parse(&text) {
+            Ok(schema) => found.push(schema),
+            // A mod DLL of another schema format: its owner or this tool
+            // needs another release, which the line names.
+            Err(e @ cargo_enshwick::points::Error::Format(_)) => {
+                unread.push(format!("{}: {e}", dll.display()));
+            }
+            Err(e) => return Err(e).with_context(|| dll.display().to_string()),
+        }
     }
     let mut lines: Vec<String> = unread
         .iter()
