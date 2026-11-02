@@ -87,7 +87,7 @@ static-is-registry-fuse-or-state crates/internal/loader/src/reload.rs static CAL
 static-is-registry-fuse-or-state crates/internal/loader/src/reload.rs static HELD: Mutex<Vec<String>> = Mutex::new(Vec::new());
 # When each player last changed a setting, the server's rate state; it
 # moves into one remote state struct with `QUERIES`.
-static-is-registry-fuse-or-state crates/internal/loader/src/remote.rs static LAST_EDIT: Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = Mutex::new(None);
+static-is-registry-fuse-or-state crates/internal/loader/src/remote/live.rs static LAST_EDIT: Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = Mutex::new(None);
 # Every world key seen this process; it moves into the saves' `Keys`
 # state.
 static-is-registry-fuse-or-state crates/internal/loader/src/saves.rs static SEEN: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
