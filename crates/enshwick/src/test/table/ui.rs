@@ -90,11 +90,19 @@ pub(crate) extern "system" fn ui_widget(
     frame: u64,
     widget: *mut UiWidget,
 ) -> Status {
-    use crate::test::{Drawn, Input};
-    // SAFETY: the safe layer passes its own widget, valid for the call.
-    let Some(w) = (unsafe { widget.as_mut() }) else {
+    let Some(mut copy) = super::get_headed(widget.cast_const()) else {
         return Status::BAD_ARGS;
     };
+    let status = draw(frame, &mut copy);
+    match super::put_headed(widget, copy) {
+        Status::OK => status,
+        refused => refused,
+    }
+}
+
+/// Draws the widget `w` in `frame` and writes its answer into it.
+fn draw(frame: u64, w: &mut UiWidget) -> Status {
+    use crate::test::{Drawn, Input};
     let label = text(w.text);
     let options: Vec<String> = if w.options.is_null() {
         Vec::new()
@@ -203,14 +211,11 @@ pub(crate) extern "system" fn ui_markers(
     markers: *const UiMarker,
     count: u32,
 ) -> Status {
-    if count as usize > crate::ui::MARKER_LIMIT || (markers.is_null() && count > 0) {
+    if count as usize > crate::ui::MARKER_LIMIT {
         return Status::BAD_ARGS;
     }
-    let given = if count == 0 {
-        &[][..]
-    } else {
-        // SAFETY: the safe layer passes `count` markers, valid for the call.
-        unsafe { core::slice::from_raw_parts(markers, count as usize) }
+    let Some(given) = super::get_headed_list(markers, count) else {
+        return Status::BAD_ARGS;
     };
     let markers: Vec<crate::test::FakeMarker> = given
         .iter()
@@ -261,8 +266,7 @@ pub(crate) extern "system" fn ui_dialog(
     callback: UiAnswerFn,
     user: *mut c_void,
 ) -> Status {
-    // SAFETY: the safe layer passes its own dialog, valid for the call.
-    let Some(d) = (unsafe { dialog.as_ref() }) else {
+    let Some(d) = super::get_headed(dialog) else {
         return Status::BAD_ARGS;
     };
     let shown = crate::test::ShownDialog {
@@ -314,8 +318,10 @@ pub(crate) extern "system" fn fog_read(
         let Some((found, pixels)) = s.host.fog.as_ref() else {
             return Status::MISSING;
         };
-        // SAFETY: the safe layer passes a writable `FogInfo` for the call.
-        unsafe { info.write(*found) };
+        let written = super::put_headed(info, *found);
+        if written != Status::OK {
+            return written;
+        }
         if !wanted {
             return Status::OK;
         }

@@ -4,7 +4,7 @@ use core::ffi::c_void;
 
 use crate::abi::{InventoryRequest, InventoryResultFn, ItemData, ModHandle, Status};
 use crate::test::SubmittedRequest;
-use crate::test::table::{OpenRequest, found, with};
+use crate::test::table::{OpenRequest, with};
 
 pub(crate) extern "system" fn inventory_open(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
@@ -21,7 +21,7 @@ pub(crate) extern "system" fn item_info(
     item: crate::ItemId,
     out: *mut ItemData,
 ) -> Status {
-    found(with(None, |s| s.host.items.get(&item.get()).copied()), out)
+    super::found_headed(with(None, |s| s.host.items.get(&item.get()).copied()), out)
 }
 
 pub(crate) extern "system" fn inventory_submit(
@@ -30,9 +30,11 @@ pub(crate) extern "system" fn inventory_submit(
     done: InventoryResultFn,
     user: *mut c_void,
 ) -> Status {
-    // SAFETY: the safe layer passes a valid request for the call; `as_ref`
-    // turns away null.
-    let Some(request) = (unsafe { request.as_ref() }) else {
+    // The loader requires only the fields through `op_count`.
+    let required = core::mem::offset_of!(InventoryRequest, op_count) + size_of::<u32>();
+    // SAFETY: the safe layer passes null or its version of the request,
+    // readable for the size its header states, for the call.
+    let Some(request) = (unsafe { crate::abi::read_headed(request, required) }) else {
         return Status::BAD_ARGS;
     };
     if request.ops.is_null() || request.op_count == 0 {

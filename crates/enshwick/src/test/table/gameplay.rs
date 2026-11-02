@@ -9,7 +9,7 @@ use crate::abi::{
     Side, SkillCheckFn, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
 };
 use crate::test::table::mods::list;
-use crate::test::table::{Registration, put, put_list, with};
+use crate::test::table::{Registration, put, with};
 
 pub(crate) extern "system" fn altars_open(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
@@ -375,7 +375,7 @@ pub(crate) extern "system" fn buff_types(
     count: *mut u32,
 ) -> Status {
     let types = with(Vec::new(), |s| s.buff_types.clone());
-    put_list(&types, out, capacity, count)
+    super::put_headed_list(&types, out, capacity, count)
 }
 
 pub(crate) extern "system" fn buffs(
@@ -386,14 +386,13 @@ pub(crate) extern "system" fn buffs(
     count: *mut u32,
 ) -> Status {
     match with(None::<Vec<ActiveBuff>>, |s| s.buffs.get(&entity.0).cloned()) {
-        Some(on) => put_list(&on, out, capacity, count),
+        Some(on) => super::put_headed_list(&on, out, capacity, count),
         None => Status::MISSING,
     }
 }
 
 pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffRequest) -> Status {
-    // SAFETY: the safe layer passes a valid request for the call.
-    let Some(request) = (unsafe { request.as_ref() }).copied() else {
+    let Some(request) = super::get_headed(request) else {
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {

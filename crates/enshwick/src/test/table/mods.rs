@@ -39,8 +39,7 @@ pub(crate) extern "system" fn settings(_me: ModHandle, defaults: Str, out: *mut 
 }
 
 pub(crate) extern "system" fn migrate(_me: ModHandle, set: *const MigrationSet) -> Status {
-    // SAFETY: the safe layer passes a valid set.
-    let Some(set) = (unsafe { set.as_ref() }) else {
+    let Some(set) = super::get_headed(set) else {
         return Status::BAD_ARGS;
     };
     let Some(map) = set.map else {

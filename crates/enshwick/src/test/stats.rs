@@ -111,10 +111,8 @@ pub(crate) extern "system" fn stat_open(
     let Some(id) = unsafe { id.as_str() }.and_then(full) else {
         return Status::BAD_ARGS;
     };
-    // SAFETY: the safe layer, the fake's only caller, passes null or a
-    // definition alive for the call.
-    let def = unsafe { def.as_ref() };
-    let parsed = match def {
+    let def = super::table::get_headed(def);
+    let parsed = match &def {
         Some(data) => match StatDef::from_data(data) {
             Some(def) => Some(def),
             None => return Status::BAD_ARGS,
@@ -180,9 +178,10 @@ pub(crate) extern "system" fn stat_info(
     if def.is_null() || id.is_null() {
         return Status::BAD_ARGS;
     }
-    // SAFETY: the `is_null` check refused null; the safe layer passes an
-    // aligned `StatDefData` it owns.
-    unsafe { def.write(data) };
+    let written = super::table::put_headed(def, data);
+    if written != Status::OK {
+        return written;
+    }
     // SAFETY: the `is_null` check refused null; the safe layer passes an
     // aligned `Str` it owns.
     unsafe { id.write(name) };
@@ -289,9 +288,7 @@ pub(crate) extern "system" fn stat_value(
 }
 
 pub(crate) extern "system" fn stat_modify(_me: ModHandle, request: *const StatModify) -> Status {
-    // SAFETY: the safe layer, the fake's only caller, passes null or a
-    // request alive for the call.
-    let Some(request) = (unsafe { request.as_ref() }) else {
+    let Some(request) = super::table::get_headed(request) else {
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
@@ -489,9 +486,7 @@ pub(crate) extern "system" fn affix_open(
     let Some(id) = unsafe { id.as_str() }.and_then(full) else {
         return Status::BAD_ARGS;
     };
-    // SAFETY: the safe layer, the fake's only caller, passes null or a
-    // definition alive for the call.
-    let Some(data) = (unsafe { def.as_ref() }) else {
+    let Some(data) = super::table::get_headed(def) else {
         return Status::BAD_ARGS;
     };
     let opened = with(Err(Status::MISSING), |s| {
@@ -506,7 +501,7 @@ pub(crate) extern "system" fn affix_open(
         };
         // SAFETY: the ABI lends the definition's group and ranges for the
         // call.
-        let Some(parsed) = (unsafe { AffixDef::from_data(data, stat) }) else {
+        let Some(parsed) = (unsafe { AffixDef::from_data(&data, stat) }) else {
             return Err(Status::BAD_ARGS);
         };
         if !own || stats.affixes.iter().any(|(known, _, _)| **known == *id) {
@@ -534,9 +529,7 @@ pub(crate) extern "system" fn affix_roll(
     roll: *const AffixRoll,
     count: *mut u32,
 ) -> Status {
-    // SAFETY: the safe layer, the fake's only caller, passes null or a roll
-    // alive for the call.
-    let Some(roll) = (unsafe { roll.as_ref() }) else {
+    let Some(roll) = super::table::get_headed(roll) else {
         return Status::BAD_ARGS;
     };
     let item = ItemInstance {

@@ -19,8 +19,7 @@ pub(crate) fn view(fields: &[(String, u64)]) -> Vec<(&str, u64)> {
 }
 
 pub(crate) extern "system" fn publish(_me: ModHandle, spec: *const ServiceSpec) -> Status {
-    // SAFETY: the safe layer passes a valid spec.
-    let Some(spec) = (unsafe { spec.as_ref() }) else {
+    let Some(spec) = super::get_headed(spec) else {
         return Status::BAD_ARGS;
     };
     let (name, Some(fields)) = (text(spec.name), layout_of(&spec.layout)) else {
@@ -53,8 +52,7 @@ pub(crate) extern "system" fn service(
     wanted: *const ServiceSpec,
     out: *mut ServiceFound,
 ) -> Status {
-    // SAFETY: the safe layer passes a valid spec.
-    let Some(wanted) = (unsafe { wanted.as_ref() }) else {
+    let Some(wanted) = super::get_headed(wanted) else {
         return Status::BAD_ARGS;
     };
     let (name, Some(fields)) = (text(wanted.name), layout_of(&wanted.layout)) else {
@@ -91,7 +89,7 @@ pub(crate) extern "system" fn service(
             Status::REFUSED
         }
     };
-    match put(out, found) {
+    match super::put_headed(out, found) {
         Status::OK => status,
         other => other,
     }
@@ -102,8 +100,7 @@ pub(crate) extern "system" fn define_event(
     spec: *const EventSpec,
     out: *mut u32,
 ) -> Status {
-    // SAFETY: the safe layer passes a valid spec.
-    let Some(spec) = (unsafe { spec.as_ref() }) else {
+    let Some(spec) = super::get_headed(spec) else {
         return Status::BAD_ARGS;
     };
     let (name, Some(fields)) = (text(spec.name), layout_of(&spec.layout)) else {
@@ -128,8 +125,7 @@ pub(crate) extern "system" fn subscribe_event(
     callback: ModEventFn,
     user: *mut c_void,
 ) -> Status {
-    // SAFETY: the safe layer passes a valid spec.
-    let Some(spec) = (unsafe { spec.as_ref() }) else {
+    let Some(spec) = super::get_headed(spec) else {
         return Status::BAD_ARGS;
     };
     let (name, Some(fields)) = (text(spec.name), layout_of(&spec.layout)) else {
