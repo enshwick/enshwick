@@ -94,7 +94,8 @@ mod tests {
         *MAP.lock().unwrap() = None;
         *ALTARS.lock().unwrap() = None;
         // SAFETY: both functions are the exports of this file's `declare_mod!(Cartographer)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let map = MAP.lock().unwrap().unwrap();
         // The first call of a world starts the loader's read of the scene.

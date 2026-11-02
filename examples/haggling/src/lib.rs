@@ -131,7 +131,13 @@ mod tests {
             )
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Haggling)`.
-        let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
+        let status = unsafe {
+            loader.start(
+                super::enshwick_mod_query,
+                super::enshwick_mod_init,
+                super::enshwick_mod_ready,
+            )
+        };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.attached_points(), ["you.trading-post:price"]);
         assert_eq!(

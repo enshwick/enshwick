@@ -69,7 +69,8 @@ mod tests {
             .item_category(enshwick::ItemId::new(SWORD), 2)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Loot)`.
-        let started = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let started =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(started, Status::OK);
         let Kit {
             affixes,

@@ -84,7 +84,7 @@ let loader = enshwick::test::FakeHost::new()
     .settings("bonus = 5\n")
     .install();
 // SAFETY: the exports of `declare_mod!` above.
-let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
 assert_eq!(status, Status::OK);
 assert_eq!(loader.hooks().len(), 1);
 
@@ -137,7 +137,7 @@ enshwick::declare_mod!(Picky);
 
 let loader = enshwick::test::FakeHost::new().install();
 // SAFETY: the exports of `declare_mod!` above.
-let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
 assert_eq!(status, Status::REFUSED);
 assert_eq!(
     loader.logs(),
@@ -380,7 +380,7 @@ enshwick::declare_mod!(Greeter);
 
 let loader = enshwick::test::FakeHost::new().install();
 // SAFETY: the exports of `declare_mod!` above.
-let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
 assert_eq!(status, Status::OK);
 enshwick_mod_shutdown();
 assert!(loader.logs().iter().any(|(_, line)| line == "shut down: hello from the first copy"));

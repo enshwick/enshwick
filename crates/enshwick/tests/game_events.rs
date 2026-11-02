@@ -56,7 +56,8 @@ mod tests {
             .field_offset("keen::ecs::EntityDiedEvent", "late", 12)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Watcher)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.game_event_types(), [DIED, 0]);
         let mut listed = LISTED.lock().unwrap().clone();

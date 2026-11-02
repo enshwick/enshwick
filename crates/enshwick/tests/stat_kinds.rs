@@ -83,7 +83,8 @@ mod tests {
     fn sources_add_up_in_order_and_changes_are_raised_once() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Rpg)`.
-        let started = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let started =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(started, Status::OK);
         let Kit {
             buffs,
@@ -242,7 +243,8 @@ mod dependency {
             .exports("you.lockers", exports)
             .install();
         // SAFETY: both functions are the exports of this module's `declare_mod!(Reader)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         let warnings = loader
             .logs()
             .into_iter()

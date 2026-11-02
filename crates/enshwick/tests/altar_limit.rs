@@ -28,7 +28,8 @@ mod tests {
     fn a_filter_answers_from_the_game_s_count_within_the_raised_limit() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: the exports of `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.altar_limit(3, 6), 18);
         assert_eq!(loader.altar_limit(11, 16), 32);

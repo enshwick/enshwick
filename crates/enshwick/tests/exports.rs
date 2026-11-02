@@ -59,7 +59,8 @@ mod tests {
         let loader = host.service(&KEYS).install();
         loader.define_point::<Price>();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Haggler)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         (loader, status)
     }
 
@@ -154,7 +155,8 @@ mod tests {
                 .install();
             loader.serve_call(|rent: &Rent| rent.locker * 3);
             // SAFETY: both functions are the exports of this module's `declare_mod!(Renter)`.
-            let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+            let status =
+                unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
             (loader, status)
         }
 

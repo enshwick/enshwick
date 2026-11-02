@@ -39,7 +39,8 @@ mod tests {
     fn a_poisoned_lock_is_logged_at_the_line_that_took_it() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: the exports of `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let warned: Vec<String> = loader
             .logs()

@@ -39,7 +39,8 @@ mod tests {
     fn started_with(settings: &str) -> Option<u32> {
         let loader = FakeHost::new().settings(settings).install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Rates)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         Rates::instance().map(|rates| rates.rate)
     }

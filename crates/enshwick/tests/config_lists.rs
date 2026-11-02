@@ -100,7 +100,8 @@ mod clamping {
             .settings("per_level = [0, 4, 40]\nreach = 25.0\n")
             .install();
         // SAFETY: the exports of `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let read = READ.lock().unwrap().take().unwrap();
         assert_eq!(read.per_level, [1, 4, 32]);

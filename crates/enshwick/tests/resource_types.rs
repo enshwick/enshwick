@@ -40,7 +40,8 @@ mod tests {
             .type_hash(types::ITEM_INFO.id(), 0x1234)
             .install();
         // SAFETY: the exports of `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let (item, image) = KEYS.get().unwrap();
         assert_eq!(*item, CHEST.key_by_hash(0x1234));

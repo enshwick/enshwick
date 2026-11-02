@@ -190,7 +190,7 @@ enshwick::declare_mod!(Lockers);
 
 let loader = enshwick::test::FakeHost::new().install();
 // SAFETY: the exports of `declare_mod!` above.
-let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
 assert!(status.is_ok());
 assert_eq!(loader.migrations(), ["2"]);
 assert_eq!(loader.migrate_settings("cost = 3\n"), Ok("cost_multiplier = 3\n".to_owned()));

@@ -42,7 +42,8 @@ mod tests {
     fn the_largest_request_holds_and_one_past_the_most_is_refused() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: the exports of `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let limit = enshwick::altars::base_limit().unwrap();
         assert_eq!((limit.zones, limit.bases), (128, 40));
@@ -95,7 +96,8 @@ mod unknown_build {
             .without_base_limit()
             .install();
         // SAFETY: the exports of `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.requested_base_limits(), None);
         let limit = enshwick::altars::base_limit().unwrap();
@@ -132,7 +134,8 @@ mod zones_only {
             .without_bases_past_16()
             .install();
         // SAFETY: the exports of `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.requested_base_limits(), Some((64, 179)));
         let limit = enshwick::altars::base_limit().unwrap();

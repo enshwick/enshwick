@@ -55,7 +55,8 @@ mod tests {
             .settings("limit = 4\nrate = 1\nworkers = 2\n")
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Limits)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(LIMIT.load(Ordering::Relaxed), 4);
         loader.set_settings("limit = 9\nrate = 2\nworkers = 8\n");

@@ -48,7 +48,8 @@ mod tests {
             .player(player(11, 8, PlayerInfo::CAN_KICK_BAN))
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = *WORLD.get().unwrap();
 
@@ -89,7 +90,8 @@ mod tests {
     fn the_allowlist_lists_each_account_once_from_any_thread() {
         let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = *WORLD.get().unwrap();
 
@@ -139,7 +141,8 @@ mod tests {
             .world()
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = *WORLD.get().unwrap();
 
@@ -163,7 +166,8 @@ mod tests {
             .player(player(11, 8, PlayerInfo::CAN_KICK_BAN))
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = *WORLD.get().unwrap();
         let key = enshwick::PlayerKey::new;
@@ -196,7 +200,8 @@ mod tests {
             .world()
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = *WORLD.get().unwrap();
         let key = enshwick::PlayerKey::new;
@@ -215,7 +220,8 @@ mod tests {
             .world()
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = *WORLD.get().unwrap();
         let key = enshwick::PlayerKey::new;
@@ -234,7 +240,8 @@ mod tests {
             .player(player(10, 7, 0))
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = *WORLD.get().unwrap();
 
@@ -266,7 +273,8 @@ mod tests {
     fn account_actions_wait_for_the_game_thread() {
         let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = *WORLD.get().unwrap();
 

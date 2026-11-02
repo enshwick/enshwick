@@ -63,7 +63,7 @@
 //!     .install();
 //! // SAFETY: `enshwick_mod_init` and `enshwick_mod_ready` are the exports
 //! // `declare_mod!(Bonus)` generated in this example.
-//! let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+//! let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
 //! assert_eq!(status, Status::OK);
 //!
 //! let reward = loader.detour(&REWARD).ok_or("not linked")?;
@@ -182,6 +182,14 @@ pub type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status
 ///
 /// See [`Installed::start`], which takes one.
 pub type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
+
+/// A mod's `enshwick_mod_query` export, as [`declare_mod!`](crate::declare_mod)
+/// writes it: the manifest the fake reads before init, as the loader does.
+///
+/// # Examples
+///
+/// See [`Installed::start`], which takes one.
+pub type QueryFn = extern "system" fn() -> *const crate::abi::Manifest;
 
 /// The id the fake loader gives the mod it runs: the namespace its stats,
 /// item data and services take.
@@ -569,21 +577,32 @@ impl Installed {
         unsafe { ready(self.api(), self.handle) }
     }
 
-    /// Initialises the mod and, when it agrees, tells it its hooks are armed;
-    /// returns the answer of `init`.
+    /// Reads the mod's manifest, initialises the mod unless the loader would
+    /// refuse it first, and, when init agrees, tells it its hooks are armed;
+    /// returns the answer of `init`, or [`Status::REFUSED`] for a refused mod.
+    ///
+    /// A mod with `developer: true` is refused before its init while
+    /// [`FakeHost::developer_tools`] is off, as the loader refuses it.
     ///
     /// # Safety
     ///
-    /// - `init` and `ready` are the `enshwick_mod_init` and
-    ///   `enshwick_mod_ready` exports of one
-    ///   [`declare_mod!`](crate::declare_mod).
+    /// - `query`, `init` and `ready` are the `enshwick_mod_query`,
+    ///   `enshwick_mod_init` and `enshwick_mod_ready` exports of one mod,
+    ///   such as one [`declare_mod!`](crate::declare_mod) writes.
     ///
     /// # Examples
     ///
     /// See [`crate`].
-    pub unsafe fn start(&self, init: InitFn, ready: ReadyFn) -> Status {
-        // SAFETY: the caller guarantees `init` is the `enshwick_mod_init` of a
-        // `declare_mod!`.
+    pub unsafe fn start(&self, query: QueryFn, init: InitFn, ready: ReadyFn) -> Status {
+        // SAFETY: `query` returns null or a manifest valid until the mod's
+        // shutdown, which no caller runs before start returns.
+        if let Some(manifest) = unsafe { query().as_ref() }
+            && table::refuses_developer(self.api(), manifest)
+        {
+            return Status::REFUSED;
+        }
+        // SAFETY: the caller guarantees `init` is the `enshwick_mod_init` of
+        // the mod whose manifest `query` returned.
         let status = unsafe { self.init(init) };
         if status.is_ok() {
             // SAFETY: the caller guarantees `ready` is the matching

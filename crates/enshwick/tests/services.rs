@@ -111,7 +111,7 @@ mod tests {
 
     fn start(loader: &enshwick::test::Installed) -> Status {
         // SAFETY: both functions are the exports of this file's `declare_mod!(Market)`.
-        unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) }
+        unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) }
     }
 
     fn logged(loader: &enshwick::test::Installed) -> String {

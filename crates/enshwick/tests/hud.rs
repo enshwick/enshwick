@@ -45,7 +45,8 @@ mod tests {
     fn hud_items_show_while_drawn_and_markers_replace_each_other() {
         let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Raid)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
 
         assert_eq!(

@@ -189,7 +189,13 @@ mod tests {
             .collect();
         let loader = host.component(character, transform, &place).install();
         // SAFETY: the exports of this crate's `declare_mod!(Waypoints)`.
-        let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
+        let status = unsafe {
+            loader.start(
+                super::enshwick_mod_query,
+                super::enshwick_mod_init,
+                super::enshwick_mod_ready,
+            )
+        };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert!(loader.draw_hud().is_empty(), "a server draws no HUD");
 
@@ -249,7 +255,13 @@ mod tests {
     fn the_client_half_draws_what_the_server_sent_until_it_is_cleared() {
         let loader = FakeHost::new().world().side(Side::CLIENT).install();
         // SAFETY: the exports of this crate's `declare_mod!(Waypoints)`.
-        let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
+        let status = unsafe {
+            loader.start(
+                super::enshwick_mod_query,
+                super::enshwick_mod_init,
+                super::enshwick_mod_ready,
+            )
+        };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert!(loader.draw_hud().is_empty());
 

@@ -71,7 +71,8 @@ mod tests {
         *SIZE.lock().unwrap() = size;
         SEEN.lock().unwrap().clear();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Watcher)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         loader
     }

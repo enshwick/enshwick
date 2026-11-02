@@ -36,7 +36,8 @@ mod tests {
     fn a_filter_changes_the_zone_so_far_and_may_ask_for_a_new_sizing() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: the exports of `declare_mod!` above.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.altars_opened(), (true, true));
         assert_eq!(loader.altar_zone(enshwick::Entity(4096), 2, 60), (2, 80));
