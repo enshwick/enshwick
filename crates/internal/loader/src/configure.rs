@@ -124,16 +124,28 @@ pub fn refused(why: &str) -> String {
 pub fn mod_reason(texts: Option<&enshwick::i18n::Texts>, why: &str) -> String {
     texts
         .and_then(|texts| texts.reason(why, texts::language()))
-        .or_else(|| {
-            why.starts_with(LOADER_REASONS)
-                .then(|| texts::reason(why))
-                .flatten()
-        })
+        .or_else(|| from_api(why).then(|| texts::reason(why)).flatten())
         .unwrap_or_else(|| why.replace('\t', " "))
 }
 
-/// The start of the keys of reasons the API gives in the loader's texts.
-const LOADER_REASONS: &str = "mods.off.section.";
+/// The reasons the API gives in the loader's texts, each key with the
+/// arguments `enshwick::__private` encodes for a section that does not read.
+const API_REASONS: [(&str, &[&str]); 3] = [
+    ("mods.off.section.newer", &["format", "reads"]),
+    ("mods.off.section.older", &["format", "reads"]),
+    ("mods.off.section.damaged", &["byte"]),
+];
+
+/// Whether `why` is one of [`API_REASONS`] with exactly its arguments, so a
+/// mod's bare key never reads as the loader's text.
+fn from_api(why: &str) -> bool {
+    let mut parts = why.split('\t');
+    let key = parts.next().unwrap_or_default();
+    let names = parts.map(|pair| pair.split_once('=').map_or(pair, |(name, _)| name));
+    API_REASONS
+        .iter()
+        .any(|&(known, args)| known == key && names.clone().eq(args.iter().copied()))
+}
 
 /// A mod's settings: one line per setting.
 #[must_use]
@@ -550,14 +562,19 @@ mod tests {
     #[test]
     fn a_section_that_does_not_read_is_told_in_the_loader_s_texts() {
         let uk = Some(enshwick::i18n::Language::UK_UA);
-        let format = "mods.off.section.format\tformat=99\treads=3";
+        let newer = "mods.off.section.newer\tformat=99\treads=3";
         assert_eq!(
-            mod_reason(None, format),
-            "its declarations are format 99, and this Enshwick reads 3: rebuild it with this Enshwick"
+            mod_reason(None, newer),
+            "its declarations are format 99, and this Enshwick reads 3: update Enshwick"
         );
         assert_eq!(
-            texts::for_reader(uk, || mod_reason(None, format)),
-            "його оголошення мають формат 99, а цей Enshwick читає 3: зберіть його заново з цим Enshwick"
+            texts::for_reader(uk, || mod_reason(None, newer)),
+            "його оголошення мають формат 99, а цей Enshwick читає 3: оновіть Enshwick"
+        );
+        let older = "mods.off.section.older\tformat=1\treads=3";
+        assert_eq!(
+            mod_reason(None, older),
+            "its declarations are format 1, and this Enshwick reads 3: rebuild it with this Enshwick"
         );
         let damaged = "mods.off.section.damaged\tbyte=26";
         assert_eq!(
@@ -569,6 +586,17 @@ mod tests {
             "його оголошення пошкоджено на байті 26: зберіть його заново з цим Enshwick"
         );
         assert_eq!(mod_reason(None, "mods.back"), "mods.back");
+    }
+
+    #[test]
+    fn a_mod_s_bare_section_key_shows_as_the_mod_gave_it() {
+        for given in [
+            "mods.off.section.newer",
+            "mods.off.section.damaged\tfoo=1",
+            "mods.off.section.older\tformat=1",
+        ] {
+            assert_eq!(mod_reason(None, given), given.replace('\t', " "));
+        }
     }
 
     #[test]

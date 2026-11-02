@@ -129,6 +129,24 @@ pub enum Error {
     Section(#[from] ReadSectionError),
 }
 
+impl Error {
+    /// Whether the declarations do not read, damaged or of another format,
+    /// for which the loader keeps their mod off.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cargo_enshwick::points::Error;
+    ///
+    /// assert!(Error::Format(1).is_unread());
+    /// assert!(!Error::CutShort.is_unread());
+    /// ```
+    #[must_use]
+    pub const fn is_unread(&self) -> bool {
+        matches!(self, Self::Format(_) | Self::Section(_))
+    }
+}
+
 /// A mod's point schemas, as `declare_mod!` writes them.
 ///
 /// # Examples

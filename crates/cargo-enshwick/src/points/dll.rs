@@ -15,8 +15,10 @@ pub const SECTION: &str = ".enshpt";
 ///
 /// # Errors
 ///
-/// [`Error`] when the bytes are no x64 DLL, or a part of the section is
-/// damaged or of an older enshwick.
+/// [`Error::Image`] when the bytes are no x64 DLL, [`Error::CutShort`] when
+/// the section ends before its header says, and an error that
+/// [`is_unread`](Error::is_unread) when the section is damaged or of another
+/// format.
 ///
 /// # Examples
 ///
