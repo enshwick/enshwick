@@ -3,6 +3,7 @@
 use enshwick::abi::{
     CheckAbiError, Dependency, Manifest, Relation, Side, Str, check_abi, read_headed,
 };
+pub use enshwick::schema_section::Kind;
 use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
@@ -32,6 +33,13 @@ pub enum ManifestError {
     /// The id is not of the form mods take.
     #[error("the id {0:?} is not <author>.<name>, each of [a-z0-9-]")]
     BadId(String),
+    /// An export names no kind the loader knows, as one of a mod built
+    /// before exports named their kind, or no local name.
+    #[error(
+        "the export {0:?} lacks its kind or its local name: write <kind>:<name>, the kind one of {kinds}, the name 1 to 128 of [a-z0-9_./-]",
+        kinds = Kind::words()
+    )]
+    ExportWithoutKind(String),
     /// The version does not parse.
     #[error("version {version:?}: {reason}")]
     BadVersion {
@@ -234,6 +242,12 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     if !enshwick::abi::is_valid_id(id) {
         return Err(ManifestError::BadId(id.to_owned()));
     }
+    // SAFETY: the caller guarantees the manifest's lists and strings
+    // readable and unchanged for the call.
+    let listed = unsafe { exports(manifest) };
+    if let Some(bare) = enshwick::__private::rules::bad_export(&listed) {
+        return Err(ManifestError::ExportWithoutKind(bare.to_owned()));
+    }
     // SAFETY: the caller guarantees the manifest's strings readable and
     // unchanged for the call.
     let version = unsafe { manifest.version.as_str() }.ok_or(ManifestError::NotUtf8("version"))?;
@@ -270,38 +284,20 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
 }
 
 /// Why the mod `asker` may not use the `kind` `name`, `<owner>:<what>`,
-/// whose owner's manifest exports `exports`.
+/// whose owner's manifest exports `exports`, each `<kind>:<local name>`.
 ///
-/// A kind is a call, point, service or event. `None` when it may: a name of
-/// its own, or one the owner exports.
+/// `None` when it may: a name of its own, or one the owner exports as that
+/// kind; a content id or stat also when the owner exports the name it is a
+/// part of.
 #[must_use]
-pub fn unexported(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Option<String> {
+pub fn unexported(kind: Kind, name: &str, asker: &str, exports: &[&str]) -> Option<String> {
     let (owner, what) = name.split_once(':')?;
-    if owner == asker || exports.contains(&what) {
+    if owner == asker || enshwick::__private::rules::exports_name(exports, kind, what) {
         return None;
     }
-    let offered = if exports.is_empty() {
-        "it exports nothing".to_owned()
-    } else {
-        format!("it exports {}", exports.join(", "))
-    };
-    Some(format!(
-        "{kind} {name}: {owner} does not export {what}; {offered}"
+    Some(enshwick::__private::rules::unexported_reason(
+        kind, name, exports,
     ))
-}
-
-/// Why the mod `asker` may not name the content id `name`, `<owner>:<what>`,
-/// as a `kind`: a `content id` or a `stat`.
-///
-/// `exports` are the owner's; `None` when it may: an id of its own, or one
-/// whose `what`, or the name `what` is a part of, the owner exports.
-#[must_use]
-pub fn unexported_content(kind: &str, name: &str, asker: &str, exports: &[&str]) -> Option<String> {
-    let (_, what) = name.split_once(':')?;
-    if enshwick::__private::rules::exports_content(exports, what) {
-        return None;
-    }
-    unexported(kind, name, asker, exports)
 }
 
 /// What a manifest tells players about its mod.
@@ -625,6 +621,17 @@ mod tests {
             "{bad}"
         );
     }
+    #[test]
+    fn an_export_without_its_kind_refuses_the_mod_and_names_the_export() {
+        static EXPORTS: [Str; 2] = [Str::new("call:price-of"), Str::new("sold")];
+        let mut bare = manifest("you.trading-post", "0.1.0");
+        bare.exports = EXPORTS.as_ptr();
+        bare.export_count = EXPORTS.len();
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
+        let why = unsafe { parse(&bare) }.unwrap_err().to_string();
+        assert!(why.contains("\"sold\" lacks its kind"), "{why}");
+    }
 
     #[test]
     fn an_id_without_an_author_is_refused() {
@@ -637,7 +644,7 @@ mod tests {
 
     #[test]
     fn exports_are_copied_with_the_manifest() {
-        static EXPORTS: [Str; 2] = [Str::new("price-of"), Str::new("sold")];
+        static EXPORTS: [Str; 2] = [Str::new("call:price-of"), Str::new("event:sold")];
         let mut exporting = manifest("you.trading-post", "0.1.0");
         exporting.exports = EXPORTS.as_ptr();
         exporting.export_count = EXPORTS.len();
@@ -646,7 +653,7 @@ mod tests {
         let copied = unsafe { read(&raw const exporting) }.unwrap();
         assert_ne!(copied.exports, EXPORTS.as_ptr());
         // SAFETY: `read` copied every string and list for the process.
-        assert_eq!(unsafe { exports(copied) }, ["price-of", "sold"]);
+        assert_eq!(unsafe { exports(copied) }, ["call:price-of", "event:sold"]);
         let silent = manifest("you.lanterns", "0.1.0");
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
@@ -655,58 +662,69 @@ mod tests {
 
     #[test]
     fn another_mod_uses_only_what_the_owner_exports() {
-        let exports = ["price-of", "sold"];
+        let exports = ["call:price-of", "event:sold"];
         let asker = "you.market-stalls";
         assert_eq!(
-            unexported("call", "you.trading-post:price-of", asker, &exports),
+            unexported(Kind::Call, "you.trading-post:price-of", asker, &exports),
             None
         );
         assert_eq!(
-            unexported("event", "you.market-stalls:opened", asker, &[]),
+            unexported(Kind::Event, "you.market-stalls:opened", asker, &[]),
             None
         );
         assert_eq!(
-            unexported("point", "you.trading-post:margin", asker, &exports).as_deref(),
+            unexported(Kind::Point, "you.trading-post:margin", asker, &exports).as_deref(),
             Some(
-                "point you.trading-post:margin: you.trading-post does not export margin; \
-                 it exports price-of, sold"
+                "point you.trading-post:margin: you.trading-post does not export point:margin; \
+                 it exports call:price-of, event:sold"
             )
         );
-        let none = unexported("service", "you.trading-post:prices", asker, &[]).unwrap();
+        let none = unexported(Kind::Service, "you.trading-post:prices", asker, &[]).unwrap();
         assert!(none.ends_with("it exports nothing"), "{none}");
     }
 
     #[test]
-    fn another_mod_names_only_the_content_the_owner_exports_and_its_parts() {
-        let exports = ["locker", "charm"];
+    fn an_export_opens_its_own_kind_alone() {
+        let exports = ["point:price", "event:sold"];
         let asker = "you.market-stalls";
-        for exported in ["you.lockers:locker", "you.lockers:locker.recipe"] {
-            assert_eq!(
-                unexported_content("content id", exported, asker, &exports),
-                None
+        assert!(unexported(Kind::Point, "you.lockers:price", asker, &exports).is_none());
+        for (kind, name) in [
+            (Kind::Content, "you.lockers:price"),
+            (Kind::Stat, "you.lockers:price"),
+            (Kind::Event, "you.lockers:price"),
+            (Kind::Call, "you.lockers:sold"),
+        ] {
+            assert!(
+                unexported(kind, name, asker, &exports).is_some(),
+                "{kind:?} {name}"
             );
         }
+    }
+
+    #[test]
+    fn another_mod_names_only_the_content_the_owner_exports_and_its_parts() {
+        let exports = ["content:locker", "stat:charm"];
+        let asker = "you.market-stalls";
+        for exported in ["you.lockers:locker", "you.lockers:locker.recipe"] {
+            assert_eq!(unexported(Kind::Content, exported, asker, &exports), None);
+        }
         assert_eq!(
-            unexported_content("stat", "you.lockers:charm.fire", asker, &exports),
+            unexported(Kind::Stat, "you.lockers:charm.fire", asker, &exports),
             None
         );
         assert_eq!(
-            unexported_content("content id", "you.market-stalls:stall", asker, &[]),
+            unexported(Kind::Content, "you.market-stalls:stall", asker, &[]),
             None
         );
         assert_eq!(
-            unexported_content("content id", "you.lockers:key", asker, &exports).as_deref(),
+            unexported(Kind::Content, "you.lockers:key", asker, &exports).as_deref(),
             Some(
-                "content id you.lockers:key: you.lockers does not export key; \
-                 it exports locker, charm"
+                "content id you.lockers:key: you.lockers does not export content:key; \
+                 it exports content:locker, stat:charm"
             )
         );
-        assert_eq!(
-            unexported_content("stat", "you.lockers:luck", asker, &exports).as_deref(),
-            Some(
-                "stat you.lockers:luck: you.lockers does not export luck; it exports locker, charm"
-            )
-        );
+        assert!(unexported(Kind::Stat, "you.lockers:locker", asker, &exports).is_some());
+        assert!(unexported(Kind::Content, "you.lockers:charm", asker, &exports).is_some());
     }
 
     #[test]

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PackManifest",
-  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's `[package.metadata.enshwick]` says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\nexports = [\"lit\"]\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.exports, [\"lit\"]);\nassert_eq!(manifest.side, PackSide::Both);\nassert!(manifest.join);\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
+  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's `[package.metadata.enshwick]` says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\nexports = [\"event:lit\"]\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.exports, [\"event:lit\"]);\nassert_eq!(manifest.side, PackSide::Both);\nassert!(manifest.join);\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
   "type": "object",
   "properties": {
     "after": {
@@ -37,7 +37,7 @@
       "default": ""
     },
     "exports": {
-      "description": "The local names of what other mods may use, such as the events its\nscripts define: `greeted` lets them hear `<id>:greeted`. The loader\nrefuses them anything else of the pack's.",
+      "description": "What other mods may use, each `event:<name>` for an event its scripts\ndefine or `content:<name>` for its content: `event:greeted` lets them\nhear `<id>:greeted`. The loader refuses them anything else of the\npack's.",
       "type": "array",
       "default": [],
       "items": {

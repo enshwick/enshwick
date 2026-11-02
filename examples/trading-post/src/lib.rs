@@ -14,7 +14,7 @@ use enshwick::{Entity, PlayerKey};
 use enshwick::{Load, Mod, Off};
 
 /// Item prices, published for other mods.
-#[enshwick::service(name = "prices", version = 1)]
+#[enshwick::service(name = "prices", version = 1, export)]
 #[derive(Debug)]
 pub struct Prices {
     /// The price of `item` in coins, 0 for an item with no price.
@@ -24,7 +24,7 @@ pub struct Prices {
 }
 
 /// An item sold at the trading post, sent on the thread that sold it.
-#[enshwick::event(name = "sold")]
+#[enshwick::event(name = "sold", export)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Sold {
     /// The item sold.
@@ -71,7 +71,7 @@ impl Deal {
 /// The price of an item at the trading post, in coins: the trading post's
 /// own price first. A refusal means the trading post does not deal. Asked
 /// on the thread that runs the player's action.
-#[enshwick::point(name = "price", mode = Override, output = u32, refusable)]
+#[enshwick::point(name = "price", mode = Override, output = u32, refusable, export)]
 #[derive(Clone, Copy, Debug)]
 pub struct Price {
     /// The item, 0 to 63.

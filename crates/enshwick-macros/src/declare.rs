@@ -9,6 +9,14 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{Ident, LitStr, Token, Type};
 
+mod deps;
+
+pub(crate) use deps::expand_deps;
+
+/// The words of the API's `schema_section::Kind`, which this crate cannot
+/// depend on; an API test holds the two to each other.
+pub(crate) const EXPORT_KINDS: [&str; 6] = ["point", "event", "call", "service", "content", "stat"];
+
 /// The keys of the table, the identity the platform reads.
 const KEYS: [&str; 13] = [
     "id",
@@ -127,7 +135,8 @@ struct Metadata {
     join: bool,
     reload: bool,
     developer: bool,
-    /// The local names other mods may use.
+    /// The content and stat kinds other mods may use, each
+    /// `content:<name>` or `stat:<name>`.
     exports: Vec<String>,
     dependencies: Vec<Dependency>,
     builds: Vec<Build>,
@@ -172,116 +181,35 @@ pub(crate) fn expand_id(name: &LitStr) -> syn::Result<TokenStream> {
     }})
 }
 
-/// Expands `deps!()`: a module per dependency the crate's `Cargo.toml`
-/// names by alias in `requires`, `after` or `recommends`, with the
-/// dependency's id and its content ids, and the declarations
-/// `cargo enshwick deps` wrote to `src/deps/<alias>.rs`, if any.
-pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
-    let (metadata, shown) = cargo_metadata()?;
-    let written = PathBuf::from(&shown)
-        .parent()
-        .map(|dir| dir.join("src").join("deps"));
-    let modules = metadata.dependencies.iter().filter_map(|d| {
-        let relation = match d.relation {
-            "REQUIRES" => "requires",
-            "RECOMMENDS" => "recommends",
-            "AFTER" => "loads after",
-            _ => return None,
-        };
-        let alias = Ident::new(&d.alias, Span::call_site());
-        let id = &d.id;
-        let doc = format!("`{id}`, which this mod {relation}.");
-        let content = if d.relation == "REQUIRES" {
-            quote! {
-                /// The dependency's content id `<dependency>:<name>`, once
-                /// the loader lets this mod name it: the dependency's
-                /// `exports` list `<name>` or the name it is a part of.
-                /// Ask once, at init, and keep the id.
-                ///
-                /// # Errors
-                ///
-                /// [`Off`](::enshwick::Off) when the dependency does not
-                /// export the name; the loader logs what it exports.
-                ///
-                /// # Panics
-                ///
-                /// When `name` is not 1 to 128 of `[a-z0-9_./-]`.
-                pub fn id(
-                    name: &'static str,
-                ) -> ::core::result::Result<::enshwick::content::Id, ::enshwick::Off> {
-                    ::enshwick::__private::dependency_id(::enshwick::content::Id::of(ID, name))
-                }
-            }
-        } else {
-            quote! {
-                /// The dependency's content id `<dependency>:<name>`; `None`
-                /// while the dependency does not run, and when it does not
-                /// export the name, which the loader logs. Each call asks
-                /// the loader which mods run: call it once, at init, and
-                /// keep the id.
-                ///
-                /// # Panics
-                ///
-                /// When `name` is not 1 to 128 of `[a-z0-9_./-]`, whether
-                /// the dependency runs or not.
-                #[must_use]
-                pub fn id(name: &'static str) -> ::core::option::Option<::enshwick::content::Id> {
-                    let id = ::enshwick::content::Id::of(ID, name);
-                    if !::enshwick::mods::is_running(ID) {
-                        return ::core::option::Option::None;
-                    }
-                    ::enshwick::__private::dependency_id(id).ok()
-                }
-            }
-        };
-        let declared = written
-            .as_ref()
-            .map(|dir| dir.join(format!("{}.rs", d.alias)))
-            .filter(|path| path.is_file())
-            .map(|path| {
-                let path = path.display().to_string();
-                quote! {
-                    #[path = #path]
-                    mod declared;
-                    pub use self::declared::*;
-                }
-            });
-        Some(quote! {
-            #[doc = #doc]
-            pub mod #alias {
-                /// The dependency's mod id.
-                pub const ID: &str = #id;
-
-                #content
-
-                #declared
-            }
-        })
-    });
-    Ok(quote! {
-        /// The mods this one depends on, by the aliases its `Cargo.toml` gives
-        /// them.
-        pub mod deps {
-            const _: &[u8] = ::core::include_bytes!(#shown);
-
-            /// The game's own content, by the debug names its data gives it.
-            pub mod vanilla {
-                pub use ::enshwick::content::vanilla::{item, loot_table, recipe, station, workshop};
-            }
-
-            #(#modules)*
-        }
-    })
+/// Whose a declaration's name is, by the crate's `Cargo.toml`.
+pub(crate) enum Owner {
+    /// The crate's mod's own.
+    Own,
+    /// Another mod's.
+    Other,
+    /// Unknown: the crate's `Cargo.toml` does not read as a mod's.
+    Unread(syn::Error),
 }
 
-/// The full name `<mod id>:<what>` of a call, point or event declared with
-/// `name`: as written when it holds a `:`, else after the id of the
-/// dependency `of` or, without `of`, of the crate's own mod. With the name,
-/// the `Cargo.toml` it read, if any, for build tracking.
+impl Owner {
+    /// Whose `full`, `<mod id>:<what>`, is by `metadata`.
+    fn of(metadata: &Metadata, full: &str) -> Self {
+        match full.split_once(':') {
+            Some((id, _)) if id == metadata.id => Self::Own,
+            _ => Self::Other,
+        }
+    }
+}
+
+/// The full name `<mod id>:<what>` of a call, point, event or service
+/// declared with `name`: as written when it holds a `:`, else after the id
+/// of the dependency `of` or, without `of`, of the crate's own mod. With
+/// the name, the `Cargo.toml` it read, if any, for build tracking, and
+/// whose the name is, from that one read.
 pub(crate) fn full_name(
     name: &LitStr,
     of: Option<&Ident>,
-) -> syn::Result<(LitStr, Option<String>)> {
+) -> syn::Result<(LitStr, Option<String>, Owner)> {
     let text = name.value();
     if text.contains(':') {
         if let Some(of) = of {
@@ -290,7 +218,13 @@ pub(crate) fn full_name(
                 "with `of`, the name is the dependency's own, without `<mod id>:`",
             ));
         }
-        return Ok((name.clone(), None));
+        return Ok(match cargo_metadata() {
+            Ok((metadata, shown)) => {
+                let owner = Owner::of(&metadata, &text);
+                (name.clone(), Some(shown), owner)
+            }
+            Err(e) => (name.clone(), None, Owner::Unread(e)),
+        });
     }
     let (metadata, shown) = cargo_metadata()?;
     let owner = match of {
@@ -326,40 +260,13 @@ pub(crate) fn full_name(
             found.id.clone()
         }
     };
-    Ok((
-        LitStr::new(&format!("{owner}:{text}"), name.span()),
-        Some(shown),
-    ))
-}
-
-/// Whether a declaration ships its schema with the crate's mod.
-pub(crate) enum Shipping {
-    /// The mod's own, and `exports` lists its local name.
-    Exported,
-    /// The mod's own, for the mod alone.
-    Internal,
-    /// Another mod's, or the crate names no mod.
-    Foreign,
-}
-
-/// How the declaration named `full`, `<mod id>:<what>`, ships, read from
-/// the crate's `Cargo.toml`, with its path when it was read, for build
-/// tracking.
-pub(crate) fn shipping(full: &str) -> (Shipping, Option<String>) {
-    let Ok((metadata, shown)) = cargo_metadata() else {
-        return (Shipping::Foreign, None);
+    let full = format!("{owner}:{text}");
+    let whose = if of.is_some() {
+        Owner::Other
+    } else {
+        Owner::of(&metadata, &full)
     };
-    let shipping = match full.split_once(':') {
-        Some((id, local)) if id == metadata.id => {
-            if metadata.exports.iter().any(|e| e == local) {
-                Shipping::Exported
-            } else {
-                Shipping::Internal
-            }
-        }
-        _ => Shipping::Foreign,
-    };
-    (shipping, Some(shown))
+    Ok((LitStr::new(&full, name.span()), Some(shown), whose))
 }
 
 /// Whether `name` is the name side of a content id: 1 to 128 of
@@ -542,22 +449,36 @@ fn string(table: &toml::Table, key: &str) -> syn::Result<Option<String>> {
         .transpose()
 }
 
-/// The local names of `exports`, each a name once.
+/// The entries of `exports`, each `content:<name>` or `stat:<name>` and
+/// given once; a call, point, service or event is exported by `export` on
+/// its declaration instead.
 fn exports_of(table: &toml::Table) -> syn::Result<Vec<String>> {
+    const TAKES: &str = "`exports` is a list of `content:<name>` and `stat:<name>`";
     let Some(value) = table.get("exports") else {
         return Ok(Vec::new());
     };
-    let names = value
-        .as_array()
-        .ok_or_else(|| refuse("`exports` is a list of local names"))?;
+    let names = value.as_array().ok_or_else(|| refuse(TAKES))?;
     let mut seen = BTreeSet::new();
     names
         .iter()
         .map(|name| {
-            let name = name.as_str().ok_or_else(|| refuse("`exports` is a list of local names"))?;
-            if !is_content_name(name) {
+            let name = name.as_str().ok_or_else(|| refuse(TAKES))?;
+            let local = match name.split_once(':') {
+                Some((kind @ ("content" | "stat"), local)) if EXPORT_KINDS.contains(&kind) => local,
+                Some((kind, _)) if EXPORT_KINDS.contains(&kind) => {
+                    return Err(refuse(format!(
+                        "`exports`: {name:?}: a point, call, event or service is exported by `export` on its declaration"
+                    )));
+                }
+                _ => {
+                    return Err(refuse(format!(
+                        "`exports`: {name:?} is not `content:<name>` or `stat:<name>`"
+                    )));
+                }
+            };
+            if !is_content_name(local) {
                 return Err(refuse(format!(
-                    "`exports`: {name:?} is not a local name, 1 to 128 of [a-z0-9_./-] without the mod's id"
+                    "`exports`: {name:?}: the name is 1 to 128 of [a-z0-9_./-], without the mod's id"
                 )));
             }
             if !seen.insert(name) {
@@ -793,10 +714,17 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
             }
         }
     });
-    let exports = export_items(metadata);
+    let listed = format!(
+        "exports = [{}]\n",
+        metadata
+            .exports
+            .iter()
+            .map(|e| crate::shape::toml_string(e))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     quote! {{
         #tracked
-        #exports
         static DEPENDENCIES: &[#abi::Dependency] = &[#(#dependencies),*];
         const AUTHOR_COUNT: usize = ::enshwick::__private::author_count(::core::env!("CARGO_PKG_AUTHORS"));
         static AUTHORS: [#abi::Str; AUTHOR_COUNT] =
@@ -804,7 +732,8 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
         static BUILDS: &[#abi::BuildRow] = &[#(#builds),*];
         const VERSION: &str = ::core::env!("CARGO_PKG_VERSION");
         const HEAD: &str = ::enshwick::__private::concatcp!(
-            "schema = 1\nmod = \"", #id, "\"\nversion = \"", VERSION, "\"\n",
+            "schema = ", ::enshwick::schema_section::FORMAT, "\nmod = \"", #id,
+            "\"\nversion = \"", VERSION, "\"\n", #listed,
         );
         ::enshwick::__schema_entry!(HEAD);
         static MANIFEST: #abi::Manifest = #abi::Manifest {
@@ -826,10 +755,10 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
                 &[::core::env!("CARGO_PKG_HOMEPAGE"), ::core::env!("CARGO_PKG_REPOSITORY")],
             )),
             points: #abi::Str::EMPTY,
-            exports: EXPORTS.as_ptr(),
-            export_count: EXPORTS.len(),
+            exports: ::core::ptr::null(),
+            export_count: 0,
         };
-        ::enshwick::__private::Manifested::new(&MANIFEST, #id, HEAD, EXPORT_NAMES)
+        ::enshwick::__private::Manifested::new(&MANIFEST, #id, HEAD)
     }}
 }
 
@@ -852,17 +781,6 @@ fn flags_of(metadata: &Metadata) -> TokenStream {
         quote!(#abi::ManifestFlags::NONE)
     } else {
         quote!(#abi::ManifestFlags(#(#flags)|*))
-    }
-}
-
-/// The static `EXPORTS` of the manifest, and its names as `EXPORT_NAMES`.
-fn export_items(metadata: &Metadata) -> TokenStream {
-    let abi = quote!(::enshwick::abi);
-    let exports = &metadata.exports;
-    let count = exports.len();
-    quote! {
-        const EXPORT_NAMES: &[&str] = &[#(#exports),*];
-        static EXPORTS: [#abi::Str; #count] = [#(#abi::Str::new(#exports)),*];
     }
 }
 
@@ -890,7 +808,7 @@ mod tests {
             name = "Market Stalls"
             side = "both"
             join = true
-            exports = ["price-of", "sold"]
+            exports = ["content:stall", "stat:luck"]
             replaces = ["stalls"]
 
             [requires]
@@ -915,7 +833,7 @@ mod tests {
         assert_eq!(metadata.id, "you.market-stalls");
         assert_eq!(metadata.side, Side::Both);
         assert!(metadata.join && !metadata.reload && !metadata.developer);
-        assert_eq!(metadata.exports, ["price-of", "sold"]);
+        assert_eq!(metadata.exports, ["content:stall", "stat:luck"]);
         let relations: Vec<(&str, &str, &str)> = metadata
             .dependencies
             .iter()
@@ -945,12 +863,22 @@ mod tests {
         assert!(refused("id = \"lanterns\"\nside = \"both\"").contains("<author>.<name>"));
         assert!(refused("side = \"both\"").contains("`id`"));
         assert!(
-            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"you.a:sold\"]")
-                .contains("not a local name")
+            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"sold\"]")
+                .contains("is not `content:<name>` or `stat:<name>`")
         );
         assert!(
-            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"sold\", \"sold\"]")
-                .contains("given twice")
+            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"event:sold\"]")
+                .contains("by `export` on its declaration")
+        );
+        assert!(
+            refused("id = \"you.a\"\nside = \"both\"\nexports = [\"content:you.a:sold\"]")
+                .contains("without the mod's id")
+        );
+        assert!(
+            refused(
+                "id = \"you.a\"\nside = \"both\"\nexports = [\"content:sold\", \"content:sold\"]"
+            )
+            .contains("given twice")
         );
         assert!(
             refused("id = \"you.a\"\nside = \"both\"\n[requires]\nOther = \"you.b\"")

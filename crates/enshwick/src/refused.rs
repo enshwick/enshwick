@@ -212,14 +212,33 @@
 /// }
 /// ```
 ///
-/// An exported event with a field a schema cannot describe, here an array;
-/// `exports` in the crate's `Cargo.toml` lists `price`:
+/// An exported event with a field a schema cannot describe, here an array:
 ///
 /// ```compile_fail
-/// #[enshwick::event(name = "price")]
+/// #[enshwick::event(name = "price", export)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
 ///     pub items: [u16; 2],
+/// }
+/// ```
+///
+/// `export` on a dependency's declaration, which only its owner exports:
+///
+/// ```compile_fail
+/// #[enshwick::event(of = lockers, name = "opened", export)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Opened {
+///     pub locker: u32,
+/// }
+/// ```
+///
+/// `export` on a full name of another mod's id, outside a test:
+///
+/// ```compile_fail
+/// #[enshwick::event(name = "you.lockers:opened", export)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Opened {
+///     pub locker: u32,
 /// }
 /// ```
 ///

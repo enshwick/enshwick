@@ -656,7 +656,11 @@ pub mod exports {
     /// `extern "system" fn() -> u32`: the [`ABI_MAJOR`](super::ABI_MAJOR)
     /// the mod was built for; its manifest's header holds the minor.
     pub const ABI: &str = "enshwick_mod_abi";
-    /// `extern "system" fn() -> *const Manifest`: static, no side effects.
+    /// `extern "system" fn() -> *const Manifest`: the manifest, or null.
+    ///
+    /// Any thread may call it any number of times; the first call builds the
+    /// manifest and allocates, and a panic there returns null. The manifest
+    /// stays valid until [`SHUTDOWN`]: copy what is kept.
     pub const QUERY: &str = "enshwick_mod_query";
     /// `extern "system" fn(*const HostApi, ModHandle) -> Status`: registers
     /// hooks, services and settings.

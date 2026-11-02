@@ -359,11 +359,13 @@ impl ManifestFacts {
         }
     }
 
-    /// Whether `name`, `<id>:<what>`, is of another mod whose exports
-    /// [`FakeHost::exports`] gave and lack `what`, which the loader refuses
-    /// the mod.
+    /// Whether the `kind` `name`, `<id>:<what>`, is of another mod whose
+    /// exports [`FakeHost::exports`] gave and lack `<kind>:<what>`, or for
+    /// content and stats also the name it is a part of, which the loader
+    /// refuses the mod.
     pub(crate) fn unexported(
         &self,
+        kind: crate::schema_section::Kind,
         name: &str,
         exports: &rustc_hash::FxHashMap<String, Vec<String>>,
     ) -> bool {
@@ -371,23 +373,7 @@ impl ManifestFacts {
             owner != self.id
                 && exports
                     .get(owner)
-                    .is_some_and(|names| !names.iter().any(|n| n == what))
-        })
-    }
-
-    /// Whether the content id `name`, `<id>:<what>`, is of another mod whose
-    /// exports [`FakeHost::exports`] gave and cover neither `what` nor the
-    /// name it is a part of, which the loader refuses the mod.
-    pub(crate) fn unexported_content(
-        &self,
-        name: &str,
-        exports: &rustc_hash::FxHashMap<String, Vec<String>>,
-    ) -> bool {
-        name.split_once(':').is_some_and(|(owner, what)| {
-            owner != self.id
-                && exports
-                    .get(owner)
-                    .is_some_and(|names| !crate::rules::exports_content(names, what))
+                    .is_some_and(|names| !crate::rules::exports_name(names, kind, what))
         })
     }
 
@@ -400,24 +386,43 @@ impl ManifestFacts {
 
 /// Logs the loader's warning for a mod refused the `kind` `id`,
 /// `<owner>:<what>`, whose owner does not export it.
-pub(crate) fn warn_unexported(s: &mut State, kind: &str, id: &str) {
-    let (owner, what) = id.split_once(':').unwrap_or_default();
-    let offered = match s.host.exports.get(owner) {
-        Some(names) if !names.is_empty() => format!("it exports {}", names.join(", ")),
-        _ => "it exports nothing".to_owned(),
-    };
+pub(crate) fn warn_unexported(s: &mut State, kind: crate::schema_section::Kind, id: &str) {
+    let owner = id.split_once(':').map_or(id, |(owner, _)| owner);
+    let offered = s.host.exports.get(owner).cloned().unwrap_or_default();
     s.logs.push((
         Level::WARN,
-        format!("{kind} {id}: {owner} does not export {what}; {offered}"),
+        crate::rules::unexported_reason(kind, id, &offered),
     ));
 }
 
 /// Notes the manifest of the mod whose init runs on `api`, when `api` is the
 /// fake's table, so the fake refuses by the mod's names and join flag.
-pub(crate) fn note_manifest(api: *const HostApi, manifest: &crate::abi::Manifest) {
-    if core::ptr::eq(api, &raw const TABLE) {
-        with((), |s| s.manifest = Some(ManifestFacts::of(manifest)));
+/// Why the fake refuses the manifest, as the loader refuses one with an
+/// export that lacks its kind or its local name; `None` when it takes it.
+pub(crate) fn note_manifest(
+    api: *const HostApi,
+    manifest: &crate::abi::Manifest,
+) -> Option<String> {
+    if !core::ptr::eq(api, &raw const TABLE) {
+        return None;
     }
+    let exports: Vec<String> = if manifest.exports.is_null() {
+        Vec::new()
+    } else {
+        // SAFETY: a manifest points at `export_count` names that live as
+        // long as it, which outlives the mod's init.
+        unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count) }
+            .iter()
+            .map(|name| text(*name))
+            .collect()
+    };
+    if let Some(bad) = crate::rules::bad_export(&exports) {
+        return Some(format!(
+            "the export {bad:?} lacks its kind or its local name: write <kind>:<name>"
+        ));
+    }
+    with((), |s| s.manifest = Some(ManifestFacts::of(manifest)));
+    None
 }
 
 /// The base limits the mod asked for, and whether the hooks are armed.

@@ -1,7 +1,7 @@
 //! The schemas a mod DLL carries in its `.enshpt` section, read from the
 //! file without running it.
 
-use enshwick::schema_section::{Section, head_id};
+use enshwick::schema_section::{Head, Section};
 use enshwick_gamedata::reflect::{Image, Layout};
 
 use super::Error;
@@ -41,14 +41,10 @@ pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, Error> {
 /// head `declare_mod!` wrote, then the mod's own declarations.
 fn from_section(raw: &[u8]) -> Result<Option<String>, Error> {
     let section = Section::parse(raw)?;
-    let Some(&head) = section.heads().first() else {
+    let Some(&Head { text: head, id }) = section.heads().first() else {
         return Ok(None);
     };
-    // `Section::parse` refuses a head without its mod's id.
-    let Some(id) = head_id(head) else {
-        return Ok(None);
-    };
-    let text = section.schema(head, id, None);
+    let text = section.schema(head, id);
     Ok((!text.is_empty()).then_some(text))
 }
 
@@ -62,18 +58,18 @@ mod tests {
     fn a_section_reads_as_its_head_and_the_mods_own_declarations() {
         let raw = b"\0\0[[point]]\nname = \"you.lockers:price\"\n\0\
             [[point]]\nname = \"you.other:price\"\n\0\
-            schema = 1\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\0\0\0\
+            schema = 2\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\0\0\0\
             [[event]]\nname = \"you.lockers:opened\"\n\0\0";
         assert_eq!(
             from_section(raw).unwrap().as_deref(),
             Some(
-                "schema = 1\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\
+                "schema = 2\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\
                  [[point]]\nname = \"you.lockers:price\"\n\
                  [[event]]\nname = \"you.lockers:opened\"\n"
             )
         );
         assert_eq!(
-            from_section(b"\0schema = 1\nmod = \"you.a\"\n\0").unwrap(),
+            from_section(b"\0schema = 2\nmod = \"you.a\"\n\0").unwrap(),
             None
         );
         assert_eq!(from_section(b"\0\0").unwrap(), None);
@@ -81,12 +77,13 @@ mod tests {
 
     #[test]
     fn a_damaged_or_older_section_is_refused_with_the_reason() {
-        let damaged = from_section(b"schema = 1\nmod = \"you.a\"\n\0[[type]]\nname = \"T\"\n");
+        let damaged =
+            from_section(b"schema = 2\nmod = \"you.a\"\n\0[[point]]\nmode = \"override\"\n");
         assert!(
             matches!(damaged, Err(Error::Section(ReadSectionError::Damaged(26)))),
             "{damaged:?}"
         );
-        let older = from_section(b"schema = 1\nmod = \"you.a\"\n[[point]]\nname = \"you.a:p\"\n")
+        let older = from_section(b"schema = 2\nmod = \"you.a\"\n[[point]]\nname = \"you.a:p\"\n")
             .unwrap_err()
             .to_string();
         assert!(older.contains("rebuild"), "{older}");

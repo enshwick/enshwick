@@ -44,18 +44,77 @@ pub fn may_declare_rate(rate: RateId, joins: bool) -> bool {
     joins || !Rate::from_id(rate).is_some_and(Rate::seen_by_clients)
 }
 
-/// Whether a mod's `exports` let other mods name its content `name`, the
-/// local part of a content id: `name` itself or the name it is a part of
-/// (`locker` for `locker.recipe`) is exported.
+/// The first of `exports` that is not `<kind>:<local name>`, the kind one
+/// of [`Kind::ALL`](crate::schema_section::Kind::ALL) and the local name 1
+/// to 128 of `[a-z0-9_./-]`, with no mod id; `None` when every one is.
+///
+/// The loader refuses a manifest with such an export, and the fake does too.
 #[must_use]
-pub fn exports_content<S: AsRef<str>>(exports: &[S], name: &str) -> bool {
-    let exported = |local: &str| exports.iter().any(|e| e.as_ref() == local);
-    exported(name) || name.match_indices('.').any(|(at, _)| exported(&name[..at]))
+pub fn bad_export<S: AsRef<str>>(exports: &[S]) -> Option<&str> {
+    let local_ok = |local: &str| {
+        (1..=128).contains(&local.len())
+            && local.bytes().all(|b| {
+                b.is_ascii_lowercase()
+                    || b.is_ascii_digit()
+                    || matches!(b, b'_' | b'.' | b'/' | b'-')
+            })
+    };
+    exports.iter().map(AsRef::as_ref).find(|export| {
+        crate::schema_section::Kind::of_export(export).is_none_or(|(_, local)| !local_ok(local))
+    })
+}
+
+/// Why a mod may not use the `kind` `name`, `<owner>:<what>`, whose owner
+/// exports `exports`: the loader's and the fake's one message, naming the
+/// missing export with its kind.
+#[must_use]
+pub fn unexported_reason<S: AsRef<str>>(
+    kind: crate::schema_section::Kind,
+    name: &str,
+    exports: &[S],
+) -> String {
+    let (owner, what) = name.split_once(':').unwrap_or((name, ""));
+    let offered = if exports.is_empty() {
+        "it exports nothing".to_owned()
+    } else {
+        let names: Vec<&str> = exports.iter().map(AsRef::as_ref).collect();
+        format!("it exports {}", names.join(", "))
+    };
+    format!(
+        "{} {name}: {owner} does not export {}:{what}; {offered}",
+        kind.label(),
+        kind.word()
+    )
+}
+
+/// Whether a mod's `exports`, each `<kind>:<local name>`, let other mods use
+/// its `kind` `name`.
+///
+/// `name` is a local name, exported when `kind:name` is, or, for `content`
+/// and `stat`, the name it is a part of (`content:locker` for
+/// `locker.recipe`).
+#[must_use]
+pub fn exports_name<S: AsRef<str>>(
+    exports: &[S],
+    kind: crate::schema_section::Kind,
+    name: &str,
+) -> bool {
+    let exported = |local: &str| {
+        exports
+            .iter()
+            .any(|e| crate::schema_section::Kind::of_export(e.as_ref()) == Some((kind, local)))
+    };
+    exported(name)
+        || (matches!(
+            kind,
+            crate::schema_section::Kind::Content | crate::schema_section::Kind::Stat
+        ) && name.match_indices('.').any(|(at, _)| exported(&name[..at])))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema_section::Kind;
 
     #[test]
     fn a_hook_needs_a_target_and_a_detour() {
@@ -113,17 +172,45 @@ mod tests {
     }
 
     #[test]
-    fn an_exported_name_exports_its_parts_too() {
-        let exports = ["locker", "bench.recipe"];
-        assert!(exports_content(&exports, "locker"));
-        assert!(exports_content(&exports, "locker.recipe"));
-        assert!(exports_content(&exports, "locker.icon.png"));
-        assert!(exports_content(&exports, "bench.recipe"));
-        assert!(!exports_content(&exports, "bench"));
-        assert!(!exports_content(&exports, "bench.name"));
-        assert!(!exports_content(&exports, "lockers"));
-        assert!(!exports_content(&exports, "locker-key"));
-        assert!(!exports_content::<&str>(&[], "locker"));
+    fn an_exported_content_name_exports_its_parts_too() {
+        let exports = ["content:locker", "content:bench.recipe"];
+        let content = |name| exports_name(&exports, Kind::Content, name);
+        assert!(content("locker"));
+        assert!(content("locker.recipe"));
+        assert!(content("locker.icon.png"));
+        assert!(content("bench.recipe"));
+        assert!(!content("bench"));
+        assert!(!content("bench.name"));
+        assert!(!content("lockers"));
+        assert!(!content("locker-key"));
+        assert!(!exports_name::<&str>(&[], Kind::Content, "locker"));
+    }
+
+    #[test]
+    fn an_export_without_a_known_kind_or_a_local_name_is_bad() {
+        assert_eq!(bad_export(&["point:price", "content:a.b/c-d_e"]), None);
+        for bad in [
+            "price",
+            "greeting:hi",
+            "point:",
+            "point:you.a:price",
+            "content:Big",
+        ] {
+            assert_eq!(bad_export(&["event:sold", bad]), Some(bad), "{bad}");
+        }
+        let long = format!("content:{}", "a".repeat(129));
+        assert_eq!(bad_export(&[long.as_str()]), Some(long.as_str()));
+    }
+
+    #[test]
+    fn an_export_opens_only_its_own_kind() {
+        let exports = ["point:price", "event:sold"];
+        assert!(exports_name(&exports, Kind::Point, "price"));
+        assert!(!exports_name(&exports, Kind::Content, "price"));
+        assert!(!exports_name(&exports, Kind::Stat, "price"));
+        assert!(!exports_name(&exports, Kind::Event, "price"));
+        assert!(!exports_name(&exports, Kind::Call, "sold"));
+        assert!(!exports_name(&exports, Kind::Point, "price.part"));
     }
 
     fn seen_by_clients(rate: RateId) -> bool {

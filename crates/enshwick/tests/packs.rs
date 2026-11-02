@@ -165,17 +165,17 @@ mod tests {
 
         #[test]
         fn another_mod_s_item_it_exports_takes_the_change() {
-            let (status, logs) = start(&["key"]);
+            let (status, logs) = start(&["content:key"]);
             assert_eq!(status, Status::OK, "{logs:?}");
         }
 
         #[test]
         fn another_mod_s_item_it_does_not_export_turns_the_pack_off() {
-            let (status, logs) = start(&["locker"]);
+            let (status, logs) = start(&["content:locker", "point:key"]);
             assert_ne!(status, Status::OK);
             assert!(
                 logs.iter().any(|(level, line)| *level == Level::WARN
-                    && line == "content id you.lockers:key: you.lockers does not export key; it exports locker"),
+                    && line == "content id you.lockers:key: you.lockers does not export content:key; it exports content:locker, point:key"),
                 "{logs:?}"
             );
         }

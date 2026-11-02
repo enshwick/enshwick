@@ -22,9 +22,10 @@ publish = false
 id = "{id}"
 side = "{side}"
 name = "{name}"
-# The local names of the calls, points, services and events other mods may
-# use; the loader refuses them the rest:
-# exports = ["price"]
+# The content and stat kinds other mods may use, as `content:<name>` and
+# `stat:<name>`; the loader refuses them the rest. Calls, points, services
+# and events take `export` on their declarations instead:
+# exports = ["content:lantern"]
 
 # Mods this one needs, works better with, or does not work beside, each
 # under an alias with a version range; `enshwick::deps!()` names them in

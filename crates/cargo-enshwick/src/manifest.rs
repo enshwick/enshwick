@@ -7,12 +7,12 @@ use enshwick::abi::{Manifest, ManifestFlags, Relation, Side, Str};
 /// Describes the mod in `dll`; an error when its version is not `expected`.
 pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String> {
     let manifest = query(dll)?;
-    // SAFETY: `query` copied the manifest out of a DLL it never unloads, whose
-    // `enshwick_mod_query` export returns a static manifest with static
-    // strings and lists that no thread writes.
+    // SAFETY: `query` copied the manifest out of a DLL it never unloads and
+    // never shuts down, so the strings and lists `enshwick_mod_query`
+    // returned stay valid and unwritten (`abi::exports::QUERY`).
     let text = unsafe { describe(&manifest) };
-    // SAFETY: `query` copied the manifest out of a DLL it never unloads,
-    // whose `enshwick_mod_query` export returns static strings.
+    // SAFETY: `query` copied the manifest out of a DLL it never unloads and
+    // never shuts down, so its strings stay valid.
     let version = unsafe { manifest.version.as_str() }.unwrap_or_default();
     match expected {
         Some(expected) if expected != version => Err(format!(
@@ -183,10 +183,10 @@ fn query(dll: &Path) -> Result<Manifest, String> {
     let query: unsafe extern "system" fn() -> *const Manifest =
         unsafe { core::mem::transmute(query) };
     // SAFETY: `query` is the mod's `exports::QUERY`, which takes no arguments
-    // and only returns its static manifest; the DLL is never unloaded.
+    // and returns its manifest; the DLL is never unloaded.
     let raw = unsafe { query() };
-    // SAFETY: the ABI says `exports::QUERY` returns null or a static manifest,
-    // which no thread writes; the DLL is never unloaded, so its strings stay.
+    // SAFETY: the ABI says `exports::QUERY` returns null or a manifest valid
+    // and unwritten until the mod's shutdown, which this tool never calls.
     unsafe { copy(raw) }
 }
 
@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn a_manifest_reads_as_lines() {
         static AUTHORS: [Str; 2] = [Str::new("themaiby"), Str::new("a friend")];
-        static EXPORTS: [Str; 2] = [Str::new("stall"), Str::new("opened")];
+        static EXPORTS: [Str; 2] = [Str::new("content:stall"), Str::new("event:opened")];
         let relation = |id, range, relation| Dependency {
             id: Str::new(id),
             range: Str::new(range),
@@ -292,7 +292,7 @@ mod tests {
             "id: you.market-stalls\nversion: 0.2.0\nname: Market Stalls\n\
              description: Stalls that sell what players craft\nauthors: themaiby, a friend\n\
              license: MIT\nhomepage: https://github.com/enshwick/enshwick\n\
-             exports: stall, opened\nside: both\njoin check: yes\n\
+             exports: content:stall, event:opened\nside: both\njoin check: yes\n\
              requires: you.trading-post >=0.1, <1.0\nafter: you.lanterns\n\
              recommends: you.lanterns\nbreaks: old-stalls <0.3\n\
              replaces: stalls"

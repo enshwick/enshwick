@@ -25,7 +25,27 @@ pub use luau::{LuauDeps, luau_deps};
 pub use rust::rust_deps;
 
 /// The schema format this tool reads.
-const FORMAT: u32 = 1;
+const FORMAT: u32 = enshwick::schema_section::FORMAT;
+
+/// What to do about a schema of `format`: an older one is the owner's to
+/// rebuild, a newer one this tool's to update.
+const fn format_fix(format: u32) -> &'static str {
+    if format < FORMAT {
+        "rebuild its mod with this enshwick"
+    } else {
+        "update cargo-enshwick"
+    }
+}
+
+/// A value read and dropped, which no definition is written from.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Ignored;
+
+impl<'de> Deserialize<'de> for Ignored {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        serde::de::IgnoredAny::deserialize(deserializer).map(|_| Self)
+    }
+}
 
 /// Why a point schema does not read or does not make a definition.
 #[derive(Debug, thiserror::Error)]
@@ -35,7 +55,7 @@ pub enum Error {
     #[error("the schema: {0}")]
     Toml(String),
     /// The schema is of another format than this tool reads.
-    #[error("the schema is format {0}; this cargo-enshwick reads {FORMAT}: update it")]
+    #[error("the schema is format {0}; this cargo-enshwick reads {FORMAT}: {fix}", fix = format_fix(*.0))]
     Format(u32),
     /// A name, type or version is not one generated code may carry.
     #[error("the schema's {what} {value:?} is not one a definition may carry")]
@@ -127,14 +147,19 @@ pub enum Error {
 /// ```
 /// use cargo_enshwick::points::Schema;
 ///
-/// assert!(Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"").is_err());
+/// assert!(Schema::parse("schema = 3\nmod = \"you.stalls\"\nversion = \"1.0.0\"").is_err());
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Schema {
-    /// The format, 1.
+    /// The format, [`FORMAT`].
     #[serde(rename = "schema")]
     format: u32,
+    /// The content and stat kinds the owner's `exports` lists, which the
+    /// owner's manifest reads from its head; no declaration is written from
+    /// them, so this tool accepts and drops the key.
+    #[serde(default)]
+    exports: Ignored,
     /// The owner's id.
     #[serde(rename = "mod")]
     owner: String,
@@ -242,15 +267,24 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.owner(), "you.stalls");
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
     pub fn parse(text: &str) -> Result<Self, Error> {
-        let schema: Self = toml::from_str(text).map_err(|e| Error::Toml(e.to_string()))?;
-        if schema.format != FORMAT {
-            return Err(Error::Format(schema.format));
+        let table: toml::Table = toml::from_str(text).map_err(|e| Error::Toml(e.to_string()))?;
+        // The format first: another format may change any other key.
+        let format = table
+            .get("schema")
+            .and_then(toml::Value::as_integer)
+            .and_then(|format| u32::try_from(format).ok())
+            .ok_or_else(|| Error::Toml("the schema names no format".to_owned()))?;
+        if format != FORMAT {
+            return Err(Error::Format(format));
         }
+        let schema: Self = toml::Value::Table(table)
+            .try_into()
+            .map_err(|e: toml::de::Error| Error::Toml(e.to_string()))?;
         schema.check()?;
         Ok(schema)
     }
@@ -272,7 +306,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.version(), "1.0.0");
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -288,7 +322,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.points().count(), 0);
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -303,7 +337,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.events().count(), 0);
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -318,7 +352,7 @@ impl Schema {
     /// ```
     /// use cargo_enshwick::points::Schema;
     ///
-    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.calls().count(), 0);
     /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
@@ -920,12 +954,19 @@ mod tests {
                 ..
             })
         ));
-        let newer = SCHEMA.replace("schema = 1", "schema = 2");
+        let newer = SCHEMA.replace("schema = 2", "schema = 3\nnew_key = 1");
+        let error = Schema::parse(&newer).unwrap_err();
+        assert!(matches!(error, Error::Format(3)), "{error}");
         assert!(
-            Schema::parse(&newer)
-                .unwrap_err()
-                .to_string()
-                .contains("update it")
+            error.to_string().ends_with("update cargo-enshwick"),
+            "{error}"
+        );
+        let older = Schema::parse(&SCHEMA.replace("schema = 2", "schema = 1"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            older.ends_with("rebuild its mod with this enshwick"),
+            "{older}"
         );
     }
 }

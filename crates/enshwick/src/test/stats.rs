@@ -130,11 +130,11 @@ pub(crate) extern "system" fn stat_open(
     };
     let opened = with(Err(Status::MISSING), |s| {
         let unexported = parsed.is_none()
-            && s.manifest
-                .as_ref()
-                .is_some_and(|manifest| manifest.unexported_content(&id, &s.host.exports));
+            && s.manifest.as_ref().is_some_and(|manifest| {
+                manifest.unexported(crate::schema_section::Kind::Stat, &id, &s.host.exports)
+            });
         if unexported {
-            super::table::warn_unexported(s, "stat", &id);
+            super::table::warn_unexported(s, crate::schema_section::Kind::Stat, &id);
             return Err(Status::REFUSED);
         }
         let own = is_own(s, &id);

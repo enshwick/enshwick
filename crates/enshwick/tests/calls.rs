@@ -11,7 +11,7 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     /// What the trading post pays for an item.
-    #[enshwick::call(name = "you.trading-post:price-of", output = u32, version = 2)]
+    #[enshwick::call(name = "you.trading-post:price-of", export, output = u32, version = 2)]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct PriceOf {
         /// The item.
@@ -101,7 +101,6 @@ mod tests {
         r#"
         id = "you.trading-post"
         side = "server"
-        exports = ["price-of"]
         "#
     );
 

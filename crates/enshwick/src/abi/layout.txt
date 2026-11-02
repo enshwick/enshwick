@@ -1,4 +1,4 @@
-abi 5.1
+abi 6.0
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 144 align 8 born 144

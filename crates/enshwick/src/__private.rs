@@ -111,45 +111,51 @@ pub fn section() -> &'static [u8] {
     }
 }
 
-/// A mod's manifest, completed at the loader's first query with the
-/// schemas of the mod's own exported points, events and calls from the
-/// binary's `.enshpt` section.
+/// A mod's manifest, completed from the binary's `.enshpt` section at the
+/// loader's first query.
+///
+/// The section gives the schemas of the mod's exported points, events and
+/// calls, and their exports and its exported services', `<kind>:<local
+/// name>`, join the content and stat exports of its `Cargo.toml`.
 #[derive(Debug)]
 pub struct Manifested {
     base: &'static crate::abi::Manifest,
     id: &'static str,
     head: &'static str,
-    exports: &'static [&'static str],
     built: std::sync::Mutex<Option<Built>>,
 }
 
-/// The completed manifest and the schema text it points at.
+/// The completed manifest and the schema text and exports it points at.
 #[derive(Debug)]
 struct Built {
     manifest: Box<crate::abi::Manifest>,
     _text: Box<str>,
+    _exports: Box<[crate::abi::Str]>,
+    _names: Box<[Box<str>]>,
 }
 
-// SAFETY: `Built` owns its manifest and the text that manifest points at,
-// and nothing writes either after they are built; the manifest's other
-// pointers lead to the mod's immutable statics.
+// SAFETY: `Send` is missing only for the raw pointers inside `Manifest` and
+// `Str`. Each points at memory no thread writes once `build` returns: the
+// text, exports and name boxes this `Built` owns, whose heap addresses stay put
+// when it moves, the section and the `declare_mod!` statics of the mod's
+// image (`Manifested::build`). Moving `Built` to another thread therefore
+// moves only read-only views, and the mutex in `Manifested` orders its one
+// free in `release` after every build.
 unsafe impl Send for Built {}
 
 impl Manifested {
-    /// The manifest `base` of the mod `id`, exporting the local names
-    /// `exports`, its schema text to start with `head`.
+    /// The manifest `base` of the mod `id`, its schema text to start with
+    /// `head`, which also names the content and stat kinds it exports.
     #[must_use]
     pub const fn new(
         base: &'static crate::abi::Manifest,
         id: &'static str,
         head: &'static str,
-        exports: &'static [&'static str],
     ) -> Self {
         Self {
             base,
             id,
             head,
-            exports,
             built: std::sync::Mutex::new(None),
         }
     }
@@ -188,16 +194,32 @@ impl Manifested {
     /// does not read.
     fn build(&self) -> Option<Built> {
         let section = crate::schema_section::Section::parse(section()).ok()?;
-        let text = section
-            .schema(self.head, self.id, Some(self.exports))
-            .into_boxed_str();
+        let text = section.schema(self.head, self.id).into_boxed_str();
+        let head = crate::schema_section::Head {
+            text: self.head,
+            id: self.id,
+        };
+        let names: Box<[Box<str>]> = head
+            .exports()
+            .into_iter()
+            .chain(section.exports(self.id))
+            .map(String::into_boxed_str)
+            .collect();
+        let exports: Box<[crate::abi::Str]> = names
+            .iter()
+            .map(|name| crate::abi::Str::new(name))
+            .collect();
         let manifest = Box::new(crate::abi::Manifest {
             points: crate::abi::Str::new(&text),
+            exports: exports.as_ptr(),
+            export_count: exports.len(),
             ..*self.base
         });
         Some(Built {
             manifest,
             _text: text,
+            _exports: exports,
+            _names: names,
         })
     }
 }
@@ -566,9 +588,12 @@ pub unsafe fn init<M: Mod>(
         refresh_level,
         core::ptr::null_mut(),
     );
+    #[cfg(feature = "test")]
+    if let Some(refused) = crate::test::table::note_manifest(api, manifest) {
+        host.fault(&refused);
+        return Status::REFUSED;
+    }
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        #[cfg(feature = "test")]
-        crate::test::table::note_manifest(api, manifest);
         M::init(&mut Load::of(
             host,
             manifest.flags.contains(ManifestFlags::JOIN),

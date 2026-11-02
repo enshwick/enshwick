@@ -101,14 +101,15 @@ pub(crate) extern "system" fn find_call(
         let Some(declared) = (unsafe { declared(&spec) }) else {
             return Status::BAD_ARGS;
         };
-        let unmet = unexported(loader, record, "call", &declared.name).or_else(|| {
-            let owner = required_owner(record, &declared.name)?;
-            let reason = crate::calls::registry().unmatched(&declared, loader)?;
-            Some(format!(
-                "call {} v{}: this mod requires {owner}, and the call cannot match: {reason}",
-                declared.name, declared.major
-            ))
-        });
+        let unmet = unexported(loader, record, crate::manifest::Kind::Call, &declared.name)
+            .or_else(|| {
+                let owner = required_owner(record, &declared.name)?;
+                let reason = crate::calls::registry().unmatched(&declared, loader)?;
+                Some(format!(
+                    "call {} v{}: this mod requires {owner}, and the call cannot match: {reason}",
+                    declared.name, declared.major
+                ))
+            });
         if let Some(reason) = unmet {
             crate::log::write(Level::WARN, &record.id, &reason);
             return Status::REFUSED;

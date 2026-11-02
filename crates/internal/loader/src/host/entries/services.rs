@@ -41,33 +41,18 @@ pub(crate) fn required_owner<'a>(record: &ModRecord, name: &'a str) -> Option<&'
 }
 
 /// Why the mod of `record` may not use the `kind` `name`, `<id>:<what>`: a
-/// loaded mod `id` whose manifest does not export `what`. `None` for a name
-/// of its own, an exported one, or one of a mod that is not loaded, which
-/// stays unmatched.
+/// loaded mod `id` whose manifest does not export `what` as that kind. `None`
+/// for a name of its own, an exported one, or one of a mod that is not
+/// loaded, which stays unmatched, so built-in `enshwick:` ids pass.
 pub(crate) fn unexported(
     loader: &Loader,
     record: &ModRecord,
-    kind: &str,
+    kind: crate::manifest::Kind,
     name: &str,
 ) -> Option<String> {
     let (owner, _) = name.split_once(':')?;
     let (_, provider) = loader.find_mod(owner)?;
     crate::manifest::unexported(kind, name, &record.id, &provider.exports())
-}
-
-/// Why the mod of `record` may not name the content id `name` as a `kind`:
-/// a loaded mod's id whose manifest exports neither its name nor the name it
-/// is a part of. `None` as [`unexported`] gives it, so built-in `enshwick:`
-/// ids pass.
-pub(crate) fn unexported_content(
-    loader: &Loader,
-    record: &ModRecord,
-    kind: &str,
-    name: &str,
-) -> Option<String> {
-    let (owner, _) = name.split_once(':')?;
-    let (_, provider) = loader.find_mod(owner)?;
-    crate::manifest::unexported_content(kind, name, &record.id, &provider.exports())
 }
 
 /// The name and layout of a service or event spec the safe layer passed.
@@ -158,9 +143,9 @@ pub(crate) extern "system" fn service(
         let Some((name, fields)) = (unsafe { spec_parts(wanted.name, &wanted.layout) }) else {
             return Status::BAD_ARGS;
         };
-        let refused = loader
-            .record(me)
-            .and_then(|(_, record)| unexported(loader, record, "service", name));
+        let refused = loader.record(me).and_then(|(_, record)| {
+            unexported(loader, record, crate::manifest::Kind::Service, name)
+        });
         let found = match refused {
             Some(reason) => Err(crate::services::FindServiceError::Unexported { reason }),
             None => crate::services::registry().find(name, wanted.major, &fields, loader),
@@ -259,7 +244,7 @@ pub(crate) extern "system" fn subscribe_event(
         let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
             return Status::BAD_ARGS;
         };
-        if let Some(reason) = unexported(loader, record, "event", name) {
+        if let Some(reason) = unexported(loader, record, crate::manifest::Kind::Event, name) {
             crate::log::write(Level::WARN, &record.id, &reason);
             return Status::REFUSED;
         }
@@ -432,14 +417,15 @@ pub(crate) extern "system" fn attach_point(
         let (Some(declared), Some(before), Some(after)) = parts else {
             return Status::BAD_ARGS;
         };
-        let unmet = unexported(loader, record, "point", &declared.name).or_else(|| {
-            let owner = required_owner(record, &declared.name)?;
-            let reason = crate::points::registry().unlinkable(&declared, loader)?;
-            Some(format!(
-                "point {}: this mod requires {owner}, and the link cannot match: {reason}",
-                declared.name
-            ))
-        });
+        let unmet = unexported(loader, record, crate::manifest::Kind::Point, &declared.name)
+            .or_else(|| {
+                let owner = required_owner(record, &declared.name)?;
+                let reason = crate::points::registry().unlinkable(&declared, loader)?;
+                Some(format!(
+                    "point {}: this mod requires {owner}, and the link cannot match: {reason}",
+                    declared.name
+                ))
+            });
         if let Some(reason) = unmet {
             crate::log::write(Level::WARN, &record.id, &reason);
             return Status::REFUSED;
@@ -524,7 +510,7 @@ pub(crate) extern "system" fn use_content(me: ModHandle, id: Str) -> Status {
         else {
             return Status::BAD_ARGS;
         };
-        match unexported_content(loader, record, "content id", id) {
+        match unexported(loader, record, crate::manifest::Kind::Content, id) {
             Some(reason) => {
                 crate::log::write(Level::WARN, &record.id, &reason);
                 Status::REFUSED

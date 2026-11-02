@@ -15,7 +15,7 @@
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_major, ABI_MAJOR);
 /// ```
-pub const ABI_MAJOR: u16 = 5;
+pub const ABI_MAJOR: u16 = 6;
 
 /// The minor version of this interface: one more for each append to the
 /// layout of this [`ABI_MAJOR`], a field at the end of a struct that starts
@@ -32,7 +32,7 @@ pub const ABI_MAJOR: u16 = 5;
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_minor, ABI_MINOR);
 /// ```
-pub const ABI_MINOR: u16 = 1;
+pub const ABI_MINOR: u16 = 0;
 
 /// Why a loader or its tools refuse a mod built for another ABI, naming the
 /// mod's version, this build's and what to do.

@@ -8,6 +8,13 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `cargo enshwick deps` writes only the declarations an owner
+  marks `export`, and reads schema format 2, whose head lists the owner's
+  content and stat exports; an owner built with an older release asks for a
+  rebuild, and a DLL in the folder that does not read is left out with that
+  line, not the whole run (#883).
+- **Breaking:** `cargo enshwick new` writes `exports` with `content:` names
+  (#883).
 - **Breaking:** `cargo enshwick deps` reads an owner's schemas from the
   entries its points, events and calls write into the DLL's `.enshpt`
   section, beside the head of its `declare_mod!`. An owner built with an

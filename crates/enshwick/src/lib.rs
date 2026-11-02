@@ -298,10 +298,11 @@ pub use enshwick_macros::Shape;
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
 ///
-/// `#[call(name = "<call>", output = <type>, version = <major>)]`, with
+/// `#[call(name = "<call>", output = <type>, version = <major>, export)]`, with
 /// `of = <alias>` for a dependency's call ([`deps!`]); `version` is 1 when
 /// left out. A changed field or answer is a new major. Every type in it has
-/// a [`trait@Shape`].
+/// a [`trait@Shape`]. `export` lets other mods call it and ships its schema
+/// with the mod; without it the call is the mod's own.
 ///
 /// # Examples
 ///
@@ -390,10 +391,12 @@ pub use enshwick_macros::config;
 ///
 /// The mod's own [extension points](crate::points), [mod
 /// events](crate::services) and calls, each a [`#[point]`](macro@point),
-/// [`#[event]`](macro@event) or `#[call]` declared without `of`, whose
-/// local name `exports` lists, put their schemas into the DLL's `.enshpt`
-/// section; the others stay the mod's own. The manifest collects the
-/// schemas from there at the loader's first query, and `cargo enshwick
+/// [`#[event]`](macro@event) or `#[call]` declared without `of` and marked
+/// `export`, put their schemas into the DLL's `.enshpt` section, and an
+/// exported [`#[service]`](macro@service) its name; the others stay the
+/// mod's own. The manifest collects the schemas and the exported names from
+/// there at the loader's first query, beside the content names `exports`
+/// lists, and `cargo enshwick
 /// deps` reads them from the DLL file.
 ///
 /// A test that declares several mods in one binary gives each its table
@@ -453,9 +456,10 @@ pub use enshwick_macros::declare_mod;
 /// gives them: `deps!()` writes `pub mod deps`, one module per alias in
 /// `requires`, `after` and `recommends`.
 ///
-/// Each module holds `ID`, the dependency's mod id, and `id("<name>")`, its
+/// Each module holds `ID`, the dependency's mod id, `stat("<name>")`, its
+/// stat kind for [`Load::open_stat`], which checks a `stat:` export, and `id("<name>")`, its
 /// content id `<dependency>:<name>`, once the loader lets this mod name it:
-/// the dependency's `exports` list `<name>` or the name it is a part of. A
+/// the dependency's `exports` list `content:<name>` or the name it is a part of. A
 /// required dependency's `id` returns [`Off`] for a name it does not export.
 /// An optional one's, from `after` or `recommends`, is `None` while it does
 /// not run or does not export the name. Ask once, at init, and keep the id.
@@ -502,10 +506,12 @@ pub use enshwick_macros::deps;
 /// `repr(C)` and implements [`services::ModEvent`] with a layout hash per
 /// field.
 ///
-/// `#[event(name = "<what>")]` for this mod's event, `#[event(of = <alias>,
+/// `#[event(name = "<what>", export)]` for this mod's event, `#[event(of = <alias>,
 /// name = "<what>")]` for a dependency's ([`deps!`]); the struct is `Copy`
 /// plain data and grows by appending fields, as a
-/// [`#[service]`](macro@service) table does.
+/// [`#[service]`](macro@service) table does. `export` lets other mods hear
+/// it and ships its schema with the mod, which needs a [`trait@Shape`] for
+/// every field; without it the event is the mod's own.
 ///
 /// # Examples
 ///
@@ -555,11 +561,13 @@ pub use enshwick_macros::hook;
 /// and one for the answer, which the loader checks for every link.
 ///
 /// `#[point(name = "<point>", mode = Observe | Advise | Override, output =
-/// <type>, refusable)]`, with `of = <alias>` for a dependency's point
+/// <type>, refusable, export)]`, with `of = <alias>` for a dependency's point
 /// ([`deps!`]); `refusable` lets a link refuse, which stops the chain. The
 /// input grows by appending fields; a changed field or answer type needs a
 /// new name. Every type in it has a [`trait@Shape`], so
-/// a change deep inside a field refuses the link too.
+/// a change deep inside a field refuses the link too. `export` lets other
+/// mods link it and ships its schema with the mod; without it the point is
+/// the mod's own.
 ///
 /// # Examples
 ///
@@ -602,12 +610,13 @@ pub use enshwick_macros::script;
 /// and implements [`services::Service`] with a layout hash per field, which
 /// the loader checks when a mod asks for the service.
 ///
-/// `#[service(name = "<what>", version = <major>)]`, with `of = <alias>`
+/// `#[service(name = "<what>", version = <major>, export)]`, with `of = <alias>`
 /// for a dependency's service ([`deps!`]); the version is 1 when left out.
 /// Fields are `extern "system" fn` pointers or plain data. Append fields to grow the table: users built against the
 /// shorter table keep working. Change a published field only with a new
 /// major. Every type in it has a [`trait@Shape`], so a change deep inside a
-/// field refuses the user too.
+/// field refuses the user too. `export` lets other mods use it; without it
+/// the table is the mod's own.
 ///
 /// # Examples
 ///

@@ -8,12 +8,29 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** every export names its kind: `Manifest::exports`, a pack's
+  `exports` and `FakeHost::exports` hold `<kind>:<local name>`, the kind one
+  of `point`, `event`, `call`, `service`, `content` and `stat`
+  (`schema_section::Kind::ALL`, hidden, which the loader and the fake share). The loader and the fake match kind and name, so
+  an exported point opens no content, stat kind or event of the same name;
+  content and stat kinds still export their parts. A call, point, service
+  or event is exported by `export` on its declaration, as
+  `#[enshwick::point(name = "price", export, ..)]`, and ships its schema
+  only then; `exports` in `[package.metadata.enshwick]` takes
+  `content:<name>` and `stat:<name>` alone. `export` with `of`, or on a full
+  name of another mod's id outside a test, fails the build. A dependency's
+  stat kind is named `deps::<alias>::stat("<name>")`, which `open_stat`
+  checks as a stat; `deps::<alias>::id` checks a content export. Since this changes what
+  `Manifest::exports` means, the ABI is 6.0: the loader refuses a mod built
+  for 5.x with "rebuild it for Enshwick" and its version. Write each export
+  with its kind, move declarations onto `export`, and rebuild every mod
+  (#883).
 - **Breaking:** `declare_mod!(Type)` takes no `points`, `events` or `calls`
-  lists. Each `#[point]`, `#[event]` and `#[call]` declared without `of`
-  whose local name `exports` lists writes its schema into the DLL's
+  lists. Each exported `#[point]`, `#[event]` and `#[call]` writes its schema into the DLL's
   `.enshpt` section; the manifest collects them from there at the loader's
   first query, and `cargo enshwick deps` from the DLL file. An exported
-  event, point or call a schema cannot describe fails the build.
+  event a schema cannot describe fails the build, as a point or call does
+  whether exported or not.
   `enshwick_mod_query` builds the manifest at its first call, returns null
   when that panics, and the manifest lives until `enshwick_mod_shutdown`,
   which frees it. Remove the lists (#868).
