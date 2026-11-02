@@ -12,7 +12,7 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     /// A sale at the trading post.
-    #[enshwick::event(name = "you.trading-post:sold", export)]
+    #[enshwick::event(name = "you.sales:sold", export)]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Sold {
         /// The item.
@@ -59,7 +59,7 @@ mod tests {
     enshwick::test::declare_mod!(
         Watcher,
         r#"
-        id = "you.trading-post"
+        id = "you.sales"
         side = "server"
         "#
     );
@@ -121,7 +121,7 @@ mod tests {
         // SAFETY: the schema text lives as long as the manifest, until a shutdown no test runs.
         let text = unsafe { manifest.points.as_str() }.unwrap_or("");
         assert!(
-            text.contains("[[event]]\nname = \"you.trading-post:sold\"\ndata = \"Sold\""),
+            text.contains("[[event]]\nname = \"you.sales:sold\"\ndata = \"Sold\""),
             "{text}"
         );
         assert!(

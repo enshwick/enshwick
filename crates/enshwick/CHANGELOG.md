@@ -11,13 +11,14 @@ Each entry names the pull request that made the change.
 - **Breaking:** a call, point, service or event is exported by `export` on
   its declaration, as `#[enshwick::point(name = "price", export, ..)]`, and
   ships its schema only then; `exports` in `[package.metadata.enshwick]`
-  lists content and stat kinds alone. The manifest's exports join both.
-  `export` with `of`, or on a full name of another mod's id outside a test,
-  fails the build. Move each such name from `exports` onto its declaration
-  (#883).
+  lists content and stat kinds alone, and a declaration whose local name it
+  lists without `export` fails the build. The manifest's exports join both,
+  less a name that would also open a declaration or content id the mod
+  keeps, since the loader matches exports by name. `export` with `of`, or on
+  a full name of another mod's id outside a test, fails the build. Move each
+  such name from `exports` onto its declaration (#883).
 - **Breaking:** `declare_mod!(Type)` takes no `points`, `events` or `calls`
-  lists. Each `#[point]`, `#[event]` and `#[call]` declared without `of`
-  whose local name `exports` lists writes its schema into the DLL's
+  lists. Each exported `#[point]`, `#[event]` and `#[call]` writes its schema into the DLL's
   `.enshpt` section; the manifest collects them from there at the loader's
   first query, and `cargo enshwick deps` from the DLL file. An exported
   event, point or call a schema cannot describe fails the build.

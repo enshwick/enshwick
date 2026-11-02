@@ -134,9 +134,13 @@ struct Built {
     _exports: Box<[crate::abi::Str]>,
 }
 
-// SAFETY: `Built` owns its manifest and the text that manifest points at,
-// and nothing writes either after they are built; the manifest's other
-// pointers lead to the mod's immutable statics.
+// SAFETY: `Send` is missing only for the raw pointers inside `Manifest` and
+// `Str`. Each points at memory no thread writes once `build` returns: the
+// text and exports boxes this `Built` owns, whose heap addresses stay put
+// when it moves, the section and the `declare_mod!` statics of the mod's
+// image (`Manifested::build`). Moving `Built` to another thread therefore
+// moves only read-only views, and the mutex in `Manifested` orders its one
+// free in `release` after every build.
 unsafe impl Send for Built {}
 
 impl Manifested {
@@ -192,13 +196,8 @@ impl Manifested {
     /// does not read.
     fn build(&self) -> Option<Built> {
         let section = crate::schema_section::Section::parse(section()).ok()?;
-        let text = section.schema(self.head, self.id).into_boxed_str();
-        let mut names = self.exports.to_vec();
-        for name in section.exports(self.id) {
-            if !names.contains(&name) {
-                names.push(name);
-            }
-        }
+        let names = section.exports(self.id, self.exports);
+        let text = section.schema(self.head, self.id, &names).into_boxed_str();
         let exports: Box<[crate::abi::Str]> = names.into_iter().map(crate::abi::Str::new).collect();
         let manifest = Box::new(crate::abi::Manifest {
             points: crate::abi::Str::new(&text),
