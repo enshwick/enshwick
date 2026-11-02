@@ -40,7 +40,7 @@ use enshwick::abi::{HookFlags, Status};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use self::attach::find_pending;
-use self::carried::{JOIN_LOOK_EVERY, Joining, find_carried};
+use self::carried::{JOIN_LOOK_EVERY, Joining, look_for_carried};
 pub(crate) use self::carried::{player_joined, player_left};
 pub(crate) use self::world_file::world_event;
 use crate::chains::Next;
@@ -385,7 +385,7 @@ pub(crate) fn after_step(loader: &Loader) {
         find_pending(loader);
     }
     if crate::events::steps().is_multiple_of(JOIN_LOOK_EVERY) && wanted() {
-        find_carried(loader);
+        look_for_carried(loader);
     }
     if !KEPT.load(Ordering::Relaxed) || !any_destroyed() {
         return;
@@ -400,13 +400,19 @@ pub(crate) fn after_step(loader: &Loader) {
         server.changed |= !gone.is_empty();
         gone
     };
+    send(&removals(&gone));
+}
+
+/// The messages that tell clients the values of `keys` are gone, for the
+/// kinds clients get.
+fn removals(keys: &[(u32, u32)]) -> Vec<Vec<u8>> {
     let mut messages = Vec::new();
-    for (kind, pide) in gone {
-        if let Some(spec) = self::kind(kind).filter(|k| k.sent) {
+    for &(id, pide) in keys {
+        if let Some(spec) = kind(id).filter(|k| k.sent) {
             push_encoded(&mut messages, &spec.id, pide, 0, &[]);
         }
     }
-    send(&messages);
+    messages
 }
 
 /// Appends a record's encoding to the last of `messages`, moving it to a
