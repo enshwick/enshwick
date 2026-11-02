@@ -156,8 +156,8 @@ mod tests {
         for (id, _) in server.symbols() {
             assert!(client.symbol(id).is_some(), "{id}");
         }
-        assert_eq!(server.symbol("npc.lookup"), Some(0x20_3d30));
-        assert_eq!(client.symbol("npc.lookup"), Some(0x46_9c30));
+        assert_eq!(server.symbol("npc.lookup"), Some(0x20_9840));
+        assert_eq!(client.symbol("npc.lookup"), Some(0x47_0f00));
     }
 
     /// The ids of the newest table of `side` that a build without a table
@@ -773,8 +773,8 @@ age = 1
     fn the_newest_embedded_tables_name_their_steam_builds() {
         let tables = tables();
         let steam = |side| newest(&tables, side).and_then(Table::steam_build);
-        assert_eq!(steam(Side::Client), Some(SteamBuild::new(26_082_781)));
-        assert_eq!(steam(Side::Server), Some(SteamBuild::new(26_083_076)));
+        assert_eq!(steam(Side::Client), Some(SteamBuild::new(26_320_373)));
+        assert_eq!(steam(Side::Server), Some(SteamBuild::new(26_319_703)));
     }
 
     #[test]
