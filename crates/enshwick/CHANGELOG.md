@@ -181,6 +181,8 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- The Mods screen has an Interface demo button while developer tools are
+  on in that game, so the demo opens without the console (#897).
 - `World::set_muted` and `World::muted` mute a player in chat and lift the
   mute, on a dedicated server or in a game a client hosts. The server drops
   every line a muted player types before another player reads it and tells
