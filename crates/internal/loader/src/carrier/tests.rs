@@ -69,7 +69,7 @@ fn a_new_host_makes_the_client_half_say_hello_again() {
 #[test]
 fn a_payload_that_may_not_travel_is_refused_before_any_link() {
     let _alone = alone();
-    assert_eq!(send(7, 5, b"MZ\x90\0"), Err(Status::BAD_ARGS));
+    assert_eq!(send(7, 5, b"\x7fELF\x02"), Err(Status::BAD_ARGS));
     let refused = send_many(&[7, 8], 5, &[1; MAX_SEALED], |_, _| {
         panic!("a refused payload names no key")
     });

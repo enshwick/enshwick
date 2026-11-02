@@ -154,14 +154,13 @@ fn carry(key: u64, channel: u32, data: &[u8]) -> bool {
 }
 
 /// Says hello to the server, on the thread that sends the client's chat: at
-/// once when its link `opened`, forgetting the last link's answer, and
+/// once when its link `opened` (the caller forgot the last link's answer
+/// with [`link_lost`] first), and
 /// every few seconds until this one is answered, since the server may drop
 /// a hello it has no room for. Waits on no lock but for a new link.
 pub(crate) fn client_tick(opened: bool) {
     let server = NetMessage::SERVER.get();
-    if opened {
-        link_lost();
-    } else if ANSWERED.load(Ordering::Acquire) {
+    if ANSWERED.load(Ordering::Acquire) {
         return;
     }
     let due = |s: &mut State| {

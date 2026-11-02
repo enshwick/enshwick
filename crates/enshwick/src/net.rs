@@ -49,11 +49,11 @@ use crate::{Host, Load, Off, PlayerKey};
 /// The largest message a channel carries, encoded, in bytes.
 pub const MAX_MESSAGE: usize = 4096;
 
-/// Starts of executable code: PE, ELF, Mach-O (both byte orders, 32 and 64
-/// bit, and fat), WebAssembly and Lua bytecode. Luau bytecode has no
-/// signature; the loader runs no received bytes as code.
-const CODE_STARTS: [&[u8]; 9] = [
-    b"MZ",
+/// Starts of executable code besides a PE: ELF, Mach-O (both byte orders,
+/// 32 and 64 bit, and fat), WebAssembly and Lua bytecode, four bytes each,
+/// which ordinary data rarely starts with. Luau bytecode has no signature;
+/// the loader runs no received bytes as code.
+const CODE_STARTS: [&[u8]; 8] = [
     b"\x7fELF",
     b"\xfe\xed\xfa\xce",
     b"\xfe\xed\xfa\xcf",
@@ -72,12 +72,23 @@ const CODE_STARTS: [&[u8]; 9] = [
 /// ```
 /// use enshwick::net::looks_like_code;
 ///
-/// assert!(looks_like_code(b"MZ\x90\0"));
+/// assert!(looks_like_code(b"\x7fELF\x02\x01"));
+/// assert!(!looks_like_code(b"MZ is a string, no PE header"));
 /// assert!(!looks_like_code(b"\x02hello"));
 /// ```
 #[must_use]
 pub fn looks_like_code(bytes: &[u8]) -> bool {
-    CODE_STARTS.iter().any(|start| bytes.starts_with(start))
+    CODE_STARTS.iter().any(|start| bytes.starts_with(start)) || is_pe(bytes)
+}
+
+/// Whether `bytes` hold a PE image's start: `MZ`, and `PE\0\0` where the
+/// offset at 0x3c points, so data that only starts with `MZ` passes.
+fn is_pe(bytes: &[u8]) -> bool {
+    let header = bytes.get(0x3c..0x40).and_then(|offset| {
+        let at = usize::try_from(u32::from_le_bytes(offset.try_into().ok()?)).ok()?;
+        bytes.get(at..at.checked_add(4)?)
+    });
+    bytes.starts_with(b"MZ") && header == Some(b"PE\0\0".as_slice())
 }
 
 /// Who a message comes from or goes to.

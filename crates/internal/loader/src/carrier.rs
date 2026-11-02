@@ -184,6 +184,12 @@ struct Carrier {
     dropped: AtomicU64,
     client_send: Next<ClientSendFn>,
     fuse: crate::fuse::Fuse,
+    /// The switch of the lobby a hosting client publishes, apart from the
+    /// channel's.
+    lobby_fuse: crate::fuse::Fuse,
+    /// Server steps of a hosting client, to look for its own player now and
+    /// then.
+    hosted_steps: AtomicU32,
 }
 
 static CARRIER: Carrier = Carrier {
@@ -204,32 +210,35 @@ static CARRIER: Carrier = Carrier {
     // `client_send`, its link on that function.
     client_send: unsafe { Next::new() },
     fuse: crate::fuse::Fuse::new("the own channel"),
+    lobby_fuse: crate::fuse::Fuse::new("the hosted lobby"),
+    hosted_steps: AtomicU32::new(0),
 };
 
 /// Resolves and checks the game's socket calls, and on a client links its
 /// chat send, where the client pumps its socket; without them the own
 /// channel stays off and the log says which part is missing.
 pub(crate) fn link(loader: &Loader) {
-    let game = match Game::resolve(loader) {
-        Ok(game) => game,
-        Err(missing) => {
-            crate::log!(WARN, "own channel off: this build has no {missing}");
-            return;
-        }
-    };
-    let _first = CARRIER.game.set(game);
-    if loader.side == enshwick::abi::Side::CLIENT
-        && !loader.link_feature(
-            "the own channel to the server",
+    let game = Game::resolve(loader);
+    if let Ok(game) = game {
+        let _first = CARRIER.game.set(game);
+    }
+    // Linked even without the channel: the lobby a client hosts is published
+    // from here too.
+    let linked = loader.side != enshwick::abi::Side::CLIENT
+        || loader.link_feature(
+            "the client's frame step",
             Target::Pinned(pinned::chat::CLIENT_SEND),
             &CARRIER.client_send,
             client_send as ClientSendFn,
             HookFlags::NONE,
-        )
-    {
-        return;
+        );
+    match game {
+        Ok(game) if linked => {
+            crate::log!(INFO, "own channel ready on game channel {}", game.channel());
+        }
+        Ok(_) => {}
+        Err(missing) => crate::log!(WARN, "own channel off: this build has no {missing}"),
     }
-    crate::log!(INFO, "own channel ready on game channel {}", game.channel());
 }
 
 /// The loader's link on the client's chat send: pumps the own channel
@@ -240,6 +249,9 @@ pub(crate) fn link(loader: &Loader) {
 /// - Called only by the game through the chain on `chat.client_send`, on the
 ///   thread that sends the client's chat, with the game client or null.
 unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
+    let _published = CARRIER
+        .lobby_fuse
+        .run("the hosted lobby", crate::lobby::poll);
     let _caught = CARRIER.fuse.run("the client's own channel", || {
         // SAFETY: `client` is the game's own argument, null or the game
         // client, on the thread that sends its chat, by this function's
@@ -390,6 +402,7 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
         return;
     };
     let mut gone = Vec::new();
+    let mut restarted = Vec::new();
     let inbox = {
         let Some(mut guard) = CARRIER.server.try_relock() else {
             return;
@@ -406,7 +419,11 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
         let share = INBOX_BYTES / peers.len().max(1);
         peers.retain(|&key, peer| {
             let kept = game.holds(peer.socket, peer.slot) && {
+                let restarts = peer.link.restarts();
                 receive(game, session, key, peer, inbox, share, now);
+                if peer.link.restarts() != restarts {
+                    restarted.push(key);
+                }
                 if developer {
                     probe_step(peer);
                     nudge(game, session, key, peer, now);
@@ -421,6 +438,10 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
         });
         core::mem::take(inbox)
     };
+    // A client whose link started over says hello again on the new one.
+    for &key in &restarted {
+        crate::net::forget_peer(key);
+    }
     for item in &inbox.items {
         let (start, end) = item.span;
         crate::net::server_carried(item.from, item.channel, &inbox.bytes[start..end]);
@@ -435,7 +456,9 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
 /// while it has none, which needs no network session (single player has
 /// one player alone), and takes what its client half sent.
 fn hosted_step(loader: &Loader) {
+    let step = CARRIER.hosted_steps.fetch_add(1, Ordering::Relaxed);
     if CARRIER.host_key.load(Ordering::Acquire) == 0
+        && step.is_multiple_of(MEMBERS_EVERY)
         && let Ok(machines) = crate::world::machines(loader)
         && let [(key, _)] = machines.as_slice()
     {
@@ -502,12 +525,15 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
 ///
 /// - `client` is null or the game client, on the thread that sends its chat.
 unsafe fn client_frame(client: *mut u8, now: Instant) {
-    crate::lobby::poll();
     if client_hosts() {
+        let opened = !CARRIER.hosted_hello.swap(true, Ordering::AcqRel);
+        if opened {
+            crate::net::link_lost();
+        }
         for message in take_looped(false) {
             crate::net::client_carried(message.channel, &message.data);
         }
-        crate::net::client_tick(!CARRIER.hosted_hello.swap(true, Ordering::AcqRel));
+        crate::net::client_tick(opened);
         return;
     }
     let modded = crate::net::server_runs_enshwick();
@@ -539,16 +565,17 @@ unsafe fn client_frame(client: *mut u8, now: Instant) {
         let change = pump_client(game, loader, session, state, now);
         (core::mem::take(&mut state.inbox), change)
     };
+    // The last link's answer goes before the new link's messages are read.
+    if change.is_some() {
+        crate::net::link_lost();
+    }
     for item in &inbox.items {
         let (start, end) = item.span;
         crate::net::client_carried(item.channel, &inbox.bytes[start..end]);
     }
     give_back(&CARRIER.client, session, inbox);
-    match change {
-        Some(Change::Opened) => crate::net::client_tick(true),
-        Some(Change::Lost) => crate::net::link_lost(),
-        None if CARRIER.client_open.load(Ordering::Acquire) => crate::net::client_tick(false),
-        None => {}
+    if CARRIER.client_open.load(Ordering::Acquire) {
+        crate::net::client_tick(change == Some(Change::Opened));
     }
 }
 
@@ -609,7 +636,12 @@ fn pump_client(
         }
     }
     let State { peers, inbox, .. } = state;
-    let peer = peers.get_mut(&SERVER)?;
+    let Some(peer) = peers.get_mut(&SERVER) else {
+        if change == Some(Change::Lost) {
+            CARRIER.client_open.store(false, Ordering::Release);
+        }
+        return change;
+    };
     let restarts = peer.link.restarts();
     receive(game, session, SERVER, peer, inbox, INBOX_BYTES, now);
     if peer.link.restarts() != restarts {

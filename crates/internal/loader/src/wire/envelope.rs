@@ -58,7 +58,7 @@ pub enum ReadMessageError {
 /// ```
 /// use enshwick_loader::wire::is_executable;
 ///
-/// assert!(is_executable(b"MZ\x90\0"));
+/// assert!(is_executable(b"\x7fELF\x02"));
 /// assert!(!is_executable(b"\x02hello"));
 /// ```
 #[must_use]
@@ -75,7 +75,7 @@ pub fn is_executable(payload: &[u8]) -> bool {
 /// use enshwick_loader::wire::{MAX_PAYLOAD, sealable};
 ///
 /// assert!(sealable(b"\x02hello"));
-/// assert!(!sealable(b"MZ"));
+/// assert!(!sealable(b"\0asm\x01\0\0\0"));
 /// assert!(!sealable(&[0; MAX_PAYLOAD + 1]));
 /// ```
 #[must_use]
@@ -175,7 +175,12 @@ mod tests {
     #[test]
     fn a_payload_that_starts_like_code_is_refused_both_ways() {
         let mut out = [0; MAX_SEALED];
-        let starts: [&[u8]; 4] = [b"MZ", b"\x7fELF", b"\0asm", b"\x1bLua"];
+        let mut pe = vec![0u8; 0x48];
+        pe[..2].copy_from_slice(b"MZ");
+        pe[0x3c] = 0x40;
+        pe[0x40..0x44].copy_from_slice(b"PE\0\0");
+        assert!(!is_executable(b"MZ, a string and no PE header"));
+        let starts: [&[u8]; 4] = [&pe, b"\x7fELF", b"\0asm", b"\x1bLua"];
         for start in starts {
             assert_eq!(seal(&mut out, 1, start), None);
             let mut message = vec![ENVELOPE, 1];
