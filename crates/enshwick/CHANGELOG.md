@@ -153,6 +153,10 @@ Each entry names the pull request that made the change.
   things checks. `test::facts` names their facts, and the loot slot's, so a
   test of these areas lays out and reads its events by them (#871).
 
+- `FakeHost::vanilla_items` lists items in the game's item registry by
+  their debug names, so a mod's test finds them with
+  `content::vanilla::item` as in the game (#PR).
+
 - `FakeHost::meters` sets what `MeterLayout` resolves, and
   `FakeHost::container_kinds` the markers `ContainerKinds` tells holders
   apart by, which `test::facts` names, so a mod's test of item meters or

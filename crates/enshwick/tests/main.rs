@@ -133,6 +133,7 @@ mod ticks;
 #[cfg(feature = "unstable")]
 mod transactions;
 mod ui;
+mod vanilla_items;
 mod vetoes;
 mod voxels;
 mod weather;
