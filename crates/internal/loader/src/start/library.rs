@@ -3,7 +3,7 @@
 use std::os::windows::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
-use enshwick::abi::{ABI_VERSION, HostApi, Manifest, ModHandle, Status, exports};
+use enshwick::abi::{ABI_MINOR, HostApi, Manifest, ModHandle, Status, check_abi, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::{
     GetModuleHandleW, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
@@ -442,8 +442,10 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     // SAFETY: a mod's `READY` export has the signature `enshwick::abi::exports`
     // documents for it.
     let ready = unsafe { core::mem::transmute::<Export, ReadyFn>(ready) };
-    if abi() != ABI_VERSION {
-        log_skip(&Skip::OtherAbi, file);
+    // The export states only the major; the manifest's header holds the
+    // minor, which `manifest::parse` checks.
+    if let Err(why) = check_abi(abi(), ABI_MINOR) {
+        log_skip(&Skip::OtherAbi(why), file);
         return None;
     }
     // SAFETY: `query` returns the mod's static manifest, null or readable

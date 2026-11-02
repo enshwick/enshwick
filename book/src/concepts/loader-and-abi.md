@@ -62,11 +62,12 @@ since the last start goes to `loader.log`, such as
 A mod and the loader are built separately, so they talk through a C ABI,
 [`enshwick::abi`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
 
-- `ABI_VERSION` is a hash of the layout of every ABI type, with each
-  field's type and each function pointer's signature. A loader loads
-  only mods built for its own version and tells the player which Enshwick
-  release to rebuild any other mod for. Structs that cross the boundary on
-  their own start with a `Header` (size and ABI version).
+- `ABI_MAJOR` and `ABI_MINOR` are the ABI version. An append to the layout
+  is the next minor, any other change a new major. A loader loads mods of
+  its major built for its minor or an older one, so a mod needs a rebuild
+  only for a new major; the loader tells the player which Enshwick release
+  to rebuild it for. Structs that cross the boundary on their own start
+  with a `Header` (size, major and minor).
 - `HostApi` is the loader's table of functions, passed to the mod at init.
 
 A mod rarely touches the ABI. [`Load`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)

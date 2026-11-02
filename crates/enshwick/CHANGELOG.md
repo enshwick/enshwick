@@ -8,6 +8,18 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** the ABI version is a major and a minor, `abi::ABI_MAJOR`
+  and `abi::ABI_MINOR`, starting at 5.0, instead of the layout hash
+  `ABI_VERSION`. A field appended to a struct that starts with a `Header`, a
+  function appended to `HostApi` or a new type is the next minor; any other
+  layout change is a new major, and the layout tests fail without the bump
+  the change needs. The loader loads a mod of its major built for its minor
+  or an older one, and refuses another major or a newer minor with the
+  versions and what to do, through `abi::check_abi` and its
+  `CheckAbiError`. `Header` holds `abi_major` and `abi_minor` in place of
+  `abi_version`, `enshwick_mod_abi` returns the major, `abi::OTHER_ABI` is
+  gone, and the C header defines `ENSHWICK_ABI_MAJOR` and
+  `ENSHWICK_ABI_MINOR`. Rebuild every mod once (#852).
 - **Breaking:** a mod does not build when a key of its texts lacks a text
   in a language of the new `Language::REQUIRED`, `en` and `uk`; add the
   missing Ukrainian texts (#838).

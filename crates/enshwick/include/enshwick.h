@@ -7,9 +7,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// The ABI version: a hash of the layout of every ABI type. A loader
-// loads only mods built for its own.
-#define ENSHWICK_ABI_VERSION 0x0dc85f01
+// The major version of this interface. A loader refuses a mod built for
+// another major.
+//
+// Any change to the layout other than an append is a new major, with
+// `ABI_MINOR` back at 0; the layout tests of this crate hold the pair to
+// the committed layout.
+#define ENSHWICK_ABI_MAJOR 5
+
+// The minor version of this interface: one more for each append to the
+// layout of this `ABI_MAJOR`, a field at the end of a struct that starts
+// with a `Header` or a new type.
+//
+// A loader loads mods built for its minor or an older one, and reads a
+// field appended after the mod's minor only where
+// `Header::covers` it.
+#define ENSHWICK_ABI_MINOR 0
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -35,8 +48,10 @@ typedef uint8_t EnshwickAccountActionType;
 typedef struct EnshwickHeader {
   // The size of the whole struct as its writer knew it.
   uint32_t size;
-  // `ABI_VERSION` of the writer.
-  uint32_t abi_version;
+  // `ABI_MAJOR` of the writer.
+  uint16_t abi_major;
+  // `ABI_MINOR` of the writer.
+  uint16_t abi_minor;
 } EnshwickHeader;
 
 // An entity id, as the engine numbers entities: a character, a prop, an item
@@ -2839,11 +2854,10 @@ typedef struct EnshwickMapMarkerTypeInfo {
 
 // The table of services the loader offers a mod.
 //
-// Until 1.0 any change to its layout is a new
-// `ABI_VERSION`, and a loader loads only mods
-// built for its own. From 1.0 fields are only appended, and a mod checks
-// `Header::covers` before it calls a field added after the release it was
-// built against.
+// A function appended at its end is a new
+// `ABI_MINOR`, any other change a new
+// `ABI_MAJOR`. A mod starts only on a table of its
+// major and its minor or a newer one, which `Header::covers` whole.
 typedef struct EnshwickHostApi {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -4478,7 +4492,8 @@ typedef struct EnshwickVoxelWrite {
 extern "C" {
 #endif
 
-// The ENSHWICK_ABI_VERSION the mod was built for.
+// The ENSHWICK_ABI_MAJOR the mod was built for; its manifest's header holds
+// the minor.
 ENSHWICK_EXPORT uint32_t enshwick_mod_abi(void);
 // The mod's manifest; static, no side effects.
 ENSHWICK_EXPORT const EnshwickManifest *enshwick_mod_query(void);

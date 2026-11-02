@@ -127,9 +127,9 @@ unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
     // readable for the size its header states, no concurrent writer.
     let manifest = unsafe { enshwick::abi::read_headed(raw, REQUIRED) }
         .ok_or("the mod returned no manifest, or a truncated one")?;
-    if manifest.header.abi_version != enshwick::abi::ABI_VERSION {
-        return Err(enshwick::abi::OTHER_ABI.to_owned());
-    }
+    let header = manifest.header;
+    enshwick::abi::check_abi(u32::from(header.abi_major), header.abi_minor)
+        .map_err(|why| why.to_string())?;
     Ok(manifest)
 }
 
@@ -148,11 +148,23 @@ fn query(dll: &Path) -> Result<Manifest, String> {
     if module.is_null() {
         return Err(format!("{} could not be loaded", dll.display()));
     }
-    let name = format!("{}\0", enshwick::abi::exports::QUERY);
-    // SAFETY: `module` was checked non-null and is never freed; `name` ends in
-    // the NUL `format!` appended and lives across the call.
-    let query = unsafe { GetProcAddress(module, name.as_ptr()) }
-        .ok_or_else(|| format!("{} is not an Enshwick mod", dll.display()))?;
+    let export = |name: &str| {
+        let name = format!("{name}\0");
+        // SAFETY: `module` was checked non-null and is never freed; `name`
+        // ends in the NUL `format!` appended and lives across the call.
+        unsafe { GetProcAddress(module, name.as_ptr()) }
+            .ok_or_else(|| format!("{} is not an Enshwick mod", dll.display()))
+    };
+    // SAFETY: the ABI gives `exports::ABI` the signature
+    // `extern "system" fn() -> u32`.
+    let abi: unsafe extern "system" fn() -> u32 =
+        unsafe { core::mem::transmute(export(enshwick::abi::exports::ABI)?) };
+    // SAFETY: `abi` is the mod's `exports::ABI`, which takes no arguments and
+    // returns a constant; the export states only the major, which decides how
+    // the manifest reads.
+    enshwick::abi::check_abi(unsafe { abi() }, enshwick::abi::ABI_MINOR)
+        .map_err(|why| why.to_string())?;
+    let query = export(enshwick::abi::exports::QUERY)?;
     // SAFETY: the ABI gives `exports::QUERY` the signature
     // `extern "system" fn() -> *const Manifest`.
     let query: unsafe extern "system" fn() -> *const Manifest =
@@ -216,17 +228,16 @@ mod tests {
     }
 
     #[test]
-    fn a_manifest_of_another_abi_version_is_refused_with_the_release_to_rebuild_for() {
+    fn a_manifest_of_an_older_abi_major_is_refused_with_the_release_to_rebuild_for() {
         let mut other = plain("you.other-mod", "1.0.0");
-        other.header.abi_version = enshwick::abi::ABI_VERSION.wrapping_add(1);
+        other.header.abi_major = enshwick::abi::ABI_MAJOR - 1;
         // SAFETY: `other` is a whole local manifest with static strings.
         let why = unsafe { copy(&raw const other) }.unwrap_err();
         assert_eq!(
             why,
-            format!(
-                "built for another Enshwick: rebuild it for Enshwick {}",
-                enshwick::VERSION
-            )
+            enshwick::abi::check_abi(u32::from(other.header.abi_major), 0)
+                .unwrap_err()
+                .to_string()
         );
     }
 
