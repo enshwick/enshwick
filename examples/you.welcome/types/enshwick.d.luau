@@ -355,13 +355,13 @@ declare enshwick: {
 	on_game_type: (type_name: string, fields: { [string]: string }, handler: (event: { [string]: any }) -> ()) -> (),
 	--- Every game event type of the running build, with its size in bytes, read from the game's reflection.
 	game_event_types: () -> { { name: string, size: number } },
-	--- Links `handler` into another mod's extension point, as `cargo enshwick point <point> --luau` describes it: it gets the input and the answer so far, and returns a new answer, nothing to keep it, or `enshwick.refuse`. Subscribe at the top level of main.luau.
+	--- Links `handler` into another mod's extension point, as `cargo enshwick deps <alias> --luau` describes it: it gets the input and the answer so far, and returns a new answer, nothing to keep it, or `enshwick.refuse`. Subscribe at the top level of main.luau.
 	extend: (point: { name: string }, handler: (input: any, answer: any) -> any) -> (),
 	--- What a point's handler returns to refuse, on a refusable point.
 	refuse: {},
-	--- Calls `handler` with the data of another mod's event, as `cargo enshwick event <event>` describes it or a description of the script's own (fields with `name` and `read`, laid out as Rust lays them out). Subscribe at the top level of main.luau.
+	--- Calls `handler` with the data of another mod's event, as `cargo enshwick deps <alias> --luau` describes it or a description of the script's own (fields with `name` and `read`, laid out as Rust lays them out). Subscribe at the top level of main.luau.
 	on_mod_event: (event: { name: string }, handler: (data: any) -> ()) -> (),
-	--- The function that runs another mod's call, as `cargo enshwick call <call> --luau` describes it: it takes the input and returns the answer, or nil and why not (`unmatched` also before the start is over, `off` or `failed`). Ask at the top level of main.luau. Unstable: may change in any release.
+	--- The function that runs another mod's call, as `cargo enshwick deps <alias> --luau` describes it: it takes the input and returns the answer, or nil and why not (`unmatched` also before the start is over, `off` or `failed`). Ask at the top level of main.luau. Unstable: may change in any release.
 	caller: (call: { name: string }) -> (input: any) -> (any, string?),
 	--- Defines a mod event of this mod for others to hear, at the top level of main.luau, by its local name (`greeted` for `<mod id>:greeted`); `send` hands every subscriber the data.
 	define_event: (event: { name: string }) -> { send: (data: any) -> () },

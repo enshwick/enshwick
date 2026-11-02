@@ -19,7 +19,14 @@ Each entry names the pull request that made the change.
 - `cargo enshwick luau` declares `enshwick.deps`, and says that
   `define_event` takes a local name (#788).
 
+- `cargo enshwick deps [<alias>]` writes every point, call and mod event a
+  dependency offers into `src/deps/<alias>.rs`, each declared by its local
+  name with `of = <alias>`, and with `--luau` into `deps/<alias>/` (#803).
+
 ### Changed
+
+- **Breaking:** `cargo enshwick point`, `call` and `event` are gone;
+  `cargo enshwick deps` writes what they wrote (#803).
 
 - `cargo enshwick new` declares the settings with `#[enshwick::config]`, and
   the new crate no longer depends on serde (#795).

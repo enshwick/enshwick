@@ -729,7 +729,7 @@ mod tests {
         pub(crate) player: u64,
     }
 
-    /// The description `cargo enshwick point --luau` writes for `Price`.
+    /// The description `cargo enshwick deps <alias> --luau` writes for `Price`.
     fn price_module() -> String {
         use enshwick::points::Point;
         let hash = |i: usize| Price::LAYOUT[i].hash;

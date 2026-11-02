@@ -15,8 +15,8 @@
 //! point is one atomic load.
 //!
 //! The owner lists its points in [`declare_mod!`](crate::declare_mod), which puts
-//! their schemas into the manifest; another mod writes its definition of a
-//! point from there with `cargo enshwick point <owner id>:<point>`.
+//! their schemas into the manifest; another mod writes its definitions of
+//! the owner's points from there with `cargo enshwick deps <alias>`.
 
 #[cfg(feature = "unstable")]
 mod described;
@@ -123,7 +123,7 @@ pub unsafe trait Point: Copy + 'static {
     const LAYOUT: &'static [LayoutField];
     /// The answer's type, as one field.
     const OUTPUT: &'static [LayoutField];
-    /// The point's schema as `cargo enshwick point` reads it from the
+    /// The point's schema as `cargo enshwick deps` reads it from the
     /// owner's manifest: its `[[point]]` table with the layout hashes, then
     /// the `[[type]]` tables of its input and answer.
     const SCHEMA: &'static str;

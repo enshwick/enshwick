@@ -1,4 +1,5 @@
-//! A point's schema: what `cargo enshwick point` reads from its owner.
+//! A point's schema: what `cargo enshwick deps` reads from its owner,
+//! `you.lockers`, which this crate's `Cargo.toml` requires as `lockers`.
 
 use enshwick::Entity;
 
@@ -16,7 +17,7 @@ impl Deal {
 }
 
 /// A "fair" price, in coins.
-#[enshwick::point(name = "you.stalls:price", mode = Override, output = u32, refusable)]
+#[enshwick::point(name = "you.lockers:price", mode = Override, output = u32, refusable)]
 #[derive(Clone, Copy, Debug)]
 pub struct Price {
     /// The player's character.
@@ -31,32 +32,43 @@ pub struct Price {
     pub place: u16,
 }
 
-/// The definition `cargo enshwick point` writes from that schema.
-#[path = "../../cargo-enshwick/tests/fixtures/stalls_price.rs"]
+/// A player opened a locker.
+#[enshwick::event(name = "you.lockers:opened")]
+#[derive(Clone, Copy, Debug)]
+pub struct Opened {
+    /// The player's character.
+    pub character: Entity,
+    /// What the player does.
+    pub deal: Deal,
+}
+
+/// The module `cargo enshwick deps lockers` writes from that schema.
+#[path = "../../cargo-enshwick/tests/fixtures/lockers_points.rs"]
 pub mod generated;
 
 /// The mod that defines the point.
-mod stalls {
+mod lockers {
     #[expect(
         dead_code,
         reason = "the test reads its manifest alone; the mod never starts"
     )]
-    pub(super) struct Stalls;
+    pub(super) struct Lockers;
 
-    impl enshwick::Mod for Stalls {
+    impl enshwick::Mod for Lockers {
         fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             Ok(Self)
         }
     }
 
     enshwick::test::declare_mod!(
-        Stalls,
+        Lockers,
         r#"
-        id = "you.stalls"
+        id = "you.lockers"
         side = "server"
-        exports = ["price"]
+        exports = ["price", "opened"]
         "#,
-        points: [super::Price]
+        points: [super::Price],
+        events: [super::Opened]
     );
 }
 
@@ -86,8 +98,9 @@ mod quiet {
 #[cfg(test)]
 mod tests {
     use enshwick::points::Point;
+    use enshwick::services::ModEvent;
 
-    use super::{Deal, Price, generated};
+    use super::{Deal, Opened, Price, generated};
 
     /// The schema text of a manifest's points, with the API crate's version,
     /// which the mod takes, written as the fixtures have it.
@@ -106,12 +119,12 @@ mod tests {
 
     #[test]
     fn the_manifest_carries_the_schema_of_every_point_it_defines() {
-        let text = points(super::stalls::enshwick_mod_query());
+        let text = points(super::lockers::enshwick_mod_query());
         let schema: toml::Table = toml::from_str(&text).unwrap();
-        assert_eq!(schema["mod"].as_str(), Some("you.stalls"));
+        assert_eq!(schema["mod"].as_str(), Some("you.lockers"));
         assert_eq!(schema["version"].as_str(), Some("1.2.0"));
         let point = &schema["point"][0];
-        assert_eq!(point["name"].as_str(), Some("you.stalls:price"));
+        assert_eq!(point["name"].as_str(), Some("you.lockers:price"));
         assert_eq!(point["mode"].as_str(), Some("override"));
         assert_eq!(point["refusable"].as_bool(), Some(true));
         assert_eq!(point["output"].as_str(), Some("u32"));
@@ -159,10 +172,10 @@ mod tests {
 
     #[test]
     fn the_schema_is_the_one_cargo_enshwick_is_tested_with() {
-        let text = points(super::stalls::enshwick_mod_query());
+        let text = points(super::lockers::enshwick_mod_query());
         assert_eq!(
             text,
-            include_str!("../../cargo-enshwick/tests/fixtures/stalls.points.toml")
+            include_str!("../../cargo-enshwick/tests/fixtures/lockers.points.toml")
         );
     }
 
@@ -182,6 +195,19 @@ mod tests {
         );
         assert_eq!(generated::Deal::SELL.0, Deal::SELL.0);
     }
+
+    #[test]
+    fn the_written_event_matches_the_owner_s() {
+        let owner = <Opened as ModEvent>::LAYOUT.iter().map(|f| f.hash);
+        let written = <generated::Opened as ModEvent>::LAYOUT
+            .iter()
+            .map(|f| f.hash);
+        assert!(owner.eq(written));
+        assert_eq!(
+            <generated::Opened as ModEvent>::NAME,
+            <Opened as ModEvent>::NAME
+        );
+    }
 }
 
 /// A limit, with an example that only compiles in its owner.
@@ -191,7 +217,7 @@ mod tests {
 /// ```
 /// let limit = 4;
 /// ```
-#[enshwick::point(name = "you.stalls:limit", mode = Observe, output = u32)]
+#[enshwick::point(name = "you.lockers:limit", mode = Observe, output = u32)]
 #[derive(Clone, Copy, Debug)]
 pub struct Limit {
     /// The level.

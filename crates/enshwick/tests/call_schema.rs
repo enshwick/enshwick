@@ -1,4 +1,5 @@
-//! A call's schema: what `cargo enshwick call` reads from its server.
+//! A call's schema: what `cargo enshwick deps` reads from its server,
+//! `you.lockers`, which this crate's `Cargo.toml` requires as `lockers`.
 
 use enshwick::Entity;
 
@@ -26,7 +27,7 @@ pub enum Stall {
 }
 
 /// The rent of a stall, in coins.
-#[enshwick::call(name = "you.stalls:rent", output = u64, version = 2)]
+#[enshwick::call(name = "you.lockers:rent", output = u64, version = 2)]
 #[derive(Clone, Copy, Debug)]
 pub struct Rent {
     /// The player's character.
@@ -42,7 +43,7 @@ pub struct Rent {
 }
 
 /// The fee for holding a stall, in coins.
-#[enshwick::call(name = "you.stalls:fee", output = u64, version = 1)]
+#[enshwick::call(name = "you.lockers:fee", output = u64, version = 1)]
 #[derive(Clone, Copy, Debug)]
 pub struct Fee {
     /// The player's character.
@@ -57,28 +58,28 @@ pub struct Fee {
     pub row: u8,
 }
 
-/// The declaration `cargo enshwick call` writes from that schema.
-#[path = "../../cargo-enshwick/tests/fixtures/stalls_rent.rs"]
+/// The module `cargo enshwick deps lockers` writes from that schema.
+#[path = "../../cargo-enshwick/tests/fixtures/lockers_calls.rs"]
 pub mod generated;
 
 /// The mod that serves the calls.
-mod stalls {
+mod lockers {
     #[expect(
         dead_code,
         reason = "the test reads its manifest alone; the mod never starts"
     )]
-    pub(super) struct Stalls;
+    pub(super) struct Lockers;
 
-    impl enshwick::Mod for Stalls {
+    impl enshwick::Mod for Lockers {
         fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
             Ok(Self)
         }
     }
 
     enshwick::test::declare_mod!(
-        Stalls,
+        Lockers,
         r#"
-        id = "you.stalls"
+        id = "you.lockers"
         side = "server"
         exports = ["rent", "fee"]
         "#,
@@ -96,7 +97,7 @@ mod tests {
     fn the_schema_is_the_one_cargo_enshwick_is_tested_with() {
         // SAFETY: `enshwick_mod_query` returns the `'static` manifest of
         // `declare_mod!`, which no thread writes.
-        let manifest = unsafe { &*super::stalls::enshwick_mod_query() };
+        let manifest = unsafe { &*super::lockers::enshwick_mod_query() };
         // SAFETY: `declare_mod!` points the schema at static text.
         let text = unsafe { manifest.points.as_str() }
             .unwrap_or_default()
@@ -107,7 +108,7 @@ mod tests {
             );
         assert_eq!(
             text,
-            include_str!("../../cargo-enshwick/tests/fixtures/stalls.calls.toml")
+            include_str!("../../cargo-enshwick/tests/fixtures/lockers.calls.toml")
         );
     }
 

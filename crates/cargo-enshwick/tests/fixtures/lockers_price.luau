@@ -1,7 +1,7 @@
 --!strict
--- The extension point `you.stalls:price` of you.stalls 1.2.0.
--- Written by `cargo enshwick point you.stalls:price --luau`. Write it again for a newer
--- you.stalls rather than edit it: the runtime links by the layout below.
+-- The extension point `you.lockers:price` of you.lockers 1.2.0.
+-- Written by `cargo enshwick deps lockers --luau`. Write it again for a newer
+-- you.lockers rather than edit it: the runtime links by the layout below.
 
 --- A "fair" price, in coins.
 export type Price = {
@@ -19,7 +19,7 @@ export type Price = {
 
 --- A "fair" price, in coins.
 return table.freeze({
-	name = "you.stalls:price",
+	name = "you.lockers:price",
 	mode = "override",
 	refusable = true,
 	input = { size = 12, fields = {

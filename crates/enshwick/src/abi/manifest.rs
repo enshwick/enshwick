@@ -338,7 +338,7 @@ pub struct Manifest {
     /// Where players read about the mod, an `https://` address.
     pub homepage: Str,
     /// The schemas of the extension points the mod defines, as TOML that
-    /// `cargo enshwick point` reads; empty for none. The same text sits in
+    /// `cargo enshwick deps` reads; empty for none. The same text sits in
     /// the DLL's `.enshpt` section, so a tool reads it without running the
     /// mod.
     pub points: Str,

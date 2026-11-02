@@ -1,8 +1,8 @@
 schema = 1
-mod = "you.stalls"
+mod = "you.lockers"
 version = "1.2.0"
 [[point]]
-name = "you.stalls:price"
+name = "you.lockers:price"
 mode = "override"
 refusable = true
 input = "Price"
@@ -34,6 +34,34 @@ type = "u8"
 name = "place"
 doc = "The stall's place in its row."
 type = "u16"
+[[type]]
+name = "Deal"
+doc = "What a player does at a stall."
+kind = "values"
+repr = "u32"
+[[type.value]]
+name = "BUY"
+value = 0
+[[type.value]]
+name = "SELL"
+value = 1
+[[event]]
+name = "you.lockers:opened"
+data = "Opened"
+doc = "A player opened a locker."
+layout = ["13059086432849901944", "4757988806913211573"]
+[[type]]
+name = "Opened"
+doc = "A player opened a locker."
+kind = "struct"
+[[type.field]]
+name = "character"
+doc = "The player's character."
+type = "enshwick.entity"
+[[type.field]]
+name = "deal"
+doc = "What the player does."
+type = "Deal"
 [[type]]
 name = "Deal"
 doc = "What a player does at a stall."

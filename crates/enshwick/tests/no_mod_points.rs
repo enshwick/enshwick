@@ -1,5 +1,5 @@
 //! The API crate declares no mod's extension points: a mod writes its
-//! definitions of another mod's points with `cargo enshwick point`.
+//! definitions of another mod's points with `cargo enshwick deps`.
 
 #[cfg(test)]
 mod tests {

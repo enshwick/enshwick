@@ -9,11 +9,11 @@
     reason = "a fuzz target reports what it finds by panicking"
 )]
 
-use cargo_enshwick::points::{Schema, from_dll, rust};
+use cargo_enshwick::points::{Schema, from_dll, rust_deps};
 use libfuzzer_sys::fuzz_target;
 
 /// The attributes a definition carries.
-const ATTRIBUTES: [&str; 5] = ["doc", "repr", "derive", "shape", "point"];
+const ATTRIBUTES: [&str; 7] = ["doc", "repr", "derive", "shape", "point", "call", "event"];
 
 /// Whether `c` hides or reorders text, as the writer drops it.
 fn is_hidden(c: char) -> bool {
@@ -105,19 +105,16 @@ fn written(text: &str) {
     let Ok(schema) = Schema::parse(text) else {
         return;
     };
-    let names: Vec<String> = schema.points().map(str::to_owned).collect();
-    for name in names {
-        let Ok(code) = rust(&schema, &name) else {
-            continue;
-        };
-        let parsed = syn::parse_file(&code);
-        assert!(parsed.is_ok(), "a definition is Rust:\n{code}");
-        let Ok(file) = parsed else {
-            continue;
-        };
-        check_attributes(&file.attrs);
-        file.items.iter().for_each(check_item);
-    }
+    let Ok(code) = rust_deps(&schema, "owner") else {
+        return;
+    };
+    let parsed = syn::parse_file(&code);
+    assert!(parsed.is_ok(), "a definition is Rust:\n{code}");
+    let Ok(file) = parsed else {
+        return;
+    };
+    check_attributes(&file.attrs);
+    file.items.iter().for_each(check_item);
 }
 
 fuzz_target!(|data: &[u8]| {

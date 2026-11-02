@@ -1,5 +1,5 @@
 //! A Luau mod calls another mod's call through the description `cargo
-//! enshwick call --luau` writes, checked against the server's types.
+//! enshwick deps --luau` writes, checked against the server's types.
 
 #[cfg(test)]
 mod tests {
@@ -13,7 +13,7 @@ mod tests {
     use enshwick_luau::{Limits, Runtime, Scripts};
 
     /// The server's call, the one the fixture module describes.
-    #[enshwick::call(name = "you.stalls:fee", output = u64, version = 1)]
+    #[enshwick::call(name = "you.lockers:fee", output = u64, version = 1)]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Fee {
         pub(crate) character: Entity,
@@ -23,7 +23,7 @@ mod tests {
         pub(crate) row: u8,
     }
 
-    const FEE: &str = include_str!("../../../cargo-enshwick/tests/fixtures/stalls_fee.luau");
+    const FEE: &str = include_str!("../../../cargo-enshwick/tests/fixtures/lockers_fee.luau");
 
     static CASE: Mutex<Option<Scripts>> = Mutex::new(None);
     static RUNTIME: Mutex<Option<Runtime>> = Mutex::new(None);
@@ -161,7 +161,7 @@ mod tests {
             logged(&loader, "late false")
                 && logged(
                     &loader,
-                    "you.stalls:fee v1 is asked for from the next start"
+                    "you.lockers:fee v1 is asked for from the next start"
                 ),
             "{:?}",
             loader.logs()
@@ -184,7 +184,7 @@ mod tests {
         assert!(
             failed
                 .to_string()
-                .contains("you.stalls:fee v1 is described differently than at the start"),
+                .contains("you.lockers:fee v1 is described differently than at the start"),
             "{failed}"
         );
         assert!(
