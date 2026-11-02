@@ -120,6 +120,56 @@ impl FakeHost {
         self
     }
 
+    /// Lists `named` in the game's item registry by their debug names, laid
+    /// out by the host's item layout, so `content::vanilla::item` finds each
+    /// item by its name in a mod the host runs. It needs
+    /// [`FakeHost::items`] and [`FakeHost::workshops`] first, which `Vanilla`
+    /// resolves; without the item layout it serves nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    ///
+    /// let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .items()
+    ///     .workshops()
+    ///     .vanilla_items(&[(chest, "Prop_Storage_32_T2_Chest_Wood")])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn vanilla_items(self, named: &[(crate::content::Guid, &str)]) -> Self {
+        use crate::content::items::{ITEM_REGISTRY, ItemLayout};
+        use crate::content::{Blob, EngineFacts, types};
+
+        let (Ok(layout), Ok(hash)) = (
+            ItemLayout::resolve(&self),
+            self.hash(types::ITEM_REGISTRY_RESOURCE.id()),
+        ) else {
+            return self;
+        };
+        let Ok(count) = u32::try_from(named.len()) else {
+            return self;
+        };
+        let mut blob = Blob::new(&vec![0; layout.refs.max(layout.names) + 8]);
+        let guids: Vec<u8> = named.iter().flat_map(|(guid, _)| guid.0).collect();
+        let refs = blob.append(&guids, 4);
+        let slots = blob.append(&vec![0; named.len() * 8], 4);
+        let mut laid =
+            blob.set_array(layout.refs, refs, count) && blob.set_array(layout.names, slots, count);
+        for (i, (_, name)) in named.iter().enumerate() {
+            let text = blob.append(name.as_bytes(), 1);
+            laid &=
+                u32::try_from(name.len()).is_ok_and(|len| blob.set_array(slots + i * 8, text, len));
+        }
+        if !laid {
+            return self;
+        }
+        self.resource(ITEM_REGISTRY.key_by_hash(hash), blob.into_bytes())
+    }
+
     /// Gives the game the text `text` for tag `id` in `language`, for
     /// `game_text`; a tag without a text in a language falls back to
     /// [`Language::EN_US`](crate::i18n::Language::EN_US) as the game's does.
