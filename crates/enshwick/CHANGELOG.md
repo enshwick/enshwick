@@ -156,7 +156,7 @@ Each entry names the pull request that made the change.
 - `FakeHost::meters` sets what `MeterLayout` resolves, and
   `FakeHost::container_kinds` the markers `ContainerKinds` tells holders
   apart by, which `test::facts` names, so a mod's test of item meters or
-  containers copies no type hash or offset of its own (#PR).
+  containers copies no type hash or offset of its own (#877).
 
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`
   name the running game's content by its debug names, so a mod's code holds
