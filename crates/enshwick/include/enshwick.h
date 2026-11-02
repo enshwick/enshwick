@@ -13,7 +13,7 @@
 // Any change to the layout other than an append is a new major, with
 // `ABI_MINOR` back at 0; the layout tests of this crate hold the pair to
 // the committed layout.
-#define ENSHWICK_ABI_MAJOR 5
+#define ENSHWICK_ABI_MAJOR 6
 
 // The minor version of this interface: one more for each append to the
 // layout of this `ABI_MAJOR`, a field at the end of a struct that starts
@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 1
+#define ENSHWICK_ABI_MINOR 0
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -2903,7 +2903,7 @@ typedef struct EnshwickHostApi {
   // that the published layout starts with the wanted one; writes the
   // table and its publisher to `out`, and on `Status::MISSING` or
   // `Status::REFUSED` the reason; refused for a service of another loaded
-  // mod whose `Manifest::exports` lack its name.
+  // mod whose `Manifest::exports` lack its kind and name.
   EnshwickStatus (*service)(EnshwickModHandle me,
                             const struct EnshwickServiceSpec *wanted,
                             struct EnshwickServiceFound *out);
@@ -3531,7 +3531,7 @@ typedef struct EnshwickHostApi {
   // index for one id. `Status::BAD_ARGS` for a malformed id or
   // definition; `Status::REFUSED` for a kind defined twice or in
   // another mod's namespace, or a kind of another loaded mod whose
-  // `Manifest::exports` lack its name and the
+  // `Manifest::exports` lack its kind and name and the
   // name it is a part of, with the id and the owner's exports logged.
   // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*stat_open)(EnshwickModHandle me,
@@ -3789,7 +3789,7 @@ typedef struct EnshwickHostApi {
   // definition once every mod is initialised; a point no running mod
   // defines, or one whose layout or mode differs, leaves the link inert.
   // `Status::REFUSED` for a point of another loaded mod whose exports
-  // (`Manifest::exports`) lack its name, or of
+  // (`Manifest::exports`) lack its kind and name, or of
   // a required mod that does not define it as `link` declares it. Allowed
   // during `enshwick_mod_init` only.
   EnshwickStatus (*attach_point)(EnshwickModHandle me,
@@ -4093,7 +4093,7 @@ typedef struct EnshwickHostApi {
   // in size, or the call stays unmatched with the reason in the log.
   // `Status::REFUSED` when the mod asked for the name and major already
   // with another spec, for a call of another loaded mod whose exports
-  // (`Manifest::exports`) lack its name, or of
+  // (`Manifest::exports`) lack its kind and name, or of
   // a required mod that does not serve it as `spec` declares it;
   // `Status::BAD_ARGS` for a spec that does not read or a null `out`.
   // Allowed during `enshwick_mod_init` only: `Status::TOO_LATE` once
@@ -4341,9 +4341,11 @@ typedef struct EnshwickManifest {
   // `declare_mod!` collects them from the DLL's `.enshpt` section, where
   // a tool reads them without running the mod.
   struct EnshwickStr points;
-  // The local names of what other mods may use: calls, points, services
-  // and events named `<id>:<name>`. The loader refuses another mod a
-  // reference to a name of this mod outside the list.
+  // What other mods may use, each `<kind>:<local name>` with a kind of
+  // `point`, `event`, `call`, `service`, `content` or `stat`, such as
+  // `call:price-of` for `<id>:price-of`. The loader refuses another mod a
+  // reference to a name of this mod unless the list holds it with its
+  // kind.
   const struct EnshwickStr *exports;
   // How many names `exports` points at.
   size_t export_count;

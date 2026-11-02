@@ -27,7 +27,7 @@ pub enum Stall {
 }
 
 /// The rent of a stall, in coins.
-#[enshwick::call(name = "you.lockers:rent", output = u64, version = 2)]
+#[enshwick::call(name = "you.lockers:rent", export, output = u64, version = 2)]
 #[derive(Clone, Copy, Debug)]
 pub struct Rent {
     /// The player's character.
@@ -43,7 +43,7 @@ pub struct Rent {
 }
 
 /// The fee for holding a stall, in coins.
-#[enshwick::call(name = "you.lockers:fee", output = u64, version = 1)]
+#[enshwick::call(name = "you.lockers:fee", export, output = u64, version = 1)]
 #[derive(Clone, Copy, Debug)]
 pub struct Fee {
     /// The player's character.
@@ -81,7 +81,6 @@ mod lockers {
         r#"
         id = "you.lockers"
         side = "server"
-        exports = ["rent", "fee"]
         "#
     );
 }

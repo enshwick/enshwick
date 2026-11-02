@@ -18,8 +18,6 @@ mod buffs;
 #[cfg(feature = "unstable")]
 mod build_rights;
 #[cfg(feature = "unstable")]
-pub mod call_schema;
-#[cfg(feature = "unstable")]
 mod calls;
 #[cfg(feature = "unstable")]
 mod capture;

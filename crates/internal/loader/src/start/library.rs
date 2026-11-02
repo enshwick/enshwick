@@ -428,9 +428,10 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         log_skip(&Skip::OtherAbi(why), file);
         return None;
     }
-    // SAFETY: `query` returns the mod's static manifest, null or readable
-    // for the size its header says, its strings and lists in the DLL's
-    // statics, which stay loaded and unwritten for this call.
+    // SAFETY: `query` returns null or the mod's manifest, readable for the
+    // size its header says, its strings and lists unwritten until the mod's
+    // shutdown (`abi::exports::QUERY`), which cannot run before `read`
+    // returns its copy.
     let manifest = match unsafe { crate::manifest::read(query()) } {
         Ok(manifest) => manifest,
         Err(reason) => {

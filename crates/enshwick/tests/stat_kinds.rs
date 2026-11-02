@@ -214,7 +214,7 @@ mod dependency {
     impl Mod for Reader {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let id = match KIND.get().copied().unwrap_or(Kind::Dependency("luck")) {
-                Kind::Dependency(name) => deps::lockers::id(name)?,
+                Kind::Dependency(name) => deps::lockers::stat(name),
                 Kind::Full(id) => Id::new(id),
             };
             let opened = load.open_stat(id)?;
@@ -254,7 +254,10 @@ mod dependency {
 
     #[test]
     fn a_kind_its_owner_exports_opens_by_its_dependency_id() {
-        assert_eq!(start(Kind::Dependency("luck"), &["luck"]).0, Status::OK);
+        assert_eq!(
+            start(Kind::Dependency("luck"), &["stat:luck"]).0,
+            Status::OK
+        );
         let (stats, luck) = OPENED.get().unwrap();
         assert_eq!(luck.key(), enshwick::stats::key_of("you.lockers:luck"));
         assert!(
@@ -265,7 +268,7 @@ mod dependency {
 
     #[test]
     fn a_kind_opens_when_its_owner_exports_the_name_it_is_a_part_of() {
-        let (status, warnings) = start(Kind::Dependency("charm.fire"), &["charm"]);
+        let (status, warnings) = start(Kind::Dependency("charm.fire"), &["stat:charm"]);
         assert_eq!(status, Status::OK);
         assert!(warnings.is_empty(), "{warnings:?}");
         let (_, fire) = OPENED.get().unwrap();
@@ -277,12 +280,21 @@ mod dependency {
 
     #[test]
     fn a_kind_its_owner_does_not_export_is_refused_with_the_owner_s_exports() {
-        let (status, warnings) = start(Kind::Full("you.lockers:luck"), &["price"]);
-        assert_eq!(status, Status::REFUSED);
+        let (status, warnings) = start(
+            Kind::Full("you.lockers:luck"),
+            &["point:luck", "content:luck"],
+        );
+        assert_eq!(
+            status,
+            Status::REFUSED,
+            "a point or content of the name opens no kind"
+        );
         assert!(OPENED.get().is_none());
         assert_eq!(
             warnings,
-            ["stat you.lockers:luck: you.lockers does not export luck; it exports price"]
+            [
+                "stat you.lockers:luck: you.lockers does not export stat:luck; it exports point:luck, content:luck"
+            ]
         );
     }
 }

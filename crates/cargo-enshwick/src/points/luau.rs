@@ -202,7 +202,7 @@ fn comment(out: &mut String, indent: &str, text: &str) {
 /// ```
 /// use cargo_enshwick::points::{Schema, luau_deps};
 ///
-/// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+/// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
 /// let deps = luau_deps(&schema, "stalls")?;
 /// assert!(deps.modules.is_empty() && deps.skipped.is_empty());
 /// # Ok::<(), cargo_enshwick::points::Error>(())
@@ -482,7 +482,7 @@ pub(super) fn luau_call(schema: &Schema, name: &str, alias: &str) -> Result<Stri
 mod tests {
     use super::*;
 
-    const SOLD: &str = "schema = 1\nmod = \"you.post\"\nversion = \"1.0.0\"\n[[event]]\nname = \"you.post:sold\"\ndata = \"Sold\"\ndoc = \"A sale.\"\nlayout = [\"1\", \"2\"]\n[[type]]\nname = \"Sold\"\ndoc = \"A sale.\"\nkind = \"struct\"\n[[type.field]]\nname = \"item\"\ndoc = \"The item.\"\ntype = \"u32\"\n[[type.field]]\nname = \"player\"\ndoc = \"The buyer.\"\ntype = \"u64\"\n";
+    const SOLD: &str = "schema = 2\nmod = \"you.post\"\nversion = \"1.0.0\"\n[[event]]\nname = \"you.post:sold\"\ndata = \"Sold\"\ndoc = \"A sale.\"\nlayout = [\"1\", \"2\"]\n[[type]]\nname = \"Sold\"\ndoc = \"A sale.\"\nkind = \"struct\"\n[[type.field]]\nname = \"item\"\ndoc = \"The item.\"\ntype = \"u32\"\n[[type.field]]\nname = \"player\"\ndoc = \"The buyer.\"\ntype = \"u64\"\n";
 
     #[test]
     fn a_point_becomes_a_luau_description_with_its_layout() {
@@ -543,7 +543,7 @@ mod tests {
     fn a_pointer_sized_enum_reads_as_its_64_bit_integer() {
         for (repr, read) in [("usize", "u64"), ("isize", "i64")] {
             let text = format!(
-                "schema = 1\nmod = \"you.post\"\nversion = \"1.0.0\"\n[[event]]\nname = \"you.post:sold\"\ndata = \"Sold\"\ndoc = \"A sale.\"\nlayout = [\"1\"]\n[[type]]\nname = \"Sold\"\ndoc = \"A sale.\"\nkind = \"struct\"\n[[type.field]]\nname = \"tier\"\ndoc = \"The tier.\"\ntype = \"Tier\"\n[[type]]\nname = \"Tier\"\ndoc = \"A tier.\"\nkind = \"enum\"\nrepr = \"{repr}\"\n[[type.variant]]\nname = \"Low\"\ndoc = \"Low.\"\nvalue = 1\n[[type.variant]]\nname = \"High\"\ndoc = \"High.\"\nvalue = 2\n"
+                "schema = 2\nmod = \"you.post\"\nversion = \"1.0.0\"\n[[event]]\nname = \"you.post:sold\"\ndata = \"Sold\"\ndoc = \"A sale.\"\nlayout = [\"1\"]\n[[type]]\nname = \"Sold\"\ndoc = \"A sale.\"\nkind = \"struct\"\n[[type.field]]\nname = \"tier\"\ndoc = \"The tier.\"\ntype = \"Tier\"\n[[type]]\nname = \"Tier\"\ndoc = \"A tier.\"\nkind = \"enum\"\nrepr = \"{repr}\"\n[[type.variant]]\nname = \"Low\"\ndoc = \"Low.\"\nvalue = 1\n[[type.variant]]\nname = \"High\"\ndoc = \"High.\"\nvalue = 2\n"
             );
             let schema = Schema::parse(&text).unwrap();
             let module = luau_event(&schema, "you.post:sold", "post").unwrap();

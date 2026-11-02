@@ -165,23 +165,37 @@ impl FakeHost {
         self
     }
 
-    /// Another mod `id` that exports only the local names `names`: as the
-    /// loader, the fake refuses the mod a call, link, service, event or
-    /// content id of `id` outside them. Without it, the fake takes every name of another
-    /// mod as exported, where the loader refuses every name of a mod
-    /// without `exports`: a test that links another mod passes that mod's
-    /// exports here, so it fails where the game would.
+    /// Another mod `id` that exports only `names`, each `<kind>:<local
+    /// name>` as a manifest lists it (`call:price-of`, `content:locker`): as
+    /// the loader, the fake refuses the mod a call, link, service, event,
+    /// content id or stat of `id` outside them, matching kind and name.
+    /// Without it, the fake takes every name of another mod as exported,
+    /// where the loader refuses every name a mod does not export: a test
+    /// that links another mod passes that mod's exports here, so it fails
+    /// where the game would.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .exports("you.trading-post", &["price-of", "sold"])
+    ///     .exports("you.trading-post", &["call:price-of", "event:sold"])
     ///     .install();
     /// # let _ = loader;
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// When a name lacks its kind, as the loader refuses a manifest whose
+    /// export lacks it.
     #[must_use]
+    #[expect(
+        clippy::panic,
+        reason = "a test that hands the fake a bare name fails as the loader refuses it"
+    )]
     pub fn exports(mut self, id: &str, names: &[&str]) -> Self {
+        if let Some(bare) = crate::rules::bad_export(names) {
+            panic!("the export {bare:?} lacks its kind or its local name: write <kind>:<name>");
+        }
         self.exports.insert(
             id.to_owned(),
             names.iter().map(|&name| name.to_owned()).collect(),

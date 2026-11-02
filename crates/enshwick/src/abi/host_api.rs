@@ -75,7 +75,7 @@ pub struct HostApi {
     /// that the published layout starts with the wanted one; writes the
     /// table and its publisher to `out`, and on [`Status::MISSING`] or
     /// [`Status::REFUSED`] the reason; refused for a service of another loaded
-    /// mod whose [`Manifest::exports`](super::Manifest::exports) lack its name.
+    /// mod whose [`Manifest::exports`](super::Manifest::exports) lack its kind and name.
     pub service: extern "system" fn(
         me: ModHandle,
         wanted: *const ServiceSpec,
@@ -751,7 +751,7 @@ pub struct HostApi {
     /// index for one id. [`Status::BAD_ARGS`] for a malformed id or
     /// definition; [`Status::REFUSED`] for a kind defined twice or in
     /// another mod's namespace, or a kind of another loaded mod whose
-    /// [`Manifest::exports`](super::Manifest::exports) lack its name and the
+    /// [`Manifest::exports`](super::Manifest::exports) lack its kind and name and the
     /// name it is a part of, with the id and the owner's exports logged.
     /// Allowed during `enshwick_mod_init` only.
     pub stat_open: extern "system" fn(
@@ -1013,7 +1013,7 @@ pub struct HostApi {
     /// definition once every mod is initialised; a point no running mod
     /// defines, or one whose layout or mode differs, leaves the link inert.
     /// [`Status::REFUSED`] for a point of another loaded mod whose exports
-    /// ([`Manifest::exports`](super::Manifest::exports)) lack its name, or of
+    /// ([`Manifest::exports`](super::Manifest::exports)) lack its kind and name, or of
     /// a required mod that does not define it as `link` declares it. Allowed
     /// during `enshwick_mod_init` only.
     pub attach_point: extern "system" fn(
@@ -1339,7 +1339,7 @@ pub struct HostApi {
     /// in size, or the call stays unmatched with the reason in the log.
     /// [`Status::REFUSED`] when the mod asked for the name and major already
     /// with another spec, for a call of another loaded mod whose exports
-    /// ([`Manifest::exports`](super::Manifest::exports)) lack its name, or of
+    /// ([`Manifest::exports`](super::Manifest::exports)) lack its kind and name, or of
     /// a required mod that does not serve it as `spec` declares it;
     /// [`Status::BAD_ARGS`] for a spec that does not read or a null `out`.
     /// Allowed during `enshwick_mod_init` only: [`Status::TOO_LATE`] once

@@ -16,21 +16,14 @@ several functions stays the way for Rust mods that share a crate.
 
 The server declares the input with
 [`#[call]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/services/calls.rs)
-and the answer's type with `output`. Its schema goes into the server's DLL.
-Its name goes into `exports` in the
-[manifest](concepts/loader-and-abi.md#what-other-mods-may-use) too, else the
-loader refuses it to callers:
-
-```toml
-[package.metadata.enshwick]
-id = "you.trading-post"
-side = "server"
-exports = ["price-of"]
-```
+and the answer's type with `output`. Marked `export`, its schema goes into
+the server's DLL and its name into the
+[manifest's exports](concepts/loader-and-abi.md#what-other-mods-may-use);
+without the flag the loader refuses it to callers:
 
 ```rust,standalone_crate
 /// What the trading post pays for an item.
-#[enshwick::call(name = "price-of", output = u32, version = 1)]
+#[enshwick::call(name = "price-of", output = u32, version = 1, export)]
 #[derive(Clone, Copy, Debug)]
 pub struct PriceOf {
     /// The item.
@@ -144,7 +137,7 @@ with the reason. In a test, serve a required server's call with
 
 A server that is loaded but does not export the call refuses every caller,
 required or not, and the log says
-`call you.trading-post:price-of: you.trading-post does not export price-of; it exports prices, sold`.
+`call you.trading-post:price-of: you.trading-post does not export call:price-of; it exports service:prices, event:sold`.
 What a refused export does, in the game and in a test, is in
 [What other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use).
 

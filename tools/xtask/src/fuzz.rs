@@ -63,7 +63,13 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
         ],
     ),
     ("pattern", &["crates/enshwick/src/code"]),
-    ("point_schemas", &["crates/cargo-enshwick/src/points"]),
+    (
+        "point_schemas",
+        &[
+            "crates/cargo-enshwick/src/points",
+            "crates/enshwick/src/schema_section",
+        ],
+    ),
     ("reflection", &["crates/enshwick-gamedata/src/reflect"]),
     ("remote_edit", &["crates/enshwick/src/config"]),
     ("remote_message", &["crates/internal/loader/src/remote"]),

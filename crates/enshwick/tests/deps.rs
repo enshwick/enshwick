@@ -102,8 +102,8 @@ mod tests {
                 id: Str::new("you.lanterns"),
                 ..ModInfo::EMPTY
             })
-            .exports("you.lockers", &["locker"])
-            .exports("you.lanterns", &["lantern"])
+            .exports("you.lockers", &["content:locker", "point:key"])
+            .exports("you.lanterns", &["content:lantern"])
             .install();
         // SAFETY: both functions are the exports of this function's `declare_mod!(Namer)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
@@ -144,14 +144,15 @@ mod tests {
         assert_eq!(
             warnings,
             [
-                "content id you.lanterns:locker: you.lanterns does not export locker; it exports lantern",
-                "content id you.lanterns:locker.recipe: you.lanterns does not export locker.recipe; it exports lantern",
-                "content id you.lockers:lantern.icon: you.lockers does not export lantern.icon; it exports locker",
+                "content id you.lanterns:locker: you.lanterns does not export content:locker; it exports content:lantern",
+                "content id you.lanterns:locker.recipe: you.lanterns does not export content:locker.recipe; it exports content:lantern",
+                "content id you.lockers:lantern.icon: you.lockers does not export content:lantern.icon; it exports content:locker, point:key",
             ]
         );
         assert!(required[2].is_err());
     }
 
+    /// `you.lockers` exports a point `key`, which opens no content `key`.
     #[test]
     fn a_required_dependency_s_content_it_does_not_export_is_off() {
         let Named {
@@ -165,7 +166,7 @@ mod tests {
         assert_eq!(optional, [None]);
         assert!(
             warnings.contains(
-                &"content id you.lockers:key: you.lockers does not export key; it exports locker"
+                &"content id you.lockers:key: you.lockers does not export content:key; it exports content:locker, point:key"
                     .to_owned()
             )
         );

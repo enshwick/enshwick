@@ -83,7 +83,8 @@ impl ModRecord {
         })
     }
 
-    /// The local names its manifest exports, for other mods to use.
+    /// What its manifest exports for other mods to use, each
+    /// `<kind>:<local name>`.
     pub(crate) fn exports(&self) -> Vec<&str> {
         // SAFETY: a record's manifest is the loader's copy, kept for the
         // process with every string and slice in it.

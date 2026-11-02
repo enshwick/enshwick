@@ -212,14 +212,53 @@
 /// }
 /// ```
 ///
-/// An exported event with a field a schema cannot describe, here an array;
-/// `exports` in the crate's `Cargo.toml` lists `price`:
+/// An exported event with a field a schema cannot describe, here an array:
 ///
 /// ```compile_fail
-/// #[enshwick::event(name = "price")]
+/// #[enshwick::event(name = "price", export)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
 ///     pub items: [u16; 2],
+/// }
+/// ```
+///
+/// `export` on a name the loader would refuse, here in upper case:
+///
+/// ```compile_fail
+/// #[enshwick::event(name = "Sold", export)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Sold {
+///     pub item: u32,
+/// }
+/// ```
+///
+/// `export` without the declaration's name:
+///
+/// ```compile_fail
+/// #[enshwick::point(export, mode = Override, output = u32)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Price {
+///     pub item: u32,
+/// }
+/// ```
+///
+/// `export` on a dependency's declaration, which only its owner exports:
+///
+/// ```compile_fail
+/// #[enshwick::event(of = lockers, name = "opened", export)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Opened {
+///     pub locker: u32,
+/// }
+/// ```
+///
+/// `export` on a full name of another mod's id, outside a test:
+///
+/// ```compile_fail
+/// #[enshwick::event(name = "you.lockers:opened", export)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Opened {
+///     pub locker: u32,
 /// }
 /// ```
 ///

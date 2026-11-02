@@ -25,7 +25,7 @@ use super::{
 /// ```
 /// use cargo_enshwick::points::{Schema, rust_deps};
 ///
-/// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+/// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
 /// assert!(rust_deps(&schema, "stalls")?.contains("`cargo enshwick deps stalls`"));
 /// assert!(rust_deps(&schema, "two words").is_err());
 /// # Ok::<(), cargo_enshwick::points::Error>(())

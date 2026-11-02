@@ -32,11 +32,11 @@ one:
 
 - A mod exports `enshwick_mod_abi`, the major it was built for. A loader of
   a newer major does not load it and logs
-  `<file> skipped: built for ABI major 4, and Enshwick 1.0.0-alpha.12 runs ABI 5.0: rebuild it for Enshwick 1.0.0-alpha.12`;
+  `<file> skipped: built for ABI major 5, and Enshwick 1.0.0-alpha.12 runs ABI 6.0: rebuild it for Enshwick 1.0.0-alpha.12`;
   a loader of an older major logs that the mod is newer and asks to update
   Enshwick.
 - The manifest's header holds the minor. A loader older than that minor
-  logs `<file> skipped: built for ABI 5.3, newer than ABI 5.1 of Enshwick 1.0.0-alpha.12: update Enshwick`.
+  logs `<file> skipped: built for ABI 6.2, newer than ABI 6.0 of Enshwick 1.0.0-alpha.12: update Enshwick`.
 - Structs that cross the boundary on their own start with a
   [`Header`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
   the struct's size as its writer knew it and the writer's major and minor.

@@ -109,7 +109,7 @@ pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 /// The text takes the keys of the table, read by the same rules; the
 /// version and the rest of `[package]` still come from the crate. Each
 /// mod's manifest carries the schemas of the binary's points, events and
-/// calls named with its id whose local names its `exports` lists.
+/// calls named with its id and marked `export`.
 ///
 /// # Examples
 ///

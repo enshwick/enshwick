@@ -10,8 +10,10 @@ use enshwick::abi::Relation;
 use enshwick::packs::{PackDependency, PackManifest};
 
 /// The schema texts `from` holds: of a schema file, of a DLL, or of every
-/// DLL in a folder and in its `mods/`, each with where it came from.
-fn schemas(from: &Path) -> anyhow::Result<Vec<(PathBuf, String)>> {
+/// DLL in a folder and in its `mods/`, each with where it came from. Each
+/// mod DLL whose section does not read, which its owner must rebuild, adds
+/// a line to `unread`.
+fn schemas(from: &Path, unread: &mut Vec<String>) -> anyhow::Result<Vec<(PathBuf, String)>> {
     let read = |path: &Path| std::fs::read(path).with_context(|| path.display().to_string());
     if from.extension().is_some_and(|e| e == "toml") {
         let text = String::from_utf8(read(from)?).with_context(|| from.display().to_string())?;
@@ -21,7 +23,11 @@ fn schemas(from: &Path) -> anyhow::Result<Vec<(PathBuf, String)>> {
     for dll in dlls(from)? {
         match from_dll(&read(&dll)?) {
             Ok(Some(text)) => found.push((dll, text)),
-            // A mod DLL whose section does not read: its owner must rebuild.
+            // A DLL of a folder whose section does not read; the one DLL asked
+            // for by name still fails the run.
+            Err(e @ cargo_enshwick::points::Error::Section(_)) if dll != from => {
+                unread.push(format!("{}: {e}", dll.display()));
+            }
             Err(e @ cargo_enshwick::points::Error::Section(_)) => {
                 return Err(e).with_context(|| dll.display().to_string());
             }
@@ -172,15 +178,24 @@ pub(crate) fn run(
     let deps = Dependencies::read(manifest.unwrap_or_else(|| Path::new(default)), luau)?;
     let wanted = deps.wanted(alias)?;
     let mut found = Vec::new();
-    for (dll, text) in schemas(from)? {
+    let mut unread = Vec::new();
+    for (dll, text) in schemas(from, &mut unread)? {
         found.push(Schema::parse(&text).with_context(|| dll.display().to_string())?);
     }
+    let left_out = if unread.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "; left out, whose sections do not read: {}",
+            unread.join("; ")
+        )
+    };
     let mut lines = Vec::new();
     let mut written = 0;
     for (alias, id) in wanted {
         let Some(schema) = found.iter().find(|s| s.owner() == id) else {
             lines.push(format!(
-                "{alias}: no DLL in {} carries what {id} offers",
+                "{alias}: no DLL in {} carries what {id} offers{left_out}",
                 from.display()
             ));
             continue;

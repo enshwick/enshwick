@@ -6,7 +6,7 @@ use enshwick::abi::{Level, ModHandle, RateId, Status, Str};
 
 use crate::base_groups::limit::Limits;
 use crate::host::entries::mods::list;
-use crate::host::entries::services::unexported_content;
+use crate::host::entries::services::unexported;
 use crate::host::memory::{get_headed, put, put_headed, put_headed_list, put_list, text};
 use crate::host::{caller, caller_index, calling, entry};
 
@@ -178,7 +178,7 @@ pub(crate) extern "system" fn stat_open(
             Err(status) => return status,
         };
         if def.is_none()
-            && let Some(reason) = unexported_content(loader, record, "stat", id)
+            && let Some(reason) = unexported(loader, record, crate::manifest::Kind::Stat, id)
         {
             crate::log::write(Level::WARN, &record.id, &reason);
             return Status::REFUSED;
