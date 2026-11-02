@@ -7,6 +7,13 @@
 //! after it, so a lost fragment goes again alone. Sizes, the fragments in
 //! flight and the bytes a message gathers are bounded; a peer that stops
 //! acknowledging is given up on. The link reads only the clock it is handed.
+//!
+//! Each side numbers its stream by an epoch, which only grows, and names
+//! the peer's epoch its acks refer to. A packet from a newer epoch that does
+//! not name this side's means the peer started over: this side starts over
+//! too, dropping what it held, under a newer epoch of its own, which the
+//! peer then takes as the answer. Packets of an older epoch are ignored, so
+//! one that comes late cannot start the link over again.
 
 use std::time::{Duration, Instant};
 
@@ -16,9 +23,9 @@ use super::MAX_SEALED;
 
 /// The version of the link's packet header, its first byte.
 pub const LINK: u8 = 1;
-/// The longest packet header: the version, a varint ack, a varint ack
-/// bitmap, a varint sequence number and the flags.
-pub const MAX_LINK_HEADER: usize = 1 + 5 + 10 + 5 + 1;
+/// The longest packet header: the version, two varint epochs, a varint ack,
+/// a varint ack bitmap, a varint sequence number and the flags.
+pub const MAX_LINK_HEADER: usize = 1 + 5 + 5 + 5 + 10 + 5 + 1;
 /// Fragments sent and not yet acknowledged at most.
 pub const WINDOW: u32 = 64;
 /// Fragments a link holds at most: in flight and waiting for the window.
@@ -39,6 +46,11 @@ const LAST: u8 = 2;
 #[derive(Serialize, Deserialize)]
 struct Head {
     version: u8,
+    /// The sender's epoch.
+    epoch: u32,
+    /// The epoch of this side's stream the acks refer to; 0 before the
+    /// sender heard one.
+    yours: u32,
     ack: u32,
     acks: u64,
     seq: u32,
@@ -52,7 +64,7 @@ struct Head {
 /// ```
 /// use enshwick_loader::wire::{Link, ReadPacketError};
 ///
-/// let mut link = Link::new(1200).ok_or("packet too small")?;
+/// let mut link = Link::new(1200, 1).ok_or("packet too small")?;
 /// assert_eq!(link.receive(&[], |_| {}), Err(ReadPacketError::Unreadable));
 /// # Ok::<(), &str>(())
 /// ```
@@ -77,8 +89,8 @@ pub enum ReadPacketError {
 /// ```
 /// use enshwick_loader::wire::{BACKLOG, Link};
 ///
-/// let mut link = Link::new(64).ok_or("packet too small")?;
-/// while link.send(&[7; 40]).is_ok() {}
+/// let mut link = Link::new(64, 1).ok_or("packet too small")?;
+/// while link.send(&[7; 20]).is_ok() {}
 /// assert_eq!(link.backlog(), BACKLOG);
 /// # Ok::<(), &str>(())
 /// ```
@@ -113,10 +125,13 @@ struct Early {
 /// use std::time::Instant;
 /// use enshwick_loader::wire::Link;
 ///
-/// let (mut a, mut b) = (Link::new(1200).ok_or("small")?, Link::new(1200).ok_or("small")?);
+/// let (mut a, mut b) = (Link::new(1200, 1).ok_or("small")?, Link::new(1200, 1).ok_or("small")?);
 /// a.send(&[1; 3000]).map_err(|_| "full")?;
 /// let mut packets = Vec::new();
-/// a.poll(Instant::now(), usize::MAX, |p| packets.push(p.to_vec()));
+/// a.poll(Instant::now(), usize::MAX, |p| {
+///     packets.push(p.to_vec());
+///     true
+/// });
 /// let mut got = Vec::new();
 /// for packet in &packets {
 ///     b.receive(packet, |message| got.push(message.len())).map_err(|_| "refused")?;
@@ -128,6 +143,10 @@ struct Early {
 pub struct Link {
     /// Fragment bytes per packet.
     fragment: usize,
+    /// This side's epoch.
+    epoch: u32,
+    /// The peer's epoch, once a packet named one.
+    theirs: Option<u32>,
     /// The oldest fragment not yet acknowledged.
     base: u32,
     /// The sequence number the next fragment takes.
@@ -140,25 +159,35 @@ pub struct Link {
     gathered: Vec<u8>,
     ack_due: bool,
     packet: Vec<u8>,
+    /// How often the link started over because the peer did.
+    restarts: u32,
 }
 
 impl Link {
-    /// A link whose packets hold at most `packet` bytes; `None` when that
-    /// leaves no room for a fragment.
+    /// A link whose packets hold at most `packet` bytes, numbered from
+    /// `epoch`, which must exceed the epoch of every earlier link to the same
+    /// peer by more than the restarts it had; `None` when the packet leaves
+    /// no room for a fragment or the epoch is 0.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick_loader::wire::{Link, MAX_LINK_HEADER};
     ///
-    /// assert!(Link::new(MAX_LINK_HEADER).is_none());
-    /// assert!(Link::new(MAX_LINK_HEADER + 1).is_some());
+    /// assert!(Link::new(MAX_LINK_HEADER, 1).is_none());
+    /// assert!(Link::new(MAX_LINK_HEADER + 1, 0).is_none());
+    /// assert!(Link::new(MAX_LINK_HEADER + 1, 1).is_some());
     /// ```
     #[must_use]
-    pub fn new(packet: usize) -> Option<Self> {
+    pub fn new(packet: usize, epoch: u32) -> Option<Self> {
         let fragment = packet.checked_sub(MAX_LINK_HEADER).filter(|&f| f > 0)?;
+        if epoch == 0 {
+            return None;
+        }
         Some(Self {
             fragment,
+            epoch,
+            theirs: None,
             base: 0,
             next: 0,
             outgoing: (0..BACKLOG).map(|_| Outgoing::default()).collect(),
@@ -167,6 +196,7 @@ impl Link {
             gathered: Vec::with_capacity(MAX_SEALED),
             ack_due: false,
             packet: Vec::with_capacity(packet),
+            restarts: 0,
         })
     }
 
@@ -187,12 +217,28 @@ impl Link {
     /// ```
     /// use enshwick_loader::wire::Link;
     ///
-    /// assert!(Link::new(1200).ok_or("small")?.is_idle());
+    /// assert!(Link::new(1200, 1).ok_or("small")?.is_idle());
     /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub const fn is_idle(&self) -> bool {
         self.base == self.next
+    }
+
+    /// How often the link started over because the peer did, dropping what
+    /// it held.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::wire::Link;
+    ///
+    /// assert_eq!(Link::new(1200, 1).ok_or("small")?.restarts(), 0);
+    /// # Ok::<(), &str>(())
+    /// ```
+    #[must_use]
+    pub const fn restarts(&self) -> u32 {
+        self.restarts
     }
 
     /// Queues the sealed `message`, cut into fragments.
@@ -211,7 +257,7 @@ impl Link {
         if message.len() > MAX_SEALED || count > room || self.next > u32::MAX - BACKLOG {
             return Err(QueueMessageError);
         }
-        let mut parts = message.chunks(self.fragment).peekable();
+        let mut parts = message.chunks(self.fragment);
         for index in 0..count {
             let part = parts.next().unwrap_or_default();
             let slot = &mut self.outgoing[ring(self.next, BACKLOG)];
@@ -250,13 +296,33 @@ impl Link {
         }
         let (head, fragment) =
             postcard::take_from_bytes::<Head>(packet).map_err(|_| ReadPacketError::Unreadable)?;
-        if head.ack > self.next {
+        if head.epoch == 0 {
             return Err(ReadPacketError::Unreadable);
         }
         if fragment.len() > self.fragment {
             return Err(ReadPacketError::TooLarge);
         }
-        self.acknowledged(head.ack, head.acks);
+        let mine = head.yours == self.epoch;
+        if mine && head.ack > self.next {
+            return Err(ReadPacketError::Unreadable);
+        }
+        match self.theirs {
+            Some(theirs) if theirs == head.epoch => {}
+            Some(theirs) if !newer(head.epoch, theirs) => return Ok(()),
+            Some(_) if !mine => {
+                self.restart();
+                self.theirs = Some(head.epoch);
+                self.ack_due = true;
+                return Ok(());
+            }
+            _ => {
+                self.forget_received();
+                self.theirs = Some(head.epoch);
+            }
+        }
+        if mine {
+            self.acknowledged(head.ack, head.acks);
+        }
         if head.flags & DATA == 0 {
             return Ok(());
         }
@@ -295,19 +361,26 @@ impl Link {
 
     /// Hands `transmit` the packets due at `now`, at most `budget`: new and
     /// timed-out fragments within the window, then an ack when one is owed
-    /// and no fragment carried it. False once a fragment went
-    /// [`MAX_TRIES`] times unacknowledged: the peer is gone.
+    /// and no fragment carried it. `transmit` answers false when it could
+    /// not send, which leaves that packet due and ends the poll. False once a
+    /// fragment went [`MAX_TRIES`] times unacknowledged: the peer is gone.
     ///
     /// # Examples
     ///
     /// See [`Link`].
-    pub fn poll(&mut self, now: Instant, budget: usize, mut transmit: impl FnMut(&[u8])) -> bool {
+    pub fn poll(
+        &mut self,
+        now: Instant,
+        budget: usize,
+        mut transmit: impl FnMut(&[u8]) -> bool,
+    ) -> bool {
         let (ack, acks) = self.acks();
+        let yours = self.theirs.unwrap_or(0);
         let end = self.next.min(self.base.saturating_add(WINDOW));
         let mut sent = 0;
         for seq in self.base..end {
             if sent == budget {
-                break;
+                return true;
             }
             let slot = &mut self.outgoing[ring(seq, BACKLOG)];
             if slot.acked
@@ -320,34 +393,87 @@ impl Link {
             if slot.tries == MAX_TRIES {
                 return false;
             }
-            if slot.sent.is_some() {
-                slot.timeout = (slot.timeout * 2).min(LAST_TIMEOUT);
-            }
-            slot.tries += 1;
-            slot.sent = Some(now);
             let head = Head {
                 version: LINK,
+                epoch: self.epoch,
+                yours,
                 ack,
                 acks,
                 seq,
                 flags: DATA | if slot.last { LAST } else { 0 },
             };
-            transmit(write(&mut self.packet, &head, &slot.data));
+            if !transmit(write(&mut self.packet, &head, &slot.data)) {
+                return true;
+            }
+            if slot.sent.is_some() {
+                slot.timeout = (slot.timeout * 2).min(LAST_TIMEOUT);
+            }
+            slot.tries += 1;
+            slot.sent = Some(now);
             sent += 1;
             self.ack_due = false;
         }
         if self.ack_due && sent < budget {
             let head = Head {
                 version: LINK,
+                epoch: self.epoch,
+                yours,
                 ack,
                 acks,
                 seq: 0,
                 flags: 0,
             };
-            transmit(write(&mut self.packet, &head, &[]));
-            self.ack_due = false;
+            self.ack_due = !transmit(write(&mut self.packet, &head, &[]));
         }
         true
+    }
+
+    /// Hands `transmit` one packet of acks alone, owed or not: for the
+    /// developer tools' check that a peer without the link drops it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::wire::Link;
+    ///
+    /// let mut link = Link::new(1200, 1).ok_or("small")?;
+    /// let mut sent = 0;
+    /// link.nudge(|_| sent += 1);
+    /// assert_eq!(sent, 1);
+    /// # Ok::<(), &str>(())
+    /// ```
+    pub fn nudge(&mut self, mut transmit: impl FnMut(&[u8])) {
+        let (ack, acks) = self.acks();
+        let head = Head {
+            version: LINK,
+            epoch: self.epoch,
+            yours: self.theirs.unwrap_or(0),
+            ack,
+            acks,
+            seq: 0,
+            flags: 0,
+        };
+        transmit(write(&mut self.packet, &head, &[]));
+    }
+
+    /// Starts over under a newer epoch, dropping what was held both ways.
+    #[cold]
+    fn restart(&mut self) {
+        self.epoch = self.epoch.wrapping_add(1).max(1);
+        self.base = 0;
+        self.next = 0;
+        self.forget_received();
+        self.restarts = self.restarts.saturating_add(1);
+    }
+
+    /// Drops what came of the peer's last stream.
+    fn forget_received(&mut self) {
+        self.expect = 0;
+        for slot in &mut self.early {
+            slot.here = false;
+        }
+        self.gathered.clear();
+        self.ack_due = false;
     }
 
     /// Marks fragments below `ack` and those `acks` names acknowledged, and
@@ -401,6 +527,11 @@ impl Link {
         }
         Ok(())
     }
+}
+
+/// Whether epoch `a` is newer than `b`, across their wrap.
+const fn newer(a: u32, b: u32) -> bool {
+    a.wrapping_sub(b).cast_signed() > 0
 }
 
 /// The slot of `seq` in a ring of `size` slots, a power of two.

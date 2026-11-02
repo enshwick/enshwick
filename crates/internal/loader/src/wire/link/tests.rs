@@ -35,7 +35,12 @@ struct Wire {
 }
 
 impl Wire {
-    fn put(&mut self, step: u32, packet: &[u8]) {
+    fn put(&mut self, step: u32, packet: &[u8]) -> bool {
+        self.lose(step, packet);
+        true
+    }
+
+    fn lose(&mut self, step: u32, packet: &[u8]) {
         let byte = self.fates.pop_front().unwrap_or(50);
         self.fates.push_back(byte);
         self.count += 1;
@@ -61,8 +66,8 @@ impl Wire {
 /// Runs `messages` from `a` to `b` over two wires with `loss` percent lost;
 /// what `b` delivered, in order, and whether `a` gave up.
 fn carry(messages: &[Vec<u8>], fates: &[u8], loss: u8) -> (Vec<Vec<u8>>, bool) {
-    let mut a = Link::new(PACKET).unwrap();
-    let mut b = Link::new(PACKET).unwrap();
+    let mut a = Link::new(PACKET, 1).unwrap();
+    let mut b = Link::new(PACKET, 1).unwrap();
     let mut there = Wire {
         fates: fates.iter().copied().collect(),
         loss,
@@ -114,19 +119,21 @@ fn a_message_over_a_clean_wire_arrives_whole_in_its_fragments() {
 
 #[test]
 fn a_peer_that_never_answers_is_given_up_on() {
-    let mut link = Link::new(PACKET).unwrap();
+    let mut link = Link::new(PACKET, 1).unwrap();
     link.send(b"hello").unwrap();
     let start = Instant::now();
-    let alive = (0..1000u32).all(|step| link.poll(start + STEP * step, 8, |_| {}));
+    let alive = (0..1000u32).all(|step| link.poll(start + STEP * step, 8, |_| true));
     assert!(!alive);
 }
 
 #[test]
 fn packets_past_a_bound_are_refused_and_change_nothing() {
-    let mut link = Link::new(PACKET).unwrap();
+    let mut link = Link::new(PACKET, 1).unwrap();
     let mut packet = Vec::new();
     let head = |ack, flags| Head {
         version: LINK,
+        epoch: 9,
+        yours: 1,
         ack,
         acks: 0,
         seq: 0,
@@ -148,13 +155,15 @@ fn packets_past_a_bound_are_refused_and_change_nothing() {
 
 #[test]
 fn a_message_gathered_past_the_largest_is_refused() {
-    let mut link = Link::new(PACKET).unwrap();
+    let mut link = Link::new(PACKET, 1).unwrap();
     let mut packet = Vec::new();
     let fragment = vec![1; PACKET - MAX_LINK_HEADER];
     let mut refused = false;
     for seq in 0..=u32::try_from(MAX_SEALED / fragment.len()).unwrap() + 1 {
         let head = Head {
             version: LINK,
+            epoch: 9,
+            yours: 0,
             ack: 0,
             acks: 0,
             seq,
@@ -167,9 +176,84 @@ fn a_message_gathered_past_the_largest_is_refused() {
     assert!(refused);
 }
 
+/// Hands every packet `from` has due at `now` to `to`; what `to` delivered.
+fn exchange(from: &mut Link, to: &mut Link, now: Instant) -> Vec<Vec<u8>> {
+    let mut packets = Vec::new();
+    from.poll(now, usize::MAX, |p| {
+        packets.push(p.to_vec());
+        true
+    });
+    let mut delivered = Vec::new();
+    for packet in packets {
+        to.receive(&packet, |m| delivered.push(m.to_vec())).unwrap();
+    }
+    delivered
+}
+
+#[test]
+fn a_peer_that_starts_over_brings_the_other_side_back_in_step() {
+    let now = Instant::now();
+    let mut a = Link::new(PACKET, 0x1_0000).unwrap();
+    let mut b = Link::new(PACKET, 0x1_0000).unwrap();
+    a.send(b"one").unwrap();
+    assert_eq!(exchange(&mut a, &mut b, now), [b"one".to_vec()]);
+    let mut stale = Vec::new();
+    a.send(b"late").unwrap();
+    a.poll(now + LAST_TIMEOUT, usize::MAX, |p| {
+        stale.push(p.to_vec());
+        true
+    });
+    exchange(&mut b, &mut a, now);
+    // `b` gave up and opened a new link to the same peer.
+    let mut b = Link::new(PACKET, 0x2_0000).unwrap();
+    b.send(b"two").unwrap();
+    assert!(exchange(&mut b, &mut a, now).is_empty());
+    assert_eq!(a.restarts(), 1);
+    assert!(a.is_idle(), "what `a` held went with its old stream");
+    exchange(&mut a, &mut b, now);
+    let later = now + LAST_TIMEOUT;
+    assert_eq!(exchange(&mut b, &mut a, later), [b"two".to_vec()]);
+    a.send(b"three").unwrap();
+    assert_eq!(exchange(&mut a, &mut b, later), [b"three".to_vec()]);
+    for packet in stale {
+        b.receive(&packet, |_| {
+            panic!("a packet of the old stream came through")
+        })
+        .unwrap();
+    }
+    assert_eq!((a.restarts(), b.restarts()), (1, 0));
+}
+
+#[test]
+fn a_packet_the_session_refused_stays_due_and_spends_no_try() {
+    let now = Instant::now();
+    let mut a = Link::new(PACKET, 1).unwrap();
+    a.send(b"held").unwrap();
+    for _ in 0..usize::from(MAX_TRIES) * 2 {
+        assert!(a.poll(now, 8, |_| false));
+    }
+    let mut sent = 0;
+    assert!(a.poll(now, 8, |_| {
+        sent += 1;
+        true
+    }));
+    assert_eq!(sent, 1);
+    let mut b = Link::new(PACKET, 1).unwrap();
+    b.send(b"x").unwrap();
+    exchange(&mut b, &mut a, now);
+    a.poll(now, 0, |_| true);
+    let mut acked = 0;
+    a.poll(now, 8, |_| false);
+    a.poll(now, 8, |p| {
+        acked += usize::from(!p.is_empty());
+        true
+    });
+    assert!(acked >= 1, "a refused ack is owed again");
+}
+
 #[test]
 fn a_full_backlog_refuses_more() {
-    let mut link = Link::new(MAX_LINK_HEADER + 1).unwrap();
+    let mut link = Link::new(MAX_LINK_HEADER + 1, 1).unwrap();
     assert!(link.send(&[0; MAX_SEALED + 1]).is_err());
     while link.send(&[0; 100]).is_ok() {}
     assert!(link.backlog() <= BACKLOG && link.backlog() > BACKLOG - 100);
@@ -198,8 +282,8 @@ proptest! {
         if ours {
             packet.insert(0, LINK);
         }
-        let mut link = Link::new(PACKET).unwrap();
+        let mut link = Link::new(PACKET, 1).unwrap();
         let _read = link.receive(&packet, |message| assert!(message.len() <= MAX_SEALED));
-        prop_assert!(link.poll(Instant::now(), 4, |p| assert!(p.len() <= PACKET)));
+        prop_assert!(link.poll(Instant::now(), 4, |p| p.len() <= PACKET));
     }
 }

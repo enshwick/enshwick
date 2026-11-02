@@ -14,7 +14,7 @@ fn link(c: &mut Criterion) {
     let mut group = c.benchmark_group("link");
     for size in [64usize, 6000] {
         let message = vec![7u8; size];
-        let (Some(mut a), Some(mut b)) = (Link::new(PACKET), Link::new(PACKET)) else {
+        let (Some(mut a), Some(mut b)) = (Link::new(PACKET, 1), Link::new(PACKET, 1)) else {
             return;
         };
         let now = Instant::now();
@@ -24,11 +24,9 @@ fn link(c: &mut Criterion) {
                 let mut delivered = 0;
                 let _queued = a.send(black_box(&message));
                 a.poll(now, usize::MAX, |packet| {
-                    let _read = b.receive(packet, |m| delivered += m.len());
+                    b.receive(packet, |m| delivered += m.len()).is_ok()
                 });
-                b.poll(now, usize::MAX, |packet| {
-                    let _read = a.receive(packet, |_| {});
-                });
+                b.poll(now, usize::MAX, |packet| a.receive(packet, |_| {}).is_ok());
                 delivered
             });
         });

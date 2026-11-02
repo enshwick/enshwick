@@ -15,7 +15,7 @@ use libfuzzer_sys::fuzz_target;
 const PACKET: usize = 1200;
 
 fuzz_target!(|data: &[u8]| {
-    let Some(mut link) = Link::new(PACKET) else {
+    let Some(mut link) = Link::new(PACKET, 1) else {
         return;
     };
     let (sends, packets) = data.split_first().map_or((0, data), |(n, rest)| (*n, rest));
@@ -26,6 +26,9 @@ fuzz_target!(|data: &[u8]| {
     for (step, packet) in (0u32..).zip(packets.split(|&b| b == 0xff)) {
         let _read = link.receive(packet, |message| assert!(message.len() <= MAX_SEALED));
         let now = start + Duration::from_millis(50) * step;
-        let _alive = link.poll(now, 16, |out| assert!(out.len() <= PACKET));
+        let _alive = link.poll(now, 16, |out| {
+            assert!(out.len() <= PACKET);
+            step % 3 != 0
+        });
     }
 });
