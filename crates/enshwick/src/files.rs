@@ -101,7 +101,9 @@ fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
 /// # Errors
 ///
 /// When the folder, the temporary file, the backup or the rename fails; the
-/// old file then stays as it was and no temporary file is left.
+/// old file then stays as it was and no temporary file is left. A backup or
+/// rename refused for access, as while another program or writer briefly
+/// holds the file, is tried again for up to about 50 ms first.
 ///
 /// # Examples
 ///
@@ -117,11 +119,43 @@ pub fn write_atomically(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<(
     drop(file);
     let placed = written
         .and_then(|()| keep_backup(path))
-        .and_then(|()| std::fs::rename(&temporary, path));
+        .and_then(|()| while_busy(|| std::fs::rename(&temporary, path)));
     if placed.is_err() {
-        let _gone = std::fs::remove_file(&temporary);
+        let _gone = while_busy(|| std::fs::remove_file(&temporary));
     }
     placed
+}
+
+/// How often [`while_busy`] tries a step.
+const BUSY_TRIES: u32 = 8;
+
+/// Windows' `ERROR_SHARING_VIOLATION` and `ERROR_LOCK_VIOLATION`, which
+/// `io::ErrorKind` leaves uncategorized.
+const BUSY_CODES: [i32; 2] = [32, 33];
+
+/// Whether `error` says another handle holds the file for now.
+fn busy(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::PermissionDenied
+        || error
+            .raw_os_error()
+            .is_some_and(|code| BUSY_CODES.contains(&code))
+}
+
+/// `step`, tried again after a short wait while it is refused for access:
+/// Windows refuses to delete, link or rename over a file that another handle
+/// holds open without delete sharing, as a virus scanner, an indexer or a
+/// second writer's backup copy briefly does.
+fn while_busy<T>(mut step: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    let mut tries = 1;
+    loop {
+        match step() {
+            Err(e) if busy(&e) && tries < BUSY_TRIES => {
+                std::thread::sleep(std::time::Duration::from_millis(u64::from(tries) * 2));
+                tries += 1;
+            }
+            done => return done,
+        }
+    }
 }
 
 /// A new file beside `path` that no other writer has, named by this
@@ -147,14 +181,26 @@ fn create_temporary(path: &Path) -> io::Result<(PathBuf, std::fs::File)> {
 /// file is there.
 fn keep_backup(path: &Path) -> io::Result<()> {
     let backup = backup_path(path);
-    match std::fs::remove_file(&backup) {
+    match while_busy(|| std::fs::remove_file(&backup)) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
         _ => {}
     }
-    match std::fs::hard_link(path, &backup) {
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(_) => std::fs::copy(path, &backup).map(drop),
+    match while_busy(|| std::fs::hard_link(path, &backup)) {
         Ok(()) => Ok(()),
+        // No file yet, or a writer at the same time kept it a moment ago: a
+        // whole earlier file stays either way, and a copy would hold the file
+        // open against the other writers' renames.
+        Err(e)
+            if matches!(
+                e.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::AlreadyExists
+            ) =>
+        {
+            Ok(())
+        }
+        // Still refused once the tries ran out, as a file system without
+        // links answers.
+        Err(_) => std::fs::copy(path, &backup).map(drop),
     }
 }
 
@@ -253,22 +299,53 @@ mod tests {
         let texts: Vec<String> = (0..8)
             .map(|n| format!("value = {n}\n").repeat(2000))
             .collect();
-        std::thread::scope(|scope| {
-            for text in &texts {
-                let path = &path;
-                scope.spawn(move || {
-                    // A rename may meet another writer's backup copy on
-                    // Windows; a refused write keeps the old file.
-                    let written = (0..20)
-                        .filter(|_| write_atomically(path, text).is_ok())
-                        .count();
-                    assert!(written > 0);
-                });
-            }
-        });
-        let last = std::fs::read_to_string(&path).unwrap();
-        assert!(texts.contains(&last), "one writer's whole text");
-        assert_eq!(names(&dir), ["settings.toml", "settings.toml.bak"]);
+        // Rounds, since a lost race shows only now and then.
+        for _ in 0..4 {
+            std::thread::scope(|scope| {
+                for text in &texts {
+                    let path = &path;
+                    scope.spawn(move || {
+                        let refused: Vec<String> = (0..20)
+                            .filter_map(|_| write_atomically(path, text).err())
+                            .map(|e| format!("{:?}: {e}", e.kind()))
+                            .collect();
+                        assert!(refused.is_empty(), "{refused:#?}");
+                    });
+                }
+            });
+            let last = std::fs::read_to_string(&path).unwrap();
+            assert!(texts.contains(&last), "one writer's whole text");
+            assert_eq!(names(&dir), ["settings.toml", "settings.toml.bak"]);
+        }
         let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_step_refused_for_access_is_tried_again_and_any_other_error_is_not() {
+        let refused = || io::Error::from(io::ErrorKind::PermissionDenied);
+        let mut calls = 0;
+        let placed = while_busy(|| {
+            calls += 1;
+            if calls < 3 { Err(refused()) } else { Ok(calls) }
+        });
+        assert_eq!(placed.unwrap(), 3);
+        let mut calls = 0;
+        let missing = while_busy::<()>(|| {
+            calls += 1;
+            Err(io::ErrorKind::NotFound.into())
+        });
+        assert_eq!(
+            (missing.unwrap_err().kind(), calls),
+            (io::ErrorKind::NotFound, 1)
+        );
+        let mut calls = 0;
+        let held = while_busy::<()>(|| {
+            calls += 1;
+            Err(refused())
+        });
+        assert_eq!(
+            (held.unwrap_err().kind(), calls),
+            (io::ErrorKind::PermissionDenied, BUSY_TRIES)
+        );
     }
 }
