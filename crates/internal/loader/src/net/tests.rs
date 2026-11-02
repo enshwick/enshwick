@@ -5,7 +5,7 @@ use super::server::{
     make_greeting_room, owed_in, take_message,
 };
 use super::*;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::wire::DATA_AGAIN;
 
@@ -166,6 +166,28 @@ fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
     let mut kept: Vec<u64> = state.greeting.keys().copied().collect();
     kept.sort_unstable();
     assert_eq!(kept, [2, newcomer]);
+}
+
+#[test]
+fn the_server_is_ready_from_its_welcome_until_the_link_goes() {
+    let server = NetMessage::SERVER.get();
+    assert!(!ready(server));
+    client_carried(5, b"before the welcome");
+    client_carried(CONTROL, &control(WELCOME));
+    assert!(ready(server));
+    link_lost();
+    assert!(!ready(server), "a new link waits for its own welcome");
+}
+
+#[test]
+fn a_refused_send_gives_its_rate_token_back() {
+    let server = NetMessage::SERVER.get();
+    client_carried(CONTROL, &control(WELCOME));
+    for _ in 0..200 {
+        assert_eq!(send_to_server(5, b"x"), Err(Status::MISSING), "no link");
+    }
+    let tokens = state(|s| s.sending[&server].tokens);
+    assert!(tokens >= 39.0, "{tokens}");
 }
 
 #[test]

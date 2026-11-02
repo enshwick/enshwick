@@ -104,6 +104,11 @@ pub enum SendError {
     /// much.
     #[error("over the rate of messages to the peer")]
     OverRate,
+    /// The encoded message starts like executable code (a PE, ELF, Mach-O,
+    /// WebAssembly or Lua bytecode signature), which the channel never
+    /// carries.
+    #[error("the message starts like executable code")]
+    LooksLikeCode,
     /// The message does not encode.
     #[error("the message does not encode: {0}")]
     Encode(String),
@@ -200,7 +205,7 @@ fn send_raw(host: Host, id: u32, peer: PlayerKey, bytes: &[u8]) -> Result<(), Se
         Status::OK => Ok(()),
         Status::MISSING => Err(SendError::NotReady),
         Status::REFUSED => Err(SendError::OverRate),
-        Status::BAD_ARGS => Err(SendError::TooLarge),
+        Status::BAD_ARGS => Err(SendError::LooksLikeCode),
         _ => Err(SendError::Refused),
     }
 }

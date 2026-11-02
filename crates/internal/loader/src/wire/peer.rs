@@ -116,6 +116,23 @@ impl Peer {
         self.admit_at(Instant::now(), RATE, BURST)
     }
 
+    /// Gives back the message [`Peer::admit`] took, for one that did not
+    /// go, up to the burst.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::wire::Peer;
+    ///
+    /// let mut peer = Peer::with_tokens(1.0);
+    /// assert!(peer.admit());
+    /// peer.refund();
+    /// assert!(peer.admit());
+    /// ```
+    pub fn refund(&mut self) {
+        self.tokens = (self.tokens + 1.0).min(BURST);
+    }
+
     /// Takes one from a rate of `rate` a second up to `burst` at `now`;
     /// false when it is spent.
     ///

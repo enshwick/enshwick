@@ -30,11 +30,11 @@ use crate::chains::Next;
 use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::pinned;
-use crate::wire::{
-    CONTROL, Link, MAX_PAYLOAD, MAX_SEALED, PROBES, is_executable, open, probe, read_probe, seal,
-};
+use crate::wire::{CONTROL, Link, MAX_SEALED, PROBES, open, probe, read_probe, seal, sealable};
 
 mod game;
+#[cfg(test)]
+mod tests;
 
 use game::{Game, Taken};
 
@@ -130,7 +130,6 @@ struct Inbox {
 /// A message between a hosting client's two halves.
 #[derive(Debug)]
 struct Looped {
-    to_server: bool,
     channel: u32,
     data: Vec<u8>,
 }
@@ -152,9 +151,16 @@ struct Carrier {
     game: OnceLock<Game>,
     server: Mutex<Option<State>>,
     client: Mutex<Option<State>>,
-    looped: Mutex<Vec<Looped>>,
-    /// Set while `looped` may hold anything, so an idle step takes no lock.
+    /// Messages a hosting client's client half sent its server half.
+    to_server: Mutex<Vec<Looped>>,
+    /// Messages a hosting client's server half sent its own player.
+    to_client: Mutex<Vec<Looped>>,
+    /// Set while either queue may hold anything, so an idle step takes no
+    /// lock.
     looping: AtomicBool,
+    /// Set once a hosting client's client half said hello to its server
+    /// half.
+    hosted_hello: AtomicBool,
     /// The account key of the player who hosts, on a hosting client; 0
     /// otherwise.
     host_key: AtomicU64,
@@ -173,8 +179,10 @@ static CARRIER: Carrier = Carrier {
     game: OnceLock::new(),
     server: Mutex::new(None),
     client: Mutex::new(None),
-    looped: Mutex::new(Vec::new()),
+    to_server: Mutex::new(Vec::new()),
+    to_client: Mutex::new(Vec::new()),
     looping: AtomicBool::new(false),
+    hosted_hello: AtomicBool::new(false),
     host_key: AtomicU64::new(0),
     client_open: AtomicBool::new(false),
     epochs: AtomicU32::new(EPOCH_STEP),
@@ -241,107 +249,134 @@ unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
 /// its link is full, [`Status::BAD_ARGS`] for a payload too long or that
 /// starts like executable code.
 pub(crate) fn send(key: u64, channel: u32, payload: &[u8]) -> Result<(), Status> {
-    if crate::world::hosting()
-        && let Some(looped) = loop_back(key, channel, payload)
-    {
-        return looped;
+    send_many(&[key], channel, payload)
+}
+
+/// [`send`] to each of `keys`, sealed once under one lock.
+///
+/// # Errors
+///
+/// As for [`send`], the first error of any key; the others still go.
+pub(crate) fn send_many(keys: &[u64], channel: u32, payload: &[u8]) -> Result<(), Status> {
+    if !sealable(payload) {
+        return Err(Status::BAD_ARGS);
     }
+    let hosting = crate::world::hosting();
+    let host = CARRIER.host_key.load(Ordering::Acquire);
+    let looped = |key: u64| hosting && (key == SERVER || (host != 0 && key == host));
+    let mut result = Ok(());
+    for &key in keys.iter().filter(|&&key| looped(key)) {
+        result = result.and(loop_back(key == SERVER, channel, payload));
+    }
+    let mut wired = keys.iter().copied().filter(|&key| !looped(key)).peekable();
+    let Some(&first) = wired.peek() else {
+        return result;
+    };
     let mut sealed = [0u8; MAX_SEALED];
     let size = seal(&mut sealed, channel, payload).ok_or(Status::BAD_ARGS)?;
-    let half = if key == SERVER {
+    let half = if first == SERVER {
         &CARRIER.client
     } else {
         &CARRIER.server
     };
     let mut guard = half.relock();
-    let peer = guard
-        .as_mut()
-        .and_then(|state| state.peers.get_mut(&key))
-        .ok_or(Status::MISSING)?;
-    if key != SERVER && !peer.heard {
-        return Err(Status::MISSING);
+    let Some(state) = guard.as_mut() else {
+        return result.and(Err(Status::MISSING));
+    };
+    for key in wired {
+        let sent = match state.peers.get_mut(&key) {
+            Some(peer) if key == SERVER || peer.heard => {
+                peer.link.send(&sealed[..size]).map_err(|_| Status::REFUSED)
+            }
+            _ => Err(Status::MISSING),
+        };
+        result = result.and(sent);
     }
-    peer.link.send(&sealed[..size]).map_err(|_| Status::REFUSED)
+    result
 }
 
-/// Holds a message between a hosting client's halves: from its client half
-/// to the server, or from the server to the host's own player; `None` for
-/// any other peer, whose message goes on the wire.
-fn loop_back(key: u64, channel: u32, payload: &[u8]) -> Option<Result<(), Status>> {
-    let host = CARRIER.host_key.load(Ordering::Acquire);
-    let to_server = key == SERVER;
-    if !to_server && (host == 0 || key != host) {
-        return None;
-    }
-    if host == 0 {
-        return Some(Err(Status::MISSING));
-    }
-    if payload.len() > MAX_PAYLOAD || is_executable(payload) {
-        return Some(Err(Status::BAD_ARGS));
-    }
-    let mut looped = CARRIER.looped.relock();
+/// Holds a message between a hosting client's halves until the other half
+/// takes it: to the server from its client half, or to the host's own
+/// player from the server.
+fn loop_back(to_server: bool, channel: u32, payload: &[u8]) -> Result<(), Status> {
+    let queue = if to_server {
+        &CARRIER.to_server
+    } else {
+        &CARRIER.to_client
+    };
+    let mut looped = queue.relock();
     if looped.len() >= MAX_LOOPED {
-        return Some(Err(Status::REFUSED));
+        return Err(Status::REFUSED);
     }
     looped.push(Looped {
-        to_server,
         channel,
         data: payload.to_vec(),
     });
     CARRIER.looping.store(true, Ordering::Release);
-    Some(Ok(()))
+    Ok(())
 }
 
-/// The messages held for one half of a hosting client.
+/// The messages held for one half of a hosting client, taken whole.
 fn take_looped(to_server: bool) -> Vec<Looped> {
     if !CARRIER.looping.load(Ordering::Acquire) {
         return Vec::new();
     }
-    let mut looped = CARRIER.looped.relock();
-    let (taken, kept): (Vec<_>, Vec<_>) = looped.drain(..).partition(|m| m.to_server == to_server);
-    *looped = kept;
-    CARRIER.looping.store(!looped.is_empty(), Ordering::Release);
-    taken
+    let queue = if to_server {
+        &CARRIER.to_server
+    } else {
+        &CARRIER.to_client
+    };
+    core::mem::take(&mut *queue.relock())
 }
 
-/// Pumps the server's sockets after a step, on the game thread: opens one
-/// for each player that joined, closes those of players who left, takes
-/// what came and sends what is due, then hands on what came.
+/// Pumps the server's sockets after a step, on the game thread: hands on
+/// what a hosting client's own player sent, opens a socket for each player
+/// that joined, closes those of players who left, takes what came and sends
+/// what is due, then hands on what came and forgets the peers that went.
 pub(crate) fn after_step(loader: &Loader, now: Instant) {
     let Some(game) = CARRIER.game.get() else {
         return;
     };
+    let host = CARRIER.host_key.load(Ordering::Acquire);
+    if host != 0 {
+        for message in take_looped(true) {
+            crate::net::server_carried(host, message.channel, &message.data);
+        }
+    }
     let Ok(server) = crate::world::server() else {
         return;
     };
     let Some(session) = game.server_session(server) else {
         return;
     };
+    let mut gone = Vec::new();
     let inbox = {
         let Some(mut guard) = CARRIER.server.try_relock() else {
             return;
         };
         let state = fresh(&mut guard, session);
         state.steps = state.steps.wrapping_add(1);
-        if state.steps % MEMBERS_EVERY == 1 {
-            let Ok(machines) = crate::world::machines(loader) else {
-                return;
-            };
+        if state.steps % MEMBERS_EVERY == 1
+            && let Ok(machines) = crate::world::machines(loader)
+        {
             members(game, session, state, &machines, now);
         }
         let developer = loader.developer_tools;
         let State { peers, inbox, .. } = state;
         peers.retain(|&key, peer| {
-            if !game.holds(peer.socket, peer.slot) {
-                crate::log!(WARN, "own channel: the socket of {key:016x} went");
-                return false;
+            let kept = game.holds(peer.socket, peer.slot) && {
+                receive(game, session, key, peer, inbox, now);
+                if developer {
+                    probe_step(peer);
+                    nudge(game, session, key, peer, now);
+                }
+                !peer.heard || send_due(game, session, key, peer, now)
+            };
+            if !kept {
+                crate::log!(WARN, "own channel: the link to {key:016x} went");
+                gone.push(key);
             }
-            receive(game, session, key, peer, inbox, now);
-            if developer {
-                probe_step(peer);
-                nudge(game, session, key, peer, now);
-            }
-            !peer.heard || send_due(game, session, key, peer, now)
+            kept
         });
         core::mem::take(inbox)
     };
@@ -349,9 +384,8 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
         crate::net::server_carried(key, channel, &inbox.bytes[start..end]);
     }
     give_back(&CARRIER.server, session, inbox);
-    let host = CARRIER.host_key.load(Ordering::Acquire);
-    for message in take_looped(true) {
-        crate::net::server_carried(host, message.channel, &message.data);
+    for key in gone {
+        crate::net::forget_peer(key);
     }
 }
 
@@ -394,21 +428,23 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
         }
     }
 }
-
 /// Pumps a client's socket, where it sends its chat: opens it once the
-/// server advertises Enshwick, takes what came and sends what is due, hands
-/// on what came, and says hello until the server answers. A hosting client
-/// takes what its server half sent it.
+/// server advertises Enshwick, takes what came and sends what is due, then
+/// hands on what came and tells the net when the link opened or went. A
+/// hosting client takes what its server half sent it.
 ///
 /// # Safety
 ///
 /// - `client` is null or the game client, on the thread that sends its chat.
 unsafe fn client_frame(client: *mut u8, now: Instant) {
+    crate::lobby::poll();
     if crate::world::hosting() {
         for message in take_looped(false) {
             crate::net::client_carried(message.channel, &message.data);
         }
-        crate::net::client_tick();
+        if !CARRIER.hosted_hello.swap(true, Ordering::AcqRel) {
+            crate::net::link_opened();
+        }
         return;
     }
     let modded = crate::net::server_runs_enshwick();
@@ -426,25 +462,38 @@ unsafe fn client_frame(client: *mut u8, now: Instant) {
     let Some(session) = (unsafe { game.client_session(client) }) else {
         return;
     };
-    let inbox = {
+    let (inbox, change) = {
         let Some(mut guard) = CARRIER.client.try_relock() else {
             return;
         };
         if !modded {
             close_client(game, session, &mut guard);
+            drop(guard);
+            crate::net::link_lost();
             return;
         }
         let state = fresh(&mut guard, session);
-        pump_client(game, loader, session, state, now);
-        core::mem::take(&mut state.inbox)
+        let change = pump_client(game, loader, session, state, now);
+        (core::mem::take(&mut state.inbox), change)
     };
     for &(_, channel, start, end) in &inbox.items {
         crate::net::client_carried(channel, &inbox.bytes[start..end]);
     }
     give_back(&CARRIER.client, session, inbox);
-    if CARRIER.client_open.load(Ordering::Acquire) {
-        crate::net::client_tick();
+    match change {
+        Some(Change::Opened) => crate::net::link_opened(),
+        Some(Change::Lost) => crate::net::link_lost(),
+        None => {}
     }
+}
+
+/// What became of the client's link in one frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Change {
+    /// A new link opened: the client says hello on it.
+    Opened,
+    /// The link went: the server is no longer ready.
+    Lost,
 }
 
 /// Closes the client's socket, when its server no longer advertises
@@ -463,13 +512,21 @@ fn close_client(game: &Game, session: usize, guard: &mut Option<State>) {
 }
 
 /// Opens the client's socket when it has none, takes what came on it and
-/// sends what is due.
-fn pump_client(game: &Game, loader: &Loader, session: usize, state: &mut State, now: Instant) {
+/// sends what is due; whether the link opened or went.
+fn pump_client(
+    game: &Game,
+    loader: &Loader,
+    session: usize,
+    state: &mut State,
+    now: Instant,
+) -> Option<Change> {
+    let mut change = None;
     if let Some(peer) = state.peers.get(&SERVER)
         && !game.holds(peer.socket, peer.slot)
     {
         crate::log!(WARN, "own channel: the socket to the server went");
         state.peers.remove(&SERVER);
+        change = Some(Change::Lost);
     }
     let due = state
         .tried
@@ -483,12 +540,11 @@ fn pump_client(game: &Game, loader: &Loader, session: usize, state: &mut State, 
             crate::log!(INFO, "own channel: socket open to the server");
             state.peers.insert(SERVER, peer);
             CARRIER.client_open.store(true, Ordering::Release);
+            change = Some(Change::Opened);
         }
     }
     let State { peers, inbox, .. } = state;
-    let Some(peer) = peers.get_mut(&SERVER) else {
-        return;
-    };
+    let peer = peers.get_mut(&SERVER)?;
     receive(game, session, SERVER, peer, inbox, now);
     if loader.developer_tools {
         probe_step(peer);
@@ -496,7 +552,9 @@ fn pump_client(game: &Game, loader: &Loader, session: usize, state: &mut State, 
     if !send_due(game, session, SERVER, peer, now) {
         peers.remove(&SERVER);
         CARRIER.client_open.store(false, Ordering::Release);
+        return Some(Change::Lost);
     }
+    change
 }
 
 /// Puts `inbox` back, emptied with its room kept, while `side` still serves
@@ -512,13 +570,17 @@ fn give_back(side: &Mutex<Option<State>>, session: usize, mut inbox: Inbox) {
     }
 }
 
-/// Forgets the client's socket, when it leaves its server: the socket went
-/// with its session.
+/// Forgets the client's link and what a hosted game's halves held for
+/// each other, when the client leaves its server or a hosted game ends.
 pub(crate) fn forget() {
     *CARRIER.client.relock() = None;
     CARRIER.client_open.store(false, Ordering::Release);
+    CARRIER.to_server.relock().clear();
+    CARRIER.to_client.relock().clear();
+    CARRIER.looping.store(false, Ordering::Release);
+    CARRIER.host_key.store(0, Ordering::Release);
+    CARRIER.hosted_hello.store(false, Ordering::Release);
 }
-
 /// Packets and messages the carrier dropped so far.
 pub(crate) fn dropped() -> u64 {
     CARRIER.dropped.load(Ordering::Relaxed)

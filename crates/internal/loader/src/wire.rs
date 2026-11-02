@@ -14,7 +14,7 @@ mod peer;
 pub use delivery::{Drops, Outbox, strays};
 pub use envelope::{
     ENVELOPE, MAX_HEADER, MAX_PAYLOAD, MAX_SEALED, ReadMessageError, is_executable, open, seal,
-    sealed_size,
+    sealable, sealed_size,
 };
 pub use link::{
     BACKLOG, FIRST_TIMEOUT, LAST_TIMEOUT, LINK, Link, MAX_LINK_HEADER, QueueMessageError,
@@ -286,7 +286,6 @@ fn probe_hash(bytes: &[u8]) -> u64 {
         (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
     })
 }
-#[cfg(test)]
 #[cfg(test)]
 mod tests {
     use super::*;

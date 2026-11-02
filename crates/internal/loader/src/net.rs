@@ -18,7 +18,6 @@
 use core::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::Instant;
 
 use enshwick::Entity;
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
@@ -41,9 +40,6 @@ mod tests;
 
 pub(crate) use server::{keep_greeting, server_carried};
 
-/// Seconds between a client's hellos until the server answers.
-const HELLO_EVERY: f64 = 5.0;
-
 /// One channel a mod opened.
 #[derive(Debug)]
 struct Channel {
@@ -58,8 +54,6 @@ struct State {
     /// On the server: peers by account key that said hello. On a client:
     /// the server, [`NetMessage::SERVER`], once it answered.
     peers: FxHashMap<u64, Peer>,
-    /// When the client last said hello.
-    hello_at: Option<Instant>,
     /// Rates of the peers sending, by key.
     sending: FxHashMap<u64, Peer>,
     /// On the server: the hellos on their way in from clients that are no
@@ -142,6 +136,32 @@ fn carry(key: u64, channel: u32, data: &[u8]) -> bool {
     crate::carrier::send(key, channel, data).is_ok()
 }
 
+/// Says hello on a client link that just opened, and forgets the last
+/// link's answer: the server is ready again once it answers this one. On
+/// the thread that sends the client's chat.
+pub(crate) fn link_opened() {
+    link_lost();
+    let mods = crate::advertise::mod_list(&crate::host::join_mods());
+    let nonce = if crate::world::hosting() {
+        crate::admission::nonce()
+    } else {
+        0
+    };
+    carry(
+        NetMessage::SERVER.get(),
+        CONTROL,
+        &hello(&mods, nonce, crate::content::language()),
+    );
+}
+
+/// Forgets the server's answer when the client's link went.
+pub(crate) fn link_lost() {
+    state(|s| {
+        s.peers.remove(&NetMessage::SERVER.get());
+        s.sending.remove(&NetMessage::SERVER.get());
+    });
+}
+
 /// Hands a message to the mod that opened its channel.
 fn deliver(channel: u32, peer: u64, data: &[u8]) {
     let Some(target) = CHANNELS
@@ -203,12 +223,11 @@ pub(crate) fn item_data(key: u64, records: &[u8]) -> bool {
     } else {
         vec![key]
     };
-    let dropped_for = peers
+    let peers: Vec<u64> = peers
         .into_iter()
         .filter(|&p| p != NetMessage::SERVER.get())
-        .filter(|&peer| !carry(peer, CONTROL, &data))
-        .count();
-    dropped_for == 0
+        .collect();
+    crate::carrier::send_many(&peers, CONTROL, &data).is_ok()
 }
 
 /// Tells the client of the player with account key `key` to open the
@@ -254,9 +273,7 @@ pub(crate) fn broadcast_control(message: &crate::remote::Message) {
     let Some(data) = remote_data(message) else {
         return;
     };
-    for key in keys {
-        carry(key, CONTROL, &data);
-    }
+    let _sent = crate::carrier::send_many(&keys, CONTROL, &data);
 }
 
 /// Sends a settings message from the client to its server; false while the
@@ -439,68 +456,37 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         }
         Ok(keys)
     })?;
-    let mut carried = true;
-    for key in keys {
-        carried &= carry(key, channel, data);
+    let sent = crate::carrier::send_many(&keys, channel, data);
+    if sent.is_err() {
+        refund(&keys);
     }
-    if peer != 0 && !carried {
-        return Err(Status::REFUSED);
-    }
-    Ok(())
+    if peer == 0 { Ok(()) } else { sent }
 }
 
 fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
+    let server = NetMessage::SERVER.get();
     state(|s| {
-        if !s.peers.contains_key(&NetMessage::SERVER.get()) {
+        if !s.peers.contains_key(&server) {
             return Err(Status::MISSING);
         }
-        let rate = s
-            .sending
-            .entry(NetMessage::SERVER.get())
-            .or_insert_with(Peer::new);
-        if !rate.admit() {
+        if !s.sending.entry(server).or_insert_with(Peer::new).admit() {
             dropped();
             return Err(Status::REFUSED);
         }
         Ok(())
     })?;
-    if !carry(NetMessage::SERVER.get(), channel, data) {
-        dropped();
-        return Err(Status::REFUSED);
-    }
-    Ok(())
+    crate::carrier::send(server, channel, data).inspect_err(|_| refund(&[server]))
 }
 
-/// Says hello to the server until it answers, every few seconds, on a
-/// client whose own channel is open; on the thread that sends its chat.
-pub(crate) fn client_tick() {
-    crate::lobby::poll();
-    let due = state(|s| {
-        let answered = s.peers.contains_key(&NetMessage::SERVER.get());
-        let due = s
-            .hello_at
-            .is_none_or(|at| at.elapsed().as_secs_f64() >= HELLO_EVERY);
-        let modded = server_runs_enshwick() || crate::world::hosting();
-        let due = !answered && due && modded;
-        if due {
-            s.hello_at = Some(Instant::now());
+/// Gives the rate tokens of a send that did not go back to `keys`.
+fn refund(keys: &[u64]) {
+    state(|s| {
+        for key in keys {
+            if let Some(rate) = s.sending.get_mut(key) {
+                rate.refund();
+            }
         }
-        due
     });
-    if !due {
-        return;
-    }
-    let mods = crate::advertise::mod_list(&crate::host::join_mods());
-    let nonce = if crate::world::hosting() {
-        crate::admission::nonce()
-    } else {
-        0
-    };
-    carry(
-        NetMessage::SERVER.get(),
-        CONTROL,
-        &hello(&mods, nonce, crate::content::language()),
-    );
 }
 
 /// The status summary's line on mod messages lost on the way, once any

@@ -82,6 +82,23 @@ pub fn is_executable(payload: &[u8]) -> bool {
     EXECUTABLE.iter().any(|start| payload.starts_with(start))
 }
 
+/// Whether `payload` may travel at all: within [`MAX_PAYLOAD`] and not
+/// starting like executable code.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{MAX_PAYLOAD, sealable};
+///
+/// assert!(sealable(b"\x02hello"));
+/// assert!(!sealable(b"MZ"));
+/// assert!(!sealable(&[0; MAX_PAYLOAD + 1]));
+/// ```
+#[must_use]
+pub fn sealable(payload: &[u8]) -> bool {
+    payload.len() <= MAX_PAYLOAD && !is_executable(payload)
+}
+
 /// The channel and payload of a received message, the payload borrowed
 /// from `message`.
 ///
@@ -152,7 +169,7 @@ pub const fn sealed_size(channel: u32, payload: usize) -> usize {
 /// See [`open`].
 #[must_use]
 pub fn seal(out: &mut [u8], channel: u32, payload: &[u8]) -> Option<usize> {
-    if payload.len() > MAX_PAYLOAD || is_executable(payload) {
+    if !sealable(payload) {
         return None;
     }
     let header = Header {

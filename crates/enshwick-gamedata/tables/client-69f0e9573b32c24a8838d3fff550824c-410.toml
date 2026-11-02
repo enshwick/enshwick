@@ -642,7 +642,6 @@ revision = 1
 "terrain.editor" = { value = 0x1778, pattern = "48 89 44 24 ?? E8 ?? ?? ?? ?? 48 8B 8F ?? ?? ?? ?? 0F 57 C0 48 89 4D ?? 48 8B C8", at = 13, size = 4 }
 "terrain.registry" = { value = 0x258, pattern = "0F 29 85 ?? ?? ?? ?? 49 8B 56 ?? E8 ?? ?? ?? ?? 48 89 87 ?? ?? ?? ?? 49 8B CF 4D 8B 86 ?? ?? ?? ?? 49 8B 56 ?? 49 81 C0 40 01 00 00", at = 19, size = 4 }
 "terrain.registry_resource" = { value = 0x38, pattern = "F2 0F 10 05 ?? ?? ?? ?? F2 0F 11 44 24 ?? 48 89 46 ?? E8 ?? ?? ?? ?? 48 85 ED", at = 17, size = 1 }
-# The client's own chat: the game client holds it here.
 # The first 8 code bytes of each interface function, little-endian.
 "ui.popup.bytes" = "0xa88d_4856_55c4_8b48"
 "ui.window_begin.bytes" = 0x7489_4808_245c_8948
