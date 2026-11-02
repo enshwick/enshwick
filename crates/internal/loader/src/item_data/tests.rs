@@ -107,6 +107,7 @@ fn server(pending: Vec<Pending>, unopened: Vec<String>) -> Server {
         values: Values::default(),
         pending,
         unopened,
+        joining: Vec::new(),
         changed: false,
     }
 }

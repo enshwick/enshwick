@@ -110,6 +110,9 @@ struct Server {
     /// any other, so they are right when their mod returns; no mod reads
     /// them meanwhile.
     unopened: Vec<String>,
+    /// The joined characters whose carried records wait, each with the steps
+    /// it may still wait; at most one entry per player.
+    joining: Vec<(u32, u32)>,
     changed: bool,
 }
 
@@ -158,9 +161,6 @@ static FINDING: AtomicBool = AtomicBool::new(false);
 static UNREAD: AtomicBool = AtomicBool::new(false);
 /// Whether a joined character waits for its inventories to fill.
 static JOINS: AtomicBool = AtomicBool::new(false);
-/// The joined characters whose carried records wait, each with the steps it
-/// may still wait.
-static JOINING: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
 /// Steps a joined character's inventories may take to fill, some ten
 /// seconds; past it its records keep waiting for its next join.
 const JOIN_STEPS: u32 = 600;
@@ -421,9 +421,12 @@ pub(crate) fn player_joined(entity: u32) {
     if !wanted() || !serves() {
         return;
     }
-    let mut joining = JOINING.relock();
-    joining.retain(|&(e, _)| e != entity);
-    joining.push((entity, JOIN_STEPS));
+    let mut server = SERVER.relock();
+    let Some(server) = server.as_mut() else {
+        return;
+    };
+    server.joining.retain(|&(e, _)| e != entity);
+    server.joining.push((entity, JOIN_STEPS));
     JOINS.store(true, Ordering::Relaxed);
 }
 
@@ -436,11 +439,11 @@ pub(crate) fn player_left(loader: &Loader, entity: u32) {
     if !wanted() || !serves() {
         return;
     }
-    JOINING.relock().retain(|&(e, _)| e != entity);
     let mut server = SERVER.relock();
     let Some(server) = server.as_mut() else {
         return;
     };
+    server.joining.retain(|&(e, _)| e != entity);
     let (waiting, aside) = keep_carried(server, entity, |pide| game::held(loader, pide));
     if waiting + aside > 0 {
         crate::log!(
@@ -492,7 +495,12 @@ fn keep_carried(
 #[cold]
 fn find_carried(loader: &Loader) {
     let ready: Vec<u32> = {
-        let mut joining = JOINING.relock();
+        let mut server = SERVER.relock();
+        let Some(server) = server.as_mut() else {
+            JOINS.store(false, Ordering::Relaxed);
+            return;
+        };
+        let joining = &mut server.joining;
         let mut ready = Vec::new();
         joining.retain_mut(|(entity, steps)| {
             if game::ready(loader, *entity) {
