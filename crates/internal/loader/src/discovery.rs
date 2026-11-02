@@ -82,14 +82,28 @@ pub(crate) struct ListRead {
     pub(crate) problem: Option<String>,
 }
 
-/// Reads the mod list from what reading its file gave.
-pub(crate) fn read_list(read: std::io::Result<String>) -> ListRead {
-    let Ok(text) = read else {
-        return ListRead {
-            list: ModList::default(),
-            writable: true,
-            problem: None,
-        };
+/// Reads the mod list from what reading its file gave: `None` for a file
+/// that is not there. A file that does not read or parse is never written.
+pub(crate) fn read_list(read: std::io::Result<Option<String>>) -> ListRead {
+    let text = match read {
+        Ok(Some(text)) => text,
+        Ok(None) => {
+            return ListRead {
+                list: ModList::default(),
+                writable: true,
+                problem: None,
+            };
+        }
+        Err(e) => {
+            return ListRead {
+                list: ModList::default(),
+                writable: false,
+                problem: Some(format!(
+                    "{LIST_PATH} is not read, every mod is on: {e} ({})",
+                    errors::BAD_MOD_LIST
+                )),
+            };
+        }
     };
     match ModList::parse(&text) {
         Ok(list) => ListRead {
@@ -188,15 +202,30 @@ mod tests {
 
     #[test]
     fn a_missing_mod_list_turns_every_mod_on_and_is_written() {
-        let read = read_list(Err(std::io::ErrorKind::NotFound.into()));
+        let read = read_list(Ok(None));
         assert!(read.writable);
         assert!(read.problem.is_none());
         assert!(read.list.off().is_empty());
     }
 
     #[test]
+    fn a_list_that_does_not_read_is_never_written() {
+        let read = read_list(Err(std::io::ErrorKind::InvalidData.into()));
+        assert!(!read.writable);
+        let problem = read.problem.unwrap();
+        assert!(
+            problem.starts_with("mods/enshwick/mods.toml is not read, every mod is on: "),
+            "{problem}"
+        );
+        assert!(
+            problem.ends_with(&format!("({})", errors::BAD_MOD_LIST)),
+            "{problem}"
+        );
+    }
+
+    #[test]
     fn a_mod_list_that_reads_keeps_its_mods_off() {
-        let read = read_list(Ok("[\"you.lanterns\"]\nenabled = false\n".into()));
+        let read = read_list(Ok(Some("[\"you.lanterns\"]\nenabled = false\n".into())));
         assert!(read.writable);
         assert!(read.problem.is_none());
         assert!(read.list.is_off("you.lanterns"));
@@ -204,7 +233,7 @@ mod tests {
 
     #[test]
     fn a_broken_mod_list_turns_every_mod_on_and_is_never_overwritten() {
-        let read = read_list(Ok("[you.lanterns\nenabled = false\n".into()));
+        let read = read_list(Ok(Some("[you.lanterns\nenabled = false\n".into())));
         assert!(!read.writable);
         assert!(!read.list.is_off("you.lanterns"));
         let problem = read.problem.unwrap();

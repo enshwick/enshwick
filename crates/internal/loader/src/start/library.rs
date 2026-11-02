@@ -91,7 +91,7 @@ pub(super) fn libraries(
         mut list,
         writable,
         problem,
-    } = discovery::read_list(std::fs::read_to_string(&list_file));
+    } = discovery::read_list(enshwick::files::read_to_string_if_present(&list_file));
     if let Some(problem) = problem {
         crate::log!(WARN, "{problem}");
     }
@@ -139,7 +139,7 @@ pub(super) fn libraries(
     modlist::set_links_off(list.links_off());
     if changed
         && writable
-        && let Err(e) = std::fs::write(&list_file, list.render())
+        && let Err(e) = enshwick::files::write_atomically(&list_file, list.render())
     {
         crate::log!(WARN, "{} not written: {e}", modlist::LIST_PATH);
     }

@@ -96,7 +96,7 @@ fix = "Delete the file the log names."
 code = "E2006"
 title = "The mod list has a mistake"
 cause = "mods/enshwick/mods.toml does not read, so every mod is on."
-fix = "Fix the line the log names, or delete the file to get a fresh one on the next start."
+fix = "Fix the line the log names, save the file as UTF-8, or close the program that holds it open. Enshwick never writes over a list it cannot read. To start over, delete the file to get a fresh one on the next start."
 
 [[error]]
 code = "E2007"

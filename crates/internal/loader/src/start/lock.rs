@@ -55,7 +55,7 @@ pub(super) fn write_lock(loader: &'static Loader, files: Vec<(String, String)>) 
                 }
             }
             if old.as_ref() != Some(&lock)
-                && let Err(e) = std::fs::write(&path, lock.render())
+                && let Err(e) = enshwick::files::write_atomically(&path, lock.render())
             {
                 crate::log!(WARN, "{} not written: {e}", modlist::LOCK_FILE);
             }

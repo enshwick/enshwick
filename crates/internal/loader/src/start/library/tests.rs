@@ -357,3 +357,27 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "Miri isolates the file system")]
+fn a_mod_list_that_does_not_read_stays_byte_for_byte() {
+    let dir = std::env::temp_dir().join(format!("enshwick-unread-list-{}", std::process::id()));
+    let _old = std::fs::remove_dir_all(&dir);
+    let mods = dir.join("mods");
+    let pack = mods.join("you.lanterns");
+    std::fs::create_dir_all(&pack).unwrap();
+    std::fs::write(
+        pack.join(enshwick::packs::MANIFEST_FILE),
+        "id = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\n",
+    )
+    .unwrap();
+    let list = mods
+        .join(crate::settings::LOADER_ID)
+        .join(crate::modlist::LIST_FILE);
+    std::fs::create_dir_all(list.parent().unwrap()).unwrap();
+    let saved_as_ansi = b"[\"you.lanterns\"]\nenabled = false\n# \xef\xbf\n";
+    std::fs::write(&list, saved_as_ansi).unwrap();
+    let _found = libraries(&mods, Run::Dry, &mut |_| {});
+    assert_eq!(std::fs::read(&list).unwrap(), saved_as_ansi);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

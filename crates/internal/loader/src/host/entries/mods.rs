@@ -56,7 +56,7 @@ pub(crate) extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut S
         let content = match std::fs::read_to_string(&path) {
             Ok(content) => content,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                if std::fs::write(&path, defaults).is_err() {
+                if enshwick::files::write_atomically(&path, defaults).is_err() {
                     crate::log::write(
                         Level::WARN,
                         &record.id,
