@@ -146,6 +146,56 @@ fn a_function_shorter_than_the_jump_is_refused() {
     assert!(hook(target).is_err());
 }
 
+/// Writes `code` like [`function`] and registers a function entry for it
+/// with an empty unwind info, as a leaf without a frame has.
+fn with_entry(code: &[u8]) -> usize {
+    /// Where the unwind info goes in the page, the one-entry table after it.
+    const UNWIND: usize = 0x800;
+    const TABLE: usize = UNWIND + 4;
+    let page = function(code);
+    let len = u32::try_from(code.len()).unwrap();
+    let rva = u32::try_from(UNWIND).unwrap();
+    // SAFETY: the 4096 writable bytes `function` allocated, of which `code`
+    // took fewer than `UNWIND`. The unwind info is version 1 with no flags,
+    // prologue or codes; the entry spans the code.
+    unsafe { ((page + UNWIND) as *mut [u32; 4]).write([1, 0, len, rva]) };
+    // SAFETY: one entry naming the code and unwind info in the page, which
+    // is never freed.
+    let added = unsafe {
+        windows_sys::Win32::System::Diagnostics::Debug::RtlAddFunctionTable(
+            (page + TABLE) as *const _,
+            1,
+            page as u64,
+        )
+    };
+    assert!(added);
+    page
+}
+
+#[test]
+fn a_hook_whose_bytes_a_branch_of_its_function_jumps_into_is_refused() {
+    let looped = with_entry(&[
+        0x31, 0xc0, // xor eax, eax
+        0xff, 0xc0, // inc eax <- the loop's head, inside the jump
+        0x39, 0xc8, // cmp eax, ecx
+        0x72, 0xfa, // jb -6
+        0xc3, // ret
+    ]);
+    assert_eq!(hook(looped), Err(PrepareError::JumpedInto(looped + 6)));
+    let after = with_entry(&[
+        0x31, 0xc0, // xor eax, eax
+        0x31, 0xd2, // xor edx, edx
+        0x90, // nop
+        0xff, 0xc0, // inc eax <- the loop's head, right after the jump
+        0x39, 0xc8, // cmp eax, ecx
+        0x72, 0xfa, // jb -6
+        0xc3, // ret
+    ]);
+    let original = hook(after).unwrap();
+    assert_eq!(callable(after)(3), 103);
+    assert_eq!(callable(original)(3), 3);
+}
+
 /// Sets `flags[1]`, then waits for `flags[0]` and returns; `r8` points at
 /// the flags. Touches no stack, so any alignment does.
 const SPIN: [u8; 16] = [
