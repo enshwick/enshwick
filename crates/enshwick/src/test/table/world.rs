@@ -902,3 +902,53 @@ pub(crate) extern "system" fn allowlist_has(
         None => Status::MISSING,
     }
 }
+
+/// Whether the fake runs a server, the dedicated one or one a client hosts.
+fn serving(s: &super::State) -> bool {
+    s.host.side == Side::SERVER || s.host.hosting
+}
+
+pub(crate) extern "system" fn chat_mute_set(
+    _me: ModHandle,
+    account: crate::PlayerKey,
+    muted: u8,
+) -> Status {
+    if account == crate::PlayerKey::new(0) || muted > 1 {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if !serving(s) {
+            return Status::MISSING;
+        }
+        let admin = s
+            .host
+            .players
+            .iter()
+            .any(|p| p.key == account && p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
+        let at = s.muted.iter().position(|&k| k == account);
+        match (muted == 1, at) {
+            (true, _) if admin || s.host.host_key == Some(account) => return Status::REFUSED,
+            (true, None) => s.muted.push(account),
+            (false, Some(at)) => {
+                s.muted.remove(at);
+            }
+            _ => {}
+        }
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn chat_mute_has(
+    _me: ModHandle,
+    account: crate::PlayerKey,
+    muted: *mut u8,
+) -> Status {
+    if account == crate::PlayerKey::new(0) || muted.is_null() {
+        return Status::BAD_ARGS;
+    }
+    let has = with(None, |s| serving(s).then(|| s.muted.contains(&account)));
+    match has {
+        Some(has) => put(muted, u8::from(has)),
+        None => Status::MISSING,
+    }
+}

@@ -505,6 +505,18 @@ unsafe extern "system" fn post(
         let _outcome = CHAT_FUSE.run("the chat queue", drain);
         return out;
     }
+    let muted = CHAT_FUSE.run("the chat mute check", || {
+        // SAFETY: `out` is the game's own argument at the entry of
+        // `chat.post`, by this function's `# Safety`.
+        unsafe { muted_line(out, kind, hash) }
+    });
+    if muted == Some(true) {
+        // SAFETY: `muted_line` returned true only for a non-null `out`, a
+        // result record of at least 8 writable bytes by this function's
+        // `# Safety`.
+        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
+        return out;
+    }
     match next() {
         // SAFETY: `next` is the rest of `chat.post`'s chain, wired while this
         // detour runs, and the arguments are the game's own, passed on
@@ -597,6 +609,30 @@ unsafe fn posted_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> Optio
     // function's `# Safety`.
     unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes) };
     client_frame(&bytes).map(str::to_owned)
+}
+
+/// Whether the game posts a line the player of account `key` typed while
+/// muted, which the server then drops before any other player reads it.
+///
+/// # Safety
+///
+/// - Called at the entry of the loader's link on `chat.post`, on the game's
+///   calling thread.
+unsafe fn muted_line(out: *mut u8, kind: u8, key: u64) -> bool {
+    let Some((loader, layout)) = LOADED.get() else {
+        return false;
+    };
+    if kind != 0 || out.is_null() {
+        return false;
+    }
+    let frame = (loader.caller_frame)();
+    // SAFETY: `frame.rsp` is non-zero, checked first, and `caller_frame`
+    // took the frame at the entry of this chain on this thread, linked with
+    // `HookFlags::CALLER_FRAME`, so it points at the live return address.
+    if frame.rsp == 0 || unsafe { frame.return_address() } != layout.post_return {
+        return false;
+    }
+    crate::chat_mute::drops(loader, key)
 }
 
 /// The frame a line from a player's client carries, which the server takes

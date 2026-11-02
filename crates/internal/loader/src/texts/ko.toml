@@ -59,6 +59,7 @@
 "change.runtime" = "{id} {key} = {value}: 이 월드에 저장하고 바로 적용했습니다."
 "stand-in.name" = "제거된 모드의 아이템"
 "stand-in.description" = "지금 설치되지 않은 모드를 위해 보관 중입니다. 모드를 다시 설치하면 아이템이 돌아옵니다."
+"muted.notice" = "관리자가 채팅에서 나를 음소거했습니다. 다른 플레이어는 내가 쓴 내용을 볼 수 없습니다."
 "refused" = "바뀌지 않았습니다: {why}."
 "refused.by-mod" = "모드가 거부함"
 "refused.value" = "{key}에는 {accepts}만 넣을 수 있음"

@@ -59,6 +59,7 @@
 "change.runtime" = "{id} {key} = {value}：已为此世界保存，已立即应用。"
 "stand-in.name" = "已移除模组的物品"
 "stand-in.description" = "为当前未安装的模组保留。重新安装该模组即可取回物品。"
+"muted.notice" = "管理员已在聊天中将你禁言。其他玩家看不到你发送的内容。"
 "refused" = "未更改：{why}。"
 "refused.by-mod" = "被模组拒绝"
 "refused.value" = "{key} 接受 {accepts}"

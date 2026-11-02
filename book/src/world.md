@@ -311,6 +311,34 @@ fn invite(world: &World, key: enshwick::PlayerKey) -> Result<(), WorldError> {
 }
 ```
 
+### Chat mutes
+
+`set_muted(key, true)` mutes an account in chat and `set_muted(key, false)`
+lifts the mute; `muted(key)` tells whether it is muted. The server drops
+every line the muted player types before any other player reads it, and
+tells the player why with one of the game's notices, at most every 30
+seconds; a client without Enshwick reads the same as a chat line. Lines mods
+send and mod messages pass. The loader keeps the mutes in
+`mod-data/enshwick/muted.txt`, one account per line, with `#` notes, and
+reads it at every start, so a mute lasts until it is lifted.
+
+An administrator online and a hosted game's host are never muted:
+`set_muted` returns `WorldError::Refused` for them. Both calls work on any
+thread, on a dedicated server and in a game a client hosts; elsewhere they
+return `WorldError::Missing`. The mod decides who may ask, such as an
+[action](actions.md) only administrators see.
+
+```rust
+use enshwick::WorldError;
+use enshwick::world::World;
+
+fn toggle_mute(world: &World, key: enshwick::PlayerKey) -> Result<bool, WorldError> {
+    let muted = !world.muted(key)?;
+    world.set_muted(key, muted)?;
+    Ok(muted)
+}
+```
+
 ## Build rights
 
 `world.can_build(&player, a, b)` tells whether the server lets a player edit

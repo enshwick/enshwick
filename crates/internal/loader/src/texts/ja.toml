@@ -59,6 +59,7 @@
 "change.runtime" = "{id} {key} = {value}：このワールド用に保存し、すぐに適用しました。"
 "stand-in.name" = "削除された MOD のアイテム"
 "stand-in.description" = "現在インストールされていない MOD のために保管されています。MOD を再びインストールするとアイテムが戻ります。"
+"muted.notice" = "管理者があなたのチャットをミュートしました。ほかのプレイヤーにはあなたの書き込みが見えません。"
 "refused" = "変更されませんでした：{why}。"
 "refused.by-mod" = "MOD が拒否しました"
 "refused.value" = "{key} に指定できるのは {accepts} です"
