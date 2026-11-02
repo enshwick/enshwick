@@ -638,6 +638,111 @@ fn a_code_patch_is_not_written_while_a_thread_stays_inside_it() {
 }
 
 #[test]
+fn a_one_check_commit_does_not_wait_for_a_thread_to_leave() {
+    static FLAGS: [AtomicU32; 2] = [AtomicU32::new(0), AtomicU32::new(0)];
+    let target = function(&[
+        0xff, 0xd2, // call rdx <- returns inside the patch
+        0xb8, 0x01, 0x00, 0x00, 0x00, // mov eax, 1
+        0xc3, // ret
+        0xcc, 0xcc,
+    ]);
+    let thread = waiting_in(target, &FLAGS);
+    // Released while a waiting commit would still wait.
+    let release = std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        FLAGS[0].store(1, Ordering::Release);
+    });
+    let patch = [Bytes {
+        id: 0,
+        address: target,
+        replacement: &[0xb8, 0x02, 0x00, 0x00, 0x00, 0x90, 0x90],
+    }];
+    let marker = 0_u8;
+    assert_eq!(
+        commit_once(&patch, || {}, (&raw const marker).addr()),
+        Commit::Busy(vec![0])
+    );
+    assert_eq!(thread.join().unwrap(), 1);
+    release.join().unwrap();
+    assert_eq!(
+        commit_once(&patch, || {}, (&raw const marker).addr()),
+        Commit::Written
+    );
+    assert_eq!(callable(target)(0), 2);
+}
+
+/// The patch [`commit_from_inside`] tries: the test's code from its call on,
+/// with `mov eax, 2` for `mov eax, 1`.
+const FROM_INSIDE: [u8; 11] = [
+    0xff, 0xd2, // call rdx
+    0x48, 0x83, 0xc4, 0x28, // add rsp, 0x28
+    0xb8, 0x02, 0x00, 0x00, 0x00, // mov eax, 2
+];
+static INSIDE_AT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static FROM_INSIDE_SAW: Mutex<Option<Commit>> = Mutex::new(None);
+
+/// Tries the patch at [`INSIDE_AT`] while its own thread returns into it.
+extern "system" fn commit_from_inside(_: u32, _: usize, _: *const AtomicU32) -> u32 {
+    let marker = 0_u8;
+    let patch = [Bytes {
+        id: 0,
+        address: INSIDE_AT.load(Ordering::Acquire),
+        replacement: &FROM_INSIDE,
+    }];
+    let saw = commit_once(&patch, || {}, (&raw const marker).addr());
+    *FROM_INSIDE_SAW.lock().unwrap() = Some(saw);
+    0
+}
+
+extern "system" fn calls_nothing(_: u32, _: usize, _: *const AtomicU32) -> u32 {
+    0
+}
+
+#[test]
+fn a_one_check_commit_leaves_a_patch_its_own_thread_returns_into() {
+    let target = function(&[
+        0x48, 0x83, 0xec, 0x28, // sub rsp, 0x28: rdx's frame stays aligned
+        0xff, 0xd2, // call rdx <- returns inside the patch
+        0x48, 0x83, 0xc4, 0x28, // add rsp, 0x28
+        0xb8, 0x01, 0x00, 0x00, 0x00, // mov eax, 1
+        0xc3, // ret
+    ]);
+    INSIDE_AT.store(target + 4, Ordering::Release);
+    // SAFETY: the code takes these arguments and calls the second.
+    let call = unsafe { core::mem::transmute::<usize, Calling>(target) };
+    assert_eq!(
+        call(
+            5,
+            (commit_from_inside as Calling as *const ()).addr(),
+            core::ptr::null()
+        ),
+        1
+    );
+    assert_eq!(
+        *FROM_INSIDE_SAW.lock().unwrap(),
+        Some(Commit::Busy(vec![0]))
+    );
+    let patch = [Bytes {
+        id: 0,
+        address: target + 4,
+        replacement: &FROM_INSIDE,
+    }];
+    let marker = 0_u8;
+    assert_eq!(
+        commit_once(&patch, || {}, (&raw const marker).addr()),
+        Commit::Written
+    );
+    assert_eq!(
+        call(
+            5,
+            (calls_nothing as Calling as *const ()).addr(),
+            core::ptr::null()
+        ),
+        2
+    );
+}
+
+#[test]
 fn only_instructions_after_the_first_move_and_only_returns_after_calls_count() {
     let pending = Pending {
         original: 0x9000,

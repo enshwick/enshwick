@@ -317,3 +317,6 @@
 "resistance_lightning.name" = "Schockbeständigkeit"
 "resistance_poison.name" = "Giftresistenz"
 "mods.developer.off" = "ein Entwicklerwerkzeug: es läuft nur, solange die Datei mod-data/enshwick/developer-tools existiert"
+
+"mods.waiting" = "{name} {version} (wartet)"
+"mods.waiting.why" = "Wartet, bis das Spiel den Code verlässt, den diese Mod ändert. Gleich neuer Versuch, dann noch dreimal im Minutenabstand. Danach schaltet sie sich aus."

@@ -511,6 +511,10 @@ pub(crate) fn armed(loader: &Loader) {
     }
 }
 
+/// Code patch tries from the interface frame; a panic turns only them off
+/// there.
+static RETRY_FUSE: Fuse = Fuse::new("code patch tries in the interface");
+
 /// The loader's link on the game's error popup: the game's draw, then the
 /// mods' frames, the loader's windows and its dialog.
 ///
@@ -532,6 +536,13 @@ unsafe extern "system" fn detour(state: *mut u8) {
     // runs, and `state` is the game's own argument, passed on unchanged.
     unsafe { NEXT.get()(state) };
     ARENA.with_borrow_mut(Arena::next_frame);
+    // A client that never hosts never steps, so its waiting patches are also
+    // tried here; one atomic compare until a check is due.
+    if let Some(loader) = crate::host::loader() {
+        let _tried = RETRY_FUSE.run("the interface frame", || {
+            crate::retry::after_step(loader, std::time::Instant::now());
+        });
+    }
     if context == 0 || state.is_null() {
         return;
     }

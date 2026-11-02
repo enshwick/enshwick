@@ -317,3 +317,6 @@
 "resistance_lightning.name" = "충격 저항"
 "resistance_poison.name" = "독 저항"
 "mods.developer.off" = "개발자 도구입니다. mod-data/enshwick/developer-tools 파일이 있을 때만 작동합니다"
+
+"mods.waiting" = "{name} {version} (대기 중)"
+"mods.waiting.why" = "이 모드가 바꾸는 코드에서 게임이 벗어나기를 기다립니다. 곧 다시 시도하고, 그 뒤 1분 간격으로 세 번 더 시도합니다. 그래도 안 되면 꺼집니다."

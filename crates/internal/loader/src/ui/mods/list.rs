@@ -24,15 +24,21 @@ pub(super) enum Listed {
 /// Paints a mod's heading, why it is off if it is, its description and
 /// credits.
 fn about(paint: &Painter<'_>, record: &crate::host::ModRecord) {
-    let heading = if record.off.load(Ordering::Acquire) {
+    let off = record.off.load(Ordering::Acquire);
+    let waiting = !off && record.waiting.load(Ordering::Acquire);
+    let heading = if off || waiting {
         let name = record.label();
-        texts::fill("mods.off", &[("name", &name), ("version", &record.version)])
+        let key = if off { "mods.off" } else { "mods.waiting" };
+        texts::fill(key, &[("name", &name), ("version", &record.version)])
     } else {
         format!("{} {}", record.label(), record.version)
     };
     paint.label(heading.as_bytes(), UiWidget::STYLE_H3, false, false);
     if let Some(reason) = record.off_reason_shown() {
         paint.label(reason.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+    } else if waiting {
+        let why = texts::text("mods.waiting.why");
+        paint.label(why.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
     let description = record.description();
     if !description.is_empty() {

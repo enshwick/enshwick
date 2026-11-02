@@ -317,3 +317,6 @@
 "resistance_lightning.name" = "Résistance aux chocs"
 "resistance_poison.name" = "Résistance au poison"
 "mods.developer.off" = "un outil de développement : il ne fonctionne que tant que le fichier mod-data/enshwick/developer-tools existe"
+
+"mods.waiting" = "{name} {version} (en attente)"
+"mods.waiting.why" = "Attend que le jeu quitte le code que ce mod modifie. Nouvel essai bientôt, puis trois fois encore, une par minute. Ensuite il se désactive."

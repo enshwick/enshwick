@@ -50,6 +50,9 @@ pub(crate) struct ModRecord {
     /// Why it is off, as the mod or the loader gave it: a text of the mod's
     /// texts as its key and values, or words.
     pub(crate) off_reason: Mutex<Option<String>>,
+    /// Set while one of its code patches waits for a thread to leave it: its
+    /// detours and mid-function hooks are bypassed, the rest of it runs.
+    pub(crate) waiting: AtomicBool,
     /// The settings texts handed to the mod.
     pub(crate) settings: Kept,
     /// The join values the mod last reported, as its settings file holds them.
@@ -220,6 +223,8 @@ pub(crate) struct Loader {
     pub(crate) delivery: OnceLock<Box<[Subscription]>>,
     /// What was wrong in the loader settings file at start, a line each.
     pub(crate) settings_problems: Vec<String>,
+    /// The code patches a thread kept out at arming, tried again later.
+    pub(crate) retry: crate::retry::Retry,
 }
 
 /// The warning line and the status entry of `feature` turned off on `build`
@@ -331,6 +336,23 @@ pub(crate) fn is_off(owner: ModIndex) -> bool {
                 .get(owner.get())
                 .is_none_or(|m| m.off.load(Ordering::Acquire))
         })
+}
+
+/// Whether the detours and mid-function hooks of `owner` are passed by: it
+/// is off, or waiting for a code patch. Only atomic loads, for hook calls.
+pub(crate) fn bypassed(owner: ModIndex) -> bool {
+    is_off(owner)
+        || loader()
+            .and_then(|l| l.mods.get(owner.get()))
+            .is_some_and(|m| m.waiting.load(Ordering::Acquire))
+}
+
+/// Marks `owner` waiting for a code patch; the loader never waits. A plain
+/// store, so the settle may call it while it holds the chains.
+pub(crate) fn wait(owner: ModIndex) {
+    if let Some(record) = loader().and_then(|l| l.mods.get(owner.get())) {
+        record.waiting.store(true, Ordering::Release);
+    }
 }
 
 impl Loader {
@@ -522,7 +544,14 @@ impl Loader {
                     .get(owner.get())
                     .is_none_or(|m| m.off.load(Ordering::Acquire))
         };
-        chains.rewire(faulted);
+        // A mod still waiting for a code patch stays wired past as well.
+        chains.rewire(|owner| {
+            faulted(owner)
+                || self
+                    .mods
+                    .get(owner.get())
+                    .is_some_and(|m| m.waiting.load(Ordering::Acquire))
+        });
         drop(chains);
         crate::points::rearm(faulted);
         if record.joins_when_on() {

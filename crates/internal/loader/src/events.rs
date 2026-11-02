@@ -342,11 +342,14 @@ unsafe extern "system" fn step(server: *mut u8) {
     let Some((loader, offsets)) = loaded().filter(|_| !STEP_FUSE.is_off()) else {
         return;
     };
+    // The step's one clock read: every part that needs the time takes it.
+    let now = Instant::now();
     // SAFETY: `server` is the post-step's own argument, the game's server or
     // null, and this runs on the game thread right after its step.
     guarded(&STEP_FUSE, "the post-step link", || unsafe {
-        after_step(loader, offsets, server);
+        after_step(loader, offsets, server, now);
     });
+    part!("code patch tries", crate::retry::after_step(loader, now));
 }
 
 /// The post-step link's work on the game thread, after the game's step.
@@ -358,9 +361,7 @@ unsafe extern "system" fn step(server: *mut u8) {
 ///   bytes from the build table's `server.player_slots` offset.
 /// - Called on the game thread after its step, where nothing else writes
 ///   the slots.
-unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
-    // The step's one clock read: every part that needs the time takes it.
-    let now = Instant::now();
+unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8, now: Instant) {
     // SAFETY: `GetCurrentThreadId` has no preconditions.
     let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
     let (seen, game) = SESSION

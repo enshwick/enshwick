@@ -43,7 +43,29 @@ and skips it, turning its mod off, when:
 
 The loader writes the patches that pass in the same batch as every hook's
 jump, with the game's other threads suspended, and logs each one: written,
-skipped with the reason, or left out because its mod is off.
+skipped with the reason, waiting, or left out because its mod is off.
+
+## A thread inside a patch
+
+A patch is never written while a game thread runs inside its bytes, or would
+return into them: the thread would resume in the middle of other
+instructions. Arming waits a little for the thread to leave. When it stays,
+the patch waits, with the rest of its mod's patches, and the mod waits with
+them:
+
+- its hooks and [mid-function hooks](mid-function-hooks.md) are passed by,
+  so they never run against the unpatched code;
+- the rest of it runs: its events, services, actions and other calls work;
+- the Mods screen and the status report show it as waiting.
+
+The loader tries the waiting patches again on the game thread, after the
+first step of the running world and then up to three more times a minute
+apart. Each try checks at most once a second for ten seconds and never waits
+on the game thread. A client that joins another's server runs no world, so
+there its waiting patches are not tried again. When the patches go in, the mod's hooks come on. After the last
+try, the patches are skipped with "a thread stayed inside it through every
+wait" and the mod is turned off. A loader feature waits and comes on the same
+way.
 
 ## All or nothing per mod
 

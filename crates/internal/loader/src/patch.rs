@@ -228,13 +228,14 @@ pub(crate) fn arm(
     mids: &Mids,
     frame: Option<FrameSlot>,
     off: fn(ModIndex) -> bool,
+    wait: fn(ModIndex),
     patches: &[CodePatch],
     counting: Count,
 ) -> Armed {
     let count = chains.len();
     if count == 0 {
         let mut armed = Armed::default();
-        armed.code = hook(chains, mids, &[], off, patches, &mut armed.failures);
+        armed.code = hook(chains, mids, &[], off, wait, patches, &mut armed.failures);
         return armed;
     }
     let thunk = counting.thunk();
@@ -370,7 +371,7 @@ pub(crate) fn arm(
         return unarmed(chains, mids, patches, "thunk pages not executable");
     }
 
-    let code = hook(chains, mids, &thunks, off, patches, &mut failures);
+    let code = hook(chains, mids, &thunks, off, wait, patches, &mut failures);
     Armed { failures, code }
 }
 
@@ -541,6 +542,7 @@ fn hook(
     mids: &Mids,
     thunks: &[(u64, *mut u8)],
     off: fn(ModIndex) -> bool,
+    wait: fn(ModIndex),
     patches: &[CodePatch],
     failures: &mut Vec<Failure>,
 ) -> Vec<Verdict> {
@@ -626,7 +628,7 @@ fn hook(
             !inside
         });
     }
-    write(chains, mids, &ready, off, patches, failures)
+    write(chains, mids, &ready, off, wait, patches, failures)
 }
 
 /// The mods hooked on a target that failed, function or mid-function hook;
@@ -652,6 +654,7 @@ fn write(
     mids: &Mids,
     ready: &[(u64, bool, &Pending)],
     off: fn(ModIndex) -> bool,
+    wait: fn(ModIndex),
     patches: &[CodePatch],
     failures: &mut Vec<Failure>,
 ) -> Vec<Verdict> {
@@ -686,14 +689,25 @@ fn write(
             .collect();
         crate::code::arming(patches, &verdicts, &targets);
         match crate::detour::commit(&hooks, &writes, crate::code::disarm) {
-            Commit::Busy(stuck) => leave_out(patches, &mut verdicts, &stuck),
+            Commit::Busy(stuck) => {
+                for owner in wait_out(patches, &mut verdicts, &stuck) {
+                    wait(owner);
+                }
+                // The chains lock is held here, so no `turn_off`: the waiting
+                // owners are wired past before the next round writes the
+                // jumps. Mid-function stubs read `off` on every hit.
+                for chain in chains.iter_mut().filter(|c| targets.contains(&c.target)) {
+                    chain.wire(off);
+                }
+            }
             done => break done,
         }
     };
     if committed == Commit::Failed {
         crate::code::arming(&[], &[], &[]);
         for verdict in &mut verdicts {
-            if *verdict == Verdict::Write {
+            // A patch an earlier round left waiting needs these hooks too.
+            if matches!(verdict, Verdict::Write | Verdict::Wait) {
                 *verdict = Verdict::Skip("the code could not be written".into());
             }
         }
@@ -711,17 +725,33 @@ fn write(
     verdicts
 }
 
-/// Skips the patches a thread stayed inside, by their index in `patches`,
-/// with the rest of their feature.
-fn leave_out(patches: &[CodePatch], verdicts: &mut [Verdict], stuck: &[usize]) {
+/// Sets the patches a thread stayed inside, by their index in `patches`, to
+/// wait with the rest of their feature; the mods that now wait.
+fn wait_out(patches: &[CodePatch], verdicts: &mut [Verdict], stuck: &[usize]) -> Vec<ModIndex> {
     for &id in stuck {
         // Every id comes from this batch's own patches: a miss is a bug.
         debug_assert!(id < verdicts.len(), "a stuck patch {id} outside the batch");
-        if let Some(verdict) = verdicts.get_mut(id) {
-            *verdict = Verdict::Skip("a thread stayed inside it through every wait".into());
+        if let (Some(verdict), Some(patch)) = (verdicts.get_mut(id), patches.get(id)) {
+            // The loader's own patches go in with state that a late write
+            // would miss (objects already created at the old size, recipe
+            // lists already built), so they never wait.
+            *verdict = if patch.owner.is_loader() {
+                Verdict::Skip("a thread stayed inside it".into())
+            } else {
+                Verdict::Wait
+            };
         }
     }
     crate::code::skip_with_feature(patches, verdicts);
+    let mut owners: Vec<ModIndex> = patches
+        .iter()
+        .zip(&*verdicts)
+        .filter(|&(p, v)| *v == Verdict::Wait && !p.owner.is_loader())
+        .map(|(p, _)| p.owner)
+        .collect();
+    owners.sort_unstable();
+    owners.dedup();
+    owners
 }
 
 /// What [`write_thunk`] wrote.

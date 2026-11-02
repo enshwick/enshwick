@@ -317,3 +317,6 @@
 "resistance_lightning.name" = "Odporność na porażenie"
 "resistance_poison.name" = "Odporność na truciznę"
 "mods.developer.off" = "narzędzie deweloperskie: działa tylko wtedy, gdy istnieje plik mod-data/enshwick/developer-tools"
+
+"mods.waiting" = "{name} {version} (czeka)"
+"mods.waiting.why" = "Czeka, aż gra opuści kod, który zmienia ten mod. Wkrótce spróbuje ponownie, potem jeszcze trzy razy co minutę. Potem się wyłączy."

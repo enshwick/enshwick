@@ -55,6 +55,8 @@ pub struct ModStatus {
     pub notes: Vec<String>,
     /// Whether it runs.
     pub running: bool,
+    /// Whether it waits for a code patch, its hooks bypassed.
+    pub waiting: bool,
     /// The lines its status sources gave.
     pub lines: Vec<String>,
     /// The features it reported on or off.
@@ -64,7 +66,11 @@ pub struct ModStatus {
 impl ModStatus {
     /// The mod's lines of the summary.
     fn render(&self, out: &mut String) {
-        let off = if self.running { "" } else { " (off)" };
+        let off = match (self.running, self.waiting) {
+            (false, _) => " (off)",
+            (true, true) => " (waiting for a code patch)",
+            (true, false) => "",
+        };
         let _w = if self.name.is_empty() || self.name == self.id {
             writeln!(out, "  {} {}{off}", self.id, self.version)
         } else {
@@ -159,6 +165,19 @@ pub struct Summary {
     /// Each loader feature that names build table entries, with what this
     /// build lacks of them.
     pub parts: Vec<Part<'static>>,
+}
+
+/// The summary's line on the code patches; the waiting ones only when any
+/// wait.
+fn patches_line(p: Patches) -> String {
+    let line = format!(
+        "code patches: {} written, {} left out (mod off), {} skipped",
+        p.written, p.off, p.skipped
+    );
+    if p.waiting == 0 {
+        return line;
+    }
+    format!("{line}, {} waiting for a thread to leave them", p.waiting)
 }
 
 /// The summary's line on mod messages that did not arrive as sent, `None`
@@ -296,11 +315,7 @@ services and events:"
             "\ncontent: {} resources served ({} built, {} failed), {} texts",
             s.resources, s.built, s.failed, s.texts
         );
-        let _w = writeln!(
-            out,
-            "code patches: {} written, {} left out (mod off), {} skipped",
-            p.written, p.off, p.skipped
-        );
+        let _w = writeln!(out, "{}", patches_line(p));
         if let Some(guard) = &self.knowledge_guard {
             let _w = writeln!(out, "knowledge guard: {guard}");
         }

@@ -193,6 +193,7 @@ pub(crate) fn start(
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
         settings_problems,
+        retry: crate::retry::Retry::default(),
     };
     let Some(loader) = host::install(loader) else {
         return;
@@ -369,6 +370,7 @@ fn records(
                 .collect(),
             off: AtomicBool::new(false),
             off_reason: Mutex::new(None),
+            waiting: AtomicBool::new(false),
             settings: host::Kept::default(),
             synced: Mutex::new(None),
             server_synced: Mutex::new(None),

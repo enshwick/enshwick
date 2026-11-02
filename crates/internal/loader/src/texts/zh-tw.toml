@@ -317,3 +317,6 @@
 "resistance_lightning.name" = "電擊抗性"
 "resistance_poison.name" = "抗毒性"
 "mods.developer.off" = "開發者工具：僅在檔案 mod-data/enshwick/developer-tools 存在時執行"
+
+"mods.waiting" = "{name} {version}（等待中）"
+"mods.waiting.why" = "正在等待遊戲離開此模組變更的程式碼。稍後會重試，之後每隔一分鐘再試三次。仍不成功則關閉。"
