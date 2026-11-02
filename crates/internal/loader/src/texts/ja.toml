@@ -316,3 +316,4 @@
 "resistance_shroud.name" = "シュラウド耐性"
 "resistance_lightning.name" = "雷耐性"
 "resistance_poison.name" = "毒耐性"
+"mods.developer.off" = "開発者ツールです。ファイル mod-data/enshwick/developer-tools がある間だけ動作します"

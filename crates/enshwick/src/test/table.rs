@@ -420,6 +420,29 @@ pub(crate) fn note_manifest(api: *const HostApi, manifest: &crate::abi::Manifest
     }
 }
 
+/// Whether the fake, when `api` is its table, turns the mod of `manifest`
+/// off before its init, as the loader does a mod with `developer: true`
+/// while developer tools are off; records the off reason as the loader
+/// does when it does.
+pub(crate) fn refuses_developer(api: *const HostApi, manifest: &crate::abi::Manifest) -> bool {
+    core::ptr::eq(api, &raw const TABLE)
+        && manifest
+            .flags
+            .contains(crate::abi::ManifestFlags::DEVELOPER)
+        && with(false, |s| {
+            if s.host.developer_tools {
+                return false;
+            }
+            let reason = crate::mods::DEVELOPER_TOOL_OFF;
+            s.faults.push(reason.to_owned());
+            s.logs.push((
+                Level::ERROR,
+                format!("off: {reason} ({})", crate::__private::MOD_OFF),
+            ));
+            true
+        })
+}
+
 /// The base limits the mod asked for, and whether the hooks are armed.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct BaseLimitState {

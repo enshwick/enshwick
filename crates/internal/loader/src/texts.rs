@@ -350,6 +350,14 @@ mod tests {
     }
 
     #[test]
+    fn a_developer_mod_s_english_off_reason_is_the_api_s() {
+        assert_eq!(
+            shipped().get("mods.developer.off", Language::EN_US),
+            Some(enshwick::mods::DEVELOPER_TOOL_OFF)
+        );
+    }
+
+    #[test]
     fn every_language_the_game_offers_has_every_text() {
         assert_eq!(shipped().missing_in(Language::OFFERED), []);
     }

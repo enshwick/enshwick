@@ -316,3 +316,4 @@
 "resistance_shroud.name" = "瘴气抗性"
 "resistance_lightning.name" = "电击抗性"
 "resistance_poison.name" = "毒素抗性"
+"mods.developer.off" = "开发者工具：仅当文件 mod-data/enshwick/developer-tools 存在时运行"

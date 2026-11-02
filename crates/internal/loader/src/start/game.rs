@@ -96,6 +96,8 @@ pub(super) struct Begun {
     pub(super) report: Option<std::thread::JoinHandle<()>>,
     /// What was wrong in the loader settings file, a line each.
     pub(super) settings_problems: Vec<String>,
+    /// Whether developer tools are on, by the file read once at start.
+    pub(super) developer_tools: bool,
 }
 
 /// Creates `mods/`, reads the loader settings, opens the log and starts
@@ -125,20 +127,34 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     let (settings, settings_problems) = crate::settings::Settings::read(&settings_file, listed);
     crate::status::mark_start();
     crate::diag::configure(&settings);
-    crate::reload::configure(settings.dev_reload);
+    let side = identify().map(|(side, _, _)| side);
+    let developer_tools = crate::developer_tools::marked(&game_dir);
+    crate::reload::configure(settings.dev_reload && developer_tools);
     crate::knowledge::guard::configure(settings.knowledge_guard);
     crate::admission::configure(&settings);
     crate::allowlist::configure(&settings);
     crate::ui::configure_actions_key(&settings.actions_key);
-    crate::texts::configure(
-        &settings.language,
-        identify().is_some_and(|(side, _, _)| side == Side::SERVER),
-    );
+    crate::texts::configure(&settings.language, side == Some(Side::SERVER));
+    let dev_reload_held = settings.dev_reload && !developer_tools;
     builds::configure(settings.build_patterns);
     let motd = settings.motd.clone();
     log::set_levels(settings);
     log::open(&game_dir.join(log::LOGS).join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
+    if developer_tools {
+        crate::log!(
+            WARN,
+            "developer tools are on: {} exists; never on a game players join",
+            enshwick::mods::DEVELOPER_TOOLS
+        );
+    }
+    if dev_reload_held {
+        crate::log!(
+            WARN,
+            "dev_reload is on but reloads stay off: mods reload only while the file {} exists",
+            enshwick::mods::DEVELOPER_TOOLS
+        );
+    }
     crate::greeting::configure(&motd);
     let applies = if settings_problems.unread {
         "the defaults apply"
@@ -183,6 +199,7 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
         mods_dir,
         report: report.ok(),
         settings_problems: settings_problems.lines,
+        developer_tools,
     })
 }
 

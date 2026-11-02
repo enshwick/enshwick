@@ -8,6 +8,14 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** a mod with `developer: true` and `dev_reload` run only
+  while the file `mods::DEVELOPER_TOOLS`, `mod-data/enshwick/developer-tools`,
+  exists, on a dedicated server, a client and a game a client hosts alike:
+  without it the mod is off before its `init`, with
+  `mods::DEVELOPER_TOOL_OFF` in the log and on the Mods screen, and
+  `dev_reload` stays off with a warning. The fake host has developer tools
+  off by default and refuses a developer mod's `init` the same way; a
+  developer mod's tests add `FakeHost::developer_tools(true)` (#893).
 - **Breaking:** mod settings show only behind each mod's Settings button on
   the Mods screen: the player's own settings, then the world's. In a world
   the game runs, single player or hosted, those are that world's; in the

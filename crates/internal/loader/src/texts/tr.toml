@@ -316,3 +316,4 @@
 "resistance_shroud.name" = "Pus Direnci"
 "resistance_lightning.name" = "Şok Direnci"
 "resistance_poison.name" = "Zehir Direnci"
+"mods.developer.off" = "bir geliştirici aracı: yalnızca mod-data/enshwick/developer-tools dosyası varken çalışır"

@@ -377,7 +377,7 @@ pub use enshwick_macros::config;
 /// | `name` | what players read; the id when left out |
 /// | `join` | `true`: the mod counts in the join check |
 /// | `reload` | `true`: a development server may reload it ([`ManifestFlags::RELOAD`](abi::ManifestFlags::RELOAD)) |
-/// | `developer` | `true`: a developer tool; every player reads a warning while it runs ([`ManifestFlags::DEVELOPER`](abi::ManifestFlags::DEVELOPER)) |
+/// | `developer` | `true`: a developer tool; it runs only while [`mods::DEVELOPER_TOOLS`] exists ([`ManifestFlags::DEVELOPER`](abi::ManifestFlags::DEVELOPER)) |
 /// | `replaces` | ids of mods this one takes the place of; the loader never starts them beside it |
 /// | `requires`, `after`, `recommends`, `breaks` | tables of other mods by alias, each a mod id or `{ id, version }` with a Cargo-style range; `after` takes no range; [`deps!`] names them in code |
 /// | `builds` | rows of symbols and constants the mod pins for game builds |
