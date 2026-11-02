@@ -1,5 +1,5 @@
-//! The schemas of points, events and calls, and the `.enshpt` entries that
-//! ship them with their mod.
+//! The schemas of points, events, calls and services, and the `.enshpt`
+//! entries that ship them with their mod.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -11,8 +11,8 @@ use crate::{declare, schema_doc};
 
 /// The `.enshpt` entry of a declaration marked `export`, `declared` being
 /// `<Type as Trait>`; none without the flag. The mod's own ships its
-/// schema, or a service its name; an event that a schema cannot describe
-/// fails the build. Another mod's, a full name of another id, fails the
+/// schema; an event or a service that a schema cannot describe fails the
+/// build. Another mod's, a full name of another id, fails the
 /// build, except in a test build, where a test binary declares mods of
 /// other ids and an event a schema cannot describe ships nothing.
 ///
@@ -57,14 +57,10 @@ pub(crate) fn schema_entry(
         ));
     }
     let schema = match kind {
-        Kind::Service => {
-            let text = format!("[[service]]\nname = {}\n", toml_string(&full));
-            quote!(#text)
-        }
         Kind::Event if !matches!(owner, declare::Owner::Own) => {
             quote!(if #declared::DESCRIBED { #declared::SCHEMA } else { "" })
         }
-        Kind::Point | Kind::Call | Kind::Event => quote!(#declared::SCHEMA),
+        Kind::Point | Kind::Call | Kind::Event | Kind::Service => quote!(#declared::SCHEMA),
     };
     match owner {
         // A test crate may declare other mods' names without a mod of its
@@ -108,7 +104,7 @@ pub(crate) enum Kind {
     Call,
     /// A mod event.
     Event,
-    /// A service table, whose entry is its name alone.
+    /// A service table.
     Service,
 }
 
@@ -158,6 +154,99 @@ pub(crate) fn event_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -
             #(#parts,)* #table, #(#fields,)* #(#nested,)*
         );
     }
+}
+
+/// The `SCHEMA` of a service: its `[[service]]` table with the layout
+/// hashes, then the `[[type]]` tables of the table and the types its
+/// fields reach. An `extern "system"` function field is `fn(<args>) -> <answer>`,
+/// with `unsafe ` before it for an unsafe one. Evaluating it, which an
+/// exported service does, fails the build on a field a schema cannot
+/// describe.
+pub(crate) fn service_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -> TokenStream {
+    let shape = quote!(::enshwick::Shape);
+    let service = quote!(::enshwick::services::Service);
+    let ident = &item.ident;
+    let table = ident.unraw().to_string();
+    let head = format!(
+        "[[service]]\nname = {}\ntable = {}\ndoc = {}\nmajor = ",
+        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
+        toml_string(&table),
+        toml_string(&schema_doc(&item.attrs)),
+    );
+    let mut parts = vec![quote!(#head, <#ident as #service>::MAJOR, "\nlayout = [")];
+    let mut checks = Vec::new();
+    let mut fields = Vec::new();
+    let mut nested = Vec::new();
+    for (i, field) in item.fields.iter().enumerate() {
+        let Some(field_ident) = &field.ident else {
+            continue;
+        };
+        let label = field_ident.unraw().to_string();
+        let separator = if i == 0 { "\"" } else { ", \"" };
+        parts.push(quote!(#separator, <#ident as #service>::LAYOUT[#i].hash, "\""));
+        let entry = format!(
+            "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
+            toml_string(&label),
+            toml_string(&schema_doc(&field.attrs))
+        );
+        let mut described = |ty: &Type| {
+            let message = format!(
+                "an exported service's schema cannot describe a type in `{label}`: derive `Shape` for it"
+            );
+            checks.push(quote!(assert!(!<#ty as #shape>::SCHEMA_NAME.is_empty(), #message);));
+            nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
+            quote!(<#ty as #shape>::SCHEMA_NAME)
+        };
+        let text = match &field.ty {
+            Type::FnPtr(function) if is_system(function) => {
+                let unsafety = if function.unsafety.is_some() {
+                    "unsafe fn("
+                } else {
+                    "fn("
+                };
+                let mut text = vec![quote!(#unsafety)];
+                for (j, input) in function.inputs.iter().enumerate() {
+                    if j > 0 {
+                        text.push(quote!(", "));
+                    }
+                    text.push(described(&input.ty));
+                }
+                text.push(quote!(")"));
+                if let syn::ReturnType::Type(_, output) = &function.output
+                    && !matches!(&**output, Type::Tuple(unit) if unit.elems.is_empty())
+                {
+                    let output = described(output);
+                    text.push(quote!(" -> ", #output));
+                }
+                quote!(#(#text),*)
+            }
+            ty => described(ty),
+        };
+        fields.push(quote!(#entry, #text, "\"\n"));
+    }
+    let table = format!(
+        "]\n[[type]]\nname = {}\ndoc = {}\nkind = \"struct\"\n",
+        toml_string(&table),
+        toml_string(&schema_doc(&item.attrs))
+    );
+    quote! {
+        const SCHEMA: &'static str = {
+            #(#checks)*
+            ::enshwick::__private::concatcp!(#(#parts,)* #table, #(#fields,)* #(#nested,)*)
+        };
+    }
+}
+
+/// Whether `function` is an `extern "system"` function, the only kind a
+/// service schema describes; another kind fails the check of its type.
+fn is_system(function: &syn::TypeFnPtr) -> bool {
+    function.variadic.is_none()
+        && function.lifetimes.is_none()
+        && function
+            .abi
+            .as_ref()
+            .and_then(|abi| abi.name.as_ref())
+            .is_some_and(|name| name.value() == "system")
 }
 
 /// The `SCHEMA` of a call: its `[[call]]` table with the layout hashes, then

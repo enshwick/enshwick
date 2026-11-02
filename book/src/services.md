@@ -138,20 +138,27 @@ Other mods reach the service and the event only when the publisher
 [exports](concepts/loader-and-abi.md#what-other-mods-may-use) them, with
 `export` on their declarations, as in
 `#[enshwick::service(name = "prices", export)]` and
-`#[enshwick::event(name = "sold", export)]`.
+`#[enshwick::event(name = "sold", export)]`. An exported table's fields are
+`extern "system"` functions and data whose types and arguments a schema
+describes: numbers, `bool`, the API's own types and types that derive
+`Shape`. Any other field fails the build. A Luau mod cannot call a
+service, so `cargo enshwick deps --luau` leaves services out and says so.
 
 ## Using a service
 
 [`load.service::<T>()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 returns the table once the loader has checked that the published table
-starts with every field of `T`. The user declares `T` in its own crate: the
-publisher's fields it needs, in the publisher's order, named with the alias
-its `Cargo.toml` gives the publisher (see [Load order](#load-order)):
+starts with every field of `T`. The publisher's manifest carries the schema
+of every service it exports, and
+[`cargo enshwick deps`](extending.md#getting-a-points-definition) writes
+the declaration of `T` into `src/deps/trading_post.rs`, named with the alias
+the user's `Cargo.toml` gives the publisher (see [Load order](#load-order)),
+with checks that hold each field to the publisher's layout:
 
 ```rust
-#[enshwick::service(name = "prices", of = trading_post)]
+#[enshwick::service(name = "prices", of = trading_post, version = 1)]
 pub struct Prices {
-    pub price: extern "system" fn(item: u32) -> u32,
+    pub price: extern "system" fn(u32) -> u32,
 }
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

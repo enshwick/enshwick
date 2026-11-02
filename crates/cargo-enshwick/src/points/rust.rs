@@ -1,13 +1,13 @@
-//! The Rust module of what a dependency offers: each point, call and mod
-//! event, declared by its local name `of` the dependency's alias, then every
-//! named type they reach, once.
+//! The Rust module of what a dependency offers: each point, call, mod event
+//! and service, declared by its local name `of` the dependency's alias, then
+//! every named type they reach, once.
 
 use std::fmt::Write as _;
 
 use super::calls::CallSchema;
 use super::{
-    Error, EventSchema, FieldSchema, Kind, PointSchema, Schema, TypeSchema, doc, find, hex,
-    is_ident, local_name, named_type, reached_from, rust_type,
+    Error, EventSchema, FieldSchema, Kind, PointSchema, Schema, ServiceSchema, TypeSchema, doc,
+    find, hex, is_ident, local_name, named_type, reached_from, rust_type,
 };
 
 /// The Rust module of everything `schema` offers other mods, for a mod that
@@ -25,7 +25,7 @@ use super::{
 /// ```
 /// use cargo_enshwick::points::{Schema, rust_deps};
 ///
-/// let schema = Schema::parse("schema = 2\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+/// let schema = Schema::parse("schema = 3\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
 /// assert!(rust_deps(&schema, "stalls")?.contains("`cargo enshwick deps stalls`"));
 /// assert!(rust_deps(&schema, "two words").is_err());
 /// # Ok::<(), cargo_enshwick::points::Error>(())
@@ -51,6 +51,7 @@ pub fn rust_deps(schema: &Schema, alias: &str) -> Result<String, Error> {
     let inputs: Vec<&str> = (schema.point.iter().map(|p| p.input.as_str()))
         .chain(schema.call.iter().map(|c| c.input.as_str()))
         .chain(schema.event.iter().map(|e| e.data.as_str()))
+        .chain(schema.service.iter().map(|s| s.table.as_str()))
         .collect();
     let shared =
         (inputs.iter().enumerate()).find_map(|(i, t)| inputs[..i].contains(t).then_some(*t));
@@ -69,6 +70,9 @@ pub fn rust_deps(schema: &Schema, alias: &str) -> Result<String, Error> {
     }
     for event in &schema.event {
         reached.extend(declare_event(&mut code, schema, event, alias)?);
+    }
+    for service in &schema.service {
+        reached.extend(declare_service(&mut code, schema, service, alias)?);
     }
     reached.retain(|t| !inputs.contains(&t.name.as_str()));
     reached.sort_by(|a, b| a.name.cmp(&b.name));
@@ -311,6 +315,43 @@ fn declare_event<'a>(
     )
 }
 
+/// Writes the declaration of `service`'s table with its checks, and returns
+/// the named types its fields reach.
+fn declare_service<'a>(
+    code: &mut String,
+    schema: &'a Schema,
+    service: &'a ServiceSchema,
+    alias: &str,
+) -> Result<Vec<&'a TypeSchema>, Error> {
+    let name = service.name.as_str();
+    let local = local_name(schema, name)?;
+    let table = input_of(schema, name, &service.table, &service.layout)?;
+    let attribute = format!(
+        "#[enshwick::service(name = {local:?}, of = {alias}, version = {})]",
+        service.major
+    );
+    let fallback = format!("The table of `{name}`.");
+    declaration(code, &service.doc, &fallback, &attribute, table);
+    checks(
+        code,
+        &service.table,
+        &Checks {
+            name,
+            of: "enshwick::services::Service",
+            whose: "publisher's",
+            fields: &table.field,
+            layout: &service.layout,
+            output: None,
+            size: None,
+        },
+    )?;
+    reached_from(
+        schema,
+        name,
+        table.field.iter().map(|f| f.ty.as_str()).collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{Error, Schema};
@@ -326,6 +367,75 @@ mod tests {
             code.contains("#[enshwick::event(name = \"opened\", of = lockers)]"),
             "{code}"
         );
+    }
+
+    const SERVICE: &str = r#"schema = 3
+mod = "you.trading-post"
+version = "1.2.0"
+[[service]]
+name = "you.trading-post:prices"
+table = "Prices"
+doc = "Item prices."
+major = 2
+layout = ["1", "2", "3"]
+[[type]]
+name = "Prices"
+doc = "Item prices."
+kind = "struct"
+[[type.field]]
+name = "price"
+doc = "The price of an item."
+type = "fn(u32, Deal) -> u32"
+[[type.field]]
+name = "reset"
+doc = "Forgets every price."
+type = "unsafe fn()"
+[[type.field]]
+name = "count"
+doc = "How many prices there are."
+type = "u32"
+[[type]]
+name = "Deal"
+doc = "What the player does."
+kind = "enum"
+repr = "u8"
+[[type.variant]]
+name = "Buy"
+value = 0
+"#;
+
+    #[test]
+    fn a_service_becomes_a_table_of_the_alias_with_its_functions_and_checks() {
+        let schema = Schema::parse(SERVICE).unwrap();
+        assert_eq!(
+            schema.services().collect::<Vec<_>>(),
+            ["you.trading-post:prices"]
+        );
+        insta::assert_snapshot!(rust_deps(&schema, "trading_post").unwrap());
+    }
+
+    #[test]
+    fn a_function_type_outside_a_service_table_or_of_a_bad_type_is_refused() {
+        let outside = SERVICE.replace("table = \"Prices\"", "table = \"Deal\"");
+        assert!(matches!(
+            Schema::parse(&outside),
+            Err(Error::Invalid {
+                what: "field type",
+                ..
+            })
+        ));
+        for bad in [
+            "fn(u32, ) -> u32",
+            "fn(u32) -> u32 {}",
+            "fn(Nope)",
+            "fn(u32) u32",
+        ] {
+            let text = SERVICE.replace("fn(u32, Deal) -> u32", bad);
+            assert!(
+                matches!(Schema::parse(&text), Err(Error::Invalid { .. })),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

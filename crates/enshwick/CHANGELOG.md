@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** an exported `#[enshwick::service]` ships its schema, a
+  `[[service]]` table with its name, major, doc and layout hashes and a
+  `[[type]]` table of its fields, `extern "system"` functions written as
+  `fn(<arguments>) -> <answer>`; `Service::SCHEMA` holds it. A field a
+  schema cannot describe fails the build of an exported service. The schema
+  format is 3: a mod built with an older release asks for a rebuild (#910).
 - **Breaking:** `Installed::start` takes the mod's `enshwick_mod_query`
   first, as `start(enshwick_mod_query, enshwick_mod_init,
   enshwick_mod_ready)`, and reads the manifest before init as the loader

@@ -1,6 +1,6 @@
 //! The `.enshpt` section of a mod binary, for the manifest and for
-//! `cargo enshwick`, which read it alike. Each exported point, event and
-//! call writes its schema there, each exported service its name, and
+//! `cargo enshwick`, which read it alike. Each exported point, event, call
+//! and service writes its schema there, and
 //! `declare_mod!` its head, which names the mod and the content and stat
 //! kinds its `exports` lists.
 //!
@@ -13,7 +13,7 @@
 use crate::__private::is_own;
 
 /// The schema format a head states, which `cargo enshwick` checks.
-pub const FORMAT: u32 = 2;
+pub const FORMAT: u32 = 3;
 
 /// What a mod exports, and what an entry declares; entries of a schema text
 /// go in this order.
@@ -26,7 +26,7 @@ pub enum Kind {
     Event,
     /// A call.
     Call,
-    /// A service table, whose entry carries no schema.
+    /// A service table.
     Service,
     /// A content id, exported by `exports` and never an entry.
     Content,
@@ -189,7 +189,7 @@ impl<'a> Entry<'a> {
 /// ```
 /// use enshwick::schema_section::Section;
 ///
-/// let section = Section::parse(b"schema = 2\nmod = \"you.a\"\n")?;
+/// let section = Section::parse(b"schema = 3\nmod = \"you.a\"\n")?;
 /// assert_eq!(section.heads()[0].id, "you.a");
 /// # Ok::<(), enshwick::schema_section::ReadSectionError>(())
 /// ```
@@ -238,7 +238,7 @@ impl<'a> Section<'a> {
     /// use enshwick::schema_section::{Kind, Section};
     ///
     /// let section = Section::parse(
-    ///     b"\0schema = 2\nmod = \"you.a\"\n\0\0[[event]]\nname = \"you.a:sold\"\n\0",
+    ///     b"\0schema = 3\nmod = \"you.a\"\n\0\0[[event]]\nname = \"you.a:sold\"\n\0",
     /// )?;
     /// assert_eq!(section.heads()[0].id, "you.a");
     /// assert_eq!(section.entries()[0].kind, Kind::Event);
@@ -331,8 +331,8 @@ impl<'a> Section<'a> {
         names
     }
 
-    /// The schema text of the mod `id`: `head`, then its points, events and
-    /// calls by kind, name and text; empty when it has none.
+    /// The schema text of the mod `id`: `head`, then its points, events,
+    /// calls and services by kind, name and text; empty when it has none.
     ///
     /// # Examples
     ///
@@ -340,22 +340,18 @@ impl<'a> Section<'a> {
     /// use enshwick::schema_section::Section;
     ///
     /// let section = Section::parse(
-    ///     b"[[event]]\nname = \"you.a:sold\"\n\0[[service]]\nname = \"you.a:prices\"\n\0[[point]]\nname = \"you.b:price\"\n",
+    ///     b"[[service]]\nname = \"you.a:prices\"\n\0[[event]]\nname = \"you.a:sold\"\n\0[[point]]\nname = \"you.b:price\"\n",
     /// )?;
     /// assert_eq!(
-    ///     section.schema("schema = 2\n", "you.a"),
-    ///     "schema = 2\n[[event]]\nname = \"you.a:sold\"\n",
+    ///     section.schema("schema = 3\n", "you.a"),
+    ///     "schema = 3\n[[event]]\nname = \"you.a:sold\"\n[[service]]\nname = \"you.a:prices\"\n",
     /// );
-    /// assert_eq!(section.schema("schema = 2\n", "you.c"), "");
+    /// assert_eq!(section.schema("schema = 3\n", "you.c"), "");
     /// # Ok::<(), enshwick::schema_section::ReadSectionError>(())
     /// ```
     #[must_use]
     pub fn schema(&self, head: &str, id: &str) -> String {
-        let mut own: Vec<&Entry<'a>> = self
-            .entries
-            .iter()
-            .filter(|e| e.kind != Kind::Service && is_own(id, e.name))
-            .collect();
+        let mut own: Vec<&Entry<'a>> = self.entries.iter().filter(|e| is_own(id, e.name)).collect();
         if own.is_empty() {
             return String::new();
         }
@@ -387,8 +383,8 @@ fn value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
 /// ```
 /// use enshwick::schema_section::head_id;
 ///
-/// assert_eq!(head_id("schema = 2\nmod = \"you.a\"\nversion = \"1.0.0\"\n"), Some("you.a"));
-/// assert_eq!(head_id("schema = 2\n"), None);
+/// assert_eq!(head_id("schema = 3\nmod = \"you.a\"\nversion = \"1.0.0\"\n"), Some("you.a"));
+/// assert_eq!(head_id("schema = 3\n"), None);
 /// ```
 #[must_use]
 pub fn head_id(head: &str) -> Option<&str> {
@@ -410,12 +406,12 @@ mod tests {
     #[test]
     fn a_head_of_another_format_is_reported_before_any_table() {
         use super::{FORMAT, ReadSectionError};
-        let newer = b"[[future]]\nname = \"you.a:x\"\n\0schema = 3\nmod = \"you.a\"\n";
+        let newer = b"[[future]]\nname = \"you.a:x\"\n\0schema = 4\nmod = \"you.a\"\n";
         let error = Section::parse(newer).unwrap_err();
-        assert_eq!(error, ReadSectionError::Format(3));
+        assert_eq!(error, ReadSectionError::Format(4));
         assert_eq!(
             error.to_string(),
-            format!("the point section is format 3; this enshwick reads {FORMAT}")
+            format!("the point section is format 4; this enshwick reads {FORMAT}")
         );
         let older = Section::parse(b"schema = 1\nmod = \"you.a\"\n[[point]]\nname = \"you.a:p\"\n")
             .unwrap_err();

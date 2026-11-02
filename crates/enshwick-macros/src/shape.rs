@@ -1,12 +1,11 @@
 use std::fmt::Write as _;
 
-use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use syn::ext::IdentExt as _;
 use syn::{Attribute, Data, DeriveInput, Fields, Ident};
 
-use crate::{expand_declaration, schema_doc};
+use crate::schema_doc;
 
 /// The integer `repr`s an enum may have; 128-bit ones are left out, since
 /// the hash takes a discriminant as an `i128`.
@@ -281,21 +280,4 @@ pub(super) fn shape_schema(
         const SCHEMA_TYPES: &'static str =
             ::enshwick::__private::concatcp!(#(#parts,)* #(#nested,)*);
     }
-}
-
-/// The struct as `repr(C)` with its layout trait: `major` is `Some` for a
-/// service.
-pub(super) fn expand_layout(
-    item: &syn::ItemStruct,
-    name: Option<syn::LitStr>,
-    major: Option<proc_macro2::TokenStream>,
-    trait_name: &proc_macro2::TokenStream,
-) -> syn::Result<TokenStream> {
-    let major = major.map(|major| quote!(const MAJOR: u32 = #major;));
-    expand_declaration(
-        item,
-        name,
-        &major.unwrap_or_default(),
-        &quote!(services::#trait_name),
-    )
 }
