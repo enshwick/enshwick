@@ -103,7 +103,12 @@ go to `logs/enshwick/loader.log`.
 The file is append-only. When lines that already ran are changed or
 removed, no line runs again: the loader counts the lines that ran, runs only
 the lines past that count, and writes a warning to the log. To start over,
-empty the file; its next lines run from the first. Administrators and their scripts reach the
+empty the file; its next lines run from the first. A file that another
+program holds open is read again a second later, and no line runs twice. A
+file that is deleted and made again, or replaced by another file, runs from
+its first line when it holds none of the lines that already ran; otherwise it
+counts as an edit. A file that does not read is noted in the log at most once
+a minute, and again when it reads. Administrators and their scripts reach the
 console this way without anyone joining.
 
 ### The server's console window

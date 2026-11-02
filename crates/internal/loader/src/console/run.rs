@@ -9,7 +9,7 @@ use crate::host::Loader;
 use crate::locks::Relock;
 use crate::texts;
 
-use super::file::{Watched, watch};
+use super::file::{Note, Watched, watch};
 use super::input::{self, End};
 use super::{Line, Source, Tool, command_files, log_query, parse, submit, take};
 
@@ -33,13 +33,35 @@ pub(crate) fn start(loader: &'static Loader) {
             watch(
                 files,
                 |path, line| submit(line, Source::File(shown(&game, path))),
-                |path| {
-                    crate::log!(
-                        WARN,
-                        "{} was edited, not appended to: lines that ran do not run again, \
-                         and only lines past their count run; empty the file to start over",
-                        shown(&game, path)
-                    );
+                |path, note| {
+                    let file = shown(&game, path);
+                    match note {
+                        Note::Edited => crate::log!(
+                            WARN,
+                            "{file} was edited, not appended to: lines that ran do not run again, \
+                             and only lines past their count run; empty the file to start over"
+                        ),
+                        Note::Unread { error, quiet: 0 } => crate::log!(
+                            WARN,
+                            "{file} does not read, so no line in it runs until it does: {error}"
+                        ),
+                        Note::Unread { error, quiet } => crate::log!(
+                            WARN,
+                            "{file} does not read, so no line in it runs until it does: {error} \
+                             ({quiet} more times since the last warning)"
+                        ),
+                        Note::ReadsAgain { skipped: 0 } => {
+                            crate::log!(INFO, "{file} reads again");
+                        }
+                        Note::ReadsAgain { skipped: 1 } => crate::log!(
+                            WARN,
+                            "{file} reads again; the line it held at start does not run"
+                        ),
+                        Note::ReadsAgain { skipped } => crate::log!(
+                            WARN,
+                            "{file} reads again; the {skipped} lines it held at start do not run"
+                        ),
+                    }
                 },
             )
         });

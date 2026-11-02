@@ -316,6 +316,12 @@ Each entry names the pull request that made the change.
 
 - A poisoned lock's warning names the line that took the lock, not a line
   inside the API (#821).
+- The command file runs no line again when it does not read for a while,
+  as when another program holds it open, and logs that at most once a
+  minute and again when it reads. A file that is deleted and made again, or
+  replaced by another file, runs from its start when it holds none of the
+  lines that ran, and counts as an edit otherwise. A file that does not read
+  at start skips only the lines it held then, and says how many (#861).
 - A bad value in `mod-configs/enshwick.toml` holds closed only the
   protections it could stand for: its own key, or every missing one when the
   bad key is unknown or a table. A file that is not TOML names the line and
