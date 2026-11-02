@@ -446,6 +446,9 @@ fn stop_replacement(stop: usize, next: usize, len: usize) -> Option<Box<[u8]>> {
 /// The lift of the workshop limit, as the log and the Mods screen name it.
 const LIFT_FEATURE: &str = "workshop recipe limit";
 
+/// The per-workshop list lookup, as the log and the Mods screen name it.
+const LOOKUP_FEATURE: &str = "recipe list lookup";
+
 /// Why the lift is off, by the table entry it names.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 enum LiftLimitError {
@@ -603,8 +606,7 @@ fn lookup_address(loader: &'static Loader) -> Option<u64> {
         let lookup = match checked(loader, pinned::recipe::LIST_LOOKUP) {
             Ok(at) => at as u64,
             Err(off) => {
-                let id = off.entry();
-                crate::log!(WARN, "the recipe list lookup is not found: {id} {off}");
+                let _off = loader.feature_off(LOOKUP_FEATURE, off.entry(), &off.to_string());
                 return None;
             }
         };
