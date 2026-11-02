@@ -213,7 +213,7 @@ pub(crate) fn sha256_of(id: &str) -> Option<String> {
         all.push(0);
         all.extend_from_slice(files.get(name).unwrap_or_default());
     }
-    Some(crate::modlist::sha256(&all))
+    Some(crate::record::sha256(&all))
 }
 
 /// Logs every problem of a pack under its id, one line each.

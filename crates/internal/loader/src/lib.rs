@@ -157,7 +157,6 @@ mod memory;
 #[cfg(windows)]
 mod mid;
 pub mod mod_index;
-pub mod modlist;
 pub mod mods_screen;
 #[cfg(windows)]
 mod module;
@@ -213,6 +212,7 @@ mod rate_links;
 )]
 mod rates;
 pub mod recipes;
+pub mod record;
 pub mod registry;
 pub mod remote;
 #[cfg_attr(

@@ -16,7 +16,6 @@ use crate::code::Watching;
 use crate::code_watch::Stage;
 use crate::host::{self, Loader, ModRecord};
 use crate::mod_index::ModIndex;
-use crate::modlist;
 use crate::patch::FrameSlot;
 use crate::resolve::{self, Candidate};
 
@@ -25,7 +24,7 @@ mod dry_run;
 mod game;
 mod join_check;
 mod library;
-mod lock;
+pub(crate) mod record;
 
 pub use dry_run::{DryMod, DryRun, DryRunError, dry_run};
 pub(crate) use join_check::TABLE_IDS;
@@ -34,7 +33,6 @@ use arm::arm;
 use game::{begin, game, wait_for_window};
 use join_check::{link_join, names, pages};
 use library::{Library, Run, libraries, unload};
-use lock::write_lock;
 
 /// The client starts under Steam's DRM wrapper, which may check the game's code
 /// before it runs. The game opens its window only once its own code runs, so
@@ -57,22 +55,6 @@ fn no_game(
         crate::report::write(game_dir, stub, None);
     }
     None
-}
-
-/// Warns about each DLL of `mods/chain/` the stub did not load.
-fn warn_unloaded(others: &[crate::others::OtherDll]) {
-    let chained = others
-        .iter()
-        .filter(|dll| dll.origin == crate::others::Origin::Chain && !dll.loaded);
-    for dll in chained {
-        crate::log!(
-            WARN,
-            "{}/{} did not load ({})",
-            crate::others::CHAIN_DIR,
-            dll.file,
-            crate::errors::CHAIN_NOT_LOADED
-        );
-    }
 }
 
 /// Stops the game when a mod that holds a world is not running.
@@ -160,11 +142,16 @@ pub(crate) fn start(
             w.check(file, Stage::Load);
         }
     });
-    warn_unloaded(&others);
-    let lock_files: Vec<(String, String)> = libraries
+    let folders: Vec<(String, String, String)> = libraries
         .iter()
         .zip(&candidates)
-        .map(|(library, candidate)| (candidate.id.clone(), library.file.clone()))
+        .map(|(library, candidate)| {
+            (
+                candidate.id.clone(),
+                library.folder.clone(),
+                library.file.clone(),
+            )
+        })
         .collect();
     let plan = resolve::resolve(&candidates, game.side);
     skip(&libraries, &candidates, &plan);
@@ -227,7 +214,7 @@ pub(crate) fn start(
     if let Some(w) = watching {
         w.finish();
     }
-    write_lock(loader, lock_files);
+    record::take(loader, folders);
     start_services(loader);
 }
 
@@ -308,17 +295,17 @@ fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
         .map(|(old, by)| {
             let library = &libraries[old];
             unload(library);
-            let replaced = modlist::Replaced {
+            let replaced = crate::record::Replaced {
                 id: candidates[old].id.clone(),
                 version: candidates[old].version.to_string(),
-                file: library.file.clone(),
+                folder: library.folder.clone(),
                 by: by.to_owned(),
             };
             crate::log!(WARN, "{}", replaced.line());
             replaced
         })
         .collect();
-    modlist::set_replaced(replaced);
+    crate::record::set_replaced(replaced);
 }
 
 /// The records of the mods `plan` loads, in load order, with their notes

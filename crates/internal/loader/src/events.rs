@@ -586,6 +586,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
                 SESSION.relock().begin();
             }
             crate::worlds::load(loader);
+            crate::start::record::write_for_world(loader);
             loader.emit(Event::WORLD_LOADED, None, core::ptr::null());
         }
         STATE_SHUTDOWN if old != STATE_SHUTDOWN => {

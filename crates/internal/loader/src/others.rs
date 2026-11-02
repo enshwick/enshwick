@@ -1,16 +1,9 @@
-//! DLLs that run beside Enshwick without its API: native mods in `mods/`,
-//! which the loader loads and leaves alone, other mods' proxies in
-//! `mods/chain/`, which the `powrprof.dll` stub loads before the loader, and
-//! other mods' proxies the game loads from its own folder.
+//! DLLs that run beside Enshwick without its API: other mods' proxies the
+//! game loads from its own folder.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use enshwick_gamedata::reflect::{Image, Layout};
-
-/// The folder whose DLLs the stub loads before the loader, as messages name
-/// it.
-#[cfg(windows)]
-pub(crate) const CHAIN_DIR: &str = "mods/chain";
 
 /// The files among `names` that take a system DLL's place, sorted by name:
 /// DLLs that `takes_place` says stand in for a system folder's DLL,
@@ -90,12 +83,6 @@ const SUBDIRECTORY: u32 = 0x8000_0000;
 const MOST_ENTRIES: u32 = 4096;
 /// The most bytes of a version resource read.
 const LONGEST_VERSION: u64 = 0x4000;
-
-/// The folder under `game_dir` whose DLLs the stub loads, in the form the
-/// stub loads them from, so a module lookup by path finds them.
-pub(crate) fn chain_dir(game_dir: &Path) -> PathBuf {
-    game_dir.join("mods").join("chain")
-}
 
 /// Whether the DLL at `path` exports the Enshwick interface, read from its
 /// export table without loading it; `None` when the file does not read as a
@@ -209,59 +196,44 @@ fn version_company(blob: &[u8]) -> Option<String> {
     String::from_utf16(&text).ok()
 }
 
-/// Where a DLL that does not use the API sits.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Origin {
-    /// Directly in `mods/`, loaded by the loader.
-    Mods,
-    /// In `mods/chain/`, loaded by the stub.
-    Chain,
-    /// In the game's folder under a name the game loads, loaded by Windows.
-    Game,
-}
-
-/// A DLL that runs beside Enshwick without its API.
+/// Another mod's proxy in the game's folder, which runs beside Enshwick
+/// without its API.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct OtherDll {
     /// Its file name.
     pub(crate) file: String,
-    /// Where it sits.
-    pub(crate) origin: Origin,
     /// Whether it is loaded in the game now.
     pub(crate) loaded: bool,
 }
 
-/// The lines the status summary shows for `others`, an empty list for none.
+/// The line the status summary shows for `others`; none for none.
 #[must_use]
 pub(crate) fn lines(others: &[OtherDll]) -> Vec<String> {
-    [
-        (Origin::Mods, "native mods in mods/, without Enshwick's API"),
-        (Origin::Chain, "loaded from mods/chain/ before the loader"),
-        (Origin::Game, "other mods' proxies in the game's folder"),
-    ]
-    .into_iter()
-    .filter_map(|(origin, heading)| {
-        let files: Vec<String> = others
-            .iter()
-            .filter(|dll| dll.origin == origin)
-            .map(|dll| match (dll.loaded, dll.origin) {
-                (true, _) => dll.file.clone(),
-                (false, Origin::Game) => format!("{} (not loaded at start)", dll.file),
-                (false, _) => format!("{} (did not load)", dll.file),
-            })
-            .collect();
-        (!files.is_empty()).then(|| format!("{heading}: {}", files.join(", ")))
-    })
-    .collect()
+    let files: Vec<String> = others
+        .iter()
+        .map(|dll| {
+            if dll.loaded {
+                dll.file.clone()
+            } else {
+                format!("{} (not loaded at start)", dll.file)
+            }
+        })
+        .collect();
+    if files.is_empty() {
+        return Vec::new();
+    }
+    vec![format!(
+        "other mods' proxies in the game's folder: {}",
+        files.join(", ")
+    )]
 }
 
-/// The file names of `others` from `origin` that are loaded, or with
-/// `loaded` false, that are not.
+/// The file names of `others` that are loaded.
 #[must_use]
-pub(crate) fn files(others: &[OtherDll], origin: Origin, loaded: bool) -> Vec<&str> {
+pub(crate) fn loaded(others: &[OtherDll]) -> Vec<&str> {
     others
         .iter()
-        .filter(|dll| dll.origin == origin && dll.loaded == loaded)
+        .filter(|dll| dll.loaded)
         .map(|dll| dll.file.as_str())
         .collect()
 }
@@ -270,33 +242,26 @@ pub(crate) fn files(others: &[OtherDll], origin: Origin, loaded: bool) -> Vec<&s
 mod tests {
     use super::*;
 
-    fn dll(file: &str, origin: Origin, loaded: bool) -> OtherDll {
-        OtherDll {
-            file: file.into(),
-            origin,
-            loaded,
-        }
-    }
-
     #[test]
-    fn the_summary_names_each_dll_by_where_it_sits() {
+    fn the_summary_names_each_proxy_and_whether_it_runs() {
         let others = [
-            dll("fps-unlock.dll", Origin::Mods, true),
-            dll("powrprof.dll", Origin::Chain, true),
-            dll("dinput8.dll", Origin::Chain, false),
-            dll("dbghelp.dll", Origin::Game, true),
-            dll("winmm.dll", Origin::Game, false),
+            OtherDll {
+                file: "dbghelp.dll".into(),
+                loaded: true,
+            },
+            OtherDll {
+                file: "winmm.dll".into(),
+                loaded: false,
+            },
         ];
         assert_eq!(
             lines(&others),
             [
-                "native mods in mods/, without Enshwick's API: fps-unlock.dll",
-                "loaded from mods/chain/ before the loader: powrprof.dll, dinput8.dll (did not load)",
-                "other mods' proxies in the game's folder: dbghelp.dll, winmm.dll (not loaded at start)",
+                "other mods' proxies in the game's folder: dbghelp.dll, winmm.dll (not loaded at start)"
             ]
         );
-        assert_eq!(files(&others, Origin::Chain, true), ["powrprof.dll"]);
-        assert_eq!(files(&others, Origin::Chain, false), ["dinput8.dll"]);
+        assert_eq!(loaded(&others), ["dbghelp.dll"]);
+        assert!(lines(&[]).is_empty());
     }
 
     #[test]
@@ -416,14 +381,6 @@ mod tests {
         assert_eq!(exports(&pe_exporting(&["DllMain"]), abi), Some(false));
         assert_eq!(exports(&pe_exporting(&[]), abi), Some(false));
         assert_eq!(exports(b"not a dll", abi), None);
-    }
-
-    #[test]
-    fn the_chain_folder_is_found_by_the_path_the_stub_loads_from() {
-        let dir = chain_dir(Path::new("game"));
-        assert_eq!(dir, Path::new("game").join("mods").join("chain"));
-        let text = dir.to_string_lossy();
-        assert!(!text.contains('/') || cfg!(not(windows)), "{text}");
     }
 
     #[test]

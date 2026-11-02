@@ -1,4 +1,5 @@
-//! Mod DLLs: finding them in `mods/`, loading them and reading their exports.
+//! Mods: one per folder of `mods/`, a DLL with the Enshwick exports or a
+//! pack; finding them, loading them and reading their exports.
 
 use std::os::windows::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
@@ -7,10 +8,9 @@ use enshwick::abi::{HostApi, Manifest, ModHandle, Status, check_major, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 
-use crate::discovery::{self, ListRead, Skip};
-use crate::modlist;
+use crate::discovery::Skip;
 use crate::module::Export;
-use crate::others::{Origin, OtherDll};
+use crate::others::OtherDll;
 use crate::resolve::{self, Candidate};
 
 type AbiFn = extern "system" fn() -> u32;
@@ -23,10 +23,11 @@ pub(super) type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
 
 /// A mod DLL with its exports, or a data pack with the loader's.
 pub(super) struct Library {
-    /// The DLL's file name, for messages.
+    /// Its folder in `mods/`.
+    pub(super) folder: String,
+    /// Its file relative to `mods/`, `<folder>/<file>`, for messages.
     pub(super) file: String,
-    /// The loaded DLL, freed again when the mod list turns its id off; null
-    /// for a pack.
+    /// The loaded DLL, freed again when it is skipped; null for a pack.
     pub(super) module: HMODULE,
     /// Whether it is a data pack.
     pub(super) pack: bool,
@@ -40,36 +41,24 @@ pub(super) struct Library {
     pub(super) ready: ReadyFn,
 }
 
-/// What `mods/` holds: the mods with readable manifests that the mod list
-/// leaves on, their manifests, and the DLLs that run without the API; the
-/// list gains the mods it lacked.
+/// What `mods/` holds: the mods with readable manifests, one per folder, and
+/// their manifests; in a game also the proxies of other mods beside it.
 pub(super) fn libraries(
     mods_dir: &Path,
     run: Run,
     loaded: &mut dyn FnMut(&str),
 ) -> (Vec<Library>, Vec<Candidate>, Vec<OtherDll>) {
-    let list_file = mods_dir
-        .join(crate::settings::LOADER_ID)
-        .join(modlist::LIST_FILE);
-    let read = enshwick::files::read_to_string_if_present(&list_file);
-    let mut changed = matches!(read, Ok(None));
-    let ListRead {
-        mut list,
-        writable,
-        problem,
-    } = discovery::read_list(read, || {
-        enshwick::files::read_to_string_if_present(&enshwick::files::backup_path(&list_file))
-            .ok()
-            .flatten()
-    });
-    if let Some(problem) = problem {
-        crate::log!(WARN, "{problem}");
+    if run == Run::Game {
+        note_old_layout(mods_dir);
     }
-    let mut libraries = Vec::new();
-    let mut candidates = Vec::new();
-    let packs = crate::packs::discover(mods_dir)
-        .into_iter()
-        .map(|found| Library {
+    let packs = crate::packs::discover(mods_dir).into_iter().map(|found| {
+        let folder = found
+            .file
+            .split_once('/')
+            .map_or(found.file.as_str(), |(folder, _)| folder)
+            .to_owned();
+        Library {
+            folder,
             file: found.file,
             module: core::ptr::null_mut(),
             pack: true,
@@ -77,12 +66,16 @@ pub(super) fn libraries(
             manifest: found.manifest,
             init: crate::packs::init,
             ready: crate::packs::ready,
-        });
-    let (found, mut others) = discover(mods_dir, &list, run, loaded);
-    if run == Run::Game {
-        others.extend(chained(mods_dir));
-        others.extend(beside(mods_dir));
-    }
+        }
+    });
+    let found = discover(mods_dir, loaded);
+    let others = if run == Run::Game {
+        beside(mods_dir)
+    } else {
+        Vec::new()
+    };
+    let mut libraries = Vec::new();
+    let mut candidates = Vec::new();
     for library in found.into_iter().chain(packs) {
         // SAFETY: every manifest here is the copy `manifest::read` made for the process
         // or a pack's manifest built for the process, their strings and lists
@@ -90,12 +83,6 @@ pub(super) fn libraries(
         // while `discover` keeps it loaded.
         match unsafe { crate::manifest::parse(library.manifest) } {
             Ok(candidate) => {
-                changed |= list.note(&candidate.id, &library.file);
-                if list.is_off(&candidate.id) {
-                    log_skip(&Skip::IdOff(candidate.id.clone()), &library.file);
-                    unload(&library);
-                    continue;
-                }
                 candidates.push(candidate);
                 libraries.push(library);
             }
@@ -103,15 +90,31 @@ pub(super) fn libraries(
         }
     }
     let (libraries, candidates) = drop_duplicates(mods_dir, libraries, candidates);
-    modlist::set_disabled(list.off());
-    modlist::set_links_off(list.links_off());
-    if changed
-        && writable
-        && let Err(e) = enshwick::files::write_atomically(&list_file, list.render())
-    {
-        crate::log!(WARN, "{} not written: {e}", modlist::LIST_PATH);
-    }
     (libraries, candidates, others)
+}
+
+/// Logs one line for each file or folder of the layout before mod folders
+/// that the loader no longer reads.
+fn note_old_layout(mods_dir: &Path) {
+    for dll in dlls(mods_dir) {
+        crate::log!(
+            WARN,
+            "mods/{} is not read: a mod lives in a folder of its own, mods/<mod>/",
+            dll.file_name()
+                .map(|f| f.to_string_lossy())
+                .unwrap_or_default()
+        );
+    }
+    /// The chain folder the stub loaded and the mod list, relative to `mods/`.
+    const OLD: [&str; 2] = ["chain", "enshwick/mods.toml"];
+    for path in OLD {
+        if mods_dir.join(&path).exists() {
+            crate::log!(
+                WARN,
+                "mods/{path} is not read: a mod runs while its folder is in mods/"
+            );
+        }
+    }
 }
 
 /// Writes the line of `skip` for the DLL `file` to the loader's log.
@@ -120,25 +123,6 @@ fn log_skip(skip: &Skip, file: &str) {
     if crate::log::enabled(level, crate::settings::LOADER_ID) {
         crate::log::write(level, crate::settings::LOADER_ID, &skip.line(file));
     }
-}
-
-/// The DLLs in `mods/chain/`, which the stub loads before the loader, and
-/// whether each is loaded.
-fn chained(mods_dir: &Path) -> Vec<OtherDll> {
-    let Some(game_dir) = mods_dir.parent() else {
-        return Vec::new();
-    };
-    dlls(&crate::others::chain_dir(game_dir))
-        .into_iter()
-        .filter_map(|path| {
-            let file = path.file_name()?.to_string_lossy().into_owned();
-            Some(OtherDll {
-                file,
-                origin: Origin::Chain,
-                loaded: is_loaded(&path),
-            })
-        })
-        .collect()
 }
 
 /// Other mods' proxies in the game's folder, as
@@ -160,11 +144,7 @@ fn beside(mods_dir: &Path) -> Vec<OtherDll> {
                     "; it was not loaded at start"
                 }
             );
-            OtherDll {
-                file: name,
-                origin: Origin::Game,
-                loaded,
-            }
+            OtherDll { file: name, loaded }
         })
         .collect()
 }
@@ -247,56 +227,62 @@ pub(super) fn unload(library: &Library) {
     }
 }
 
-/// Loads every `mods/*.dll` the mod list leaves on: the mods that export the
-/// Enshwick interface, and in a game the DLLs without it, told apart by
-/// their export tables before they load, which stay loaded and run on their
-/// own.
-fn discover(
-    mods_dir: &Path,
-    list: &modlist::ModList,
-    run: Run,
-    loaded: &mut dyn FnMut(&str),
-) -> (Vec<Library>, Vec<OtherDll>) {
+/// Loads the one DLL with the Enshwick exports in each folder of `mods/`,
+/// told apart from the folder's other DLLs, the mod's own, by their export
+/// tables before they load. A second such DLL in a folder is skipped, named
+/// with the first; the loader's own folder holds no mod.
+fn discover(mods_dir: &Path, loaded: &mut dyn FnMut(&str)) -> Vec<Library> {
     let mut mods = Vec::new();
-    let mut others = Vec::new();
-    let files = dlls(mods_dir)
-        .into_iter()
-        .filter(|path| {
-            let file = path
-                .file_name()
-                .map(|f| f.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let off = list.is_file_off(&file);
-            if off {
-                log_skip(&Skip::FileOff, &file);
-            }
-            !off
-        })
-        .collect::<Vec<_>>();
-    for path in files {
-        let file = path
+    for folder in folders(mods_dir) {
+        let name = folder
             .file_name()
             .map(|f| f.to_string_lossy().into_owned())
             .unwrap_or_default();
-        if crate::others::is_mod_file(&path) == Some(false) {
-            if run == Run::Game {
-                let native = load_native(&path);
-                loaded(&file);
-                if let Some(file) = native {
-                    others.push(OtherDll {
-                        file,
-                        origin: Origin::Mods,
-                        loaded: true,
-                    });
-                }
+        let mut first: Option<String> = None;
+        for path in dlls(&folder) {
+            if crate::others::is_mod_file(&path) == Some(false) {
+                continue;
             }
-        } else {
-            let library = load(&path);
+            let file = format!(
+                "{name}/{}",
+                path.file_name()
+                    .map(|f| f.to_string_lossy())
+                    .unwrap_or_default()
+            );
+            if let Some(other) = &first {
+                log_skip(
+                    &Skip::SecondMod {
+                        other: other.clone(),
+                    },
+                    &file,
+                );
+                continue;
+            }
+            first = Some(file.clone());
+            let library = load(&path, &name, file.clone());
             loaded(&file);
             mods.extend(library);
         }
     }
-    (mods, others)
+    mods
+}
+
+/// The folders directly in `mods/`, sorted, without the loader's own.
+fn folders(mods_dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(mods_dir) else {
+        return Vec::new();
+    };
+    let mut folders: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_dir()
+                && p.file_name()
+                    .is_some_and(|f| !f.eq_ignore_ascii_case(crate::settings::LOADER_ID))
+        })
+        .collect();
+    folders.sort_by_cached_key(|path| path.file_name().map(std::ffi::OsStr::to_ascii_lowercase));
+    folders
 }
 
 /// Whether the loader starts a game or tries mods in a dry run, which loads
@@ -309,22 +295,9 @@ pub(super) enum Run {
     Dry,
 }
 
-/// Loads the native mod at `path` from where it is and keeps it loaded; its
-/// file name, or `None`, logged, when it does not load.
-fn load_native(path: &Path) -> Option<String> {
-    let file = path.file_name()?.to_string_lossy().into_owned();
-    if let Err(error) = crate::module::load_library(path) {
-        crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
-        return None;
-    }
-    crate::log!(INFO, "{file} is no Enshwick mod; it runs on its own");
-    Some(file)
-}
-
-/// Loads the mod DLL at `path`; `None`, logged, when it is no mod of this
-/// ABI.
-fn load(path: &Path) -> Option<Library> {
-    let file = path.file_name()?.to_string_lossy().into_owned();
+/// Loads the mod DLL at `path`, in `folder` of `mods/` and named `file`
+/// there; `None`, logged, when it is no mod of this ABI.
+fn load(path: &Path, folder: &str, file: String) -> Option<Library> {
     let module = match crate::module::load_library(path) {
         Ok(module) => module,
         Err(error) => {
@@ -332,7 +305,7 @@ fn load(path: &Path) -> Option<Library> {
             return None;
         }
     };
-    let library = exports_of(module, &file);
+    let library = exports_of(module, folder, &file);
     if library.is_none() {
         // SAFETY: `module` was loaded by `load_library` in this function, and
         // `exports_of` returned `None` without calling into it, so nothing of
@@ -342,9 +315,10 @@ fn load(path: &Path) -> Option<Library> {
     library
 }
 
-/// The mod in the loaded `module`, named `file` in messages; `None`, logged,
-/// when it exports no Enshwick interface of this ABI.
-fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
+/// The mod in the loaded `module`, from `folder` of `mods/` and named `file`
+/// in messages; `None`, logged, when it exports no Enshwick interface of
+/// this ABI.
+fn exports_of(module: HMODULE, folder: &str, file: &str) -> Option<Library> {
     // SAFETY: `module` was loaded by `load`, which frees it only after
     // this returns; the `Module` does not leave this function, and the
     // exports it finds are called only while the library stays loaded.
@@ -388,6 +362,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         }
     };
     Some(Library {
+        folder: folder.to_owned(),
         file: file.to_owned(),
         module,
         pack: false,

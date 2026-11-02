@@ -8,7 +8,6 @@ use super::MODS_PER_PAGE;
 use crate::host::Loader;
 use crate::listing::Listing;
 use crate::locks::Relock;
-use crate::others::Origin;
 use crate::texts;
 use crate::ui::{Painter, actions};
 
@@ -148,17 +147,10 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             paint.label(note.as_bytes(), UiWidget::STYLE_SECONDARY, false, false);
         }
     }
-    for (origin, loaded, key) in [
-        (Origin::Mods, true, "mods.others.native"),
-        (Origin::Chain, true, "mods.others.chain"),
-        (Origin::Game, true, "mods.others.beside"),
-        (Origin::Chain, false, "mods.others.chain-failed"),
-    ] {
-        let files = crate::others::files(&loader.others, origin, loaded);
-        if !files.is_empty() {
-            let line = texts::fill(key, &[("files", &files.join(", "))]);
-            paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
-        }
+    let beside = crate::others::loaded(&loader.others);
+    if !beside.is_empty() {
+        let line = texts::fill("mods.others.beside", &[("files", &beside.join(", "))]);
+        paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
     pages(paint, listing, first, mods.len());
     done

@@ -161,11 +161,10 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         last_crash: crate::crash::last().map(str::to_owned),
         at: crate::diag::now(),
         mods,
-        disabled: crate::modlist::disabled().to_vec(),
         others: crate::others::lines(&loader.others),
-        replaced: crate::modlist::replaced()
+        replaced: crate::record::replaced()
             .iter()
-            .map(crate::modlist::Replaced::line)
+            .map(crate::record::Replaced::line)
             .collect(),
         turned_off: crate::diag::history(),
         parts_off: crate::diag::parts_off(),

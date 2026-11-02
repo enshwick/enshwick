@@ -302,10 +302,9 @@ mod tests {
             last_crash: Some("fault 0xc0000005, blamed on you.trading-post: in its code".into()),
             at: 45_000,
             mods: mods(),
-            disabled: vec!["you.my-mod".into()],
-            others: vec!["native mods in mods/, without Enshwick's API: fps-unlock.dll".into()],
+            others: vec!["other mods' proxies in the game's folder: dbghelp.dll".into()],
             replaced: vec![
-                "you.stalls is replaced by you.market-stalls; delete mods/stalls.dll".into(),
+                "you.stalls is replaced by you.market-stalls; delete mods/stalls/".into(),
             ],
             turned_off: vec![TurnedOff {
                 id: "you.trading-post".into(),

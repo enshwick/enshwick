@@ -213,13 +213,8 @@ impl Registry {
 
     /// Matches every link with its point and orders each point's links:
     /// the sealed points by id, the links left inert, and the links whose
-    /// order closes a cycle, which run by their priority. `link_off` says
-    /// whether the mod list turns off a mod's link on a point.
-    pub(crate) fn seal(
-        &mut self,
-        mods: &impl Mods,
-        link_off: impl Fn(&str, &str) -> bool,
-    ) -> (Box<[Sealed]>, Vec<Inert>, Vec<Inert>) {
+    /// order closes a cycle, which run by their priority.
+    pub(crate) fn seal(&mut self, mods: &impl Mods) -> (Box<[Sealed]>, Vec<Inert>, Vec<Inert>) {
         let mut matched: Vec<Vec<Pending>> = self.defined.iter().map(|_| Vec::new()).collect();
         let mut inert = Vec::new();
         let mut cycles = Vec::new();
@@ -245,16 +240,6 @@ impl Registry {
                     point,
                     reason,
                     level,
-                });
-                continue;
-            }
-            let (linker, _) = mods.name(link.owner.get());
-            if link_off(linker, &point) || link_off(linker, &definition.declared.name) {
-                inert.push(Inert {
-                    owner: link.owner,
-                    point,
-                    reason: format!("off in {}", crate::modlist::LIST_PATH),
-                    level: Level::INFO,
                 });
                 continue;
             }
@@ -520,7 +505,7 @@ pub(crate) fn sealed() -> bool {
 
 /// Seals the points, logs every link left inert and arms the rest.
 pub(crate) fn seal(mods: &impl Mods) {
-    let (points, inert, cycles) = registry().seal(mods, crate::modlist::is_link_off);
+    let (points, inert, cycles) = registry().seal(mods);
     for note in &inert {
         let (id, _) = mods.name(note.owner.get());
         crate::log::write(
@@ -530,13 +515,6 @@ pub(crate) fn seal(mods: &impl Mods) {
                 "point {}: the link stays inert: {}",
                 note.point, note.reason
             ),
-        );
-    }
-    for (id, point) in unmatched_links_off(crate::modlist::links_off(), &inert, mods) {
-        crate::log!(
-            WARN,
-            "{}: links_off of {id} names {point}, which {id} does not link; nothing turned off",
-            crate::modlist::LIST_PATH
         );
     }
     for note in &cycles {
@@ -560,24 +538,6 @@ pub(crate) fn seal(mods: &impl Mods) {
     }
     let _first = SEALED.set(points);
     let _first = INERT.set(inert);
-}
-
-/// The entries of the mod list's `links_off` that turned no link off: the
-/// mod runs but links no such point.
-fn unmatched_links_off<'a>(
-    entries: &'a [(String, String)],
-    inert: &[Inert],
-    mods: &impl Mods,
-) -> impl Iterator<Item = (&'a str, &'a str)> {
-    entries
-        .iter()
-        .filter(move |(id, point)| {
-            mods.find(id).is_some_and(|index| !mods.off(index))
-                && !inert
-                    .iter()
-                    .any(|n| n.point == *point && mods.name(n.owner.get()).0 == id)
-        })
-        .map(|(id, point)| (id.as_str(), point.as_str()))
 }
 
 /// Counts each point's live links again, once a mod turned off: its links

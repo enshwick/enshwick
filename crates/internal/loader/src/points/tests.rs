@@ -86,7 +86,7 @@ fn set(value: usize) -> usize {
 }
 
 fn seal(registry: &mut Registry) -> (Box<[Sealed]>, Vec<super::Inert>) {
-    let (points, inert, cycles) = registry.seal(&loaded(), |_, _| false);
+    let (points, inert, cycles) = registry.seal(&loaded());
     assert!(cycles.is_empty(), "{cycles:?}");
     (points, inert)
 }
@@ -150,7 +150,7 @@ fn a_link_reading_past_the_owner_s_input_or_answer_is_refused() {
         let mut wide = link(ModIndex::new(1), set(7));
         wide.declared = sized(input, output);
         registry.attach(wide).unwrap();
-        let (points, inert, _) = registry.seal(&Traders, |_, _| false);
+        let (points, inert, _) = registry.seal(&Traders);
         assert!(points[0].links.is_empty(), "{input} {output}");
         assert_eq!(inert.len(), 1);
     }
@@ -354,24 +354,6 @@ fn a_linking_mod_that_turns_off_leaves_the_count() {
 }
 
 #[test]
-fn a_link_the_list_turns_off_stays_inert() {
-    let mut registry = Registry::default();
-    let live = defined(&mut registry);
-    assert!(registry.attach(link(ModIndex::new(1), set(5))).is_ok());
-    assert!(registry.attach(link(ModIndex::new(2), set(6))).is_ok());
-    let (points, inert, _) = registry.seal(&loaded(), |id, point| {
-        id == "you.haggling" && point == "you.trading-post:price"
-    });
-    points[0].arm(|_| false);
-    assert_eq!(live.load(Ordering::Relaxed), 1);
-    assert_eq!(points[0].links.len(), 1);
-    assert_eq!(inert.len(), 1);
-    assert_eq!(inert[0].owner, ModIndex::new(1));
-    assert!(inert[0].reason.contains("mods.toml"), "{}", inert[0].reason);
-    assert_eq!(ask(&points[0], 1), (PointVerdict::SET, 6));
-}
-
-#[test]
 fn a_layout_mismatch_leaves_the_link_inert_with_the_field() {
     let mut registry = Registry::default();
     defined(&mut registry);
@@ -437,7 +419,7 @@ fn a_missing_owner_leaves_the_link_inert_without_a_warning() {
             .is_ok()
     );
     assert!(registry.attach(link(ModIndex::new(1), 0)).is_ok());
-    let (points, inert, _) = registry.seal(&off, |_, _| false);
+    let (points, inert, _) = registry.seal(&off);
     assert!(points[0].links.is_empty());
     assert_eq!(inert[0].reason, "you.trading-post 0.3.0 is off");
 }
@@ -477,31 +459,6 @@ fn the_report_names_mods_changing_one_point_and_who_undid_whom() {
 }
 
 #[test]
-fn a_links_off_entry_that_matches_no_link_is_named() {
-    let mut registry = Registry::default();
-    defined(&mut registry);
-    assert!(registry.attach(link(ModIndex::new(1), 0)).is_ok());
-    let (_, inert, _) = registry.seal(&loaded(), |id, point| {
-        id == "you.haggling" && point == "you.trading-post:price"
-    });
-    let entries = [
-        ("you.haggling", "you.trading-post:price"),
-        ("you.haggling", "you.trading-post:gate"),
-        ("you.trading-post", "you.trading-post:price"),
-        ("not-installed", "you.trading-post:price"),
-    ]
-    .map(|(id, point)| (id.to_owned(), point.to_owned()));
-    let unmatched: Vec<_> = super::unmatched_links_off(&entries, &inert, &loaded()).collect();
-    assert_eq!(
-        unmatched,
-        [
-            ("you.haggling", "you.trading-post:gate"),
-            ("you.trading-post", "you.trading-post:price")
-        ]
-    );
-}
-
-#[test]
 fn a_cycle_is_broken_by_priority_and_named() {
     let mut registry = Registry::default();
     defined(&mut registry);
@@ -511,7 +468,7 @@ fn a_cycle_is_broken_by_priority_and_named() {
     b.after = vec!["you.haggling".to_owned()];
     assert!(registry.attach(a).is_ok());
     assert!(registry.attach(b).is_ok());
-    let (points, inert, cycles) = registry.seal(&loaded(), |_, _| false);
+    let (points, inert, cycles) = registry.seal(&loaded());
     assert_eq!(points[0].links.len(), 2);
     assert!(inert.is_empty());
     assert_eq!(cycles.len(), 1);
