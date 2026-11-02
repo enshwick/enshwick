@@ -1,7 +1,7 @@
 //! The schemas a mod DLL carries in its `.enshpt` section, read from the
 //! file without running it.
 
-use enshwick::schema_section::{Head, Section};
+use enshwick::schema_section::{Head, ReadSectionError, Section};
 use enshwick_gamedata::reflect::{Image, Layout};
 
 use super::Error;
@@ -15,8 +15,10 @@ pub const SECTION: &str = ".enshpt";
 ///
 /// # Errors
 ///
-/// [`Error`] when the bytes are no x64 DLL, or a part of the section is
-/// damaged or of an older enshwick.
+/// [`Error::Image`] when the bytes are no x64 DLL, [`Error::CutShort`] when
+/// the section ends before its header says, and an error that
+/// [`is_unread`](Error::is_unread) when the section is damaged or of another
+/// format.
 ///
 /// # Examples
 ///
@@ -40,7 +42,10 @@ pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, Error> {
 /// The schema text in `raw`, the bytes of a mod's `.enshpt` section: the
 /// head `declare_mod!` wrote, then the mod's own declarations.
 fn from_section(raw: &[u8]) -> Result<Option<String>, Error> {
-    let section = Section::parse(raw)?;
+    let section = Section::parse(raw).map_err(|error| match error {
+        ReadSectionError::Format(format) => Error::Format(format),
+        other => Error::Section(other),
+    })?;
     let Some(&Head { text: head, id }) = section.heads().first() else {
         return Ok(None);
     };
@@ -50,9 +55,7 @@ fn from_section(raw: &[u8]) -> Result<Option<String>, Error> {
 
 #[cfg(test)]
 mod tests {
-    use enshwick::schema_section::ReadSectionError;
-
-    use super::{Error, from_section};
+    use super::{Error, ReadSectionError, from_section};
 
     #[test]
     fn a_section_reads_as_its_head_and_the_mods_own_declarations() {
@@ -84,8 +87,17 @@ mod tests {
             "{damaged:?}"
         );
         let older = from_section(b"schema = 1\nmod = \"you.a\"\n[[point]]\nname = \"you.a:p\"\n")
+            .unwrap_err();
+        assert!(matches!(older, Error::Format(1)), "{older:?}");
+        assert!(
+            older
+                .to_string()
+                .ends_with("rebuild its mod with this enshwick"),
+            "{older}"
+        );
+        let newer = from_section(b"schema = 99\nmod = \"you.a\"\n")
             .unwrap_err()
             .to_string();
-        assert!(older.contains("rebuild"), "{older}");
+        assert!(newer.ends_with("update cargo-enshwick"), "{newer}");
     }
 }

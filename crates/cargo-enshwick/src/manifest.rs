@@ -14,6 +14,12 @@ pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String>
     // SAFETY: `query` copied the manifest out of a DLL it never unloads and
     // never shuts down, so its strings stay valid.
     let version = unsafe { manifest.version.as_str() }.unwrap_or_default();
+    if let Err(why) = declarations(dll) {
+        return Err(format!(
+            "{} stays off: its declarations do not read: {why}\n{text}",
+            dll.display()
+        ));
+    }
     match expected {
         Some(expected) if expected != version => Err(format!(
             "{} is version {version}, expected {expected}\n{text}",
@@ -21,6 +27,15 @@ pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String>
         )),
         _ => Ok(text),
     }
+}
+
+/// Reads the declarations in the `.enshpt` section of `dll` as the loader
+/// does; the reason when the file, its image or the section does not read.
+fn declarations(dll: &Path) -> Result<(), String> {
+    let bytes = std::fs::read(dll).map_err(|e| e.to_string())?;
+    cargo_enshwick::points::from_dll(&bytes)
+        .map(drop)
+        .map_err(|e| e.to_string())
 }
 
 /// The manifest as lines of `key: value`.

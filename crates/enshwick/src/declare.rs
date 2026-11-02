@@ -76,14 +76,12 @@ macro_rules! __declare_exports {
             me: $crate::abi::ModHandle,
         ) -> $crate::abi::Status {
             // SAFETY: the caller guarantees `api` is the loader's table, alive
-            // for the process, which is the contract of `init`; `query`
-            // returns null or a manifest valid until the shutdown, which
-            // never runs during the init.
+            // for the process, which is the contract of `init`.
             unsafe {
                 $crate::__private::init::<$ty>(
                     api,
                     me,
-                    __ENSHWICK_MANIFEST.query(),
+                    &__ENSHWICK_MANIFEST,
                     __ENSHWICK_TEXTS,
                     &__ENSHWICK_INSTANCE,
                 )

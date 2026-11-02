@@ -63,6 +63,16 @@ required-features = ["test"]
 name = "call_schema"
 required-features = ["test", "unstable"]
 
+# Their binaries' sections hold a head of another format and a damaged one,
+# which would turn off every mod of `main`.
+[[test]]
+name = "section_unread"
+required-features = ["test"]
+
+[[test]]
+name = "section_damaged"
+required-features = ["test"]
+
 [lints]
 workspace = true
 

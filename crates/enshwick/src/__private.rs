@@ -130,6 +130,9 @@ pub struct Manifested {
 #[derive(Debug)]
 struct Built {
     manifest: Box<crate::abi::Manifest>,
+    /// Why the mod stays off because its section does not read, as a reason
+    /// in the loader's texts, when the manifest has no schemas or exports.
+    unread: Option<String>,
     _text: Box<str>,
     _exports: Box<[crate::abi::Str]>,
     _names: Box<[Box<str>]>,
@@ -168,21 +171,23 @@ impl Manifested {
     /// allocated then, never on later calls. Any thread may call it; it
     /// takes a lock and calls nothing that could call it again.
     ///
-    /// Null when building panicked or the section does not read, which
-    /// leaves the mod off and the game running. The manifest stays valid
-    /// until [`release`](Self::release).
+    /// Null when building panicked, which leaves the mod off and the game
+    /// running. When the section does not read, the manifest has no
+    /// schemas or exports, and [`init`] refuses the mod with the reason.
+    /// The manifest stays valid until [`release`](Self::release).
     pub fn query(&self) -> *const crate::abi::Manifest {
+        self.with_built(|built| core::ptr::from_ref::<crate::abi::Manifest>(&built.manifest))
+            .unwrap_or(core::ptr::null())
+    }
+
+    /// `read` over the manifest, built first when it is not; `None` when
+    /// building or `read` panicked.
+    fn with_built<R>(&self, read: impl FnOnce(&Built) -> R) -> Option<R> {
         use crate::locks::Relock as _;
-        let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut built = self.built.relock();
-            if built.is_none() {
-                *built = Some(self.build()?);
-            }
-            built
-                .as_ref()
-                .map(|b| core::ptr::from_ref::<crate::abi::Manifest>(&b.manifest))
-        }));
-        built.ok().flatten().unwrap_or(core::ptr::null())
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            read(self.built.relock().get_or_insert_with(|| self.build()))
+        }))
+        .ok()
     }
 
     /// Frees the manifest [`query`](Self::query) built, before a
@@ -193,18 +198,23 @@ impl Manifested {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.built.relock().take()));
     }
 
-    /// The manifest with the mod's schema text, or `None` when the section
-    /// does not read.
-    fn build(&self) -> Option<Built> {
-        let section = crate::schema_section::Section::parse(section()).ok()?;
-        let text = section.schema(self.head, self.id).into_boxed_str();
-        let names: Box<[Box<str>]> = self
-            .exports
-            .iter()
-            .map(|&name| name.to_owned())
-            .chain(section.exports(self.id))
-            .map(String::into_boxed_str)
-            .collect();
+    /// The manifest with the mod's schema text and exports; when the section
+    /// does not read, with neither, keeping why.
+    fn build(&self) -> Built {
+        let (text, names, unread): (Box<str>, Box<[Box<str>]>, _) =
+            match crate::schema_section::Section::parse(section()) {
+                Ok(section) => (
+                    section.schema(self.head, self.id).into_boxed_str(),
+                    self.exports
+                        .iter()
+                        .map(|&name| name.to_owned())
+                        .chain(section.exports(self.id))
+                        .map(String::into_boxed_str)
+                        .collect(),
+                    None,
+                ),
+                Err(error) => (Box::default(), Box::default(), Some(unread(&error))),
+            };
         let exports: Box<[crate::abi::Str]> = names
             .iter()
             .map(|name| crate::abi::Str::new(name))
@@ -215,12 +225,36 @@ impl Manifested {
             export_count: exports.len(),
             ..*self.base
         });
-        Some(Built {
+        Built {
             manifest,
+            unread,
             _text: text,
             _exports: exports,
             _names: names,
-        })
+        }
+    }
+}
+
+/// Why a mod whose section does not read for `error` stays off, as a reason
+/// in the loader's texts: an older format is the mod's to rebuild, a newer
+/// one the loader's to update.
+fn unread(error: &crate::schema_section::ReadSectionError) -> String {
+    use crate::schema_section::{FORMAT, ReadSectionError};
+    match *error {
+        ReadSectionError::Format(format) => crate::i18n::reason::encode(
+            if format < FORMAT {
+                "mods.off.section.older"
+            } else {
+                "mods.off.section.newer"
+            },
+            &[
+                ("format", format.to_string()),
+                ("reads", FORMAT.to_string()),
+            ],
+        ),
+        ReadSectionError::Damaged(byte) | ReadSectionError::NotText(byte) => {
+            crate::i18n::reason::encode("mods.off.section.damaged", &[("byte", byte.to_string())])
+        }
     }
 }
 
@@ -567,18 +601,24 @@ pub const MOD_OFF: &str = "E2003, see https://enshwick.com/errors/e2003/";
 ///   header states.
 /// - That table stays valid and unchanged for the rest of the process,
 ///   as the loader's process-wide table does.
-/// - `manifest` is null, or points at a manifest valid for the call.
 pub unsafe fn init<M: Mod>(
     api: *const HostApi,
     me: ModHandle,
-    manifest: *const crate::abi::Manifest,
+    manifested: &Manifested,
     texts: Option<&'static str>,
     slot: &Slot<M>,
 ) -> Status {
-    // SAFETY: the caller guarantees `manifest` null or valid for the call.
-    let Some(manifest) = (unsafe { manifest.as_ref() }) else {
+    let Some((manifest, unread)) = manifested.with_built(|built| {
+        (
+            core::ptr::from_ref::<crate::abi::Manifest>(&built.manifest),
+            built.unread.clone(),
+        )
+    }) else {
         return Status::FAULTED;
     };
+    // SAFETY: the built manifest stays valid until `release`, which only
+    // the mod's shutdown calls, never during its init.
+    let manifest = unsafe { &*manifest };
     // SAFETY: `Host::new` needs `api` null or a table readable for its
     // header's size that outlives the process; this function's `# Safety`
     // bullets guarantee both.
@@ -597,6 +637,10 @@ pub unsafe fn init<M: Mod>(
         refresh_level,
         core::ptr::null_mut(),
     );
+    if let Some(reason) = unread {
+        host.fault(&reason);
+        return Status::REFUSED;
+    }
     #[cfg(feature = "test")]
     if let Some(refused) = crate::test::table::note_manifest(api, manifest) {
         host.fault(&refused);
