@@ -355,13 +355,12 @@ fn every_headed_struct_from_a_writer_of_minor_0_reads() {
 /// major knows, so a mod built for an older minor keeps loading.
 #[test]
 fn no_entry_point_requires_more_than_the_born_size_of_a_mod_s_struct() {
-    for helper in ["get_headed(", "get_headed_list(", "read_headed("] {
-        for (at, _) in host_source().match_indices(helper) {
-            let call = &host_source()[at..];
-            let call = &call[..call.find(';').unwrap_or(call.len())];
+    for name in headed_in_abi() {
+        for path in ["", "api_frame::", "enshwick::abi::"] {
+            let sized = format!("size_of::<{path}{name}>");
             assert!(
-                !call.contains("size_of::<"),
-                "require `<T as Headed>::BORN`, not the size of this build: {call}"
+                !host_source().contains(&sized),
+                "{sized}: require `<{name} as Headed>::BORN` of a mod's struct, not this build's size"
             );
         }
     }

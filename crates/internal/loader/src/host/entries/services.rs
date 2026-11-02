@@ -369,7 +369,9 @@ pub(crate) extern "system" fn define_point(
         // The mod's headed out struct, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let room = (!out.is_null()).then(|| unsafe { out.cast::<Header>().read_unaligned() }.size);
-        if room.is_none_or(|room| (room as usize) < size_of::<api_frame::PointHandle>()) {
+        if room.is_none_or(|room| {
+            (room as usize) < <api_frame::PointHandle as enshwick::abi::Headed>::BORN
+        }) {
             return Status::BAD_ARGS;
         }
         let defined = crate::points::registry().define(index, &record.id, declared);

@@ -27,7 +27,7 @@ Each entry names the pull request that made the change.
   `check_abi` takes the manifest header's `u16` major. `CheckAbiError`
   gains `BeforeMajors` for a DLL built before ABI majors, and its
   `OtherMajor` holds a `u16`. The ABI major moves only to the next one
-  (#PR).
+  (#865).
 - **Breaking:** a mod does not build when a key of its texts lacks a text
   in a language of the new `Language::REQUIRED`, `en` and `uk`; add the
   missing Ukrainian texts (#838).
