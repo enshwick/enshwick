@@ -92,11 +92,11 @@ pub unsafe trait ModEvent: Copy + 'static {
     const NAME: &'static str;
     /// The data's fields, in order.
     const LAYOUT: &'static [LayoutField];
-    /// Whether a schema describes every field's type, which listing the
-    /// event in `declare_mod!(.., events: [..])` needs.
+    /// Whether a schema describes every field's type; an event declared
+    /// without `of` ships its schema only then.
     const DESCRIBED: bool = false;
     /// The event's `[[event]]` and `[[type]]` tables for its defining mod's
-    /// schema, which `declare_mod!(.., events: [..])` puts into the manifest.
+    /// schema, which the event's declaration puts into the manifest.
     const SCHEMA: &'static str = "";
 }
 

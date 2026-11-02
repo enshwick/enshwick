@@ -91,6 +91,7 @@ mod panic_reasons;
 #[cfg(feature = "unstable")]
 mod players;
 pub mod point_schema;
+mod points_declared;
 #[cfg(feature = "unstable")]
 mod points_described;
 mod points_links;

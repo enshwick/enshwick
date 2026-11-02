@@ -1,10 +1,10 @@
 //! What another mod offers, read from its schemas and written as the
 //! declarations a mod that depends on it compiles.
 //!
-//! The owner's `declare_mod!(.., points: [..], calls: [..], events: [..])`
-//! puts a schema of each point, call and event it lists into its manifest
-//! and into the `.enshpt` section of its DLL, so the schema is read here
-//! without running the owner's code. A schema comes from another author:
+//! Each of the owner's own points, calls and events puts its schema into
+//! the `.enshpt` section of the owner's DLL, beside the head its
+//! `declare_mod!` writes, so the schema is read here without running the
+//! owner's code. A schema comes from another author:
 //! every name, type and text it carries is checked before it enters
 //! generated code. The declarations name every type they reach and check
 //! their own layout against the hashes the owner's build wrote.
@@ -568,9 +568,26 @@ pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, Error> {
     let raw = image
         .read(range.start, range.end - range.start)
         .ok_or(Error::CutShort)?;
-    let end = raw.iter().rposition(|&b| b != 0).map_or(0, |at| at + 1);
-    let text = std::str::from_utf8(&raw[..end]).map_err(|_| Error::NotText)?;
-    Ok((!text.is_empty()).then(|| text.to_owned()))
+    from_section(raw)
+}
+
+/// The schema text in `raw`, the bytes of a mod's `.enshpt` section: the
+/// head `declare_mod!` wrote, then the mod's own declarations.
+fn from_section(raw: &[u8]) -> Result<Option<String>, Error> {
+    let Some(head) = raw
+        .split(|&b| b == 0)
+        .find(|entry| entry.starts_with(b"schema = "))
+    else {
+        return Ok(None);
+    };
+    let head = std::str::from_utf8(head).map_err(|_| Error::NotText)?;
+    let table = toml::from_str::<toml::Table>(head).map_err(|e| Error::Toml(e.to_string()))?;
+    let id = table
+        .get("mod")
+        .and_then(toml::Value::as_str)
+        .ok_or_else(|| Error::Toml("the head names no `mod`".to_owned()))?;
+    let text = enshwick::__private::own_schemas(head, id, raw);
+    Ok((!text.is_empty()).then_some(text))
 }
 
 /// The Rust path of a schema type name.
@@ -953,5 +970,26 @@ mod tests {
                 .to_string()
                 .contains("update it")
         );
+    }
+
+    #[test]
+    fn a_section_reads_as_its_head_and_the_mods_own_declarations() {
+        let raw = b"\0\0[[point]]\nname = \"you.lockers:price\"\n\0\
+            [[point]]\nname = \"you.other:price\"\n\0\
+            schema = 1\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\0\0\0\
+            [[event]]\nname = \"you.lockers:opened\"\n\0\0";
+        assert_eq!(
+            from_section(raw).unwrap().as_deref(),
+            Some(
+                "schema = 1\nmod = \"you.lockers\"\nversion = \"0.1.0\"\n\
+                 [[point]]\nname = \"you.lockers:price\"\n\
+                 [[event]]\nname = \"you.lockers:opened\"\n"
+            )
+        );
+        assert_eq!(
+            from_section(b"\0schema = 1\nmod = \"you.a\"\n\0").unwrap(),
+            None
+        );
+        assert_eq!(from_section(b"\0\0").unwrap(), None);
     }
 }

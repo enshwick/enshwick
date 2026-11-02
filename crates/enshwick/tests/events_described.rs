@@ -62,8 +62,7 @@ mod tests {
         id = "you.trading-post"
         side = "server"
         exports = ["sold"]
-        "#,
-        events: [Sold]
+        "#
     );
 
     fn start(size: u32) -> enshwick::test::Installed {

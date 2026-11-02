@@ -38,37 +38,168 @@ pub const ATTRIBUTE_SET_INITIALISED: u8 = 1;
 pub const EXPERIENCE_SOURCES: &[(crate::game_events::ExperienceSourceType, &str)] =
     &crate::game_events::ExperienceSourceType::IDS;
 
-/// The schema text of `declare_mod!`: empty when it names no point, so a
-/// mod without points carries nothing.
-#[must_use]
-pub const fn point_schemas(text: &'static str) -> &'static str {
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'[' {
-            return text;
-        }
-        i += 1;
-    }
-    ""
-}
-
-/// The bytes of `text`, as a static in a section of its own holds them.
+/// The bytes of `text` and a closing NUL, an entry of the `.enshpt`
+/// section that [`__schema_entry!`](crate::__schema_entry) writes.
 ///
 /// # Panics
 ///
-/// When `N` is not the length of `text`, at compile time.
+/// When `N` is not one more than the length of `text`, at compile time.
 #[must_use]
-pub const fn bytes<const N: usize>(text: &str) -> [u8; N] {
+pub const fn entry<const N: usize>(text: &str) -> [u8; N] {
     let source = text.as_bytes();
-    assert!(source.len() == N, "the section's size is the text's length");
+    assert!(source.len() + 1 == N, "an entry is its text and a NUL");
     let mut out = [0u8; N];
     let mut i = 0;
-    while i < N {
+    while i < source.len() {
         out[i] = source[i];
         i += 1;
     }
     out
+}
+
+/// The bytes of this binary's `.enshpt` section: the schema entries of
+/// every point, event and call declared without `of`, and the head of each
+/// `declare_mod!`, separated by NULs.
+#[must_use]
+pub fn section() -> &'static [u8] {
+    // The linker sorts `.enshpt$<x>` by `<x>` into one `.enshpt`, so the
+    // entries in `$m` lie between the markers in `$a` and `$z`.
+    #[cfg(windows)]
+    let (start, stop) = {
+        #[unsafe(link_section = ".enshpt$a")]
+        static START: [u8; 1] = [0];
+        #[unsafe(link_section = ".enshpt$z")]
+        static STOP: [u8; 1] = [0];
+        (START.as_ptr(), STOP.as_ptr())
+    };
+    #[cfg(not(windows))]
+    let (start, stop) = {
+        // The section must exist for the linker to define its bounds.
+        #[used]
+        #[cfg_attr(
+            target_vendor = "apple",
+            unsafe(link_section = "__DATA,__enshpt,regular,no_dead_strip")
+        )]
+        #[cfg_attr(not(target_vendor = "apple"), unsafe(link_section = "enshpt"))]
+        static PRESENT: [u8; 0] = [];
+        unsafe extern "Rust" {
+            #[cfg_attr(
+                target_vendor = "apple",
+                link_name = "\x01section$start$__DATA$__enshpt"
+            )]
+            #[cfg_attr(not(target_vendor = "apple"), link_name = "__start_enshpt")]
+            static START: [u8; 0];
+            #[cfg_attr(target_vendor = "apple", link_name = "\x01section$end$__DATA$__enshpt")]
+            #[cfg_attr(not(target_vendor = "apple"), link_name = "__stop_enshpt")]
+            static STOP: [u8; 0];
+        }
+        (
+            core::ptr::addr_of!(START).cast::<u8>(),
+            core::ptr::addr_of!(STOP).cast::<u8>(),
+        )
+    };
+    let len = stop.addr().saturating_sub(start.addr());
+    // SAFETY: the linker places the whole section, `len` bytes of
+    // immutable statics, between `start` and `stop` in this image, which
+    // stays mapped while its code runs. The pointer takes exposed
+    // provenance, since the bytes belong to many statics, not to `START`.
+    unsafe {
+        core::slice::from_raw_parts(
+            core::ptr::with_exposed_provenance::<u8>(start.expose_provenance()),
+            len,
+        )
+    }
+}
+
+/// A mod's manifest, completed at the loader's first query with the
+/// schemas of the mod's own points, events and calls from the binary's
+/// `.enshpt` section.
+#[derive(Debug)]
+pub struct Manifested {
+    base: &'static crate::abi::Manifest,
+    id: &'static str,
+    head: &'static str,
+    full: OnceLock<&'static crate::abi::Manifest>,
+}
+
+impl Manifested {
+    /// The manifest `base` of the mod `id`, its schema text to start with
+    /// `head`.
+    #[must_use]
+    pub const fn new(
+        base: &'static crate::abi::Manifest,
+        id: &'static str,
+        head: &'static str,
+    ) -> Self {
+        Self {
+            base,
+            id,
+            head,
+            full: OnceLock::new(),
+        }
+    }
+
+    /// The manifest; the section is read at the first call only.
+    pub fn get(&self) -> &'static crate::abi::Manifest {
+        self.full.get_or_init(|| {
+            let text = own_schemas(self.head, self.id, section());
+            if text.is_empty() {
+                return self.base;
+            }
+            let text: &'static str = Box::leak(text.into_boxed_str());
+            Box::leak(Box::new(crate::abi::Manifest {
+                points: crate::abi::Str::new(text),
+                ..*self.base
+            }))
+        })
+    }
+}
+
+/// The schema text of the mod `id`: `head`, then the entries of `section`
+/// that declare its own points, events and calls, in that order and by
+/// name; empty when it declares none.
+///
+/// Entries are separated by NULs, and a linker may pad between them with
+/// more; entries of other mods in the same binary, as in a test, are left
+/// out.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::__private::own_schemas;
+///
+/// let section = b"\0[[event]]\nname = \"you.a:sold\"\n\0\0[[point]]\nname = \"you.b:price\"\n\0";
+/// assert_eq!(
+///     own_schemas("schema = 1\n", "you.a", section),
+///     "schema = 1\n[[event]]\nname = \"you.a:sold\"\n",
+/// );
+/// assert_eq!(own_schemas("schema = 1\n", "you.c", section), "");
+/// ```
+#[must_use]
+pub fn own_schemas(head: &str, id: &str, section: &[u8]) -> String {
+    let rank = |entry: &str| {
+        ["[[point]]", "[[event]]", "[[call]]"]
+            .iter()
+            .position(|kind| entry.starts_with(kind))
+    };
+    let mut own: Vec<(usize, &str, &str)> = section
+        .split(|&b| b == 0)
+        .filter_map(|entry| core::str::from_utf8(entry).ok())
+        .filter_map(|entry| {
+            let name = entry.split_once("\nname = \"")?.1.split_once('"')?.0;
+            Some((rank(entry)?, name, entry))
+        })
+        .filter(|(_, name, _)| is_own(id, name))
+        .collect();
+    if own.is_empty() {
+        return String::new();
+    }
+    own.sort_unstable();
+    let mut text = head.to_owned();
+    for (_, _, entry) in own {
+        text.push_str(entry);
+    }
+    text
 }
 
 /// The first non-empty text of `texts`, or empty.
@@ -100,24 +231,6 @@ pub fn dependency_id(id: crate::content::Id) -> Result<crate::content::Id, crate
 pub const fn is_own(id: &str, name: &str) -> bool {
     let (id, name) = (id.as_bytes(), name.as_bytes());
     name.len() > id.len() && name[id.len()] == b':' && same(name.split_at(id.len()).0, id)
-}
-
-/// Whether `name` is `<id>:<export>` for one of `exports`, the local
-/// names a mod's manifest exports.
-#[must_use]
-pub const fn is_exported(id: &str, exports: &[&str], name: &str) -> bool {
-    if !is_own(id, name) {
-        return false;
-    }
-    let local = name.as_bytes().split_at(id.len() + 1).1;
-    let mut i = 0;
-    while i < exports.len() {
-        if same(exports[i].as_bytes(), local) {
-            return true;
-        }
-        i += 1;
-    }
-    false
 }
 
 /// Whether `code` is a language's code in text files, as

@@ -224,12 +224,11 @@ The change takes effect at the next start.
 The mod that owns a rule declares its point once with
 [`#[point]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs):
 the input struct, the name `<owner id>:<point>`, the mode, the answer's type
-and, when links may refuse, `refusable`. List it under `points` in
-`declare_mod!` (see [the manifest](concepts/loader-and-abi.md#the-manifest)),
-as `enshwick::declare_mod!(TradingPost, points: [Price])`, so its schema ships with
-the mod and other mods can write their definitions from it, and add its
-local name to `exports` in the manifest, `exports = ["price"]`, so other mods
-may link it; a listed point missing from `exports` fails the build. Every field's
+and, when links may refuse, `refusable`. Its schema ships with the mod (see
+[the manifest](concepts/loader-and-abi.md#schemas-for-other-mods)), so
+other mods can write their definitions from it. Add its local name to
+`exports` in the manifest, `exports = ["price"]`, so other mods may link
+it. Every field's
 type and the answer's are numbers, `bool`, `enshwick::Entity`,
 `enshwick::content::Guid`, or types of the mod's own with
 [`#[derive(Shape)]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs);

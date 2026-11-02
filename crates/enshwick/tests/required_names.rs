@@ -8,7 +8,7 @@ mod tests {
     use enshwick::points::{Decision, Order, Verdict};
     use enshwick::{Load, Mod, Off};
 
-    #[enshwick::point(name = "you.lockers:price", mode = Override, output = u32)]
+    #[enshwick::point(name = "price", of = lockers, mode = Override, output = u32)]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Price {
         pub(crate) locker: u32,
@@ -80,7 +80,7 @@ mod tests {
         use enshwick::services::Caller;
         use enshwick::{Load, Mod, Off};
 
-        #[enshwick::call(name = "you.lockers:rent", output = u32)]
+        #[enshwick::call(name = "rent", of = lockers, output = u32)]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Rent {
             pub(crate) locker: u32,

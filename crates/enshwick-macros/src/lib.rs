@@ -304,10 +304,17 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     };
     let schema = event_schema(&item, name.as_ref());
     let padding = padding_free_assert(&item, "a mod event's data");
+    let ident = &item.ident;
+    let entry = of.is_none().then(|| {
+        let event = quote!(<#ident as ::enshwick::services::ModEvent>);
+        quote! {
+            ::enshwick::__schema_entry!(if #event::DESCRIBED { #event::SCHEMA } else { "" });
+        }
+    });
     match expand_declaration(&item, name, &schema, &quote!(services::ModEvent)) {
         Ok(declared) => {
             let declared = proc_macro2::TokenStream::from(declared);
-            quote!(#declared #padding #tracked).into()
+            quote!(#declared #padding #tracked #entry).into()
         }
         Err(e) => e.to_compile_error().into(),
     }
@@ -367,9 +374,8 @@ pub fn texts(input: TokenStream) -> TokenStream {
 }
 
 /// The `SCHEMA` of a mod event: its `[[event]]` table with the layout
-/// hashes, then the `[[type]]` tables of its data. A field whose type a
-/// schema cannot describe fails the build only where `declare_mod!` lists the
-/// event, since the text is built there.
+/// hashes, then the `[[type]]` tables of its data. An event with a field
+/// whose type a schema cannot describe ships no schema.
 fn event_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -> proc_macro2::TokenStream {
     let shape = quote!(::enshwick::Shape);
     let event = quote!(::enshwick::services::ModEvent);
@@ -492,10 +498,14 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
             &quote!(points::Point),
         )?);
         let padding = padding_free_assert(&item, "a point's input");
+        let entry = of.is_none().then(
+            || quote!(::enshwick::__schema_entry!(<#ident as ::enshwick::points::Point>::SCHEMA);),
+        );
         Ok(quote! {
             #declared
             #padding
             #tracked
+            #entry
             const _: () = assert!(
                 <#output as ::enshwick::Shape>::PADDING_FREE,
                 "a point's answer has padding, which another language would read uninitialised: add the bytes as fields",
@@ -587,9 +597,13 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
         )?);
         let types: Vec<&Type> = item.fields.iter().map(|f| &f.ty).collect();
         let shape = quote!(::enshwick::Shape);
+        let entry = of.is_none().then(
+            || quote!(::enshwick::__schema_entry!(<#ident as ::enshwick::services::Call>::SCHEMA);),
+        );
         Ok(quote! {
             #declared
             #tracked
+            #entry
 
             const _: () = {
                 assert!(

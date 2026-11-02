@@ -4335,10 +4335,10 @@ typedef struct EnshwickManifest {
   struct EnshwickStr license;
   // Where players read about the mod, an `https://` address.
   struct EnshwickStr homepage;
-  // The schemas of the extension points the mod defines, as TOML that
-  // `cargo enshwick deps` reads; empty for none. The same text sits in
-  // the DLL's `.enshpt` section, so a tool reads it without running the
-  // mod.
+  // The schemas of the extension points, calls and mod events the mod
+  // defines, as TOML that `cargo enshwick deps` reads; empty for none.
+  // `declare_mod!` collects them from the DLL's `.enshpt` section, where
+  // a tool reads them without running the mod.
   struct EnshwickStr points;
   // The local names of what other mods may use: calls, points, services
   // and events named `<id>:<name>`. The loader refuses another mod a
