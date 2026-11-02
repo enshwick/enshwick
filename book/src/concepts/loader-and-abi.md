@@ -291,9 +291,10 @@ and ships nothing. `declare_mod!` takes nothing but the mod's type: when the
 loader first asks for the manifest, it collects the schemas and the
 exported names from that section into the manifest. `cargo enshwick deps`
 reads the same section from the DLL file, without running the mod, to write
-other mods' declarations. An exported event, point or call whose fields a
-schema cannot describe fails the build, and so does `export` on a name of
-another mod's id:
+other mods' declarations. A point or call whose types a schema cannot
+describe fails the build, exported or not, and so does an exported event
+whose fields it cannot describe, and `export` on a name of another mod's
+id:
 
 ```rust,standalone_crate
 #[enshwick::point(name = "price", mode = Override, output = u32, export)]
