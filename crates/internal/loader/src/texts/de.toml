@@ -319,3 +319,4 @@
 "mods.developer.off" = "ein Entwicklerwerkzeug: es läuft nur, solange die Datei mod-data/enshwick/developer-tools existiert"
 "reload.done" = "{name} neu geladen."
 "reload.waits" = "{name} wurde geändert und wartet auf einen Neustart: {why}"
+"mods.demo" = "Oberflächen-Demo"

@@ -319,3 +319,4 @@
 "mods.developer.off" = "開発者ツールです。ファイル mod-data/enshwick/developer-tools がある間だけ動作します"
 "reload.done" = "{name} を再読み込みしました。"
 "reload.waits" = "{name} が変更されましたが、再起動まで反映されません: {why}"
+"mods.demo" = "インターフェースのデモ"

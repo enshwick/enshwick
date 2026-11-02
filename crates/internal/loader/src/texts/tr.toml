@@ -319,3 +319,4 @@
 "mods.developer.off" = "bir geliştirici aracı: yalnızca mod-data/enshwick/developer-tools dosyası varken çalışır"
 "reload.done" = "{name} yeniden yüklendi."
 "reload.waits" = "{name} değişti ve yeniden başlatmayı bekliyor: {why}"
+"mods.demo" = "Arayüz tanıtımı"

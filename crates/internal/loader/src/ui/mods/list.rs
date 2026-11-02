@@ -45,8 +45,9 @@ fn about(paint: &Painter<'_>, record: &crate::host::ModRecord) {
 }
 
 /// What the loader itself has on, off or wrong, above the mods: developer
-/// tools on, features this build lacks, parts a panic turned off, a broken
-/// settings file and discovery off.
+/// tools on, with the interface demo's button where this game has them,
+/// features this build lacks, parts a panic turned off, a broken settings
+/// file and discovery off.
 fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
     if loader.developer_tools {
         paint.label(
@@ -55,6 +56,9 @@ fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
             true,
             false,
         );
+    }
+    if loader.developer_tools && paint.button(texts::text("mods.demo").as_bytes(), true) {
+        crate::ui::open_demo(None);
     }
     let lacking = loader.build.lacking(crate::TABLE_IDS);
     if !lacking.is_empty() {

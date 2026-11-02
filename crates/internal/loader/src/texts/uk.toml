@@ -319,3 +319,4 @@
 "mods.developer.off" = "інструмент розробника: працює лише тоді, коли існує файл mod-data/enshwick/developer-tools"
 "reload.done" = "{name} перезавантажено."
 "reload.waits" = "{name} змінився й чекає перезапуску: {why}"
+"mods.demo" = "Демонстрація інтерфейсу"
