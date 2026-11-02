@@ -406,7 +406,6 @@ fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(u32,
 /// entities; every [`JOIN_LOOK_EVERY`] steps, looks for joined characters'
 /// carried items; after every step, drops the records of the entities
 /// destroyed in it, and tells the clients.
-
 pub(crate) fn after_step(loader: &Loader) {
     if FINDING.load(Ordering::Relaxed) {
         find_pending(loader);
@@ -546,7 +545,6 @@ pub(crate) fn player_left(loader: &Loader, entity: Entity) {
 /// anchor names one, else aside under the item's session id. An older
 /// waiting record on the same slot goes aside. The number waiting and the
 /// number aside.
-
 fn keep_carried(
     server: &mut Server,
     character: Entity,
@@ -722,7 +720,6 @@ fn look(
 /// finds in the same link and slot, holding the same item. A record whose
 /// item already has a newer value, or an older one on a slot a newer record
 /// names, goes aside; the character's other records keep waiting.
-
 fn take_back_carried(
     server: &mut Server,
     character: CharacterId,
