@@ -67,22 +67,12 @@ impl Part {
         functions: &[pinned::ui::PAUSE_MENU_SITE, pinned::ui::PAUSE_ENTRY],
         menu: true,
     };
-    pub(crate) const WORLD_ROWS: Self = Self {
-        name: "Mods rows in the world settings",
-        functions: &[pinned::ui::WORLD_SETTINGS_SITE],
-        menu: false,
-    };
     pub(crate) const HUD: Self = Self {
         name: "HUD",
         functions: &[pinned::ui::HUD, pinned::ui::HUD_VISIBLE],
         menu: false,
     };
-    pub(crate) const ALL: [Self; 4] = [
-        Self::MAIN_MENU,
-        Self::PAUSE_MENU,
-        Self::WORLD_ROWS,
-        Self::HUD,
-    ];
+    pub(crate) const ALL: [Self; 3] = [Self::MAIN_MENU, Self::PAUSE_MENU, Self::HUD];
 }
 
 /// The functions both menus' Mods entries need: the Mods screen they open

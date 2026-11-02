@@ -1,9 +1,11 @@
-//! A mod's own settings page, and each settings row drawn with its text field.
+//! A mod's settings page, behind its gear on the Mods screen: each player's
+//! own settings, then the running world's, or with no world the defaults of
+//! new worlds; and each settings row drawn with its text field.
 
 use enshwick::abi::UiWidget;
 
 use super::list::{listing, pages};
-use super::{Entries, ROWS_PER_PAGE};
+use super::{Entries, ROWS_PER_PAGE, joined_elsewhere};
 use crate::configure::rows::{self, Lock, Row, Widget};
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -16,11 +18,10 @@ pub(super) fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
     let Some(record) = loader.mods.get(index) else {
         return Vec::new();
     };
-    let Some(schema) = client_schema(record) else {
+    let Some(schema) = page_schema(record) else {
         return Vec::new();
     };
-    let file = std::fs::read_to_string(loader.configs_dir.join(format!("{}.toml", record.id)))
-        .unwrap_or_default();
+    let file = crate::worlds::show_text(loader, record);
     let texts = record.texts.relock().clone();
     let words = texts.as_ref().map(|texts| rows::Words {
         texts,
@@ -29,8 +30,9 @@ pub(super) fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
     rows::rows(&schema, &file, None, words)
 }
 
-pub(super) fn client_schema(record: &crate::host::ModRecord) -> Option<enshwick::config::Schema> {
-    mods_screen::user_settings(record.schema.relock().clone()?)
+/// The settings mod `record`'s page edits here; `None` when it has none.
+pub(super) fn page_schema(record: &crate::host::ModRecord) -> Option<enshwick::config::Schema> {
+    mods_screen::page_settings(record.schema.relock().clone()?, joined_elsewhere())
 }
 
 /// Draws a page of mod `index`'s settings; the outcome of a change.
@@ -57,7 +59,32 @@ pub(super) fn settings(
     let listing = listing(paint, ROWS_PER_PAGE);
     *first = listing.clamp_first(*first, rows.len());
     let shown = listing.shown(*first, rows.len());
+    let world = crate::worlds::current().is_some();
+    let mut section = None;
     for row in rows.iter().take(shown.end).skip(shown.start) {
+        let scope = schema
+            .field(crate::configure::element(&row.key).0)
+            .map(|f| f.scope);
+        if let Some(scope) = scope
+            && section != Some(scope)
+        {
+            section = Some(scope);
+            let (heading, note) = mods_screen::section(scope, world);
+            paint.label(
+                texts::text(heading).as_bytes(),
+                UiWidget::STYLE_H3,
+                false,
+                false,
+            );
+            if let Some(note) = note {
+                paint.label(
+                    texts::text(note).as_bytes(),
+                    UiWidget::STYLE_SECONDARY,
+                    true,
+                    false,
+                );
+            }
+        }
         if let Some(value) = draw_row(paint, &record.id, &schema, row, Some(entries)) {
             changed = Some((row.key.clone(), value));
         }

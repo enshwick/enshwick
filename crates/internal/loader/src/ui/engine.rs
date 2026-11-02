@@ -309,14 +309,6 @@ impl MenuLayout {
     }
 }
 
-/// The world settings view's fields at the loader's hook in it: the
-/// config's byte that makes every row read-only, and the shown tab.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct ViewLayout {
-    pub(super) read_only: usize,
-    pub(super) tab: usize,
-}
-
 /// The build's constants by id.
 type Lookup<'a> = &'a dyn Fn(&str) -> Option<u64>;
 
@@ -448,15 +440,6 @@ impl DialogLayout {
     }
 }
 
-impl ViewLayout {
-    fn read(lookup: Lookup<'_>) -> Result<Self, Missing> {
-        Ok(Self {
-            read_only: field(lookup, pinned::ui::VIEW_READ_ONLY.id())?,
-            tab: field(lookup, pinned::ui::VIEW_TAB.id())?,
-        })
-    }
-}
-
 /// A window's own objects, kept in place from its start to its end.
 pub(super) struct Window {
     object: Buf<WINDOW_OBJECT>,
@@ -531,8 +514,6 @@ pub(crate) struct Engine {
     pub(super) menu: Option<MenuLayout>,
     /// The dialogs' fields; `None` keeps dialogs in system windows.
     pub(super) dialog: Option<DialogLayout>,
-    /// The world settings view's fields; `None` keeps the mods' rows out.
-    pub(super) view: Option<ViewLayout>,
     /// The scroll area's functions and looks; `None` pages long lists.
     scroll: Option<scroll::Scrolling>,
     /// The text field's functions; `None` shows texts read-only.
@@ -576,7 +557,6 @@ pub(crate) struct Engine {
     action_query: Option<ActionQueryFn>,
     pub(super) main_menu_site: u64,
     pub(super) pause_menu_site: u64,
-    pub(super) world_settings_site: u64,
     /// The main menu's site between its version line and its legal line,
     /// when its code holds on this build; 0 keeps the loader's line off.
     pub(super) legal_line_site: u64,
@@ -713,7 +693,6 @@ unsafe fn game_fn<F: Copy>(loader: &Loader, name: Symbol) -> Result<F, Missing> 
 struct Optional {
     menu: Option<MenuLayout>,
     dialog: Option<DialogLayout>,
-    view: Option<ViewLayout>,
     scroll: Option<scroll::Scrolling>,
     text_fields: Option<text_field::TextFields>,
 }
@@ -721,8 +700,7 @@ struct Optional {
 impl Optional {
     /// Reads each optional layout, adding the menus' entries to `parts_off`
     /// when theirs does not read, then turns off each of `parts_off` and
-    /// each other layout that does not read, with its reason; the world
-    /// settings' rows only while their hook site reads.
+    /// each other layout that does not read, with its reason.
     fn resolve(loader: &Loader, parts_off: &mut Vec<(Part, Missing)>) -> Self {
         let lookup = |id: &str| loader.build.constant(id);
         let menu = MenuLayout::read(&lookup);
@@ -741,13 +719,9 @@ impl Optional {
         for (part, why) in parts_off.iter() {
             off(part.name)(why);
         }
-        let world_rows = !parts_off.iter().any(|(p, _)| *p == Part::WORLD_ROWS);
         Self {
             menu: menu.ok(),
             dialog: DialogLayout::read(&lookup).inspect_err(off("dialogs")).ok(),
-            view: world_rows
-                .then(|| ViewLayout::read(&lookup).inspect_err(off(Part::WORLD_ROWS.name)))
-                .and_then(Result::ok),
             scroll: scroll::Scrolling::resolve(loader)
                 .inspect_err(off("scrolling on the Mods screen (lists page)"))
                 .ok(),
@@ -787,8 +761,7 @@ macro_rules! part_fn {
 impl Engine {
     /// Resolves every function and look. The first of the interface's own
     /// that is missing or does not read as expected keeps the interface
-    /// off; an optional part, the dialogs, the world settings' rows, the
-    /// menus' entries, the HUD, the scroll area and the text field, turns
+    /// off; an optional part, the dialogs, the menus' entries, the HUD, the scroll area and the text field, turns
     /// off alone with its reason, and the rest stays on.
     pub(crate) fn resolve(loader: &Loader) -> Result<Self, Missing> {
         let mut parts_off = check_functions(|name| check_function(loader, name))?;
@@ -798,7 +771,6 @@ impl Engine {
         let Optional {
             menu,
             dialog,
-            view,
             scroll,
             text_fields,
         } = Optional::resolve(loader, &mut parts_off);
@@ -834,7 +806,6 @@ impl Engine {
             layout,
             menu,
             dialog,
-            view,
             scroll,
             text_fields,
             window_begin: function!(pinned::ui::WINDOW_BEGIN, WindowBeginFn),
@@ -886,7 +857,6 @@ impl Engine {
             action_query: part_fn!(loader, menus, pinned::ui::ACTION_QUERY, ActionQueryFn),
             main_menu_site: site(Part::MAIN_MENU, pinned::ui::MAIN_MENU_SITE),
             pause_menu_site: site(Part::PAUSE_MENU, pinned::ui::PAUSE_MENU_SITE),
-            world_settings_site: site(Part::WORLD_ROWS, pinned::ui::WORLD_SETTINGS_SITE),
             legal_line_site: if loader.code_holds(pinned::ui::LEGAL_LINE_SITE) {
                 loader.address(pinned::ui::LEGAL_LINE_SITE).unwrap_or(0)
             } else {

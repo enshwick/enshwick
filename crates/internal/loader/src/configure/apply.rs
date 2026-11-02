@@ -2,8 +2,8 @@
 //! own check, written atomically with the file's comments kept, and the
 //! mod told at once. Each player's own settings go to the settings file,
 //! the others to the running world's settings, or with no world running to
-//! the changes waiting for the next world. The console's `enshwick config` and the Mods screen both change settings
-//! through here.
+//! the settings file, the template of new worlds. The console's `enshwick
+//! config` and the Mods screen both change settings through here.
 
 use enshwick::abi::Event;
 use enshwick::config::Stage;
@@ -57,9 +57,10 @@ pub(crate) fn apply(
     let mut change = super::set(id, &schema, &text, key, value)?;
     // The mod checks what it would read with the change.
     let read = match &destination {
-        Destination::Global => crate::worlds::effective(loader, record, &change.text),
+        Destination::Global | Destination::NewWorlds => {
+            crate::worlds::effective(loader, record, &change.text)
+        }
         Destination::World(_) => crate::worlds::compose(&change.text, &global, &schema),
-        Destination::Next => crate::worlds::overlay(&global, &change.text, None),
     };
     crate::host::check_settings(index, &read)?;
     crate::watch::write_noted(&path, || crate::worlds::write_target(&path, &change.text)).map_err(
@@ -69,14 +70,12 @@ pub(crate) fn apply(
         },
     )?;
     crate::log!(INFO, "{who} set {id} {key} = {}", change.value);
-    change.destination = destination.clone();
-    if destination != Destination::Next {
-        // The change is the world's, not the asking player's: the mod's
-        // handler reads no reader's language.
-        texts::for_nobody(|| {
-            loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
-        });
-    }
+    change.destination = destination;
+    // The change is the world's, not the asking player's: the mod's handler
+    // reads no reader's language.
+    texts::for_nobody(|| {
+        loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
+    });
     Ok(change)
 }
 

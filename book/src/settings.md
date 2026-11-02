@@ -193,9 +193,9 @@ the one the game started with, and the settings file holds it for every
 world.
 
 A newer version of a mod that adds a setting finds it at its template value
-in each world. Changes to world settings made before any world runs, as on
-the screen that creates or starts a world, wait in
-`mod-data/<id>/worlds/next.toml` and go into the next world that loads.
+in each world. A change to a world setting while no world runs, as from the
+main menu, goes into the settings file: worlds made from then on start with
+it, and a world that has its own file keeps its values.
 
 While a world runs, the loader watches its settings file as it watches the
 settings file, and an edit reaches `on_config_change` about a second after it
@@ -224,22 +224,24 @@ changes them too:
 | `enshwick config <mod> <key> <value>` | checks the value and writes it to the running world's settings, comments kept    |
 
 On a dedicated server, `enshwick config` edits the world it runs; before its
-world loads, the change waits for it. A key names one element of a list with
+world loads, a world setting goes into the settings file, for new worlds. A key names one element of a list with
 its index, `per_level[2]`, and a grouped setting with its dotted key,
 `comfort.multiplier`.
 
-The world settings, when a player creates or starts a world and in the pause
-menu's world settings, are where a world's settings are edited: under their
-last tab, every mod's world settings show as the game's own rows, built from
-the schema: a toggle for `bool`, a slider for a number with a range (in stops
+A mod's Settings button on the Mods screen opens its settings page: each
+player's own settings under "Your settings", then the world's. In a world
+this process runs, single player or hosted, those are the world's ("This
+world"); in the main menu they are the settings new worlds start with ("New
+worlds"). The game's own world settings show no mod rows. Every row is the
+game's own, built from the schema: a toggle for `bool`, a slider for a number with a range (in stops
 for whole numbers up to 32 values), a slider per element for a list of up to
 16 numbers with a range (numbered from 1, or from the field's `first = n`,
 and labelled by the mod's text `<key>.element`, `{n}` standing for the
 number, such as `Flame level {n}`), a dropdown for `choices`, and the value with the
 file's name for the rest (text, longer lists, tables, numbers without a
-range). A list's length changes in the file. They are read-only where the game makes its own rows read-only, for a
-player who is no host; joined to another's game, the rows show the server's
-`sync` values only.
+range). A list's length changes in the file. Joined to another's game, the
+page keeps each player's own settings, and its "Server settings" button
+opens the server's settings of the mod.
 
 Rows speak the player's language through the mod's
 [texts](content/texts.md), which `load.texts` hands the loader: the label is
@@ -250,8 +252,7 @@ world loads": they apply when the world loads again; `restart` rows say "when
 the game starts again". A change is
 written at once, as the game applies its own settings.
 
-The Mods screen edits each player's own (`client`) settings. There a text
-setting shows the game's own text field, and its value goes through the same
+On the settings page a text setting shows the game's own text field, and its value goes through the same
 checks as any other change. A text longer than 256 bytes, and any text on a
 game build where the loader cannot draw the text field, shows as a line with
 the file's name instead. A `secret` shows only its mark, never its value.

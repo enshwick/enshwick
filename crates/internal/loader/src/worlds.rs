@@ -8,9 +8,9 @@
 //! this process, a mod reads that world's settings with its own `client`
 //! settings over them; with no world, the template.
 //!
-//! Changes to world settings made before any world runs, as on the screen
-//! that creates or starts a world, wait in `mod-data/<id>/worlds/next.toml`
-//! and go into the next world that loads.
+//! A change to a world setting while no world runs, as from the main menu,
+//! goes into the template: the defaults of worlds made from then on. A world
+//! that has its file keeps its own values.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -44,31 +44,26 @@ pub fn world_file(data_dir: &Path, id: &str, key: &str) -> PathBuf {
         .join("settings.toml")
 }
 
-/// Where changes for the next world wait.
-#[must_use]
-pub fn next_file(data_dir: &Path, id: &str) -> PathBuf {
-    data_dir.join(id).join("worlds").join("next.toml")
-}
-
 /// Where a change of a setting at `stage` goes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Destination {
-    /// The settings file: each player's own settings, and the template.
+    /// The settings file, for each player's own settings.
     Global,
     /// The settings of the world with this key.
     World(String),
-    /// The changes waiting for the next world.
-    Next,
+    /// The settings file, for a world setting while no world runs: the
+    /// template new worlds start from.
+    NewWorlds,
 }
 
 /// Where a change of a setting at `stage` goes while the world `current`
 /// runs, or none.
 #[must_use]
 pub fn destination(stage: Stage, current: Option<&str>) -> Destination {
-    match (stage, current) {
-        (stage, _) if stage.scope() == Scope::User => Destination::Global,
-        (_, Some(key)) => Destination::World(key.to_owned()),
-        (_, None) => Destination::Next,
+    match (stage.scope(), current) {
+        (Scope::World, Some(key)) => Destination::World(key.to_owned()),
+        (Scope::World, None) => Destination::NewWorlds,
+        _ => Destination::Global,
     }
 }
 
@@ -177,18 +172,16 @@ pub fn compose(world: &str, global: &str, schema: &Schema) -> String {
     overlay(world, global, Some(&client_keys(schema)))
 }
 
-/// The settings a world starts with, or a world's settings after the changes
-/// waiting for the next world: `None` when nothing needs writing.
+/// The settings a world starts with, or a world's settings with the keys a
+/// newer template added: `None` when nothing needs writing.
 #[must_use]
-pub fn prepare(template: &str, existing: Option<&str>, next: Option<&str>) -> Option<String> {
-    match (existing, next) {
-        (Some(world), None) => {
+pub fn prepare(template: &str, existing: Option<&str>) -> Option<String> {
+    match existing {
+        Some(world) => {
             let filled = with_new_keys(world, template);
             (filled != world).then_some(filled)
         }
-        (Some(world), Some(next)) => Some(overlay(&with_new_keys(world, template), next, None)),
-        (None, Some(next)) => Some(overlay(template, next, None)),
-        (None, None) => Some(template.to_owned()),
+        None => Some(template.to_owned()),
     }
 }
 
@@ -199,13 +192,9 @@ pub fn prepare(template: &str, existing: Option<&str>, next: Option<&str>) -> Op
 ///
 /// When the file is there and does not read, text that is not UTF-8
 /// included: it stays as it is, never replaced by the template.
-pub fn world_text(
-    template: &str,
-    path: &Path,
-    next: Option<&str>,
-) -> std::io::Result<Option<String>> {
+pub fn world_text(template: &str, path: &Path) -> std::io::Result<Option<String>> {
     let existing = enshwick::files::read_to_string_if_present(path)?;
-    Ok(prepare(template, existing.as_deref(), next))
+    Ok(prepare(template, existing.as_deref()))
 }
 
 /// `world` with the keys `template` has and it lacks, as a newer version of
@@ -243,7 +232,7 @@ mod live {
     use enshwick::abi::Event;
     use enshwick::config::Schema;
 
-    use super::{Destination, compose, current, next_file, set_current, world_file, world_text};
+    use super::{Destination, compose, current, set_current, world_file, world_text};
     use crate::host::{Loader, ModRecord};
     use crate::locks::Relock;
 
@@ -280,18 +269,13 @@ mod live {
     }
 
     /// The text shown for the settings of `record` on this process: the
-    /// running world's, else the template with the changes waiting for the
-    /// next world, with the settings file's `user` settings over either.
+    /// running world's, else the template, with the settings file's `user`
+    /// settings over either.
     pub(crate) fn show_text(loader: &Loader, record: &ModRecord) -> String {
         let global = read(&global_path(loader, record)).unwrap_or_default();
-        let shown = if let Some(key) = current() {
-            read(&world_file(&loader.data_dir, &record.id, &key)).unwrap_or_else(|| global.clone())
-        } else {
-            match read(&next_file(&loader.data_dir, &record.id)) {
-                Some(next) => super::overlay(&global, &next, None),
-                None => global.clone(),
-            }
-        };
+        let shown = current()
+            .and_then(|key| read(&world_file(&loader.data_dir, &record.id, &key)))
+            .unwrap_or_else(|| global.clone());
         match schema(record) {
             Some(schema) => compose(&shown, &global, &schema),
             None => shown,
@@ -310,9 +294,8 @@ mod live {
         destination: &Destination,
     ) -> Result<(PathBuf, String), (PathBuf, std::io::Error)> {
         let path = match destination {
-            Destination::Global => global_path(loader, record),
+            Destination::Global | Destination::NewWorlds => global_path(loader, record),
             Destination::World(key) => world_file(&loader.data_dir, &record.id, key),
-            Destination::Next => next_file(&loader.data_dir, &record.id),
         };
         match enshwick::files::read_to_string_if_present(&path) {
             Ok(text) => Ok((path, text.unwrap_or_default())),
@@ -344,9 +327,7 @@ mod live {
         for record in loader.mods.iter().filter(|m| schema(m).is_some()) {
             let global = read(&global_path(loader, record)).unwrap_or_default();
             let world_path = world_file(&loader.data_dir, &record.id, &key);
-            let next_path = next_file(&loader.data_dir, &record.id);
-            let next = read(&next_path);
-            let text = match world_text(&global, &world_path, next.as_deref()) {
+            let text = match world_text(&global, &world_path) {
                 Ok(text) => text,
                 Err(e) => {
                     crate::log::write(
@@ -370,9 +351,6 @@ mod live {
                     continue;
                 }
                 crate::watch::wrote(&world_path);
-            }
-            if next.is_some() {
-                let _gone = std::fs::remove_file(&next_path);
             }
         }
         crate::log!(INFO, "world settings: world {key}");
@@ -409,23 +387,11 @@ mod tests {
     }
 
     #[test]
-    fn a_world_starts_from_the_template_and_takes_waiting_changes() {
+    fn a_world_starts_from_the_template_and_keeps_its_own_values_after() {
         let template = "# Limit.\nlimit = 4\nlabels = true\n";
-        assert_eq!(prepare(template, None, None).as_deref(), Some(template));
-        assert_eq!(
-            prepare(template, Some("limit = 9\nlabels = true\n"), None),
-            None
-        );
-        let started = prepare(template, None, Some("limit = 6\n")).unwrap();
-        assert!(started.contains("# Limit.\nlimit = 6"), "{started}");
-        let later = prepare(
-            template,
-            Some("limit = 9 # mine\nlabels = true\n"),
-            Some("limit = 2\n"),
-        )
-        .unwrap();
-        assert_eq!(later, "limit = 2 # mine\nlabels = true\n");
-        let newer = prepare(template, Some("limit = 9\n"), None).unwrap();
+        assert_eq!(prepare(template, None).as_deref(), Some(template));
+        assert_eq!(prepare(template, Some("limit = 9\nlabels = true\n")), None);
+        let newer = prepare(template, Some("limit = 9\n")).unwrap();
         assert_eq!(newer, "limit = 9\nlabels = true\n");
     }
 
@@ -437,12 +403,12 @@ mod tests {
         let template = "limit = 4\n";
         let path = dir.join("settings.toml");
         assert_eq!(
-            world_text(template, &path, None).unwrap().as_deref(),
+            world_text(template, &path).unwrap().as_deref(),
             Some(template),
             "a new world starts from the template"
         );
         std::fs::write(&path, b"limit = 9\n\xff\n").unwrap();
-        assert!(world_text(template, &path, None).is_err(), "not UTF-8");
+        assert!(world_text(template, &path).is_err(), "not UTF-8");
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
@@ -489,14 +455,15 @@ workers = 6
             destination(Stage::Runtime, Some("w")),
             Destination::World("w".into())
         );
-        assert_eq!(destination(Stage::Sync, None), Destination::Next);
+        assert_eq!(
+            destination(Stage::Sync, None),
+            Destination::NewWorlds,
+            "with no world a change sets the defaults of new worlds"
+        );
+        assert_eq!(destination(Stage::Client, None), Destination::Global);
         assert_eq!(client_keys(&schema()), ["labels"]);
         let file = world_file(Path::new("d"), "you.trading-post", "w-1");
         assert!(file.ends_with("you.trading-post/worlds/w-1/settings.toml"));
-        assert!(
-            next_file(Path::new("d"), "you.trading-post")
-                .ends_with("you.trading-post/worlds/next.toml")
-        );
     }
 
     #[test]

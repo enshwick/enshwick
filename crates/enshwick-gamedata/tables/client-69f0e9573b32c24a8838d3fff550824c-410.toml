@@ -229,7 +229,6 @@ revision = 1
 "ui.action_query" = { rva = 0xd8_f6f0, pattern = "40 53 41 57 48 81 EC C8 02 00 00 41 0F B7 D8 4C 8B F9" }
 "ui.main_menu_site" = { rva = 0xc1_a7e0, pattern = "75 04 C6 46 ?? 01 33 C0 C7 44 24 ?? 01 00 00 00 49 8D 8E ?? ?? ?? ??", at = 6 }
 "ui.pause_menu_site" = { rva = 0xcc_1a87, pattern = "41 C7 04 24 01 00 00 00 48 8B 05 ?? ?? ?? ?? 4C 8B B0 ?? ?? ?? ?? 49 8D 8E ?? ?? ?? ??", at = 8 }
-"ui.world_settings_site" = { rva = 0xb8_32bb, pattern = "48 8D 8D ?? ?? ?? ?? 49 8B D6 E8 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? F3 0F 10 44 24 ??", at = 15 }
 "ui.node_id_get" = { rva = 0x119_8c60, pattern = "E8 ?? ?? ?? ?? 49 8B CE 0F 10 38 E8 ?? ?? ?? ?? 4C 8B F8 48 8B CE E8 ?? ?? ?? ?? 84 C0", rel = 12 }
 
 # Engine offsets, sizes and values by symbolic id. A `pattern` holds
@@ -690,7 +689,6 @@ revision = 1
 "ui.action_query.bytes" = "0xc8ec_8148_5741_5340"
 "ui.main_menu_site.bytes" = 0x1_4824_44c7_c033
 "ui.pause_menu_site.bytes" = 0x4c01_b59a_0a05_8b48
-"ui.world_settings_site.bytes" = "0xe800_0017_588d_8d48"
 # The interface's layouts: fields of the context, the popup state, the
 # widgets' configs and the objects the widget functions fill, with the
 # extent each function reads or writes; `ui.nav_*` are offsets in the
@@ -773,8 +771,6 @@ revision = 1
 "ui.action_node" = { value = 0x40, pattern = "66 44 89 53 ?? F2 0F 11 4B ?? 4C 89 53 ?? 44 88 0B 44 88 43 ??", at = 13, size = 1 }
 "ui.action_bound" = { value = 0x1b, pattern = "48 B8 25 23 22 84 E4 9C F2 CB 44 88 53 ?? 48 89 44 24 ??", at = 13, size = 1 }
 "ui.action_extent" = { value = 0x48, pattern = "66 44 89 53 ?? F2 0F 11 4B ?? 4C 89 53 ?? 44 88 0B 44 88 43 ??", at = 13, size = 1, plus = 8 }
-"ui.view_read_only" = { value = 0x91, pattern = "48 8D 95 ?? ?? ?? ?? 66 89 BD ?? ?? ?? ?? E8 ?? ?? ?? ?? 80 BE ?? ?? ?? ?? 00 66 89 BD ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 0F 28 C6", at = 21, size = 4 }
-"ui.view_tab" = { value = 0x8, pattern = "0F 29 44 24 ?? E8 ?? ?? ?? ?? 41 0F B6 4F ?? 85 C9 74 4B 83 E9 01", at = 14, size = 1 }
 # Fields the loader reads in bases, weather pools, saved buffs, pickup
 # targets and knowledge requests; a request's layout is confirmed where
 # the game builds one from a player's input.

@@ -1,7 +1,12 @@
 //! The Mods screen: a "Mods" entry in the title screen's main menu and in the
 //! pause menu, beside Settings, opens a screen of the loader's own that lists
-//! the mods and shows each mod's settings as the game's settings rows, built
-//! from the schema the mod handed the loader.
+//! the mods. Each mod's Settings button opens its settings as the game's
+//! settings rows, built from the schema the mod handed the loader: each
+//! player's own, then the world's. In a world this process runs those are
+//! the world's; in the main menu, the defaults of new worlds. Joined to
+//! another's server, the server's settings of the mod are a page of their
+//! own, which only its administrators change. Mod settings show nowhere
+//! else, not in the game's world settings.
 //!
 //! The entries are drawn from two hooks inside the menus' drawing: in the
 //! main menu before its Credits entry, in the pause menu right after its
@@ -21,10 +26,6 @@
 //! takes typed text in the game's own text field, set on Enter; typing left
 //! without Enter is dropped. A build without either pages its lists and
 //! shows its texts read-only.
-//!
-//! The world settings view shows the same rows under its last tab, inside
-//! its scroll area, from a hook after the tab's own rows: read-only where the
-//! view is, for a player who may not change the world.
 
 use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
@@ -32,8 +33,7 @@ use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use enshwick::abi::{Registers, UiWidget};
 use list::{Listed, list};
 use server::{server_list, server_settings};
-use settings::{page_rows, settings};
-use world::{WorldRows, world_settings};
+use settings::{page_rows, page_schema, settings};
 
 use crate::configure::rows::Row;
 use crate::fuse::Fuse;
@@ -42,7 +42,7 @@ use crate::interface_parts::Part;
 use crate::listing;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
-use crate::mods_screen::{self, BACK_PRESSED, Back, Heard, Kind, WORLD_SETTINGS_OPENED};
+use crate::mods_screen::{self, BACK_PRESSED, Back, Heard, Kind};
 use crate::pinned;
 use crate::texts;
 
@@ -79,14 +79,6 @@ static FRAME: AtomicU64 = AtomicU64::new(0);
 static NODE: AtomicU64 = AtomicU64::new(0);
 /// Set by a hook that saw Back while the screen showed.
 static BACK: AtomicU8 = AtomicU8::new(0);
-/// Set when the player asked for the world settings from the screen over
-/// the pause menu.
-static JUMP: AtomicU8 = AtomicU8::new(0);
-/// Set while the screen shows over the pause menu, where the world settings
-/// are one step away.
-static JUMP_SHOWN: AtomicU8 = AtomicU8::new(0);
-/// The pause menu's submenu state for the world settings.
-const WORLD_SETTINGS_SUBMENU: u32 = 4;
 
 /// What the screen shows.
 enum Page {
@@ -209,14 +201,8 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
             Part::PAUSE_MENU,
             pinned::ui::PAUSE_MENU_SITE,
         ),
-        (
-            engine.world_settings_site,
-            world_settings,
-            Part::WORLD_ROWS,
-            pinned::ui::WORLD_SETTINGS_SITE,
-        ),
     ] {
-        if site == 0 || (site == engine.world_settings_site && engine.view.is_none()) {
+        if site == 0 {
             continue;
         }
         let link = crate::mid::MidLink {
@@ -289,28 +275,12 @@ unsafe extern "system" fn main_menu(registers: *mut Registers, _user: *mut core:
     });
 }
 
-/// The hook after the pause menu's Settings entry: draws the Mods entry and
-/// opens the world settings when the Mods screen asked to.
+/// The hook after the pause menu's Settings entry: draws the Mods entry.
 ///
 /// # Safety
 ///
-/// - Called only by the mid-hook stub, on the hooked thread, with null or
-///   the registers it saved, valid and unaliased for the call.
-unsafe extern "system" fn pause_menu(registers: *mut Registers, _user: *mut core::ffi::c_void) {
-    // SAFETY: the mid-hook stub passes either null or the registers it saved
-    // on its stack, valid and unaliased for this call.
-    let submenu = unsafe { registers.as_ref() }.map_or(0, |r| r.r12);
-    if JUMP.swap(0, Ordering::Relaxed) != 0
-        && let Ok(submenu) = usize::try_from(submenu)
-        && submenu != 0
-    {
-        // SAFETY: `submenu` is non-zero by the `if` condition; at the hook at
-        // the table's `ui.pause_menu_site`, `r12` points at the pause menu's
-        // four-byte submenu state, which the menu reads and writes only on
-        // this thread; 4 opens its world settings, as its own entry does.
-        unsafe { crate::memory::write(submenu, 0, WORLD_SETTINGS_SUBMENU) };
-        BACK.store(WORLD_SETTINGS_OPENED, Ordering::Relaxed);
-    }
+/// - Called only by the mid-hook stub, on the hooked thread.
+unsafe extern "system" fn pause_menu(_registers: *mut Registers, _user: *mut core::ffi::c_void) {
     let _drawn = PAUSE_MENU_FUSE.run("the pause menu's entry", || {
         // SAFETY: the hook at the table's `ui.pause_menu_site` sits right
         // after the pause menu's Settings entry, on the frame's thread; the
@@ -363,17 +333,11 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
             *slot = None;
             return;
         }
-        JUMP_SHOWN.store(u8::from(screen.from == FROM_PAUSE), Ordering::Relaxed);
         if let Some(entries) = screen.page.entries() {
             entries.ending = false;
         }
         let editing = screen.page.editing();
         match mods_screen::heard(BACK.swap(0, Ordering::Relaxed), editing) {
-            Heard::WorldSettings => {
-                *slot = None;
-                JUMP_SHOWN.store(0, Ordering::Relaxed);
-                return;
-            }
             Heard::EndTyping => screen.page.end_typing(),
             Heard::Back if back(screen) => {
                 *slot = None;
@@ -527,15 +491,18 @@ fn content(loader: &Loader, paint: &Painter<'_>, page: &mut Page) -> Next {
                 return Next::ServerList;
             }
             match list(loader, paint, first) {
-                Listed::Settings(index) => Next::Page(
-                    Page::Settings {
-                        index,
-                        first: 0,
-                        rows: page_rows(loader, index),
-                        entries: Entries::default(),
-                    },
-                    None,
-                ),
+                Listed::Settings(index) => match loader.mods.get(index) {
+                    Some(record) if page_schema(record).is_none() => server_page(record.id.clone()),
+                    _ => Next::Page(
+                        Page::Settings {
+                            index,
+                            first: 0,
+                            rows: page_rows(loader, index),
+                            entries: Entries::default(),
+                        },
+                        None,
+                    ),
+                },
                 Listed::Actions(id) => {
                     Next::Page(Page::Actions(super::actions::View::new(id, None)), None)
                 }
@@ -547,31 +514,30 @@ fn content(loader: &Loader, paint: &Painter<'_>, page: &mut Page) -> Next {
             first,
             rows,
             entries,
-        } => match settings(loader, paint, *index, first, rows, entries) {
-            Some(message) => {
-                *rows = page_rows(loader, *index);
-                Next::Message(message)
+        } => {
+            let record = loader.mods.get(*index);
+            let server = record.filter(|record| {
+                joined_elsewhere()
+                    && record
+                        .schema
+                        .relock()
+                        .as_ref()
+                        .is_some_and(mods_screen::has_world_settings)
+            });
+            if let Some(record) = server
+                && paint.button(texts::text("mods.server").as_bytes(), true)
+            {
+                return server_page(record.id.clone());
             }
-            None => Next::Stay,
-        },
-        Page::ServerList { first } => match server_list(paint, first) {
-            Some(id) => {
-                let asked =
-                    crate::net::to_server(&crate::remote::Message::Query { id: id.clone() });
-                Next::Page(
-                    Page::ServerSettings {
-                        id,
-                        first: 0,
-                        rows: Vec::new(),
-                        schema: None,
-                        news: 0,
-                        entries: Entries::default(),
-                    },
-                    (!asked).then(|| (texts::text("mods.server.closed").to_owned(), false)),
-                )
+            match settings(loader, paint, *index, first, rows, entries) {
+                Some(message) => {
+                    *rows = page_rows(loader, *index);
+                    Next::Message(message)
+                }
+                None => Next::Stay,
             }
-            None => Next::Stay,
-        },
+        }
+        Page::ServerList { first } => server_list(paint, first).map_or(Next::Stay, server_page),
         Page::ServerSettings {
             id,
             first,
@@ -588,14 +554,22 @@ fn content(loader: &Loader, paint: &Painter<'_>, page: &mut Page) -> Next {
     }
 }
 
-/// The view's last tab, under which the mods' rows show.
-const LAST_TAB: u8 = 3;
-
-thread_local! {
-    static WORLD: RefCell<Option<WorldRows>> = const { RefCell::new(None) };
+/// Asks the joined server for its settings of mod `id` and opens their page.
+fn server_page(id: String) -> Next {
+    let asked = crate::net::to_server(&crate::remote::Message::Query { id: id.clone() });
+    Next::Page(
+        Page::ServerSettings {
+            id,
+            first: 0,
+            rows: Vec::new(),
+            schema: None,
+            news: 0,
+            entries: Entries::default(),
+        },
+        (!asked).then(|| (texts::text("mods.server.closed").to_owned(), false)),
+    )
 }
 
 mod list;
 mod server;
 mod settings;
-mod world;
