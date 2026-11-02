@@ -347,7 +347,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     match event {
         Event::WORLD_LOADED => {
             let mut key = crate::saves::world_key(loader).map(str::to_owned);
-            let fields = match key.as_deref().map(|key| read_kept(key)) {
+            let fields = match key.as_deref().map(read_kept) {
                 Some(Some(fields)) => fields,
                 // A world without a key keeps nothing, so nothing is written.
                 Some(None) => {

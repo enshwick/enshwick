@@ -14,6 +14,7 @@
 //! 0x1C are the world's random GUID, the same across saves and new for each
 //! world (server 25988414, client 426).
 
+use std::fmt::Write as _;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -165,7 +166,10 @@ fn recorded(key: &str) -> io::Result<Option<Guid>> {
 }
 
 fn write_record(key: &str, guid: Guid) -> io::Result<()> {
-    let guid = guid.iter().map(|b| format!("{b:02x}")).collect();
+    let guid = guid.iter().fold(String::with_capacity(32), |mut hex, b| {
+        let _written = write!(hex, "{b:02x}");
+        hex
+    });
     let text = toml::to_string(&Record { guid }).map_err(io::Error::other)?;
     enshwick::files::write_atomically(&record_path(key), text)
 }

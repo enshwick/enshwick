@@ -1,8 +1,8 @@
 # State and data folders
 
 What a mod keeps for a world lies beside that world's save, so copying the
-save folder moves the world with everything its mods keep for it. What
-belongs to the mod's installation lies in the mod's own folder in `mods/`.
+save folder moves the world with its mod data. The mod's installation lies in
+its own folder in `mods/`.
 
 ## Where things live
 

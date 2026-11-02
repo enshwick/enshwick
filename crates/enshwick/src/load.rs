@@ -334,7 +334,7 @@ impl Load<'_> {
     /// beside the world's save; `None` while no world runs, as during init
     /// before a hosted game or a dedicated server's world loads. A world's
     /// state belongs there; [`WorldStore`](crate::state::WorldStore) keeps
-    /// it for you, and [`World::data_dir`](crate::world::World::data_dir)
+    /// it for you, and `World::data_dir`
     /// answers the same once the world runs.
     ///
     /// # Examples

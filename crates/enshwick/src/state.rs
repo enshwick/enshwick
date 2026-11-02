@@ -178,7 +178,7 @@ pub const HOLD_FILE: &str = "hold.txt";
 /// A hold in the mod's folder, [`Load::mod_dir`](crate::Load::mod_dir),
 /// holds every world and counts as the loader starts, on every build. A
 /// hold in the mod's data folder of one world,
-/// [`World::data_dir`](crate::world::World::data_dir), stops the game only
+/// `World::data_dir`, stops the game only
 /// as that world loads, where the loader runs; a build it leaves vanilla
 /// learns no world, so it does not stop for such a hold.
 ///
@@ -207,7 +207,7 @@ impl Hold {
     /// The hold kept in `dir`: the mod's folder from
     /// [`Load::mod_dir`](crate::Load::mod_dir) for every world, or its data
     /// folder of one world from
-    /// [`World::data_dir`](crate::world::World::data_dir).
+    /// `World::data_dir`.
     ///
     /// # Examples
     ///
@@ -370,12 +370,14 @@ pub(crate) fn world_key(host: crate::Host) -> Option<String> {
 }
 
 /// A value kept per world, in `<stem>-mod-data/<id>/<name>.toml` beside the
-/// world's save, never inside the save: removing the mod leaves the world
+/// world's save.
+///
+/// The file is never inside the save: removing the mod leaves the world
 /// vanilla, and copying the save folder takes the value along. The value is
 /// a TOML table, such as a struct.
 ///
 /// A field the type gains in an update reads from `Default` while a world's
-/// file lacks it, as [`Store::load`] reads.
+/// file lacks it, in nested tables too.
 ///
 /// Get it from [`Load::world_store`](crate::Load::world_store). It reads the
 /// running world's file when the world has loaded and writes it, when
