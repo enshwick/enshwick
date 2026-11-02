@@ -644,6 +644,12 @@ pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
     past16::arming(patches, verdicts, hooked);
 }
 
+/// Turns off bases past 16, which rests on code patches, with a plain store:
+/// see [`crate::code::disarm`].
+pub(crate) fn disarm() {
+    past16::disarm();
+}
+
 fn raised() -> bool {
     RAISED.load(Ordering::Acquire)
 }
