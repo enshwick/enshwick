@@ -59,7 +59,7 @@
 "change.runtime" = "{id} {key} = {value}: bu dünya için kaydedildi, hemen uygulandı."
 "stand-in.name" = "Kaldırılmış bir modun eşyası"
 "stand-in.description" = "Şu anda kurulu olmayan bir mod için saklandı. Eşyayı geri almak için modu yeniden kurun."
-"muted.notice" = "Bir yönetici sizi sohbette susturdu. Diğer oyuncular yazdıklarınızı görmez."
+"muted.notice" = "Sohbette susturuldunuz. Diğer oyuncular yazdıklarınızı görmez."
 "refused" = "Değiştirilmedi: {why}."
 "refused.by-mod" = "mod reddetti"
 "refused.value" = "{key} için geçerli: {accepts}"

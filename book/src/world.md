@@ -320,10 +320,12 @@ tells the player why with one of the game's notices, at most every 30
 seconds; a client without Enshwick reads the same as a chat line. Lines mods
 send and mod messages pass. The loader keeps the mutes in
 `mod-data/enshwick/muted.txt`, one account per line, with `#` notes, and
-reads it at every start, so a mute lasts until it is lifted.
+reads it at every start, so a mute lasts until it is lifted; an edit of the
+file by hand applies at the next start.
 
 An administrator online and a hosted game's host are never muted:
-`set_muted` returns `WorldError::Refused` for them. Both calls work on any
+`set_muted` returns `WorldError::Refused` for them when it can tell, and
+their lines pass even when their account was muted before. Both calls work on any
 thread, on a dedicated server and in a game a client hosts; elsewhere they
 return `WorldError::Missing`. The mod decides who may ask, such as an
 [action](actions.md) only administrators see.

@@ -4272,7 +4272,8 @@ typedef struct EnshwickHostApi {
   // at once and read again at every start. `Status::OK` also when the
   // list already says so; `Status::BAD_ARGS` for account 0 or `muted`
   // above 1; `Status::REFUSED` for a mute of an administrator online
-  // or of a hosted game's host, and when the file is not written;
+  // or of a hosted game's host, whose lines pass even when muted before,
+  // and when the file is not written;
   // `Status::MISSING` outside a server, the dedicated one or the one a
   // client hosts. Any thread, also while another call changes the list:
   // changes take turns and the file is replaced whole. A panic in the

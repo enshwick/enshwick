@@ -59,7 +59,7 @@
 "change.runtime" = "{id} {key} = {value}: für diese Welt gespeichert, sofort angewendet."
 "stand-in.name" = "Gegenstand einer entfernten Mod"
 "stand-in.description" = "Aufbewahrt für eine Mod, die gerade nicht installiert ist. Installiere die Mod wieder, um den Gegenstand zurückzubekommen."
-"muted.notice" = "Ein Administrator hat dich im Chat stummgeschaltet. Andere Spieler sehen nicht, was du schreibst."
+"muted.notice" = "Du bist im Chat stummgeschaltet. Andere Spieler sehen nicht, was du schreibst."
 "refused" = "Nicht geändert: {why}."
 "refused.by-mod" = "von der Mod abgelehnt"
 "refused.value" = "{key} erwartet {accepts}"

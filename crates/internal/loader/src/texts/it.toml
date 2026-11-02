@@ -59,7 +59,7 @@
 "change.runtime" = "{id} {key} = {value}: salvato per questo mondo, applicato ora."
 "stand-in.name" = "Oggetto di una mod rimossa"
 "stand-in.description" = "Conservato per una mod che ora non è installata. Installa di nuovo la mod per riavere l'oggetto."
-"muted.notice" = "Un amministratore ti ha silenziato in chat. Gli altri giocatori non vedono ciò che scrivi."
+"muted.notice" = "Sei silenziato in chat. Gli altri giocatori non vedono ciò che scrivi."
 "refused" = "Non modificato: {why}."
 "refused.by-mod" = "rifiutato dalla mod"
 "refused.value" = "{key} accetta {accepts}"

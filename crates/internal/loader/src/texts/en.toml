@@ -59,7 +59,7 @@
 "change.runtime" = "{id} {key} = {value}: saved for this world, applied now."
 "stand-in.name" = "Item of a removed mod"
 "stand-in.description" = "Kept for a mod that is not installed now. Install the mod again to get the item back."
-"muted.notice" = "An administrator muted you in chat. Other players do not see what you write."
+"muted.notice" = "You are muted in chat. Other players do not see what you write."
 "refused" = "Not changed: {why}."
 "refused.by-mod" = "refused by the mod"
 "refused.value" = "{key} takes {accepts}"

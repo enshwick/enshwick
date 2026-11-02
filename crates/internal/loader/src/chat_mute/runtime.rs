@@ -42,8 +42,23 @@ fn path(loader: &Loader) -> PathBuf {
 
 fn keep(keys: Vec<u64>) {
     STATE.any.store(!keys.is_empty(), Ordering::Release);
+    STATE.told.relock().retain(|key, _| keys.contains(key));
     *STATE.keys.relock() = keys;
 }
+
+/// Whether the player of `key` online is an administrator; `false` off the
+/// game thread, where the players do not read.
+fn admin_online(loader: &Loader, key: u64) -> bool {
+    crate::world::players(loader).is_ok_and(|players| {
+        players
+            .iter()
+            .any(|p| p.key == enshwick::PlayerKey::new(key) && crate::console::player_is_admin(p))
+    })
+}
+
+/// Turns the mute check off alone at its first panic, so chat and mod
+/// messages keep working.
+static MUTE_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat mutes");
 
 /// Whether this process runs a server whose chat the mutes hold: the
 /// dedicated one, or the one a client hosts.
@@ -91,15 +106,8 @@ pub(crate) fn has(_loader: &Loader, key: u64) -> bool {
 /// hosted game's host; [`SetMuteError::Write`] when the file does not read
 /// or is not written.
 pub(crate) fn set(loader: &Loader, key: u64, muted: bool, who: &str) -> Result<(), SetMuteError> {
-    if muted {
-        let admin = crate::world::players(loader).is_ok_and(|players| {
-            players.iter().any(|p| {
-                p.key == enshwick::PlayerKey::new(key) && crate::console::player_is_admin(p)
-            })
-        });
-        if protected(key, admin, crate::admission::host()) {
-            return Err(SetMuteError::Protected);
-        }
+    if muted && protected(key, admin_online(loader, key), crate::admission::host()) {
+        return Err(SetMuteError::Protected);
     }
     let _one = STATE.writing.relock();
     let path = path(loader);
@@ -109,13 +117,12 @@ pub(crate) fn set(loader: &Loader, key: u64, muted: bool, who: &str) -> Result<(
         Err(e) => return Err(e.into()),
     };
     let Some(text) = changed(&text, key, muted) else {
+        // The file says so already, perhaps edited by hand: the list follows it.
+        keep(crate::allowlist::parse(&text).0);
         return Ok(());
     };
     enshwick::files::write_atomically(&path, &text)?;
     keep(crate::allowlist::parse(&text).0);
-    if !muted {
-        STATE.told.relock().remove(&key);
-    }
     crate::log!(
         INFO,
         "{who} {} {key:016x} in chat",
@@ -126,9 +133,20 @@ pub(crate) fn set(loader: &Loader, key: u64, muted: bool, who: &str) -> Result<(
 
 /// Whether the server drops a line the player of `key` typed, telling the
 /// player at most every [`super::NOTICE_GAP`]; on the game thread, from the
-/// chat post link.
+/// chat post link. An administrator or the host is never dropped, whenever
+/// the mute was set. Off after a panic in it.
 pub(crate) fn drops(loader: &Loader, key: u64) -> bool {
-    if key == 0 || !has(loader, key) {
+    MUTE_FUSE
+        .run("a muted line", || dropped(loader, key))
+        .unwrap_or(false)
+}
+
+fn dropped(loader: &Loader, key: u64) -> bool {
+    // A typed line is a person's, not a frame's: one uncontended lock per line.
+    if key == 0
+        || !has(loader, key)
+        || protected(key, admin_online(loader, key), crate::admission::host())
+    {
         return false;
     }
     let now = Instant::now();

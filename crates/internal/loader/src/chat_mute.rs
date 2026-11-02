@@ -14,6 +14,7 @@ pub const HEADER: &str = "\
 # Accounts muted in chat, one per line: the 16 hex digits `enshwick world`
 # shows, or hex after 0x. Text after # is a note. The server drops what a
 # muted player types; administrators and a hosted game's host are never muted.
+# The server reads this file as it starts: a change by hand applies then.
 ";
 
 /// The least time between two notices that tell a muted player why their
