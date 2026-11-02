@@ -150,7 +150,7 @@ fn a_function_shorter_than_the_jump_is_refused() {
 /// with an empty unwind info, as a leaf without a frame has.
 fn with_entry(code: &[u8]) -> usize {
     /// Where the unwind info goes in the page, the one-entry table after it.
-    const UNWIND: usize = 0x800;
+    const UNWIND: usize = 0x800; // bound, not a game offset: the test's own page
     const TABLE: usize = UNWIND + 4;
     let page = function(code);
     let len = u32::try_from(code.len()).unwrap();
