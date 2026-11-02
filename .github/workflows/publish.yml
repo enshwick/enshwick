@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   publish:
+    # Crates are published only from main.
+    if: github.ref == 'refs/heads/main'
     # A fresh machine: what ships is built and published without the
     # caches that branch builds write to.
     runs-on: ubuntu-26.04
