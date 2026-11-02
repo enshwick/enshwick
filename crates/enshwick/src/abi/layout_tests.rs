@@ -310,26 +310,38 @@ fn parse_golden(text: &str) -> Option<(Version, Snapshot)> {
 /// Whether `new` only appends to `old`: every old type keeps its alignment
 /// and its fields, a type grows only at its end and only when it starts with
 /// a [`Header`], which tells the reader its writer's size; new types are
-/// free.
+/// free. An appended field starts past the old size, since an older writer's
+/// header covers its padding.
 fn appends(old: &Snapshot, new: &Snapshot) -> bool {
     old.types.iter().all(|(name, was)| {
         new.types.get(name).is_some_and(|now| {
             let headed = was.fields.first().is_some_and(|field| field.ty == "Header");
+            let past_old_end = now.fields[now.fields.len().min(was.fields.len())..]
+                .iter()
+                .all(|field| field.offset >= was.size);
             now.align == was.align
                 && now.fields.starts_with(&was.fields)
+                && past_old_end
                 && (now == was || headed && now.size > was.size)
         })
     })
 }
 
 /// Why `now` is the wrong version for the layout `new`, when the golden
-/// file holds `old` at `was`; `None` when it fits. A new major fits any
-/// change; within a major, an unchanged layout keeps the minor, an append
-/// takes the next one, and any other change fits no minor.
+/// file holds `old` at `was`; `None` when it fits. A higher major fits any
+/// change, since a lower one could match mods of an earlier major; within a
+/// major, an unchanged layout keeps the minor, an append takes the next one,
+/// and any other change fits no minor.
 fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Option<String> {
     let (major, minor) = was;
     let rewrite = "then run the tests with ENSHWICK_ABI_LAYOUT=update";
-    if now.0 != major {
+    if now.0 < major {
+        return Some(format!(
+            "the ABI major only grows: set ABI_MAJOR to {} or more",
+            major + 1
+        ));
+    }
+    if now.0 > major {
         return (now.1 != 0)
             .then(|| format!("a new ABI major starts at minor 0: set ABI_MINOR to 0, {rewrite}"));
     }
@@ -345,7 +357,11 @@ fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Opt
         ));
     };
     (now.1 != needed).then(|| {
-        format!("the layout from ABI {major}.{minor} needs ABI {major}.{needed}: set ABI_MINOR to {needed}, {rewrite}")
+        format!(
+            "the layout from ABI {major}.{minor} needs ABI {major}.{needed}: set ABI_MINOR to \
+             {needed}, keep what readers require of an older writer at its old size and read \
+             the appended fields only where Header::covers them, {rewrite}"
+        )
     })
 }
 
@@ -466,6 +482,22 @@ mod fixture {
     }
 
     #[repr(C)]
+    pub(super) struct Padded {
+        pub(super) header: Header,
+        pub(super) wide: u64,
+        pub(super) short: u32,
+    }
+
+    #[repr(C)]
+    pub(super) struct PaddedGrown {
+        pub(super) header: Header,
+        pub(super) wide: u64,
+        pub(super) short: u32,
+        pub(super) added: u32,
+        pub(super) more: u64,
+    }
+
+    #[repr(C)]
     pub(super) struct Plain {
         pub(super) value: u32,
     }
@@ -477,7 +509,7 @@ mod fixture {
     }
 }
 
-use fixture::{After, Before, Headed, HeadedGrown, Plain, PlainGrown};
+use fixture::{After, Before, Headed, HeadedGrown, Padded, PaddedGrown, Plain, PlainGrown};
 
 /// A layout of the named shapes.
 fn layout(types: &[(&str, Shape)]) -> Snapshot {
@@ -519,6 +551,36 @@ fn a_field_appended_to_a_headed_struct_needs_the_next_minor() {
     assert!(!fits(old(), new(), (5, 2)), "a missing bump fails");
     assert!(!fits(old(), new(), (5, 4)), "a skipped minor fails");
     assert!(fits(old(), new(), (6, 0)));
+}
+
+#[test]
+fn a_field_appended_into_the_old_tail_padding_needs_a_new_major() {
+    let old = || {
+        shape!(Padded {
+            header,
+            wide,
+            short
+        })
+    };
+    let new = || {
+        shape!(PaddedGrown {
+            header,
+            wide,
+            short,
+            added,
+            more
+        })
+    };
+    assert!(new().fields[3].offset < old().size);
+    assert!(!fits(old(), new(), (5, 3)));
+    assert!(fits(old(), new(), (6, 0)));
+}
+
+#[test]
+fn the_major_never_goes_down() {
+    let headed = || shape!(Headed { header, value });
+    assert!(!fits(headed(), headed(), (4, 0)));
+    assert!(!fits(headed(), headed(), (1, 0)));
 }
 
 #[test]

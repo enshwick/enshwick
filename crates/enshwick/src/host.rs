@@ -106,6 +106,12 @@ fn panic_line(info: &std::panic::PanicHookInfo<'_>) -> String {
     }
 }
 
+/// Whether a loader table under `header` serves a mod built for minor
+/// `minor` of this major: the same major, and that minor or a newer one.
+fn serves(header: Header, minor: u16) -> bool {
+    header.abi_major == crate::abi::ABI_MAJOR && header.abi_minor >= minor
+}
+
 impl Host {
     /// Wraps the loader's table for the mod `me`; `None` for a table of
     /// another ABI major, an older minor or one shorter than this build's.
@@ -121,10 +127,7 @@ impl Host {
         // table that starts with its header and lives for the process;
         // `as_ref` maps null to `None`.
         let header = unsafe { api.cast::<Header>().as_ref() }?;
-        if header.abi_major != crate::abi::ABI_MAJOR
-            || !(crate::abi::ABI_MINOR..).contains(&header.abi_minor)
-            || !header.covers(size_of::<HostApi>())
-        {
+        if !serves(*header, crate::abi::ABI_MINOR) || !header.covers(size_of::<HostApi>()) {
             return None;
         }
         // SAFETY: the table is readable for its header's size by this
@@ -315,5 +318,28 @@ impl Host {
         let mut frame = CallerFrame::default();
         (self.api.caller_frame)(&raw mut frame);
         frame
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::abi::ABI_MAJOR;
+
+    fn table(major: u16, minor: u16) -> Header {
+        Header {
+            size: 0,
+            abi_major: major,
+            abi_minor: minor,
+        }
+    }
+
+    #[test]
+    fn a_table_serves_mods_of_its_major_up_to_its_minor() {
+        assert!(serves(table(ABI_MAJOR, 1), 0));
+        assert!(serves(table(ABI_MAJOR, 1), 1));
+        assert!(!serves(table(ABI_MAJOR, 0), 1), "an older loader");
+        assert!(!serves(table(ABI_MAJOR + 1, 1), 1));
+        assert!(!serves(table(ABI_MAJOR - 1, 1), 1));
     }
 }

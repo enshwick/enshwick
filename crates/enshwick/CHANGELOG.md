@@ -19,7 +19,7 @@ Each entry names the pull request that made the change.
   `CheckAbiError`. `Header` holds `abi_major` and `abi_minor` in place of
   `abi_version`, `enshwick_mod_abi` returns the major, `abi::OTHER_ABI` is
   gone, and the C header defines `ENSHWICK_ABI_MAJOR` and
-  `ENSHWICK_ABI_MINOR`. Rebuild every mod once.
+  `ENSHWICK_ABI_MINOR`. Rebuild every mod once (#852).
 - **Breaking:** a mod does not build when a key of its texts lacks a text
   in a language of the new `Language::REQUIRED`, `en` and `uk`; add the
   missing Ukrainian texts (#838).

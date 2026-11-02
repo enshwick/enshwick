@@ -711,8 +711,18 @@ mod tests {
     }
 
     #[test]
-    fn a_mod_of_another_abi_major_is_refused_with_the_release_to_rebuild_for() {
-        for other in [ABI_MAJOR + 1, ABI_MAJOR - 1, 0] {
+    fn a_mod_of_a_newer_abi_major_is_refused_until_the_loader_updates() {
+        let mut built = manifest("you.ok", "0.1.0");
+        built.header.abi_major = ABI_MAJOR + 1;
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
+        let why = unsafe { parse(&built) }.unwrap_err().to_string();
+        assert!(why.ends_with(": update Enshwick"), "{why}");
+    }
+
+    #[test]
+    fn a_mod_of_an_older_abi_major_is_refused_with_the_release_to_rebuild_for() {
+        for other in [ABI_MAJOR - 1, 0] {
             let mut built = manifest("you.ok", "0.1.0");
             built.header.abi_major = other;
             // SAFETY: every string and list in the manifest points at `'static`

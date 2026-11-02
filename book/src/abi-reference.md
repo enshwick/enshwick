@@ -31,8 +31,10 @@ A loader loads a mod built for its own major and its own minor or an older
 one:
 
 - A mod exports `enshwick_mod_abi`, the major it was built for. A loader of
-  another major does not load it and logs
-  `<file> skipped: built for ABI major 4, and Enshwick 1.0.0-alpha.12 runs ABI 5.0: rebuild it for Enshwick 1.0.0-alpha.12`.
+  a newer major does not load it and logs
+  `<file> skipped: built for ABI major 4, and Enshwick 1.0.0-alpha.12 runs ABI 5.0: rebuild it for Enshwick 1.0.0-alpha.12`;
+  a loader of an older major logs that the mod is newer and asks to update
+  Enshwick.
 - The manifest's header holds the minor. A loader older than that minor
   logs `<file> skipped: built for ABI 5.3, newer than ABI 5.1 of Enshwick 1.0.0-alpha.12: update Enshwick`.
 - Structs that cross the boundary on their own start with a
