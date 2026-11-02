@@ -521,9 +521,8 @@ fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
     crate::carrier::send(server, channel, data).inspect_err(|_| refund(&[server]))
 }
 
-/// Takes one message to `key` from its sending rate, which also bounds what
-/// a hosting client's halves hold for each other; counts one over it as
-/// dropped.
+/// Takes one message to `key` from its sending rate, in process too;
+/// counts one over it as dropped.
 fn admit_sending(s: &mut State, key: u64) -> bool {
     let admitted = s.sending.entry(key).or_default().admit();
     if !admitted {

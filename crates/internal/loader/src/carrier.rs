@@ -139,6 +139,9 @@ struct Item {
 /// A message between a hosting client's two halves.
 #[derive(Debug)]
 struct Looped {
+    /// The host's own player when it was queued, which a later host does
+    /// not change.
+    host: u64,
     channel: u32,
     data: Vec<u8>,
 }
@@ -190,6 +193,9 @@ struct Carrier {
     /// Server steps of a hosting client, to look for its own player now and
     /// then.
     hosted_steps: AtomicU32,
+    /// Set by a test that plays a client that hosts.
+    #[cfg(test)]
+    hosts: AtomicBool,
 }
 
 static CARRIER: Carrier = Carrier {
@@ -212,6 +218,8 @@ static CARRIER: Carrier = Carrier {
     fuse: crate::fuse::Fuse::new("the own channel"),
     lobby_fuse: crate::fuse::Fuse::new("the hosted lobby"),
     hosted_steps: AtomicU32::new(0),
+    #[cfg(test)]
+    hosts: AtomicBool::new(false),
 };
 
 /// Resolves and checks the game's socket calls, and on a client links its
@@ -295,17 +303,21 @@ pub(crate) fn send_many(
     if !sealable(payload) {
         return Err(Status::BAD_ARGS);
     }
-    for &key in keys.iter().filter(|&&key| loops(key)) {
-        if let Err(status) = loop_back(key == SERVER, channel, payload) {
+    // One look at both, so each key goes one way.
+    let hosting = client_hosts();
+    let host = CARRIER.host_key.load(Ordering::Acquire);
+    let looped = |key: u64| hosting && (key == SERVER || (host != 0 && key == host));
+    for &key in keys.iter().filter(|&&key| looped(key)) {
+        if let Err(status) = loop_back(key == SERVER, host, channel, payload) {
             failed(key, status);
         }
     }
     let wired = |to_server: bool| {
         keys.iter()
             .copied()
-            .filter(move |&key| !loops(key) && (key == SERVER) == to_server)
+            .filter(move |&key| !looped(key) && (key == SERVER) == to_server)
     };
-    if keys.iter().all(|&key| loops(key)) {
+    if keys.iter().all(|&key| looped(key)) {
         return Ok(());
     }
     let mut sealed = [0u8; MAX_SEALED];
@@ -346,19 +358,19 @@ fn send_sealed(
 /// a game it hosts: its two halves then talk in process. A dedicated
 /// server runs a server too, but no client half.
 fn client_hosts() -> bool {
+    #[cfg(test)]
+    if CARRIER.hosts.load(Ordering::Acquire) {
+        return true;
+    }
     crate::world::hosting()
         && crate::host::loader().is_some_and(|loader| loader.side == enshwick::abi::Side::CLIENT)
 }
 
-/// Whether a message to `key` stays in process, between a hosting client's
-/// halves: to its server half, or to the host's own player. The receive of
-/// such a message is trusted; its send took the rate.
-pub(crate) fn loops(key: u64) -> bool {
-    client_hosts()
-        && (key == SERVER || {
-            let host = CARRIER.host_key.load(Ordering::Acquire);
-            host != 0 && key == host
-        })
+/// Makes this test process a client that hosts, its own player `key`.
+#[cfg(test)]
+pub(crate) fn host_for_test(key: u64) {
+    CARRIER.hosts.store(true, Ordering::Release);
+    set_host(key);
 }
 
 /// Notes the account key of the player of a client that hosts; a new one
@@ -370,16 +382,18 @@ fn set_host(key: u64) {
     }
 }
 
-/// Holds a message between a hosting client's halves until the other half
-/// takes it: to the server from its client half, or to the host's own
-/// player from the server.
-fn loop_back(to_server: bool, channel: u32, payload: &[u8]) -> Result<(), Status> {
+fn loop_back(to_server: bool, host: u64, channel: u32, payload: &[u8]) -> Result<(), Status> {
+    // Before the server half knows its own player, nobody would take it.
+    if host == 0 {
+        return Err(Status::MISSING);
+    }
     let (queue, waiting) = looped_queue(to_server);
     let mut looped = queue.relock();
     if looped.len() >= MAX_LOOPED {
         return Err(Status::REFUSED);
     }
     looped.push(Looped {
+        host,
         channel,
         data: payload.to_vec(),
     });
@@ -467,7 +481,7 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
     }
     for item in &inbox.items {
         let (start, end) = item.span;
-        crate::net::server_carried(item.from, item.channel, &inbox.bytes[start..end]);
+        crate::net::server_carried(item.from, item.channel, &inbox.bytes[start..end], false);
     }
     give_back(&CARRIER.server, session, inbox);
     for key in gone {
@@ -475,9 +489,6 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
     }
 }
 
-/// A hosting client's server half, after its step: finds its own player
-/// while it has none, which needs no network session (single player has
-/// one player alone), and takes what its client half sent.
 fn hosted_step(loader: &Loader) {
     let step = CARRIER.hosted_steps.fetch_add(1, Ordering::Relaxed);
     if CARRIER.host_key.load(Ordering::Acquire) == 0
@@ -487,12 +498,14 @@ fn hosted_step(loader: &Loader) {
     {
         set_host(*key);
     }
-    let host = CARRIER.host_key.load(Ordering::Acquire);
-    if host == 0 {
-        return;
-    }
+    take_hosted();
+}
+
+/// Hands a hosting client's server half what its client half sent, each
+/// from the host it was queued under.
+pub(crate) fn take_hosted() {
     for message in take_looped(true) {
-        crate::net::server_carried(host, message.channel, &message.data);
+        crate::net::server_carried(message.host, message.channel, &message.data, true);
     }
 }
 
