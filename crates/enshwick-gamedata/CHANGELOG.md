@@ -22,6 +22,8 @@ Each entry names the pull request that made the change.
   read (#710).
 - `Table::fall_back` carries a body symbol only where its function still
   holds its body (#710).
+- Breaking: `Table::carry_key` takes a range of the code it leaves out of
+  the key, for bytes that change from start to start (#864).
 
 ## [1.0.0-alpha.11] - 2026-10-28
 
