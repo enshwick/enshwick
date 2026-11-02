@@ -169,7 +169,7 @@ fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
 }
 
 #[test]
-fn the_server_is_ready_from_its_welcome_until_the_link_goes() {
+fn the_server_is_ready_from_its_welcome_until_the_link_goes_and_refusals_cost_no_rate() {
     let server = NetMessage::SERVER.get();
     assert!(!ready(server));
     client_carried(5, b"before the welcome");
@@ -178,11 +178,7 @@ fn the_server_is_ready_from_its_welcome_until_the_link_goes() {
     link_lost();
     assert!(!ready(server), "a new link waits for its own welcome");
     assert!(!ANSWERED.load(Ordering::Acquire), "a frame looks again");
-}
-
-#[test]
-fn a_refused_send_gives_its_rate_token_back() {
-    let server = NetMessage::SERVER.get();
+    // One test, since both read the net's shared state.
     client_carried(CONTROL, &control(WELCOME));
     for _ in 0..200 {
         assert_eq!(send_to_server(5, b"x"), Err(Status::MISSING), "no link");
