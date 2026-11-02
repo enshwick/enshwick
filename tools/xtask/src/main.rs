@@ -372,6 +372,17 @@ fn cargo() -> String {
     std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned())
 }
 
+/// `PATH` for the tools the checks run, with LLVM's default Windows folder
+/// last: its installer leaves the folder off `PATH` unless asked, and the
+/// header check and the C example need its clang.
+pub(crate) fn tool_path() -> std::ffi::OsString {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let llvm = std::env::var_os("ProgramFiles")
+        .filter(|_| cfg!(windows))
+        .map(|programs| std::path::Path::new(&programs).join("LLVM").join("bin"));
+    std::env::join_paths(std::env::split_paths(&path).chain(llvm)).unwrap_or(path)
+}
+
 /// One command line: cargo, or another tool of the checks.
 #[derive(Debug)]
 struct Step {
@@ -427,6 +438,7 @@ impl Step {
         let mut command = Command::new(self.program.map_or_else(cargo, str::to_owned));
         command
             .args(&self.args)
+            .env("PATH", tool_path())
             .envs(self.env.iter().map(|(name, value)| (name, value)));
         let (ok, output) = if quiet {
             match command.output() {
@@ -474,16 +486,16 @@ fn stable_api_steps(code: bool) -> Vec<Step> {
     // `unstable`, so their examples fail to build without it. They are
     // marked `standalone_crate` and skipped here: one example that fails
     // in the merged build makes rustdoc build the rest one by one, which
-    // takes minutes; merged they share one binary and take seconds.
-    steps.push(Step::new(&["test", "--doc"]).then(&STABLE_API).then(&[
-        "--",
-        "--skip",
-        "src/script",
-        "--skip",
-        "src/rates.rs",
-        "--skip",
-        "src/item_data.rs",
-    ]));
+    // takes minutes; merged they share one binary and take seconds. The
+    // test names carry the source path with the host's separator.
+    let mut doctests = Step::new(&["test", "--doc"])
+        .then(&STABLE_API)
+        .then(&["--"]);
+    for module in ["src/script", "src/rates.rs", "src/item_data.rs"] {
+        let windows = module.replace('/', "\\");
+        doctests = doctests.then(&["--skip", module, "--skip", &windows]);
+    }
+    steps.push(doctests);
     // A link into an unstable module breaks only this build, and the
     // crate's own rustdoc takes seconds once the examples above built
     // its dependencies.
@@ -655,5 +667,23 @@ mod tests {
         assert!(workspace_rustdoc(true, false));
         assert!(workspace_rustdoc(false, true));
         assert!(!workspace_rustdoc(false, false));
+    }
+
+    #[test]
+    fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
+        let steps = stable_api_steps(false);
+        let skipped = |name: &str| {
+            steps.iter().any(|step| {
+                step.args
+                    .windows(2)
+                    .any(|pair| pair[0] == "--skip" && name.contains(pair[1].as_str()))
+            })
+        };
+        for file in ["src/script/mod.rs", "src/rates.rs", "src/item_data.rs"] {
+            let name = format!("crates/enshwick/{file} - item (line 1)");
+            assert!(skipped(&name), "{name}");
+            assert!(skipped(&name.replace('/', "\\")), "{name}");
+        }
+        assert!(!skipped("crates\\enshwick\\src\\lib.rs - item (line 1)"));
     }
 }
