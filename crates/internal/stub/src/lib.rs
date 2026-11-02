@@ -1,16 +1,15 @@
 //! The POWRPROF.dll proxy that starts the Enshwick loader.
 //!
 //! Windows loads it from the game's folder. It forwards every POWRPROF.dll
-//! export to the system copy, then, outside the loader lock, loads the other
-//! proxy DLLs placed in `mods/chain/`, loads `mods/enshwick/enshwick.dll` and
-//! calls its `enshwick_start`. Without the loader the game runs vanilla.
+//! export to the system copy, then, outside the loader lock, loads
+//! `mods/enshwick/enshwick.dll` and calls its `enshwick_start`. Without the loader the game runs vanilla.
 //! On the dedicated server the server's own code waits until the loader has
 //! armed its hooks.
 
 #![cfg(windows)]
 
-mod chain;
 mod gate;
+mod load;
 mod note;
 mod proxy;
 
@@ -80,7 +79,7 @@ pub unsafe extern "system" fn DllMain(
 }
 
 fn start(missing: u32) {
-    if !chain::first_in_process() {
+    if !load::first_in_process() {
         return;
     }
     let Some(game_dir) = game_dir() else {
@@ -90,12 +89,11 @@ fn start(missing: u32) {
         ));
         return;
     };
-    chain::load(&game_dir);
-    let module = chain::load_library(&game_dir.join(chain::LOADER));
+    let module = load::load_library(&game_dir.join(load::LOADER));
     if module.is_null() {
         note::note(&format!(
             "{} could not be loaded ({}); the game runs without mods",
-            chain::LOADER,
+            load::LOADER,
             std::io::Error::last_os_error()
         ));
         return;
@@ -104,7 +102,7 @@ fn start(missing: u32) {
     let Some(start) = (unsafe { GetProcAddress(module, c"enshwick_start".as_ptr().cast()) }) else {
         note::note(&format!(
             "{} has no enshwick_start ({}); the game runs without mods. Install the loader again",
-            chain::LOADER,
+            load::LOADER,
             std::io::Error::last_os_error()
         ));
         return;

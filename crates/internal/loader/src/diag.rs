@@ -460,11 +460,9 @@ mod tests {
              feature light on\n    3 zones merged\n"
         ));
         assert!(text.contains(
-            "  you.trading-post 0.1.1 (off)\n  off in mods/enshwick/mods.toml: you.my-mod\n"
-        ));
-        assert!(text.contains(
-            "  not started: you.stalls is replaced by you.market-stalls; delete mods/stalls.dll\n  \
-             native mods in mods/, without Enshwick's API: fps-unlock.dll\n"
+            "  you.trading-post 0.1.1 (off)\n  \
+             not started: you.stalls is replaced by you.market-stalls; delete mods/stalls/\n  \
+             other mods' proxies in the game's folder: dbghelp.dll\n"
         ));
         assert!(text.contains("12:13:20Z you.trading-post: panic in an action"));
         assert!(text.contains(

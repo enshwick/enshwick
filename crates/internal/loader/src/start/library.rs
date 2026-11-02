@@ -96,6 +96,8 @@ pub(super) fn libraries(
 /// Logs one line for each file or folder of the layout before mod folders
 /// that the loader no longer reads.
 fn note_old_layout(mods_dir: &Path) {
+    /// The chain folder the stub loaded and the mod list, relative to `mods/`.
+    const OLD: [&str; 2] = ["chain", "enshwick/mods.toml"];
     for dll in dlls(mods_dir) {
         crate::log!(
             WARN,
@@ -105,10 +107,8 @@ fn note_old_layout(mods_dir: &Path) {
                 .unwrap_or_default()
         );
     }
-    /// The chain folder the stub loaded and the mod list, relative to `mods/`.
-    const OLD: [&str; 2] = ["chain", "enshwick/mods.toml"];
     for path in OLD {
-        if mods_dir.join(&path).exists() {
+        if mods_dir.join(path).exists() {
             crate::log!(
                 WARN,
                 "mods/{path} is not read: a mod runs while its folder is in mods/"
@@ -119,7 +119,7 @@ fn note_old_layout(mods_dir: &Path) {
 
 /// Writes the line of `skip` for the DLL `file` to the loader's log.
 fn log_skip(skip: &Skip, file: &str) {
-    let level = skip.level();
+    let level = enshwick::abi::Level::WARN;
     if crate::log::enabled(level, crate::settings::LOADER_ID) {
         crate::log::write(level, crate::settings::LOADER_ID, &skip.line(file));
     }
@@ -258,9 +258,9 @@ fn discover(mods_dir: &Path, loaded: &mut dyn FnMut(&str)) -> Vec<Library> {
                 );
                 continue;
             }
-            first = Some(file.clone());
-            let library = load(&path, &name, file.clone());
+            let library = load(&path, &name, &file);
             loaded(&file);
+            first = Some(file);
             mods.extend(library);
         }
     }
@@ -297,15 +297,15 @@ pub(super) enum Run {
 
 /// Loads the mod DLL at `path`, in `folder` of `mods/` and named `file`
 /// there; `None`, logged, when it is no mod of this ABI.
-fn load(path: &Path, folder: &str, file: String) -> Option<Library> {
+fn load(path: &Path, folder: &str, file: &str) -> Option<Library> {
     let module = match crate::module::load_library(path) {
         Ok(module) => module,
         Err(error) => {
-            crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
+            crate::log!(WARN, "{}", crate::errors::load_failure(file, &error));
             return None;
         }
     };
-    let library = exports_of(module, folder, &file);
+    let library = exports_of(module, folder, file);
     if library.is_none() {
         // SAFETY: `module` was loaded by `load_library` in this function, and
         // `exports_of` returned `None` without calling into it, so nothing of

@@ -1,6 +1,8 @@
-//! `mods.lock`, the world's record of what ran with it: the loader's version,
-//! the game build and each running mod's id, version, folder and SHA-256, so
-//! a server can be set up again exactly and two servers compared.
+//! `mods.lock`, the world's record of the loader, game build and mods that ran with it.
+//!
+//! It holds the loader's version, the game build and each running mod's id,
+//! version, folder and SHA-256, so a server can be set up again exactly and
+//! two servers compared.
 //!
 //! The record is taken once at start, since the mod set never changes in a
 //! process, and written at every world load into that world's data; what

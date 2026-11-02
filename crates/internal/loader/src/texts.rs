@@ -264,7 +264,7 @@ mod tests {
                 // Ids of services, messages and engine names share these
                 // namespaces; their texts are found by the calls alone.
                 && !["enshwick", "world"].contains(&parts[0])
-                && !["toml", "txt", "log", "json", "dll"].contains(parts.last().unwrap())
+                && !["toml", "txt", "log", "json", "dll", "lock"].contains(parts.last().unwrap())
         };
         let mut keys: Vec<String> = source
             .split("texts::")

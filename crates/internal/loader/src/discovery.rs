@@ -1,8 +1,6 @@
 //! What the start decides about each mod folder in `mods/`, and the line the
 //! log gives each decision.
 
-use enshwick::abi::Level;
-
 use crate::errors;
 use crate::manifest::ManifestError;
 
@@ -35,11 +33,6 @@ pub(crate) enum Skip {
 }
 
 impl Skip {
-    /// The level of the log line: every skip is a problem.
-    pub(crate) const fn level(&self) -> Level {
-        Level::WARN
-    }
-
     /// The log line for the DLL `file`, with the error code a problem
     /// carries.
     pub(crate) fn line(&self, file: &str) -> String {
@@ -79,7 +72,6 @@ mod tests {
         let skip = Skip::SecondMod {
             other: "lanterns/lanterns.dll".into(),
         };
-        assert_eq!(skip.level(), Level::WARN);
         let line = skip.line("lanterns/lanterns-old.dll");
         assert!(
             line.starts_with("lanterns/lanterns-old.dll skipped:"),
@@ -91,7 +83,6 @@ mod tests {
 
     #[test]
     fn a_dll_without_all_four_exports_is_a_broken_dll() {
-        assert_eq!(Skip::NotAMod.level(), Level::WARN);
         assert_eq!(
             Skip::NotAMod.line("half.dll"),
             format!("half.dll is not an Enshwick mod ({})", errors::BROKEN_DLL)
@@ -116,7 +107,6 @@ mod tests {
     #[test]
     fn a_manifest_that_does_not_read_says_why_with_the_broken_dll_code() {
         let skip = Skip::Manifest(ManifestError::Missing);
-        assert_eq!(skip.level(), Level::WARN);
         assert_eq!(
             skip.line("empty.dll"),
             format!(
@@ -137,7 +127,6 @@ mod tests {
             runs: "lanterns-new.dll".into(),
             runs_version: "0.2.0".into(),
         };
-        assert_eq!(skip.level(), Level::WARN);
         assert_eq!(
             skip.line("lanterns.dll"),
             format!(

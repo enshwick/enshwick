@@ -60,7 +60,7 @@ fix = "Extract Enshwick into the game's folder again. Under Proton, add WINEDLLO
 code = "E1009"
 title = "Another mod replaced Enshwick's powrprof.dll"
 cause = "Some mods bring their own powrprof.dll, dinput8.dll, winmm.dll or dbghelp.dll. One of them took the place of Enshwick's."
-fix = "Move the other mod's file into mods/chain/, then put Enshwick's powrprof.dll back into the game's folder."
+fix = "Put Enshwick's powrprof.dll back into the game's folder. The other mod's powrprof.dll cannot run beside it; keep one of the two mods."
 
 [[error]]
 code = "E2001"

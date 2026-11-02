@@ -30,7 +30,7 @@ pub(crate) struct Report {
     pub(crate) cpus: usize,
     /// The status summary, once the loader serves the game.
     pub(crate) status: Option<String>,
-    /// The files of `mods/` and `mods/chain/` with their sizes, `/`
+    /// The DLLs of `mods/` and of its folders with their sizes, `/`
     /// separated.
     pub(crate) files: Vec<(String, u64)>,
     /// The latest warning and error lines, oldest first.
@@ -194,7 +194,13 @@ pub(crate) fn write(game_dir: &Path, stub: u32, status: Option<String>) {
     let _settled = crate::log::settle(SETTLE);
     let mods_dir = game_dir.join("mods");
     let mut files = files_in(&mods_dir, "mods/");
-    files.extend(files_in(&mods_dir.join("chain"), "mods/chain/"));
+    for folder in std::fs::read_dir(&mods_dir).into_iter().flatten().flatten() {
+        if folder.file_type().is_ok_and(|kind| kind.is_dir()) {
+            let name = folder.file_name().to_string_lossy().into_owned();
+            files.extend(files_in(&folder.path(), &format!("mods/{name}/")));
+        }
+    }
+    files.sort();
     files.extend(
         crate::others::beside_game(game_dir)
             .into_iter()
