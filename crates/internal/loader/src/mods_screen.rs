@@ -89,7 +89,7 @@ pub fn page_settings(mut schema: Schema, away: bool) -> Option<Schema> {
     if away {
         schema
             .fields
-            .retain(|f| f.scope == Scope::User || f.stage == Stage::Sync);
+            .retain(|f| f.scope == Scope::User || f.follows_server());
     }
     schema.fields.sort_by_key(|f| f.scope != Scope::User);
     (!schema.fields.is_empty()).then_some(schema)
@@ -124,13 +124,15 @@ impl Place {
     }
 }
 
-/// Marks the world's rows of `rows`, whose fields `schema` describes, as
-/// set by the server, which takes no changes from here.
-pub fn lock_world_rows(schema: &Schema, rows: &mut [Row]) {
+/// Makes the world's rows of `rows`, whose fields `schema` describes,
+/// read-only in another's world: set by the server once it sent its join
+/// values (`sent`), else plainly read-only.
+pub fn lock_world_rows(schema: &Schema, rows: &mut [Row], sent: bool) {
+    let lock = if sent { Lock::Server } else { Lock::File };
     for row in rows {
         let key = crate::configure::element(&row.key).0;
         if schema.field(key).is_some_and(|f| f.scope == Scope::World) {
-            row.lock = Lock::Server;
+            row.lock = lock;
         }
     }
 }

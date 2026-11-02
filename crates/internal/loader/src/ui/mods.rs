@@ -510,24 +510,43 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             place,
             server,
         } => {
-            let joined = if FRAME.load(Ordering::Relaxed).is_multiple_of(JOINED_EVERY) {
+            let look = FRAME.load(Ordering::Relaxed).is_multiple_of(JOINED_EVERY);
+            let joined = if look {
                 joined_elsewhere()
             } else {
                 place.joined
             };
             let now = self::place(from, joined);
-            if now != *place {
+            // In another's world the server may send new join values at any
+            // time; the text fields keep what the player is typing.
+            if now != *place || (look && now.away) {
                 *place = now;
                 *rows = page_rows(loader, *index, now);
                 *server = server_id(loader, *index, now);
-                *entries = Entries::default();
             }
             if let Some(id) = server
                 && paint.button(texts::text("mods.server").as_bytes(), true)
             {
                 return server_page(id.clone());
             }
-            match settings(loader, paint, *index, first, rows, entries, place.world) {
+            if rows.is_empty() {
+                paint.label(
+                    texts::text("mods.server.none").as_bytes(),
+                    UiWidget::STYLE_SECONDARY,
+                    true,
+                    false,
+                );
+                return Next::Stay;
+            }
+            match settings(
+                loader,
+                paint,
+                *index,
+                first,
+                rows,
+                entries,
+                place.world || place.away,
+            ) {
                 Some(message) => {
                     *rows = page_rows(loader, *index, *place);
                     Next::Message(message)
@@ -552,23 +571,30 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
     }
 }
 
-/// Opens mod `index`'s settings page; `from` is the menu under the screen.
+/// Opens mod `index`'s settings page, or straight the joined server's
+/// settings of a mod with nothing to show here; `from` is the menu under
+/// the screen.
 fn settings_page(loader: &Loader, from: u8, index: usize) -> Next {
     if loader.mods.get(index).is_none() {
         return Next::Stay;
     }
     let place = place(from, joined_elsewhere());
-    Next::Page(
-        Page::Settings {
-            index,
-            first: 0,
-            rows: page_rows(loader, index, place),
-            entries: Entries::default(),
-            place,
-            server: server_id(loader, index, place),
-        },
-        None,
-    )
+    let rows = page_rows(loader, index, place);
+    let server = server_id(loader, index, place);
+    match server {
+        Some(id) if rows.is_empty() => server_page(id),
+        server => Next::Page(
+            Page::Settings {
+                index,
+                first: 0,
+                rows,
+                entries: Entries::default(),
+                place,
+                server,
+            },
+            None,
+        ),
+    }
 }
 
 /// Where the screen opened over menu `from` stands now, joined to a server

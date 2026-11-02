@@ -87,15 +87,23 @@ fn in_another_s_world_a_mods_page_shows_only_the_world_values_the_server_sends()
 }
 
 #[test]
-fn the_world_rows_lock_to_the_server_and_the_players_own_stay_open() {
+fn in_another_s_world_only_the_world_rows_take_no_changes() {
     let schema = schema();
-    let mut shown = rows(&schema, "", None, None);
-    lock_world_rows(&schema, &mut shown);
-    for row in &shown {
-        let world = schema.field(&row.key).unwrap().scope == Scope::World;
-        let want = if world { Lock::Server } else { Lock::Open };
-        assert_eq!(row.lock, want, "{}", row.key);
+    for (sent, locked) in [(true, Lock::Server), (false, Lock::File)] {
+        let mut shown = rows(&schema, "", None, None);
+        lock_world_rows(&schema, &mut shown, sent);
+        for row in &shown {
+            let world = schema.field(&row.key).unwrap().scope == Scope::World;
+            let want = if world { locked } else { Lock::Open };
+            assert_eq!(row.lock, want, "{} sent {sent}", row.key);
+        }
     }
+    let synced = Schema::new(
+        "",
+        "config",
+        vec![field("rule", Stage::Startup, Scope::World).with_synced(true)],
+    );
+    assert_eq!(keys(&page_settings(synced, true).unwrap()), ["rule"]);
 }
 
 #[test]

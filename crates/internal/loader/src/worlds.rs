@@ -396,15 +396,24 @@ mod live {
                 crate::watch::wrote(&world_path);
             }
             if next.is_some() {
-                let _gone = std::fs::remove_file(&next_path);
-                crate::log::write(
-                    enshwick::abi::Level::INFO,
-                    &record.id,
-                    &format!(
-                        "world settings: the changes waiting in {} went into world {key}",
-                        next_path.display()
+                let (level, line) = match std::fs::remove_file(&next_path) {
+                    Ok(()) => (
+                        enshwick::abi::Level::INFO,
+                        format!(
+                            "world settings: the changes waiting in {} went into world {key}",
+                            next_path.display()
+                        ),
                     ),
-                );
+                    Err(e) => (
+                        enshwick::abi::Level::WARN,
+                        format!(
+                            "world settings: {} went into world {key} but stays: {e}; \
+                             delete it, or the next world takes it again",
+                            next_path.display()
+                        ),
+                    ),
+                };
+                crate::log::write(level, &record.id, &line);
             }
         }
         crate::log!(INFO, "world settings: world {key}");

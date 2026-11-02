@@ -42,7 +42,7 @@ pub(super) fn page_rows(loader: &Loader, index: usize, place: mods_screen::Place
         .clone()
         .and_then(|values| mods_screen::server_table(&values));
     let mut rows = rows::rows(&schema, &file, server.as_ref(), words);
-    mods_screen::lock_world_rows(&schema, &mut rows);
+    mods_screen::lock_world_rows(&schema, &mut rows, server.is_some());
     rows
 }
 
