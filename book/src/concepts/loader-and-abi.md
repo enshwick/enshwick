@@ -7,7 +7,7 @@ The loader comes in two parts:
 - `powrprof.dll`, the stub, in the folder of `enshrouded.exe` or
   `enshrouded_server.exe`. Windows loads it with the game. It forwards every
   export to the system's `powrprof.dll`, then, on a thread of its own, loads
-  the DLLs in `mods/chain/` and then the loader. Without the loader the game
+  the loader. Without the loader the game
   runs vanilla.
 - `mods/enshwick/enshwick.dll`, the loader. It identifies the game build,
   loads the mods, initialises them, arms their hooks and answers their calls.
@@ -19,42 +19,38 @@ patterns; a mod whose entries are not found stays off with the reason, and
 
 ## How mods are found
 
-Every `*.dll` directly in `mods/` is a candidate, taken in file name order. The
-loader loads each and keeps it when it exports the four functions of
+Each mod lives in a folder of its own in `mods/`, and runs while that folder
+is there. The loader takes the folders in name order, all but its own
+`mods/enshwick/`. In each folder, the one DLL that exports the four functions
+of
 [`abi::exports`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
-and was built for the loader's ABI version. A DLL without `enshwick_mod_abi` is a native mod: it stays loaded
-and runs on its own, and the status summary and the Mods screen list it. One
-with only part of the interface is logged and unloaded. The file name is free; the id in the manifest
-names the mod. Every folder in `mods/` with a `pack.toml` is a
-[data pack](../content/packs.md), which the loader runs as a mod of its
-own; its entry's file is `<id>/pack.toml`.
+is the mod; the loader tells it apart by its export table before loading it.
+Other DLLs in the folder are the mod's own, and the mod's imports resolve
+from its folder. A second DLL with the four exports in the same folder is
+skipped, with both files named in `loader.log`. A DLL built for another ABI
+version, or with only part of the interface, is logged and unloaded.
 
-## The mod list and the lock
+The folder name and the file name are free; the id in the manifest names the
+mod. `cargo enshwick install` and our releases use `mods/<id>/<package>.dll`.
+A folder with a `pack.toml` is a [data pack](../content/packs.md), which the
+loader runs as a mod of its own; its entry's file is `<id>/pack.toml`.
 
-`mods/enshwick/mods.toml` names every mod the loader has found, by id, with
-its file. The loader writes it on first start with every mod turned on, adds
-mods it finds later, and keeps everything else, comments included:
+To turn a mod off, move its folder out of `mods/`; to remove it, delete the
+folder. The loader keeps no list of mods. A DLL directly in `mods/`, a
+`mods/chain/` folder and a `mods/enshwick/mods.toml` are not read; on start,
+`loader.log` names each one it finds.
 
-```toml
-[you.trading-post]
-enabled = false # off until the next release
-file = "trading_post.dll"
-```
+## The record of a world
 
-A file whose entry says `enabled = false` is never loaded, so none of its code
-runs; `loader.log` says `trading_post.dll skipped: off in
-mods/enshwick/mods.toml`. `links_off = ["you.trading-post:price"]` in an entry keeps the
-mod on and only its link on that [extension point](../extending.md) off. Changes take effect at the next start. A list that
-is not valid TOML is left as it is and every mod loads, with a warning.
-`enshwick` on the [console](../chat.md#the-console) and the status summary name the mods that are off.
-
-`mods/enshwick/enshwick.lock` is written at every start: the loader's version
-and SHA-256, the game build, and each running mod's id, version, file and
+At every world load the loader writes `mods.lock` into that world's data,
+`mod-data/enshwick/worlds/<world>/mods.lock`: the loader's version and
+SHA-256, the game build, and each running mod's id, version, folder and
 SHA-256, in load order, then under `[[replaced]]` the mods a present mod
-replaces (see `replaces` in [the manifest](#the-manifest)). Copying it with the DLLs sets up the same server
-again, and comparing two locks shows where two servers differ. What changed
-since the last start goes to `loader.log`, such as
-`since the last start: you.trading-post 0.3.0 -> 0.3.1`.
+replaces (see `replaces` in [the manifest](#the-manifest)). Copying the
+folders it names sets up the same server again, and comparing two records
+shows where two servers differ. What changed since the world last loaded
+goes to `loader.log`, such as
+`since this world last loaded: you.trading-post 0.3.0 -> 0.3.1`.
 
 ## The ABI
 

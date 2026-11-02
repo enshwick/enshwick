@@ -19,6 +19,31 @@ struct Package {
     name: String,
     manifest_path: PathBuf,
     targets: Vec<Target>,
+    #[serde(default)]
+    metadata: Option<PackageMetadata>,
+}
+
+impl Package {
+    /// The mod's folder in `mods/`: its id from `[package.metadata.enshwick]`,
+    /// else the package name, since the loader reads any folder name.
+    fn folder(&self) -> &str {
+        self.metadata
+            .as_ref()
+            .and_then(|m| m.enshwick.as_ref())
+            .map_or(&self.name, |e| &e.id)
+    }
+}
+
+/// `[package.metadata]`, as far as installing goes.
+#[derive(Debug, serde::Deserialize)]
+struct PackageMetadata {
+    enshwick: Option<ModMetadata>,
+}
+
+/// `[package.metadata.enshwick]`, as far as installing goes.
+#[derive(Debug, serde::Deserialize)]
+struct ModMetadata {
+    id: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -27,7 +52,7 @@ struct Target {
     crate_types: Vec<String>,
 }
 
-/// Builds the chosen mod and copies it to `<game>/mods/<package>.dll`.
+/// Builds the chosen mod and copies it to `<game>/mods/<id>/<package>.dll`.
 pub(crate) fn install(game: &Path, package: Option<&str>) -> anyhow::Result<String> {
     if !GAME_EXECUTABLES.iter().any(|exe| game.join(exe).is_file()) {
         bail!(
@@ -80,8 +105,9 @@ pub(crate) fn install(game: &Path, package: Option<&str>) -> anyhow::Result<Stri
         &package.name,
     )?;
     let mods = game.join("mods");
-    std::fs::create_dir_all(&mods).with_context(|| mods.display().to_string())?;
-    let to = mods.join(format!("{}.dll", package.name));
+    let folder = mods.join(package.folder());
+    std::fs::create_dir_all(&folder).with_context(|| folder.display().to_string())?;
+    let to = folder.join(format!("{}.dll", package.name));
     std::fs::copy(&from, &to).with_context(|| format!("{} -> {}", from.display(), to.display()))?;
     let mut done = format!("installed {}", to.display());
     if !mods.join("enshwick").join("enshwick.dll").is_file() {
@@ -297,6 +323,7 @@ mod tests {
                 name: name.replace('-', "_"),
                 crate_types: kinds.iter().map(|&k| k.to_owned()).collect(),
             }],
+            metadata: None,
         }
     }
 
@@ -340,5 +367,17 @@ mod tests {
             "target_directory":"/w/target","workspace_root":"/w"}"#;
         let metadata: Metadata = serde_json::from_str(json).unwrap();
         assert_eq!(metadata.packages[0].targets[0].crate_types, ["cdylib"]);
+    }
+
+    #[test]
+    fn a_mod_installs_into_the_folder_of_its_id_else_of_its_package() {
+        let json = r#"{"packages":[
+            {"name":"trading-post","manifest_path":"/w/a/Cargo.toml","targets":[],
+             "metadata":{"enshwick":{"id":"you.trading-post","side":"both"}}},
+            {"name":"stalls","manifest_path":"/w/b/Cargo.toml","targets":[],"metadata":null},
+            {"name":"other","manifest_path":"/w/c/Cargo.toml","targets":[],"metadata":{"docs":{}}}]}"#;
+        let metadata: Metadata = serde_json::from_str(json).unwrap();
+        let folders: Vec<&str> = metadata.packages.iter().map(Package::folder).collect();
+        assert_eq!(folders, ["you.trading-post", "stalls", "other"]);
     }
 }

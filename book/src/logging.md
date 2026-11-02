@@ -59,7 +59,7 @@ written says how many were dropped.
 
 `report.md` gathers what an issue needs in one file: the loader version and
 the stub's contract, Windows or the Wine version with `WINEDLLOVERRIDES`, and
-the status summary. It lists the DLLs in `mods/`, in `mods/chain/` and other
+the status summary. It lists the DLLs in `mods/` and its folders, and other
 mods' proxies beside the game, with their sizes, and the latest 200 warnings
 and errors of the loader and every mod. The loader writes it once its log
 opens, again when it cannot serve the game, and with every status summary,
@@ -263,7 +263,7 @@ conflicts:
 
 | Line ends with | The change came |
 | --- | --- |
-| `by another program before Enshwick started` | before the loader, from a DLL in `mods/chain/` or another program |
+| `by another program before Enshwick started` | before the loader, from another mod's proxy or another program |
 | `by a.dll while it loaded` | while that DLL loaded, from its own start-up code |
 | `by another program while Enshwick unloaded the DLLs it skips` | while the loader unloaded a mod that is off or an older copy |
 | `by you.mod in its init` or `in its ready` | while that mod's `init` or `ready` ran |

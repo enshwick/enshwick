@@ -1294,7 +1294,7 @@ typedef struct EnshwickModInfo {
   // 1 when the mod is off: refused at init or faulted since.
   uint8_t off;
   // The DLL's path relative to the game's folder, with `/` separators,
-  // such as `mods/trading_post.dll`.
+  // such as `mods/you.trading-post/trading_post.dll`.
   struct EnshwickStr file;
   // The manifest's human metadata, as in `Manifest`; in
   // `HostApi::join_missing`, the name and homepage the server advertises

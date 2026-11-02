@@ -179,15 +179,16 @@ Some mods come with their own `powrprof.dll`, `dinput8.dll`, `winmm.dll` or
 `dbghelp.dll`. When one of them replaces Enshwick's `powrprof.dll`, Enshwick
 does not start.
 
-Put Enshwick's `powrprof.dll` back into the game's folder and move the other
-mod's file into `mods/chain/`. Enshwick starts every DLL there, in file name
-order, before its own mods.
+Put Enshwick's `powrprof.dll` back into the game's folder. Another mod's
+`powrprof.dll` cannot run beside it, so keep one of the two mods. Another
+mod's `dinput8.dll`, `winmm.dll` or `dbghelp.dll` stays beside the game and
+runs next to Enshwick.
 
-The status summary, `report.md` and the Mods screen list the DLLs in
-`mods/chain/` and other mods' proxy DLLs beside the game.
+The status summary, `report.md` and the Mods screen list other mods' proxy
+DLLs beside the game.
 
-Under Proton, add each moved file's name to the overrides as well, such as
-`WINEDLLOVERRIDES="powrprof,dinput8=n,b" %command%` for a moved `dinput8.dll`.
+Under Proton, each proxy needs its name in the overrides, such as
+`WINEDLLOVERRIDES="powrprof,dinput8=n,b" %command%` beside a `dinput8.dll`.
 
 ## Nothing happens under Proton
 
@@ -212,9 +213,7 @@ Survivors per altar 0.1.4
 ```
 
 A mod's place is the homepage the server advertises for it, or the server's
-admin when it advertises none. A mod you turned off in
-`mods/enshwick/mods.toml` is listed under "Turn on in": turn it on and restart
-the game. `loader.log` then has
+admin when it advertises none. `loader.log` then has
 `join refused: the server runs mods this client lacks`. Other cases do not keep
 the player out:
 

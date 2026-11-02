@@ -5,8 +5,8 @@ to when a server runs a mod they lack.
 
 ## How a release is installed
 
-A player installs a mod by copying its DLL into `mods/`, by hand or through a
-mod manager. How server admins put the release into a container image is in
+A player installs a mod by copying its folder into `mods/`, as `mods/<id>/`,
+by hand or through a mod manager. A release archive holds that folder. How server admins put the release into a container image is in
 [Run a server in Docker or Kubernetes](https://enshwick.com/guides/run-a-server-in-docker/).
 
 ## Versions

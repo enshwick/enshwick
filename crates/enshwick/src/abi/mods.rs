@@ -19,7 +19,7 @@ use crate::abi::{Header, ManifestFlags, Side, Str};
 ///     side: Side::BOTH,
 ///     flags: ManifestFlags::JOIN,
 ///     off: 0,
-///     file: Str::new("mods/trading_post.dll"),
+///     file: Str::new("mods/you.trading-post/trading_post.dll"),
 ///     name: Str::new("Trading Post"),
 ///     description: Str::EMPTY,
 ///     authors: core::ptr::null(),
@@ -47,7 +47,7 @@ pub struct ModInfo {
     /// 1 when the mod is off: refused at init or faulted since.
     pub off: u8,
     /// The DLL's path relative to the game's folder, with `/` separators,
-    /// such as `mods/trading_post.dll`.
+    /// such as `mods/you.trading-post/trading_post.dll`.
     pub file: Str,
     /// The manifest's human metadata, as in [`Manifest`](super::Manifest); in
     /// [`HostApi::join_missing`](super::HostApi::join_missing), the name and homepage the server advertises

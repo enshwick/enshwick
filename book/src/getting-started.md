@@ -93,7 +93,8 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 ```
 
 `install` builds the mod in release for `x86_64-pc-windows-msvc`, through
-`cargo xwin` off Windows, and copies the DLL to `<game>/mods/<package>.dll`.
+`cargo xwin` off Windows, and copies the DLL to `<game>/mods/<id>/<package>.dll`, in a folder named
+after the mod's id.
 When the target or cargo-xwin is missing, it says so with the command that
 adds it. The game folder is `--game`, or the
 `ENSHROUDED_DIR` environment variable. It must hold `enshrouded.exe` or

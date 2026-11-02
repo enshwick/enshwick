@@ -196,7 +196,6 @@ point with its links and every inert link:
 | `<owner> <version>: field <n> is <name> here and <name> at the owner, ...`          | A field differs: the mods compiled other declarations  |
 | `the answer's type, or a field, variant or value inside it, differs ...`            | The answer's type differs                              |
 | `<owner> <version> declares it overridden, this mod advised; ...`                   | The mode or the refusal flag differs                   |
-| `off in mods/enshwick/mods.toml`                                                    | The player switched the link off                       |
 
 A reason that ends in `both mods must compile one declaration` means the two
 mods were built against different versions of the point's declaration.
@@ -204,20 +203,6 @@ mods were built against different versions of the point's declaration.
 A link that panics is turned off with one warning,
 `its link on you.trading-post:price panicked and is off; you.trading-post:price runs without it`.
 The point is answered without it from then on, and the mod keeps running.
-
-## Switching a link off
-
-A player keeps a mod but turns off one of its links in
-`mods/enshwick/mods.toml`, under the linking mod's entry:
-
-```toml
-[you.haggling]
-enabled = true
-file = "enshwick_example_haggling.dll"
-links_off = ["you.trading-post:price"]
-```
-
-The change takes effect at the next start.
 
 ## Defining a point
 

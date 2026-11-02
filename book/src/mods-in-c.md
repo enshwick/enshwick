@@ -58,8 +58,8 @@ which leaves out your mod's folder: load it by its full path.
 ## Check it
 
 Run `cargo enshwick manifest hello_c.dll` on Windows. It loads the DLL, asks it
-for its manifest and prints the id, version and side. Then copy the DLL into the
-game's `mods/` folder. The log shows `hello from C` under `you.hello-c` when the
+for its manifest and prints the id, version and side. Then copy the DLL into a
+folder of its own in the game's `mods/` folder, such as `mods/you.hello-c/`. The log shows `hello from C` under `you.hello-c` when the
 loader starts it.
 
 ## Keep it current

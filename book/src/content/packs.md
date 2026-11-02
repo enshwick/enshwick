@@ -22,7 +22,7 @@ mods/
 ```
 
 Every file but `pack.toml` is optional. The loader runs a pack as it runs a
-mod: it is in [`mods.toml`](../concepts/loader-and-abi.md) and the lock, counts in
+mod: it is in [the world's record](../concepts/loader-and-abi.md#the-record-of-a-world), counts in
 [the join check](../concepts/join-check.md), has its log `logs/enshwick/mods/<id>.log`, and is turned off alone when it goes
 wrong. What it adds goes through the same calls a mod makes (`add_item`,
 `add_recipe`, `add_workshop`, `add_loot`, `add_texts`), beside vanilla
