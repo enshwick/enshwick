@@ -5,13 +5,15 @@
 //! line the full channel cannot take is counted and the count logged once
 //! there is room. The writer also keeps the latest lines in memory for
 //! `enshwick log` on the console. The writer keeps the two runs before as `<name>.1.log`
-//! and `<name>.2.log`, each at most [`KEPT_BYTES`].
+//! and `<name>.2.log`, each at most [`KEPT_BYTES`]. A file that passes its cap
+//! during a run ([`ALL_CAP`], [`SOURCE_CAP`]) rolls over the same way, so the
+//! logs never hold more than three times the caps.
 
 use std::collections::VecDeque;
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::ops::Range;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, TrySendError, sync_channel};
 use std::sync::{Mutex, OnceLock};
@@ -36,6 +38,10 @@ const SETTLE_POLL: Duration = Duration::from_millis(2);
 const KEPT_BYTES: u64 = 8 << 20;
 /// Earlier runs kept beside the current one.
 const KEPT_RUNS: usize = 2;
+/// The most bytes `all.log` holds before it rolls over.
+const ALL_CAP: u64 = 64 << 20;
+/// The most bytes `loader.log` or a mod's file holds before it rolls over.
+const SOURCE_CAP: u64 = 16 << 20;
 
 /// One line as written, with its level and where its source sits in it, so
 /// the source costs no copy of its own.
@@ -146,7 +152,7 @@ pub fn open(dir: &Path) {
             rotate(&dir.join("all.log"));
             rotate(&dir.join("loader.log"));
             rotate_dir(&mods);
-            let mut all = match std::fs::File::create(dir.join("all.log")) {
+            let mut all = match Capped::create(dir.join("all.log"), ALL_CAP) {
                 Ok(all) => all,
                 Err(e) => {
                     COUNTS.stopped.store(true, Ordering::Release);
@@ -157,7 +163,7 @@ pub fn open(dir: &Path) {
                     return;
                 }
             };
-            let mut files: rustc_hash::FxHashMap<String, Option<std::fs::File>> =
+            let mut files: rustc_hash::FxHashMap<String, Option<Capped>> =
                 rustc_hash::FxHashMap::default();
             for line in receive {
                 let dropped = COUNTS.dropped.swap(0, Ordering::Relaxed);
@@ -168,10 +174,10 @@ pub fn open(dir: &Path) {
                         LOADER_ID,
                         &format!("{dropped} log lines were dropped: they came faster than the disk took them"),
                     );
-                    let _all = all.write_all(note.text.as_bytes());
+                    all.write(note.text.as_bytes());
                     keep(note);
                 }
-                let _all = all.write_all(line.text.as_bytes()).and_then(|()| all.flush());
+                all.write(line.text.as_bytes());
                 let source = line.source();
                 if !files.contains_key(source) {
                     let path = if source == LOADER_ID {
@@ -179,11 +185,10 @@ pub fn open(dir: &Path) {
                     } else {
                         mods.join(format!("{source}.log"))
                     };
-                    files.insert(source.to_owned(), std::fs::File::create(path).ok());
+                    files.insert(source.to_owned(), Capped::create(path, SOURCE_CAP).ok());
                 }
-                // Flush per line: after a crash the last lines are the useful ones.
                 if let Some(Some(file)) = files.get_mut(source) {
-                    let _own = file.write_all(line.text.as_bytes()).and_then(|()| file.flush());
+                    file.write(line.text.as_bytes());
                 }
                 keep(line);
                 COUNTS.taken.fetch_add(1, Ordering::Release);
@@ -197,13 +202,81 @@ pub fn open(dir: &Path) {
     }
 }
 
+/// A log file of the writer that rolls over, as [`rotate`] moves an earlier
+/// run aside, once it would pass its cap, so a server running for weeks never
+/// fills its disk.
+struct Capped {
+    path: PathBuf,
+    /// `None` while the file could not be made again after a roll.
+    file: Option<std::fs::File>,
+    written: u64,
+    cap: u64,
+}
+
+impl Capped {
+    /// Makes the file at `path` anew, empty.
+    fn create(path: PathBuf, cap: u64) -> std::io::Result<Self> {
+        let file = std::fs::File::create(&path)?;
+        Ok(Self {
+            path,
+            file: Some(file),
+            written: 0,
+            cap,
+        })
+    }
+
+    /// Appends `bytes` and flushes them, rolling the file over first when
+    /// they would take it past its cap.
+    fn write(&mut self, bytes: &[u8]) {
+        let len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+        if self.written > 0 && self.written.saturating_add(len) > self.cap {
+            self.roll();
+        }
+        // Flush per line: after a crash the last lines are the useful ones.
+        if let Some(file) = &mut self.file
+            && file.write_all(bytes).and_then(|()| file.flush()).is_ok()
+        {
+            self.written = self.written.saturating_add(len);
+        }
+    }
+
+    /// Moves the file aside as the latest earlier run and starts it again
+    /// with a line that says where the lines before went.
+    #[cold]
+    fn roll(&mut self) {
+        // Closed before the rename, which Windows needs.
+        self.file = None;
+        rotate(&self.path);
+        self.written = 0;
+        self.file = std::fs::File::create(&self.path).ok();
+        let name = |path: &Path| path.file_name().map(|n| n.to_string_lossy().into_owned());
+        let (Some(current), Some(earlier)) = (
+            name(&self.path),
+            run_path(&self.path, 1).as_deref().and_then(name),
+        ) else {
+            return;
+        };
+        let note = Line::new(
+            now(),
+            Level::INFO,
+            LOADER_ID,
+            &format!("{current} is full; its earlier lines of this run are in {earlier}"),
+        );
+        if let Some(file) = &mut self.file
+            && file.write_all(note.text.as_bytes()).is_ok()
+        {
+            self.written = u64::try_from(note.text.len()).unwrap_or(u64::MAX);
+        }
+    }
+}
+
 /// Moves every current `<name>.log` in `dir` aside as `<name>.1.log`, the
 /// one before to `<name>.2.log`, dropping the oldest.
 fn rotate_dir(dir: &Path) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
-    let current: Vec<std::path::PathBuf> = entries
+    let current: Vec<PathBuf> = entries
         .filter_map(|entry| Some(entry.ok()?.path()))
         .filter(|path| path.is_file() && run_of(path) == Some(0))
         .collect();
@@ -226,7 +299,7 @@ fn run_of(path: &Path) -> Option<usize> {
 }
 
 /// `<name>.<run>.log` beside `current`, `<name>.log`.
-fn run_path(current: &Path, run: usize) -> Option<std::path::PathBuf> {
+fn run_path(current: &Path, run: usize) -> Option<PathBuf> {
     let stem = current.file_stem()?.to_str()?;
     Some(current.with_file_name(format!("{stem}.{run}.log")))
 }
@@ -514,6 +587,41 @@ mod tests {
         assert_eq!(read("tail.log").as_deref(), Some("cccc\n"));
         keep_tail(&big, &dir.join("tail.log"), 100).unwrap();
         assert_eq!(read("tail.log").as_deref(), Some("aaaa\nbbbb\ncccc\n"));
+        let _clean = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_past_its_cap_rolls_over_with_its_earlier_lines_kept() {
+        let dir = std::env::temp_dir().join(format!("enshwick-log-cap-{}", std::process::id()));
+        let _fresh = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("all.log");
+        let mut file = Capped::create(path.clone(), 200).unwrap();
+        for i in 0..20 {
+            file.write(format!("line {i:02} of the run\n").as_bytes());
+        }
+        let current = std::fs::read_to_string(&path).unwrap();
+        let earlier = std::fs::read_to_string(dir.join("all.1.log")).unwrap();
+        assert!(current.len() <= 200, "{current}");
+        let mut lines = current.lines();
+        assert!(
+            lines.next().is_some_and(|note| note.ends_with(
+                "[enshwick] all.log is full; its earlier lines of this run are in all.1.log"
+            )),
+            "{current}"
+        );
+        assert!(current.ends_with("line 19 of the run\n"), "{current}");
+        let first: u32 = lines.next().unwrap()[5..7].parse().unwrap();
+        assert!(
+            earlier.ends_with(&format!("line {:02} of the run\n", first - 1)),
+            "no line is lost at the roll: {earlier}"
+        );
+        assert!(
+            std::fs::read_to_string(dir.join("all.2.log")).is_ok(),
+            "the second roll moved the first one to run 2"
+        );
+        assert!(!dir.join("all.3.log").exists());
+        drop(file);
         let _clean = std::fs::remove_dir_all(&dir);
     }
 
