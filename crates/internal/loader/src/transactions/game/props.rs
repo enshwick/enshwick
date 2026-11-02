@@ -487,7 +487,9 @@ fn state(loader: &Loader, facts: &Facts, entity: u32) -> Result<StateReads, Stat
         // SAFETY: `found` is the link's own live `InventorySetup`, kept in
         // its row (checked by `inline`), with its `isInitialized` byte at the
         // reflected offset.
-        let initialized: u8 = unsafe { enshwick::raw::read_at(found, facts.setup_initialized) };
+        let initialized = unsafe {
+            crate::transactions::props::setup_initialized(found, facts.setup_initialized)
+        };
         let mut links = [(0, 0); LINKS];
         for (i, slot) in links.iter_mut().enumerate() {
             // SAFETY: `found` is the live `InventorySetup`, whose `LINKS`
@@ -499,10 +501,7 @@ fn state(loader: &Loader, facts: &Facts, entity: u32) -> Result<StateReads, Stat
             let category: u8 = unsafe { enshwick::raw::read_at(found, facts.setup_categories + i) };
             *slot = (link, category);
         }
-        Some(Setup {
-            initialized: initialized != 0,
-            links,
-        })
+        Some(Setup { initialized, links })
     };
     let mut slots = |link: u32| {
         let found = match inline(loader, link, facts.inventory) {

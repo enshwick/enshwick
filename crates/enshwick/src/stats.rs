@@ -295,7 +295,7 @@ impl Stats {
     ///
     /// Unstable: needs the `unstable` feature and may change in any release.
     /// The value is kept as item data, which sets aside, after a restart, a
-    /// value on an item no load or join finds in its slot again.
+    /// value on an item outside a placed container or a player's inventory.
     ///
     /// # Errors
     ///
