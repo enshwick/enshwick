@@ -150,7 +150,8 @@ Each entry names the pull request that made the change.
   API's; `FakeHost::map_waypoints` sets each player's waypoint;
   `FakeHost::effect_events` sets the NPC command, threat and ping events
   `Effects` raises; `FakeHost::loot` sets the components loot from destroyed
-  things checks. `test::facts` names their facts, and the loot slot's, so a
+  things checks; `FakeHost::meters` sets what `MeterLayout` resolves.
+  `test::facts` names their facts, and the loot slot's, so a
   test of these areas lays out and reads its events by them (#871).
 
 - `content::vanilla::item`, `recipe`, `loot_table`, `station` and `workshop`

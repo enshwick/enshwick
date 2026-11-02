@@ -428,6 +428,34 @@ impl FakeHost {
         )
     }
 
+    /// Item meters: what [`MeterLayout`](crate::content::items::MeterLayout)
+    /// resolves, the meter's own component and the templates it is cloned
+    /// into.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::items::MeterLayout;
+    ///
+    /// let host = enshwick::test::FakeHost::new().meters();
+    /// let layout = MeterLayout::resolve(&host)?;
+    /// assert!(layout.fuel_setup[2] + 4 <= layout.fuel_setup[0]);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn meters(self) -> Self {
+        self.preset(
+            &[ids::FUEL_SETUP, ids::TEMPLATE, ids::TEMPLATE_COLLECTION],
+            &[(ids::FUEL_SETUP, 8)],
+            &[
+                (ids::FUEL_SETUP_MAX, 0),
+                (ids::FUEL_SETUP_START, 4),
+                (ids::TEMPLATE_COMPONENTS, 0x10),
+                (ids::TEMPLATE_COLLECTION_TEMPLATES, 0),
+            ],
+        )
+    }
+
     /// Plays a build that lacks `fact`, whichever preset set it, so a test
     /// of what turns off without it starts from the preset.
     ///
