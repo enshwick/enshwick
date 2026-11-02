@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn the_schema_is_the_one_cargo_enshwick_is_tested_with() {
         // SAFETY: `enshwick_mod_query` returns the manifest of
-        // `declare_mod!`, valid until its shutdown, which no test runs.
+        // `declare_mod!`, valid for the process.
         let manifest = unsafe { &*super::lockers::enshwick_mod_query() };
         // SAFETY: the manifest's schema text lives as long as the manifest.
         let text = unsafe { manifest.points.as_str() }

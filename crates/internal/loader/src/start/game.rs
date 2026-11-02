@@ -129,13 +129,11 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     crate::diag::configure(&settings);
     let side = identify().map(|(side, _, _)| side);
     let developer_tools = crate::developer_tools::marked(&game_dir);
-    crate::reload::configure(settings.dev_reload && developer_tools);
     crate::knowledge::guard::configure(settings.knowledge_guard);
     crate::admission::configure(&settings);
     crate::allowlist::configure(&settings);
     crate::ui::configure_actions_key(&settings.actions_key);
     crate::texts::configure(&settings.language, side == Some(Side::SERVER));
-    let dev_reload_held = settings.dev_reload && !developer_tools;
     builds::configure(settings.build_patterns);
     let motd = settings.motd.clone();
     log::set_levels(settings);
@@ -145,13 +143,6 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
         crate::log!(
             WARN,
             "developer tools are on: {} exists; never on a game players join",
-            enshwick::mods::DEVELOPER_TOOLS
-        );
-    }
-    if dev_reload_held {
-        crate::log!(
-            WARN,
-            "dev_reload is on but reloads stay off: mods reload only while the file {} exists",
             enshwick::mods::DEVELOPER_TOOLS
         );
     }

@@ -457,6 +457,21 @@ Each entry names the pull request that made the change.
 
 ### Removed
 
+- **Breaking:** dev reload is gone: the loader setting `dev_reload`, the
+  copies under `mods/enshwick/reload/`, `ManifestFlags::RELOAD`, the
+  `reload` key of a mod's table, `Mod::shutdown` and the
+  `enshwick_mod_shutdown` export with `abi::exports::SHUTDOWN`. A changed
+  mod takes a restart. The manifest `enshwick_mod_query` returns stays
+  valid for the process. Delete `reload = true` and `shutdown`; an old
+  `mods/enshwick/reload/` folder may be deleted by hand (#912).
+- **Breaking:** the loader no longer watches data packs' files: a changed
+  `loot.toml`, changes of values and Luau scripts take the next start, on a
+  dedicated server as on a client. `Pack::same_content`,
+  `Pack::same_beside_changes` and `enshwick-luau`'s `Runtime::reload`,
+  `Runtime::runs` and `ReloadError` are gone (#912).
+- **Breaking:** the console's `enshwick reload <mod id>` is gone; a mod
+  reads a changed settings file as before, through its settings change
+  event (#912).
 - **Breaking:** `was: [...]` in `manifest!` and `Relation::WAS` are gone. A
   mod keeps one id: the loader no longer copies a former id's settings and
   data, no longer finds a mod, its requirements, points, calls, events,

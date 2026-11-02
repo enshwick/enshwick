@@ -57,7 +57,7 @@ macro_rules! __declare_exports {
         /// Any thread may call it, again and again. The first call reads
         /// the binary's schema section and allocates the schema text; a
         /// panic there is caught and returns null. The manifest stays
-        /// valid until `enshwick_mod_shutdown`, which frees it.
+        /// valid for the process.
         #[cfg_attr(not(test), unsafe(no_mangle))]
         pub extern "system" fn enshwick_mod_query() -> *const $crate::abi::Manifest {
             __ENSHWICK_MANIFEST.query()
@@ -99,13 +99,6 @@ macro_rules! __declare_exports {
             _me: $crate::abi::ModHandle,
         ) {
             $crate::__private::ready::<$ty>(&__ENSHWICK_INSTANCE);
-        }
-
-        /// Stops the mod before a development reload unloads it.
-        #[cfg_attr(not(test), unsafe(no_mangle))]
-        pub extern "system" fn enshwick_mod_shutdown() {
-            $crate::__private::shutdown::<$ty>(&__ENSHWICK_INSTANCE);
-            __ENSHWICK_MANIFEST.release();
         }
     };
 }

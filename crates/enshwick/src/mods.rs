@@ -19,7 +19,7 @@ pub const LOADER_ID: &str = "enshwick";
 /// The file, relative to the game's folder, that turns developer tools on.
 ///
 /// The loader reads it once at start. Developer tools are mods with
-/// `developer: true`, dev reload and the interface demo; without the file
+/// `developer: true` and the interface demo; without the file
 /// the loader turns a developer mod off before its `init`.
 ///
 /// # Examples

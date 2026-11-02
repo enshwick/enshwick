@@ -259,12 +259,11 @@ server's log and status summary.
 ## Developer tools
 
 The empty file `mod-data/enshwick/developer-tools`, read at start, turns on
-the tools for making mods: mods with `developer: true` in their manifest,
-[dev reload](testing.md#reloading-a-mod-while-the-game-runs) and the
-interface demo. The rule is the same for a dedicated server, a client and
+the tools for making mods: mods with `developer: true` in their manifest and
+the interface demo. The rule is the same for a dedicated server, a client and
 a game a client hosts for others. Without the file the loader turns a
 developer mod off before its `init`, with the reason in the log and on the
-Mods screen, and leaves `dev_reload` off. A game players join never runs
+Mods screen. A game players join never runs
 them unless its owner made the file. A mod author creates the file once on
 their own machine: on a client, in the game's folder, the same folder that
 holds `mods/`; on a dedicated server, in the server's folder. A tester's

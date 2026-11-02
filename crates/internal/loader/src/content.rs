@@ -257,7 +257,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let changed = serve_changes(
         &mut served,
         crate::data_changes::serve(loader),
-        crate::data_changes::keeps_bases(crate::reload::copies(), crate::data_changes::has_live()),
+        crate::data_changes::has_live(),
     );
     let rated = serve_rates(&mut served, crate::rate_links::recipe_patch(loader));
     let orphans = aliases

@@ -204,9 +204,9 @@ mod tests {
     #[test]
     fn the_manifest_carries_the_served_call_s_schema() {
         // SAFETY: `enshwick_mod_query` returns the manifest of
-        // `declare_mod!`, valid until its shutdown.
+        // `declare_mod!`, valid for the process.
         let manifest = unsafe { &*enshwick_mod_query() };
-        // SAFETY: the schema text lives as long as the manifest, until a shutdown no test runs.
+        // SAFETY: the schema text lives as long as the manifest, for the process.
         let text = unsafe { manifest.points.as_str() }.unwrap_or("");
         let table: toml::Table = toml::from_str(text).unwrap();
         let call = &table["call"][0];

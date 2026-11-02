@@ -33,21 +33,3 @@ fn app_states_map_to_screens() {
     assert_eq!(screen(1), UiFrame::MENU);
     assert_eq!(screen(0), UiFrame::MENU);
 }
-
-#[test]
-fn only_the_copy_that_registered_a_frame_draws_it() {
-    extern "system" fn draw(_frame: *const UiFrame, _user: *mut core::ffi::c_void) {}
-    let owner = ModIndex::LOADER;
-    let current = Frame::new(owner, draw, core::ptr::null_mut());
-    let older = Frame {
-        generation: current.generation + 1,
-        ..current
-    };
-    let (sealed, late) = ([older, current], vec![current]);
-    assert_eq!(
-        each(&sealed, Some(&late)).count(),
-        2,
-        "the sealed and the late current copy"
-    );
-    assert!(each(&sealed[..1], None).next().is_none());
-}

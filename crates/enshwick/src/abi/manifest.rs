@@ -252,11 +252,6 @@ impl ManifestFlags {
     /// Server and clients must run the same version of this mod to play
     /// together; it counts in the join check.
     pub const JOIN: Self = Self(1);
-    /// The mod may be reloaded while the game runs, for development: it
-    /// keeps no state it cannot hand over, stops its own threads in
-    /// `shutdown` and uses only what a reload can unlink (hooks, events,
-    /// lookups, settings, logging); see the modding book.
-    pub const RELOAD: Self = Self(2);
     /// The mod is a developer tool, never for real play: it runs only while
     /// [`DEVELOPER_TOOLS`](crate::mods::DEVELOPER_TOOLS) exists, and every player reads that developer tools are on.
     pub const DEVELOPER: Self = Self(4);
@@ -274,8 +269,8 @@ impl ManifestFlags {
 
 /// What a mod is, read by the loader before it runs any of the mod's code.
 ///
-/// `enshwick_mod_query` returns it, valid until the mod's
-/// `enshwick_mod_shutdown`; the loader copies what it keeps.
+/// `enshwick_mod_query` returns it, valid for the process; the loader
+/// copies what it keeps.
 ///
 /// # Examples
 ///

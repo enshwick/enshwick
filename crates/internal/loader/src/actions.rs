@@ -60,22 +60,15 @@ fn server_state<R>(f: impl FnOnce(&mut ServerState) -> R) -> R {
     }))
 }
 
-/// Registers mod `owner`'s actions callback; a second one is refused unless
-/// the mod is initialised again.
+/// Registers mod `owner`'s actions callback; a second one is refused.
 pub(crate) fn register(
     owner: ModIndex,
     callback: ActionFn,
     user: *mut core::ffi::c_void,
-    again: bool,
 ) -> Status {
     let mut registered = REGISTERED.relock();
-    if let Some(known) = registered.iter_mut().find(|r| r.owner == owner) {
-        if !again {
-            return Status::REFUSED;
-        }
-        known.callback = callback;
-        known.user = user.expose_provenance();
-        return Status::OK;
+    if registered.iter().any(|r| r.owner == owner) {
+        return Status::REFUSED;
     }
     registered.push(Registered {
         owner,

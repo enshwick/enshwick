@@ -295,8 +295,7 @@ end)
 The function answers nil and why not: `unmatched` when no running mod serves the
 call as described or the start is not over, `off` when the server or its handler
 is, and `failed` when its handler failed. A call asked for after the start
-raises an error, and so does a reload that describes an asked call differently:
-either change takes the next start.
+raises an error: it takes the next start.
 
 The input's fields are numbers, booleans, entities and GUIDs. The runtime works
 out each field's layout hash from its name, type and offset and refuses a
@@ -384,24 +383,10 @@ fails at start leaves the mod off from the start, with the same line.
 
 ## Threads
 
-`main.luau` runs on the loader's start thread, and after a reload on the
-thread that watches files. Event handlers and tasks run
+`main.luau` runs on the loader's start thread. Event handlers and tasks run
 on the server's game thread, between simulation steps, where calls into the
 world are allowed (see [Threads](concepts/threads.md)). Hooks and filters
 inside a step stay in Rust: a Luau mod sees their results through events.
-
-## Change scripts while the game runs
-
-With `dev_reload = true` in the loader's settings, the loader looks at a Luau
-mod's folder every second: a script added, removed, renamed or changed, in
-any subfolder the mod may hold scripts in, counts as a change. A new mod
-folder waits for the next start. On a change the loader runs `main.luau`
-again in a new VM: handlers of
-events subscribed at start move to the new scripts, and tasks of the old ones
-stop. A handler of an event the old scripts did not subscribe runs from the
-next start, and the log says so. When the new scripts fail, the old ones keep
-running. Without `dev_reload`, a script change waits for the next start. The
-pack's data files reload as any [data pack](content/packs.md)'s do.
 
 ## What a mod costs
 

@@ -52,14 +52,6 @@ pub fn set_pending(pending: &mut [Pending], owner: ModIndex, id: ChangeId, value
     }
 }
 
-/// Whether the resources the changes patch keep their base, which a
-/// rebuild in place starts from: under a development reload, or once a mod
-/// declared a change it sets later.
-#[must_use]
-pub const fn keeps_bases(dev_reload: bool, live: bool) -> bool {
-    dev_reload || live
-}
-
 #[cfg(test)]
 mod tests {
     use enshwick::content::Guid;
@@ -154,13 +146,6 @@ mod tests {
         assert_eq!(values, vec![Value::Set(99.0), Value::Times(3.0), UNSET]);
         set_pending(&mut pending, ModIndex::new(1), ChangeId(1), None);
         assert!(matches!(&pending[0], Pending::One(d) if d.change.value == UNSET));
-    }
-
-    #[test]
-    fn a_live_change_keeps_the_bases_a_later_set_rebuilds_from() {
-        assert!(keeps_bases(false, true));
-        assert!(keeps_bases(true, false));
-        assert!(!keeps_bases(false, false));
     }
 
     #[test]

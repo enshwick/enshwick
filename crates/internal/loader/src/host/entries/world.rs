@@ -183,8 +183,7 @@ pub(crate) extern "system" fn status(
             Ok(found) => found,
             Err(status) => return status,
         };
-        // A source added later would outlive a reload of the mod unseen.
-        if !crate::reload::in_init(index.get()) {
+        if !crate::host::in_init(index.get()) {
             return Status::TOO_LATE;
         }
         crate::status::register(index, callback, user)
@@ -201,11 +200,10 @@ pub(crate) extern "system" fn actions(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !crate::reload::in_init(index.get()) {
+        if !crate::host::in_init(index.get()) {
             return Status::TOO_LATE;
         }
-        let again = crate::reload::reinitialising(index.get());
-        let status = crate::actions::register(index, callback, user, again);
+        let status = crate::actions::register(index, callback, user);
         if status.is_ok() {
             crate::log::write(Level::DEBUG, &record.id, "player actions");
         }

@@ -1260,11 +1260,6 @@ typedef uint32_t EnshwickManifestFlags;
 // Server and clients must run the same version of this mod to play
 // together; it counts in the join check.
 #define EnshwickManifestFlags_JOIN 1
-// The mod may be reloaded while the game runs, for development: it
-// keeps no state it cannot hand over, stops its own threads in
-// `shutdown` and uses only what a reload can unlink (hooks, events,
-// lookups, settings, logging); see the modding book.
-#define EnshwickManifestFlags_RELOAD 2
 // The mod is a developer tool, never for real play: it runs only while
 // `DEVELOPER_TOOLS` exists, and every player reads that developer tools are on.
 #define EnshwickManifestFlags_DEVELOPER 4
@@ -2793,8 +2788,7 @@ typedef struct EnshwickMapMarkerInfo {
 // `HostApi::subscribe_tick`, for
 // `HostApi::set_tick_every`.
 //
-// Valid for the mod that subscribed it until that mod reloads, after which
-// the loader answers `Status::MISSING`.
+// Valid for the mod that subscribed it, for the process.
 typedef uint32_t EnshwickTickHandle;
 
 // The frame of the map of the scene the server runs, as
@@ -4198,9 +4192,9 @@ typedef struct EnshwickHostApi {
   // nothing. The data lives for the call; the loader keeps `user` and
   // never frees it. Writes the handler's handle to `out`, the caller's,
   // writable for four bytes, on `Status::OK` only. `Status::BAD_ARGS`
-  // for a null `out`; `Status::TOO_LATE` outside `enshwick_mod_init`
-  // and a reloading mod's init again. The handler runs until the mod is
-  // off; a panic in it turns the mod off. It may call
+  // for a null `out`; `Status::TOO_LATE` outside `enshwick_mod_init`.
+  // The handler runs until the mod is off; a panic in it turns the mod
+  // off. It may call
   // `HostApi::set_tick_every` on itself. `Status::REFUSED` once the
   // loader holds `u32::MAX` handlers, and when the loader panics.
   EnshwickStatus (*subscribe_tick)(EnshwickModHandle me,
@@ -4212,9 +4206,8 @@ typedef struct EnshwickHostApi {
   // `every_nanos`, 0 for every step, from the next step on: the next
   // call comes `every_nanos` after its last one, or on the next step when
   // that time has passed. `Status::REFUSED` for another mod's handle;
-  // `Status::MISSING` for a handle the loader never gave out or one of
-  // the mod's copy before a reload. Any thread, the handler itself
-  // included. A panic in the loader returns `Status::REFUSED`.
+  // `Status::MISSING` for a handle the loader never gave out. Any
+  // thread, the handler itself included. A panic in the loader returns `Status::REFUSED`.
   EnshwickStatus (*set_tick_every)(EnshwickModHandle me,
                                    EnshwickTickHandle handle,
                                    uint64_t every_nanos);
@@ -4302,8 +4295,8 @@ typedef struct EnshwickKnowledgeData {
 
 // What a mod is, read by the loader before it runs any of the mod's code.
 //
-// `enshwick_mod_query` returns it, valid until the mod's
-// `enshwick_mod_shutdown`; the loader copies what it keeps.
+// `enshwick_mod_query` returns it, valid for the process; the loader
+// copies what it keeps.
 typedef struct EnshwickManifest {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -4526,8 +4519,6 @@ ENSHWICK_EXPORT const EnshwickManifest *enshwick_mod_query(void);
 ENSHWICK_EXPORT EnshwickStatus enshwick_mod_init(const EnshwickHostApi *host, EnshwickModHandle me);
 // Runs after every chain is armed.
 ENSHWICK_EXPORT void enshwick_mod_ready(const EnshwickHostApi *host, EnshwickModHandle me);
-// Optional: stops what the mod started before a development reload unloads it.
-ENSHWICK_EXPORT void enshwick_mod_shutdown(void);
 
 #ifdef __cplusplus
 }

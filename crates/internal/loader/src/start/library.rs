@@ -38,40 +38,6 @@ pub(super) struct Library {
     pub(super) init: InitFn,
     /// Its `ready` export.
     pub(super) ready: ReadyFn,
-    /// With dev reload: the DLL in `mods/` and the copy the mod runs from.
-    pub(super) copied: Option<(PathBuf, PathBuf)>,
-}
-
-/// A mod DLL a dev reload loaded from a new copy.
-pub(crate) struct Loaded {
-    /// The module.
-    pub(crate) module: HMODULE,
-    /// Its manifest, the loader's copy.
-    pub(crate) manifest: &'static Manifest,
-    /// Its `init`.
-    pub(crate) init: InitFn,
-    /// Its `ready`.
-    pub(crate) ready: ReadyFn,
-}
-
-/// Loads the mod DLL at `path`, a dev reload copy of `original`; `None`,
-/// logged, when it is no mod of this ABI.
-pub(crate) fn load_copy(path: &Path, original: &Path) -> Option<Loaded> {
-    if crate::others::is_mod_file(path) == Some(false) {
-        crate::log!(
-            WARN,
-            "{} is no Enshwick mod any more; it is not loaded",
-            path.display()
-        );
-        return None;
-    }
-    let library = load_from(path, Some(original))?;
-    Some(Loaded {
-        module: library.module,
-        manifest: library.manifest,
-        init: library.init,
-        ready: library.ready,
-    })
 }
 
 /// What `mods/` holds: the mods with readable manifests that the mod list
@@ -109,7 +75,6 @@ pub(super) fn libraries(
             pack: true,
             range: None,
             manifest: found.manifest,
-            copied: None,
             init: crate::packs::init,
             ready: crate::packs::ready,
         });
@@ -348,7 +313,7 @@ pub(super) enum Run {
 /// file name, or `None`, logged, when it does not load.
 fn load_native(path: &Path) -> Option<String> {
     let file = path.file_name()?.to_string_lossy().into_owned();
-    if let Err(error) = crate::module::load_library(path, None) {
+    if let Err(error) = crate::module::load_library(path) {
         crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
         return None;
     }
@@ -356,27 +321,11 @@ fn load_native(path: &Path) -> Option<String> {
     Some(file)
 }
 
-/// Loads the mod DLL at `path`, from a fresh copy with dev reload.
+/// Loads the mod DLL at `path`; `None`, logged, when it is no mod of this
+/// ABI.
 fn load(path: &Path) -> Option<Library> {
-    if crate::reload::copies() {
-        let mods_dir = path.parent()?;
-        let copy = crate::reload::first_copy(mods_dir, path)?;
-        let mut library = load_from(&copy, Some(path))?;
-        library.copied = Some((path.to_path_buf(), copy));
-        return Some(library);
-    }
-    load_from(path, None)
-}
-
-/// Loads the DLL at `path`, a dev reload copy of `original` when given, which
-/// then names it in messages and whose folder its imports also resolve from.
-fn load_from(path: &Path, original: Option<&Path>) -> Option<Library> {
-    let file = original
-        .unwrap_or(path)
-        .file_name()?
-        .to_string_lossy()
-        .into_owned();
-    let module = match crate::module::load_library(path, original.and_then(Path::parent)) {
+    let file = path.file_name()?.to_string_lossy().into_owned();
+    let module = match crate::module::load_library(path) {
         Ok(module) => module,
         Err(error) => {
             crate::log!(WARN, "{}", crate::errors::load_failure(&file, &error));
@@ -396,7 +345,7 @@ fn load_from(path: &Path, original: Option<&Path>) -> Option<Library> {
 /// The mod in the loaded `module`, named `file` in messages; `None`, logged,
 /// when it exports no Enshwick interface of this ABI.
 fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
-    // SAFETY: `module` was loaded by `load_from`, which frees it only after
+    // SAFETY: `module` was loaded by `load`, which frees it only after
     // this returns; the `Module` does not leave this function, and the
     // exports it finds are called only while the library stays loaded.
     let found = unsafe { crate::module::Module::from_handle(module) };
@@ -429,9 +378,8 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         return None;
     }
     // SAFETY: `query` returns null or the mod's manifest, readable for the
-    // size its header says, its strings and lists unwritten until the mod's
-    // shutdown (`abi::exports::QUERY`), which cannot run before `read`
-    // returns its copy.
+    // size its header says, its strings and lists unwritten for the process
+    // (`abi::exports::QUERY`).
     let manifest = match unsafe { crate::manifest::read(query()) } {
         Ok(manifest) => manifest,
         Err(reason) => {
@@ -447,7 +395,6 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         manifest,
         init,
         ready,
-        copied: None,
     })
 }
 

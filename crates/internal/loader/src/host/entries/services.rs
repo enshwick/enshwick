@@ -7,9 +7,7 @@ use enshwick::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str, TickH
 
 use crate::host::join::keep;
 use crate::host::memory::{get_headed, put, put_headed, text};
-use crate::host::{
-    Loader, ModRecord, Subscription, caller, caller_index, calling, entry, mark_handled,
-};
+use crate::host::{Loader, ModRecord, Subscription, caller, caller_index, calling, entry};
 use crate::locks::Relock;
 
 impl crate::points::Mods for Loader {
@@ -550,14 +548,8 @@ pub(crate) extern "system" fn subscribe(
             event,
             callback,
             user: user.expose_provenance(),
-            generation: crate::reload::generation(index.get()),
         };
         if loader.delivery.get().is_some() {
-            if crate::reload::reinitialising(index.get()) {
-                mark_handled(event);
-                crate::reload::subscribe_late(subscription);
-                return Status::OK;
-            }
             return Status::TOO_LATE;
         }
         let mut subscriptions = loader.subscriptions.relock();
@@ -581,12 +573,10 @@ pub(crate) extern "system" fn subscribe_tick(
         if out.is_null() {
             return Status::BAD_ARGS;
         }
-        if loader.delivery.get().is_some() && !crate::reload::reinitialising(index.get()) {
+        if loader.delivery.get().is_some() {
             return Status::TOO_LATE;
         }
-        let generation = crate::reload::generation(index.get());
-        let Some(handle) = crate::ticks::TICKS.add(index, generation, every_nanos, callback, user)
-        else {
+        let Some(handle) = crate::ticks::TICKS.add(index, every_nanos, callback, user) else {
             return Status::REFUSED;
         };
         // SAFETY: `out` is non-null by the check before it and, by
@@ -602,12 +592,7 @@ pub(crate) extern "system" fn set_tick_every(
     every_nanos: u64,
 ) -> Status {
     entry("set_tick_every", || match calling(me) {
-        Ok((_, index, _)) => crate::ticks::TICKS.set_every(
-            handle,
-            index,
-            crate::reload::generation(index.get()),
-            every_nanos,
-        ),
+        Ok((_, index, _)) => crate::ticks::TICKS.set_every(handle, index, every_nanos),
         Err(status) => status,
     })
 }

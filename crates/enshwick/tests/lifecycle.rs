@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn a_mod_lives_its_whole_life() {
         // SAFETY: `enshwick_mod_query` returns null or the manifest
-        // of `declare_mod!`, valid until its shutdown.
+        // of `declare_mod!`, valid for the process.
         let manifest = unsafe { enshwick_mod_query().as_ref() }.expect("the manifest is queried");
         // SAFETY: the id points at a `'static` string literal of `declare_mod!`.
         assert_eq!(unsafe { manifest.id.as_str() }, Some("you.test-mod"));

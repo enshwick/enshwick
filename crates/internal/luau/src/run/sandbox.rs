@@ -85,7 +85,6 @@ impl Inner {
         let lua = sandbox(self.limits, &self.overruns).map_err(StartError::Sandbox)?;
         let vm = Arc::new(Vm {
             lua,
-            scripts: scripts.clone(),
             starting: AtomicBool::new(true),
             handlers: Mutex::new(Vec::new()),
             points: Mutex::new(Vec::new()),

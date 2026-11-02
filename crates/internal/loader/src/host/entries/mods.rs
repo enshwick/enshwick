@@ -355,7 +355,7 @@ pub(crate) extern "system" fn config_check(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("config_check", || match calling(me) {
-        Ok((_, index, _)) if !crate::reload::in_init(index.get()) => Status::TOO_LATE,
+        Ok((_, index, _)) if !crate::host::in_init(index.get()) => Status::TOO_LATE,
         Ok((_, _, record)) => {
             if record
                 .check

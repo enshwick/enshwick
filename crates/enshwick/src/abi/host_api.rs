@@ -1454,9 +1454,9 @@ pub struct HostApi {
     /// nothing. The data lives for the call; the loader keeps `user` and
     /// never frees it. Writes the handler's handle to `out`, the caller's,
     /// writable for four bytes, on [`Status::OK`] only. [`Status::BAD_ARGS`]
-    /// for a null `out`; [`Status::TOO_LATE`] outside `enshwick_mod_init`
-    /// and a reloading mod's init again. The handler runs until the mod is
-    /// off; a panic in it turns the mod off. It may call
+    /// for a null `out`; [`Status::TOO_LATE`] outside `enshwick_mod_init`.
+    /// The handler runs until the mod is off; a panic in it turns the mod
+    /// off. It may call
     /// [`HostApi::set_tick_every`] on itself. [`Status::REFUSED`] once the
     /// loader holds `u32::MAX` handlers, and when the loader panics.
     pub subscribe_tick: extern "system" fn(
@@ -1470,9 +1470,8 @@ pub struct HostApi {
     /// `every_nanos`, 0 for every step, from the next step on: the next
     /// call comes `every_nanos` after its last one, or on the next step when
     /// that time has passed. [`Status::REFUSED`] for another mod's handle;
-    /// [`Status::MISSING`] for a handle the loader never gave out or one of
-    /// the mod's copy before a reload. Any thread, the handler itself
-    /// included. A panic in the loader returns [`Status::REFUSED`].
+    /// [`Status::MISSING`] for a handle the loader never gave out. Any
+    /// thread, the handler itself included. A panic in the loader returns [`Status::REFUSED`].
     pub set_tick_every:
         extern "system" fn(me: ModHandle, handle: TickHandle, every_nanos: u64) -> Status,
     /// Writes to `out` the frame of the map of the scene the server runs:

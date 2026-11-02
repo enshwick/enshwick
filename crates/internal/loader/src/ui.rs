@@ -27,8 +27,6 @@ use core::cell::{Cell, RefCell};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use arc_swap::ArcSwapOption;
-
 use enshwick::abi::{
     HookFlags, Side, Status, Str, UiAnswerFn, UiDialog, UiFrame, UiFrameFn, UiWidget,
 };
@@ -213,56 +211,10 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 static NEXT: Next<PopupFn> = unsafe { Next::new() };
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 /// Frame callbacks: open while mods initialise, sealed after.
-static FRAMES: Registry<Frame> = Registry::new();
+static FRAMES: Registry<Registered<UiFrameFn>> = Registry::new();
 /// HUD callbacks: open while mods initialise, sealed after.
-static HUDS: Registry<Frame> = Registry::new();
-/// Frame and HUD callbacks of mods reloaded after sealing, swapped whole.
-static LATE_FRAMES: ArcSwapOption<Vec<Frame>> = ArcSwapOption::const_empty();
-static LATE_HUDS: ArcSwapOption<Vec<Frame>> = ArcSwapOption::const_empty();
+static HUDS: Registry<Registered<UiFrameFn>> = Registry::new();
 
-/// A frame or HUD callback with the reload generation of the mod copy that
-/// registered it; a reloaded mod's older copies are skipped.
-#[derive(Debug, Clone, Copy)]
-struct Frame {
-    registered: Registered<UiFrameFn>,
-    generation: u32,
-}
-
-impl Frame {
-    fn new(owner: ModIndex, callback: UiFrameFn, user: *mut core::ffi::c_void) -> Self {
-        Self {
-            registered: Registered::new(owner, callback, user),
-            generation: crate::reload::generation(owner.get()),
-        }
-    }
-
-    /// Whether its mod runs, in the copy that registered it.
-    fn current(&self) -> bool {
-        self.registered.live()
-            && self.generation == crate::reload::generation(self.registered.owner.get())
-    }
-}
-
-/// Adds `frame` to `late`, for a mod a reload initialises again.
-fn add_late(late: &ArcSwapOption<Vec<Frame>>, frame: Frame) {
-    late.rcu(|current| {
-        let mut next = current.as_deref().cloned().unwrap_or_default();
-        next.push(frame);
-        Some(std::sync::Arc::new(next))
-    });
-}
-
-/// The current callbacks of `sealed` and `late`, in order.
-fn each<'a>(
-    sealed: &'a [Frame],
-    late: Option<&'a Vec<Frame>>,
-) -> impl Iterator<Item = &'a Registered<UiFrameFn>> {
-    sealed
-        .iter()
-        .chain(late.into_iter().flatten())
-        .filter(|frame| frame.current())
-        .map(|frame| &frame.registered)
-}
 // SAFETY: `HudFn` is the signature of the game's `ui.hud`, and `link` uses
 // this slot only as the `next` of `hud_detour`, its link on that function.
 static HUD_NEXT: Next<HudFn> = unsafe { Next::new() };
@@ -378,15 +330,8 @@ pub(crate) fn register_frame(
     if loader.side != Side::CLIENT {
         return Status::MISSING;
     }
-    if FRAMES.is_sealed() {
-        if !crate::reload::reinitialising(owner.get()) {
-            return Status::TOO_LATE;
-        }
-        add_late(&LATE_FRAMES, Frame::new(owner, callback, user));
-        return Status::OK;
-    }
     FRAMES
-        .add(Frame::new(owner, callback, user))
+        .add(Registered::new(owner, callback, user))
         .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
@@ -400,14 +345,7 @@ pub(crate) fn register_hud(
     if loader.side != Side::CLIENT {
         return Status::MISSING;
     }
-    if HUDS.is_sealed() {
-        if !crate::reload::reinitialising(owner.get()) {
-            return Status::TOO_LATE;
-        }
-        add_late(&LATE_HUDS, Frame::new(owner, callback, user));
-        return Status::OK;
-    }
-    HUDS.add(Frame::new(owner, callback, user))
+    HUDS.add(Registered::new(owner, callback, user))
         .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
@@ -646,8 +584,7 @@ fn hud(engine: &Engine, context: usize) {
         return;
     };
     HUD_ITEMS.with_borrow_mut(Vec::clear);
-    let late = LATE_HUDS.load();
-    for registered in each(huds, late.as_deref()) {
+    for registered in huds.iter().filter(|r| r.live()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
         DRAWING.set(Some(Drawing {
             token,
@@ -779,8 +716,7 @@ fn frames(engine: &Engine, context: usize) {
         return;
     };
     let screen = screen(engine.app_state(context));
-    let late = LATE_FRAMES.load();
-    for registered in each(frames, late.as_deref()) {
+    for registered in frames.iter().filter(|r| r.live()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
         DRAWING.set(Some(Drawing {
             token,

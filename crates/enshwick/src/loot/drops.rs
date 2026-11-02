@@ -456,7 +456,7 @@ struct Engine {
 
 static ENGINE: Fresh<Engine> = Fresh::new();
 /// Every drop, with the group it belongs to: 0 for a mod's own, a content
-/// pack's hash for the pack's, which a reload replaces whole.
+/// pack's hash for the pack's, which goes whole when the pack turns off.
 static DROPS: Fresh<Mutex<Vec<(u64, Drop)>>> = Fresh::new();
 /// Whether the single-item roll is linked.
 static ONE_LINKED: Fresh<std::sync::atomic::AtomicBool> = Fresh::new();
@@ -929,8 +929,8 @@ impl From<ReplaceDropsError> for Off {
     }
 }
 
-/// Replaces every drop of group `group` with `drops`, as a data pack's
-/// reload does; no drops forgets the group.
+/// Replaces every drop of group `group` with `drops`; no drops forgets the
+/// group.
 ///
 /// # Errors
 ///

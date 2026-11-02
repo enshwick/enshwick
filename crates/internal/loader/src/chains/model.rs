@@ -1,6 +1,6 @@
 //! Model tests of the hook chains' slots under loom: a game thread walking a
-//! chain while the loader rewires it past a faulted mod, or trades a
-//! reloaded mod's link, only ever follows a slot to a link or the original.
+//! chain while the loader rewires it past a faulted mod only ever follows a
+//! slot to a link or the original.
 //!
 //! Run with `RUSTFLAGS="--cfg loom" cargo test -p enshwick-loader --lib chains::model --release`.
 
@@ -88,29 +88,6 @@ mod tests {
                 "{during:x?}"
             );
             assert_eq!(walk(head, &hops), [0xa, 0xc]);
-        });
-    }
-
-    #[test]
-    fn a_call_during_a_reload_passes_the_old_link_the_new_or_neither() {
-        loom::model(|| {
-            let (mut chains, head, mut hops) = armed(&[(1, 0xa), (2, 0xb)]);
-            let reloaded = link(2, 0xbb, 1);
-            hops.push((reloaded.detour, reloaded.next));
-            let walker = {
-                let hops = hops.clone();
-                thread::spawn(move || walk(head, &hops))
-            };
-            chains.rewire(|owner| owner == ModIndex::new(2));
-            chains.remove_owner(ModIndex::new(2));
-            assert_eq!(chains.relink(TARGET, reloaded), Status::OK);
-            chains.rewire(|_| false);
-            let during = walker.join().unwrap();
-            assert!(
-                [vec![0xa, 0xb], vec![0xa], vec![0xa, 0xbb]].contains(&during),
-                "{during:x?}"
-            );
-            assert_eq!(walk(head, &hops), [0xa, 0xbb]);
         });
     }
 

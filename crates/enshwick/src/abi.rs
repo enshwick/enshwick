@@ -660,7 +660,7 @@ pub mod exports {
     ///
     /// Any thread may call it any number of times; the first call builds the
     /// manifest and allocates, and a panic there returns null. The manifest
-    /// stays valid until [`SHUTDOWN`]: copy what is kept.
+    /// stays valid for the process.
     pub const QUERY: &str = "enshwick_mod_query";
     /// `extern "system" fn(*const HostApi, ModHandle) -> Status`: registers
     /// hooks, services and settings.
@@ -668,9 +668,6 @@ pub mod exports {
     /// `extern "system" fn(*const HostApi, ModHandle)`: after every chain is
     /// armed.
     pub const READY: &str = "enshwick_mod_ready";
-    /// `extern "system" fn()`: before a development reload unloads the DLL;
-    /// the mod stops what it started. Optional.
-    pub const SHUTDOWN: &str = "enshwick_mod_shutdown";
 }
 
 const _: () = {

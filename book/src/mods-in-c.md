@@ -19,7 +19,7 @@ layout on every change. `hello.c` writes one line to the log when it starts.
    `ENSHWICK_ABI_MAJOR` and `ENSHWICK_ABI_MINOR`; a mod needs at least `id`,
    `version` and `side`. `ENSHWICK_STR_INIT("text")` makes a string.
 3. Define `enshwick_mod_abi`, `enshwick_mod_query`, `enshwick_mod_init` and
-   `enshwick_mod_ready`; `enshwick_mod_shutdown` is optional. The header
+   `enshwick_mod_ready`. The header
    declares them with `ENSHWICK_EXPORT`, so the DLL exports them.
 4. In `enshwick_mod_init`, call the loader through the `EnshwickHostApi` table
    it passes, such as `host->log(me, EnshwickLevel_INFO, line)`.

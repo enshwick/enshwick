@@ -1,5 +1,4 @@
-//! Developer tools: mods with `developer: true`, dev reload and the
-//! interface demo. They are on only where the file
+//! Developer tools: mods with `developer: true` and the interface demo. They are on only where the file
 //! [`enshwick::mods::DEVELOPER_TOOLS`] exists, read once at start, on every
 //! side, so neither a dedicated server nor a game a client hosts for others
 //! runs them unless its owner made the file.
@@ -9,8 +8,7 @@ use std::path::Path;
 use enshwick::abi::ManifestFlags;
 
 /// Why a mod with `flags` does not run where developer tools are `on` or
-/// not; `None` when it runs. The start asks it before each `init`; a reload needs developer tools
-/// on to run at all.
+/// not; `None` when it runs. The start asks it before each `init`.
 #[must_use]
 pub(crate) fn refused(on: bool, flags: ManifestFlags) -> Option<&'static str> {
     (!on && flags.contains(ManifestFlags::DEVELOPER)).then_some(enshwick::mods::DEVELOPER_TOOL_OFF)

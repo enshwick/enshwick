@@ -175,11 +175,6 @@ mod off_line;
 mod others;
 #[cfg(windows)]
 mod pacing;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the Windows build watches pack files")
-)]
-mod pack_watch;
 #[cfg(windows)]
 mod packs;
 #[cfg(windows)]
@@ -215,8 +210,6 @@ mod rate_links;
 mod rates;
 pub mod recipes;
 pub mod registry;
-#[cfg(windows)]
-mod reload;
 pub mod remote;
 #[cfg_attr(
     all(not(windows), not(test)),

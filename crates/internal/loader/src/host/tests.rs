@@ -14,7 +14,6 @@ fn a_raise_walks_its_event_s_subscriptions_in_their_order() {
         event,
         callback: handler,
         user: 0,
-        generation: 0,
     };
     let mut sealed = vec![
         made(ModIndex::new(2), Event::TICKED),

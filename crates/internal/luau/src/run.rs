@@ -131,11 +131,10 @@ pub struct Usage {
     pub overruns: u64,
 }
 
-/// One VM of a mod: the Luau state, the scripts it runs and the handlers
-/// its `main.luau` registered.
+/// One VM of a mod: the Luau state and the handlers its `main.luau`
+/// registered.
 pub(crate) struct Vm {
     lua: Lua,
-    scripts: Scripts,
     /// Whether `main.luau` is still running its top level.
     starting: AtomicBool,
     handlers: Mutex<Vec<(Subscription, Function)>>,
@@ -159,8 +158,6 @@ pub(crate) struct Inner {
     namespaces: Vec<(&'static script::Namespace, Opened)>,
     /// The VM; gone once the mod is off, which frees its memory.
     vm: ArcSwapOption<Vm>,
-    /// The subscriptions made at start, the only ones a reload can serve.
-    subscribed: Mutex<Vec<Subscription>>,
     /// The mod events the scripts define, each with the emitter the loader
     /// gives once `main.luau` ran at start.
     defined: Mutex<Vec<Defined>>,
@@ -249,108 +246,17 @@ impl Runtime {
     pub fn is_off(&self) -> bool {
         self.0.off.load(Ordering::Acquire)
     }
-
-    /// Whether the mod runs exactly `scripts` now.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick_luau::{Limits, Scripts};
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let scripts = Scripts::new().with("main.luau", "");
-    ///     let runtime = enshwick_luau::start(load, "you.hello", scripts.clone(), None, Limits::default())?;
-    ///     assert!(runtime.runs(&scripts));
-    ///     Ok(())
-    /// }
-    /// ```
-    #[must_use]
-    pub fn runs(&self, scripts: &Scripts) -> bool {
-        self.0
-            .vm
-            .load()
-            .as_ref()
-            .is_some_and(|vm| vm.scripts == *scripts)
-    }
-
-    /// Runs `scripts` in place of the mod's scripts, for development: a new
-    /// VM runs `main.luau`, takes over the handlers of the events subscribed
-    /// at start, and the old VM's tasks stop at their next run.
-    ///
-    /// # Errors
-    ///
-    /// [`ReloadError`] when the mod is off, or with the file, line and
-    /// message when the new `main.luau` fails at its start; the old scripts
-    /// keep running.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick_luau::{Limits, Scripts};
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let runtime = enshwick_luau::start(load, "you.hello", Scripts::new().with("main.luau", ""), None, Limits::default())?;
-    ///     let newer = Scripts::new().with("main.luau", "print('again')");
-    ///     runtime.reload(newer.clone()).map_err(|e| enshwick::Off::new(e.to_string()))?;
-    ///     assert!(runtime.runs(&newer));
-    ///     Ok(())
-    /// }
-    /// ```
-    pub fn reload(&self, scripts: Scripts) -> Result<(), ReloadError> {
-        let inner = &self.0;
-        if self.is_off() {
-            return Err(ReloadError::Off);
-        }
-        let vm = inner.run_main(scripts)?;
-        let waiting: Vec<String> = {
-            let subscribed = inner.subscribed.relock();
-            vm.events()
-                .into_iter()
-                .filter(|sub| !subscribed.contains(sub))
-                .map(|sub| sub.name())
-                .collect()
-        };
-        if !waiting.is_empty() {
-            inner.host.log(
-                Level::WARN,
-                &format!("handlers of {} run from the next start", waiting.join(", ")),
-            );
-        }
-        inner.vm.store(Some(vm));
-        if self.is_off() {
-            inner.vm.store(None);
-            return Err(ReloadError::Off);
-        }
-        Ok(())
-    }
-}
-
-/// Why [`Runtime::reload`] left the old scripts running.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_luau::{ReloadError, StartError};
-///
-/// let error = ReloadError::Start(StartError::Missing);
-/// assert_eq!(error.to_string(), "main.luau is missing");
-/// ```
-#[derive(Clone, Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum ReloadError {
-    /// A fault turned the mod off.
-    #[error("the mod is off")]
-    Off,
-    /// The new `main.luau` failed at its start: the file, line and message.
-    #[error(transparent)]
-    Start(#[from] StartError),
 }
 
 /// Why a mod's `main.luau` did not start.
 ///
 /// # Examples
 ///
-/// See [`ReloadError`].
+/// ```
+/// use enshwick_luau::StartError;
+///
+/// assert_eq!(StartError::Missing.to_string(), "main.luau is missing");
+/// ```
 #[derive(Clone, Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum StartError {
@@ -387,7 +293,7 @@ impl Scope {
         args: Vec<Value>,
         signature: &'static Signature,
     ) -> Result<Value, script::Error> {
-        let stale = || script::Error::new("the scripts were reloaded or stopped");
+        let stale = || script::Error::new("the scripts stopped");
         let inner = self.inner.upgrade().ok_or_else(stale)?;
         let vm = self.vm.upgrade().ok_or_else(stale)?;
         let current = inner
@@ -511,7 +417,6 @@ fn begin(
         limits,
         namespaces,
         vm: ArcSwapOption::empty(),
-        subscribed: Mutex::new(Vec::new()),
         defined: Mutex::new(Vec::new()),
         asked: Mutex::new(Vec::new()),
         started: AtomicBool::new(false),
@@ -541,7 +446,6 @@ fn begin(
         .map_err(|error| Off::new(error.to_string()))?;
     let events = vm.events();
     inner.vm.store(Some(vm));
-    inner.subscribed.relock().clone_from(&events);
     subscribe(&inner, load, events)?;
     let defined: Vec<(
         enshwick::services::DescribedEvent,
@@ -557,7 +461,7 @@ fn begin(
         // fields whose hashes it worked out from their reads and offsets,
         // and `encode` writes each primitive's valid bytes, a bool as 0 or
         // 1; every send goes through the table `define_event` made for this
-        // description, which a reload cannot change.
+        // description.
         let _first = emitter.set(unsafe { load.define_described_event(&event) }?);
     }
     let asked: Vec<(DescribedCall, Arc<OnceLock<DescribedCaller>>)> = inner
@@ -575,8 +479,7 @@ fn begin(
         // every other primitive is valid for any bytes; the input buffer
         // starts zeroed and the match on fields and size with `#[call]`'s
         // padding check leaves no other byte. Every call goes through the
-        // function `caller` made for this description, which a reload cannot
-        // change.
+        // function `caller` made for this description.
         let _first = caller.set(unsafe { load.described_caller(&call) }?);
     }
     inner.started.store(true, Ordering::Release);

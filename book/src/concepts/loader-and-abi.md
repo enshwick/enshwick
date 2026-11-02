@@ -20,10 +20,9 @@ patterns; a mod whose entries are not found stays off with the reason, and
 ## How mods are found
 
 Every `*.dll` directly in `mods/` is a candidate, taken in file name order. The
-loader loads each and keeps it when it exports the four required functions of
+loader loads each and keeps it when it exports the four functions of
 [`abi::exports`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
-and was built for the loader's ABI version. The fifth, `enshwick_mod_shutdown`,
-is optional. A DLL without `enshwick_mod_abi` is a native mod: it stays loaded
+and was built for the loader's ABI version. A DLL without `enshwick_mod_abi` is a native mod: it stays loaded
 and runs on its own, and the status summary and the Mods screen list it. One
 with only part of the interface is logged and unloaded. The file name is free; the id in the manifest
 names the mod. Every folder in `mods/` with a `pack.toml` is a
@@ -100,7 +99,6 @@ id = "you.trading-post"            # <author>.<name>, each of [a-z0-9-]
 side = "both"                      # "server", "client" or "both"
 name = "Trading post"              # what players read; the id when left out
 join = true                        # counts in the join check
-reload = true                      # a development server may reload it
 exports = ["content:locker"]       # content and stat kinds other mods may use
 replaces = ["barter"]              # a mod this one folds in
 
@@ -146,8 +144,6 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
   by its id. The mod's texts translate its name and description under
   [`mod.name` and `mod.description`](../content/texts.md#the-mods-own-name).
 - `join = true`: see [The join check](join-check.md).
-- `reload = true`: a development server may reload the mod while it runs; see
-  [Testing](../testing.md#reloading-a-mod-while-the-game-runs).
 - `developer = true`: the mod is a developer tool, such as a probe that logs
   what the game does. While it runs, every player reads a warning that
   developer tools are on; see [The interface](../interface.md).

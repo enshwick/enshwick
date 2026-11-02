@@ -1,7 +1,7 @@
 //! The loader's side of the API: its state and the `HostApi` table.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi as api_frame;
@@ -179,9 +179,6 @@ pub(crate) struct Subscription {
     pub(crate) callback: EventFn,
     /// The mod's pointer for the handler, as an address.
     pub(crate) user: usize,
-    /// The subscribing mod's reload generation; events of an older one are
-    /// dropped.
-    pub(crate) generation: u32,
 }
 
 /// Everything the loader knows once mods are resolved.
@@ -505,15 +502,10 @@ impl Loader {
         self.mods.iter().enumerate().find(|(_, m)| m.id == id)
     }
 
-    /// The mod of handle `me`; while it is on, the table function it is
-    /// inside counts against it for a reload, whenever it calls.
+    /// The mod of handle `me`.
     fn record(&self, me: ModHandle) -> Option<(ModIndex, &ModRecord)> {
         let index = ModIndex::from_handle(me)?;
-        let record = self.mods.get(index.get())?;
-        if !record.off.load(Ordering::Relaxed) {
-            crate::reload::note(index.get());
-        }
-        Some((index, record))
+        Some((index, self.mods.get(index.get())?))
     }
 
     /// Turns a mod off: unlinks its hooks and logs why.
@@ -584,7 +576,6 @@ impl Loader {
                 .delivery
                 .get()
                 .is_some_and(|d| d.iter().any(|s| s.event == event))
-            || crate::reload::late().is_some_and(|late| late.iter().any(|s| s.event == event))
     }
 
     /// Raises `event` with `data` for every mod still on, or for mod `only`.
@@ -606,16 +597,13 @@ impl Loader {
         let Some(delivery) = self.delivery.get() else {
             return;
         };
-        let late = crate::reload::late();
-        let late = late.as_ref().map_or(&[][..], |late| late.as_slice());
-        for subscription in of_event(delivery, event).iter().chain(late).filter(|s| {
+        for subscription in of_event(delivery, event).iter().filter(|s| {
             s.event == event
                 && only.is_none_or(|only| only == s.owner.get())
                 && self
                     .mods
                     .get(s.owner.get())
                     .is_some_and(|m| !m.off.load(Ordering::Acquire))
-                && s.generation == crate::reload::generation(s.owner.get())
         }) {
             // SAFETY: the handler lives in the mod's DLL, which stays loaded;
             // the safe layer catches its panics.
@@ -714,10 +702,24 @@ impl Fallback for u64 {
 /// code never unwinds into the mod that called it: the call is refused and
 /// the fault logged.
 fn entry<R: Fallback>(name: &'static str, body: impl FnOnce() -> R) -> R {
-    crate::reload::entered(name, || {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
-            .unwrap_or_else(|_| entry_fault(name))
-    })
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
+        .unwrap_or_else(|_| entry_fault(name))
+}
+
+/// The index of the mod whose `init` runs now, `usize::MAX` for none.
+static INITIALISING: AtomicUsize = AtomicUsize::new(usize::MAX);
+
+/// Runs `init` of mod `index`, which [`in_init`] then answers for.
+pub(crate) fn initialising<R>(index: usize, init: impl FnOnce() -> R) -> R {
+    INITIALISING.store(index, Ordering::Release);
+    let outcome = init();
+    INITIALISING.store(usize::MAX, Ordering::Release);
+    outcome
+}
+
+/// Whether mod `index` is running its `init` now.
+pub(crate) fn in_init(index: usize) -> bool {
+    INITIALISING.load(Ordering::Acquire) == index
 }
 
 #[cold]
@@ -743,7 +745,6 @@ fn calling(me: ModHandle) -> Result<(&'static Loader, ModIndex, &'static ModReco
 /// loader's own handle passes too.
 fn caller(me: ModHandle) -> Result<&'static Loader, Status> {
     if me == LOADER_HANDLE {
-        crate::reload::note_initialising();
         return loader().ok_or(Status::BAD_ARGS);
     }
     calling(me).map(|(loader, _, _)| loader)

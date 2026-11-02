@@ -377,7 +377,6 @@ pub use enshwick_macros::config;
 /// | `side` | `"server"`, `"client"` or `"both"` |
 /// | `name` | what players read; the id when left out |
 /// | `join` | `true`: the mod counts in the join check |
-/// | `reload` | `true`: a development server may reload it ([`ManifestFlags::RELOAD`](abi::ManifestFlags::RELOAD)) |
 /// | `developer` | `true`: a developer tool; it runs only while [`mods::DEVELOPER_TOOLS`] exists ([`ManifestFlags::DEVELOPER`](abi::ManifestFlags::DEVELOPER)) |
 /// | `replaces` | ids of mods this one takes the place of; the loader never starts them beside it |
 /// | `requires`, `after`, `recommends`, `breaks` | tables of other mods by alias, each a mod id or `{ id, version }` with a Cargo-style range; `after` takes no range; [`deps!`] names them in code |
@@ -441,7 +440,7 @@ pub use enshwick_macros::config;
 ///
 /// assert!(Hello::instance().is_none());
 /// // SAFETY: `enshwick_mod_query` returns the manifest of
-/// // `declare_mod!`, valid until its shutdown.
+/// // `declare_mod!`, valid for the process.
 /// let manifest = unsafe { &*enshwick_mod_query() };
 /// // SAFETY: `declare_mod!` points the id at a string literal, alive for the process.
 /// assert_eq!(unsafe { manifest.id.as_str() }, Some("you.hello"));

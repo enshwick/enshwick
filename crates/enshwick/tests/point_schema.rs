@@ -103,7 +103,7 @@ mod tests {
     /// which the mod takes, written as the fixtures have it.
     fn points(manifest: *const enshwick::abi::Manifest) -> String {
         // SAFETY: `enshwick_mod_query` returns the manifest of
-        // `declare_mod!`, valid until its shutdown, which no test runs.
+        // `declare_mod!`, valid for the process.
         let manifest = unsafe { &*manifest };
         // SAFETY: the manifest's schema text lives as long as the manifest.
         let text = unsafe { manifest.points.as_str() }.unwrap_or_default();

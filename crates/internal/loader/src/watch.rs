@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
-use enshwick::abi::{Event, Level, Side};
+use enshwick::abi::{Event, Level};
 use enshwick::config::Stage;
 
 use crate::host::Loader;
@@ -132,23 +132,6 @@ pub(crate) fn start(loader: &'static Loader) {
             seen: None,
         })
         .collect();
-    // A pack's data files and scripts; the dedicated server applies what it
-    // can of a change at once, and with `dev_reload` on the client too.
-    let watch_packs = loader.side == Side::SERVER || crate::reload::copies();
-    let pack_files = || -> Vec<(usize, PathBuf, Stamp)> {
-        crate::packs::watched(loader)
-            .into_iter()
-            .map(|(index, path)| {
-                let seen = stamp(&path);
-                (index, path, seen)
-            })
-            .collect()
-    };
-    let mut packs = if watch_packs {
-        pack_files()
-    } else {
-        Vec::new()
-    };
     let started = std::thread::Builder::new()
         .name("enshwick-settings".into())
         .spawn(move || {
@@ -177,14 +160,6 @@ pub(crate) fn start(loader: &'static Loader) {
                     let now = path.as_deref().and_then(stamp);
                     if file.changed(key.as_deref(), path.as_deref(), now) {
                         changed(loader, Some(file.owner.get()));
-                    }
-                }
-                if watch_packs {
-                    let now = pack_files();
-                    let touched = crate::pack_watch::touched(&packs, &now);
-                    packs = now;
-                    for index in touched {
-                        crate::packs::changed(loader, index);
                     }
                 }
                 crate::recipes::poll(loader);

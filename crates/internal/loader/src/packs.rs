@@ -3,10 +3,8 @@
 //! manifest, so the mod list, the lock and the join check see
 //! it as they see a DLL, and runs it through the API's [`Load::add_pack`]
 //! during init; a pack with a `main.luau` is a Luau mod, whose scripts run
-//! in a sandbox of their own (`enshwick-luau`). The dedicated server watches
-//! a pack's files and applies a changed `loot.toml` at once; with
-//! `dev_reload` on, the server and the client also take changed values and
-//! scripts at once; other changes wait for a restart.
+//! in a sandbox of their own (`enshwick-luau`). A change to a pack's files
+//! takes a restart.
 //!
 //! [`Load::add_pack`]: enshwick::Load::add_pack
 
@@ -22,7 +20,6 @@ use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
 use crate::locks::Relock;
-use crate::mod_index::ModIndex;
 
 /// A pack folder found in `mods/`.
 pub(crate) struct Found {
@@ -335,182 +332,7 @@ pub(crate) extern "system" fn ready(_api: *const HostApi, _me: ModHandle) {}
 pub(crate) fn forget(id: &str) {
     let known = with(|packs| packs.remove(id).is_some());
     if known {
-        let _forgotten = enshwick::packs::reload_loot(id, Vec::new());
-    }
-}
-
-/// The files of every running pack, for the watcher: `(record index,
-/// path)`. A Luau mod's scripts are listed from its folder as it is now, so
-/// a script added while the game runs is watched too; a folder that does
-/// not list keeps the scripts it ran with.
-pub(crate) fn watched(loader: &Loader) -> Vec<(usize, PathBuf)> {
-    loader
-        .mods
-        .iter()
-        .enumerate()
-        .filter_map(|(index, record)| {
-            with(|packs| {
-                packs
-                    .get(&record.id)
-                    .map(|p| (index, p.dir.clone(), p.scripts.clone()))
-            })
-        })
-        .flat_map(|(index, dir, ran)| {
-            let scripts = enshwick::packs::script_files(&dir)
-                .unwrap_or_else(|_| ran.iter().map(|name| dir.join(name)).collect());
-            let files: Vec<PathBuf> = enshwick::packs::FILES
-                .iter()
-                .map(|file| dir.join(file))
-                .chain(scripts)
-                .collect();
-            files.into_iter().map(move |path| (index, path))
-        })
-        .collect()
-}
-
-/// Runs the changed scripts of the Luau mod `id` at once with `dev`
-/// reload, or says they wait for the next start.
-fn scripts_changed(id: &str, files: &PackFiles, dev: bool) {
-    let Some(runtime) = with(|packs| packs.get(id).and_then(|p| p.runtime.clone())) else {
-        return;
-    };
-    let Some(scripts) = scripts_of(files) else {
-        crate::log::write(
-            Level::WARN,
-            id,
-            "main.luau is gone: the scripts stop at the next start",
-        );
-        return;
-    };
-    if runtime.runs(&scripts) {
-        return;
-    }
-    if !dev {
-        crate::log::write(
-            Level::WARN,
-            id,
-            "scripts changed: they run at the next start, or at once with dev_reload = true",
-        );
-        return;
-    }
-    match runtime.reload(scripts) {
-        Ok(()) => {
-            with(|packs| {
-                if let Some(loaded) = packs.get_mut(id) {
-                    loaded.hash = files.hash();
-                    loaded.scripts = files.scripts().map(|(name, _)| name.to_owned()).collect();
-                }
-            });
-            crate::log::write(Level::INFO, id, "scripts reloaded");
-        }
-        Err(why) => crate::log::write(
-            Level::WARN,
-            id,
-            &format!("scripts not reloaded, the old ones run on: {why}"),
-        ),
-    }
-}
-
-/// A pack's files changed: reads them again, runs changed scripts at once
-/// with `dev_reload`, and applies a changed `loot.toml` at once; a problem
-/// or any other change is logged and waits.
-pub(crate) fn changed(loader: &Loader, index: usize) {
-    let Some(record) = loader.mods.get(index) else {
-        return;
-    };
-    let dev = crate::reload::copies();
-    let server = loader.side == Side::SERVER;
-    if !(server || dev) || record.off.load(std::sync::atomic::Ordering::Acquire) {
-        return;
-    }
-    let id = record.id.as_str();
-    let Some(dir) = with(|packs| packs.get(id).map(|p| p.dir.clone())) else {
-        return;
-    };
-    let files = match PackFiles::read_dir(&dir) {
-        Ok(files) => files,
-        Err(why) => {
-            crate::log::write(Level::WARN, id, &format!("data pack not reloaded: {why}"));
-            return;
-        }
-    };
-    scripts_changed(id, &files, dev);
-    let pack = match Pack::parse(id, &files) {
-        Ok(pack) => pack,
-        Err(errors) => {
-            report(id, &errors);
-            crate::log::write(
-                Level::WARN,
-                id,
-                "data pack not reloaded: fix the files above",
-            );
-            return;
-        }
-    };
-    report_skipped(id, &pack);
-    let (same, values) = with(|packs| {
-        packs
-            .get(id)
-            .and_then(|p| p.pack.as_ref())
-            .map_or((false, false), |old| {
-                (old.same_content(&pack), old.same_beside_changes(&pack))
-            })
-    });
-    let mut taken = same;
-    if !same && values && dev {
-        match crate::data_changes::reload(
-            ModIndex::new(index),
-            pack.changes().to_vec(),
-            pack.selections().to_vec(),
-            pack.recipe_selections().to_vec(),
-        ) {
-            Ok(rebuilt) => {
-                crate::log::write(
-                    Level::INFO,
-                    id,
-                    &format!(
-                        "data pack reloaded: {} changes of values, {rebuilt} resources built again",
-                        pack.changes().len()
-                            + pack.selections().len()
-                            + pack.recipe_selections().len()
-                    ),
-                );
-                taken = true;
-            }
-            Err(why) => crate::log::write(
-                Level::WARN,
-                id,
-                &format!("changes of values not reloaded: {why}"),
-            ),
-        }
-    } else if !same {
-        let how = if values {
-            "changes of values change at the next start, or at once with dev_reload = true"
-        } else {
-            "items, recipes, workshops and texts change at the next start"
-        };
-        crate::log::write(
-            Level::WARN,
-            id,
-            &format!("data pack changed beyond its loot: {how}"),
-        );
-    }
-    if server {
-        match enshwick::packs::reload_loot(id, pack.drops().to_vec()) {
-            Ok(()) => crate::log::write(
-                Level::INFO,
-                id,
-                &format!("data pack reloaded: {} loot drops", pack.drops().len()),
-            ),
-            Err(why) => crate::log::write(Level::WARN, id, &format!("loot not reloaded: {why}")),
-        }
-    }
-    if taken {
-        with(|packs| {
-            if let Some(loaded) = packs.get_mut(id) {
-                loaded.pack = Some(pack);
-            }
-        });
+        let _forgotten = enshwick::packs::forget_loot(id);
     }
 }
 

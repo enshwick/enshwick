@@ -201,7 +201,7 @@ fn query(dll: &Path) -> Result<Manifest, String> {
     // and returns its manifest; the DLL is never unloaded.
     let raw = unsafe { query() };
     // SAFETY: the ABI says `exports::QUERY` returns null or a manifest valid
-    // and unwritten until the mod's shutdown, which this tool never calls.
+    // and unwritten for the process.
     unsafe { copy(raw) }
 }
 

@@ -23,10 +23,10 @@ mod select;
 #[cfg(windows)]
 pub(crate) use game::{
     LiveTarget, declare, declare_change, declare_items, declare_recipes, has_live, reachable,
-    reload, serve, set_change, wanted, world_event,
+    serve, set_change, wanted, world_event,
 };
 pub use kept::{KEPT_FILE, Kept, hold_reason, served};
-pub use live::{UNSET, keeps_bases, set_live, set_pending};
+pub use live::{UNSET, set_live, set_pending};
 pub use select::{Pending, Picked, Selectable, TraitOffsets, expand, grouped, traits_of};
 
 /// A change one mod declared, with where it came from.
@@ -351,24 +351,6 @@ pub fn template_slots(values: &[(Guid, f64)]) -> (Option<f64>, bool) {
 #[must_use]
 pub const fn grown_slots(old: u8, new: u8) -> (u8, bool) {
     if new < old { (old, true) } else { (new, false) }
-}
-
-/// `declared` with the changes of `owner` replaced by `new`, at the place
-/// the owner's first change had in load order, or last for an owner that
-/// had none.
-#[must_use]
-pub fn replace_owner(declared: &[Declared], owner: ModIndex, new: Vec<Declared>) -> Vec<Declared> {
-    let mut next: Vec<Declared> = declared
-        .iter()
-        .filter(|d| d.owner != owner)
-        .cloned()
-        .collect();
-    let at = declared
-        .iter()
-        .position(|d| d.owner == owner)
-        .map_or(next.len(), |at| at.min(next.len()));
-    next.splice(at..at, new);
-    next
 }
 
 /// Where an item's changeable values sit in its static data, from the
@@ -754,36 +736,6 @@ mod tests {
     fn a_container_never_shrinks() {
         assert_eq!(grown_slots(24, 48), (48, false));
         assert_eq!(grown_slots(24, 16), (24, true));
-    }
-
-    #[test]
-    fn a_reloaded_mod_keeps_its_place_in_load_order() {
-        let all = [
-            declared(0, WOOD, Value::Set(100.0), "a"),
-            declared(1, WOOD, Value::Set(200.0), "b"),
-            declared(2, WOOD, Value::Set(300.0), "c"),
-        ];
-        let next = replace_owner(
-            &all,
-            ModIndex::new(1),
-            vec![
-                declared(1, WOOD, Value::Set(250.0), "b2"),
-                declared(1, STONE, Value::Set(5.0), "b3"),
-            ],
-        );
-        let sources: Vec<&str> = next.iter().map(|d| d.source.as_str()).collect();
-        assert_eq!(sources, ["a", "b2", "b3", "c"]);
-        let fresh = replace_owner(
-            &all,
-            ModIndex::new(3),
-            vec![declared(3, WOOD, Value::Times(2.0), "d")],
-        );
-        assert_eq!(fresh.last().map(|d| d.source.as_str()), Some("d"));
-        let (merged, _) = merge(&next, no_requires);
-        assert_eq!(
-            merged.value(Key::new(WOOD, Field::MaxStackSize), 20.0, |_| true),
-            Some(300.0)
-        );
     }
 
     /// An item of 0x40 bytes: stack size 20 at 0, damage 1.5 at 8 with its

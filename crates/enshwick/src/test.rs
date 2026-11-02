@@ -134,7 +134,7 @@ pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 /// );
 ///
 /// // SAFETY: `enshwick_mod_query` returns the manifest of
-/// // `declare_mod!`, valid until its shutdown.
+/// // `declare_mod!`, valid for the process.
 /// let manifest = unsafe { &*enshwick_mod_query() };
 /// // SAFETY: `declare_mod!` points the id at a string literal, alive for the process.
 /// assert_eq!(unsafe { manifest.id.as_str() }, Some("you.lockers"));
@@ -594,8 +594,7 @@ impl Installed {
     ///
     /// See [`crate`].
     pub unsafe fn start(&self, query: QueryFn, init: InitFn, ready: ReadyFn) -> Status {
-        // SAFETY: `query` returns null or a manifest valid until the mod's
-        // shutdown, which no caller runs before start returns.
+        // SAFETY: `query` returns null or a manifest valid for the process.
         if let Some(manifest) = unsafe { query().as_ref() }
             && table::refuses_developer(self.api(), manifest)
         {

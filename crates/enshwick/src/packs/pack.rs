@@ -385,61 +385,6 @@ impl Pack {
             && self.texts.trim().is_empty())
     }
 
-    /// Whether `other` adds the same content as this pack, its loot aside:
-    /// what a running game can take without a restart.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::packs::{Pack, PackFiles};
-    ///
-    /// let loot = |chance: &str| PackFiles::new().with("loot.toml", format!(
-    ///     "[[drop]]\nitems = [\"you.lockers:locker\"]\nchance = {chance}\nfrom = \"bosses\"\n"
-    /// ));
-    /// let before = Pack::parse("you.lanterns", &loot("0.1"))?;
-    /// let after = Pack::parse("you.lanterns", &loot("0.5"))?;
-    /// assert!(before.same_content(&after));
-    /// # Ok::<(), enshwick::packs::ParsePackError>(())
-    /// ```
-    #[must_use]
-    pub fn same_content(&self, other: &Self) -> bool {
-        self.namespace == other.namespace
-            && self.items == other.items
-            && self.recipes == other.recipes
-            && self.workshops == other.workshops
-            && self.changes == other.changes
-            && self.selections == other.selections
-            && self.recipe_selections == other.recipe_selections
-            && self.texts == other.texts
-    }
-
-    /// Whether `other` adds the same content as this pack, its loot and its
-    /// changes of values aside: what a development reload takes without a
-    /// restart.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::packs::{Pack, PackFiles};
-    ///
-    /// let stacks = |size: u32| PackFiles::new().with("items.toml", format!(
-    ///     "[[change]]\nitems = [\"3f4093ae-75ed-4e5d-bd0b-784ba83b88f5\"]\nmax_stack = {size}\n"
-    /// ));
-    /// let before = Pack::parse("you.stacks", &stacks(100))?;
-    /// let after = Pack::parse("you.stacks", &stacks(500))?;
-    /// assert!(!before.same_content(&after));
-    /// assert!(before.same_beside_changes(&after));
-    /// # Ok::<(), enshwick::packs::ParsePackError>(())
-    /// ```
-    #[must_use]
-    pub fn same_beside_changes(&self, other: &Self) -> bool {
-        self.namespace == other.namespace
-            && self.items == other.items
-            && self.recipes == other.recipes
-            && self.workshops == other.workshops
-            && self.texts == other.texts
-    }
-
     /// The hash of the files the pack was read from, as
     /// [`PackFiles::hash`] gives it.
     ///
@@ -715,7 +660,7 @@ pub(super) fn id(full: &str) -> Result<Id, Off> {
     Id::try_new(name).ok_or_else(|| Off::new(format!("data pack: {full:?} is no content id")))
 }
 
-/// The group of a pack's drops, which a reload replaces.
+/// The group of a pack's drops.
 #[must_use]
 pub(crate) fn group(namespace: &str) -> u64 {
     namespace
@@ -726,16 +671,13 @@ pub(crate) fn group(namespace: &str) -> u64 {
         | 1
 }
 
-/// Replaces the drops of the pack `namespace` with `drops`, as the loader
-/// does when a pack's `loot.toml` changes.
+/// Takes out the drops of the pack `namespace`, as the loader does when the
+/// pack turns off.
 ///
 /// # Errors
 ///
-/// Why they take a restart instead.
+/// Why they stay until a restart.
 #[doc(hidden)]
-pub fn reload_loot(
-    namespace: &str,
-    drops: Vec<Drop>,
-) -> Result<(), crate::loot::ReplaceDropsError> {
-    crate::loot::replace_group(group(namespace), drops)
+pub fn forget_loot(namespace: &str) -> Result<(), crate::loot::ReplaceDropsError> {
+    crate::loot::replace_group(group(namespace), Vec::new())
 }

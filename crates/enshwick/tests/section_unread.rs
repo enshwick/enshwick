@@ -35,7 +35,7 @@ mod tests {
     #[test]
     fn a_mod_whose_declarations_are_newer_is_named_and_refused_without_exports() {
         // SAFETY: `enshwick_mod_query` returns null or the manifest of
-        // `declare_mod!`, valid until its shutdown, which no test runs.
+        // `declare_mod!`, valid for the process.
         let manifest = unsafe { stale::enshwick_mod_query().as_ref() }.expect("a manifest");
         // SAFETY: the id points at a `'static` string literal of `declare_mod!`.
         assert_eq!(unsafe { manifest.id.as_str() }, Some("you.stale"));

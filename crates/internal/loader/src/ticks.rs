@@ -47,9 +47,6 @@ pub const fn due(now: u64, last: Option<u64>, every: u64) -> bool {
 #[repr(align(128))]
 pub struct Tick {
     owner: ModIndex,
-    /// The owner's reload generation when it subscribed; a handler of an
-    /// older one never runs.
-    generation: u32,
     callback: EventFn,
     /// The mod's pointer for the handler, as an address.
     user: usize,
@@ -70,12 +67,6 @@ impl Tick {
     #[must_use]
     pub const fn owner(&self) -> ModIndex {
         self.owner
-    }
-
-    /// The owner's reload generation when it subscribed.
-    #[must_use]
-    pub const fn generation(&self) -> u32 {
-        self.generation
     }
 
     /// The handler, inside the owner's DLL.
@@ -177,13 +168,11 @@ impl Ticks {
         StepTime { elapsed, average }
     }
 
-    /// Lists a handler of mod `owner` at its reload `generation`, due on
-    /// the next step and then every `every` nanoseconds; `None` past
-    /// `u32::MAX` handlers.
+    /// Lists a handler of mod `owner`, due on the next step and then every
+    /// `every` nanoseconds; `None` past `u32::MAX` handlers.
     pub fn add(
         &self,
         owner: ModIndex,
-        generation: u32,
         every: u64,
         callback: EventFn,
         user: *mut core::ffi::c_void,
@@ -196,7 +185,6 @@ impl Ticks {
         let handle = TickHandle(u32::try_from(list.len()).ok()?);
         list.push(Box::leak(Box::new(Tick {
             owner,
-            generation,
             callback,
             user: user.expose_provenance(),
             every: AtomicU64::new(every),
@@ -210,25 +198,16 @@ impl Ticks {
         Some(handle)
     }
 
-    /// Sets the period of handler `handle` for mod `owner` at its reload
-    /// `generation`: [`Status::REFUSED`] for another mod's handler,
-    /// [`Status::MISSING`] for no handler or one of an older generation.
-    pub fn set_every(
-        &self,
-        handle: TickHandle,
-        owner: ModIndex,
-        generation: u32,
-        every: u64,
-    ) -> Status {
+    /// Sets the period of handler `handle` for mod `owner`:
+    /// [`Status::REFUSED`] for another mod's handler, [`Status::MISSING`]
+    /// for no handler.
+    pub fn set_every(&self, handle: TickHandle, owner: ModIndex, every: u64) -> Status {
         let list = self.list.load();
         let Some(&tick) = list.as_deref().and_then(|l| l.get(handle.0 as usize)) else {
             return Status::MISSING;
         };
         if tick.owner != owner {
             return Status::REFUSED;
-        }
-        if tick.generation != generation {
-            return Status::MISSING;
         }
         tick.every.store(every, Ordering::Relaxed);
         Status::OK
@@ -261,7 +240,7 @@ impl Ticks {
                 continue;
             }
             if !live(tick) {
-                // A mod that is off or reloaded never takes this handler
+                // A mod that is off never takes this handler
                 // back, so it stops being due instead of being checked on
                 // every step.
                 tick.every.store(u64::MAX, Ordering::Relaxed);
@@ -299,13 +278,7 @@ mod tests {
     fn listed(every: &[u64]) -> Ticks {
         let ticks = Ticks::new();
         for (owner, &every) in every.iter().enumerate() {
-            let added = ticks.add(
-                ModIndex::new(owner),
-                0,
-                every,
-                nothing,
-                core::ptr::null_mut(),
-            );
+            let added = ticks.add(ModIndex::new(owner), every, nothing, core::ptr::null_mut());
             assert_eq!(added, Some(TickHandle(u32::try_from(owner).unwrap())));
         }
         ticks
@@ -348,7 +321,7 @@ mod tests {
     fn a_first_call_after_steps_ran_carries_the_step_before() {
         let ticks = Ticks::new();
         let _before = steps(&ticks, 0, 3, 40 * MS);
-        let _added = ticks.add(ModIndex::new(0), 0, MS, nothing, core::ptr::null_mut());
+        let _added = ticks.add(ModIndex::new(0), MS, nothing, core::ptr::null_mut());
         assert_eq!(steps(&ticks, 3, 1, 40 * MS), [(0, 4, 1, 40 * MS)]);
     }
 
@@ -366,7 +339,7 @@ mod tests {
         let ticks = listed(&[100 * MS]);
         let _first = steps(&ticks, 0, 1, 50 * MS);
         assert_eq!(
-            ticks.set_every(TickHandle(0), ModIndex::new(0), 0, 300 * MS),
+            ticks.set_every(TickHandle(0), ModIndex::new(0), 300 * MS),
             Status::OK
         );
         assert_eq!(steps(&ticks, 1, 6, 50 * MS), [(0, 7, 6, 300 * MS)]);
@@ -376,7 +349,7 @@ mod tests {
     fn a_shorter_period_that_already_passed_runs_on_the_next_step() {
         let ticks = listed(&[1_000 * MS]);
         let _first = steps(&ticks, 0, 4, 50 * MS);
-        let _set = ticks.set_every(TickHandle(0), ModIndex::new(0), 0, 100 * MS);
+        let _set = ticks.set_every(TickHandle(0), ModIndex::new(0), 100 * MS);
         assert_eq!(steps(&ticks, 4, 1, 50 * MS), [(0, 5, 4, 200 * MS)]);
     }
 
@@ -404,15 +377,12 @@ mod tests {
     }
 
     #[test]
-    fn another_mod_s_handler_is_refused_and_an_older_copy_s_missing() {
+    fn another_mod_s_handler_is_refused_and_an_unknown_one_missing() {
         let ticks = listed(&[0, 0]);
-        let set = |handle, owner, generation| {
-            ticks.set_every(TickHandle(handle), ModIndex::new(owner), generation, 5)
-        };
-        assert_eq!(set(1, 0, 0), Status::REFUSED);
-        assert_eq!(set(0, 0, 1), Status::MISSING);
-        assert_eq!(set(2, 0, 0), Status::MISSING);
-        assert_eq!(set(1, 1, 0), Status::OK);
+        let set = |handle, owner| ticks.set_every(TickHandle(handle), ModIndex::new(owner), 5);
+        assert_eq!(set(1, 0), Status::REFUSED);
+        assert_eq!(set(2, 0), Status::MISSING);
+        assert_eq!(set(1, 1), Status::OK);
     }
 
     #[test]
