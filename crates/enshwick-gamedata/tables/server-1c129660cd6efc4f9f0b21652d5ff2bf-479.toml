@@ -6,6 +6,7 @@ side = "server"
 guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
 age = 479
 steam_build = 26319703
+game_version = 1283531
 revision = 1
 
 # Systems whose reflected entry must equal the pinned address: the
@@ -149,7 +150,7 @@ revision = 1
 "buffs.cleanse" = { rva = 0x5_d630, pattern = "45 33 C9 4C 8D 41 ?? 41 8B C1 4C 8B D1 0F 1F 00 41 39 10" }
 "knowledge.player_value" = { rva = 0x99_fe00, pattern = "40 53 48 83 EC 20 80 B9 ?? ?? ?? ?? 00 48 8B 99 ?? ?? ?? ?? 75 0E 41 FF C8" }
 "knowledge.world_value" = { rva = 0x99_ff30, pattern = "40 53 48 83 EC 20 48 8D 59 ?? C7 44 24 ?? 00 00 00 00 48 8B CB" }
-"knowledge.push" = { rva = 0x9a_3bd0, pattern = "48 8D 54 24 ?? 89 44 24 ?? E8 ?? ?? ?? ?? 48 8B 4C 24 ?? 48 FF C7 48 3B F9", rel = 10 }
+"knowledge.push" = { rva = 0x9a_3bd0, pattern = "48 8D 54 24 ?? 89 44 24 ?? E8 ?? ?? ?? ?? 48 8B 4C 24 ?? 48 FF C7 48 3B F9", rel = 10, body = { len = 0x2f, open = [], hash = "d29fc6ccf0a8dd0ee9091f3c82dea675" } }
 # The journal registry's getter of its blob, found through a call.
 "knowledge.journal_blob_get" = { rva = 0x93_bbd0, pattern = "48 8B D9 E8 ?? ?? ?? ?? 48 8B 4D ?? E8 ?? ?? ?? ?? 4C 8B E8 48 85 C0 0F 84 ?? ?? ?? ??", rel = 13 }
 "player.death_sink" = { rva = 0x5_2430, pattern = "48 89 5C 24 ?? 55 56 57 41 54 41 55 48 8D AC 24 ?? ?? ?? ?? 48 81 EC D0 02 00 00" }
@@ -219,7 +220,7 @@ revision = 1
 "bases.slot_init" = { rva = 0x20_6dd0, pattern = "49 8B D6 48 8B CF E8 ?? ?? ?? ?? 48 83 C7 58 48 83 EE 01 75 E2", rel = 7 }
 "bases.slot_free" = { rva = 0x20_5b60, pattern = "4C 8B 36 48 8B CB E8 ?? ?? ?? ?? 0F 1F 00 48 83 EB 58 48 8B CB", rel = 7 }
 "net.socket_create" = { rva = 0x9f_c620, pattern = "48 89 5C 24 ?? 48 89 7C 24 ?? 55 48 8B EC 48 83 EC 70 8B 41 ??", body = { len = 0x233, open = [0x38, 0x3f, 0x54, 0x5e, 0xb3, 0xc7, 0xd0, 0xf0, 0x101, 0x115, 0x137, 0x168, 0x179, 0x18d, 0x1af, 0x21d], hash = "17e83c89183419d1e045a7890e9015ae" } }
-"net.socket_destroy" = { rva = 0x9f_ec20, pattern = "74 11 49 8B 0E E8 ?? ?? ?? ?? 4A 8B 44 3B ?? 4C 89 2C 06 FF C7", rel = 6 }
+"net.socket_destroy" = { rva = 0x9f_ec20, pattern = "74 11 49 8B 0E E8 ?? ?? ?? ?? 4A 8B 44 3B ?? 4C 89 2C 06 FF C7", rel = 6, body = { len = 0xf, open = [0xb], hash = "6d576e8a648c1b0e99a14e87b21207e7" } }
 "net.message_open" = { rva = 0xa0_3340, pattern = "40 55 53 57 41 56 48 8D 6C 24 ?? 48 81 EC C8 00 00 00 49 8B F9" }
 "net.message_commit" = { rva = 0x9f_a440, pattern = "48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 20 44 8B 42 ??", body = { len = 0xc8, open = [0x6b, 0x74, 0x7c, 0xc4], hash = "52c7088a07cee2a29c90578610bbfe22" } }
 "net.message_abort" = { rva = 0x9f_f350, pattern = "48 8B 12 48 81 C1 ?? ?? ?? ?? 45 33 C0 E9 ?? ?? ?? ?? CC CC CC CC CC CC CC CC CC CC CC CC CC CC 48 8B 12 48 81 C1" }
