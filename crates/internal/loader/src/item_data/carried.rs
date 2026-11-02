@@ -10,6 +10,7 @@ use super::{
     KEPT, SERVER, Scope, Server, UNREAD, game, insert_found, kind, messages_for, scope, send,
     serves, wanted,
 };
+use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::item_records::anchor::{self, Anchor, CharacterId, Pending};
 use crate::locks::Relock;
@@ -20,9 +21,9 @@ pub(super) const JOIN_LOOK_EVERY: u64 = 30;
 /// Looks a joined character's records take once its inventories are
 /// filled; past them the rest wait for its next join.
 pub(super) const JOIN_LOOKS: u32 = 20;
-/// Looks a joined character may take to fill its inventories at all, twelve
-/// times [`JOIN_LOOKS`]; past them its records wait for its next join.
-pub(super) const JOIN_LOOKS_CAP: u32 = 240;
+/// Looks a joined character may take to fill its inventories at all; past
+/// them its records wait for its next join.
+pub(super) const JOIN_LOOKS_CAP: u32 = 12 * JOIN_LOOKS;
 
 /// A joined character whose carried records look for their items.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -44,9 +45,26 @@ impl Joining {
     }
 }
 
+/// The carried item data's joins and leaves: a panic in them turns off only
+/// these, not the join and leave events of every mod.
+static CARRIED_FUSE: Fuse = Fuse::new("carried item data");
+
 /// A player's character `entity` joined: when records it carried wait, they
 /// look for its items once its inventories fill.
 pub(crate) fn player_joined(loader: &Loader, entity: Entity) {
+    let _ran = CARRIED_FUSE.run("a player's join", || joined(loader, entity));
+}
+
+/// A player's character `entity` leaves, its items still in the world: the
+/// values on them wait for the character's next join under its GUID, or go
+/// aside where no GUID reads, rather than be dropped when the game destroys
+/// the items it removes with the character. Its slot still names it.
+#[cold]
+pub(crate) fn player_left(loader: &Loader, entity: Entity) {
+    let _ran = CARRIED_FUSE.run("a player's leave", || left(loader, entity));
+}
+
+fn joined(loader: &Loader, entity: Entity) {
     // A world whose things did not read attaches nothing this session.
     if !wanted() || !serves() || UNREAD.load(Ordering::Relaxed) {
         return;
@@ -68,12 +86,7 @@ pub(crate) fn player_joined(loader: &Loader, entity: Entity) {
     }
 }
 
-/// A player's character `entity` leaves, its items still in the world: the
-/// values on them wait for the character's next join under its GUID, or go
-/// aside where no GUID reads, rather than be dropped when the game destroys
-/// the items it removes with the character. Its slot still names it.
-#[cold]
-pub(crate) fn player_left(loader: &Loader, entity: Entity) {
+fn left(loader: &Loader, entity: Entity) {
     if !wanted() || !serves() {
         return;
     }
@@ -86,10 +99,10 @@ pub(crate) fn player_left(loader: &Loader, entity: Entity) {
     server.joining.retain(|joining| joining.entity != entity);
     if let Some(character) = character_of(entity)
         && !UNREAD.load(Ordering::Relaxed)
-        && game::ready(loader, entity.0)
+        && game::filled(loader, entity) == Some(true)
     {
-        // Filled inventories read exactly now: a record whose slot no
-        // longer holds its item will not find it at a later join either.
+        // Filled inventories read exactly now: a record whose slot holds
+        // another item will not find its own at a later join either.
         let gone = set_aside_waiting(&mut server.pending, character, |link, slot| {
             game::in_slot(loader, entity.0, link, slot).map(|(_, item)| item)
         });
@@ -143,7 +156,7 @@ pub(super) fn keep_carried(
         .iter()
         .filter(|record| !record.aside)
         .map(|record| (record.kind, record.anchor));
-    let _older = set_aside_older(&mut server.pending, newer);
+    set_aside_older(&mut server.pending, newer);
     server.changed |= !left.is_empty();
     server.pending.append(&mut left);
     (waiting, aside)
@@ -181,9 +194,10 @@ pub(super) fn set_aside_older(
 
 /// Sets aside each record of `pending` still waiting for `character` whose
 /// slot, as `item_in(link, slot)` reads it when the character leaves with
-/// filled inventories, no longer holds its item. One whose slot holds an
-/// item of its id keeps waiting: the slot cannot tell the item from
-/// another of the same id. Logs how many; the number.
+/// filled inventories, holds another item. One whose slot reads empty or
+/// not at all keeps waiting, as does one whose slot holds an item of its
+/// id: neither says for certain that its item is gone. Logs how many; the
+/// number.
 pub(super) fn set_aside_waiting(
     pending: &mut [Pending],
     character: CharacterId,
@@ -199,7 +213,7 @@ pub(super) fn set_aside_waiting(
         else {
             continue;
         };
-        if c == character && item_in(link, slot) != Some(record.check) {
+        if c == character && item_in(link, slot).is_some_and(|item| item != record.check) {
             record.aside = true;
             gone += 1;
         }
@@ -207,7 +221,7 @@ pub(super) fn set_aside_waiting(
     if gone > 0 {
         crate::log!(
             INFO,
-            "mod data: {gone} carried values set aside in the world's file: a leaving player's slots no longer hold their items"
+            "mod data: {gone} carried values set aside in the world's file: a leaving player's slots hold other items"
         );
     }
     gone
@@ -237,7 +251,7 @@ pub(super) fn find_carried(loader: &Loader) {
                 &characters,
                 joining,
                 &mut found,
-                |entity| game::ready(loader, entity.0),
+                |entity| game::filled(loader, entity) != Some(false),
                 |entity, link, slot| game::in_slot(loader, entity.0, link, slot),
             ) {
                 Look::Again => true,

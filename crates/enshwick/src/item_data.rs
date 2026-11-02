@@ -18,10 +18,10 @@
 //! under the character and the slot instead: when the player leaves, or the
 //! server stops while they play, the value waits for that character's next
 //! join and then finds the item in that slot again, if it holds the same
-//! item; one still missing when the player leaves again goes aside. On a
-//! game build whose table does not say where the server keeps a player's
-//! character, the value goes aside at the leave, kept but attached to
-//! nothing.
+//! item; one whose slot holds another item when the player leaves again
+//! goes aside. On a game build whose table does not say where the server
+//! keeps a player's character, the value goes aside at the leave, kept but
+//! attached to nothing.
 //!
 //! The server keeps the values, in `mod-data/enshwick/worlds/<key>/`, never
 //! in the game's save, and sends every change to the clients that run

@@ -209,23 +209,17 @@ pub(crate) struct Held {
     pub(crate) root: u32,
 }
 
-/// Whether the inventories of `root`, a joining character, are filled: its
-/// `InventorySetup` says it is initialized (server 399). Always `true` on a
-/// build without that field, where a join takes back what it finds as the
-/// steps go.
-pub(crate) fn ready(loader: &Loader, root: u32) -> bool {
-    let Some(layout) = layout(loader) else {
-        return false;
-    };
-    let Some(initialized) = layout.initialized else {
-        return true;
-    };
-    component(loader, root, layout.setup).is_some_and(|setup| {
-        // SAFETY: `setup` is the root's live `InventorySetup`, which holds its
-        // `isInitialized` byte at `initialized` (inside the type, checked by
-        // `layout`); read on the game thread (checked by `world::component`).
-        unsafe { crate::transactions::props::setup_initialized(setup, initialized) }
-    })
+/// Whether the inventories of `root`, a character, are filled: its
+/// `InventorySetup` says it is initialized (server 399). `None` when that
+/// does not read: a build without the field, or no setup.
+pub(crate) fn filled(loader: &Loader, root: Entity) -> Option<bool> {
+    let layout = layout(loader)?;
+    let initialized = layout.initialized?;
+    let setup = component(loader, root.0, layout.setup)?;
+    // SAFETY: `setup` is the root's live `InventorySetup`, which holds its
+    // `isInitialized` byte at `initialized` (inside the type, checked by
+    // `layout`); read on the game thread (checked by `world::component`).
+    Some(unsafe { crate::transactions::props::setup_initialized(setup, initialized) })
 }
 
 /// The item entity in slot `slot` of the inventory at `link` of `root`, and
