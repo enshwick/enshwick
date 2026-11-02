@@ -360,18 +360,22 @@ pub(crate) fn check(
             }
         })
         .collect();
+    skip_with_owner(patches, &mut verdicts);
+    verdicts
+}
+
+/// Skips every patch still to be written whose owner has a skipped one.
+pub(crate) fn skip_with_owner(patches: &[CodePatch], verdicts: &mut [Verdict]) {
     let skipped: Vec<ModIndex> = patches
         .iter()
-        .zip(&verdicts)
-        .filter(|(_, verdict)| matches!(verdict, Verdict::Skip(_)))
-        .map(|(patch, _)| patch.owner)
+        .zip(&*verdicts)
+        .filter_map(|(patch, verdict)| matches!(verdict, Verdict::Skip(_)).then_some(patch.owner))
         .collect();
-    for (patch, verdict) in patches.iter().zip(&mut verdicts) {
+    for (patch, verdict) in patches.iter().zip(verdicts) {
         if *verdict == Verdict::Write && skipped.contains(&patch.owner) {
             *verdict = Verdict::Skip("another patch of its owner was skipped".into());
         }
     }
-    verdicts
 }
 
 /// The bytes at `address` now, inside the game's code section only, once
