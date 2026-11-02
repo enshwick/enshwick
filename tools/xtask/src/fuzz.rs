@@ -45,6 +45,7 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
             "crates/internal/loader/src/join",
         ],
     ),
+    ("link_packets", &["crates/internal/loader/src/wire"]),
     ("migrations", &["crates/internal/loader/src/migrations"]),
     (
         "mod_manifests",
@@ -189,7 +190,7 @@ mod tests {
     fn a_module_reaches_the_targets_that_read_it() {
         assert_eq!(
             reached(&files(&["crates/internal/loader/src/wire/frames.rs"])),
-            ["channel_messages", "notices", "wire_frames"]
+            ["channel_messages", "link_packets", "notices", "wire_frames"]
         );
         assert_eq!(
             reached(&files(&["crates/internal/loader/src/join.rs"])),
