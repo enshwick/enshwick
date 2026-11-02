@@ -221,6 +221,31 @@ pub(crate) struct Loader {
     pub(crate) settings_problems: Vec<String>,
 }
 
+/// The warning line and the status entry of `feature` turned off on `build`
+/// because its entry `id` failed for `reason`, as [`Loader::feature_off`]
+/// reports them.
+pub(crate) fn off_report(
+    build: &KnownBuild,
+    feature: &str,
+    id: &str,
+    reason: &str,
+) -> (String, String) {
+    let reason = build.reason(id, reason);
+    (
+        crate::builds::off_line(feature, &build.name, id, reason),
+        format!("{id} {reason}"),
+    )
+}
+
+/// Logs the warning line of an [`off_report`] and lists `feature` with its
+/// status entry among the loader parts off, on the Mods screen and in the
+/// status summary. Always false, for the caller to return.
+pub(crate) fn report_off(feature: &str, (line, entry): (String, String)) -> bool {
+    crate::log!(WARN, "{line}");
+    crate::diag::part_off(feature, &entry);
+    false
+}
+
 static LOADER: OnceLock<Loader> = OnceLock::new();
 /// The events some mod handles, a bit per event id.
 static HANDLED: AtomicU64 = AtomicU64::new(0);
@@ -449,14 +474,7 @@ impl Loader {
     /// Mods screen and in the status summary. Always false, for the caller
     /// to return.
     pub(crate) fn feature_off(&self, feature: &str, id: &str, reason: &str) -> bool {
-        let reason = self.build.reason(id, reason);
-        crate::log!(
-            WARN,
-            "{}",
-            crate::builds::off_line(feature, &self.build.name, id, reason)
-        );
-        crate::diag::part_off(feature, &format!("{id} {reason}"));
-        false
+        report_off(feature, off_report(self.build, feature, id, reason))
     }
 
     /// The mod named `id`, as a player or an administrator names it.
