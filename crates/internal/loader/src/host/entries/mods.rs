@@ -233,14 +233,14 @@ pub(crate) extern "system" fn replaced(
         }
         let infos = INFOS.get_or_init(|| {
             let text = |s: String| Str::new(Box::leak(s.into_boxed_str()));
-            crate::modlist::replaced()
+            crate::record::replaced()
                 .iter()
                 .map(|old| ModInfo {
                     header: Header::of::<ModInfo>(),
                     id: Str::new(&old.id),
                     version: Str::new(&old.version),
                     off: 1,
-                    file: text(format!("mods/{}", old.file)),
+                    file: text(format!("mods/{}/", old.folder)),
                     replaced_by: Str::new(&old.by),
                     ..ModInfo::EMPTY
                 })

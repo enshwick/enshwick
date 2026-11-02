@@ -8,6 +8,20 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** each mod lives in a folder of its own, `mods/<mod>/`, and runs
+  while that folder is there. In each folder the one DLL with the Enshwick
+  exports is the mod; the folder's other DLLs are the mod's own, and a second
+  mod DLL there is skipped with both files named. `cargo enshwick install`
+  writes `mods/<id>/<package>.dll`. A DLL directly in `mods/`, `mods/chain/`
+  and `mods/enshwick/mods.toml` are no longer read, and the loader logs one
+  line for each it finds: move each mod into a folder of its own. There is no
+  mod list: a mod is turned off by moving its folder out of `mods/`, and a
+  link on an extension point can no longer be turned off alone. The stub no
+  longer loads other proxies from `mods/chain/` (#913).
+- **Breaking:** `mods/enshwick/enshwick.lock` became each world's record,
+  `mod-data/enshwick/worlds/<world>/mods.lock`, written at every load of that
+  world with each mod's folder, and what changed since the world last loaded
+  goes to `loader.log` (#913).
 - **Breaking:** an exported `#[enshwick::service]` ships its schema, a
   `[[service]]` table with its name, major, doc and layout hashes and a
   `[[type]]` table of its fields, `extern "system"` functions written as

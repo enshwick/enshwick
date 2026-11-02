@@ -78,7 +78,7 @@ pub const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
 /// use enshwick::mods::LOADER_FILES;
 ///
 /// let taken = |file: &str| LOADER_FILES.contains(&file);
-/// assert!(taken("powrprof.dll") && !taken("mods/trading_post.dll"));
+/// assert!(taken("powrprof.dll") && !taken("mods/you.trading-post/trading_post.dll"));
 /// ```
 pub const LOADER_FILES: [&str; 2] = [STUB_FILE, LOADER_FILE];
 
@@ -141,7 +141,7 @@ pub struct ModEntry {
     /// Whether the mod runs: not refused at init and not faulted since.
     pub running: bool,
     /// The DLL's path relative to the game's folder, with `/` separators,
-    /// such as `mods/trading_post.dll`. Empty in [`join_missing`] for a
+    /// such as `mods/you.trading-post/trading_post.dll`. Empty in [`join_missing`] for a
     /// mod this client does not have.
     pub file: String,
     /// The name players read; empty when the manifest names none. In
@@ -438,7 +438,7 @@ mod tests {
             side: Side::BOTH,
             flags: ManifestFlags::JOIN,
             off: 1,
-            file: Str::new("mods/trading_post.dll"),
+            file: Str::new("mods/you.trading-post/trading_post.dll"),
             name: Str::new("Trading Post"),
             description: Str::new("A chest only its owner opens"),
             authors: AUTHORS.as_ptr(),
@@ -452,7 +452,7 @@ mod tests {
         let entry = unsafe { entry(&info) }.unwrap();
         assert!(entry.join);
         assert!(!entry.running);
-        assert_eq!(entry.file, "mods/trading_post.dll");
+        assert_eq!(entry.file, "mods/you.trading-post/trading_post.dll");
         assert_eq!(entry.label(), "Trading Post");
         assert_eq!(entry.authors, ["themaiby", "someone"]);
         assert_eq!(entry.license, "MIT");

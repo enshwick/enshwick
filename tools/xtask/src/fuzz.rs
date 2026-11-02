@@ -79,7 +79,7 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
             "crates/enshwick/src/config",
             "crates/enshwick/src/i18n",
             "crates/enshwick/src/packs",
-            "crates/internal/loader/src/modlist",
+            "crates/internal/loader/src/record",
         ],
     ),
     ("table", &["crates/enshwick-gamedata/src"]),

@@ -51,9 +51,9 @@ On Linux under Proton, add `WINEDLLOVERRIDES="powrprof=n,b" %command%` to the
 game's launch options. For a server in Docker or Kubernetes, see
 [Run a server in Docker or Kubernetes](https://enshwick.com/guides/run-a-server-in-docker/).
 
-To turn a mod off, set `enabled = false` for it in `mods/enshwick/mods.toml`. To
-remove a mod, delete its DLL from `mods/`. To remove Enshwick, delete
-`powrprof.dll`.
+Each mod lives in a folder of its own, `mods/<id>/`, and runs while that folder
+is there. To turn a mod off, move its folder out of `mods/`. To remove a mod,
+delete its folder. To remove Enshwick, delete `powrprof.dll`.
 
 ### Mods
 
@@ -74,8 +74,8 @@ Some mods count in the join check. Each mod's page says if it does. A player and
 their server need the same versions of these mods. A player who lacks one, or
 has another version, sees which and does not join. Such a mod that the player
 has and the server does not run is off for that session. Other mods are each
-side's own. A server writes the set of mods that loaded, with the SHA-256 of
-each DLL, to `mods/enshwick/enshwick.lock`.
+side's own. At each world load, a server writes the set of mods that ran, with the SHA-256
+of each DLL, to `mod-data/enshwick/worlds/<world>/mods.lock`.
 
 ### Settings
 

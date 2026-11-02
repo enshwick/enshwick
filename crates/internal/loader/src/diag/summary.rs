@@ -124,9 +124,7 @@ pub struct Summary {
     pub at: u64,
     /// Every loaded mod, in load order.
     pub mods: Vec<ModStatus>,
-    /// Mods turned off in the mod list, by id.
-    pub disabled: Vec<String>,
-    /// The DLLs that run beside the mods without the API, a line per folder.
+    /// The other mods' proxies that run beside the mods without the API.
     pub others: Vec<String>,
     /// Mods that present mods replace, never started, a line each.
     pub replaced: Vec<String>,
@@ -276,14 +274,6 @@ impl Summary {
         let _w = writeln!(out, "\nmods: {running} of {} running", self.mods.len());
         for m in &self.mods {
             m.render(&mut out);
-        }
-        if !self.disabled.is_empty() {
-            let _w = writeln!(
-                out,
-                "  off in {}: {}",
-                crate::modlist::LIST_PATH,
-                self.disabled.join(", ")
-            );
         }
         for line in &self.replaced {
             let _w = writeln!(out, "  not started: {line}");

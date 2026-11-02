@@ -1,19 +1,18 @@
-//! What the start decides about each DLL in `mods/` and the mod list, and
-//! the line the log gives each decision.
-
-use enshwick::abi::Level;
+//! What the start decides about each mod folder in `mods/`, and the line the
+//! log gives each decision.
 
 use crate::errors;
 use crate::manifest::ManifestError;
-use crate::modlist::{LIST_PATH, ModList};
 
-/// Why a DLL in `mods/` does not start.
+/// Why a DLL in a mod folder does not start.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Skip {
-    /// An entry of the mod list that is off names the file.
-    FileOff,
-    /// The mod list turns off the mod's id.
-    IdOff(String),
+    /// Its folder holds another DLL with the Enshwick exports, and a folder
+    /// holds one mod.
+    SecondMod {
+        /// The other DLL, as `<folder>/<file>`.
+        other: String,
+    },
     /// It exports the interface's version but not all four functions.
     NotAMod,
     /// It was built for another ABI major, as its `enshwick_mod_abi` says.
@@ -34,21 +33,15 @@ pub(crate) enum Skip {
 }
 
 impl Skip {
-    /// The level of the log line: a choice of the player's is news, the
-    /// rest a problem.
-    pub(crate) fn level(&self) -> Level {
-        match self {
-            Self::FileOff | Self::IdOff(_) => Level::INFO,
-            _ => Level::WARN,
-        }
-    }
-
     /// The log line for the DLL `file`, with the error code a problem
     /// carries.
     pub(crate) fn line(&self, file: &str) -> String {
         match self {
-            Self::FileOff => format!("{file} skipped: off in {LIST_PATH}"),
-            Self::IdOff(id) => format!("{file} skipped: {id} is off in {LIST_PATH}"),
+            Self::SecondMod { other } => format!(
+                "{file} skipped: its folder also holds the mod {other}, and a folder in mods/ \
+                 holds one mod; move one to a folder of its own ({})",
+                errors::DUPLICATE_MOD
+            ),
             Self::NotAMod => format!("{file} is not an Enshwick mod ({})", errors::BROKEN_DLL),
             Self::OtherAbi(why) | Self::Manifest(ManifestError::OtherAbi(why)) => {
                 format!("{file} skipped: {why} ({})", errors::OTHER_ABI)
@@ -70,84 +63,26 @@ impl Skip {
     }
 }
 
-/// The mod list as the start reads it.
-#[derive(Debug)]
-pub(crate) struct ListRead {
-    /// The list; empty, every mod on, when the file is missing or broken.
-    pub(crate) list: ModList,
-    /// Whether the start may write the list back: not over a broken file
-    /// the player still has to fix.
-    pub(crate) writable: bool,
-    /// The warning for a broken file.
-    pub(crate) problem: Option<String>,
-}
-
-/// Reads the mod list from what reading its file gave: `None` for a file
-/// that is not there. A file that does not read or parse is never written,
-/// and the mods off in `backup`, the list before its last write, stay off.
-pub(crate) fn read_list(
-    read: std::io::Result<Option<String>>,
-    backup: impl FnOnce() -> Option<String>,
-) -> ListRead {
-    let reason = match read.map(|text| text.map(|text| ModList::parse(&text))) {
-        Ok(None) => {
-            return ListRead {
-                list: ModList::default(),
-                writable: true,
-                problem: None,
-            };
-        }
-        Ok(Some(Ok(list))) => {
-            return ListRead {
-                list,
-                writable: true,
-                problem: None,
-            };
-        }
-        Ok(Some(Err(reason))) => reason.to_string(),
-        Err(e) => e.to_string(),
-    };
-    let kept = backup().and_then(|text| ModList::parse(&text).ok());
-    let problem = if kept.is_some() {
-        format!(
-            "{LIST_PATH} is not read, so the mods off in {LIST_PATH}.bak stay off and every other mod is on: {reason} ({})",
-            errors::BAD_MOD_LIST
-        )
-    } else {
-        format!(
-            "{LIST_PATH} is not read, every mod is on: {reason} ({})",
-            errors::BAD_MOD_LIST
-        )
-    };
-    ListRead {
-        list: kept.unwrap_or_default(),
-        writable: false,
-        problem: Some(problem),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn a_file_the_player_turned_off_is_news_without_an_error_code() {
-        assert_eq!(Skip::FileOff.level(), Level::INFO);
-        assert_eq!(
-            Skip::FileOff.line("lanterns.dll"),
-            "lanterns.dll skipped: off in mods/enshwick/mods.toml"
+    fn a_second_mod_in_a_folder_names_both_files() {
+        let skip = Skip::SecondMod {
+            other: "lanterns/lanterns.dll".into(),
+        };
+        let line = skip.line("lanterns/lanterns-old.dll");
+        assert!(
+            line.starts_with("lanterns/lanterns-old.dll skipped:"),
+            "{line}"
         );
-        let id = Skip::IdOff("you.lanterns".into());
-        assert_eq!(id.level(), Level::INFO);
-        assert_eq!(
-            id.line("lanterns-2.dll"),
-            "lanterns-2.dll skipped: you.lanterns is off in mods/enshwick/mods.toml"
-        );
+        assert!(line.contains("lanterns/lanterns.dll"), "{line}");
+        assert!(line.contains(&errors::DUPLICATE_MOD.to_string()), "{line}");
     }
 
     #[test]
     fn a_dll_without_all_four_exports_is_a_broken_dll() {
-        assert_eq!(Skip::NotAMod.level(), Level::WARN);
         assert_eq!(
             Skip::NotAMod.line("half.dll"),
             format!("half.dll is not an Enshwick mod ({})", errors::BROKEN_DLL)
@@ -172,7 +107,6 @@ mod tests {
     #[test]
     fn a_manifest_that_does_not_read_says_why_with_the_broken_dll_code() {
         let skip = Skip::Manifest(ManifestError::Missing);
-        assert_eq!(skip.level(), Level::WARN);
         assert_eq!(
             skip.line("empty.dll"),
             format!(
@@ -193,7 +127,6 @@ mod tests {
             runs: "lanterns-new.dll".into(),
             runs_version: "0.2.0".into(),
         };
-        assert_eq!(skip.level(), Level::WARN);
         assert_eq!(
             skip.line("lanterns.dll"),
             format!(
@@ -201,77 +134,6 @@ mod tests {
                  runs 0.2.0; lanterns.dll can be deleted ({})",
                 errors::DUPLICATE_MOD
             )
-        );
-    }
-
-    #[test]
-    fn a_missing_mod_list_turns_every_mod_on_and_is_written() {
-        let read = read_list(Ok(None), || None);
-        assert!(read.writable);
-        assert!(read.problem.is_none());
-        assert!(read.list.off().is_empty());
-    }
-
-    #[test]
-    fn a_list_that_does_not_read_is_never_written() {
-        let read = read_list(Err(std::io::ErrorKind::InvalidData.into()), || None);
-        assert!(!read.writable);
-        let problem = read.problem.unwrap();
-        assert!(
-            problem.starts_with("mods/enshwick/mods.toml is not read, every mod is on: "),
-            "{problem}"
-        );
-        assert!(
-            problem.ends_with(&format!("({})", errors::BAD_MOD_LIST)),
-            "{problem}"
-        );
-    }
-
-    #[test]
-    fn a_list_that_does_not_read_keeps_the_mods_off_in_its_backup() {
-        let backup = || Some("[\"you.lanterns\"]\nenabled = false\n".to_owned());
-        let read = read_list(Err(std::io::ErrorKind::InvalidData.into()), backup);
-        assert!(!read.writable);
-        assert!(read.list.is_off("you.lanterns"));
-        let problem = read.problem.unwrap();
-        assert!(
-            problem.starts_with(
-                "mods/enshwick/mods.toml is not read, so the mods off in \
-                 mods/enshwick/mods.toml.bak stay off and every other mod is on: "
-            ),
-            "{problem}"
-        );
-        let broken = read_list(Ok(Some("[you.lanterns\n".into())), backup);
-        assert!(!broken.writable);
-        assert!(broken.list.is_off("you.lanterns"));
-        let unreadable_backup = read_list(Ok(Some("[x\n".into())), || Some("[y\n".into()));
-        assert!(unreadable_backup.list.off().is_empty());
-    }
-
-    #[test]
-    fn a_mod_list_that_reads_keeps_its_mods_off() {
-        let read = read_list(
-            Ok(Some("[\"you.lanterns\"]\nenabled = false\n".into())),
-            || None,
-        );
-        assert!(read.writable);
-        assert!(read.problem.is_none());
-        assert!(read.list.is_off("you.lanterns"));
-    }
-
-    #[test]
-    fn a_broken_mod_list_turns_every_mod_on_and_is_never_overwritten() {
-        let read = read_list(Ok(Some("[you.lanterns\nenabled = false\n".into())), || None);
-        assert!(!read.writable);
-        assert!(!read.list.is_off("you.lanterns"));
-        let problem = read.problem.unwrap();
-        assert!(
-            problem.starts_with("mods/enshwick/mods.toml is not read, every mod is on: "),
-            "{problem}"
-        );
-        assert!(
-            problem.ends_with(&format!("({})", errors::BAD_MOD_LIST)),
-            "{problem}"
         );
     }
 }

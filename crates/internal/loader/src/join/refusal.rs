@@ -37,11 +37,9 @@ pub struct Dialog {
 }
 
 /// The client's mods that are off, by id: the server's mods among them are
-/// the player's to turn on, not to install.
+/// the player's to get back by a restart, not to install.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Off {
-    /// Turned off by the player in the mod list.
-    pub by_player: Vec<String>,
     /// Turned off by the loader since the game started.
     pub this_game: Vec<String>,
 }
@@ -53,8 +51,6 @@ enum Get {
     From(String),
     /// From the server's admin: the server names no source.
     Ask,
-    /// By turning it on in the mod list.
-    TurnOn,
     /// By restarting the game, which turned it off.
     Restart,
 }
@@ -85,9 +81,7 @@ pub fn dialog(
 ) -> Dialog {
     let mut groups: BTreeMap<Get, Vec<String>> = BTreeMap::new();
     for need in needs {
-        let get = if off.by_player.contains(&need.id) {
-            Get::TurnOn
-        } else if off.this_game.contains(&need.id) {
+        let get = if off.this_game.contains(&need.id) {
             Get::Restart
         } else {
             pages
@@ -121,10 +115,6 @@ pub fn dialog(
         lines.push(match get {
             Get::From(place) => texts::fill("join.dialog.from", &[("place", place)]),
             Get::Ask => texts::fill("join.dialog.ask", &[]),
-            Get::TurnOn => texts::fill(
-                "join.dialog.turn-on",
-                &[("file", crate::modlist::LIST_PATH)],
-            ),
             Get::Restart => texts::fill("join.dialog.restart", &[]),
         });
         for line in mods {
@@ -212,9 +202,8 @@ mod tests {
     }
 
     #[test]
-    fn mods_the_player_or_the_game_turned_off_are_to_turn_on_not_to_install() {
+    fn mods_the_game_turned_off_are_to_restart_not_to_install() {
         let off = Off {
-            by_player: vec!["you.trading-post".to_owned()],
             this_game: vec!["count".to_owned()],
         };
         let pages = BTreeMap::from([(
@@ -233,7 +222,7 @@ mod tests {
         assert_eq!(
             lines(&dialog),
             [
-                "Turn on in mods/enshwick/mods.toml:",
+                "From github.com/someone/mods:",
                 "you.trading-post 0.3.0",
                 "Turned off in this game; restart it:",
                 "count 0.2.0",
@@ -249,7 +238,6 @@ mod tests {
             "https://github.com/enshwick/enshwick".to_owned(),
         )]);
         let off = Off {
-            by_player: vec!["you.trading-post".to_owned()],
             this_game: vec!["count".to_owned()],
         };
         let dialog = dialog(

@@ -53,14 +53,10 @@ pub const UNMET_RELATIONS: Code = Code("E2002");
 pub const MOD_OFF: Code = Code("E2003");
 /// A DLL in `mods/` is no working mod.
 pub const BROKEN_DLL: Code = Code("E2004");
-/// One mod in two files.
+/// One mod in two files, or two mods in one folder.
 pub const DUPLICATE_MOD: Code = Code("E2005");
-/// The mod list does not read.
-pub const BAD_MOD_LIST: Code = Code("E2006");
 /// A mod's hold stops the game.
 pub const HELD: Code = Code("E2007");
-/// A DLL of `mods/chain/` is not loaded.
-pub const CHAIN_NOT_LOADED: Code = Code("E2008");
 /// The server runs join mods the client lacks.
 pub const JOIN_MISSING: Code = Code("E3001");
 
@@ -78,9 +74,7 @@ pub const ALL: &[Code] = &[
     MOD_OFF,
     BROKEN_DLL,
     DUPLICATE_MOD,
-    BAD_MOD_LIST,
     HELD,
-    CHAIN_NOT_LOADED,
     JOIN_MISSING,
 ];
 

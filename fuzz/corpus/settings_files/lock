@@ -1,5 +1,0 @@
-[[mod]]
-id = "you.mod"
-version = "1.0.0"
-file = "you_mod.dll"
-sha256 = "00"

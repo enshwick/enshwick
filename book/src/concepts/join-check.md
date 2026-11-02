@@ -67,9 +67,7 @@ compares the fingerprint with its own:
   The client does not join, and one dialog lists each, with the server's
   version, the player's, and where to get it: the mod's page the server
   advertises, or the server's admin. Then the loader raises
-  `JoinRefused` (below). A mod the player turned off in
-  `mods/enshwick/mods.toml` is named as such, left out of `JoinRefused`'s list,
-  and is the player's to turn back on.
+  `JoinRefused` (below).
 - **The same mods, another loader version.** A note says so, and the player
   joins.
 - **The server does not answer the query.** The player joins without a check.

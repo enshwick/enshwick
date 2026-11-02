@@ -207,7 +207,6 @@ fn refused(missing: &[crate::admission::Need], reply: &[u8], names: &super::Name
         crate::errors::JOIN_MISSING
     );
     let off = super::refusal::Off {
-        by_player: crate::modlist::disabled().to_vec(),
         this_game: crate::host::join_mods_off(),
     };
     let pages: BTreeMap<String, String> = missing
@@ -218,7 +217,7 @@ fn refused(missing: &[crate::admission::Need], reply: &[u8], names: &super::Name
     // Mods that are off on the client are the player's to turn on.
     let wanted: Vec<crate::join::missing::Wanted> = missing
         .iter()
-        .filter(|need| !off.by_player.contains(&need.id) && !off.this_game.contains(&need.id))
+        .filter(|need| !off.this_game.contains(&need.id))
         .map(|need| crate::join::missing::Wanted {
             name: super::name(reply, &need.id),
             page: pages.get(&need.id).cloned().unwrap_or_default(),

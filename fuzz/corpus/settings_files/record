@@ -1,0 +1,9 @@
+loader = "0.4.0"
+loader_sha256 = "aa"
+game = "1.0 server (1269579)"
+
+[[mod]]
+id = "you.mod"
+version = "1.0.0"
+folder = "you.mod"
+sha256 = "00"

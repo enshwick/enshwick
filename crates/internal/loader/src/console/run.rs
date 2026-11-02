@@ -229,20 +229,14 @@ fn mods(loader: &Loader) -> String {
             &[("version", version), ("mods", &mods.join(", "))],
         )
     }];
-    let disabled = crate::modlist::disabled();
-    if !disabled.is_empty() {
-        sentences.push(texts::fill(
-            "enshwick.off-in",
-            &[
-                ("file", crate::modlist::LIST_PATH),
-                ("mods", &disabled.join(", ")),
-            ],
-        ));
-    }
-    sentences.extend(crate::modlist::replaced().iter().map(|old| {
+    sentences.extend(crate::record::replaced().iter().map(|old| {
         texts::fill(
             "enshwick.replaced",
-            &[("id", &old.id), ("by", &old.by), ("file", &old.file)],
+            &[
+                ("id", &old.id),
+                ("by", &old.by),
+                ("file", &format!("{}/", old.folder)),
+            ],
         )
     }));
     sentences.push(texts::fill("enshwick.more", &[]));

@@ -15,7 +15,8 @@
 //! The Enshwick loader comes with the platform and runs every mod, so players
 //! install one thing.
 //!
-//! A mod is a DLL in the game's `mods/` folder. It implements [`Mod`] and
+//! A mod is a DLL in a folder of its own in the game's `mods/` folder,
+//! `mods/<id>/`. It implements [`Mod`] and
 //! exports itself with [`declare_mod!`]. In [`Mod::init`] it reads its
 //! settings and adds its handlers through [`Load`]. Where the API has no
 //! call, it links hooks declared with [`detour!`] or [`#[hook]`](macro@hook)

@@ -137,17 +137,6 @@ enshwick::test::declare_mod!(
 );
 "##;
 
-/// The mod list: `lockers.dll` is off by its id under an older file name,
-/// `turned-off.dll` by its file.
-const LIST: &str = r#"["fixture.lockers"]
-enabled = false
-file = "lockers-old.dll"
-
-["fixture.gone"]
-enabled = false
-file = "turned-off.dll"
-"#;
-
 /// The target folder this test binary runs from, which the fixtures share so
 /// the API crate compiles once across runs.
 fn target_dir() -> PathBuf {
@@ -272,28 +261,28 @@ fn loader_lines() -> Vec<(Level, String)> {
         .collect()
 }
 
-/// Fills `mods` from the fixtures in `built`: one mod that runs beside a
-/// copy of itself, and one DLL for each other reason to skip.
+/// Fills `mods` from the fixtures in `built`, one folder each: two mods,
+/// one beside a copy of itself and one beside a second mod in its folder,
+/// one DLL for each other reason to skip, and mods where none is read: a
+/// top-level DLL and one in the loader's folder.
 fn fill_mods(built: &Path, mods: &Path) {
-    std::fs::create_dir_all(mods.join(crate::settings::LOADER_ID)).unwrap();
     for (from, to) in [
-        ("lanterns", "lanterns.dll"),
-        ("lanterns", "lanterns-copy.dll"),
-        ("lockers", "lockers.dll"),
-        ("half", "half.dll"),
-        ("old_abi", "old-abi.dll"),
-        ("no_manifest", "no-manifest.dll"),
+        ("lanterns", "lanterns/lanterns.dll"),
+        ("lanterns", "lanterns-copy/lanterns.dll"),
+        ("lockers", "lockers/lockers.dll"),
+        ("lanterns", "lockers/second.dll"),
+        ("half", "half/half.dll"),
+        ("old_abi", "old-abi/old-abi.dll"),
+        ("no_manifest", "no-manifest/no-manifest.dll"),
+        ("lockers", "top.dll"),
+        ("lanterns", "enshwick/lanterns.dll"),
     ] {
-        std::fs::copy(built.join(format!("{from}.dll")), mods.join(to)).unwrap();
+        let to = mods.join(to);
+        std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+        std::fs::copy(built.join(format!("{from}.dll")), to).unwrap();
     }
-    std::fs::write(mods.join("not-pe.dll"), "not a DLL").unwrap();
-    std::fs::write(mods.join("turned-off.dll"), "never read").unwrap();
-    std::fs::write(
-        mods.join(crate::settings::LOADER_ID)
-            .join(crate::modlist::LIST_FILE),
-        LIST,
-    )
-    .unwrap();
+    std::fs::create_dir_all(mods.join("not-pe")).unwrap();
+    std::fs::write(mods.join("not-pe/not-pe.dll"), "not a DLL").unwrap();
 }
 
 #[test]
@@ -325,8 +314,10 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     crate::log::end_capture();
 
     let ids: Vec<&str> = candidates.iter().map(|c| c.id.as_str()).collect();
-    assert_eq!(ids, ["fixture.lanterns"], "{lines:#?}");
-    assert_eq!(found.len(), 1);
+    assert_eq!(ids, ["fixture.lanterns", "fixture.lockers"], "{lines:#?}");
+    let files: Vec<&str> = found.iter().map(|l| l.file.as_str()).collect();
+    assert_eq!(files[1], "lockers/lockers.dll");
+    assert_eq!(found[1].folder, "lockers");
     assert!(others.is_empty());
     let has = |level: Level, line: &str| {
         assert!(
@@ -335,22 +326,21 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
             level.name()
         );
     };
-    has(
-        Level::INFO,
-        "turned-off.dll skipped: off in mods/enshwick/mods.toml",
-    );
-    has(
-        Level::INFO,
-        "lockers.dll skipped: fixture.lockers is off in mods/enshwick/mods.toml",
-    );
+    let second = super::Skip::SecondMod {
+        other: "lockers/lockers.dll".into(),
+    };
+    has(Level::WARN, &second.line("lockers/second.dll"));
     has(
         Level::WARN,
-        &format!("half.dll is not an Enshwick mod ({})", errors::BROKEN_DLL),
+        &format!(
+            "half/half.dll is not an Enshwick mod ({})",
+            errors::BROKEN_DLL
+        ),
     );
     has(
         Level::WARN,
         &format!(
-            "old-abi.dll skipped: {} ({})",
+            "old-abi/old-abi.dll skipped: {} ({})",
             enshwick::abi::check_major(HASHED_ABI).unwrap_err(),
             errors::OTHER_ABI
         ),
@@ -358,13 +348,13 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     has(
         Level::WARN,
         &format!(
-            "no-manifest.dll skipped: the manifest is missing ({})",
+            "no-manifest/no-manifest.dll skipped: the manifest is missing ({})",
             errors::BROKEN_DLL
         ),
     );
     let not_pe = lines
         .iter()
-        .find(|(_, text)| text.starts_with("not-pe.dll could not be loaded: "))
+        .find(|(_, text)| text.starts_with("not-pe/not-pe.dll could not be loaded: "))
         .unwrap_or_else(|| panic!("no line for not-pe.dll in {lines:#?}"));
     assert_eq!(not_pe.0, Level::WARN);
     assert!(
@@ -373,7 +363,9 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     );
     let duplicates: Vec<&str> = lines
         .iter()
-        .filter(|(_, text)| text.ends_with(&format!("({})", errors::DUPLICATE_MOD)))
+        .filter(|(_, text)| {
+            text.ends_with(&format!("({})", errors::DUPLICATE_MOD)) && text.contains(" is also in ")
+        })
         .map(|(_, text)| text.as_str())
         .collect();
     assert_eq!(duplicates.len(), 1, "{lines:#?}");
@@ -383,13 +375,6 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         duplicates[0]
     );
 
-    let list = std::fs::read_to_string(
-        mods.join(crate::settings::LOADER_ID)
-            .join(crate::modlist::LIST_FILE),
-    )
-    .unwrap();
-    assert!(list.contains("[\"fixture.lanterns\"]"), "{list}");
-    assert!(list.contains("file = \"turned-off.dll\""), "{list}");
     for library in &found {
         super::unload(library);
     }
@@ -398,47 +383,29 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
 
 #[test]
 #[cfg_attr(miri, ignore = "Miri isolates the file system")]
-fn a_mod_list_that_does_not_read_stays_byte_for_byte() {
-    let dir = std::env::temp_dir().join(format!("enshwick-unread-list-{}", std::process::id()));
+fn each_file_of_the_layout_before_mod_folders_gets_one_line() {
+    let dir = std::env::temp_dir().join(format!("enshwick-old-layout-{}", std::process::id()));
     let _old = std::fs::remove_dir_all(&dir);
     let mods = dir.join("mods");
-    let pack = mods.join("you.lanterns");
-    std::fs::create_dir_all(&pack).unwrap();
-    std::fs::write(
-        pack.join(enshwick::packs::MANIFEST_FILE),
-        "id = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\n",
-    )
-    .unwrap();
-    let list = mods
-        .join(crate::settings::LOADER_ID)
-        .join(crate::modlist::LIST_FILE);
-    std::fs::create_dir_all(list.parent().unwrap()).unwrap();
-    // "5 €" as Notepad's ANSI saves it on a western Windows: € is 0x80.
-    let saved_as_windows_1252 = b"[\"you.lanterns\"]\nenabled = false\n# 5 \x80\n";
-    std::fs::write(&list, saved_as_windows_1252).unwrap();
-    let ids = || {
-        let (_, candidates, _) = libraries(&mods, Run::Dry, &mut |_| {});
-        candidates.into_iter().map(|c| c.id).collect::<Vec<_>>()
-    };
+    std::fs::create_dir_all(mods.join("chain")).unwrap();
+    std::fs::create_dir_all(mods.join(crate::settings::LOADER_ID)).unwrap();
+    std::fs::write(mods.join("lanterns.dll"), "").unwrap();
+    std::fs::write(mods.join("enshwick/mods.toml"), "").unwrap();
     crate::log::capture();
-    let found = ids();
+    super::note_old_layout(&mods);
     let lines = loader_lines();
     crate::log::end_capture();
-    assert_eq!(found, ["you.lanterns"], "found, so the list would gain it");
-    assert!(
-        lines.iter().any(|(level, text)| *level == Level::WARN
-            && text.starts_with("mods/enshwick/mods.toml is not read, every mod is on: ")
-            && text.ends_with(&format!("({})", errors::BAD_MOD_LIST))),
+    let old: Vec<&str> = lines
+        .iter()
+        .filter(|(level, _)| *level == Level::WARN)
+        .filter_map(|(_, text)| text.split_once(" is not read: "))
+        .map(|(file, _)| file)
+        .collect();
+    assert_eq!(
+        old,
+        ["mods/lanterns.dll", "mods/chain", "mods/enshwick/mods.toml"],
         "{lines:#?}"
     );
-    assert_eq!(std::fs::read(&list).unwrap(), saved_as_windows_1252);
-    std::fs::write(
-        enshwick::files::backup_path(&list),
-        "[\"you.lanterns\"]\nenabled = false\n",
-    )
-    .unwrap();
-    assert!(ids().is_empty(), "off in the backup, so off");
-    assert_eq!(std::fs::read(&list).unwrap(), saved_as_windows_1252);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -459,11 +426,11 @@ fn a_mods_import_never_resolves_from_the_current_directory() {
         }
         return;
     };
-    let mods = dir.join("mods");
+    let folder = dir.join("mods").join("imports");
     let current = dir.join("current");
-    std::fs::create_dir_all(&mods).unwrap();
+    std::fs::create_dir_all(&folder).unwrap();
     std::fs::create_dir_all(&current).unwrap();
-    let imports = mods.join("imports.dll");
+    let imports = folder.join("imports.dll");
     std::fs::copy(built.join("imports.dll"), &imports).unwrap();
     let dependency = format!("{DEPENDENCY}.dll");
     let system = crate::module::system_dir().unwrap();
@@ -488,8 +455,9 @@ fn a_mods_import_never_resolves_from_the_current_directory() {
         "the import came from the current directory: {out}"
     );
 
-    std::fs::rename(current.join(&dependency), mods.join(&dependency)).unwrap();
-    let library = super::load(&imports).expect("an import beside the mod resolves");
+    std::fs::rename(current.join(&dependency), folder.join(&dependency)).unwrap();
+    let library = super::load(&imports, "imports", "imports/imports.dll")
+        .expect("an import beside the mod resolves");
     super::unload(&library);
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -502,6 +470,6 @@ fn imports_load_in_this_process() {
     let Some(path) = std::env::var_os(IMPORTS_MOD) else {
         return;
     };
-    let library = super::load(Path::new(&path));
+    let library = super::load(Path::new(&path), "imports", "imports/imports.dll");
     println!("{LOADED}{}", library.is_some());
 }
