@@ -201,7 +201,8 @@ impl Facts {
         let ty = |id: &str| type_of(loader, id);
         Ok(Self {
             setup: ty(catalogue::ids::INVENTORY_SETUP)?,
-            setup_initialized: at(catalogue::ids::INVENTORY_SETUP_INITIALIZED)?,
+            setup_initialized: crate::catalogue::setup_initialized_at(loader)
+                .ok_or(Status::MISSING)?,
             setup_links: at(catalogue::ids::INVENTORY_SETUP_LINKS)?,
             setup_categories: at(catalogue::ids::INVENTORY_SETUP_CATEGORIES)?,
             inventory: ty(catalogue::ids::INVENTORY)?,

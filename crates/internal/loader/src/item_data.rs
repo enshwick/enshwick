@@ -42,7 +42,7 @@ use self::attach::find_pending;
 pub(crate) use self::world_file::world_event;
 use crate::chains::Next;
 use crate::host::{Loader, Target};
-use crate::item_records::anchor::{self, Anchor, Pending};
+use crate::item_records::anchor::{self, Anchor, CharacterId, Pending};
 use crate::item_records::{decode, encode};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -110,10 +110,30 @@ struct Server {
     /// any other, so they are right when their mod returns; no mod reads
     /// them meanwhile.
     unopened: Vec<String>,
-    /// The joined characters whose carried records wait, each with the steps
-    /// it may still wait; at most one entry per player.
-    joining: Vec<(u32, u32)>,
+    /// The joined characters whose carried records wait; at most one entry
+    /// per player.
+    joining: Vec<Joining>,
     changed: bool,
+}
+
+/// A joined character whose carried records look for their items.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Joining {
+    entity: Entity,
+    /// Looks left before its inventories must be filled.
+    cap: u32,
+    /// Looks left once they are filled; [`JOIN_LOOKS`] until then.
+    looks: u32,
+}
+
+impl Joining {
+    const fn new(entity: Entity) -> Self {
+        Self {
+            entity,
+            cap: JOIN_LOOKS_CAP,
+            looks: JOIN_LOOKS,
+        }
+    }
 }
 
 impl Server {
@@ -159,13 +179,15 @@ static FINDING: AtomicBool = AtomicBool::new(false);
 /// records wait unattached, so a value set now would claim a place one of
 /// them holds. The store refuses values until the next load.
 static UNREAD: AtomicBool = AtomicBool::new(false);
-/// Whether a joined character waits for its inventories to fill.
-static JOINS: AtomicBool = AtomicBool::new(false);
-/// Steps a joined character's carried records look for their items, some
-/// ten seconds; past it the rest keep waiting for its next join.
-const JOIN_STEPS: u32 = 600;
-/// Steps between two looks of a joined character for its items.
-const JOIN_LOOK_EVERY: u32 = 30;
+/// Steps between two looks of a joined character for its carried items,
+/// about half a second.
+const JOIN_LOOK_EVERY: u64 = 30;
+/// Looks a joined character's records take once its inventories are
+/// filled, about ten seconds; past them the rest wait for its next join.
+const JOIN_LOOKS: u32 = 20;
+/// Looks a joined character may take to fill its inventories at all, about
+/// two minutes; past them its records wait for its next join.
+const JOIN_LOOKS_CAP: u32 = 240;
 /// Entities the game asked to destroy since the last step, each in the low
 /// word under its round in the high one, 0 for an empty slot; written from
 /// any thread without a lock. A slot from an earlier round is stale.
@@ -381,13 +403,15 @@ fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(u32,
 }
 
 /// After the server's step: after a load's first, finds the file's records'
-/// entities; after every step, drops the records of the entities destroyed
-/// in it, and tells the clients.
+/// entities; every [`JOIN_LOOK_EVERY`] steps, looks for joined characters'
+/// carried items; after every step, drops the records of the entities
+/// destroyed in it, and tells the clients.
+
 pub(crate) fn after_step(loader: &Loader) {
     if FINDING.load(Ordering::Relaxed) {
         find_pending(loader);
     }
-    if JOINS.load(Ordering::Relaxed) {
+    if crate::events::steps().is_multiple_of(JOIN_LOOK_EVERY) {
         find_carried(loader);
     }
     if !KEPT.load(Ordering::Relaxed) || !any_destroyed() {
@@ -403,23 +427,70 @@ pub(crate) fn after_step(loader: &Loader) {
         server.changed |= !gone.is_empty();
         gone
     };
-    let mut message = Vec::new();
+    let mut messages = Vec::new();
     for (kind, pide) in gone {
         if let Some(spec) = self::kind(kind).filter(|k| k.sent) {
-            encode(&mut message, &spec.id, pide, 0, &[]);
-            if message.len() > MESSAGE_BYTES {
-                crate::net::item_data(0, &std::mem::take(&mut message));
-            }
+            push_encoded(&mut messages, &spec.id, pide, 0, &[]);
         }
     }
-    if !message.is_empty() {
-        crate::net::item_data(0, &message);
+    send(&messages);
+}
+
+/// Appends a record's encoding to the last of `messages`, starting a new
+/// message first when it would grow past [`MESSAGE_BYTES`].
+fn push_encoded(messages: &mut Vec<Vec<u8>>, id: &str, pide: u32, item: u32, value: &[u8]) {
+    let mut one = Vec::new();
+    encode(&mut one, id, pide, item, value);
+    match messages.last_mut() {
+        Some(last) if last.len() + one.len() <= MESSAGE_BYTES => last.extend_from_slice(&one),
+        _ => messages.push(one),
     }
 }
 
-/// A player's character `entity` joined: its carried records look for their
-/// items once its inventories fill.
-pub(crate) fn player_joined(entity: u32) {
+/// The messages that tell clients the values of `keys` in `values`, for the
+/// kinds clients get.
+fn messages_for(values: &Values, keys: &[(u32, u32)]) -> Vec<Vec<u8>> {
+    let mut messages = Vec::new();
+    for &(kind, pide) in keys {
+        if let (Some(spec), Some(record)) = (
+            self::kind(kind).filter(|k| k.sent),
+            values.get(&(kind, pide)),
+        ) {
+            push_encoded(&mut messages, &spec.id, pide, record.item, &record.value);
+        }
+    }
+    messages
+}
+
+/// Sends `messages` to every client.
+fn send(messages: &[Vec<u8>]) {
+    for message in messages {
+        crate::net::item_data(0, message);
+    }
+}
+
+/// Puts each `found` record into `values` under its kind and entity, as
+/// attached from now on; the keys.
+fn insert_found(values: &mut Values, found: Vec<(u32, u32, Pending)>) -> Vec<(u32, u32)> {
+    found
+        .into_iter()
+        .map(|(kind, entity, record)| {
+            values.insert(
+                (kind, entity),
+                Record {
+                    item: record.check,
+                    anchor: Some(record.anchor),
+                    value: record.value,
+                },
+            );
+            (kind, entity)
+        })
+        .collect()
+}
+
+/// A player's character `entity` joined: when carried records wait, they
+/// look for its items once its inventories fill.
+pub(crate) fn player_joined(entity: Entity) {
     if !wanted() || !serves() {
         return;
     }
@@ -427,9 +498,15 @@ pub(crate) fn player_joined(entity: u32) {
     let Some(server) = server.as_mut() else {
         return;
     };
-    server.joining.retain(|&(e, _)| e != entity);
-    server.joining.push((entity, JOIN_STEPS));
-    JOINS.store(true, Ordering::Relaxed);
+    let waits = server
+        .pending
+        .iter()
+        .any(|record| !record.aside && matches!(record.anchor, Anchor::Carried { .. }));
+    if !waits {
+        return;
+    }
+    server.joining.retain(|joining| joining.entity != entity);
+    server.joining.push(Joining::new(entity));
 }
 
 /// A player's character `entity` leaves, its items still in the world: the
@@ -437,18 +514,24 @@ pub(crate) fn player_joined(entity: u32) {
 /// aside where no GUID reads, rather than be dropped when the game destroys
 /// the items it removes with the character. Its slot still names it.
 #[cold]
-pub(crate) fn player_left(loader: &Loader, entity: u32) {
+pub(crate) fn player_left(loader: &Loader, entity: Entity) {
     if !wanted() || !serves() {
         return;
     }
     let characters = crate::world::characters(loader);
+    let character_of = |root: Entity| {
+        characters
+            .iter()
+            .find_map(|&(e, character)| (e == root).then_some(character))
+    };
     let mut server = SERVER.relock();
     let Some(server) = server.as_mut() else {
         return;
     };
-    server.joining.retain(|&(e, _)| e != entity);
-    let (waiting, aside) =
-        keep_carried(server, entity, |pide| game::held(loader, pide, &characters));
+    server.joining.retain(|joining| joining.entity != entity);
+    let (waiting, aside) = keep_carried(server, entity, |pide| {
+        game::held(loader, pide, character_of)
+    });
     if waiting + aside > 0 {
         crate::log!(
             INFO,
@@ -460,11 +543,13 @@ pub(crate) fn player_left(loader: &Loader, entity: u32) {
 /// Moves the item values of `server` whose item `held` finds in an
 /// inventory of `character` into its pending records: under the
 /// character's GUID, slot and link to wait for its next join where the
-/// anchor names one, else aside under the item's session id. The number
-/// waiting and the number aside.
+/// anchor names one, else aside under the item's session id. An older
+/// waiting record on the same slot goes aside. The number waiting and the
+/// number aside.
+
 fn keep_carried(
     server: &mut Server,
-    character: u32,
+    character: Entity,
     held: impl Fn(u32) -> Option<game::Held>,
 ) -> (usize, usize) {
     let mut left = Vec::new();
@@ -472,7 +557,7 @@ fn keep_carried(
         if scope(kind, record.anchor) != Some(Scope::Item) {
             return true;
         }
-        let Some(held) = held(pide).filter(|held| held.root == character) else {
+        let Some(held) = held(pide).filter(|held| held.root == character.0) else {
             return true;
         };
         let carried = held
@@ -489,109 +574,158 @@ fn keep_carried(
     });
     let aside = left.iter().filter(|record| record.aside).count();
     let waiting = left.len() - aside;
-    // A record still waiting from an earlier leave names the same slot: the
-    // newer value wins, so no place is ever named twice.
-    let newer: FxHashSet<(u32, Anchor)> = left
+    let newer = left
         .iter()
         .filter(|record| !record.aside)
-        .map(|record| (record.kind, record.anchor))
-        .collect();
-    server
-        .pending
-        .retain(|record| record.aside || !newer.contains(&(record.kind, record.anchor)));
+        .map(|record| (record.kind, record.anchor));
+    let _older = set_aside_older(&mut server.pending, newer);
     server.changed |= !left.is_empty();
     server.pending.append(&mut left);
     (waiting, aside)
 }
 
-/// Looks, every [`JOIN_LOOK_EVERY`] steps after a join, for the items the
-/// joined characters carried, on the game thread after a step. A look
-/// waits for the character's inventories to fill; a record whose slot does
-/// not hold its item yet keeps waiting, and past [`JOIN_STEPS`] it waits for
-/// the character's next join, still in the world's file.
+/// Sets aside every waiting carried record of `pending` on a kind and slot
+/// that `newer` names again: the newer value counts, so no slot is ever
+/// named twice. Logs how many went aside; the number.
+fn set_aside_older(pending: &mut [Pending], newer: impl Iterator<Item = (u32, Anchor)>) -> usize {
+    let newer: FxHashSet<(u32, Anchor)> = newer
+        .filter(|(_, anchor)| matches!(anchor, Anchor::Carried { .. }))
+        .collect();
+    if newer.is_empty() {
+        return 0;
+    }
+    let mut older = 0usize;
+    for record in pending
+        .iter_mut()
+        .filter(|record| !record.aside && newer.contains(&(record.kind, record.anchor)))
+    {
+        record.aside = true;
+        older += 1;
+    }
+    if older > 0 {
+        crate::log!(
+            INFO,
+            "mod data: {older} older carried values set aside in the world's file, a newer value on the same slot counting instead"
+        );
+    }
+    older
+}
+
+/// Looks for the items the joined characters carried, every
+/// [`JOIN_LOOK_EVERY`] steps on the game thread. A look first waits for
+/// the character's inventories to fill, at most [`JOIN_LOOKS_CAP`] looks;
+/// from then on it takes back what lies in its slot for [`JOIN_LOOKS`]
+/// looks. What finds no item waits in the world's file for the next join.
 #[cold]
 fn find_carried(loader: &Loader) {
-    let characters = crate::world::characters(loader);
-    let mut messages = Vec::new();
-    let mut message = Vec::new();
-    let mut stats = false;
-    {
+    let (messages, stats) = {
         let mut server = SERVER.relock();
         let Some(server) = server.as_mut() else {
-            JOINS.store(false, Ordering::Relaxed);
             return;
         };
+        if server.joining.is_empty() {
+            return;
+        }
+        let characters = crate::world::characters(loader);
         let mut joining = std::mem::take(&mut server.joining);
-        joining.retain_mut(|(entity, steps)| {
-            *steps = steps.saturating_sub(1);
-            if *steps % JOIN_LOOK_EVERY != 0 {
-                return true;
-            }
-            let Some(&(_, character)) = characters.iter().find(|(e, _)| e == entity) else {
-                return *steps > 0;
-            };
-            let entity = *entity;
-            let waiting = if game::ready(loader, entity) {
-                let back = take_back_carried(server, character, |link, slot| {
-                    game::in_slot(loader, entity, link, slot)
-                });
-                stats |= touches_item_stats(&back.found);
-                for &(kind, pide) in &back.found {
-                    let (Some(spec), Some(record)) = (
-                        self::kind(kind).filter(|k| k.sent),
-                        server.values.get(&(kind, pide)),
-                    ) else {
-                        continue;
-                    };
-                    encode(&mut message, &spec.id, pide, record.item, &record.value);
-                    if message.len() > MESSAGE_BYTES {
-                        messages.push(std::mem::take(&mut message));
-                    }
-                }
-                if !back.found.is_empty() || back.replaced > 0 {
+        let mut found = Vec::new();
+        joining.retain_mut(
+            |joining| match look(
+                server,
+                &characters,
+                joining,
+                &mut found,
+                |entity| game::ready(loader, entity.0),
+                |entity, link, slot| game::in_slot(loader, entity.0, link, slot),
+            ) {
+                Look::Again => true,
+                Look::Done => false,
+                Look::Stop(why) => {
                     crate::log!(
                         INFO,
-                        "mod data: a joined player's items took {} values back; {} set aside, their items holding a newer value",
-                        back.found.len(),
-                        back.replaced
+                        "mod data: a joined player's carried values wait in the world's file for its next join: {why}"
                     );
+                    false
                 }
-                Some(back.waiting)
-            } else {
-                None
-            };
-            if waiting == Some(0) {
-                return false;
-            }
-            if *steps == 0 {
-                crate::log!(
-                    INFO,
-                    "mod data: a joined player's carried values found no item in their slots in {JOIN_STEPS} steps; they wait in the world's file for its next join"
-                );
-                return false;
-            }
-            true
-        });
+            },
+        );
         server.joining = joining;
-        JOINS.store(!server.joining.is_empty(), Ordering::Relaxed);
         KEPT.store(!server.values.is_empty(), Ordering::Relaxed);
-    }
-    messages.push(message);
-    for message in messages.iter().filter(|m| !m.is_empty()) {
-        crate::net::item_data(0, message);
-    }
+        (
+            messages_for(&server.values, &found),
+            touches_item_stats(&found),
+        )
+    };
+    send(&messages);
     if stats {
         crate::stats::items_changed();
     }
 }
 
+/// What a look of a joined character leaves to do.
+enum Look {
+    /// Some records wait and the character looks again.
+    Again,
+    /// Nothing of the character waits any more.
+    Done,
+    /// Some records wait for the next join, for this reason.
+    Stop(&'static str),
+}
+
+/// One look of `joining` for its carried items, adding the keys taken back
+/// to `found`. `ready(entity)` is whether a character's inventories are
+/// filled, `in_slot(entity, link, slot)` the item entity and item there.
+fn look(
+    server: &mut Server,
+    characters: &[(Entity, CharacterId)],
+    joining: &mut Joining,
+    found: &mut Vec<(u32, u32)>,
+    ready: impl Fn(Entity) -> bool,
+    in_slot: impl Fn(Entity, u8, u8) -> Option<(u32, u32)>,
+) -> Look {
+    let entity = joining.entity;
+    let character = characters
+        .iter()
+        .find_map(|&(e, character)| (e == entity).then_some(character))
+        .filter(|_| ready(entity));
+    let Some(character) = character else {
+        joining.cap = joining.cap.saturating_sub(1);
+        return if joining.cap == 0 {
+            Look::Stop("no look ran, its inventories never read as filled")
+        } else {
+            Look::Again
+        };
+    };
+    let back = take_back_carried(server, character, |link, slot| in_slot(entity, link, slot));
+    if !back.found.is_empty() || back.replaced + back.older > 0 {
+        crate::log!(
+            INFO,
+            "mod data: a joined player's items took {} values back; {} set aside, their items holding a newer value, and {} older values on the same slot",
+            back.found.len(),
+            back.replaced,
+            back.older
+        );
+    }
+    found.extend(back.found);
+    if back.waiting == 0 {
+        return Look::Done;
+    }
+    joining.looks = joining.looks.saturating_sub(1);
+    if joining.looks == 0 {
+        Look::Stop("its slots held no matching item")
+    } else {
+        Look::Again
+    }
+}
+
 /// Attaches the pending records `character` carried to the item `held`
 /// finds in the same link and slot, holding the same item. A record whose
-/// item already has a newer value goes aside; the character's other records
-/// keep waiting.
+/// item already has a newer value, or an older one on a slot a newer record
+/// names, goes aside; the character's other records keep waiting.
+
 fn take_back_carried(
     server: &mut Server,
-    character: [u8; 16],
+    character: CharacterId,
     held: impl Fn(u8, u8) -> Option<(u32, u32)>,
 ) -> TakenBack {
     let pending = std::mem::take(&mut server.pending);
@@ -599,24 +733,14 @@ fn take_back_carried(
     let outcome = anchor::resolve_carried(pending, character, held, |kind, pide| {
         values.contains_key(&(kind, pide))
     });
-    let mut back = TakenBack {
-        found: Vec::with_capacity(outcome.found.len()),
+    let back = TakenBack {
+        found: insert_found(&mut server.values, outcome.found),
         replaced: outcome.replaced,
+        older: outcome.ambiguous,
         waiting: outcome.waiting,
     };
-    for (kind, pide, record) in outcome.found {
-        back.found.push((kind, pide));
-        server.values.insert(
-            (kind, pide),
-            Record {
-                item: record.check,
-                anchor: Some(record.anchor),
-                value: record.value,
-            },
-        );
-    }
     server.pending = outcome.left;
-    server.changed |= !back.found.is_empty() || back.replaced > 0;
+    server.changed |= !back.found.is_empty() || back.replaced + back.older > 0;
     back
 }
 
@@ -627,6 +751,8 @@ struct TakenBack {
     found: Vec<(u32, u32)>,
     /// Records aside: their item already had a newer value.
     replaced: usize,
+    /// Records aside: a newer record named the same slot.
+    older: usize,
     /// Records of the character that still wait.
     waiting: usize,
 }
@@ -730,7 +856,11 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         Scope::Item => (
             item,
             loader
-                .and_then(|loader| game::held(loader, pide, &crate::world::characters(loader)))
+                .and_then(|loader| {
+                    game::held(loader, pide, |root| {
+                        crate::world::character_of(loader, root)
+                    })
+                })
                 .and_then(|held| held.anchor),
         ),
         Scope::Entity => {

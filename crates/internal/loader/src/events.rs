@@ -191,6 +191,11 @@ static PICKUP_NEXT: Next<PickupFn> = unsafe { Next::new() };
 /// Building events from worker threads, raised after the step.
 static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
 static STEPS: AtomicU64 = AtomicU64::new(0);
+
+/// The server steps run so far, for parts that act every few steps.
+pub(crate) fn steps() -> u64 {
+    STEPS.load(Ordering::Relaxed)
+}
 /// The handle of the player seen joining in each slot, 0 for none.
 static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];
 /// One fuse per link: a panic in the loader's own work of a link turns off
@@ -460,7 +465,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
             );
             part!("player joined events", {
                 crate::stats::player_joined(loader, &data);
-                crate::item_data::player_joined(data.entity.0);
+                crate::item_data::player_joined(data.entity);
                 loader.emit(Event::PLAYER_JOINED, None, (&raw const data).cast());
             });
         }
@@ -635,7 +640,7 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
             crate::admission::left(data.key.get());
             guarded(&REMOVE_FUSE, "the player removal link", || {
                 // Before the game removes the character: its items still read.
-                crate::item_data::player_left(loader, data.entity.0);
+                crate::item_data::player_left(loader, data.entity);
                 loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());
             });
         }

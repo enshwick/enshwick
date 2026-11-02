@@ -3,7 +3,7 @@
 use super::attach::attach;
 use super::world_file::{read_file, read_world, unwritten, write_file};
 use super::*;
-use crate::item_records::anchor::Index;
+use crate::item_records::anchor::{CharacterId, Index};
 use crate::item_records::file::{self, Saved};
 
 #[test]
@@ -194,7 +194,7 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
             root,
         })
     };
-    assert_eq!(keep_carried(&mut world, ANN, held), (0, 2));
+    assert_eq!(keep_carried(&mut world, Entity(ANN), held), (0, 2));
     let mut kept: Vec<(u32, u32)> = world.values.keys().copied().collect();
     kept.sort_unstable();
     assert_eq!(kept, [(0, 2003), (0, 2004), (1, ANN)]);
@@ -221,7 +221,7 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
 #[test]
 fn a_leaving_character_s_items_wait_for_its_join_and_come_back_in_their_slots() {
     const ANN: u32 = 7;
-    const ANN_GUID: [u8; 16] = [0xa1; 16];
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
     kinds();
     let mut world = server(Vec::new(), Vec::new());
     let value = |item, byte| Record {
@@ -251,7 +251,7 @@ fn a_leaving_character_s_items_wait_for_its_join_and_come_back_in_their_slots() 
             root: ANN,
         })
     };
-    assert_eq!(keep_carried(&mut world, ANN, left), (2, 1));
+    assert_eq!(keep_carried(&mut world, Entity(ANN), left), (2, 1));
     assert!(world.values.is_empty());
     assert!(world.changed);
     world.changed = false;
@@ -290,7 +290,7 @@ fn a_leaving_character_s_items_wait_for_its_join_and_come_back_in_their_slots() 
 #[test]
 fn a_second_leave_keeps_one_waiting_record_per_slot_with_the_newer_value() {
     const ANN: u32 = 7;
-    const ANN_GUID: [u8; 16] = [0xa1; 16];
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
     kinds();
     let mut world = server(Vec::new(), Vec::new());
     let in_slot = |pide| {
@@ -310,15 +310,141 @@ fn a_second_leave_keeps_one_waiting_record_per_slot_with_the_newer_value() {
         value: Box::new([byte]),
     };
     world.values.insert((0, 2001), value(1));
-    assert_eq!(keep_carried(&mut world, ANN, in_slot), (1, 0));
+    assert_eq!(keep_carried(&mut world, Entity(ANN), in_slot), (1, 0));
     // Rejoined, nothing taken back in time, a new value set, left again.
     world.values.insert((0, 3001), value(2));
-    assert_eq!(keep_carried(&mut world, ANN, in_slot), (1, 0));
-    let waiting: Vec<u8> = world.pending.iter().map(|r| r.value[0]).collect();
-    assert_eq!(waiting, [2]);
+    assert_eq!(keep_carried(&mut world, Entity(ANN), in_slot), (1, 0));
+    let pending: Vec<(u8, bool)> = world
+        .pending
+        .iter()
+        .map(|r| (r.value[0], r.aside))
+        .collect();
+    assert_eq!(
+        pending,
+        [(1, true), (2, false)],
+        "the older one kept, aside"
+    );
     let back = take_back_carried(&mut world, ANN_GUID, |_, _| Some((4001, 77)));
     assert_eq!(back.found, [(0, 4001)]);
     assert_eq!(&*world.values[&(0, 4001)].value, &[2]);
+}
+
+#[test]
+fn a_value_set_on_a_slot_an_older_record_waits_on_sets_that_record_aside() {
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
+    let slot = Anchor::Carried {
+        character: ANN_GUID,
+        link: 0,
+        slot: 1,
+    };
+    let mut pending = vec![Pending {
+        kind: 0,
+        anchor: slot,
+        check: 77,
+        value: Box::new([1]),
+        aside: false,
+    }];
+    assert_eq!(
+        set_aside_older(&mut pending, [(1, slot)].into_iter()),
+        0,
+        "another kind"
+    );
+    assert_eq!(set_aside_older(&mut pending, [(0, slot)].into_iter()), 1);
+    assert!(pending[0].aside);
+}
+
+#[test]
+fn a_slow_join_counts_its_looks_from_when_its_inventories_fill() {
+    const ANN: Entity = Entity(7);
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
+    kinds();
+    let mut world = server(
+        vec![Pending {
+            kind: 0,
+            anchor: Anchor::Carried {
+                character: ANN_GUID,
+                link: 0,
+                slot: 1,
+            },
+            check: 77,
+            value: Box::new([1]),
+            aside: false,
+        }],
+        Vec::new(),
+    );
+    let characters = [(ANN, ANN_GUID)];
+    let mut joining = Joining::new(ANN);
+    let mut found = Vec::new();
+    // Not filled for longer than the looks a filled join gets.
+    for _ in 0..JOIN_LOOKS * 2 {
+        let look = look(
+            &mut world,
+            &characters,
+            &mut joining,
+            &mut found,
+            |_| false,
+            |_, _, _| None,
+        );
+        assert!(matches!(look, Look::Again));
+    }
+    // Filled, the slot still empty, then holding the item.
+    let empty = look(
+        &mut world,
+        &characters,
+        &mut joining,
+        &mut found,
+        |_| true,
+        |_, _, _| None,
+    );
+    assert!(matches!(empty, Look::Again));
+    let filled = look(
+        &mut world,
+        &characters,
+        &mut joining,
+        &mut found,
+        |_| true,
+        |_, _, _| Some((3001, 77)),
+    );
+    assert!(matches!(filled, Look::Done));
+    assert_eq!(found, [(0, 3001)]);
+}
+
+#[test]
+fn a_join_that_never_fills_stops_at_the_cap_and_its_records_keep_waiting() {
+    const ANN: Entity = Entity(7);
+    const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
+    kinds();
+    let record = Pending {
+        kind: 0,
+        anchor: Anchor::Carried {
+            character: ANN_GUID,
+            link: 0,
+            slot: 1,
+        },
+        check: 77,
+        value: Box::new([1]),
+        aside: false,
+    };
+    let mut world = server(vec![record.clone()], Vec::new());
+    let mut joining = Joining::new(ANN);
+    let mut found = Vec::new();
+    let mut stopped = None;
+    for at in 1..=JOIN_LOOKS_CAP {
+        if let Look::Stop(why) = look(
+            &mut world,
+            &[(ANN, ANN_GUID)],
+            &mut joining,
+            &mut found,
+            |_| false,
+            |_, _, _| None,
+        ) {
+            stopped = Some((at, why));
+            break;
+        }
+    }
+    assert_eq!(stopped.map(|(at, _)| at), Some(JOIN_LOOKS_CAP));
+    assert!(stopped.is_some_and(|(_, why)| why.contains("never")));
+    assert_eq!(world.pending, [record], "nothing went aside");
 }
 
 #[test]

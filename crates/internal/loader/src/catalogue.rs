@@ -19,6 +19,13 @@ pub(crate) fn offset(loader: &Loader, id: &str) -> Option<usize> {
     constant(id, &loader.reflection).and_then(|offset| usize::try_from(offset).ok())
 }
 
+/// Where an `InventorySetup` holds its `isInitialized` byte, which every
+/// part that waits for filled inventories reads through
+/// [`crate::transactions::props::setup_initialized`].
+pub(crate) fn setup_initialized_at(loader: &Loader) -> Option<usize> {
+    offset(loader, ids::INVENTORY_SETUP_INITIALIZED)
+}
+
 /// The size of the type the catalogue id `id` names in the running game.
 pub(crate) fn size(loader: &Loader, id: &str) -> Option<usize> {
     let info = loader.reflection.type_info(type_name(id)).ok()?;

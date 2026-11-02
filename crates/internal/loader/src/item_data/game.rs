@@ -8,7 +8,7 @@ use enshwick::Entity;
 use enshwick::raw::read_at;
 use enshwick_gamedata::catalogue as names;
 
-use super::anchor::{Anchor, Placed};
+use super::anchor::{Anchor, CharacterId, Placed};
 use crate::host::Loader;
 
 /// `link` of an item in its root's own inventory rather than a linked one.
@@ -77,7 +77,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 owner_entity: field(names::type_name(names::ids::OWNER), "ownerEntityId")?,
                 setup: ty(names::ids::INVENTORY_SETUP)?,
                 links: at(names::ids::INVENTORY_SETUP_LINKS)?,
-                initialized: at(names::ids::INVENTORY_SETUP_INITIALIZED),
+                initialized: crate::catalogue::setup_initialized_at(loader),
                 inventory: ty(names::ids::INVENTORY)?,
                 stack: usize::try_from(stack.size()).ok()?,
                 stack_item: field(names::type_name(names::ids::ITEM_STACK), "id")?,
@@ -86,17 +86,16 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             // Every read lies inside the reflected type it reads.
             let size =
                 |name: &str| usize::try_from(loader.reflection.type_info(name).ok()?.size()).ok();
+            let setup_size = size(names::type_name(names::ids::INVENTORY_SETUP))?;
             let inside = layout.position + size_of::<[i64; 3]>()
                 <= usize::try_from(transform_type.size()).ok()?
                 && layout.stack_pide.max(layout.stack_item) + 4 <= layout.stack
                 && layout.slot_entity.max(layout.item) + 4 <= size(ITEM_STATE)?
                 && layout.slot_index < size(ITEM_STATE)?
                 && layout.owner_entity + 4 <= size(names::type_name(names::ids::OWNER))?
-                && layout.links + usize::from(LINKS) * 4
-                    <= size(names::type_name(names::ids::INVENTORY_SETUP))?
+                && layout.links + usize::from(LINKS) * 4 <= setup_size
                 && usize::from(SLOTS) * layout.stack
                     <= size(names::type_name(names::ids::INVENTORY))?;
-            let setup_size = size(names::type_name(names::ids::INVENTORY_SETUP))?;
             inside.then_some(Layout {
                 initialized: layout.initialized.filter(|&at| at < setup_size),
                 ..layout
@@ -127,7 +126,7 @@ fn component(loader: &Loader, entity: u32, ty: u32) -> Option<*const u8> {
 /// world save does not hold, and for an entity with no template or place.
 pub(crate) fn placed(loader: &Loader, entity: u32) -> Option<Placed> {
     let layout = layout(loader)?;
-    if crate::world::player_entities(loader)
+    if crate::world::character_entities(loader)
         .ok()?
         .contains(&entity)
     {
@@ -160,11 +159,14 @@ fn link_of(loader: &Loader, layout: &Layout, root: u32, inventory: u32) -> Optio
 
 /// Where the item entity `pide` sits, as an anchor, the item it holds and
 /// the root whose inventory holds it; `None` for an entity the world does
-/// not hold. An item a character in `characters` carries, by entity and
-/// GUID as [`crate::world::characters`] reads them, is anchored to it. The
-/// anchor is `None` for an item in neither a placed thing's inventory nor
-/// such a character's.
-pub(crate) fn held(loader: &Loader, pide: u32, characters: &[(u32, [u8; 16])]) -> Option<Held> {
+/// not hold. An item in no placed thing's inventory is anchored to the
+/// character `character_of` names for its root, which runs only then. The
+/// anchor is `None` for an item in neither.
+pub(crate) fn held(
+    loader: &Loader,
+    pide: u32,
+    character_of: impl FnOnce(Entity) -> Option<CharacterId>,
+) -> Option<Held> {
     let layout = layout(loader)?;
     let state = component(loader, pide, layout.item_state)?;
     // SAFETY: `state` is the entity's live `ItemState`, whose reflected slot
@@ -186,15 +188,15 @@ pub(crate) fn held(loader: &Loader, pide: u32, characters: &[(u32, [u8; 16])]) -
         None => inventory,
     };
     let anchor = link_of(loader, layout, root, inventory).and_then(|link| {
-        characters
-            .iter()
-            .find(|&&(entity, _)| entity == root)
-            .map(|&(_, character)| Anchor::Carried {
-                character,
-                link,
-                slot,
+        placed(loader, root)
+            .map(|root| Anchor::Held { root, link, slot })
+            .or_else(|| {
+                character_of(Entity(root)).map(|character| Anchor::Carried {
+                    character,
+                    link,
+                    slot,
+                })
             })
-            .or_else(|| placed(loader, root).map(|root| Anchor::Held { root, link, slot }))
     });
     Some(Held { anchor, item, root })
 }

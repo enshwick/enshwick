@@ -4,10 +4,9 @@ use std::sync::atomic::Ordering;
 
 use rustc_hash::FxHashSet;
 
-use super::{FINDING, KEPT, MESSAGE_BYTES, Record, SERVER, Server, UNREAD, game, kind};
+use super::{FINDING, KEPT, SERVER, Server, UNREAD, game, insert_found, messages_for, send};
 use crate::host::Loader;
 use crate::item_records::anchor::{self, Anchor, Index, Pending};
-use crate::item_records::encode;
 use crate::locks::Relock;
 
 /// The placed things whose templates the `pending` records name, by key;
@@ -83,24 +82,13 @@ pub(super) fn attach(
         held,
         |kind, entity| taken.contains(&(kind, entity)),
     );
-    let mut attached = Attached {
-        found: Vec::with_capacity(outcome.found.len()),
+    let attached = Attached {
+        found: insert_found(&mut server.values, outcome.found),
         ambiguous: outcome.ambiguous,
         missing: outcome.missing,
         replaced: outcome.replaced,
         earlier: outcome.earlier,
     };
-    for (kind, entity, record) in outcome.found {
-        attached.found.push((kind, entity));
-        server.values.insert(
-            (kind, entity),
-            Record {
-                item: record.check,
-                anchor: Some(record.anchor),
-                value: record.value,
-            },
-        );
-    }
     server.pending = outcome.left;
     // Records newly aside are written so, whatever else changes.
     server.changed |=
@@ -129,8 +117,7 @@ pub(super) fn find_pending(loader: &Loader) {
     };
     let started = std::time::Instant::now();
     let index = index(loader, &pending);
-    let mut message = Vec::new();
-    let attached = {
+    let (attached, messages) = {
         let mut server = SERVER.relock();
         let Some(server) = server.as_mut() else {
             return;
@@ -138,24 +125,12 @@ pub(super) fn find_pending(loader: &Loader) {
         let attached = attach(server, index.as_ref(), |root, link, slot| {
             game::in_slot(loader, root, link, slot)
         });
-        for &(kind, entity) in attached.iter().flat_map(|a| &a.found) {
-            let (Some(spec), Some(record)) = (
-                self::kind(kind).filter(|k| k.sent),
-                server.values.get(&(kind, entity)),
-            ) else {
-                continue;
-            };
-            encode(&mut message, &spec.id, entity, record.item, &record.value);
-            if message.len() > MESSAGE_BYTES {
-                crate::net::item_data(0, &std::mem::take(&mut message));
-            }
-        }
+        let found = attached.as_ref().map_or(&[][..], |a| &a.found[..]);
+        let messages = messages_for(&server.values, found);
         KEPT.store(!server.values.is_empty(), Ordering::Relaxed);
-        attached
+        (attached, messages)
     };
-    if !message.is_empty() {
-        crate::net::item_data(0, &message);
-    }
+    send(&messages);
     let Some(attached) = attached else {
         UNREAD.store(true, Ordering::Relaxed);
         crate::log!(
