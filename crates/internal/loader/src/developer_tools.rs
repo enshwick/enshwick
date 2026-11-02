@@ -1,43 +1,38 @@
-//! Developer tools, such as the interface demo, dev reload and mods with
-//! `developer: true`: on only where the file
-//! `mod-data/enshwick/developer-tools` exists, read once at start, so a
-//! server players use never runs them. A client keeps its developer mods,
-//! with the warning.
+//! Developer tools: mods with `developer: true`, dev reload and the
+//! interface demo. They are on only where the file
+//! [`enshwick::mods::DEVELOPER_TOOLS`] exists, read once at start, on every
+//! side, so neither a dedicated server nor a game a client hosts for others
+//! runs them unless its owner made the file.
 
 use std::path::Path;
 
-use enshwick::abi::{ManifestFlags, Side};
+use enshwick::abi::ManifestFlags;
 
-/// Why a dedicated server without developer tools turns a developer mod off
-/// before its `init`.
-pub(crate) const REFUSED: &str = "a developer tool: a dedicated server runs it only while the file \
-     mod-data/enshwick/developer-tools exists";
-
-/// Why a mod with `flags` does not run on `side`, where developer tools are
-/// `on` or not; `None` when it runs.
+/// Why a mod with `flags` does not run where developer tools are `on` or
+/// not; `None` when it runs. Every path that runs a mod's `init` asks it.
 #[must_use]
-pub(crate) fn refused(side: Side, on: bool, flags: ManifestFlags) -> Option<&'static str> {
-    (side == Side::SERVER && !on && flags.contains(ManifestFlags::DEVELOPER)).then_some(REFUSED)
+pub(crate) fn refused(on: bool, flags: ManifestFlags) -> Option<&'static str> {
+    (!on && flags.contains(ManifestFlags::DEVELOPER)).then_some(enshwick::mods::DEVELOPER_TOOL_OFF)
 }
 
-/// Whether `dev_reload` (`wanted`) takes effect on `side`, where developer
-/// tools are `on` or not: on a client always, on a dedicated server only
-/// with developer tools.
-#[must_use]
-pub(crate) fn reloads(wanted: bool, side: Side, on: bool) -> bool {
-    wanted && (side != Side::SERVER || on)
+/// The mods, by their index among the manifest `flags` in load order, that
+/// developer tools being `on` or not keep from running, with why: the start
+/// turns them off before any `init` runs.
+pub(crate) fn off(
+    on: bool,
+    flags: impl IntoIterator<Item = ManifestFlags>,
+) -> Vec<(usize, &'static str)> {
+    flags
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, flags)| refused(on, flags).map(|why| (index, why)))
+        .collect()
 }
 
-/// The file that turns developer tools on, in the loader's data folder.
-pub(crate) const MARKER: &str = "developer-tools";
-
-/// Whether the `mod-data` folder `data_dir` turns developer tools on.
+/// Whether the game in the folder `game_dir` has developer tools on.
 #[must_use]
-pub(crate) fn marked(data_dir: &Path) -> bool {
-    data_dir
-        .join(enshwick::mods::LOADER_ID)
-        .join(MARKER)
-        .is_file()
+pub(crate) fn marked(game_dir: &Path) -> bool {
+    game_dir.join(enshwick::mods::DEVELOPER_TOOLS).is_file()
 }
 
 /// Whether players are warned that developer tools are on: the `marker`
@@ -92,33 +87,38 @@ mod tests {
     }
 
     #[test]
-    fn a_dedicated_server_runs_a_developer_mod_only_with_developer_tools() {
+    fn a_developer_mod_runs_only_with_developer_tools_on() {
         let tool = ManifestFlags::DEVELOPER;
-        assert_eq!(refused(Side::SERVER, false, tool), Some(REFUSED));
-        assert_eq!(refused(Side::SERVER, true, tool), None);
-        assert_eq!(refused(Side::CLIENT, false, tool), None);
-        assert_eq!(refused(Side::SERVER, false, ManifestFlags::JOIN), None);
+        assert_eq!(
+            refused(false, tool),
+            Some(enshwick::mods::DEVELOPER_TOOL_OFF)
+        );
+        assert_eq!(refused(true, tool), None);
+        assert_eq!(refused(false, ManifestFlags::JOIN), None);
     }
 
     #[test]
-    fn dev_reload_on_a_dedicated_server_needs_developer_tools() {
-        assert!(!reloads(true, Side::SERVER, false));
-        assert!(reloads(true, Side::SERVER, true));
-        assert!(reloads(true, Side::CLIENT, false));
-        assert!(!reloads(false, Side::CLIENT, true));
+    fn the_start_turns_off_only_the_developer_mods_before_init() {
+        let order = [
+            ManifestFlags::JOIN,
+            ManifestFlags::DEVELOPER,
+            ManifestFlags::RELOAD,
+        ];
+        assert_eq!(off(false, order), [(1, enshwick::mods::DEVELOPER_TOOL_OFF)]);
+        assert!(off(true, order).is_empty());
     }
 
     #[test]
     #[cfg_attr(miri, ignore = "Miri isolates the file system")]
     fn developer_tools_are_on_only_with_the_marker_file() {
         let dir = std::env::temp_dir().join(format!("enshwick-devtools-{}", std::process::id()));
-        let folder = dir.join(enshwick::mods::LOADER_ID);
-        std::fs::create_dir_all(&folder).unwrap();
+        let marker = dir.join(enshwick::mods::DEVELOPER_TOOLS);
+        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
         assert!(!marked(&dir));
-        std::fs::create_dir_all(folder.join(MARKER)).unwrap();
+        std::fs::create_dir_all(&marker).unwrap();
         assert!(!marked(&dir), "a folder of that name is no marker");
-        std::fs::remove_dir(folder.join(MARKER)).unwrap();
-        std::fs::write(folder.join(MARKER), "").unwrap();
+        std::fs::remove_dir(&marker).unwrap();
+        std::fs::write(&marker, "").unwrap();
         assert!(marked(&dir));
         std::fs::remove_dir_all(&dir).unwrap();
     }

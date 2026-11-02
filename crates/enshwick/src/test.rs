@@ -365,7 +365,7 @@ impl FakeHost {
             players: Vec::new(),
             mods: Vec::new(),
             hosting: false,
-            developer_tools: true,
+            developer_tools: false,
             host_key: None,
             server_world: 0,
             join_missing: Vec::new(),
@@ -445,16 +445,17 @@ impl FakeHost {
     }
 
     /// Whether developer tools are on, as the file
-    /// `mod-data/enshwick/developer-tools` turns them on; on by default,
-    /// as on a development server. Without them a dedicated server turns a
-    /// mod with `developer: true` off before its `init`, so the fake's init
-    /// returns [`Status::REFUSED`](crate::abi::Status::REFUSED).
+    /// [`DEVELOPER_TOOLS`](crate::mods::DEVELOPER_TOOLS) turns them on; off
+    /// by default, as in a game players use. While they are off the loader
+    /// turns a mod with `developer: true` off before its `init`, so the
+    /// fake's init returns [`Status::REFUSED`](crate::abi::Status::REFUSED)
+    /// with the reason in [`Installed::faults`].
     ///
     /// # Examples
     ///
     /// ```
     /// let _loader = enshwick::test::FakeHost::new()
-    ///     .developer_tools(false)
+    ///     .developer_tools(true)
     ///     .install();
     /// ```
     #[must_use]

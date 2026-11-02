@@ -88,21 +88,6 @@ fn enforce_holds(loader: &Loader) {
     crate::holds::enforce(&loader.data_dir, &running, false, Some(loader));
 }
 
-/// Whether developer tools are on, by their marker file; warns when they
-/// are.
-fn developer_tools(data_dir: &std::path::Path) -> bool {
-    let on = crate::developer_tools::marked(data_dir);
-    if on {
-        crate::log!(
-            WARN,
-            "developer tools are on: mod-data/{}/{} exists; never on a server players use",
-            crate::settings::LOADER_ID,
-            crate::developer_tools::MARKER
-        );
-    }
-    on
-}
-
 /// Seals the registries mods filled during init, in the order they depend
 /// on each other.
 fn seal(loader: &'static Loader) {
@@ -161,6 +146,7 @@ pub(crate) fn start(
         mods_dir,
         report: first_report,
         settings_problems,
+        developer_tools,
     }) = begin(stub_abi, missing_forwards)
     else {
         return;
@@ -195,7 +181,7 @@ pub(crate) fn start(
         build: game.build,
         reflection: game.reflection,
         configs_dir: mods_dir.with_file_name("mod-configs"),
-        developer_tools: developer_tools(&data_dir),
+        developer_tools,
         data_dir,
         mods_dir,
         stub: stub_abi,
@@ -451,14 +437,13 @@ fn arm_watched(loader: &Loader, frame: Option<FrameSlot>, watching: Option<&mut 
 /// Calls every mod's `init` in load order, putting game code each one
 /// changes outside the API down to it.
 fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching>) {
+    let flags = loader.mods.iter().map(|record| record.manifest.flags);
+    for (index, why) in crate::developer_tools::off(loader.developer_tools, flags) {
+        loader.turn_off(ModIndex::new(index), why);
+    }
     for (index, library) in order.iter().enumerate() {
         let record = &loader.mods[index];
-        if let Some(why) = crate::developer_tools::refused(
-            loader.side,
-            loader.developer_tools,
-            record.manifest.flags,
-        ) {
-            loader.turn_off(ModIndex::new(index), why);
+        if record.off.load(Ordering::Acquire) {
             continue;
         }
         // SAFETY: `library.init` is the mod's `INIT` export, typed `InitFn`
