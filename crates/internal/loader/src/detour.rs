@@ -15,6 +15,15 @@
 //! 1269579). On the client (build 426) no module of the process, drivers
 //! and overlays included, called a fiber function from the main menu
 //! through a world load; a fiber another module makes stays unseen.
+//!
+//! Code may also jump into the replaced bytes after the first, where it
+//! would land inside the jump. A target is refused when a direct branch or
+//! call of its own function, as the image's function table bounds it, lands
+//! there. Not seen: indirect jumps (switch tables, computed addresses),
+//! branches from other functions or from parts of the same function the
+//! compiler split into entries of their own, and code without a function
+//! entry, such as generated code. A wrong site then fails only when that
+//! path runs.
 
 use std::sync::Mutex;
 
@@ -25,7 +34,7 @@ use iced_x86::{
 };
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    CONTEXT, CONTEXT_CONTROL_AMD64, GetThreadContext, SetThreadContext,
+    CONTEXT, CONTEXT_CONTROL_AMD64, GetThreadContext, RtlLookupFunctionEntry, SetThreadContext,
 };
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
@@ -122,6 +131,10 @@ pub(crate) enum PrepareError {
     /// The jump would overwrite bytes another hook's jump takes.
     #[error("its bytes overlap another hook's jump")]
     OverlapsAnotherHook,
+    /// A branch of the target's function, at this address, lands inside the
+    /// bytes the jump replaces, where it would land in the jump itself.
+    #[error("the branch at {0:#x} lands inside the bytes of the jump")]
+    JumpedInto(usize),
 }
 
 /// Prepares every request: relays and trampolines written and sealed, the
@@ -243,6 +256,9 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Prep
         stolen += instruction.len();
         instructions.push(instruction);
     }
+    if let Some(branch) = jumped_into(request.target, stolen) {
+        return Err(PrepareError::JumpedInto(branch));
+    }
     let entry = near(request.target, fresh)?;
     let (relay, trampoline) = (entry, entry + FAR_JUMP);
     let block = InstructionBlock::new(&instructions, trampoline as u64);
@@ -284,6 +300,47 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Prep
         trampoline,
         moved,
     })
+}
+
+/// The first direct branch or call of the function around `target` that
+/// lands in `target + 1..target + stolen`, by the function's bounds in the
+/// unwind data of its image. Code without a function entry, a leaf such as
+/// generated code, is not checked.
+fn jumped_into(target: usize, stolen: usize) -> Option<usize> {
+    let (begin, end) = function_around(target)?;
+    let len = end.checked_sub(begin)?;
+    if !hookable(begin, len) {
+        return None;
+    }
+    // SAFETY: `hookable` checked that the function's bytes lie in committed,
+    // readable pages; the slice lives for this function only, while no patch
+    // writes them.
+    let code = unsafe { core::slice::from_raw_parts(begin as *const u8, len) };
+    let inside = target as u64 + 1..(target + stolen) as u64;
+    let mut decoder = Decoder::with_ip(64, code, begin as u64, DecoderOptions::NONE);
+    decoder
+        .iter()
+        .find(|instruction| inside.contains(&instruction.near_branch_target()))
+        .and_then(|instruction| usize::try_from(instruction.ip()).ok())
+}
+
+/// The start and end of the function whose entry in its image's function
+/// table holds `address`; `None` without one.
+fn function_around(address: usize) -> Option<(usize, usize)> {
+    let mut image = 0;
+    // SAFETY: `RtlLookupFunctionEntry` takes any address, `image` is a
+    // writable `u64` and the history table may be null.
+    let entry =
+        unsafe { RtlLookupFunctionEntry(address as u64, &raw mut image, core::ptr::null_mut()) };
+    if entry.is_null() {
+        return None;
+    }
+    let image = usize::try_from(image).ok()?;
+    // SAFETY: a non-null entry is a readable `IMAGE_RUNTIME_FUNCTION_ENTRY`
+    // of a loaded image or a registered table, whose first two `u32` are the
+    // function's start and end, offsets from `image`.
+    let [begin, end]: [u32; 2] = unsafe { enshwick::raw::read_at(entry.cast(), 0) };
+    Some((image + begin as usize, image + end as usize))
 }
 
 /// `jmp [rip + 0]` to `destination`.
