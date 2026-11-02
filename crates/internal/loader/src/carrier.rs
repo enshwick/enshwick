@@ -313,8 +313,6 @@ pub(crate) fn send_many(
     }
     let mut sealed = [0u8; MAX_SEALED];
     let size = seal(&mut sealed, channel, payload).ok_or(Status::BAD_ARGS)?;
-    // The server's key goes on the client half's link, every other key on
-    // the server half's.
     for (to_server, half) in [(true, &CARRIER.client), (false, &CARRIER.server)] {
         let mut group = wired(to_server).peekable();
         if group.peek().is_none() {

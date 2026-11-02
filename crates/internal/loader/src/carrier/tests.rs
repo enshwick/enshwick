@@ -88,13 +88,13 @@ fn each_key_without_a_link_is_named_and_the_rest_still_go() {
     assert_eq!(failed, [(7, Status::MISSING), (8, Status::MISSING)]);
 }
 
-fn heard_peer() -> Peer {
+fn peer(heard: bool) -> Peer {
     Peer {
         machine: 0,
         socket: 0,
         slot: 0,
         link: Link::new(1200, 1).expect("a packet that holds a message"),
-        heard: true,
+        heard,
         rate: crate::wire::Peer::new(),
         opened: Instant::now(),
         nudged: false,
@@ -105,9 +105,10 @@ fn heard_peer() -> Peer {
 #[test]
 fn keys_of_both_sides_in_one_send_each_go_on_their_own_side() {
     let _alone = alone();
-    for (half, key) in [(&CARRIER.server, 7), (&CARRIER.client, SERVER)] {
+    // The server sends nothing first, so its link is never heard before.
+    for (half, key, heard) in [(&CARRIER.server, 7, true), (&CARRIER.client, SERVER, false)] {
         let mut guard = half.relock();
-        fresh(&mut guard, 1).peers.insert(key, heard_peer());
+        fresh(&mut guard, 1).peers.insert(key, peer(heard));
     }
     for keys in [[SERVER, 7], [7, SERVER]] {
         let mut failed = Vec::new();
@@ -116,7 +117,6 @@ fn keys_of_both_sides_in_one_send_each_go_on_their_own_side() {
         });
         assert_eq!((sent, failed), (Ok(()), Vec::new()), "{keys:?}");
     }
-    *CARRIER.client.relock() = None;
 }
 
 #[test]
