@@ -97,7 +97,7 @@ pub(super) fn settings(
                 );
             }
         }
-        if let Some(value) = draw_row(paint, &record.id, &schema, row, Some(entries)) {
+        if let Some(value) = draw_row(paint, &record.id, &schema, row, entries) {
             changed = Some((row.key.clone(), value));
         }
         if !row.doc.is_empty() {
@@ -114,14 +114,14 @@ pub(super) fn settings(
     )
 }
 
-/// Draws one row, its text field kept in `entries` where the page has
-/// them; the TOML of the player's change.
+/// Draws one row, its text field kept in `entries`; the TOML of the
+/// player's change.
 pub(super) fn draw_row(
     paint: &Painter<'_>,
     id: &str,
     schema: &enshwick::config::Schema,
     row: &Row,
-    entries: Option<&mut Entries>,
+    entries: &mut Entries,
 ) -> Option<String> {
     let label = mods_screen::row_label(row);
     let read_only = row.lock != Lock::Open;
@@ -148,24 +148,22 @@ pub(super) fn draw_row(
             )?;
             rows::picked(schema.field(&row.key)?, picked as usize)
         }
-        Widget::Entry { text, toml } => match entries {
-            Some(entries) if !read_only && paint.engine.types_text() => {
+        Widget::Entry { text, toml } => {
+            if !read_only && paint.engine.types_text() {
                 paint.label(label.as_bytes(), UiWidget::STYLE_BODY, true, false);
-                text_row(paint, &row.key, text, entries)
+                return text_row(paint, &row.key, text, entries);
             }
-            _ => {
-                let line = if read_only {
-                    texts::fill("row.value", &[("label", &label), ("value", text)])
-                } else {
-                    texts::fill(
-                        "row.text",
-                        &[("label", &label), ("value", toml), ("id", id)],
-                    )
-                };
-                paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
-                None
-            }
-        },
+            let line = if read_only {
+                texts::fill("row.value", &[("label", &label), ("value", text)])
+            } else {
+                texts::fill(
+                    "row.text",
+                    &[("label", &label), ("value", toml), ("id", id)],
+                )
+            };
+            paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
+            None
+        }
         Widget::Text(value) => {
             let line = texts::fill(
                 "row.text",
