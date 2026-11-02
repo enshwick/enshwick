@@ -1,16 +1,20 @@
-//! A point declared only by its attribute, with a local name: its schema
-//! reaches its owner's manifest and no other mod's, and another mod links
-//! to it. This crate's `Cargo.toml` gives the owner's id, `you.hello`.
+//! A point declared only by its attribute, with a local name: marked
+//! `export`, its schema reaches its owner's manifest and no other mod's,
+//! its name the owner's exports, and another mod links to it; a point
+//! without the flag ships nothing and another mod's link to it is refused.
+//! This crate's `Cargo.toml` gives the owner's id, `you.hello`.
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// What the owner pays for an item.
-#[enshwick::point(name = "price", mode = Override, output = u32)]
+#[enshwick::point(name = "price", export, mode = Override, output = u32)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Price {
     /// The item.
     pub(crate) item: u32,
 }
 
-/// A point of the owner for itself, which `exports` leaves out.
+/// A point of the owner for itself, without `export`.
 #[enshwick::point(name = "hidden", mode = Override, output = u32)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Hidden {
@@ -18,7 +22,10 @@ pub(crate) struct Hidden {
     pub(crate) item: u32,
 }
 
-/// The mod that owns the point.
+/// Whether the extender's link to [`Hidden`] was refused.
+static HIDDEN_REFUSED: AtomicBool = AtomicBool::new(false);
+
+/// The mod that owns the points.
 mod owner {
     #[expect(
         dead_code,
@@ -37,7 +44,6 @@ mod owner {
         r#"
         id = "you.hello"
         side = "server"
-        exports = ["price"]
         "#
     );
 }
@@ -58,13 +64,14 @@ mod restarted {
         r#"
         id = "you.hello"
         side = "server"
-        exports = ["price"]
         "#
     );
 }
 
-/// A mod that links to the point.
+/// A mod that links to both points.
 mod extender {
+    use std::sync::atomic::Ordering;
+
     use enshwick::points::{Order, Verdict};
 
     pub(super) struct Extender;
@@ -74,6 +81,10 @@ mod extender {
             load.extend_point(&Order::new(), |price: &super::Price, so_far: &u32| {
                 Verdict::Set(so_far + price.item)
             })?;
+            let hidden = load.extend_point(&Order::new(), |_: &super::Hidden, so_far: &u32| {
+                Verdict::Set(*so_far)
+            });
+            super::HIDDEN_REFUSED.store(hidden.is_err(), Ordering::Relaxed);
             Ok(Self)
         }
     }
@@ -92,25 +103,42 @@ mod extender {
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::Status;
+    use super::*;
+
+    use enshwick::abi::{Manifest, Status};
     use enshwick::points::Decision;
 
-    use super::{Price, extender, owner, restarted};
-
-    /// The schema text of a manifest.
-    fn points(manifest: *const enshwick::abi::Manifest) -> String {
+    /// The manifest `query` returned.
+    fn manifest(query: *const Manifest) -> &'static Manifest {
         // SAFETY: `enshwick_mod_query` returns the manifest of
         // `declare_mod!`, valid until its shutdown; only one test shuts a
-        // mod down, `restarted`, and after this call.
-        let manifest = unsafe { &*manifest };
+        // mod down, `restarted`, and reads it only before and after.
+        unsafe { &*query }
+    }
+
+    /// The schema text of a manifest.
+    fn points(query: *const Manifest) -> String {
         // SAFETY: the manifest's schema text lives as long as the manifest.
-        unsafe { manifest.points.as_str() }
+        unsafe { manifest(query).points.as_str() }
             .unwrap_or_default()
             .to_owned()
     }
 
+    /// The local names a manifest exports.
+    fn exports(query: *const Manifest) -> Vec<String> {
+        let manifest = manifest(query);
+        // SAFETY: `exports` points at `export_count` names that live as long
+        // as the manifest.
+        let names = unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count) };
+        names
+            .iter()
+            // SAFETY: each name lives as long as the manifest.
+            .map(|name| unsafe { name.as_str() }.unwrap_or_default().to_owned())
+            .collect()
+    }
+
     #[test]
-    fn the_owner_s_manifest_carries_a_point_declared_only_by_its_attribute() {
+    fn the_owner_s_manifest_carries_the_exported_point_alone() {
         let text = points(owner::enshwick_mod_query());
         let schema: toml::Table = toml::from_str(&text).unwrap();
         assert_eq!(schema["mod"].as_str(), Some("you.hello"));
@@ -121,7 +149,8 @@ mod tests {
             .iter()
             .filter_map(|p| p["name"].as_str())
             .collect();
-        assert_eq!(names, ["you.hello:price"], "the internal point stays out");
+        assert_eq!(names, ["you.hello:price"]);
+        assert_eq!(exports(owner::enshwick_mod_query()), ["price"]);
     }
 
     #[test]
@@ -134,16 +163,22 @@ mod tests {
     #[test]
     fn another_mod_s_manifest_carries_none_of_the_owner_s_schemas() {
         assert_eq!(points(extender::enshwick_mod_query()), "");
+        assert!(exports(extender::enshwick_mod_query()).is_empty());
     }
 
     #[test]
-    fn another_mod_links_to_the_point() {
-        let loader = enshwick::test::FakeHost::new().install();
+    fn another_mod_links_to_the_exported_point_and_is_refused_the_other() {
+        let offered = exports(owner::enshwick_mod_query());
+        let offered: Vec<&str> = offered.iter().map(String::as_str).collect();
+        let loader = enshwick::test::FakeHost::new()
+            .exports("you.hello", &offered)
+            .install();
         // SAFETY: both functions are the exports of `declare_mod!(Extender)`.
         let status =
             unsafe { loader.start(extender::enshwick_mod_init, extender::enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(loader.attached_points(), ["you.hello:price"]);
+        assert!(HIDDEN_REFUSED.load(Ordering::Relaxed));
         assert_eq!(
             loader.ask_point(&Price { item: 2 }, 3),
             Decision::Changed(5)

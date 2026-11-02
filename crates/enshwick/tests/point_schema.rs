@@ -17,7 +17,7 @@ impl Deal {
 }
 
 /// A "fair" price, in coins.
-#[enshwick::point(name = "you.lockers:price", mode = Override, output = u32, refusable)]
+#[enshwick::point(name = "you.lockers:price", export, mode = Override, output = u32, refusable)]
 #[derive(Clone, Copy, Debug)]
 pub struct Price {
     /// The player's character.
@@ -33,7 +33,7 @@ pub struct Price {
 }
 
 /// A player opened a locker.
-#[enshwick::event(name = "you.lockers:opened")]
+#[enshwick::event(name = "you.lockers:opened", export)]
 #[derive(Clone, Copy, Debug)]
 pub struct Opened {
     /// The player's character.
@@ -65,7 +65,6 @@ mod lockers {
         r#"
         id = "you.lockers"
         side = "server"
-        exports = ["price", "opened"]
         "#
     );
 }

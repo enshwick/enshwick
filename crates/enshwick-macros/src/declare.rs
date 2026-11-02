@@ -332,34 +332,17 @@ pub(crate) fn full_name(
     ))
 }
 
-/// Whether a declaration ships its schema with the crate's mod.
-pub(crate) enum Shipping {
-    /// The mod's own, and `exports` lists its local name.
-    Exported,
-    /// The mod's own, for the mod alone.
-    Internal,
-    /// Another mod's, or the crate names no mod.
-    Foreign,
-}
-
-/// How the declaration named `full`, `<mod id>:<what>`, ships, read from
-/// the crate's `Cargo.toml`, with its path when it was read, for build
-/// tracking.
-pub(crate) fn shipping(full: &str) -> (Shipping, Option<String>) {
+/// Whether the declaration named `full`, `<mod id>:<what>`, is the crate's
+/// mod's own, read from the crate's `Cargo.toml`, with its path when it
+/// was read, for build tracking; another mod's when the crate names none.
+pub(crate) fn is_own(full: &str) -> (bool, Option<String>) {
     let Ok((metadata, shown)) = cargo_metadata() else {
-        return (Shipping::Foreign, None);
+        return (false, None);
     };
-    let shipping = match full.split_once(':') {
-        Some((id, local)) if id == metadata.id => {
-            if metadata.exports.iter().any(|e| e == local) {
-                Shipping::Exported
-            } else {
-                Shipping::Internal
-            }
-        }
-        _ => Shipping::Foreign,
-    };
-    (shipping, Some(shown))
+    let own = full
+        .split_once(':')
+        .is_some_and(|(id, _)| id == metadata.id);
+    (own, Some(shown))
 }
 
 /// Whether `name` is the name side of a content id: 1 to 128 of

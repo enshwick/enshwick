@@ -15,7 +15,6 @@ publish.workspace = true
 [package.metadata.enshwick]
 id = "you.trading-post"
 side = "server"
-exports = ["prices", "sold", "price"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

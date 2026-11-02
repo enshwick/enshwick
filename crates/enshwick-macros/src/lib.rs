@@ -18,7 +18,7 @@ mod schema;
 mod texts;
 
 use crate::config::expand_config;
-use crate::schema::{call_schema, event_schema, point_schema, schema_entry};
+use crate::schema::{Kind, call_schema, event_schema, point_schema, schema_entry};
 use crate::shape::expand_layout;
 use crate::shape::expand_shape;
 
@@ -245,6 +245,7 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut name: Option<syn::LitStr> = None;
     let mut of: Option<Ident> = None;
     let mut version: Option<syn::LitInt> = None;
+    let mut export: Option<Ident> = None;
     let settings = syn::meta::parser(|meta| {
         if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
@@ -255,14 +256,30 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
         } else if meta.path.is_ident("version") {
             version = Some(meta.value()?.parse()?);
             Ok(())
+        } else if meta.path.is_ident("export") {
+            export = meta.path.get_ident().cloned();
+            Ok(())
         } else {
-            Err(meta.error("expected `name = \"<what>\"`, `of = <alias>` or `version = <major>`"))
+            Err(meta.error(
+                "expected `name = \"<what>\"`, `of = <alias>`, `version = <major>` or `export`",
+            ))
         }
     });
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
     let (name, tracked) = match resolve(name, of.as_ref()) {
         Ok(resolved) => resolved,
+        Err(e) => return e.to_compile_error().into(),
+    };
+    let ident = &item.ident;
+    let entry = match schema_entry(
+        name.as_ref(),
+        of.as_ref(),
+        export.as_ref(),
+        &quote!(<#ident as ::enshwick::services::Service>),
+        Kind::Service,
+    ) {
+        Ok(entry) => entry,
         Err(e) => return e.to_compile_error().into(),
     };
     let declared = proc_macro2::TokenStream::from(
@@ -274,7 +291,7 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
         )
         .unwrap_or_else(|e| e.to_compile_error().into()),
     );
-    quote!(#declared #tracked).into()
+    quote!(#declared #tracked #entry).into()
 }
 
 /// Declares a mod event: makes the struct `repr(C)` and implements
@@ -287,6 +304,7 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
 pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut name: Option<syn::LitStr> = None;
     let mut of: Option<Ident> = None;
+    let mut export: Option<Ident> = None;
     let settings = syn::meta::parser(|meta| {
         if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
@@ -294,8 +312,11 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
         } else if meta.path.is_ident("of") {
             of = Some(meta.value()?.parse()?);
             Ok(())
+        } else if meta.path.is_ident("export") {
+            export = meta.path.get_ident().cloned();
+            Ok(())
         } else {
-            Err(meta.error("expected `name = \"<what>\"` or `of = <alias>`"))
+            Err(meta.error("expected `name = \"<what>\"`, `of = <alias>` or `export`"))
         }
     });
     parse_macro_input!(args with settings);
@@ -307,12 +328,16 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     let schema = event_schema(&item, name.as_ref());
     let padding = padding_free_assert(&item, "a mod event's data");
     let ident = &item.ident;
-    let entry = schema_entry(
+    let entry = match schema_entry(
         name.as_ref(),
         of.as_ref(),
+        export.as_ref(),
         &quote!(<#ident as ::enshwick::services::ModEvent>),
-        true,
-    );
+        Kind::Event,
+    ) {
+        Ok(entry) => entry,
+        Err(e) => return e.to_compile_error().into(),
+    };
     match expand_declaration(&item, name, &schema, &quote!(services::ModEvent)) {
         Ok(declared) => {
             let declared = proc_macro2::TokenStream::from(declared);
@@ -389,6 +414,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut mode: Option<Ident> = None;
     let mut output: Option<Type> = None;
     let mut refusable = false;
+    let mut export: Option<Ident> = None;
     let settings = syn::meta::parser(|meta| {
         if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
@@ -400,9 +426,11 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
             output = Some(meta.value()?.parse()?);
         } else if meta.path.is_ident("refusable") {
             refusable = true;
+        } else if meta.path.is_ident("export") {
+            export = meta.path.get_ident().cloned();
         } else {
             return Err(meta.error(
-                "expected `name = \"<point>\"`, `of = <alias>`, `mode = Override`, `output = <type>` or `refusable`",
+                "expected `name = \"<point>\"`, `of = <alias>`, `mode = Override`, `output = <type>`, `refusable` or `export`",
             ));
         }
         Ok(())
@@ -415,9 +443,10 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
         let entry = schema_entry(
             name.as_ref(),
             of.as_ref(),
+            export.as_ref(),
             &quote!(<#ident as ::enshwick::points::Point>),
-            false,
-        );
+            Kind::Point,
+        )?;
         let mode = mode.ok_or_else(|| {
             syn::Error::new_spanned(
                 &ident,
@@ -505,6 +534,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut of: Option<Ident> = None;
     let mut output: Option<Type> = None;
     let mut version: Option<syn::LitInt> = None;
+    let mut export: Option<Ident> = None;
     let settings = syn::meta::parser(|meta| {
         if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
@@ -514,9 +544,11 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
             output = Some(meta.value()?.parse()?);
         } else if meta.path.is_ident("version") {
             version = Some(meta.value()?.parse()?);
+        } else if meta.path.is_ident("export") {
+            export = meta.path.get_ident().cloned();
         } else {
             return Err(meta.error(
-                "expected `name = \"<call>\"`, `of = <alias>`, `output = <type>` or `version = <major>`",
+                "expected `name = \"<call>\"`, `of = <alias>`, `output = <type>`, `version = <major>` or `export`",
             ));
         }
         Ok(())
@@ -529,9 +561,10 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
         let entry = schema_entry(
             name.as_ref(),
             of.as_ref(),
+            export.as_ref(),
             &quote!(<#ident as ::enshwick::services::Call>),
-            false,
-        );
+            Kind::Call,
+        )?;
         let output = output
             .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
         let major = version.map_or_else(|| quote!(1), |v| quote!(#v));

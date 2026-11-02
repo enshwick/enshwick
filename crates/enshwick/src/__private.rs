@@ -111,9 +111,12 @@ pub fn section() -> &'static [u8] {
     }
 }
 
-/// A mod's manifest, completed at the loader's first query with the
-/// schemas of the mod's own exported points, events and calls from the
-/// binary's `.enshpt` section.
+/// A mod's manifest, completed from the binary's `.enshpt` section at the
+/// loader's first query.
+///
+/// The section gives the schemas of the mod's exported points, events and
+/// calls, and their names and its exported services' join the content names
+/// of its `Cargo.toml` among its exports.
 #[derive(Debug)]
 pub struct Manifested {
     base: &'static crate::abi::Manifest,
@@ -123,11 +126,12 @@ pub struct Manifested {
     built: std::sync::Mutex<Option<Built>>,
 }
 
-/// The completed manifest and the schema text it points at.
+/// The completed manifest and the schema text and exports it points at.
 #[derive(Debug)]
 struct Built {
     manifest: Box<crate::abi::Manifest>,
     _text: Box<str>,
+    _exports: Box<[crate::abi::Str]>,
 }
 
 // SAFETY: `Built` owns its manifest and the text that manifest points at,
@@ -188,16 +192,24 @@ impl Manifested {
     /// does not read.
     fn build(&self) -> Option<Built> {
         let section = crate::schema_section::Section::parse(section()).ok()?;
-        let text = section
-            .schema(self.head, self.id, Some(self.exports))
-            .into_boxed_str();
+        let text = section.schema(self.head, self.id).into_boxed_str();
+        let mut names = self.exports.to_vec();
+        for name in section.exports(self.id) {
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        let exports: Box<[crate::abi::Str]> = names.into_iter().map(crate::abi::Str::new).collect();
         let manifest = Box::new(crate::abi::Manifest {
             points: crate::abi::Str::new(&text),
+            exports: exports.as_ptr(),
+            export_count: exports.len(),
             ..*self.base
         });
         Some(Built {
             manifest,
             _text: text,
+            _exports: exports,
         })
     }
 }

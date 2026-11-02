@@ -48,7 +48,7 @@ fn from_section(raw: &[u8]) -> Result<Option<String>, Error> {
     let Some(id) = head_id(head) else {
         return Ok(None);
     };
-    let text = section.schema(head, id, None);
+    let text = section.schema(head, id);
     Ok((!text.is_empty()).then_some(text))
 }
 

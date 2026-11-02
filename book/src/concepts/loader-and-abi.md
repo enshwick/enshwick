@@ -101,7 +101,7 @@ side = "both"                      # "server", "client" or "both"
 name = "Trading post"              # what players read; the id when left out
 join = true                        # counts in the join check
 reload = true                      # a development server may reload it
-exports = ["price-of", "sold"]     # what other mods may use
+exports = ["locker"]               # content other mods may use
 replaces = ["barter"]              # a mod this one folds in
 
 [package.metadata.enshwick.requires]
@@ -151,7 +151,8 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
 - `developer = true`: the mod is a developer tool, such as a probe that logs
   what the game does. While it runs, every player reads a warning that
   developer tools are on; see [The interface](../interface.md).
-- `exports` lists the local names of what other mods may use; see
+- `exports` lists the local names of the content and stat kinds other mods
+  may use; a call, point, service or event says it on its declaration. See
   [What other mods may use](#what-other-mods-may-use).
 - `requires`, `after`, `recommends` and `breaks` are tables of other mods,
   each under an alias of the mod's choosing (a Rust name in snake case,
@@ -239,9 +240,11 @@ them.
 ### What other mods may use
 
 A mod's calls, points, services, events, content and stat kinds are its own
-until it exports them. `exports` lists their local names, and the loader refuses
-another mod a reference to any other name of the mod. With `exports = ["price-of", "sold"]`
-in `you.trading-post`, another mod may call `you.trading-post:price-of` and
+until it exports them. A call, point, service or event is exported by
+`export` on its declaration, as `#[enshwick::call(name = "price-of", export, ..)]`.
+Content and stat kinds are exported by their local names in `exports`. The
+loader refuses another mod a reference to any other name of the mod. When
+`you.trading-post` exports its call `price-of` and its event `sold`, another mod may call `you.trading-post:price-of` and
 hear `you.trading-post:sold`. A link to the point `you.trading-post:margin`
 is refused, and the log says
 `point you.trading-post:margin: you.trading-post does not export margin; it exports price-of, sold`.
@@ -272,17 +275,18 @@ as `exports` in its `pack.toml`.
 
 Each [extension point](../extending.md#defining-a-point),
 [event](../services.md) and [call](../calls.md) the mod declares without
-`of` and lists in `exports` puts its schema into the DLL's `.enshpt`
-section; one left out of `exports` stays the mod's own and ships nothing.
-`declare_mod!` takes nothing but the mod's type: when the loader first asks
-for the manifest, it collects the schemas from that section into the
-manifest. `cargo enshwick deps` reads the same section from the DLL file,
-without running the mod, to write other mods' declarations. An exported
-event or point whose fields a schema cannot describe fails the build. With
-`exports = ["price"]` in the mod's `Cargo.toml`:
+`of` and marks `export` puts its schema into the DLL's `.enshpt` section,
+and an exported service its name; one without the flag stays the mod's own
+and ships nothing. `declare_mod!` takes nothing but the mod's type: when the
+loader first asks for the manifest, it collects the schemas and the
+exported names from that section into the manifest. `cargo enshwick deps`
+reads the same section from the DLL file, without running the mod, to write
+other mods' declarations. An exported event, point or call whose fields a
+schema cannot describe fails the build, and so does `export` on a name of
+another mod's id:
 
 ```rust,standalone_crate
-#[enshwick::point(name = "price", mode = Override, output = u32)]
+#[enshwick::point(name = "price", mode = Override, output = u32, export)]
 #[derive(Clone, Copy, Debug)]
 pub struct Price {
     /// The item.
