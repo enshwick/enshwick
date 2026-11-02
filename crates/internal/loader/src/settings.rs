@@ -151,7 +151,7 @@ impl Settings {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => (
                 Self::default(),
                 Problems {
-                    lines: std::fs::write(path, Self::template())
+                    lines: enshwick::files::write_atomically(path, Self::template())
                         .err()
                         .map(|e| format!("the defaults could not be written there: {e}"))
                         .into_iter()

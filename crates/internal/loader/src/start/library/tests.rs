@@ -396,6 +396,52 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+#[cfg_attr(miri, ignore = "Miri isolates the file system")]
+fn a_mod_list_that_does_not_read_stays_byte_for_byte() {
+    let dir = std::env::temp_dir().join(format!("enshwick-unread-list-{}", std::process::id()));
+    let _old = std::fs::remove_dir_all(&dir);
+    let mods = dir.join("mods");
+    let pack = mods.join("you.lanterns");
+    std::fs::create_dir_all(&pack).unwrap();
+    std::fs::write(
+        pack.join(enshwick::packs::MANIFEST_FILE),
+        "id = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\n",
+    )
+    .unwrap();
+    let list = mods
+        .join(crate::settings::LOADER_ID)
+        .join(crate::modlist::LIST_FILE);
+    std::fs::create_dir_all(list.parent().unwrap()).unwrap();
+    // "5 €" as Notepad's ANSI saves it on a western Windows: € is 0x80.
+    let saved_as_windows_1252 = b"[\"you.lanterns\"]\nenabled = false\n# 5 \x80\n";
+    std::fs::write(&list, saved_as_windows_1252).unwrap();
+    let ids = || {
+        let (_, candidates, _) = libraries(&mods, Run::Dry, &mut |_| {});
+        candidates.into_iter().map(|c| c.id).collect::<Vec<_>>()
+    };
+    crate::log::capture();
+    let found = ids();
+    let lines = loader_lines();
+    crate::log::end_capture();
+    assert_eq!(found, ["you.lanterns"], "found, so the list would gain it");
+    assert!(
+        lines.iter().any(|(level, text)| *level == Level::WARN
+            && text.starts_with("mods/enshwick/mods.toml is not read, every mod is on: ")
+            && text.ends_with(&format!("({})", errors::BAD_MOD_LIST))),
+        "{lines:#?}"
+    );
+    assert_eq!(std::fs::read(&list).unwrap(), saved_as_windows_1252);
+    std::fs::write(
+        enshwick::files::backup_path(&list),
+        "[\"you.lanterns\"]\nenabled = false\n",
+    )
+    .unwrap();
+    assert!(ids().is_empty(), "off in the backup, so off");
+    assert_eq!(std::fs::read(&list).unwrap(), saved_as_windows_1252);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// The variable that hands [`imports_load_in_this_process`] the mod to load.
 const IMPORTS_MOD: &str = "ENSHWICK_TEST_IMPORTS_MOD";
 

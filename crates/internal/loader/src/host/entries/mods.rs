@@ -53,10 +53,10 @@ pub(crate) extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut S
         if !path.exists() && old.exists() && std::fs::rename(&old, &path).is_ok() {
             crate::log::write(Level::INFO, &record.id, "settings moved to mod-configs");
         }
-        let content = match std::fs::read_to_string(&path) {
-            Ok(content) => content,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                if std::fs::write(&path, defaults).is_err() {
+        let content = match enshwick::files::read_to_string_if_present(&path) {
+            Ok(Some(content)) => content,
+            Ok(None) => {
+                if enshwick::files::write_atomically(&path, defaults).is_err() {
                     crate::log::write(
                         Level::WARN,
                         &record.id,
@@ -65,6 +65,7 @@ pub(crate) extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut S
                     defaults.to_owned()
                 } else {
                     crate::migrations::settings_written(loader, index.get());
+                    // Its migrations may have brought in other mods' settings.
                     std::fs::read_to_string(&path).unwrap_or_else(|_| defaults.to_owned())
                 }
             }

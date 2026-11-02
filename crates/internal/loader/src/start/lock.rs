@@ -46,16 +46,24 @@ pub(super) fn write_lock(loader: &'static Loader, files: Vec<(String, String)>) 
                 replaced: modlist::replaced().to_vec(),
             };
             let path = dir.join(modlist::LOCK_FILE);
-            let old = std::fs::read_to_string(&path)
-                .ok()
-                .and_then(|text| modlist::Lock::parse(&text));
+            let old = match enshwick::files::read_to_string_if_present(&path) {
+                Ok(text) => text.and_then(|text| modlist::Lock::parse(&text)),
+                Err(e) => {
+                    crate::log!(
+                        WARN,
+                        "{} is not read, so it is left as it is: {e}",
+                        modlist::LOCK_FILE
+                    );
+                    return;
+                }
+            };
             if let Some(old) = &old {
                 for change in lock.changes(old) {
                     crate::log!(INFO, "since the last start: {change}");
                 }
             }
             if old.as_ref() != Some(&lock)
-                && let Err(e) = std::fs::write(&path, lock.render())
+                && let Err(e) = enshwick::files::write_atomically(&path, lock.render())
             {
                 crate::log!(WARN, "{} not written: {e}", modlist::LOCK_FILE);
             }

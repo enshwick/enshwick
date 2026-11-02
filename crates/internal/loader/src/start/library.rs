@@ -85,15 +85,20 @@ pub(super) fn libraries(
     let list_file = mods_dir
         .join(crate::settings::LOADER_ID)
         .join(modlist::LIST_FILE);
+    let read = enshwick::files::read_to_string_if_present(&list_file);
+    let mut changed = matches!(read, Ok(None));
     let ListRead {
         mut list,
         writable,
         problem,
-    } = discovery::read_list(std::fs::read_to_string(&list_file));
+    } = discovery::read_list(read, || {
+        enshwick::files::read_to_string_if_present(&enshwick::files::backup_path(&list_file))
+            .ok()
+            .flatten()
+    });
     if let Some(problem) = problem {
         crate::log!(WARN, "{problem}");
     }
-    let mut changed = !list_file.exists();
     let mut libraries = Vec::new();
     let mut candidates = Vec::new();
     let packs = crate::packs::discover(mods_dir)
@@ -137,7 +142,7 @@ pub(super) fn libraries(
     modlist::set_links_off(list.links_off());
     if changed
         && writable
-        && let Err(e) = std::fs::write(&list_file, list.render())
+        && let Err(e) = enshwick::files::write_atomically(&list_file, list.render())
     {
         crate::log!(WARN, "{} not written: {e}", modlist::LIST_PATH);
     }

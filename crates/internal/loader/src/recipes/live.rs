@@ -101,7 +101,7 @@ pub(crate) fn init(loader: &'static Loader) {
     }
     let path = loader.configs_dir.join(FILE);
     if !path.exists()
-        && let Err(e) = std::fs::write(&path, TEMPLATE)
+        && let Err(e) = enshwick::files::write_atomically(&path, TEMPLATE)
     {
         crate::log!(WARN, "{} not written: {e}", path.display());
     }
