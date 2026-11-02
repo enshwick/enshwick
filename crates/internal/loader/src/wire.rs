@@ -22,8 +22,8 @@ pub use envelope::{
 pub(crate) use frame::Partial;
 pub use frame::{Frame, assemble, frames, parse};
 pub use link::{
-    BACKLOG, FIRST_TIMEOUT, LAST_TIMEOUT, LINK, Link, MAX_LINK_HEADER, MAX_TRIES,
-    QueueMessageError, ReadPacketError, WINDOW,
+    BACKLOG, FIRST_TIMEOUT, LAST_TIMEOUT, LINK, Link, MAX_LINK_HEADER, QueueMessageError,
+    ReadPacketError, SILENCE, WINDOW,
 };
 pub use peer::{DATA_AGAIN, Peer};
 

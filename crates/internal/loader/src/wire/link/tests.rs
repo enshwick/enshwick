@@ -229,7 +229,7 @@ fn a_packet_the_session_refused_stays_due_and_spends_no_try() {
     let now = Instant::now();
     let mut a = Link::new(PACKET, 1).unwrap();
     a.send(b"held").unwrap();
-    for _ in 0..usize::from(MAX_TRIES) * 2 {
+    for _ in 0..24 {
         assert!(a.poll(now, 8, |_| false));
     }
     let mut sent = 0;
