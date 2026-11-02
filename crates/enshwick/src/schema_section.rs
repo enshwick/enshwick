@@ -105,6 +105,37 @@ impl Kind {
     pub fn of_word(word: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.word() == word)
     }
+
+    /// The kind and local name of `export`, `<kind>:<local name>`; `None`
+    /// when it names no kind of [`ALL`](Self::ALL).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::schema_section::Kind;
+    ///
+    /// assert_eq!(Kind::of_export("event:sold"), Some((Kind::Event, "sold")));
+    /// assert_eq!(Kind::of_export("sold"), None);
+    /// ```
+    #[must_use]
+    pub fn of_export(export: &str) -> Option<(Self, &str)> {
+        let (word, local) = export.split_once(':')?;
+        Some((Self::of_word(word)?, local))
+    }
+
+    /// Every kind's word, joined by `, `, for messages.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::schema_section::Kind;
+    ///
+    /// assert!(Kind::words().starts_with("point, event"));
+    /// ```
+    #[must_use]
+    pub fn words() -> String {
+        Self::ALL.map(Self::word).join(", ")
+    }
 }
 
 /// One exported declaration in the section.
@@ -120,6 +151,10 @@ pub struct Entry<'a> {
 
 impl<'a> Entry<'a> {
     /// The local name, after `<mod id>:`.
+    ///
+    /// # Examples
+    ///
+    /// See [`export`](Self::export).
     #[must_use]
     pub fn local(&self) -> &'a str {
         self.name
@@ -128,19 +163,65 @@ impl<'a> Entry<'a> {
     }
 
     /// The export of it, `<kind>:<local name>`, as a manifest lists it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::schema_section::Section;
+    ///
+    /// let section = Section::parse(b"[[call]]\nname = \"you.a:fee\"\n")?;
+    /// let fee = section.entries()[0];
+    /// assert_eq!(fee.local(), "fee");
+    /// assert_eq!(fee.export(), "call:fee");
+    /// # Ok::<(), enshwick::schema_section::ReadSectionError>(())
+    /// ```
     #[must_use]
     pub fn export(&self) -> String {
         format!("{}:{}", self.kind.word(), self.local())
     }
 }
 
-/// The head one `declare_mod!` wrote.
+/// The head one `declare_mod!` wrote, which names its mod and the content
+/// and stat kinds it exports.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::schema_section::Section;
+///
+/// let section = Section::parse(b"schema = 2\nmod = \"you.a\"\nexports = [\"content:locker\"]\n")?;
+/// let head = section.heads()[0];
+/// assert_eq!(head.id, "you.a");
+/// assert_eq!(head.exports(), ["content:locker"]);
+/// # Ok::<(), enshwick::schema_section::ReadSectionError>(())
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Head<'a> {
     /// Its text, the start of the mod's schema text.
     pub text: &'a str,
     /// The mod id it names.
     pub id: &'a str,
+}
+
+impl<'a> Head<'a> {
+    /// The content and stat kinds its `exports = [..]` line names, each
+    /// `<kind>:<name>`; empty without the line.
+    ///
+    /// # Examples
+    ///
+    /// See [`Head`].
+    #[must_use]
+    pub fn exports(&self) -> Vec<&'a str> {
+        self.text
+            .lines()
+            .find_map(|line| line.strip_prefix("exports = [")?.strip_suffix(']'))
+            .map(|list| {
+                list.split(", ")
+                    .filter_map(|quoted| quoted.strip_prefix('"')?.strip_suffix('"'))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 /// The section, split into heads and entries once.

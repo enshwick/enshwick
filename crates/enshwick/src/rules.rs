@@ -56,11 +56,10 @@ pub fn exports_name<S: AsRef<str>>(
     kind: crate::schema_section::Kind,
     name: &str,
 ) -> bool {
-    let word = kind.word();
     let exported = |local: &str| {
         exports
             .iter()
-            .any(|e| e.as_ref().split_once(':') == Some((word, local)))
+            .any(|e| crate::schema_section::Kind::of_export(e.as_ref()) == Some((kind, local)))
     };
     exported(name)
         || (matches!(
