@@ -62,7 +62,7 @@ fn install_with(
     .map_err(|e| e.to_string())?;
     stubs.finish(0, pending.original);
     assert!(stubs.seal());
-    assert!(detour::commit(&[&pending], &[]));
+    assert_eq!(detour::commit(&[&pending], &[]), detour::Commit::Written);
     Ok(())
 }
 
