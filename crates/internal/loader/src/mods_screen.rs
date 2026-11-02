@@ -50,8 +50,11 @@ pub enum Kind {
     Settings,
     /// The joined server's mods with settings.
     ServerList,
-    /// The joined server's settings of a mod.
+    /// The joined server's settings of a mod, opened from the server's list.
     ServerSettings,
+    /// The joined server's settings of a mod, opened from that mod on the
+    /// list of mods.
+    ModServerSettings,
     /// The actions the server offers.
     Actions,
 }
@@ -74,7 +77,7 @@ pub enum Back {
 pub const fn back(kind: Kind) -> Back {
     match kind {
         Kind::List => Back::Close,
-        Kind::Settings | Kind::ServerList => Back::List,
+        Kind::Settings | Kind::ServerList | Kind::ModServerSettings => Back::List,
         Kind::ServerSettings => Back::ServerList,
         Kind::Actions => Back::Inside,
     }
