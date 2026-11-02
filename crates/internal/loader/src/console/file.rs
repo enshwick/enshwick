@@ -197,8 +197,14 @@ pub struct Watched {
     /// The file's length at start, as its stamp gave it, for a file that did
     /// not read then.
     skip: usize,
-    /// Whether the file was gone at the last look that found it.
+    /// Whether the file was gone, or another file came in its place, and was
+    /// not taken up again yet.
     gone: bool,
+    /// Which file was read last.
+    identity: Identity,
+    /// A hash of the whole file that came back without the lines that ran,
+    /// which waits for a second read before it counts as new.
+    anew: Option<u64>,
     /// The error of a file that did not read at start, for the first look.
     unread_at_start: Option<std::io::Error>,
     /// Whether the file fails to read, and whether that was noted.
@@ -215,9 +221,10 @@ impl Watched {
     #[must_use]
     pub fn new(path: PathBuf) -> Self {
         let seen = stamp(&path);
-        let (tail, unread_at_start) = match enshwick::files::read_if_present(&path) {
-            Ok(content) => (Some(Tail::at(&content.unwrap_or_default())), None),
-            Err(error) => (None, Some(error)),
+        let (tail, identity, unread_at_start) = match read_with_identity(&path) {
+            Ok(Some((content, identity))) => (Some(Tail::at(&content)), identity, None),
+            Ok(None) => (Some(Tail::at(b"")), None, None),
+            Err(error) => (None, None, Some(error)),
         };
         Self {
             skip: seen.map_or(0, |(_, len)| usize::try_from(len).unwrap_or(usize::MAX)),
@@ -225,6 +232,8 @@ impl Watched {
             tail,
             path,
             gone: false,
+            identity,
+            anew: None,
             unread_at_start,
             failing: None,
             noted: None,
@@ -243,7 +252,7 @@ impl Watched {
         let mut notes = Vec::new();
         let lines = match self.fresh_lines() {
             Ok((lines, skipped)) => {
-                if self.failing.take() == Some(true) {
+                if self.failing.take() == Some(true) && !self.gone {
                     notes.push(Note::ReadsAgain { skipped });
                 }
                 if self.tail.as_mut().is_some_and(Tail::take_edited) {
@@ -273,9 +282,11 @@ impl Watched {
     }
 
     /// The lines added since the last look and how many lines held at start
-    /// a first read skipped. A file that is gone changes nothing; when it
-    /// comes back, it goes on where it was if it still starts with what ran,
-    /// and counts as a new file otherwise.
+    /// a first read skipped. A file that is gone changes nothing. A file that
+    /// comes back, or another file put in its place, goes on where it was if
+    /// it still starts with what ran, and counts as a new file otherwise once
+    /// it reads the same twice in a row, so one caught half written runs
+    /// nothing.
     fn fresh_lines(&mut self) -> std::io::Result<(Vec<String>, usize)> {
         if let Some(error) = self.unread_at_start.take() {
             return Err(error);
@@ -284,14 +295,18 @@ impl Watched {
         if now == self.seen && self.tail.as_ref().is_some_and(|tail| !tail.waits()) {
             return Ok((Vec::new(), 0));
         }
-        let content = enshwick::files::read_if_present(&self.path)?;
+        let read = read_with_identity(&self.path)?;
         self.seen = now;
-        let Some(content) = content else {
+        let Some((content, identity)) = read else {
             self.gone = true;
             // A file gone before it ever read is new when it comes.
             self.tail.get_or_insert_with(|| Tail::at(b""));
             return Ok((Vec::new(), 0));
         };
+        let replaced = identity.is_some() && self.identity.is_some() && identity != self.identity;
+        if identity.is_some() {
+            self.identity = identity;
+        }
         let mut skipped = 0;
         let skip = self.skip;
         let tail = self.tail.get_or_insert_with(|| {
@@ -302,11 +317,63 @@ impl Watched {
                 .count();
             Tail::at(start)
         });
-        if core::mem::replace(&mut self.gone, false) && !tail.continues(&content) {
+        if (self.gone || replaced) && !tail.continues(&content) {
+            let whole = hash(&content);
+            if self.anew != Some(whole) {
+                self.anew = Some(whole);
+                self.gone = true;
+                // Read again at the next look, even if the file stays as it is.
+                self.seen = None;
+                return Ok((Vec::new(), skipped));
+            }
             *tail = Tail::at(b"");
         }
+        self.gone = false;
+        self.anew = None;
         Ok((tail.feed(&content), skipped))
     }
+}
+
+/// The file's volume and index, which tell another file put at its path.
+type Identity = Option<(u32, u64)>;
+
+/// What `path` holds and which file it is; `None` for a file that is not
+/// there.
+fn read_with_identity(path: &Path) -> std::io::Result<Option<(Vec<u8>, Identity)>> {
+    use std::io::Read as _;
+    let mut file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let identity = identity(&file);
+    let mut content = Vec::new();
+    file.read_to_end(&mut content)?;
+    Ok(Some((content, identity)))
+}
+
+#[cfg(windows)]
+fn identity(file: &std::fs::File) -> Identity {
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+    let mut info = core::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::uninit();
+    // SAFETY: `file` keeps its handle open across the call, and `info` is a
+    // local the call fills whole when it returns non-zero.
+    let filled = unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) };
+    if filled == 0 {
+        return None;
+    }
+    // SAFETY: the call returned non-zero, so it filled `info`.
+    let info = unsafe { info.assume_init() };
+    let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+    Some((info.dwVolumeSerialNumber, index))
+}
+
+#[cfg(not(windows))]
+fn identity(_: &std::fs::File) -> Identity {
+    None
 }
 
 /// Watches `files` for good, handing each new line to `submit` and each
@@ -537,9 +604,57 @@ mod tests {
         std::fs::remove_file(&path).unwrap();
         assert!(lines(&mut watched).is_empty());
         std::fs::write(&path, "kick Cy\n").unwrap();
+        assert!(
+            lines(&mut watched).is_empty(),
+            "read twice before it counts"
+        );
         assert_eq!(lines(&mut watched), ["kick Cy"]);
         std::fs::write(&path, "kick Cy\nkick Di\n").unwrap();
         assert_eq!(lines(&mut watched), ["kick Di"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(windows)]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
+    fn another_file_put_in_its_place_between_looks_runs_from_its_start() {
+        let dir = scratch("renamed");
+        let path = dir.join(FILE);
+        let mut watched = Watched::new(path.clone());
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\n").unwrap();
+        assert_eq!(lines(&mut watched), ["give 7 1 Ann", "ban Bob"]);
+        let staged = dir.join("commands.tmp");
+        std::fs::write(&staged, "kick Cy\n").unwrap();
+        std::fs::rename(&staged, &path).unwrap();
+        assert!(
+            lines(&mut watched).is_empty(),
+            "read twice before it counts"
+        );
+        assert_eq!(lines(&mut watched), ["kick Cy"]);
+        std::fs::write(&staged, "kick Cy\nkick Di\n").unwrap();
+        std::fs::rename(&staged, &path).unwrap();
+        assert_eq!(
+            lines(&mut watched),
+            ["kick Di"],
+            "a rename that appends goes on"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
+    fn a_file_coming_back_half_written_runs_no_line_again() {
+        let dir = scratch("restored");
+        let path = dir.join(FILE);
+        let mut watched = Watched::new(path.clone());
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\n").unwrap();
+        assert_eq!(lines(&mut watched), ["give 7 1 Ann", "ban Bob"]);
+        std::fs::remove_file(&path).unwrap();
+        assert!(lines(&mut watched).is_empty());
+        std::fs::write(&path, "give 7 1 Ann\n").unwrap();
+        assert!(lines(&mut watched).is_empty(), "caught half restored");
+        std::fs::write(&path, "give 7 1 Ann\nban Bob\nkick Cy\n").unwrap();
+        assert_eq!(lines(&mut watched), ["kick Cy"]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -577,10 +692,10 @@ mod tests {
         drop(writer);
         std::fs::remove_file(&path).unwrap();
         assert!(matches!(notes(&mut watched)[..], [Note::Unread { .. }]));
-        assert!(matches!(
-            notes(&mut watched)[..],
-            [Note::ReadsAgain { skipped: 0 }]
-        ));
+        assert!(
+            notes(&mut watched).is_empty(),
+            "a gone file does not read again"
+        );
         std::fs::write(&path, "kick Di\n").unwrap();
         assert_eq!(lines(&mut watched), ["kick Di"]);
         std::fs::remove_dir_all(&dir).unwrap();

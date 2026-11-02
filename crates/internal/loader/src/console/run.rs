@@ -53,6 +53,10 @@ pub(crate) fn start(loader: &'static Loader) {
                         Note::ReadsAgain { skipped: 0 } => {
                             crate::log!(INFO, "{file} reads again");
                         }
+                        Note::ReadsAgain { skipped: 1 } => crate::log!(
+                            WARN,
+                            "{file} reads again; the line it held at start does not run"
+                        ),
                         Note::ReadsAgain { skipped } => crate::log!(
                             WARN,
                             "{file} reads again; the {skipped} lines it held at start do not run"
