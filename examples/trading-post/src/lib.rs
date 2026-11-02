@@ -143,7 +143,7 @@ impl Mod for TradingPost {
     }
 }
 
-enshwick::declare_mod!(TradingPost, points: [Price], events: [Sold]);
+enshwick::declare_mod!(TradingPost);
 
 #[cfg(test)]
 mod tests {

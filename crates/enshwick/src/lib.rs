@@ -388,12 +388,12 @@ pub use enshwick_macros::config;
 /// with its name. The loader names the mod and its version in every message
 /// about it.
 ///
-/// After the type, `points: [..]`, `events: [..]` and `calls: [..]` list the
-/// [extension points](crate::points) (each a [`#[point]`](macro@point)
-/// input), the [mod events](crate::services) (each an
-/// [`#[event]`](macro@event) type) and the calls it serves, each a `#[call]`
-/// input; their schemas go into the manifest, where `cargo enshwick deps`,
-/// `event` and `call` read them.
+/// The mod's own [extension points](crate::points), [mod
+/// events](crate::services) and calls, each a [`#[point]`](macro@point),
+/// [`#[event]`](macro@event) or [`#[call]`](macro@call) declared without
+/// `of`, put their schemas into the DLL's `.enshpt` section. The manifest
+/// collects them from there once, at the loader's first query, and
+/// `cargo enshwick deps` reads them from the DLL file.
 ///
 /// A test that declares several mods in one binary gives each its table
 /// inline with `test::declare_mod!`, behind the `test` feature.

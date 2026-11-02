@@ -7,8 +7,7 @@ use std::path::PathBuf;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
-use syn::punctuated::Punctuated;
-use syn::{Ident, LitStr, Token, Type, bracketed};
+use syn::{Ident, LitStr, Token, Type};
 
 /// The keys of the table, the identity the platform reads.
 const KEYS: [&str; 13] = [
@@ -39,16 +38,12 @@ const RELATIONS: [(&str, &str); 4] = [
     ("breaks", "BREAKS"),
 ];
 
-/// What `declare_mod!` takes: the mod's type, its metadata as TOML and the
-/// path of its texts for a test, and the Rust types of the points, events
-/// and calls it defines.
+/// What `declare_mod!` takes: the mod's type, and its metadata as TOML and
+/// the path of its texts for a test.
 pub(crate) struct Args {
     ty: Type,
     metadata: Option<LitStr>,
     texts: Option<LitStr>,
-    points: Vec<Type>,
-    events: Vec<Type>,
-    calls: Vec<Type>,
 }
 
 impl Parse for Args {
@@ -58,9 +53,6 @@ impl Parse for Args {
             ty,
             metadata: None,
             texts: None,
-            points: Vec::new(),
-            events: Vec::new(),
-            calls: Vec::new(),
         };
         while input.parse::<Option<Token![,]>>()?.is_some() {
             if input.is_empty() {
@@ -74,38 +66,17 @@ impl Parse for Args {
                 continue;
             }
             let key: Ident = input.parse()?;
-            if key == "texts" {
-                input.parse::<Token![=]>()?;
-                if args.texts.is_some() {
-                    return Err(syn::Error::new(key.span(), "`texts` is given once"));
-                }
-                args.texts = Some(input.parse()?);
-                continue;
-            }
-            input.parse::<Token![:]>()?;
-            let content;
-            bracketed!(content in input);
-            let types: Vec<Type> = Punctuated::<Type, Token![,]>::parse_terminated(&content)?
-                .into_iter()
-                .collect();
-            let list = match key.to_string().as_str() {
-                "points" => &mut args.points,
-                "events" => &mut args.events,
-                "calls" => &mut args.calls,
-                _ => {
-                    return Err(syn::Error::new(
-                        key.span(),
-                        "expected `points: [..]`, `events: [..]` or `calls: [..]`",
-                    ));
-                }
-            };
-            if !list.is_empty() {
+            if key != "texts" {
                 return Err(syn::Error::new(
                     key.span(),
-                    format!("`{key}` is given once"),
+                    "expected `texts = \"..\"`: points, events and calls ship from their attributes",
                 ));
             }
-            *list = types;
+            input.parse::<Token![=]>()?;
+            if args.texts.is_some() {
+                return Err(syn::Error::new(key.span(), "`texts` is given once"));
+            }
+            args.texts = Some(input.parse()?);
         }
         Ok(args)
     }
@@ -745,15 +716,16 @@ fn exports(
     texts: Option<&crate::texts::File>,
 ) -> TokenStream {
     let ty = &args.ty;
-    let manifest = manifest(args, metadata, cargo);
+    let manifest = manifest(metadata, cargo);
     let texts = crate::texts::File::option(texts);
     quote! {
         ::enshwick::__declare_exports!(#ty, #manifest, #texts);
     }
 }
 
-/// The block that builds the static manifest and evaluates to it.
-fn manifest(args: &Args, metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
+/// The block that builds the static manifest and evaluates to the
+/// `Manifested` that completes it with the mod's schemas.
+fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
     let abi = quote!(::enshwick::abi);
     let tracked = cargo.map(|path| {
         quote!(
@@ -791,14 +763,9 @@ fn manifest(args: &Args, metadata: &Metadata, cargo: Option<&str>) -> TokenStrea
             }
         }
     });
-    let (points, events, calls) = (&args.points, &args.events, &args.calls);
-    let exports = export_items(args, metadata);
+    let exports = export_items(metadata);
     quote! {{
         #tracked
-        #(const _: () = ::core::assert!(
-            <#events as ::enshwick::services::ModEvent>::DESCRIBED,
-            "an event's schema cannot describe a field's type: derive `Shape` for it",
-        );)*
         #exports
         static DEPENDENCIES: &[#abi::Dependency] = &[#(#dependencies),*];
         const AUTHOR_COUNT: usize = ::enshwick::__private::author_count(::core::env!("CARGO_PKG_AUTHORS"));
@@ -806,17 +773,10 @@ fn manifest(args: &Args, metadata: &Metadata, cargo: Option<&str>) -> TokenStrea
             ::enshwick::__private::authors(::core::env!("CARGO_PKG_AUTHORS"));
         static BUILDS: &[#abi::BuildRow] = &[#(#builds),*];
         const VERSION: &str = ::core::env!("CARGO_PKG_VERSION");
-        const POINTS: &str = ::enshwick::__private::point_schemas(
-            ::enshwick::__private::concatcp!(
-                "schema = 1\nmod = \"", #id, "\"\nversion = \"", VERSION, "\"\n",
-                #(<#points as ::enshwick::points::Point>::SCHEMA,)*
-                #(<#events as ::enshwick::services::ModEvent>::SCHEMA,)*
-                #(<#calls as ::enshwick::services::Call>::SCHEMA,)*
-            ),
+        const HEAD: &str = ::enshwick::__private::concatcp!(
+            "schema = 1\nmod = \"", #id, "\"\nversion = \"", VERSION, "\"\n",
         );
-        #[cfg_attr(windows, unsafe(link_section = ".enshpt"))]
-        #[used]
-        static POINT_SECTION: [u8; POINTS.len()] = ::enshwick::__private::bytes(POINTS);
+        ::enshwick::__schema_entry!(HEAD);
         static MANIFEST: #abi::Manifest = #abi::Manifest {
             header: #abi::Header::of::<#abi::Manifest>(),
             id: #abi::Str::new(#id),
@@ -835,11 +795,11 @@ fn manifest(args: &Args, metadata: &Metadata, cargo: Option<&str>) -> TokenStrea
             homepage: #abi::Str::new(::enshwick::__private::first_text(
                 &[::core::env!("CARGO_PKG_HOMEPAGE"), ::core::env!("CARGO_PKG_REPOSITORY")],
             )),
-            points: #abi::Str::new(POINTS),
+            points: #abi::Str::EMPTY,
             exports: EXPORTS.as_ptr(),
             export_count: EXPORTS.len(),
         };
-        &MANIFEST
+        ::enshwick::__private::Manifested::new(&MANIFEST, #id, HEAD)
     }}
 }
 
@@ -865,43 +825,13 @@ fn flags_of(metadata: &Metadata) -> TokenStream {
     }
 }
 
-/// The static `EXPORTS` of the manifest, and a check that every point,
-/// event and call the mod lists, which are for other mods, is its own and
-/// among them.
-fn export_items(args: &Args, metadata: &Metadata) -> TokenStream {
+/// The static `EXPORTS` of the manifest.
+fn export_items(metadata: &Metadata) -> TokenStream {
     let abi = quote!(::enshwick::abi);
-    let (id, exports) = (&metadata.id, &metadata.exports);
-    let (points, events, calls) = (&args.points, &args.events, &args.calls);
+    let exports = &metadata.exports;
+    let count = exports.len();
     quote! {
-        const EXPORT_NAMES: &[&str] = &[#(#exports),*];
-        #(const _: () = ::core::assert!(
-            ::enshwick::__private::is_own(#id, <#points as ::enshwick::points::Point>::NAME),
-            "a point listed in `declare_mod!` has another mod's id: a mod lists only its own points, events and calls",
-        );)*
-        #(const _: () = ::core::assert!(
-            ::enshwick::__private::is_own(#id, <#events as ::enshwick::services::ModEvent>::NAME),
-            "an event listed in `declare_mod!` has another mod's id: a mod lists only its own points, events and calls",
-        );)*
-        #(const _: () = ::core::assert!(
-            ::enshwick::__private::is_own(#id, <#calls as ::enshwick::services::Call>::NAME),
-            "a call listed in `declare_mod!` has another mod's id: a mod lists only its own points, events and calls",
-        );)*
-        #(const _: () = ::core::assert!(
-            !::enshwick::__private::is_own(#id, <#points as ::enshwick::points::Point>::NAME)
-                || ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#points as ::enshwick::points::Point>::NAME),
-            "a point listed in `declare_mod!` is for other mods: add its local name to `exports` in [package.metadata.enshwick]",
-        );)*
-        #(const _: () = ::core::assert!(
-            !::enshwick::__private::is_own(#id, <#events as ::enshwick::services::ModEvent>::NAME)
-                || ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#events as ::enshwick::services::ModEvent>::NAME),
-            "an event listed in `declare_mod!` is for other mods: add its local name to `exports` in [package.metadata.enshwick]",
-        );)*
-        #(const _: () = ::core::assert!(
-            !::enshwick::__private::is_own(#id, <#calls as ::enshwick::services::Call>::NAME)
-                || ::enshwick::__private::is_exported(#id, EXPORT_NAMES, <#calls as ::enshwick::services::Call>::NAME),
-            "a call listed in `declare_mod!` is for other mods: add its local name to `exports` in [package.metadata.enshwick]",
-        );)*
-        static EXPORTS: [#abi::Str; EXPORT_NAMES.len()] = [#(#abi::Str::new(#exports)),*];
+        static EXPORTS: [#abi::Str; #count] = [#(#abi::Str::new(#exports)),*];
     }
 }
 

@@ -82,8 +82,7 @@ mod lockers {
         id = "you.lockers"
         side = "server"
         exports = ["rent", "fee"]
-        "#,
-        calls: [super::Rent, super::Fee]
+        "#
     );
 }
 
@@ -99,13 +98,16 @@ mod tests {
         // `declare_mod!`, which no thread writes.
         let manifest = unsafe { &*super::lockers::enshwick_mod_query() };
         // SAFETY: `declare_mod!` points the schema at static text.
-        let text = unsafe { manifest.points.as_str() }
-            .unwrap_or_default()
-            .replacen(
-                &format!("version = \"{}\"", enshwick::VERSION),
-                "version = \"1.2.0\"",
-                1,
-            );
+        let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
+        // The points and events, before the calls, are `point_schema`'s, in
+        // the same test binary.
+        let (head, _) = text.split_once("[[point]]").unwrap_or((text, ""));
+        let calls = text.find("[[call]]").map_or("", |at| &text[at..]);
+        let text = format!("{head}{calls}").replacen(
+            &format!("version = \"{}\"", enshwick::VERSION),
+            "version = \"1.2.0\"",
+            1,
+        );
         assert_eq!(
             text,
             include_str!("../../cargo-enshwick/tests/fixtures/lockers.calls.toml")

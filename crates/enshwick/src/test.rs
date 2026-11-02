@@ -107,9 +107,9 @@ pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 /// declare several mods.
 ///
 /// The text takes the keys of the table, read by the same rules; the
-/// version and the rest of `[package]` still come from the crate.
-/// `points: [..]`, `events: [..]` and `calls: [..]` follow as for
-/// `declare_mod!`.
+/// version and the rest of `[package]` still come from the crate. Each
+/// mod's manifest carries the schemas of the binary's points, events and
+/// calls named with its id.
 ///
 /// # Examples
 ///

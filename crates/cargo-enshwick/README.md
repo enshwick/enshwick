@@ -41,18 +41,15 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 - `id <mod:name>...` prints the GUID and the game id of each
   [content id](https://github.com/enshwick/enshwick/blob/main/book/src/content.md#content-ids), as `Guid::named`
   derives them: `cargo enshwick id you.lanterns:lantern`.
-- `point <mod>:<point> --from <path> [--out <file>]` writes the Rust
-  definition of another mod's
-  [extension point](https://github.com/enshwick/enshwick/blob/main/book/src/extending.md#getting-a-points-definition)
-  from the schema its owner's build put into the owner's DLL, read without
-  running it. `--from` is the owner's DLL, a folder with it in it or in its
-  `mods/` (such as the game's), or a schema file the owner published.
-  With `--luau` it writes the point's Luau module for a Luau mod instead.
-- `call <mod>:<call> --from <path> [--out <file>]` writes the declaration of
-  another mod's call, which the server lists in `declare_mod!(.., calls: [..])`.
-  With `--luau` it writes the call's Luau module for a Luau mod instead.
-- `event <mod>:<event> --from <path> [--out <file>]` writes the Luau module
-  of another mod's event, which the owner lists in `declare_mod!(.., events: [..])`.
+- `deps [<alias>] --from <path> [--luau]` writes what each dependency
+  offers, its
+  [extension points](https://github.com/enshwick/enshwick/blob/main/book/src/extending.md#getting-a-points-definition),
+  calls and mod events, as declarations in `src/deps/<alias>.rs`. It reads
+  the schemas the owner's points, calls and events put into the owner's DLL,
+  without running it. `--from` is the owner's DLL, a folder with it in it or
+  in its `mods/` (such as the game's), or a schema file the owner published.
+  With `--luau` it writes a Luau module per point, call and event for a Luau
+  mod instead.
 - `types [<name>...] --from <game> [--rust <file>] [--luau <file>]` writes
   the [game's own types](https://github.com/enshwick/enshwick/blob/main/book/src/game-types.md)
   as Rust and Luau from the reflection data of the game executable `--from`

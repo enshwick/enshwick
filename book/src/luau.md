@@ -238,7 +238,7 @@ written again.
 
 A Luau mod hears another mod's [events](services.md) and sends its own.
 `cargo enshwick deps <alias> --luau` writes the description of each event the
-owner lists in its `declare_mod!(.., events: [..])`, beside its points. A description may also be written by hand:
+owner declares, beside its points. A description may also be written by hand:
 each field with a `name` and how it reads, `u8` to `i64`, `f32`, `f64`,
 `bool`, `guid`, or an id: `entity`, `item_id`, `recipe_id`,
 `knowledge_id`, `skill_node`, `player_key`, `buff_type_id` or `npc_id`, laid out and hashed as Rust lays out a

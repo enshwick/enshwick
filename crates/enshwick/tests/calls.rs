@@ -102,8 +102,7 @@ mod tests {
         id = "you.trading-post"
         side = "server"
         exports = ["price-of"]
-        "#,
-        calls: [PriceOf]
+        "#
     );
 
     fn start() -> enshwick::test::Installed {

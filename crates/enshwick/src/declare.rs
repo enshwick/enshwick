@@ -2,8 +2,31 @@
 
 mod unwind;
 
-/// The exports of `declare_mod!`: `$manifest` is the block that builds the
-/// mod's static manifest, `$texts` the mod's embedded texts, if any.
+/// Writes `$schema`, the schema text of a point, event or call or the head
+/// of `declare_mod!`, into the binary's `.enshpt` section, where the
+/// manifest and `cargo enshwick` find it.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __schema_entry {
+    ($schema:expr) => {
+        const _: () = {
+            #[used]
+            #[cfg_attr(windows, unsafe(link_section = ".enshpt$m"))]
+            #[cfg_attr(
+                target_vendor = "apple",
+                unsafe(link_section = "__DATA,__enshpt,regular,no_dead_strip")
+            )]
+            #[cfg_attr(
+                not(any(windows, target_vendor = "apple")),
+                unsafe(link_section = "enshpt")
+            )]
+            static ENTRY: [u8; $schema.len() + 1] = $crate::__private::entry($schema);
+        };
+    };
+}
+
+/// The exports of `declare_mod!`: `$manifest` builds the mod's
+/// `__private::Manifested`, `$texts` the mod's embedded texts, if any.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __declare_exports {
@@ -12,7 +35,7 @@ macro_rules! __declare_exports {
 
         static __ENSHWICK_INSTANCE: $crate::__private::Slot<$ty> = $crate::__private::Slot::new();
 
-        static __ENSHWICK_MANIFEST: &$crate::abi::Manifest = $manifest;
+        static __ENSHWICK_MANIFEST: $crate::__private::Manifested = $manifest;
 
         static __ENSHWICK_TEXTS: ::core::option::Option<&str> = $texts;
 
@@ -32,7 +55,7 @@ macro_rules! __declare_exports {
         /// The mod's static manifest.
         #[cfg_attr(not(test), unsafe(no_mangle))]
         pub extern "system" fn enshwick_mod_query() -> *const $crate::abi::Manifest {
-            __ENSHWICK_MANIFEST
+            __ENSHWICK_MANIFEST.get()
         }
 
         /// Initialises the mod.
@@ -53,7 +76,7 @@ macro_rules! __declare_exports {
                 $crate::__private::init::<$ty>(
                     api,
                     me,
-                    __ENSHWICK_MANIFEST,
+                    __ENSHWICK_MANIFEST.get(),
                     __ENSHWICK_TEXTS,
                     &__ENSHWICK_INSTANCE,
                 )
