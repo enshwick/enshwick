@@ -90,15 +90,22 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             How::Loads(strings) => self.loading(strings)?,
             How::Shape { within, steps } => return self.shaped(within, steps, route),
         };
-        Some(Routed::Symbol(u64::from(rva)))
+        self.code
+            .is_function(rva)
+            .then_some(Routed::Reached(u64::from(rva)))
     }
 
     /// The RVA `name` stands for: what the route of that id finds, else the
-    /// ECS system of that name, else the table's symbol.
+    /// ECS system of that name, else the table's symbol. A route that finds
+    /// another symbol than the table holds stands for nothing, so nothing
+    /// builds on an entry the cross-check turns off.
     fn address(&mut self, name: &str) -> Option<u32> {
         if let Ok(i) = self.routes.binary_search_by(|r| r.id.as_str().cmp(name))
-            && let Some(Routed::Symbol(rva)) = self.resolve(i)
+            && let Some(Routed::Symbol(rva) | Routed::Reached(rva)) = self.resolve(i)
         {
+            if self.known.symbol(name).is_some_and(|pinned| pinned != rva) {
+                return None;
+            }
             return u32::try_from(rva).ok();
         }
         self.system(name)
@@ -191,7 +198,13 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         if found.next().is_some() {
             return None;
         }
-        let symbol = |va: u64| va.checked_sub(base).map(Routed::Symbol);
+        let rva = |va: u64| va.checked_sub(base);
+        // An address taken in the code must start a function there.
+        let taken_address = |va: u64| {
+            let at = rva(va)?;
+            let function = u32::try_from(at).is_ok_and(|f| code.is_function(f));
+            (!code.in_text(va) || function).then_some(Routed::Reached(at))
+        };
         let constant = |v: u64| {
             let v = if route.shift {
                 1u64.checked_shl(u32::try_from(v).ok()?)?
@@ -201,12 +214,11 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             v.checked_add_signed(route.plus).map(Routed::Constant)
         };
         match route.take {
-            Take::Start => symbol(one.start),
-            Take::End => symbol(one.end),
-            Take::Address => symbol(one.taken?),
+            Take::Start => rva(one.start).map(Routed::Symbol),
+            Take::End => rva(one.end).map(Routed::Reached),
+            Take::Address => taken_address(one.taken?),
             Take::Value => constant(one.taken?),
             Take::Cell => constant(u64::from(code.image().u32(one.taken?)?)),
-            Take::Fixed => Some(Routed::Constant(route.fixed)),
         }
     }
 }
@@ -218,7 +230,11 @@ fn one(mut items: impl Iterator<Item = u32>) -> Option<u32> {
 }
 
 /// The `.rdata` addresses of each string any of `routes` names, by string.
-pub(super) fn strings(image: &Image<'_>, routes: &[&Route]) -> FxHashMap<String, Vec<u64>> {
+pub(super) fn strings(
+    image: &Image<'_>,
+    routes: &[&Route],
+    threads: usize,
+) -> FxHashMap<String, Vec<u64>> {
     let texts: Vec<&str> = routes
         .iter()
         .filter_map(|r| match &r.how {
@@ -232,7 +248,7 @@ pub(super) fn strings(image: &Image<'_>, routes: &[&Route]) -> FxHashMap<String,
     }
     texts
         .iter()
-        .zip(code::strings(image, &texts))
+        .zip(code::strings(image, &texts, threads))
         .map(|(text, addresses)| ((*text).to_owned(), addresses))
         .collect()
 }
@@ -256,7 +272,8 @@ fn callers(code: &Code<'_, '_>, reflection: &Reflection<'_>) -> (usize, FxHashMa
 /// The ECS system records without component lists, which the reflection
 /// skips, by name: in `.rdata`, a pointer to the name, its length and the
 /// entry in the code, the name lowercase ASCII and NUL-terminated. The first
-/// record of a name or an entry counts, and none a reflected system has.
+/// record of an entry counts, none a reflected system has, and none of a name
+/// two records give different entries.
 fn records(code: &Code<'_, '_>, reflection: &Reflection<'_>) -> FxHashMap<String, u32> {
     let image = code.image();
     let base = code.base();
@@ -269,6 +286,8 @@ fn records(code: &Code<'_, '_>, reflection: &Reflection<'_>) -> FxHashMap<String
         return found;
     };
     let mut taken: FxHashSet<u64> = reflection.systems().map(System::entry).collect();
+    let mut seen: FxHashMap<&str, u64> = FxHashMap::default();
+    let mut ambiguous: FxHashSet<&str> = FxHashSet::default();
     let word = |at: usize| {
         bytes
             .get(at..at + 8)
@@ -303,13 +322,19 @@ fn records(code: &Code<'_, '_>, reflection: &Reflection<'_>) -> FxHashMap<String
         let Ok(spelled) = core::str::from_utf8(spelled) else {
             continue;
         };
-        if reflection.system(spelled).is_ok() || found.contains_key(spelled) || !taken.insert(entry)
-        {
+        if reflection.system(spelled).is_ok() {
+            continue;
+        }
+        if *seen.entry(spelled).or_insert(entry) != entry {
+            ambiguous.insert(spelled);
+        }
+        if found.contains_key(spelled) || !taken.insert(entry) {
             continue;
         }
         if let Some(rva) = entry.checked_sub(base).and_then(|r| u32::try_from(r).ok()) {
             found.insert(spelled.to_owned(), rva);
         }
     }
+    found.retain(|name, _| !ambiguous.contains(name.as_str()));
     found
 }

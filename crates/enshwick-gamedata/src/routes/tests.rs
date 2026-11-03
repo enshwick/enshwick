@@ -246,33 +246,59 @@ fn rel(next: u64, target: u64) -> [u8; 4] {
 
 /// Function `a` loads "hello" and calls the leaf; `b`, the code of system
 /// record `sys_b`, calls the leaf and holds `mov eax, 7` twice; `c` calls
-/// `a` and `b`; the leaf at 0x1040 has no `.pdata` row.
+/// `a` and `b`; the leaf at 0x1040 has no `.pdata` row. `d` (`sys_d`) loads
+/// an address inside `a`; `e` (`sys_e`) jumps to the unpadded run after it,
+/// `f` (`sys_f`) has one after it it does not jump to; `sys_c` has two
+/// records with different entries.
 fn fake() -> Fake {
     let mut fake = Fake::new();
     let hello = RDATA + 0x180;
     fake.put(hello, b"hello\0");
-    let mut a = vec![0x48, 0x8d, 0x0d];
-    a.extend(rel(0x1007, hello));
-    a.push(0xe8);
-    a.extend(rel(0x100c, 0x1040));
-    a.push(0xc3);
-    fake.function(0x1000, &a, Some(0));
-    let mut b = vec![0xe8];
-    b.extend(rel(0x1015, 0x1040));
-    b.extend([0xb8, 7, 0, 0, 0, 0xb8, 7, 0, 0, 0, 0xc3]);
-    fake.function(0x1010, &b, Some(1));
-    let mut c = vec![0xe8];
-    c.extend(rel(0x1025, 0x1000));
-    c.push(0xe8);
-    c.extend(rel(0x102a, 0x1010));
-    c.push(0xc3);
-    fake.function(0x1020, &c, Some(2));
+    let mut loads = vec![0x48, 0x8d, 0x0d];
+    loads.extend(rel(0x1007, hello));
+    loads.push(0xe8);
+    loads.extend(rel(0x100c, 0x1040));
+    loads.push(0xc3);
+    fake.function(0x1000, &loads, Some(0));
+    let mut twice = vec![0xe8];
+    twice.extend(rel(0x1015, 0x1040));
+    twice.extend([0xb8, 7, 0, 0, 0, 0xb8, 7, 0, 0, 0, 0xc3]);
+    fake.function(0x1010, &twice, Some(1));
+    let mut calls = vec![0xe8];
+    calls.extend(rel(0x1025, 0x1000));
+    calls.push(0xe8);
+    calls.extend(rel(0x102a, 0x1010));
+    calls.push(0xc3);
+    fake.function(0x1020, &calls, Some(2));
     fake.function(0x1040, &[0x8b, 0x41, 0x78, 0xc1, 0xe0, 0x03, 0xc3], None);
-    let name = RDATA + 0x100;
-    fake.put(name, b"sys_b\0");
-    let record = RDATA + 0x200;
-    for (at, word) in [BASE + name, 5, BASE + 0x1010].into_iter().enumerate() {
-        fake.put(record + at as u64 * 8, &word.to_le_bytes());
+    let mut inside = vec![0x48, 0x8d, 0x05];
+    inside.extend(rel(0x1057, 0x1005));
+    inside.push(0xc3);
+    fake.function(0x1050, &inside, Some(3));
+    fake.function(0x1060, &[0xeb, 0x00], Some(4));
+    fake.function(0x1062, &[0xb8, 5, 0, 0, 0, 0xc3], None);
+    fake.function(0x1070, &[0x90, 0x90], Some(5));
+    fake.function(0x1072, &[0xb8, 6, 0, 0, 0, 0xc3], None);
+    let records: [(&[u8], u64); 6] = [
+        (b"sys_b", 0x1010),
+        (b"sys_d", 0x1050),
+        (b"sys_e", 0x1060),
+        (b"sys_f", 0x1070),
+        (b"sys_c", 0x1000),
+        (b"sys_c", 0x1020),
+    ];
+    for (i, (name, entry)) in records.into_iter().enumerate() {
+        let i = i as u64;
+        let at = RDATA + 0x100 + i * 0x10;
+        fake.put(at, name);
+        fake.put(at + name.len() as u64, &[0]);
+        let record = RDATA + 0x200 + i * 0x20;
+        for (k, word) in [BASE + at, name.len() as u64, BASE + entry]
+            .into_iter()
+            .enumerate()
+        {
+            fake.put(record + k as u64 * 8, &word.to_le_bytes());
+        }
     }
     fake
 }
@@ -282,23 +308,16 @@ const FAKE_ROUTES: &str = r#"
 [[route]]
 id = "t.disp"
 in = "t.leaf"
-shape = ["mov eax,[rcx+*]"]
+shape = ["mov eax,[rcx+*]", "shl eax,?"]
 take = "value"
 plus = 1
 
 [[route]]
 id = "t.shift"
 in = "t.leaf"
-shape = ["shl eax,*"]
+shape = ["mov eax,[rcx+0x78]", "shl eax,*"]
 take = "value"
 shift = true
-
-[[route]]
-id = "t.fixed"
-in = "t.leaf"
-shape = ["mov eax,[rcx+0x78]"]
-take = "fixed"
-value = 5
 
 [[route]]
 id = "t.leaf"
@@ -324,6 +343,32 @@ in = "t.loop"
 shape = ["ret"]
 
 [[route]]
+id = "t.string"
+in = "~fn:a"
+shape = ["lea rcx,[rip+*]"]
+take = "address"
+
+[[route]]
+id = "t.inside"
+in = "sys_d"
+shape = ["lea rax,[rip+*]"]
+take = "address"
+
+[[route]]
+id = "t.ambiguous"
+system = "sys_c"
+
+[[route]]
+id = "t.tail"
+in = "sys_e"
+shape = ["mov eax,0x5", "ret"]
+
+[[route]]
+id = "t.untail"
+in = "sys_f"
+shape = ["mov eax,0x6", "ret"]
+
+[[route]]
 id = "sys_b"
 system = "sys_b"
 
@@ -332,36 +377,111 @@ id = "~fn:a"
 loads = ["hello"]
 "#;
 
+const EMPTY: &str =
+    "name = \"empty\"\nside = \"server\"\nguid = \"00000000000000000000000000000000\"\nage = 0";
+
+fn empty() -> crate::Resolved {
+    Table::parse(EMPTY).unwrap().resolve()
+}
+
 #[test]
 fn every_kind_of_route_finds_its_entry_in_any_row_order() {
     let fake = fake();
     let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
     let reflection = Reflection::scan(&image);
-    let empty = Table::parse(
-        "name = \"empty\"\nside = \"server\"\nguid = \"00000000000000000000000000000000\"\nage = 0",
-    )
-    .unwrap()
-    .resolve();
     let routes = Routes::parse(FAKE_ROUTES).unwrap();
-    let found: Vec<(&str, Option<Routed>)> = routes.find(&image, &reflection, Side::Server, &empty);
+    let found: Vec<(&str, Option<Routed>)> =
+        routes.find(&image, &reflection, Side::Server, &empty());
     assert_eq!(
         found,
         [
-            ("t.caller", Some(Routed::Symbol(0x1020))),
+            ("t.ambiguous", None),
+            ("t.caller", Some(Routed::Reached(0x1020))),
             ("t.disp", Some(Routed::Constant(0x79))),
-            ("t.fixed", Some(Routed::Constant(5))),
-            ("t.leaf", Some(Routed::Symbol(0x1040))),
+            ("t.inside", None),
+            ("t.leaf", Some(Routed::Reached(0x1040))),
             ("t.loop", None),
             ("t.once", Some(Routed::Symbol(0x101a))),
             ("t.shift", Some(Routed::Constant(8))),
+            ("t.string", Some(Routed::Reached(0x2180))),
+            ("t.tail", Some(Routed::Symbol(0x1062))),
             ("t.twice", None),
+            ("t.untail", None),
         ]
     );
+    assert!(routes.checks("t.once", Side::Server));
+    assert!(!routes.checks("t.leaf", Side::Server));
 }
+
+#[test]
+fn nothing_builds_on_a_route_the_table_contradicts() {
+    let fake = fake();
+    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+    let reflection = Reflection::scan(&image);
+    let routes = Routes::parse(FAKE_ROUTES).unwrap();
+    let known = Table::parse(&format!("{EMPTY}\n[symbols]\n\"t.leaf\" = 0x1000"))
+        .unwrap()
+        .resolve();
+    let found = routes.find(&image, &reflection, Side::Server, &known);
+    let of = |id: &str| found.iter().find(|(f, _)| *f == id).unwrap().1;
+    assert_eq!(of("t.leaf"), Some(Routed::Reached(0x1040)));
+    assert_eq!(of("t.disp"), None);
+    assert_eq!(of("t.shift"), None);
+}
+
+#[test]
+fn a_constant_taken_by_one_loose_step_or_a_fixed_value_is_refused() {
+    let row = |keys: &str| format!("[[route]]\nid = \"a.b\"\nin = \"s\"\n{keys}");
+    for bad in [
+        "shape = [\"mov eax,[rcx+*]\"]\ntake = \"value\"",
+        "shape = [\"mov eax,[rip+*]\"]\ntake = \"cell\"",
+        "shape = [\"mov eax,?\"]\ntake = \"fixed\"\nvalue = 4",
+    ] {
+        assert!(Routes::parse(&row(bad)).is_err(), "{bad}");
+    }
+    for good in [
+        "shape = [\"mov eax,[rcx+*]\", \"ret\"]\ntake = \"value\"",
+        "shape = [\"cmp [rcx+0x10],*\"]\ntake = \"value\"",
+        "shape = [\"lea rcx,{a.c}\", \"mov eax,[rcx+*]\"]\ntake = \"value\"",
+    ] {
+        assert!(Routes::parse(&row(good)).is_ok(), "{good}");
+    }
+}
+
+/// Entries a route finds on a table build that its own table does not pin
+/// and no pattern of the newest table finds there either, by table name.
+const UNPINNED_UNCHECKED: &[(&str, &[&str])] = &[
+    (
+        "1.0 client (1269579)",
+        &[
+            "bases.cursor",
+            "bases.entity_query",
+            "bases.set_insert",
+            "building.block_box",
+            "recipe.limit_stop",
+            "ui.scroll_focus",
+            "ui.text_field",
+            "ui.text_field_extent",
+            "ui.text_field_text",
+        ],
+    ),
+    (
+        "1.0 server (1269579)",
+        &[
+            "bases.cursor",
+            "bases.entity_query",
+            "bases.set_insert",
+            "building.block_box",
+            "recipe.limit_stop",
+        ],
+    ),
+];
 
 /// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
 /// skipped without it), every route of their side finds, with no table
-/// behind it, the value their own table pins, where it pins one.
+/// behind it, the value their own table pins; an entry the table does not
+/// pin takes the value the newest table's patterns find there, or is one of
+/// [`UNPINNED_UNCHECKED`].
 #[test]
 #[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
 fn every_route_finds_what_the_own_table_pins() {
@@ -370,11 +490,6 @@ fn every_route_finds_what_the_own_table_pins() {
         .map(|(_, text)| Table::parse(text).unwrap())
         .collect();
     let routes = Routes::embedded().unwrap();
-    let empty = Table::parse(
-        "name = \"empty\"\nside = \"server\"\nguid = \"00000000000000000000000000000000\"\nage = 0",
-    )
-    .unwrap()
-    .resolve();
     for (var, side) in [
         ("ENSH_SERVER_EXE", Side::Server),
         ("ENSH_CLIENT_EXE", Side::Client),
@@ -388,17 +503,42 @@ fn every_route_finds_what_the_own_table_pins() {
         let own = exact(&tables, side, image.fingerprint().unwrap())
             .unwrap()
             .resolve();
+        let text = image.range(image.section(".text").unwrap());
+        let code = image.read(text.start, text.end - text.start).unwrap();
+        let carried = crate::newest(&tables, side).unwrap().fall_back(
+            code,
+            text.start - image.base(),
+            |at| image.u32(image.base() + at),
+        );
+        let unchecked: &[&str] = UNPINNED_UNCHECKED
+            .iter()
+            .find(|(name, _)| *name == own.name())
+            .map_or(&[], |(_, ids)| ids);
         let wrong: Vec<String> = routes
-            .find(&image, &reflection, side, &empty)
+            .find(&image, &reflection, side, &empty())
             .into_iter()
             .filter_map(|(id, routed)| {
-                let pinned = match (own.symbol(id), own.constant(id)) {
-                    (Some(rva), _) => Routed::Symbol(rva),
-                    (None, Some(value)) => Routed::Constant(value),
-                    (None, None) => return None,
+                let (value, constant) = match routed {
+                    Some(Routed::Symbol(v) | Routed::Reached(v)) => (Some(v), false),
+                    Some(Routed::Constant(v)) => (Some(v), true),
+                    None => (None, false),
                 };
-                (routed != Some(pinned))
-                    .then(|| format!("{id}: route {routed:x?}, table {pinned:x?}"))
+                let entry = |table: &crate::Resolved| {
+                    if constant {
+                        table.constant(id)
+                    } else {
+                        table.symbol(id)
+                    }
+                };
+                let pinned = own.symbol(id).is_some() || own.constant(id).is_some();
+                let want = if pinned {
+                    entry(&own)
+                } else if value.is_none() || unchecked.contains(&id) {
+                    return None;
+                } else {
+                    entry(&carried)
+                };
+                (value != want).then(|| format!("{id}: route {routed:x?}, table {want:x?}"))
             })
             .collect();
         assert!(

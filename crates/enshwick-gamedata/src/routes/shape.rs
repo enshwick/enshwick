@@ -96,6 +96,22 @@ impl Step {
         })
     }
 
+    /// Whether the step pins an operand to one value: an exact immediate,
+    /// an exact displacement or another entry's address.
+    pub(crate) fn is_exact(&self) -> bool {
+        self.ops.iter().any(|op| {
+            matches!(
+                op,
+                Op::Immediate(_)
+                    | Op::Entry(_)
+                    | Op::Memory {
+                        disp: Disp::Exact(_),
+                        ..
+                    }
+            )
+        })
+    }
+
     /// Whether `ins` is this step, with `entry` giving the address of a named
     /// entry; the taken value, if the step takes one, goes to `taken`.
     pub(crate) fn matches(

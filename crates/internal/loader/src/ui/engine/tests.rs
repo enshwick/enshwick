@@ -12,6 +12,14 @@ fn texts_hash_as_the_game_does() {
     assert_ne!(hash("ж".as_bytes()), plain);
 }
 
+#[test]
+fn a_function_s_bytes_are_checked_whenever_the_table_has_them() {
+    assert!(code_checks(Some(7), false, || 7));
+    assert!(!code_checks(Some(7), true, || 8));
+    assert!(code_checks(None, true, || unreachable!()));
+    assert!(!code_checks(None, false, || unreachable!()));
+}
+
 /// The layouts of every client table fit the loader's buffers, and a
 /// build whose label grew past them keeps the interface off.
 #[test]

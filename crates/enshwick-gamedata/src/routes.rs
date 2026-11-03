@@ -19,11 +19,16 @@
 //! `take` says what the entry is: `start` (the default; the function, or
 //! the shape's first instruction), `end` (the address after the shape),
 //! `address` (the address the shape's `*` takes), `value` (the number it
-//! takes), `cell` (the `u32` the game keeps at the address it takes) or
-//! `fixed` (the row's `value`, where the shape matches); the last three are
-//! constants, the rest symbols. `shift` turns a taken constant `v` into
-//! `1 << v`, and `plus` then adds to it. `sides` limits a route to some
-//! sides; it defaults to every side.
+//! takes) or `cell` (the `u32` the game keeps at the address it takes); the
+//! last two are constants, the rest symbols. A taken constant needs a shape
+//! of two steps or one with an exact operand or an `{entry}`. `shift` turns
+//! a taken constant `v` into `1 << v`, and `plus` then adds to it. `sides`
+//! limits a route to some sides; it defaults to every side.
+//!
+//! Only a shape's start checks the code of the symbol it finds
+//! ([`Routed::Symbol`]); every other symbol is [`Routed::Reached`], and one in
+//! the code must start a function. A route that finds another symbol than
+//! `known` holds stands for nothing to the routes that name it.
 //!
 //! A route whose id starts with `~` or has no `.` is a waypoint: a function
 //! other routes pass through that no table pins, never an entry itself.
@@ -52,13 +57,18 @@ use shape::Step;
 /// ```
 /// use enshwick_gamedata::Routed;
 ///
-/// assert_ne!(Routed::Symbol(0x10), Routed::Constant(0x10));
+/// assert_ne!(Routed::Symbol(0x10), Routed::Reached(0x10));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Routed {
-    /// A symbol, relative to the image base.
+    /// A symbol whose code the route's shape matched, relative to the image
+    /// base: the match checked the code there.
     Symbol(u64),
+    /// A symbol the route reached without matching its code, relative to the
+    /// image base: the start of a function, an address the shape took, or the
+    /// address after the shape. Nothing checked the code there.
+    Reached(u64),
     /// A constant.
     Constant(u64),
 }
@@ -71,7 +81,6 @@ enum Take {
     Address,
     Value,
     Cell,
-    Fixed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -89,8 +98,6 @@ struct Route {
     sides: Vec<Side>,
     how: How,
     take: Take,
-    /// The value of a `fixed` take.
-    fixed: u64,
     /// Whether a taken constant `v` becomes `1 << v`.
     shift: bool,
     /// What is added to a taken constant.
@@ -101,6 +108,12 @@ impl Route {
     /// Whether the route finds an entry rather than a waypoint.
     fn is_entry(&self) -> bool {
         !self.id.starts_with('~') && self.id.contains('.')
+    }
+
+    /// Whether the route's match checks the code at the symbol it finds:
+    /// the start of its shape.
+    fn checks_code(&self) -> bool {
+        self.take == Take::Start && matches!(self.how, How::Shape { .. })
     }
 }
 
@@ -124,7 +137,6 @@ struct RouteRow {
     within: Option<String>,
     shape: Option<Vec<String>>,
     take: Option<Take>,
-    value: Option<u64>,
     shift: Option<bool>,
     plus: Option<i64>,
 }
@@ -165,24 +177,28 @@ impl RouteRow {
             }
         };
         let take = self.take.unwrap_or(Take::Start);
-        let takes: usize = match &how {
-            How::Shape { steps, .. } => steps.iter().map(Step::takes).sum(),
-            _ => 0,
+        let steps: &[Step] = match &how {
+            How::Shape { steps, .. } => steps,
+            _ => &[],
         };
-        let shaped = matches!(how, How::Shape { .. });
+        let takes: usize = steps.iter().map(Step::takes).sum();
+        let shaped = !steps.is_empty();
         match take {
             Take::Start if takes == 0 => {}
-            Take::End | Take::Fixed if shaped && takes == 0 => {}
+            Take::End if shaped && takes == 0 => {}
             Take::Address | Take::Value | Take::Cell if shaped && takes == 1 => {}
             _ => {
                 return Err(bad(
-                    "`end` and `fixed` take a shape, `address`, `value` and `cell` a shape with one `*`, and `start` no `*`",
+                    "`end` takes a shape, `address`, `value` and `cell` a shape with one `*`, and `start` no `*`",
                 ));
             }
         }
-        if self.value.is_some() != (take == Take::Fixed) {
+        if matches!(take, Take::Value | Take::Cell)
+            && steps.len() < 2
+            && !steps.iter().any(Step::is_exact)
+        {
             return Err(bad(
-                "`value` is the value of a `fixed` take, which needs it",
+                "a taken constant needs a shape of two steps, an exact operand or an `{entry}`",
             ));
         }
         if (self.shift.is_some() || self.plus.is_some())
@@ -197,7 +213,6 @@ impl RouteRow {
             id,
             how,
             take,
-            fixed: self.value.unwrap_or(0),
             shift: self.shift.unwrap_or(false),
             plus: self.plus.unwrap_or(0),
         })
@@ -316,6 +331,27 @@ impl Routes {
             .any(|r| r.is_entry() && r.sides.contains(&side))
     }
 
+    /// Whether the route of `side` for symbol `id` checks the code it finds,
+    /// as its `<id>.bytes` would: its shape starts there.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::{Routes, Side};
+    ///
+    /// let routes = Routes::embedded()?;
+    /// assert!(!routes.checks("ui.slider", Side::Client));
+    /// # Ok::<(), enshwick_gamedata::TableError>(())
+    /// ```
+    #[must_use]
+    pub fn checks(&self, id: &str, side: Side) -> bool {
+        let from = self.routes.partition_point(|r| r.id.as_str() < id);
+        self.routes[from..]
+            .iter()
+            .take_while(|r| r.id == id)
+            .any(|r| r.is_entry() && r.sides.contains(&side) && r.checks_code())
+    }
+
     /// What the route of `side` for each entry finds in `image`, by id,
     /// `None` where it finds nothing; `known` gives the functions and
     /// entries a route names that no route of `side` finds.
@@ -345,6 +381,22 @@ impl Routes {
         side: Side,
         known: &Resolved,
     ) -> Vec<(&'r str, Option<Routed>)> {
+        let threads = std::thread::available_parallelism().map_or(1, usize::from);
+        self.find_on(threads, image, reflection, side, known)
+    }
+
+    /// [`Routes::find`] on at most `threads` threads, for measuring the
+    /// start on fewer cores.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn find_on<'r>(
+        &'r self,
+        threads: usize,
+        image: &Image<'_>,
+        reflection: &Reflection<'_>,
+        side: Side,
+        known: &Resolved,
+    ) -> Vec<(&'r str, Option<Routed>)> {
         let sided: Vec<&Route> = self
             .routes
             .iter()
@@ -357,9 +409,9 @@ impl Routes {
                 .enumerate()
                 .filter(|(_, r)| r.is_entry())
         };
-        let strings = find::strings(image, &sided);
+        let strings = find::strings(image, &sided, threads);
         let wanted: FxHashSet<u64> = strings.values().flatten().copied().collect();
-        let Some(code) = Code::new(image, &wanted) else {
+        let Some(code) = Code::new(image, &wanted, threads) else {
             return entries().map(|(_, r)| (r.id.as_str(), None)).collect();
         };
         let mut finder = find::Finder::new(&code, reflection, known, &sided, strings);

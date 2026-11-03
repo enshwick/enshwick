@@ -34,6 +34,12 @@ fn find(c: &mut Criterion) {
         group.bench_function(name, |b| {
             b.iter(|| routes.find(black_box(&image), &reflection, side, &known));
         });
+        // A player's machine may have few cores free at start.
+        for threads in [2, 4] {
+            group.bench_function(format!("{name}/{threads} threads"), |b| {
+                b.iter(|| routes.find_on(threads, black_box(&image), &reflection, side, &known));
+            });
+        }
     }
     group.finish();
 }

@@ -17,9 +17,9 @@ Each entry names the pull request that made the change.
   `system` alone, a shape in any routed function through `in`, and
   `called_by` over route ids; shapes match index registers, exact
   displacements and exact immediates; a taken constant takes `shift` and
-  `plus`, and `take = "fixed"` gives the row's `value`. The route finder
-  indexes code outside `.pdata`, and the routes find 749 client and 523
-  server entries without a table row (#920).
+  `plus`. `Routes::checks` tells whether a route checks its symbol's code.
+  The route finder indexes code outside `.pdata`, and the routes find 720
+  client and 499 server entries without a table row (#920).
 - `Body`, `Resolved::body` and `MAX_PATTERN`: a symbol whose whole function
   the loader relies on is checked by the function's length, its moving
   4-byte fields and a hash of the rest (#710).
@@ -28,6 +28,13 @@ Each entry names the pull request that made the change.
 
 - Breaking: a shape that matches twice finds nothing, and `Routes::ids`
   lists each entry once, sorted by id, without waypoints (#920).
+- Breaking: `Routed::Reached` is a symbol a route reached without matching
+  its code; it must start a function when it lies in the code, and
+  `Resolved::route` supplies it without counting it routed, so its table's
+  checks stay. A taken constant needs a two-step shape, an exact operand or
+  an `{entry}`. A route that disagrees with the table stands for nothing to
+  the routes that name it, and an ECS record name with two entries finds
+  nothing (#920).
 - Breaking: a body row reads `body = { len, open, hash }` instead of
   `body = true` over a pattern of the whole function, and `Symbol::body`
   returns `Option<&Body>`. A body row needs a pattern that finds it: its own

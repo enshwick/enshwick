@@ -30,9 +30,10 @@ fn the_join_target_copies_read_on_each_client() {
 }
 
 /// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
-/// skipped without it), their own table with every routed row it pins and
-/// its `.bytes` check taken out gets each entry back from the engine routes,
-/// with the value the full table pins, and nothing goes missing.
+/// skipped without it), their own table with every routed row it pins taken
+/// out, and the `.bytes` check of each symbol whose route checks its code,
+/// gets each entry back from the engine routes, with the value the full
+/// table pins; only those routes stand for a check, and nothing goes missing.
 #[test]
 fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
     let routes = tables::Routes::embedded().unwrap();
@@ -69,7 +70,9 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
             let rows = doc[section].as_table_mut().unwrap();
             for id in &ids {
                 rows.remove(id);
-                rows.remove(&format!("{id}.bytes"));
+                if routes.checks(id, side) {
+                    rows.remove(&format!("{id}.bytes"));
+                }
             }
         }
         let stripped = Table::parse(&doc.to_string()).unwrap();
@@ -80,9 +83,21 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
             lacking: OnceLock::new(),
         };
         let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
-        assert!(build.route(&routes, &image, &reflection, running) >= ids.len());
+        // Entries the full table does not pin come from the routes too; the
+        // gamedata crate's route test checks each against the patterns.
+        let found = build.route(&routes, &image, &reflection, running);
+        let supplied = routes
+            .ids()
+            .filter(|id| routes.routes(id, side) && !ids.contains(id))
+            .filter(|id| build.symbol(id).or_else(|| build.constant(id)).is_some())
+            .count();
+        assert_eq!(found, ids.len() + supplied, "{var}");
         for id in ids {
-            assert!(build.routed(id), "{var}: {id}");
+            assert_eq!(
+                build.routed(id),
+                routes.checks(id, side) || pinned.constant(id).is_some(),
+                "{var}: {id}"
+            );
             let (have, want) = match pinned.symbol(id) {
                 Some(rva) => (build.symbol(id), Some(rva)),
                 None => (build.constant(id), pinned.constant(id)),

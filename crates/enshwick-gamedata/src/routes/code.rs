@@ -45,6 +45,8 @@ pub(crate) struct Code<'i, 'a> {
     /// Every RIP-relative `lea` of a wanted address as `(address,
     /// function)`, sorted.
     loads: Vec<(u64, u32)>,
+    /// How many threads the passes over the code run on.
+    threads: usize,
 }
 
 /// What the decode of one part found.
@@ -61,8 +63,12 @@ struct Branches {
 impl<'i, 'a> Code<'i, 'a> {
     /// The functions `image` declares and the code outside them, with the
     /// functions that load each address of `wanted` with a RIP-relative
-    /// `lea`; `None` without `.text` or `.pdata`.
-    pub(crate) fn new(image: &'i Image<'a>, wanted: &FxHashSet<u64>) -> Option<Self> {
+    /// `lea`, read on `threads` threads; `None` without `.text` or `.pdata`.
+    pub(crate) fn new(
+        image: &'i Image<'a>,
+        wanted: &FxHashSet<u64>,
+        threads: usize,
+    ) -> Option<Self> {
         let base = image.base();
         let text = image.range(image.section(".text")?);
         let pdata = image.range(image.section(".pdata")?);
@@ -91,8 +97,9 @@ impl<'i, 'a> Code<'i, 'a> {
             calls: Vec::new(),
             called: Vec::new(),
             loads: Vec::new(),
+            threads,
         };
-        let found = crate::table::search(&tasks(code.parts.len()), |range| {
+        let found = crate::table::search_on(threads, &tasks(code.parts.len()), |range| {
             Some(code.branches(range.clone(), wanted))
         });
         let mut branches = Branches::default();
@@ -143,8 +150,8 @@ impl<'i, 'a> Code<'i, 'a> {
     /// Adds the code no `.pdata` entry covers: each run of code a call or a
     /// jump out of a function reaches, or that follows the padding after a
     /// function, up to the first `int3`. A run right after a function's
-    /// part with no padding between is the rest of that function, unless
-    /// another function calls or jumps to it.
+    /// part with no padding between is the rest of that function when that
+    /// function jumps to it and no other calls or jumps to it.
     fn add_outside(&mut self, branches: &mut Branches, wanted: &FxHashSet<u64>) {
         let (starts, tails) = self.gaps();
         let text_end = rva(self.text.end, self.base).unwrap_or(0);
@@ -176,7 +183,7 @@ impl<'i, 'a> Code<'i, 'a> {
                 (leaf, cap)
             })
             .collect();
-        let ends = crate::table::search(&tasks(caps.len()), |range| {
+        let ends = crate::table::search_on(self.threads, &tasks(caps.len()), |range| {
             Some(
                 caps[range.clone()]
                     .iter()
@@ -198,9 +205,9 @@ impl<'i, 'a> Code<'i, 'a> {
                     .copied()
                     .filter(|&owner| {
                         !called.contains(&begin)
-                            && jumpers
-                                .get(&begin)
-                                .is_none_or(|from| from.iter().all(|&f| f == owner))
+                            && jumpers.get(&begin).is_some_and(|from| {
+                                from.contains(&owner) && from.iter().all(|&f| f == owner)
+                            })
                     })
                     .unwrap_or(begin)
             })
@@ -261,7 +268,7 @@ impl<'i, 'a> Code<'i, 'a> {
                 owner = function;
             }
         }
-        let found = crate::table::search(&tasks(gaps.len()), |range| {
+        let found = crate::table::search_on(self.threads, &tasks(gaps.len()), |range| {
             let mut starts = Vec::new();
             let mut tails = Vec::new();
             for &(from, to, owner) in &gaps[range.clone()] {
@@ -348,6 +355,18 @@ impl<'i, 'a> Code<'i, 'a> {
         self.image
     }
 
+    /// Whether a function begins at `rva`.
+    pub(crate) fn is_function(&self, rva: u32) -> bool {
+        self.parts_of(rva)
+            .next()
+            .is_some_and(|(begin, _)| begin == rva)
+    }
+
+    /// Whether `va` lies in the code section.
+    pub(crate) fn in_text(&self, va: u64) -> bool {
+        self.text.contains(&va)
+    }
+
     /// The begin RVA of the function whose code holds `rva`.
     pub(crate) fn function_of(&self, rva: u64) -> Option<u32> {
         let rva = u32::try_from(rva).ok()?;
@@ -414,8 +433,9 @@ impl<'i, 'a> Code<'i, 'a> {
 }
 
 /// For each of `texts`, the `.rdata` addresses where it lies as a whole
-/// NUL-terminated string, from one pass over the strings there on all cores.
-pub(crate) fn strings(image: &Image<'_>, texts: &[&str]) -> Vec<Vec<u64>> {
+/// NUL-terminated string, from one pass over the strings there on `threads`
+/// threads.
+pub(crate) fn strings(image: &Image<'_>, texts: &[&str], threads: usize) -> Vec<Vec<u64>> {
     let mut found = vec![Vec::new(); texts.len()];
     let Some(rdata) = image.section(".rdata").map(|s| image.range(s)) else {
         return found;
@@ -441,7 +461,7 @@ pub(crate) fn strings(image: &Image<'_>, texts: &[&str]) -> Vec<Vec<u64>> {
         .collect();
     cuts.dedup();
     let pieces: Vec<Range<usize>> = cuts.windows(2).map(|w| w[0]..w[1]).collect();
-    let hits = crate::table::search(&pieces, |piece| {
+    let hits = crate::table::search_on(threads, &pieces, |piece| {
         let mut hits = Vec::new();
         let mut at = piece.start;
         for end in memchr::memchr_iter(0, &bytes[piece.clone()]).map(|nul| piece.start + nul) {

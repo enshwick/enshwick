@@ -185,8 +185,10 @@ impl Resolved {
     /// Takes what an engine route found for entry `id`: an entry the
     /// table lacks or missed is supplied, one it holds must agree or goes
     /// off as [`Self::missing`], and nothing found leaves the table's
-    /// entry. A found symbol also stands for its `<id>.bytes` check, which
-    /// the route's own match replaces.
+    /// entry. A [`Routed::Symbol`] or constant is [`Self::routed`], and a
+    /// symbol also stands for its `<id>.bytes` check, which the route's own
+    /// match replaces; a [`Routed::Reached`] symbol is not, and keeps its
+    /// checks.
     ///
     /// # Examples
     ///
@@ -213,6 +215,9 @@ impl Resolved {
     ///     Routing::Conflict { table: 0x1000, engine: 0x2000 }
     /// );
     /// assert_eq!(resolved.symbol("f.held"), None);
+    /// assert_eq!(resolved.route("f.call", Some(Routed::Reached(0x3000))), Routing::Supplied);
+    /// assert_eq!(resolved.symbol("f.call"), Some(0x3000));
+    /// assert!(!resolved.routed("f.call"));
     /// assert_eq!(resolved.route("f.none", None), Routing::Unresolved);
     /// # Ok::<(), enshwick_gamedata::TableError>(())
     /// ```
@@ -221,7 +226,7 @@ impl Resolved {
             return Routing::Unresolved;
         };
         let (entries, engine) = match found {
-            Routed::Symbol(rva) => (&mut self.symbols, rva),
+            Routed::Symbol(rva) | Routed::Reached(rva) => (&mut self.symbols, rva),
             Routed::Constant(value) => (&mut self.constants, value),
         };
         let routing = match entries.binary_search_by(|(have, _)| have.as_str().cmp(id)) {
@@ -239,8 +244,12 @@ impl Resolved {
                 Routing::Supplied
             }
         };
+        self.missing.retain(|have| have != id);
+        if matches!(found, Routed::Reached(_)) {
+            return routing;
+        }
         let check = format!("{id}.bytes");
-        self.missing.retain(|have| have != id && *have != check);
+        self.missing.retain(|have| *have != check);
         if let Err(at) = self.routed.binary_search_by(|have| have.as_str().cmp(id)) {
             self.routed.insert(at, id.to_owned());
         }

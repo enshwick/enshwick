@@ -60,7 +60,7 @@ take = "address"
 [[route]]
 id = "access.object_id"
 in = "access.dismantle_method"
-shape = ["mov rax,[rdx+*]"]
+shape = ["mov rax,[rdx+*]", "test rax,rax"]
 take = "value"
 
 [[route]]
@@ -107,13 +107,13 @@ loads = [
 [[route]]
 id = "access.sort_target"
 in = "access.sort"
-shape = ["mov ebx,[rbx+*]"]
+shape = ["mov rdi,rcx", "mov ebx,[rbx+*]"]
 take = "value"
 
 [[route]]
 id = "access.state_input"
 in = "access.transfer"
-shape = ["mov rsi,[rdx+*]"]
+shape = ["sub rsp,rax", "mov rsi,[rdx+*]"]
 take = "value"
 
 [[route]]
@@ -190,7 +190,7 @@ take = "value"
 [[route]]
 id = "actor.state_in_shroud"
 system = "fog_resistance_update"
-shape = ["or [rax+?],*"]
+shape = ["mov rax,[rsp+?]", "or [rax+?],*"]
 take = "value"
 
 [[route]]
@@ -200,7 +200,7 @@ system = "actor_instrument_song_playing"
 [[route]]
 id = "altar.level_attribute"
 system = "upgrade_building_range"
-shape = ["mov edx,*"]
+shape = ["lea rcx,[rbp-?]", "mov edx,*"]
 take = "value"
 
 [[route]]
@@ -298,25 +298,11 @@ id = "base_crafting_props_cleanup"
 system = "base_crafting_props_cleanup"
 
 [[route]]
-id = "bases.allocator"
-in = "bases.new_base"
-shape = ["mov rdi,[rsi]", "cmp [rbx+?],rdi"]
-take = "fixed"
-value = 0x0
-
-[[route]]
 id = "bases.animal_map"
 in = "bases.server_update"
 shape = ["nop [rax+rax*1]", "lea rcx,[rsi+*]"]
 take = "value"
 plus = -8
-
-[[route]]
-id = "bases.animal_value"
-in = "bases.server_update"
-shape = ["lea rbp,[rbx+rbx*2]"]
-take = "fixed"
-value = 0x3
 
 [[route]]
 id = "bases.animals"
@@ -332,16 +318,9 @@ shape = ["movaps xmm0,[rcx+rax*1]", "movups [r10+*],xmm0"]
 take = "value"
 
 [[route]]
-id = "bases.answer_error"
-in = "bases.base_at"
-shape = ["mov [r10],?", "mov rbx,[rsp+?]"]
-take = "fixed"
-value = 0x0
-
-[[route]]
 id = "bases.answer_index"
 in = "bases.base_at"
-shape = ["mov [r10+*],r11l"]
+shape = ["ret", "mov [r10+*],r11l"]
 take = "value"
 
 [[route]]
@@ -384,7 +363,7 @@ called_by = ["base_bed_counts_cleanup_server"]
 [[route]]
 id = "bases.changes"
 in = "bases.rebuild"
-shape = ["inc [rdi+*]"]
+shape = ["inc [rdi+*]", "mov rax,[rsp+?]"]
 take = "value"
 
 [[route]]
@@ -398,7 +377,7 @@ take = "address"
 id = "bases.client_size"
 sides = ["client"]
 in = "bases.client_create"
-shape = ["mov edx,*"]
+shape = ["mov edx,*", "mov r8d,?"]
 take = "value"
 
 [[route]]
@@ -410,33 +389,26 @@ take = "address"
 [[route]]
 id = "bases.container_box"
 in = "bases.zones_at"
-shape = ["shl rcx,*"]
+shape = ["mov rax,[rdi]", "shl rcx,*"]
 take = "value"
 shift = true
 
 [[route]]
 id = "bases.container_cap"
 in = "bases.zones_at"
-shape = ["cmp rdx,[rdi+*]"]
+shape = ["shl rsi,?", "cmp rdx,[rdi+*]"]
 take = "value"
-
-[[route]]
-id = "bases.container_data"
-in = "bases.zones_at"
-shape = ["mov rax,[rdi]"]
-take = "fixed"
-value = 0x0
 
 [[route]]
 id = "bases.container_grow"
 in = "bases.zones_at"
-shape = ["mov rax,[rdi+*]"]
+shape = ["mov rax,[rdi+*]", "test rax,rax"]
 take = "value"
 
 [[route]]
 id = "bases.container_len"
 in = "bases.zones_at"
-shape = ["mov rdx,[rdi+*]"]
+shape = ["mov rdx,[rdi+*]", "mov esi,ebx"]
 take = "value"
 
 [[route]]
@@ -505,7 +477,7 @@ take = "address"
 [[route]]
 id = "bases.grouped"
 in = "bases.rebuild"
-shape = ["mov eax,[rcx+*]"]
+shape = ["sub rsp,rax", "mov eax,[rcx+*]"]
 take = "value"
 
 [[route]]
@@ -526,13 +498,13 @@ take = "address"
 id = "bases.heap_allocate"
 sides = ["client"]
 in = "~fn:bases.heap_allocate"
-shape = ["mov r10,[r9+*]"]
+shape = ["mov [rsp+?],al", "mov r10,[r9+*]"]
 take = "value"
 
 [[route]]
 id = "bases.heap_free"
 in = "bases.grouping"
-shape = ["call [rax+*]"]
+shape = ["mov rax,[rcx]", "call [rax+*]"]
 take = "value"
 
 [[route]]
@@ -549,7 +521,7 @@ take = "address"
 [[route]]
 id = "bases.kind"
 in = "bases.new_base"
-shape = ["cmp [rsi+*],r14l"]
+shape = ["mov [rbx+?],r15", "cmp [rsi+*],r14l"]
 take = "value"
 
 [[route]]
@@ -561,13 +533,13 @@ take = "value"
 [[route]]
 id = "bases.map_buckets"
 in = "bases.stock_cache"
-shape = ["mov r8,[rdi+*]"]
+shape = ["je ?", "mov r8,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "bases.map_count"
 in = "bases.stock_cache"
-shape = ["cmp [rdi+*],r15d"]
+shape = ["mov [rsp+?],r13", "cmp [rdi+*],r15d"]
 take = "value"
 
 [[route]]
@@ -591,7 +563,7 @@ take = "address"
 [[route]]
 id = "bases.npc_kind"
 in = "bases.npc_totals"
-shape = ["cmp [r8+*],?"]
+shape = ["inc [rbx+?]", "cmp [r8+*],?"]
 take = "value"
 
 [[route]]
@@ -608,34 +580,27 @@ shape = ["call *", "mov r14,r13"]
 take = "address"
 
 [[route]]
-id = "bases.npc_value"
-in = "bases.npc_totals"
-shape = ["lea rdx,[rax+rax*2]"]
-take = "fixed"
-value = 0xc
-
-[[route]]
 id = "bases.npcs"
 in = "bases.npc_totals"
-shape = ["mov [rcx+*],r14d"]
+shape = ["mov esi,r14d", "mov [rcx+*],r14d"]
 take = "value"
 
 [[route]]
 id = "bases.npcs_home"
 in = "bases.npc_totals"
-shape = ["add [rbx+*],ax"]
+shape = ["inc rsi", "add [rbx+*],ax"]
 take = "value"
 
 [[route]]
 id = "bases.page"
 in = "bases.stock_cache"
-shape = ["mov [rdx+*],r15"]
+shape = ["mov [rdx+*],r15", "mov eax,r15d"]
 take = "value"
 
 [[route]]
 id = "bases.position"
 in = "bases.stock_cache"
-shape = ["mov eax,[rdx+*]"]
+shape = ["mov eax,[rdx+*]", "xor r15d,r15d"]
 take = "value"
 
 [[route]]
@@ -649,13 +614,13 @@ calls = ["bases.entity_query", "bases.set_insert"]
 [[route]]
 id = "bases.rebuilt"
 in = "bases.rebuild"
-shape = ["cmp [rcx+*],eax"]
+shape = ["mov rdi,rcx", "cmp [rcx+*],eax"]
 take = "value"
 
 [[route]]
 id = "bases.record_animals"
 in = "bases.server_update"
-shape = ["lea rdi,[rsi+*]"]
+shape = ["mov [rsp+?],rdi", "lea rdi,[rsi+*]"]
 take = "value"
 plus = -50
 
@@ -669,49 +634,49 @@ take = "value"
 [[route]]
 id = "bases.record_beds"
 in = "bases.bed_cleanup"
-shape = ["lea rax,[rcx+*]"]
+shape = ["lea rax,[rcx+*]", "nop [rax+rax*1]"]
 take = "value"
 plus = -52
 
 [[route]]
 id = "bases.record_comfort"
 in = "bases.comfort_cleanup"
-shape = ["lea rax,[rcx+*]"]
+shape = ["lea rax,[rcx+*]", "xorps xmm0,xmm0"]
 take = "value"
 plus = -48
 
 [[route]]
 id = "bases.record_comfort_len"
 in = "bases.comfort_cleanup"
-shape = ["mov [rax+*],ecx"]
+shape = ["movups [rax+?],xmm0", "mov [rax+*],ecx"]
 take = "value"
 plus = 4
 
 [[route]]
 id = "bases.record_list_all"
 in = "bases.sort"
-shape = ["mov ecx,*"]
+shape = ["mov ecx,*", "cmove eax,ecx"]
 take = "value"
 plus = -48
 
 [[route]]
 id = "bases.record_list_kept"
 in = "bases.sort"
-shape = ["mov eax,*"]
+shape = ["test r14l,r14l", "mov eax,*"]
 take = "value"
 plus = -48
 
 [[route]]
 id = "bases.record_npcs_home"
 in = "bases.npc_totals"
-shape = ["lea rdi,[rcx+*]"]
+shape = ["lea rdi,[rcx+*]", "nop [rax+rax*1]"]
 take = "value"
 plus = -48
 
 [[route]]
 id = "bases.record_props"
 in = "bases.props_cleanup"
-shape = ["lea rdx,[rcx+*]"]
+shape = ["lea rdx,[rcx+*]", "nop [rax]"]
 take = "value"
 plus = -48
 
@@ -731,28 +696,28 @@ plus = -48
 [[route]]
 id = "bases.record_set_bitmap"
 in = "bases.rebuild"
-shape = ["lea rbx,[rcx+*]"]
+shape = ["jbe ?", "lea rbx,[rcx+*]"]
 take = "value"
 plus = -96
 
 [[route]]
 id = "bases.record_set_buckets"
 in = "bases.rebuild"
-shape = ["lea rbx,[rcx+*]"]
+shape = ["jbe ?", "lea rbx,[rcx+*]"]
 take = "value"
 plus = -88
 
 [[route]]
 id = "bases.record_set_count"
 in = "bases.rebuild"
-shape = ["lea rbx,[rcx+*]"]
+shape = ["jbe ?", "lea rbx,[rcx+*]"]
 take = "value"
 plus = -48
 
 [[route]]
 id = "bases.records"
 in = "bases.ctor"
-shape = ["lea rdx,[rcx+*]"]
+shape = ["xor r10d,r10d", "lea rdx,[rcx+*]"]
 take = "value"
 
 [[route]]
@@ -770,7 +735,7 @@ take = "address"
 [[route]]
 id = "bases.server_size"
 in = "bases.server_create"
-shape = ["mov edx,*"]
+shape = ["mov r8d,esi", "mov edx,*"]
 take = "value"
 
 [[route]]
@@ -812,7 +777,7 @@ take = "address"
 [[route]]
 id = "bases.slot"
 in = "bases.server_create"
-shape = ["add rdi,*"]
+shape = ["call ?", "add rdi,*"]
 take = "value"
 
 [[route]]
@@ -830,7 +795,7 @@ take = "address"
 [[route]]
 id = "bases.slots"
 in = "bases.server_create"
-shape = ["lea rdi,[rbx+*]"]
+shape = ["lea rdi,[rbx+*]", "nop [rax]"]
 take = "value"
 
 [[route]]
@@ -868,13 +833,13 @@ take = "value"
 [[route]]
 id = "bases.sort_entity_position"
 in = "bases.sort"
-shape = ["movups xmm2,[r8+*]"]
+shape = ["mov rdi,rcx", "movups xmm2,[r8+*]"]
 take = "value"
 
 [[route]]
 id = "bases.staging"
 in = "bases.stock_cache"
-shape = ["lea rbp,[r14+*]"]
+shape = ["lea rbp,[r14+*]", "lea eax,[r9+r9*4]"]
 take = "value"
 
 [[route]]
@@ -899,13 +864,13 @@ take = "address"
 [[route]]
 id = "bases.stock_count"
 in = "bases.stock_cache"
-shape = ["mov [rcx+*],rax"]
+shape = ["cmovb rax,rdx", "mov [rcx+*],rax"]
 take = "value"
 
 [[route]]
 id = "bases.stock_entities"
 in = "bases.stock_cache"
-shape = ["mov [rcx+*],r11"]
+shape = ["mov [rcx+?],rax", "mov [rcx+*],r11"]
 take = "value"
 
 [[route]]
@@ -970,28 +935,14 @@ take = "value"
 [[route]]
 id = "buffs.record_size"
 in = "~fn:buffs.record_size"
-shape = ["imul r8,rax,*"]
+shape = ["mov r9,r13", "imul r8,rax,*"]
 take = "value"
 
 [[route]]
 id = "buffs.record_strength"
 in = "buffs.restore"
-shape = ["movss xmm0,[r14+*]"]
+shape = ["mov rdx,[rbp+?]", "movss xmm0,[r14+*]"]
 take = "value"
-
-[[route]]
-id = "buffs.record_type"
-in = "buffs.restore"
-shape = [
-  "mov r14,r8",
-  "mov ebx,edx",
-  "call ?",
-  "mov ecx,[r14]",
-  "mov rdx,rax",
-  "call {buffs.type_by_id}",
-]
-take = "fixed"
-value = 0x0
 
 [[route]]
 id = "buffs.registry"
@@ -1009,7 +960,7 @@ take = "value"
 [[route]]
 id = "buffs.registry_blob"
 in = "buffs.type_by_id"
-shape = ["mov r11,[rdx+*]"]
+shape = ["mov r11,[rdx+*]", "test r11,r11"]
 take = "value"
 
 [[route]]
@@ -1053,13 +1004,13 @@ take = "address"
 [[route]]
 id = "building.ctx_player"
 in = "building.pickup"
-shape = ["mov eax,[r15+*]"]
+shape = ["mov [rbx+?],esi", "mov eax,[r15+*]"]
 take = "value"
 
 [[route]]
 id = "building.ctx_replay"
 in = "building.pickup"
-shape = ["cmp [r15+*],al"]
+shape = ["jne ?", "cmp [r15+*],al"]
 take = "value"
 
 [[route]]
@@ -1079,7 +1030,7 @@ take = "address"
 [[route]]
 id = "building.cursor_item_info"
 in = "building.cursor_check"
-shape = ["mov rax,[rdi+*]"]
+shape = ["mov rax,[rdi+*]", "test rax,rax"]
 take = "value"
 
 [[route]]
@@ -1119,16 +1070,9 @@ shape = ["lea rcx,[rbp+?]", "call *", "movzx r14d,al"]
 take = "address"
 
 [[route]]
-id = "building.pickup_entity"
-in = "building.pickup"
-shape = ["mov edi,r8d"]
-take = "fixed"
-value = 0x0
-
-[[route]]
 id = "building.pickup_mode"
 in = "building.pickup"
-shape = ["movzx ecx,[r14+*]"]
+shape = ["mov [rcx+?],eax", "movzx ecx,[r14+*]"]
 take = "value"
 
 [[route]]
@@ -1140,7 +1084,7 @@ take = "address"
 [[route]]
 id = "building.zone_entry_shape"
 in = "~fn:building.zone_entry_shape"
-shape = ["movzx r8d,[rcx+*]"]
+shape = ["movzx r8d,[rcx+*]", "mov r10,rdx"]
 take = "value"
 
 [[route]]
@@ -1166,7 +1110,7 @@ take = "address"
 [[route]]
 id = "chat.handle_slot"
 in = "~fn:chat.handle_slot"
-shape = ["and r12d,*"]
+shape = ["mov ecx,ecx", "and r12d,*"]
 take = "value"
 
 [[route]]
@@ -1184,13 +1128,13 @@ take = "address"
 [[route]]
 id = "chat.max_text"
 in = "chat.post"
-shape = ["cmp rax,*"]
+shape = ["mov r13,rcx", "cmp rax,*"]
 take = "value"
 
 [[route]]
 id = "chat.node_delivered"
 in = "chat.post"
-shape = ["mov [rdi+*],ebp"]
+shape = ["and eax,?", "mov [rdi+*],ebp"]
 take = "value"
 
 [[route]]
@@ -1208,21 +1152,14 @@ take = "end"
 [[route]]
 id = "chat.reply_type"
 in = "server.player_remove"
-shape = ["mov r8l,*"]
+shape = ["mov [rsp+?],r8", "mov r8l,*"]
 take = "value"
 
 [[route]]
 id = "chat.store_slot_count"
 in = "chat.post"
-shape = ["cmp r10,*"]
+shape = ["add rax,?", "cmp r10,*"]
 take = "value"
-
-[[route]]
-id = "chat.store_slot_size"
-in = "~fn:chat.store_slot_size"
-shape = ["mov rbx,rdx"]
-take = "fixed"
-value = 0xc
 
 [[route]]
 id = "chat.store_slots"
@@ -1239,19 +1176,19 @@ take = "value"
 [[route]]
 id = "chunks.height"
 in = "~fn:chunks.height"
-shape = ["cmp r12d,[rbx+*]"]
+shape = ["inc r12d", "cmp r12d,[rbx+*]"]
 take = "value"
 
 [[route]]
 id = "chunks.index"
 in = "~fn:chunks.index"
-shape = ["mov eax,[r15+*]"]
+shape = ["mov eax,[r15+*]", "xor edx,edx"]
 take = "value"
 
 [[route]]
 id = "chunks.manager"
 in = "chunks.step"
-shape = ["mov r13,[rcx+*]"]
+shape = ["mov rbx,rdx", "mov r13,[rcx+*]"]
 take = "value"
 
 [[route]]
@@ -1261,7 +1198,7 @@ loads = ["Invalid state"]
 [[route]]
 id = "chunks.width"
 in = "~fn:chunks.index"
-shape = ["div [rcx+*]"]
+shape = ["xor edx,edx", "div [rcx+*]"]
 take = "value"
 
 [[route]]
@@ -1408,7 +1345,7 @@ take = "value"
 [[route]]
 id = "damage.hit_vector"
 in = "~fn:damage.hit"
-shape = ["movups xmm0,[rbp-*]"]
+shape = ["call ?", "movups xmm0,[rbp-*]"]
 take = "value"
 
 [[route]]
@@ -1424,7 +1361,7 @@ shape = ["mov [r8+rcx*4],edx"]
 [[route]]
 id = "daytime.anchor"
 in = "daytime.set_time"
-shape = ["mov [rcx+*],r8"]
+shape = ["mov rbx,rcx", "mov [rcx+*],r8"]
 take = "value"
 
 [[route]]
@@ -1436,37 +1373,37 @@ take = "value"
 [[route]]
 id = "daytime.day_end"
 in = "~fn:daytime.day_end"
-shape = ["mov r10,[rcx+*]"]
+shape = ["sub rsp,?", "mov r10,[rcx+*]"]
 take = "value"
 
 [[route]]
 id = "daytime.day_length"
 in = "~fn:daytime.day_length"
-shape = ["mov [rbp+*],rsi"]
+shape = ["mov [rbp+*],rsi", "mov [rbp+?],rbx"]
 take = "value"
 
 [[route]]
 id = "daytime.day_start"
 in = "~fn:daytime.day_end"
-shape = ["mov r9,[rcx+*]"]
+shape = ["mov r9,[rcx+*]", "xor eax,eax"]
 take = "value"
 
 [[route]]
 id = "daytime.game_time"
 in = "daytime.set_time"
-shape = ["mov [rbx+*],rax"]
+shape = ["inc [rbx+?]", "mov [rbx+*],rax"]
 take = "value"
 
 [[route]]
 id = "daytime.is_day"
 in = "~fn:daytime.clock"
-shape = ["mov [rdi+*],al"]
+shape = ["mov rcx,rdi", "mov [rdi+*],al"]
 take = "value"
 
 [[route]]
 id = "daytime.night_length"
 in = "~fn:daytime.day_length"
-shape = ["mov [rbp+*],rbx"]
+shape = ["mov [rbp+?],rsi", "mov [rbp+*],rbx"]
 take = "value"
 
 [[route]]
@@ -1490,7 +1427,7 @@ take = "address"
 [[route]]
 id = "daytime.speed"
 in = "daytime.set_speed"
-shape = ["movss [rdi+*],xmm6"]
+shape = ["inc [rdi+?]", "movss [rdi+*],xmm6"]
 take = "value"
 
 [[route]]
@@ -1551,13 +1488,13 @@ called_by = ["debug_draw_level"]
 [[route]]
 id = "ecs.attribute_slot"
 system = "upgrade_building_range"
-shape = ["movzx edx,[rcx+*]"]
+shape = ["jne ?", "movzx edx,[rcx+*]"]
 take = "value"
 
 [[route]]
 id = "ecs.change_tracker"
 in = "ecs.iterator_next"
-shape = ["add rdx,*"]
+shape = ["mov rdx,[rcx]", "add rdx,*"]
 take = "value"
 
 [[route]]
@@ -1666,13 +1603,13 @@ take = "value"
 [[route]]
 id = "ecs.context_row"
 system = "collider_physics_velocity"
-shape = ["mov eax,[rdi+*]"]
+shape = ["mov rcx,[rdi]", "mov eax,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "ecs.descriptor_entity_records"
 system = "collider_physics_velocity"
-shape = ["mov rax,[rcx+*]"]
+shape = ["mov rax,[rcx+*]", "add rdx,rdx"]
 take = "value"
 
 [[route]]
@@ -1684,7 +1621,7 @@ take = "address"
 [[route]]
 id = "ecs.entities_entry_size"
 in = "ecs.entities_with"
-shape = ["shl r9,*"]
+shape = ["mov r8,[rdi]", "shl r9,*"]
 take = "value"
 shift = true
 
@@ -1719,13 +1656,6 @@ id = "ecs.entity_map_capacity"
 in = "~fn:ecs.context_entity_world"
 shape = ["call {ecs.entity_slot}", "cmp rax,[rdi+*]"]
 take = "value"
-
-[[route]]
-id = "ecs.entity_record_size"
-system = "collider_physics_velocity"
-shape = ["lea edx,[rax-?]"]
-take = "fixed"
-value = 0x10
 
 [[route]]
 id = "ecs.entity_records"
@@ -1768,43 +1698,43 @@ take = "address"
 [[route]]
 id = "ecs.event_record_align"
 in = "ecs.event_merge"
-shape = ["add eax,*"]
+shape = ["sub eax,ecx", "add eax,*"]
 take = "value"
 
 [[route]]
 id = "ecs.event_record_header"
 in = "ecs.event_merge"
-shape = ["lea rax,[rdi+*]"]
+shape = ["movzx r8d,[rdx]", "lea rax,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "ecs.event_record_size"
 in = "ecs.event_merge"
-shape = ["movzx r12d,[rdi+*]"]
+shape = ["movzx r12d,[rdi+*]", "mov r9d,[rdi]"]
 take = "value"
 
 [[route]]
 id = "ecs.event_stream_count"
 in = "ecs.event_merge"
-shape = ["cmp [rcx+*],r13"]
+shape = ["mov r14,rcx", "cmp [rcx+*],r13"]
 take = "value"
 
 [[route]]
 id = "ecs.event_stream_size"
 in = "ecs.event_merge"
-shape = ["add rcx,*"]
+shape = ["mov rcx,[rsp+?]", "add rcx,*"]
 take = "value"
 
 [[route]]
 id = "ecs.event_stream_used"
 in = "ecs.event_merge"
-shape = ["cmp [r15+*],ebp"]
+shape = ["add r15,rcx", "cmp [r15+*],ebp"]
 take = "value"
 
 [[route]]
 id = "ecs.event_streams"
 in = "ecs.event_merge"
-shape = ["mov r15,[r14+*]"]
+shape = ["mov r15,[r14+*]", "xor ebp,ebp"]
 take = "value"
 
 [[route]]
@@ -1830,13 +1760,13 @@ take = "address"
 [[route]]
 id = "ecs.level_data_offset"
 system = "upgrade_building_range"
-shape = ["movzx ecx,[rbx+*]"]
+shape = ["movzx ecx,[rbx+*]", "add rcx,rbx"]
 take = "value"
 
 [[route]]
 id = "ecs.level_flags"
 system = "upgrade_building_range"
-shape = ["test [rbx+*],?"]
+shape = ["je ?", "test [rbx+*],?"]
 take = "value"
 
 [[route]]
@@ -1863,13 +1793,13 @@ take = "address"
 [[route]]
 id = "ecs.record_template"
 in = "~fn:ecs.context_entity_world"
-shape = ["mov rax,[rax+*]"]
+shape = ["mov rax,[rax+*]", "movups xmm0,[rax]"]
 take = "value"
 
 [[route]]
 id = "ecs.registry_type_count"
 in = "~fn:ecs.registry_type_count"
-shape = ["cmp rdi,[r15+*]"]
+shape = ["add r10,?", "cmp rdi,[r15+*]"]
 take = "value"
 
 [[route]]
@@ -1898,7 +1828,7 @@ take = "value"
 [[route]]
 id = "ecs.registry_type_records"
 in = "~fn:ecs.registry_type_count"
-shape = ["mov rax,[r15+*]"]
+shape = ["je ?", "mov rax,[r15+*]"]
 take = "value"
 
 [[route]]
@@ -1916,38 +1846,31 @@ take = "address"
 [[route]]
 id = "ecs.spawn_component_bytes"
 in = "~fn:ecs.spawn_component_bytes"
-shape = ["mov rbx,[rdx+*]"]
+shape = ["mov rbx,[rdx+*]", "mov rcx,rdi"]
 take = "value"
 
 [[route]]
 id = "ecs.spawn_component_data"
 in = "~fn:ecs.spawn_component_bytes"
-shape = ["mov rdx,[rdx+*]"]
+shape = ["mov rcx,rdi", "mov rdx,[rdx+*]"]
 take = "value"
-
-[[route]]
-id = "ecs.spawn_component_hash"
-in = "~fn:ecs.spawn_component_bytes"
-shape = ["mov rdx,[r14+?]"]
-take = "fixed"
-value = 0x0
 
 [[route]]
 id = "ecs.spawn_component_size"
 in = "~fn:ecs.spawn_component_bytes"
-shape = ["add r12,*"]
+shape = ["inc rsi", "add r12,*"]
 take = "value"
 
 [[route]]
 id = "ecs.spawn_initial"
 in = "~fn:ecs.spawn_component_bytes"
-shape = ["mov rdx,[r14+*]"]
+shape = ["mov r12,rsi", "mov rdx,[r14+*]"]
 take = "value"
 
 [[route]]
 id = "ecs.spawn_initial_count"
 in = "~fn:ecs.spawn_component_bytes"
-shape = ["cmp [r14+*],rsi"]
+shape = ["mov [rbp+?],al", "cmp [r14+*],rsi"]
 take = "value"
 
 [[route]]
@@ -1964,16 +1887,9 @@ take = "value"
 plus = 4
 
 [[route]]
-id = "ecs.spawn_requester"
-in = "~fn:ecs.spawn_component_bytes"
-shape = ["mov [rbp+?],ebx"]
-take = "fixed"
-value = 0x0
-
-[[route]]
 id = "ecs.spawn_template"
 in = "~fn:ecs.spawn_component_bytes"
-shape = ["movups xmm0,[r14+*]"]
+shape = ["mov [rbp+?],eax", "movups xmm0,[r14+*]"]
 take = "value"
 
 [[route]]
@@ -1992,13 +1908,13 @@ called_by = ["ecs.entities_with", "~c6:~c0:~c0:~fn:ecs.type_record_static"]
 [[route]]
 id = "ecs.type_info_hash"
 in = "~fn:ecs.type_info_hash"
-shape = ["mov eax,[rcx+*]"]
+shape = ["mov rcx,[r9+rax*1+?]", "mov eax,[rcx+*]"]
 take = "value"
 
 [[route]]
 id = "ecs.type_record_static"
 in = "~fn:ecs.registry_type_count"
-shape = ["cmp [rax+r10*1+*],?"]
+shape = ["mov rax,[r15+?]", "cmp [rax+r10*1+*],?"]
 take = "value"
 
 [[route]]
@@ -2435,7 +2351,7 @@ take = "value"
 [[route]]
 id = "inventory.desc_size"
 in = "inventory.desc_zero"
-shape = ["mov [rcx+*],eax"]
+shape = ["mov [rcx+*],eax", "mov rax,rcx"]
 take = "value"
 plus = 8
 
@@ -2533,12 +2449,24 @@ take = "value"
 [[route]]
 id = "inventory.view_fill"
 system = "inventory_actions"
-shape = ["lea rdx,[rbp-?]", "mov rcx,r13", "call ?", "mov r8d,?", "lea rdx,[rbp-?]"]
+shape = [
+  "lea rdx,[rbp-?]",
+  "mov rcx,r13",
+  "call ?",
+  "mov r8d,?",
+  "lea rdx,[rbp-?]",
+]
 
 [[route]]
 id = "inventory.view_frame"
 system = "inventory_actions"
-shape = ["lea rdx,[rbp-*]", "mov rcx,r13", "call ?", "mov r8d,?", "lea rdx,[rbp-?]"]
+shape = [
+  "lea rdx,[rbp-*]",
+  "mov rcx,r13",
+  "call ?",
+  "mov r8d,?",
+  "lea rdx,[rbp-?]",
+]
 take = "value"
 
 [[route]]
@@ -2561,13 +2489,6 @@ shape = [
 take = "value"
 
 [[route]]
-id = "inventory.view_replication"
-system = "inventory_actions"
-shape = ["mov rbx,[rbp-?]", "mov r14,[rbp+?]"]
-take = "fixed"
-value = 0xf8
-
-[[route]]
 id = "item.info"
 called_by = ["pickup_item_setup", "server_player_input_begin_frame"]
 
@@ -2579,39 +2500,39 @@ system = "journal_ui"
 [[route]]
 id = "knowledge.connection_created"
 in = "~fn:knowledge.connection_created"
-shape = ["mov [rax+rcx*1+*],?"]
+shape = ["lea rdx,[rip+?]", "mov [rax+rcx*1+*],?"]
 take = "value"
 
 [[route]]
 id = "knowledge.connection_loaded"
 in = "~fn:knowledge.connection_loaded"
-shape = ["mov [rax+rcx*1+*],?"]
+shape = ["mov [rax+rcx*1+*],?", "ret"]
 take = "value"
 
 [[route]]
 id = "knowledge.connection_size"
 in = "~fn:knowledge.connection_size"
-shape = ["imul rbx,rax,*"]
+shape = ["imul rbx,rax,*", "add rbx,rcx"]
 take = "value"
 
 [[route]]
 id = "knowledge.defs"
 sides = ["client"]
 in = "~fn:knowledge.defs"
-shape = ["mov rdi,[rcx+*]"]
+shape = ["mov rdi,[rcx+*]", "mov rsi,rdx"]
 take = "value"
 
 [[route]]
 id = "knowledge.defs_blob"
 sides = ["client"]
 in = "~fn:knowledge.defs"
-shape = ["mov rdi,[rdi+*]"]
+shape = ["mov ebx,r8d", "mov rdi,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "knowledge.input_action"
 system = "handle_knowledge_trigger_input"
-shape = ["movsd xmm0,[rbx+*]"]
+shape = ["je ?", "movsd xmm0,[rbx+*]"]
 take = "value"
 
 [[route]]
@@ -2629,7 +2550,7 @@ take = "value"
 [[route]]
 id = "knowledge.journal_blob"
 in = "knowledge.journal_blob_get"
-shape = ["mov rax,[rcx+*]"]
+shape = ["mov rax,[rcx+*]", "ret"]
 take = "value"
 
 [[route]]
@@ -2645,17 +2566,9 @@ shape = ["mov rcx,[rbp]", "call *"]
 take = "address"
 
 [[route]]
-id = "knowledge.log_entry_id"
-sides = ["client"]
-in = "knowledge.set_values"
-shape = ["mov rdx,[r14+?]"]
-take = "fixed"
-value = 0x0
-
-[[route]]
 id = "knowledge.log_entry_size"
 in = "~fn:knowledge.log_entry_size"
-shape = ["add rax,*"]
+shape = ["jne ?", "add rax,*"]
 take = "value"
 
 [[route]]
@@ -2709,43 +2622,43 @@ take = "value"
 [[route]]
 id = "knowledge.record_active"
 in = "knowledge.player_value"
-shape = ["cmp [rbx+*],?"]
+shape = ["add rbx,rcx", "cmp [rbx+*],?"]
 take = "value"
 
 [[route]]
 id = "knowledge.record_changes"
 in = "~fn:knowledge.record_changes"
-shape = ["mov [rdi+*],cx"]
+shape = ["add cx,dx", "mov [rdi+*],cx"]
 take = "value"
 
 [[route]]
 id = "knowledge.record_count"
 in = "~fn:knowledge.record_count"
-shape = ["cmp [rcx+*],r15d"]
+shape = ["mov r14d,r15d", "cmp [rcx+*],r15d"]
 take = "value"
 
 [[route]]
 id = "knowledge.record_log"
 in = "~fn:knowledge.log_entry_size"
-shape = ["mov rax,[rcx+rdi*1+*]"]
+shape = ["mov rax,[rcx+rdi*1+*]", "mov rcx,[rcx+rdi*1+?]"]
 take = "value"
 
 [[route]]
 id = "knowledge.record_log_count"
 in = "~fn:knowledge.log_entry_size"
-shape = ["mov rcx,[rcx+rdi*1+*]"]
+shape = ["mov rax,[rcx+rdi*1+?]", "mov rcx,[rcx+rdi*1+*]"]
 take = "value"
 
 [[route]]
 id = "knowledge.record_size"
 in = "~fn:knowledge.log_entry_size"
-shape = ["add rdi,*"]
+shape = ["add rbx,?", "add rdi,*"]
 take = "value"
 
 [[route]]
 id = "knowledge.records"
 in = "knowledge.player_value"
-shape = ["mov rbx,[rcx+*]"]
+shape = ["mov rbx,[rcx+*]", "jne ?"]
 take = "value"
 
 [[route]]
@@ -2753,27 +2666,6 @@ id = "knowledge.replication"
 in = "~fn:buffs.registry"
 shape = ["mov [rdi+*],rax", "call ?", "mov [rdi+?],rax", "lea r8,[rbp+?]"]
 take = "value"
-
-[[route]]
-id = "knowledge.request_kind"
-system = "handle_knowledge_trigger_input"
-shape = ["movsd xmm0,[rbx+?]"]
-take = "fixed"
-value = 0x4
-
-[[route]]
-id = "knowledge.request_target"
-system = "handle_knowledge_trigger_input"
-shape = ["movsd xmm0,[rbx+?]"]
-take = "fixed"
-value = 0xc
-
-[[route]]
-id = "knowledge.request_value"
-system = "handle_knowledge_trigger_input"
-shape = ["movsd xmm0,[rbx+?]"]
-take = "fixed"
-value = 0x8
 
 [[route]]
 id = "knowledge.resend_player"
@@ -2804,19 +2696,19 @@ take = "value"
 [[route]]
 id = "knowledge.step"
 in = "~fn:knowledge.step"
-shape = ["mov [rsi+*],ebx"]
+shape = ["mov [rsi+?],r14", "mov [rsi+*],ebx"]
 take = "value"
 
 [[route]]
 id = "knowledge.world_log"
 in = "~fn:knowledge.log_entry_size"
-shape = ["mov rsi,[rdx+*]"]
+shape = ["jmp ?", "mov rsi,[rdx+*]"]
 take = "value"
 
 [[route]]
 id = "knowledge.world_log_count"
 in = "~fn:knowledge.log_entry_size"
-shape = ["mov r15,[rdx+*]"]
+shape = ["mov rsi,[rdx+?]", "mov r15,[rdx+*]"]
 take = "value"
 
 [[route]]
@@ -2885,15 +2777,24 @@ take = "address"
 
 [[route]]
 id = "label.max_text"
+sides = ["client"]
 in = "~fn:label.max_text"
-shape = ["mov eax,*"]
+shape = ["mov [rbp-?],ebx", "mov eax,*"]
+take = "value"
+plus = -1
+
+[[route]]
+id = "label.max_text"
+sides = ["server"]
+in = "~fn:label.max_text"
+shape = ["mov eax,*", "cmp rbx,rax"]
 take = "value"
 plus = -1
 
 [[route]]
 id = "label.rename_entity"
 in = "~fn:chat.post_return"
-shape = ["mov r9d,[rbp+*]"]
+shape = ["je ?", "mov r9d,[rbp+*]"]
 take = "value"
 
 [[route]]
@@ -2934,13 +2835,6 @@ shape = ["je ?", "mov rcx,rbx", "call ?", "mov edx,[rdi+*]"]
 take = "value"
 
 [[route]]
-id = "loot.request_node"
-in = "~fn:loot.request_labels"
-shape = ["movss [rbx+?],xmm0", "lea rcx,[rbp+?]"]
-take = "fixed"
-value = 0x0
-
-[[route]]
 id = "loot.roll"
 in = "random_loot_on_interaction"
 shape = ["call *", "lea rcx,[rbp+?]"]
@@ -2957,13 +2851,6 @@ id = "loot.stack_roll"
 in = "loot.roll_one"
 shape = ["mov rdx,rsi", "mov rcx,r13", "call *"]
 take = "address"
-
-[[route]]
-id = "loot.txn_context"
-in = "inventory.txn_init"
-shape = ["mov [rcx+?],?", "mov rax,[rdx+?]", "mov [rcx],rax"]
-take = "fixed"
-value = 0x0
 
 [[route]]
 id = "loot.txn_entity"
@@ -2995,7 +2882,7 @@ take = "value"
 id = "map.entry_label"
 sides = ["client"]
 system = "replicate_map_markers_for_ui"
-shape = ["movups [rsi+*],xmm1"]
+shape = ["movsd xmm0,[rbp-?]", "movups [rsi+*],xmm1"]
 take = "value"
 
 [[route]]
@@ -3009,7 +2896,7 @@ take = "value"
 id = "map.entry_size"
 sides = ["client"]
 in = "~fn:map.context_state"
-shape = ["add r14,*"]
+shape = ["inc rsi", "add r14,*"]
 take = "value"
 
 [[route]]
@@ -3044,35 +2931,35 @@ take = "address"
 id = "map.fog_size_z"
 sides = ["client"]
 in = "map.fog_reveal"
-shape = ["movss xmm8,[rcx+*]"]
+shape = ["xorps xmm2,xmm2", "movss xmm8,[rcx+*]"]
 take = "value"
 
 [[route]]
 id = "map.fog_tile_edge_shift"
 sides = ["client"]
 in = "map.fog_reveal"
-shape = ["shr edx,*"]
+shape = ["xorps xmm0,xmm0", "shr edx,*"]
 take = "value"
 
 [[route]]
 id = "map.fog_tile_shift"
 sides = ["client"]
 in = "map.fog_reveal"
-shape = ["shl rcx,*"]
+shape = ["add ecx,ebp", "shl rcx,*"]
 take = "value"
 
 [[route]]
 id = "map.fog_tiles"
 sides = ["client"]
 in = "map.fog_reveal"
-shape = ["add rcx,[r14+*]"]
+shape = ["shl rcx,?", "add rcx,[r14+*]"]
 take = "value"
 
 [[route]]
 id = "map.fog_tiles_wide"
 sides = ["client"]
 in = "map.fog_reveal"
-shape = ["mov rdi,[rcx+*]"]
+shape = ["mov rdi,[rcx+*]", "mov r14,rcx"]
 take = "value"
 
 [[route]]
@@ -3086,14 +2973,14 @@ take = "value"
 id = "map.list_capacity"
 sides = ["client"]
 in = "~fn:map.list_capacity"
-shape = ["cmp rdx,[rcx+*]"]
+shape = ["inc rdx", "cmp rdx,[rcx+*]"]
 take = "value"
 
 [[route]]
 id = "map.list_count"
 sides = ["client"]
 in = "~fn:map.context_state"
-shape = ["cmp rsi,[r15+*]"]
+shape = ["add r14,?", "cmp rsi,[r15+*]"]
 take = "value"
 
 [[route]]
@@ -3112,7 +2999,7 @@ take = "value"
 id = "map.registry_blob"
 sides = ["client"]
 in = "~fn:map.registry_blob"
-shape = ["mov rax,[rdx+*]"]
+shape = ["mov rax,[rdx+*]", "test rax,rax"]
 take = "value"
 
 [[route]]
@@ -3213,13 +3100,13 @@ take = "address"
 [[route]]
 id = "net.session_manager"
 in = "net.socket_create"
-shape = ["lea rcx,[rdi+*]"]
+shape = ["lea rcx,[rdi+*]", "mov [rsp+?],r11l"]
 take = "value"
 
 [[route]]
 id = "net.socket_channel"
 in = "~fn:net.socket_channel"
-shape = ["mov [rbx+*],r14d"]
+shape = ["mov [rbx+?],rax", "mov [rbx+*],r14d"]
 take = "value"
 
 [[route]]
@@ -3256,7 +3143,7 @@ take = "value"
 [[route]]
 id = "net.socket_peer"
 in = "~fn:net.socket_channel"
-shape = ["mov [rbx+*],r12d"]
+shape = ["mov [rbx+?],r14d", "mov [rbx+*],r12d"]
 take = "value"
 
 [[route]]
@@ -3483,7 +3370,7 @@ system = "reverb"
 [[route]]
 id = "save.flags"
 in = "server.save_request"
-shape = ["movzx edx,[rcx+*]"]
+shape = ["jne ?", "movzx edx,[rcx+*]"]
 take = "value"
 
 [[route]]
@@ -3493,21 +3380,14 @@ loads = ["[savedata2] Could not create directory path '%k', error:%k"]
 [[route]]
 id = "save.path_data"
 in = "~fn:save.path_data"
-shape = ["mov r9,[rdi+*]"]
+shape = ["mov r9,[rdi+*]", "xor ecx,ecx"]
 take = "value"
 
 [[route]]
 id = "save.path_lengths"
 in = "~fn:save.path_data"
-shape = ["add rbx,[rcx+*]"]
+shape = ["add rbx,[rcx+*]", "mov rdi,rcx"]
 take = "value"
-
-[[route]]
-id = "save.path_parts"
-in = "~fn:save.path_data"
-shape = ["mov r8,[rcx+?]"]
-take = "fixed"
-value = 0x4
 
 [[route]]
 id = "save.phase"
@@ -3552,7 +3432,7 @@ take = "value"
 [[route]]
 id = "server.config"
 in = "server.account_action"
-shape = ["mov r15,[r15+*]"]
+shape = ["xor esi,esi", "mov r15,[r15+*]"]
 take = "value"
 
 [[route]]
@@ -3590,7 +3470,7 @@ take = "value"
 [[route]]
 id = "server.entry_state"
 in = "server.set_state"
-shape = ["lea rsi,[rcx+*]"]
+shape = ["lea rsi,[rcx+*]", "mov rdi,rcx"]
 take = "value"
 
 [[route]]
@@ -3608,7 +3488,7 @@ take = "value"
 [[route]]
 id = "server.game_settings_resend"
 in = "server.post_step"
-shape = ["cmp [rbx+*],?"]
+shape = ["xor r10d,r10d", "cmp [rbx+*],?"]
 take = "value"
 
 [[route]]
@@ -3620,29 +3500,22 @@ take = "value"
 [[route]]
 id = "server.permission_entries"
 in = "~fn:server.permission_entries"
-shape = ["cmp eax,*"]
+shape = ["lea eax,[rdx-?]", "cmp eax,*"]
 take = "value"
 plus = 1
-
-[[route]]
-id = "server.permission_entry_size"
-in = "~fn:server.permission_entries"
-shape = ["cmp eax,?"]
-take = "fixed"
-value = 0xa0
 
 [[route]]
 id = "server.permission_mask"
 sides = ["client"]
 system = "player_ui"
-shape = ["movzx eax,[rcx+rdi*1+*]"]
+shape = ["mov [rbx+?],eax", "movzx eax,[rcx+rdi*1+*]"]
 take = "value"
 
 [[route]]
 id = "server.permission_mask"
 sides = ["server"]
 in = "~fn:server.permission_entries"
-shape = ["movzx eax,[r9+r8*1+*]"]
+shape = ["movzx eax,[r9+r8*1+*]", "mov [rcx],al"]
 take = "value"
 
 [[route]]
@@ -3681,19 +3554,19 @@ take = "value"
 [[route]]
 id = "server.player_slot_entity"
 in = "server.player_remove"
-shape = ["mov edx,[rdi+*]"]
+shape = ["mov edx,[rdi+*]", "test edx,edx"]
 take = "value"
 
 [[route]]
 id = "server.player_slot_key"
 in = "server.player_remove"
-shape = ["mov rax,[rdi+*]"]
+shape = ["lea r8,[rip+?]", "mov rax,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "server.player_slot_machine"
 in = "~fn:server.player_slot_character"
-shape = ["mov [rsi+*],ebx"]
+shape = ["xorps xmm0,xmm0", "mov [rsi+*],ebx"]
 take = "value"
 
 [[route]]
@@ -3736,7 +3609,7 @@ take = "value"
 [[route]]
 id = "server.player_slots"
 in = "~fn:server.player_slot_character"
-shape = ["lea rsi,[rcx+*]"]
+shape = ["mov eax,edx", "lea rsi,[rcx+*]"]
 take = "value"
 
 [[route]]
@@ -3764,7 +3637,7 @@ loads = ["[server] Failed to save 'ServerSaveGame', while getting base zones"]
 [[route]]
 id = "server.save_system"
 in = "server.save_request"
-shape = ["mov rcx,[rcx+*]"]
+shape = ["jne ?", "mov rcx,[rcx+*]"]
 take = "value"
 
 [[route]]
@@ -3818,7 +3691,7 @@ system = "server_update_impact_system"
 [[route]]
 id = "session.host_machine"
 in = "~fn:session.host_machine"
-shape = ["cmp edx,[rcx+*]"]
+shape = ["mov r15,rcx", "cmp edx,[rcx+*]"]
 take = "value"
 
 [[route]]
@@ -3874,7 +3747,7 @@ take = "address"
 [[route]]
 id = "survivors.assign_bed"
 system = "player_assign_npc"
-shape = ["mov edi,[rdi+*]"]
+shape = ["mov edx,[rdx+?]", "mov edi,[rdi+*]"]
 take = "value"
 
 [[route]]
@@ -3925,13 +3798,13 @@ take = "value"
 [[route]]
 id = "survivors.map_capacity"
 in = "survivors.registry_load"
-shape = ["cmp rax,[rbp+*]"]
+shape = ["call ?", "cmp rax,[rbp+*]"]
 take = "value"
 
 [[route]]
 id = "survivors.map_count"
 in = "survivors.registry_load"
-shape = ["inc [rbp+*]"]
+shape = ["mov [r11],rdx", "inc [rbp+*]"]
 take = "value"
 
 [[route]]
@@ -3949,7 +3822,7 @@ take = "value"
 [[route]]
 id = "survivors.map_values"
 in = "survivors.registry_load"
-shape = ["mov r9,[rbp+*]"]
+shape = ["mov r9,[rbp+*]", "mov r8,rax"]
 take = "value"
 
 [[route]]
@@ -4003,7 +3876,7 @@ take = "value"
 [[route]]
 id = "survivors.registry_item_map"
 in = "survivors.registry_load"
-shape = ["lea rbp,[rsi+*]"]
+shape = ["lea rbp,[rsi+*]", "mov rdx,[rsi]"]
 take = "value"
 
 [[route]]
@@ -4023,7 +3896,7 @@ take = "address"
 [[route]]
 id = "survivors.registry_loaded"
 in = "survivors.registry_load"
-shape = ["cmp [rcx+*],?"]
+shape = ["sub rsp,?", "cmp [rcx+*],?"]
 take = "value"
 
 [[route]]
@@ -4046,13 +3919,13 @@ take = "address"
 [[route]]
 id = "survivors.spawn_ammo_item"
 in = "survivors.spawn"
-shape = ["mov r13d,[r14+*]"]
+shape = ["je ?", "mov r13d,[r14+*]"]
 take = "value"
 
 [[route]]
 id = "survivors.spawn_consume"
 in = "survivors.spawn"
-shape = ["cmp [r14+*],dil"]
+shape = ["mov [rbp+?],r15", "cmp [r14+*],dil"]
 take = "value"
 
 [[route]]
@@ -4064,13 +3937,13 @@ take = "end"
 [[route]]
 id = "survivors.spawn_target"
 in = "survivors.spawn"
-shape = ["cvtsi2ss xmm6,[r14+*]"]
+shape = ["xorps xmm6,xmm6", "cvtsi2ss xmm6,[r14+*]"]
 take = "value"
 
 [[route]]
 id = "survivors.spawn_template"
 in = "survivors.spawn"
-shape = ["mov r8,[rdx+*]"]
+shape = ["sub rsp,rax", "mov r8,[rdx+*]"]
 take = "value"
 
 [[route]]
@@ -4102,49 +3975,49 @@ take = "value"
 id = "survivors.ui_map_bits"
 sides = ["client"]
 system = "ui_npc_status"
-shape = ["mov rbx,[rdi+*]"]
+shape = ["je ?", "mov rbx,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "survivors.ui_map_capacity"
 sides = ["client"]
 system = "ui_npc_status"
-shape = ["mov r11,[rdi+*]"]
+shape = ["imul eax,edx,?", "mov r11,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "survivors.ui_map_count"
 sides = ["client"]
 system = "ui_npc_status"
-shape = ["cmp [rdi+*],ebp"]
+shape = ["mov r11,[rdi+?]", "cmp [rdi+*],ebp"]
 take = "value"
 
 [[route]]
 id = "survivors.ui_map_keys"
 sides = ["client"]
 system = "ui_npc_status"
-shape = ["mov r10,[rdi+*]"]
+shape = ["mov r10,[rdi+*]", "cmp [r10+r9*4],eax"]
 take = "value"
 
 [[route]]
 id = "survivors.ui_map_values"
 sides = ["client"]
 system = "ui_npc_status"
-shape = ["add rbx,[rdi+*]"]
+shape = ["imul rbx,r9,?", "add rbx,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "survivors.ui_record_size"
 sides = ["client"]
 system = "ui_npc_status"
-shape = ["imul rbx,r9,*"]
+shape = ["jae ?", "imul rbx,r9,*"]
 take = "value"
 
 [[route]]
 id = "survivors.ui_record_status"
 sides = ["client"]
 system = "ui_npc_status"
-shape = ["mov [rbx+*],cl"]
+shape = ["movzx ecx,[rax+?]", "mov [rbx+*],cl"]
 take = "value"
 
 [[route]]
@@ -4166,13 +4039,13 @@ shape = ["mov ebx,eax", "mov rcx,rsi"]
 [[route]]
 id = "survivors.unique_saved_state"
 system = "unique_npc_spawns"
-shape = ["mov r9,[rsp+*]"]
+shape = ["jne ?", "mov r9,[rsp+*]"]
 take = "value"
 
 [[route]]
 id = "survivors.unique_transform"
 system = "unique_npc_spawns"
-shape = ["mov r8,[rsp+*]"]
+shape = ["lea rdx,[rsp+?]", "mov r8,[rsp+*]"]
 take = "value"
 
 [[route]]
@@ -4188,13 +4061,13 @@ take = "value"
 [[route]]
 id = "terrain.registry_resource"
 in = "~fn:terrain.registry_resource"
-shape = ["mov [rsi+*],rax"]
+shape = ["movsd [rsp+?],xmm0", "mov [rsi+*],rax"]
 take = "value"
 
 [[route]]
 id = "terrain.voxel_world"
 in = "~fn:terrain.voxel_world"
-shape = ["mov rcx,[rdx+*]"]
+shape = ["mov rbx,rdx", "mov rcx,[rdx+*]"]
 take = "value"
 
 [[route]]
@@ -4208,14 +4081,14 @@ take = "address"
 id = "text.pool_language"
 sides = ["client"]
 in = "text.lookup"
-shape = ["cmp [rsi+*],edi"]
+shape = ["lea rbp,[rsi+?]", "cmp [rsi+*],edi"]
 take = "value"
 
 [[route]]
 id = "textures.key_size"
 sides = ["client"]
 in = "textures.keys"
-shape = ["shl rax,*"]
+shape = ["mov ecx,[r8+?]", "shl rax,*"]
 take = "value"
 shift = true
 
@@ -4235,7 +4108,7 @@ loads = ["out of game ui textures"]
 id = "textures.registry_listed"
 sides = ["client"]
 in = "textures.registry_fill"
-shape = ["cmp [rcx+*],?"]
+shape = ["sub rsp,?", "cmp [rcx+*],?"]
 take = "value"
 
 [[route]]
@@ -4293,7 +4166,7 @@ shape = ["mov rcx,[rdi+?]", "test rcx,rcx", "je ?", "call {textures.signal}"]
 id = "textures.request_size"
 sides = ["client"]
 in = "textures.request"
-shape = ["add r13,*"]
+shape = ["inc r12", "add r13,*"]
 take = "value"
 
 [[route]]
@@ -4391,14 +4264,14 @@ system = "trigger_knowledge_on_kill"
 id = "ui.action_bound"
 sides = ["client"]
 in = "ui.action_new"
-shape = ["mov [rbx+*],r10l"]
+shape = ["mov rax,?", "mov [rbx+*],r10l"]
 take = "value"
 
 [[route]]
 id = "ui.action_extent"
 sides = ["client"]
 in = "ui.action_new"
-shape = ["mov [rbx+*],r10"]
+shape = ["mov [rbx+*],r10", "mov [rbx],r9l"]
 take = "value"
 plus = 8
 
@@ -4413,7 +4286,7 @@ take = "address"
 id = "ui.action_node"
 sides = ["client"]
 in = "ui.action_new"
-shape = ["mov [rbx+*],r10"]
+shape = ["mov [rbx+*],r10", "mov [rbx],r9l"]
 take = "value"
 
 [[route]]
@@ -4446,14 +4319,14 @@ take = "value"
 id = "ui.button_enabled"
 sides = ["client"]
 in = "~fn:ui.button_align"
-shape = ["movzx eax,[rdx+*]"]
+shape = ["movaps [rax-?],xmm15", "movzx eax,[rdx+*]"]
 take = "value"
 
 [[route]]
 id = "ui.button_extent"
 sides = ["client"]
 in = "ui.button"
-shape = ["movsd xmm6,[rcx+*]"]
+shape = ["mov rdi,rdx", "movsd xmm6,[rcx+*]"]
 take = "value"
 plus = 8
 
@@ -4496,7 +4369,7 @@ take = "value"
 id = "ui.button_size_mode"
 sides = ["client"]
 in = "~fn:ui.button_align"
-shape = ["mov ecx,[rdx+*]"]
+shape = ["mov [rcx+?],al", "mov ecx,[rdx+*]"]
 take = "value"
 
 [[route]]
@@ -4516,22 +4389,22 @@ take = "address"
 [[route]]
 id = "ui.context"
 sides = ["client"]
-in = "ui.slider"
-shape = ["mov r9,[rip+*]"]
+in = "ui.main_entry"
+shape = ["mov rdx,[rip+*]"]
 take = "address"
 
 [[route]]
 id = "ui.context_host"
 sides = ["client"]
 in = "~fn:ui.context_host"
-shape = ["mov rax,[rcx+*]"]
+shape = ["mov rax,[rcx+*]", "cmp [rax+?],?"]
 take = "value"
 
 [[route]]
 id = "ui.context_nav"
 sides = ["client"]
 in = "~fn:ui.context_nav"
-shape = ["mov [rcx+*],rdi"]
+shape = ["mov rax,[rcx+?]", "mov [rcx+*],rdi"]
 take = "value"
 
 [[route]]
@@ -4552,14 +4425,14 @@ take = "address"
 id = "ui.dropdown_capacity"
 sides = ["client"]
 in = "~fn:ui.dropdown_capacity"
-shape = ["cmp al,*"]
+shape = ["mov rdx,rcx", "cmp al,*"]
 take = "value"
 
 [[route]]
 id = "ui.dropdown_count"
 sides = ["client"]
 in = "~fn:ui.dropdown_capacity"
-shape = ["movzx eax,[rcx+*]"]
+shape = ["movzx eax,[rcx+*]", "mov rdx,rcx"]
 take = "value"
 
 [[route]]
@@ -4573,7 +4446,7 @@ take = "value"
 id = "ui.dropdown_entry_text"
 sides = ["client"]
 in = "~fn:ui.dropdown_capacity"
-shape = ["movups [rax+*],xmm0"]
+shape = ["mov [rsp+?],rcx", "movups [rax+*],xmm0"]
 take = "value"
 
 [[route]]
@@ -4595,7 +4468,7 @@ take = "address"
 id = "ui.entry_size"
 sides = ["client"]
 in = "ui.toggle"
-shape = ["lea rdx,[rdx+*]"]
+shape = ["cmp [rdx],r8d", "lea rdx,[rdx+*]"]
 take = "value"
 
 [[route]]
@@ -4611,14 +4484,6 @@ shape = [
   "mov rax,{ui.context}",
 ]
 take = "value"
-
-[[route]]
-id = "ui.entry_value"
-sides = ["client"]
-in = "ui.toggle"
-shape = ["nop [rax]"]
-take = "fixed"
-value = 0x0
 
 [[route]]
 id = "ui.first_use"
@@ -4681,7 +4546,7 @@ take = "address"
 id = "ui.frame_node"
 sides = ["client"]
 in = "ui.frame_open"
-shape = ["mov [rbx+*],rax"]
+shape = ["mov rcx,rbx", "mov [rbx+*],rax"]
 take = "value"
 
 [[route]]
@@ -4702,14 +4567,14 @@ take = "address"
 id = "ui.host_answer"
 sides = ["client"]
 in = "~fn:ui.context_host"
-shape = ["mov [rax+*],dl"]
+shape = ["mov [rax+*],dl", "ret"]
 take = "value"
 
 [[route]]
 id = "ui.host_answered"
 sides = ["client"]
 in = "~fn:ui.context_host"
-shape = ["cmp [rax+*],?"]
+shape = ["mov rax,[rcx+?]", "cmp [rax+*],?"]
 take = "value"
 
 [[route]]
@@ -4832,14 +4697,6 @@ shape = ["mov sil,?", "movzx ecx,[rdi+*]"]
 take = "value"
 
 [[route]]
-id = "ui.menu_entry_text"
-sides = ["client"]
-in = "ui.main_entry"
-shape = ["movss xmm7,[r8+?]", "movups xmm0,[rdi]"]
-take = "fixed"
-value = 0x0
-
-[[route]]
 id = "ui.nav_axis"
 sides = ["client"]
 in = "ui.nav_init"
@@ -4857,7 +4714,7 @@ take = "value"
 id = "ui.nav_config_size"
 sides = ["client"]
 in = "~fn:ui.context_nav"
-shape = ["movsd xmm1,[rdx+*]"]
+shape = ["movups [rdi+?],xmm0", "movsd xmm1,[rdx+*]"]
 take = "value"
 plus = 8
 
@@ -4904,7 +4761,7 @@ take = "value"
 id = "ui.nav_highlight"
 sides = ["client"]
 in = "ui.nav_init"
-shape = ["movups [rcx+*],xmm0"]
+shape = ["mov [rcx+?],?", "movups [rcx+*],xmm0"]
 take = "value"
 
 [[route]]
@@ -4999,7 +4856,7 @@ take = "address"
 id = "ui.node_id"
 sides = ["client"]
 in = "ui.node_id_get"
-shape = ["mov rax,[rcx+*]"]
+shape = ["mov rax,[rcx+*]", "ret"]
 take = "value"
 
 [[route]]
@@ -5076,14 +4933,6 @@ take = "value"
 plus = 1
 
 [[route]]
-id = "ui.panel_kind"
-sides = ["client"]
-in = "ui.panel"
-shape = ["movss xmm10,[rip+?]"]
-take = "fixed"
-value = 0x0
-
-[[route]]
 id = "ui.pause_entry"
 sides = ["client"]
 in = "~fn:ui.context_state"
@@ -5118,7 +4967,7 @@ loads = ["errorMessageWindow"]
 id = "ui.popup_active"
 sides = ["client"]
 in = "ui.popup"
-shape = ["cmp [rcx+*],?"]
+shape = ["cmp [rcx+*],?", "mov rsi,rcx"]
 take = "value"
 
 [[route]]
@@ -5152,7 +5001,7 @@ take = "value"
 id = "ui.popup_extent"
 sides = ["client"]
 in = "ui.popup"
-shape = ["cmp [rcx+*],?"]
+shape = ["cmp [rcx+*],?", "mov rsi,rcx"]
 take = "value"
 plus = 1
 
@@ -5221,7 +5070,7 @@ take = "address"
 id = "ui.scroll_extent"
 sides = ["client"]
 in = "ui.scroll_set_focus"
-shape = ["mov [rcx+*],?"]
+shape = ["jne ?", "mov [rcx+*],?"]
 take = "value"
 plus = 1
 
@@ -5352,7 +5201,7 @@ take = "value"
 id = "ui.slider_stops"
 sides = ["client"]
 in = "ui.slider_init"
-shape = ["lea rax,[rcx+*]"]
+shape = ["mov [rsp+?],rax", "lea rax,[rcx+*]"]
 take = "value"
 
 [[route]]
@@ -5463,14 +5312,14 @@ take = "address"
 id = "ui.toggle_count"
 sides = ["client"]
 in = "ui.toggle"
-shape = ["movzx r13d,[rdi+*]"]
+shape = ["movzx edx,[rsi]", "movzx r13d,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "ui.toggle_enabled"
 sides = ["client"]
 in = "ui.toggle"
-shape = ["movzx ecx,[rdi+*]"]
+shape = ["movzx ecx,[rdi+*]", "test al,al"]
 take = "value"
 
 [[route]]
@@ -5491,7 +5340,7 @@ take = "value"
 id = "ui.toggle_extent"
 sides = ["client"]
 in = "ui.toggle"
-shape = ["movzx eax,[rdi+*]"]
+shape = ["xor bl,bl", "movzx eax,[rdi+*]"]
 take = "value"
 plus = 1
 
@@ -5520,7 +5369,7 @@ take = "address"
 id = "ui.window_extent"
 sides = ["client"]
 in = "~fn:ui.window_extent"
-shape = ["mov [r15+*],rax"]
+shape = ["mov rcx,rax", "mov [r15+*],rax"]
 take = "value"
 plus = 8
 
@@ -5542,18 +5391,10 @@ sides = ["client"]
 system = "ui_custom_name_debug"
 
 [[route]]
-id = "ui_image.content"
-sides = ["client"]
-in = "~fn:ui_image.content"
-shape = ["cmp [rsi+?],r13l"]
-take = "fixed"
-value = 0x0
-
-[[route]]
 id = "ui_image.flags"
 sides = ["client"]
 in = "~fn:ui_image.content"
-shape = ["movzx r9d,[rsi+*]"]
+shape = ["xor r8d,r8d", "movzx r9d,[rsi+*]"]
 take = "value"
 
 [[route]]
@@ -5567,7 +5408,7 @@ take = "value"
 id = "ui_image.height"
 sides = ["client"]
 in = "~fn:ui_image.content"
-shape = ["mov rax,[rsi+*]"]
+shape = ["mov [rsp+?],al", "mov rax,[rsi+*]"]
 take = "value"
 plus = 4
 
@@ -5582,7 +5423,7 @@ take = "value"
 id = "ui_image.width"
 sides = ["client"]
 in = "~fn:ui_image.content"
-shape = ["mov rax,[rsi+*]"]
+shape = ["mov [rsp+?],al", "mov rax,[rsi+*]"]
 take = "value"
 
 [[route]]
@@ -5708,38 +5549,31 @@ loads = [
 [[route]]
 id = "voxel.building_first"
 in = "~fn:voxel.building_first"
-shape = ["lea edx,[rbx+*]"]
+shape = ["jb ?", "lea edx,[rbx+*]"]
 take = "value"
 
 [[route]]
 id = "voxel.grid_depth"
 in = "~fn:voxel.grid_depth"
-shape = ["cmp r10d,[r9+*]"]
+shape = ["jae ?", "cmp r10d,[r9+*]"]
 take = "value"
 
 [[route]]
 id = "voxel.grid_pages"
 in = "~fn:voxel.grid_depth"
-shape = ["mov ecx,[r15+rcx*8+*]"]
+shape = ["lea r9,[r15+rcx*8]", "mov ecx,[r15+rcx*8+*]"]
 take = "value"
-
-[[route]]
-id = "voxel.grid_stride"
-in = "~fn:voxel.grid_depth"
-shape = ["mov r13d,[rsp+?]"]
-take = "fixed"
-value = 0x28
 
 [[route]]
 id = "voxel.grids"
 in = "~fn:voxel.grid_depth"
-shape = ["mov rbp,[r15+rcx*8+*]"]
+shape = ["mov rbp,[r15+rcx*8+*]", "lea r9,[r15+rcx*8]"]
 take = "value"
 
 [[route]]
 id = "voxel.materials"
 in = "~fn:voxel.building_first"
-shape = ["cmp rbx,*"]
+shape = ["inc rbx", "cmp rbx,*"]
 take = "value"
 
 [[route]]
@@ -5751,7 +5585,7 @@ take = "address"
 [[route]]
 id = "voxel.store"
 in = "~fn:voxel.store"
-shape = ["mov rcx,[rcx+*]"]
+shape = ["mov rcx,[rcx+*]", "jmp ?"]
 take = "value"
 
 [[route]]
@@ -5763,7 +5597,7 @@ take = "address"
 [[route]]
 id = "voxel.undo_extent"
 in = "voxel.undo_apply"
-shape = ["movsd xmm0,[rdx+*]"]
+shape = ["add ecx,r9d", "movsd xmm0,[rdx+*]"]
 take = "value"
 plus = 8
 
@@ -5791,47 +5625,15 @@ take = "address"
 id = "weather.entry_data"
 sides = ["client"]
 in = "weather.free"
-shape = ["lea rax,[rdx+*]"]
+shape = ["lea rax,[rdx+*]", "xor esi,esi"]
 take = "value"
 
 [[route]]
 id = "weather.entry_data"
 sides = ["server"]
 in = "weather.free"
-shape = ["lea rcx,[rdx+*]"]
+shape = ["lea rcx,[rdx+*]", "xor esi,esi"]
 take = "value"
-
-[[route]]
-id = "weather.entry_generation"
-sides = ["client"]
-in = "weather.free"
-shape = ["shl rcx,?", "add rdx,rcx"]
-take = "fixed"
-value = 0x0
-
-[[route]]
-id = "weather.entry_generation"
-sides = ["server"]
-in = "weather.free"
-shape = ["lea rdx,[rax+rcx*8]", "mov ecx,ebx"]
-take = "fixed"
-value = 0x0
-
-[[route]]
-id = "weather.entry_size"
-sides = ["client"]
-in = "weather.free"
-shape = ["mov rdx,[r8+rax*1+?]"]
-take = "fixed"
-value = 0x50
-
-[[route]]
-id = "weather.entry_size"
-sides = ["server"]
-in = "weather.free"
-shape = ["jae ?", "mov rax,[rdx+rax*1+?]"]
-take = "fixed"
-value = 0x48
 
 [[route]]
 id = "weather.free"
@@ -5841,131 +5643,124 @@ called_by = ["~fn:weather.layer_count"]
 id = "weather.generation"
 sides = ["client"]
 in = "weather.sample"
-shape = ["mov eax,[r12+*]"]
+shape = ["je ?", "mov eax,[r12+*]"]
 take = "value"
 
 [[route]]
 id = "weather.generation"
 sides = ["server"]
 in = "weather.sample"
-shape = ["mov eax,[r13+*]"]
+shape = ["je ?", "mov eax,[r13+*]"]
 take = "value"
 
 [[route]]
 id = "weather.instance_despawn"
 sides = ["client"]
 in = "~fn:weather.instance_despawn"
-shape = ["mov rdx,[rsi+*]"]
+shape = ["mov rcx,rbx", "mov rdx,[rsi+*]"]
 take = "value"
 
 [[route]]
 id = "weather.instance_despawn"
 sides = ["server"]
 in = "weather.sample"
-shape = ["mov rdx,[r14+*]"]
+shape = ["mov rcx,rbx", "mov rdx,[r14+*]"]
 take = "value"
 
 [[route]]
 id = "weather.instance_phenomenon"
 sides = ["client"]
 in = "weather.sample"
-shape = ["movzx eax,[rbp+*]"]
+shape = ["add rdx,r14", "movzx eax,[rbp+*]"]
 take = "value"
 
 [[route]]
 id = "weather.instance_phenomenon"
 sides = ["server"]
 in = "weather.sample"
-shape = ["movzx eax,[r14+*]"]
+shape = ["add rdi,r15", "movzx eax,[r14+*]"]
 take = "value"
 
 [[route]]
 id = "weather.instance_position"
 sides = ["client"]
 in = "~fn:weather.instance_position"
-shape = ["movups xmm7,[rdx+*]"]
+shape = ["movups xmm7,[rdx+*]", "cvtsi2sd xmm0,r8"]
 take = "value"
 
 [[route]]
 id = "weather.instance_position"
 sides = ["server"]
 in = "weather.sample"
-shape = ["sub rcx,[r14+*]"]
+shape = ["sub rcx,rax", "sub rcx,[r14+*]"]
 take = "value"
 
 [[route]]
 id = "weather.instance_radius"
 sides = ["client"]
 in = "weather.sample"
-shape = ["movss xmm2,[rbp+*]"]
+shape = ["movss xmm2,[rbp+*]", "xorps xmm8,xmm8"]
 take = "value"
 
 [[route]]
 id = "weather.instance_radius"
 sides = ["server"]
 in = "weather.sample"
-shape = ["movss xmm9,[r14+*]"]
+shape = ["xorps xmm0,xmm0", "movss xmm9,[r14+*]"]
 take = "value"
 
 [[route]]
 id = "weather.layer_count"
 in = "~fn:weather.layer_count"
-shape = ["cmp rsi,[rbx+*]"]
+shape = ["lea rbp,[rbp+?]", "cmp rsi,[rbx+*]"]
 take = "value"
 
 [[route]]
 id = "weather.layers"
 in = "~fn:weather.layer_count"
-shape = ["mov rdi,[rbx+*]"]
+shape = ["nop [rax+rax*1]", "mov rdi,[rbx+*]"]
 take = "value"
-
-[[route]]
-id = "weather.manager"
-in = "weather.sample"
-shape = ["mov r8d,[rdx+?]"]
-take = "fixed"
-value = 0x0
 
 [[route]]
 id = "weather.page_count"
 sides = ["client"]
 in = "weather.free"
-shape = ["cmp r8,[rdi+*]"]
+shape = ["and rcx,rdx", "cmp r8,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "weather.page_count"
 sides = ["server"]
 in = "weather.free"
-shape = ["cmp rdx,[rdi+*]"]
+shape = ["shr rdx,cl", "cmp rdx,[rdi+*]"]
 take = "value"
 
 [[route]]
 id = "weather.page_entries"
 sides = ["client"]
 in = "weather.free"
-shape = ["mov rdx,[r8+rax*1+*]"]
+shape = ["mov rdx,[r8+rax*1+*]", "lea rcx,[rcx+rcx*4]"]
 take = "value"
 
 [[route]]
 id = "weather.page_entries"
 sides = ["server"]
 in = "weather.free"
-shape = ["mov rax,[rdx+rax*1+*]"]
+shape = ["mov rax,[rdx+rax*1+*]", "lea rcx,[r8+r8*8]"]
 take = "value"
 
 [[route]]
 id = "weather.page_entry_count"
 sides = ["client"]
 in = "weather.free"
-shape = ["cmp rcx,[r8+rax*1+*]"]
+shape = ["shl r8,?", "cmp rcx,[r8+rax*1+*]"]
 take = "value"
 
 [[route]]
 id = "weather.page_entry_count"
 sides = ["server"]
 in = "weather.free"
-shape = ["cmp r8,[rdx+rax*1+*]"]
+shape = ["shl rdx,?", "cmp r8,[rdx+rax*1+*]"]
 take = "value"
 
 [[route]]
@@ -5984,15 +5779,23 @@ take = "value"
 
 [[route]]
 id = "weather.page_shift"
+sides = ["client"]
 in = "weather.free"
-shape = ["mov rcx,[rcx+*]"]
+shape = ["mov ebx,edx", "mov rcx,[rcx+*]"]
+take = "value"
+
+[[route]]
+id = "weather.page_shift"
+sides = ["server"]
+in = "weather.free"
+shape = ["mov rdi,rcx", "mov rcx,[rcx+*]"]
 take = "value"
 
 [[route]]
 id = "weather.page_size"
 sides = ["client"]
 in = "weather.free"
-shape = ["shl r8,*"]
+shape = ["shl r8,*", "cmp rcx,[r8+rax*1+?]"]
 take = "value"
 shift = true
 
@@ -6012,8 +5815,16 @@ take = "value"
 
 [[route]]
 id = "weather.resource"
+sides = ["client"]
 in = "weather.sample"
-shape = ["mov r8d,[rdx+*]"]
+shape = ["mov r13,r8", "mov r8d,[rdx+*]"]
+take = "value"
+
+[[route]]
+id = "weather.resource"
+sides = ["server"]
+in = "weather.sample"
+shape = ["mov r12,r8", "mov r8d,[rdx+*]"]
 take = "value"
 
 [[route]]
@@ -6077,15 +5888,8 @@ take = "value"
 [[route]]
 id = "weather.slot_size"
 in = "~fn:weather.layer_count"
-shape = ["lea rbp,[rbp+*]"]
+shape = ["inc rsi", "lea rbp,[rbp+*]"]
 take = "value"
-
-[[route]]
-id = "weather.slot_time"
-in = "~fn:weather.slot_phenomenon"
-shape = ["mov rax,?", "mov [rdi],rax"]
-take = "fixed"
-value = 0x0
 
 [[route]]
 id = "weather.spawn"
@@ -6105,7 +5909,7 @@ take = "address"
 [[route]]
 id = "weather.system"
 in = "~fn:weather.system"
-shape = ["cmp [rcx+*],?"]
+shape = ["cmp [rcx+*],?", "mov rdi,rcx"]
 take = "value"
 
 [[route]]
@@ -6122,7 +5926,7 @@ take = "value"
 [[route]]
 id = "world.scene_chunks"
 in = "~fn:chunks.height"
-shape = ["mov rbx,[rcx+*]"]
+shape = ["mov [rax+?],rbx", "mov rbx,[rcx+*]"]
 take = "value"
 
 [[route]]
@@ -6134,7 +5938,7 @@ take = "value"
 [[route]]
 id = "world.scene_chunks.scene"
 in = "~fn:chunks.height"
-shape = ["movups xmm0,[rbx+*]"]
+shape = ["call ?", "movups xmm0,[rbx+*]"]
 take = "value"
 
 [[route]]
@@ -6716,6 +6520,14 @@ loads = ["settingContentParent"]
 
 [[route]]
 id = "~caller:~c1:~fn:voxel.grids"
+sides = ["client"]
+in = "~caller:~caller:bases.client_create"
+shape = ["lea rax,[rip+*]", "mov [rbp-?],rax", "mov rax,[rdi+?]"]
+take = "address"
+
+[[route]]
+id = "~caller:~c1:~fn:voxel.grids"
+sides = ["server"]
 in = "~fn:server.build_zone_system"
 shape = ["mov [rbp-?],rax", "lea rax,[rip+*]", "mov [rbp+?],rax"]
 take = "address"
