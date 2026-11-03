@@ -23,6 +23,14 @@ pub enum ResolveRuleError {
     /// The rule's name is empty.
     #[error("an empty name")]
     Empty,
+    /// The name is no full id: a game name without its `enshrouded:`.
+    #[error(
+        "{name:?} is no id; write enshrouded:{name} for the game's, <mod id>:<name> for a mod's, or a GUID"
+    )]
+    Bare {
+        /// The name as written.
+        name: String,
+    },
     /// No recipe has the GUID.
     #[error("no recipe {name}")]
     NoRecipeGuid {

@@ -22,6 +22,7 @@ mod calls;
 mod capture;
 mod config_check;
 mod config_errors;
+mod config_files;
 mod config_groups;
 mod config_lists;
 #[cfg(feature = "unstable")]

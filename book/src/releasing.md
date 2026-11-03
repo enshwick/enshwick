@@ -32,7 +32,7 @@ release is the one the DLL reports.
 
 The loader names the version wherever the mod comes up:
 
-- `you.trading-post 0.2.0 initialised` in `loader.log`;
+- `you.trading-post 0.2.0 initialised` in the loader's log;
 - `requires you.lockers ^0.2, found 0.1.3` when a requirement is out of
   range;
 - `Trading Post 0.2.0, yours 0.1.0` in the dialog of a refused join.

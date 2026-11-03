@@ -2987,8 +2987,8 @@ typedef struct EnshwickHostApi {
                                      void *user);
   // Adds `callback` with `user` to the mod's status sources: the loader
   // calls it, on a thread of its own or the game thread, whenever it
-  // writes its status summary (`logs/enshwick/status.log`, `/enshwick
-  // status`) and shows its lines under the mod. Allowed during
+  // writes its status summary (`enshwick status` on the console, into
+  // the loader's log) and shows its lines under the mod. Allowed during
   // `enshwick_mod_init` only.
   EnshwickStatus (*status)(EnshwickModHandle me, EnshwickStatusFn callback, void *user);
   // Runs the console line `line` as the server's console, an

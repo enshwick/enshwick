@@ -137,7 +137,7 @@ changed does not.
   describe them). It searches on every start and writes nothing. What no
   pattern finds is missing, so only the loader features and the mods that
   need it turn off, and the log names the build. With `build_patterns =
-  false` in `mod-configs/enshwick.toml` such a build stays vanilla instead,
+  false` in `enshwick.toml` in the game's folder such a build stays vanilla instead,
   and a mod that set a [hold](state.md) stops the game, so a world that needs
   the mod is not opened without it. A mod's own rows cannot make an unknown
   build known.

@@ -21,11 +21,10 @@
 //!
 //! A vanilla server grants whatever knowledge a client asks for in its
 //! input, so a modified client could grant itself any of it. The loader's
-//! knowledge guard (`knowledge_guard` in the loader's settings) knows what
-//! a vanilla client asks for: a player's bools and the seen bit (0) of a
-//! player's flags, and never an id that gives experience or skill points or
-//! a quest. By default it watches, logging the rest and letting it
-//! through; enforcing, it refuses the rest. A mod widens or narrows it with
+//! knowledge guard knows what a vanilla client asks for: a player's bools
+//! and the seen bit (0) of a player's flags, and never an id that gives
+//! experience or skill points or a quest. It refuses the rest, logging the
+//! first refusals. A mod widens or narrows it with
 //! `Load::on_knowledge_input`. The input filter and the revokes need the
 //! `unstable` feature: what a vanilla client asks for, and how it takes a
 //! revoke, are not yet seen in the running game.

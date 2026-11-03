@@ -55,7 +55,8 @@ impl Name<'_> {
         match self {
             Self::Guid(guid) => guid.to_string().into(),
             Self::Content(id) => id.to_string().into(),
-            Self::Debug(name) => name.0.to_owned().into(),
+            Self::Debug(name) if name.0.trim().is_empty() => "".into(),
+            Self::Debug(name) => format!("{}:{}", crate::mods::GAME_ID, name.0).into(),
         }
     }
 }

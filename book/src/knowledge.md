@@ -111,27 +111,19 @@ marks, and a vanilla server grants whatever it asks: a modified client could
 grant itself any recipe, quest or skill point. The loader's knowledge guard
 knows what a vanilla client asks for, a player's bools and the seen bit (0)
 of a player's flags; the rest is ids of the world's, counters, other flag
-bits, ids that give experience or skill points, and quests. `knowledge_guard`
-in `mod-configs/enshwick.toml` says what it does with the rest:
+bits, ids that give experience or skill points, and quests. The guard refuses
+the rest: a refused request changes nothing and is not asked again. It has no
+setting.
 
-| Value       | The guard                                                            |
-| ----------- | -------------------------------------------------------------------- |
-| `"watch"`   | the default: logs each request it would refuse and lets it through   |
-| `"enforce"` | refuses it; a refused request changes nothing and is not asked again |
-| `"off"`     | does nothing; mods' filters still run                                |
-
-Requests the guard would refuse or refuses, and those a filter refuses, are
-logged as `knowledge guard: would refuse, let through ...` or
+Requests the guard or a filter refuses are logged as
 `knowledge guard: refused ...`, the first 64 of a run; the status summary
 counts them all.
 
 `load.on_knowledge_input(filter)` runs `filter` on every request
-after the guard, with the guard's reason (`refusal`, given in every mode) and
-the verdict so far (`allowed`); its answer replaces the verdict, so a mod can
-refuse more or allow what the guard refuses. A filter's refusal stands in
-every mode; a watching guard refuses nothing itself, so filters see its
-requests allowed. Filters run in load order on the server's worker threads,
-only when a client asks.
+after the guard, with the guard's reason (`refusal`) and the verdict so far
+(`allowed`); its answer replaces the verdict, so a mod can refuse more or
+allow what the guard refuses. Filters run in load order on the server's
+worker threads, only when a client asks.
 
 ```rust
 use enshwick::knowledge::Refusal;

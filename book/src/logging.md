@@ -1,7 +1,8 @@
 # Logging and diagnostics
 
-The loader writes one set of logs for itself and every mod, keeps a status
-summary of what runs, and turns a failing mod off with a reason in the log.
+The loader writes one log folder for itself and every mod, writes a status
+summary of what runs on request, and turns a failing mod off with a reason in
+the log.
 
 ## Log macros
 
@@ -34,38 +35,32 @@ hook; a line that is kept is formatted on the calling thread.
 
 ## Log files
 
-The loader writes to `logs/enshwick/` beside the game:
+The loader writes every log to `logs/` beside the game, one file per source
+and run:
 
-| File            | Holds                                               |
-| --------------- | --------------------------------------------------- |
-| `all.log`       | every line, the loader's and every mod's            |
-| `loader.log`    | the loader's own lines                              |
-| `mods/<id>.log` | one mod's lines                                     |
-| `status.log`    | the latest [status summary](#status-summary)        |
-| `crash.log`     | each crash, blamed on a mod, the loader or the game |
-| `report.md`     | the report a player attaches to an issue            |
+| File                                    | Holds                                                    |
+| --------------------------------------- | -------------------------------------------------------- |
+| `enshwick_<date>_<time>.log`            | the loader's own lines of the run that started then      |
+| `<mod id>_<date>_<time>.log`            | one mod's lines of that run                              |
+| `enshwick-crash_<date>_<time>.log`      | a crash, blamed on a mod, the loader or the game         |
+| `start.log`                             | lines from before the loader started, while it never did |
 
-A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. At start the
-files of the two sessions before are kept as `<name>.1.log` (the last) and
-`<name>.2.log`, each cut to its last 8 MiB, and older ones are deleted. During
-a session, `all.log` moves aside the same way once it would pass 32 MiB, and
-`loader.log` or a mod's file once it would pass 8 MiB, so `<name>.1.log` can
-hold the start of the same session; the new file's first line says so. A log
-never takes more than three times its cap. A background thread writes them and
+The time is the run's start in UTC, such as `enshwick_2026-11-03_10-00-00.log`.
+A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. Each source keeps
+its newest 10 files and deletes older ones as it opens a new one; deleting any
+file by hand is safe. A file that would pass 8 MiB ends with a line naming the
+next file, and the run goes on there. A background thread writes them and
 flushes every line, so a hook never waits on the disk and the last lines
 before a crash are kept. Up to 4096 lines wait for it; a line that finds the
 queue full is dropped rather than making the game wait, and the next line
 written says how many were dropped.
 
-`report.md` gathers what an issue needs in one file: the loader version and
-the stub's contract, Windows or the Wine version with `WINEDLLOVERRIDES`, and
-the status summary. It lists the DLLs in `mods/` and its folders, and other
-mods' proxies beside the game, with their sizes, and the latest 200 warnings
-and errors of the loader and every mod. The loader writes it once its log
-opens, again when it cannot serve the game, and with every status summary,
-each time after the log has taken the lines before it. Paths show the game's
-folder as `<game>`, the user's profile folder as `%USERPROFILE%` and the name
-in a Linux home folder as `<user>`, in any case and with either slash.
+The stub and the loader write the lines from before the log opens to
+`start.log`; the loader's file takes them in as it opens and removes it, so
+`start.log` stays only when the loader did not start. When the game's folder
+takes no files, they go to `enshwick/start.log` in the Windows temporary
+folder. The loader's file starts with its version, Windows or the Wine
+version, and the number of logical processors.
 
 ### Reading the log from the console
 
@@ -84,8 +79,9 @@ The writer keeps the latest 1024 lines in memory. The
 
 ## Levels
 
-The player picks how much is kept in `mod-configs/enshwick.toml`, the loader's
-own settings:
+The player picks how much is kept in `enshwick.toml` in the game's folder,
+the loader's own settings. The loader writes the file on first start with
+every key commented out at its default; remove the `#` before a key to set it:
 
 ```toml
 # error, warn, info or debug; info by default
@@ -94,34 +90,29 @@ log_level = "info"
 log_levels = { "you.lockers" = "debug" }
 ```
 
-The loader watches this file like a mod's settings: a change applies about a
-second later, and every mod's level follows without a restart.
+The loader watches this file: a change of the levels applies about a second
+later, and every mod's level follows without a restart.
 
-The keys of `mod-configs/enshwick.toml`:
+The keys of `enshwick.toml`:
 
-| Key                  | Default   | Meaning                                                                                                                 |
-| -------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `log_level`          | `"info"`  | the most detailed lines kept                                                                                            |
-| `log_levels`         | empty     | `log_level` per mod id                                                                                                  |
-| `status_minutes`     | `10`      | minutes between status summaries; `0` writes one only on request                                                        |
-| `diagnostics`        | `false`   | count the calls of every hooked function; read at start                                                                 |
-| `diagnostics_timing` | `false`   | with `diagnostics`, also time every 256th call; read at start                                                           |
-| `build_patterns`     | `true`    | run a build without its table on patterns; read at start                                                                |
-| `knowledge_guard`    | `"watch"` | watch, enforce or turn off the [knowledge guard](knowledge.md#what-clients-ask-for); read at start                      |
-| `require_enshwick`   | `true`    | kick players whose game lacks the server's [mods of side both](concepts/join-check.md); read at start                   |
-| `allowlist`          | `false`   | on a dedicated server, let in only the [allowlist](world.md#the-allowlist)'s accounts and administrators; read at start |
-| `language`           | `""`      | on a dedicated server, language code of the console's and other texts no player's game names; empty for English         |
-| `motd`               | `""`      | the [message of the day](https://enshwick.com/guides/run-a-server-in-docker/#greet-players-when-they-join) players read in chat; at most 4 lines and 500 bytes |
+| Key                  | Default  | Meaning                                                       |
+| -------------------- | -------- | ------------------------------------------------------------- |
+| `log_level`          | `"info"` | the most detailed lines kept                                  |
+| `log_levels`         | empty    | `log_level` per mod id                                        |
+| `diagnostics`        | `false`  | count the calls of every hooked function; read at start       |
+| `diagnostics_timing` | `false`  | with `diagnostics`, also time every 256th call; read at start |
+| `build_patterns`     | `true`   | run a build without its table on patterns; read at start      |
 
-The file rejects unknown keys. A file that does not parse at start is logged
-and the loader runs with the defaults; a change that does not parse is logged
-and skipped.
+A key whose value does not read keeps its default, and the log names it with
+error [E1007](https://enshwick.com/errors/E1007); every other key applies. A
+file that does not parse reads as the defaults. The rule a world sets for
+joining players, `require_enshwick`, lives with the world: see
+[The join check](concepts/join-check.md).
 
 ## Status summary
 
-The loader writes a status summary to `logs/enshwick/status.log`: a minute
-after start, then every `status_minutes`, and whenever the console runs
-`enshwick status`. Each write replaces the last. It lists:
+The console's `enshwick status` writes a status summary into the loader's
+log. It lists:
 
 - the loader and game versions, and whether this process hosts a game;
 - every mod with its name, version and whether it runs, its authors, licence
@@ -281,12 +272,14 @@ and changes to game data rather than code, are not seen.
 
 ## Faults
 
-When the loader turns a mod off, `loader.log` and the mod's log say why, the
-mod's log with an error `off: <reason>`, and the Mods screen shows the reason under the mod, in the
-reader's language for an `Off::text`. The summary's list of mods turned off
-keeps the reason, and `enshwick` on the console marks the mod `(off)`. A
-hardware fault that ends the game goes to `crash.log` instead, and the next
-start shows its line in the log and at the top of `status.log`.
+When the loader turns a mod off, the loader's log and the mod's log say why,
+the mod's log with an error `off: <reason>`, and the Mods screen shows the
+reason under the mod, in the reader's language for an `Off::text`. The
+summary's list of mods turned off keeps the reason, and `enshwick` on the
+console marks the mod `(off)`. A hardware fault that ends the game goes to the
+loader's log and to a crash file of its own,
+`logs/enshwick-crash_<date>_<time>.log`, and the next start shows its line in
+the log and at the top of the status summary.
 
 What turns a mod off, and the reason each case logs, is in
 [When a mod fails](concepts/lifecycle.md#when-a-mod-fails).

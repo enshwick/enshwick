@@ -8,7 +8,7 @@ The loader takes every mod through five steps, all at game start.
    id, version, side, dependencies, pinned build rows. No other code of the
    mod runs yet. A malformed manifest skips the mod, and so does a side
    other than `server` or `both`.
-2. **Resolve.** The loader skips, each with a reason in `loader.log`:
+2. **Resolve.** The loader skips, each with a reason in the loader's log:
    - a second mod with an id already taken, in file name order;
    - mods whose `requires` is missing, skipped or out of range, as in
      `requires trading-post ^0.2, found 0.1.3`;
@@ -78,14 +78,15 @@ The DLL stays loaded and the mod stays off until the next start.
 | a hook body panics | the panic is caught, the mod is off, the call continues to the rest of the chain (see [Panics](../hooks.md#panics)) |
 | an event handler, action, status closure or `ready` panics | off, `off: <what panicked>` |
 | the mod calls `host.fault(reason)` | off, with that reason |
-| a hardware fault in the mod's code | not caught: the game crashes as it would; `crash.log` names the mod |
+| a hardware fault in the mod's code | not caught: the game crashes as it would; the crash file names the mod |
 
 A panic is caught only with `panic = "unwind"`, which the release profile of
 `cargo enshwick new` keeps. A hardware fault, such as an access violation, is
-not a panic. When it ends the game, the loader writes `crash.log` before the
-game's own crash handling runs, naming the mod whose code faulted, whose
-callback it was running, or whose code was on the stack; see
-[What is in crash.log?](../faq.md#what-is-in-crashlog).
+not a panic. When it ends the game, the loader writes its line to the loader's
+log and to `logs/enshwick-crash_<date>_<time>.log` before the game's own
+crash handling runs, naming the mod whose code faulted, whose callback it was
+running, or whose code was on the stack; see
+[What is in a crash file?](../faq.md#what-is-in-a-crash-file).
 
 Where the reason shows, in the log, the status summary and the Mods screen, is
 in [Faults](../logging.md#faults).

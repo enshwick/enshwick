@@ -15,7 +15,7 @@ It cannot set game rules yet, such as rates or limits. A
 
 The loader runs it as it runs any pack: it is in the mod list and the
 lock, counts in [the join check](concepts/join-check.md) with the hash of
-every script, has its log `logs/enshwick/mods/<id>.log`, and is turned off
+every script, has its log `logs/<id>_<date>_<time>.log`, and is turned off
 alone when it goes wrong. It may hold data files too, such as `items.toml`.
 
 ```text

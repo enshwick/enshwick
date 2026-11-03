@@ -105,7 +105,7 @@ they come from.
 
 The loader skips a mod whose manifest has another major or a newer minor, an invalid id, the
 loader's own id `enshwick`, a version that is not SemVer, an unknown side, or a
-dependency range that does not parse; the reason goes to `loader.log` as
+dependency range that does not parse; the reason goes to the loader's log as
 `<file> skipped: <reason>`.
 
 ## Status codes

@@ -281,8 +281,8 @@ the mod can do without.
 
 ## When the loader refuses
 
-The user's log names the service and why, and `logs/enshwick/status.log`
-lists every service and event with its publisher and subscribers.
+The user's log names the service and why, and the status summary lists every
+service and event with its publisher and subscribers.
 
 | Reason                                                   | What it means                                             |
 | -------------------------------------------------------- | --------------------------------------------------------- |

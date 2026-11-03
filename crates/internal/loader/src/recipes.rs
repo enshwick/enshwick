@@ -22,6 +22,7 @@ use rustc_hash::FxHashMap;
 use enshwick::abi::RecipeRuleKind;
 use enshwick::content::recipes::RecipeLayout;
 use enshwick::content::{Blob, Guid};
+use enshwick::mods::GAME_ID;
 
 /// The server's recipe file, in `mod-configs`.
 pub const FILE: &str = "enshwick.recipes.toml";
@@ -38,14 +39,15 @@ pub const TEMPLATE: &str = r#"# Recipes nobody crafts in this game. They leave e
 # items that exist stay. A world's own <save>-mod-settings/enshwick/recipes.toml
 # applies over this file. Changes apply within a second.
 #
-# recipes names a recipe by its debug name (Tool_Torch01_T0_PK), a mod's
-# recipe by its content id (you.lanterns:lantern.recipe), any recipe by its
-# GUID.
+# recipes names a recipe by its full id: the game's as
+# enshrouded:<debug name> (enshrouded:Tool_Torch01_T0_PK), a mod's as its
+# content id (you.lanterns:lantern.recipe); any recipe also by its GUID.
 # outputs disables every recipe that makes an item, named the same ways.
-# workshops disables every recipe made at a workshop: "hand", or the debug
-# name of the station's or the survivor's item (Craftingstation_Workbench,
-# NPC_Crafter_Blacksmith01). [enable] takes recipes back from [disable] and
-# from mods. The console line enshwick recipes find <text> finds the names.
+# workshops disables every recipe made at a workshop: "hand", or the id of
+# the station's or the survivor's item (enshrouded:Craftingstation_Workbench,
+# enshrouded:NPC_Crafter_Blacksmith01). [enable] takes recipes back from
+# [disable] and from mods. The console line enshwick recipes find <text>
+# finds the ids.
 
 [disable]
 recipes = []
@@ -207,8 +209,10 @@ impl RuleFile {
     }
 }
 
+mod edit;
 mod errors;
 
+pub use edit::{edit_file, parts};
 pub use errors::{EditRulesError, ParseRulesError, ResolveRuleError};
 
 /// One recipe of the registry, as rules find it.
@@ -355,7 +359,7 @@ impl Names {
         self.item_labels.get(&id).map(String::as_str)
     }
 
-    /// A workshop in words: `hand`, its item's debug name, or its id.
+    /// A workshop in words: `hand`, its item's full id, or its number.
     #[must_use]
     pub fn workshop_name(&self, workshop: u32) -> String {
         if workshop == 0 {
@@ -364,7 +368,7 @@ impl Names {
         self.workshop_items
             .get(&workshop)
             .and_then(|item| self.item_name(*item))
-            .map_or_else(|| workshop.to_string(), str::to_owned)
+            .map_or_else(|| workshop.to_string(), full_id)
     }
 
     /// The item with debug name `name`.
@@ -372,12 +376,12 @@ impl Names {
         match self.items.get(name).map(Vec::as_slice) {
             Some([one]) => Ok(*one),
             Some(several) if !several.is_empty() => Err(ResolveRuleError::SeveralItems {
-                name: name.to_owned(),
+                name: full_id(name),
                 guids: several.to_vec(),
             }),
             _ => Err(ResolveRuleError::NoItem {
-                name: name.to_owned(),
-                near: owned(&near(self.items.keys().map(String::as_str), name)),
+                name: full_id(name),
+                near: full_ids(&near(self.items.keys().map(String::as_str), name)),
             }),
         }
     }
@@ -389,11 +393,6 @@ fn list(guids: &[Guid]) -> String {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-/// `names`, owned.
-fn owned(names: &[&str]) -> Vec<String> {
-    names.iter().map(|&name| name.to_owned()).collect()
 }
 
 fn near_list(near: &[String]) -> String {
@@ -430,16 +429,47 @@ fn near<'a>(names: impl Iterator<Item = &'a str>, name: &str) -> Vec<&'a str> {
     scored.into_iter().take(NEAR).map(|(_, n)| n).collect()
 }
 
-/// A name as a reference: a GUID, a content id's GUID, or a debug name.
+/// A name as a reference: a GUID, a content id's GUID, or the game's debug
+/// name after `enshrouded:`.
 enum Reference<'a> {
     Guid(Guid),
     Name(&'a str),
 }
 
-fn reference(name: &str) -> Reference<'_> {
+/// What `name` refers to.
+///
+/// # Errors
+///
+/// [`ResolveRuleError::Bare`] for a name that is no full id.
+fn reference(name: &str) -> Result<Reference<'_>, ResolveRuleError> {
+    if let Some(game) = name
+        .strip_prefix(GAME_ID)
+        .and_then(|rest| rest.strip_prefix(':'))
+    {
+        return Ok(Reference::Name(game));
+    }
     Guid::try_parse(name)
         .or_else(|| Guid::try_named(name))
-        .map_or(Reference::Name(name), Reference::Guid)
+        .map(Reference::Guid)
+        .ok_or_else(|| ResolveRuleError::Bare {
+            name: name.to_owned(),
+        })
+}
+
+/// A name of the game's data as people read and write it: a debug name as
+/// `enshrouded:<name>`, a mod's content id as it is.
+#[must_use]
+pub fn full_id(name: &str) -> String {
+    if name.contains(':') {
+        name.to_owned()
+    } else {
+        format!("{GAME_ID}:{name}")
+    }
+}
+
+/// `names` as full ids.
+fn full_ids(names: &[&str]) -> Vec<String> {
+    names.iter().map(|name| full_id(name)).collect()
 }
 
 /// The game ids of the recipes `rule` names.
@@ -453,7 +483,7 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, Re
         return Err(ResolveRuleError::Empty);
     }
     match rule.kind {
-        Kind::Recipe => match reference(name) {
+        Kind::Recipe => match reference(name)? {
             Reference::Guid(guid) => index
                 .recipes
                 .iter()
@@ -462,7 +492,7 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, Re
                 .ok_or_else(|| ResolveRuleError::NoRecipeGuid {
                     name: name.to_owned(),
                 }),
-            Reference::Name(name) => match index.by_name.get(name).map(Vec::as_slice) {
+            Reference::Name(game) => match index.by_name.get(game).map(Vec::as_slice) {
                 Some([one]) => Ok(vec![index.recipes[*one].id]),
                 Some(several) if !several.is_empty() => {
                     let guids: Vec<Guid> = several.iter().map(|&i| index.recipes[i].guid).collect();
@@ -473,12 +503,12 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, Re
                 }
                 _ => Err(ResolveRuleError::NoRecipe {
                     name: name.to_owned(),
-                    near: owned(&near(index.by_name.keys().map(String::as_str), name)),
+                    near: full_ids(&near(index.by_name.keys().map(String::as_str), game)),
                 }),
             },
         },
         Kind::Output => {
-            let item = match reference(name) {
+            let item = match reference(name)? {
                 Reference::Guid(guid) => guid,
                 Reference::Name(name) => names.item(name)?,
             };
@@ -500,10 +530,10 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, Re
             let workshop = if name.eq_ignore_ascii_case(HAND) {
                 0
             } else {
-                match reference(name) {
+                match reference(name)? {
                     Reference::Guid(guid) => guid.fnv1a(),
-                    Reference::Name(name) => {
-                        let item = names.item(name)?;
+                    Reference::Name(game) => {
+                        let item = names.item(game)?;
                         *names.workshops.get(&item.fnv1a()).ok_or_else(|| {
                             ResolveRuleError::NoWorkshop {
                                 name: name.to_owned(),
@@ -563,9 +593,13 @@ pub fn compose(
 }
 
 /// The recipes whose debug name, or whose output's, holds `text`, ignoring
-/// case.
+/// case and an `enshrouded:` before it.
 #[must_use]
 pub fn find<'a>(index: &'a Index, names: &Names, text: &str) -> Vec<&'a Recipe> {
+    let text = text
+        .strip_prefix(GAME_ID)
+        .and_then(|rest| rest.strip_prefix(':'))
+        .unwrap_or(text);
     let wanted = text.to_ascii_lowercase();
     index
         .recipes
@@ -587,11 +621,15 @@ pub fn describe(recipe: &Recipe, names: &Names) -> String {
     let made: Vec<String> = recipe
         .outputs
         .iter()
-        .filter_map(|&o| names.item_name(o).map(|name| format!("{name} (item {o})")))
+        .filter_map(|&o| {
+            names
+                .item_name(o)
+                .map(|name| format!("{} (item {o})", full_id(name)))
+        })
         .collect();
     format!(
         "{} ({}) at {}{}",
-        recipe.name,
+        full_id(&recipe.name),
         recipe.guid,
         names.workshop_name(recipe.workshop),
         if made.is_empty() {
@@ -600,67 +638,6 @@ pub fn describe(recipe: &Recipe, names: &Names) -> String {
             format!(", makes {}", made.join(", "))
         }
     )
-}
-
-/// `text` with `name` added to the `[disable]` (`disable`) or `[enable]`
-/// list of `kind`, and taken out of the other; comments kept.
-///
-/// # Errors
-///
-/// When `text` is no TOML or its lists are no lists.
-pub fn edit_file(
-    text: &str,
-    kind: Kind,
-    name: &str,
-    disable: bool,
-) -> Result<String, EditRulesError> {
-    let mut doc: toml_edit::DocumentMut = text.parse()?;
-    let (to, from) = if disable {
-        ("disable", "enable")
-    } else {
-        ("enable", "disable")
-    };
-    if let Some(list) = doc
-        .get_mut(from)
-        .and_then(|t| t.get_mut(kind.key()))
-        .and_then(toml_edit::Item::as_array_mut)
-    {
-        list.retain(|v| v.as_str() != Some(name));
-    }
-    let table = doc
-        .entry(to)
-        .or_insert_with(toml_edit::table)
-        .as_table_like_mut()
-        .ok_or(EditRulesError::NotTable { table: to })?;
-    let list = table
-        .entry(kind.key())
-        .or_insert(toml_edit::value(toml_edit::Array::new()))
-        .as_array_mut()
-        .ok_or(EditRulesError::NotList {
-            table: to,
-            key: kind.key(),
-        })?;
-    if !list.iter().any(|v| v.as_str() == Some(name)) {
-        list.push(name);
-    }
-    Ok(doc.to_string())
-}
-
-/// Splits ids into the messages a client takes: the first and last flags
-/// and up to `per` ids each, at least one message.
-#[must_use]
-pub fn parts(ids: &[u32], per: usize) -> Vec<(bool, bool, Vec<u32>)> {
-    let chunks: Vec<&[u32]> = if ids.is_empty() {
-        vec![&[]]
-    } else {
-        ids.chunks(per.max(1)).collect()
-    };
-    let last = chunks.len() - 1;
-    chunks
-        .into_iter()
-        .enumerate()
-        .map(|(i, chunk)| (i == 0, i == last, chunk.to_vec()))
-        .collect()
 }
 
 #[cfg(windows)]
@@ -768,19 +745,38 @@ mod tests {
     fn rules_name_recipes_by_name_guid_output_and_workshop() {
         let (index, names) = (index(), names());
         let ids = |kind: Kind, name: &str| resolve(&rule(kind, name), &index, &names);
-        assert_eq!(ids(Kind::Recipe, "Block_Wood"), Ok(vec![3]));
+        assert_eq!(ids(Kind::Recipe, "enshrouded:Block_Wood"), Ok(vec![3]));
         assert_eq!(
             ids(Kind::Recipe, &index.recipes[0].guid.to_string()),
             Ok(vec![1])
         );
         assert_eq!(ids(Kind::Recipe, "test:block_wood"), Ok(vec![3]));
-        assert_eq!(ids(Kind::Output, "Tool_Torch01_T0"), Ok(vec![1, 2]));
+        assert_eq!(
+            ids(Kind::Output, "enshrouded:Tool_Torch01_T0"),
+            Ok(vec![1, 2])
+        );
         assert_eq!(ids(Kind::Output, &TORCH.to_string()), Ok(vec![1, 2]));
         assert_eq!(ids(Kind::Workshop, "hand"), Ok(vec![1]));
         assert_eq!(
-            ids(Kind::Workshop, "Craftingstation_Workbench"),
+            ids(Kind::Workshop, "enshrouded:Craftingstation_Workbench"),
             Ok(vec![2, 3, 4, 5])
         );
+    }
+
+    #[test]
+    fn a_game_name_without_its_id_says_how_to_write_it() {
+        let (index, names) = (index(), names());
+        for kind in [Kind::Recipe, Kind::Output, Kind::Workshop] {
+            assert_eq!(
+                resolve(&rule(kind, "Block_Wood"), &index, &names),
+                Err(ResolveRuleError::Bare {
+                    name: "Block_Wood".to_owned()
+                }),
+                "{kind:?}"
+            );
+        }
+        assert_eq!(full_id("Block_Wood"), "enshrouded:Block_Wood");
+        assert_eq!(full_id("you.lanterns:lantern"), "you.lanterns:lantern");
     }
 
     #[test]
@@ -792,17 +788,20 @@ mod tests {
                 .to_string()
         };
         assert_eq!(
-            why(Kind::Recipe, "Block_Wod"),
-            "no recipe \"Block_Wod\"; near: Block_Wood"
+            why(Kind::Recipe, "enshrouded:Block_Wod"),
+            "no recipe \"enshrouded:Block_Wod\"; near: enshrouded:Block_Wood"
         );
-        assert!(why(Kind::Recipe, "Twin").starts_with("2 recipes are named \"Twin\": "));
-        assert_eq!(
-            why(Kind::Output, "Tool_Torch"),
-            "no item \"Tool_Torch\"; near: Tool_Torch01_T0"
+        assert!(
+            why(Kind::Recipe, "enshrouded:Twin")
+                .starts_with("2 recipes are named \"enshrouded:Twin\": ")
         );
         assert_eq!(
-            why(Kind::Workshop, "Tool_Torch01_T0"),
-            "Tool_Torch01_T0 has no workshop"
+            why(Kind::Output, "enshrouded:Tool_Torch"),
+            "no item \"enshrouded:Tool_Torch\"; near: enshrouded:Tool_Torch01_T0"
+        );
+        assert_eq!(
+            why(Kind::Workshop, "enshrouded:Tool_Torch01_T0"),
+            "enshrouded:Tool_Torch01_T0 has no workshop"
         );
         assert_eq!(why(Kind::Recipe, ""), "an empty name");
     }
@@ -812,21 +811,21 @@ mod tests {
         let (index, names) = (index(), names());
         let server = RuleFile::parse(
             "server.toml",
-            "[disable]\nworkshops = [\"Craftingstation_Workbench\"]\n[enable]\nrecipes = [\"Block_Wood\"]\n",
+            "[disable]\nworkshops = [\"enshrouded:Craftingstation_Workbench\"]\n[enable]\nrecipes = [\"enshrouded:Block_Wood\"]\n",
         )
         .unwrap();
         let world = RuleFile::parse(
             "world.toml",
-            "[disable]\nrecipes = [\"Block_Wood\", \"Nope\"]\n[enable]\nrecipes = [\"Tool_Torch01_T0_PK\"]\n",
+            "[disable]\nrecipes = [\"enshrouded:Block_Wood\", \"enshrouded:Nope\"]\n[enable]\nrecipes = [\"enshrouded:Tool_Torch01_T0_PK\"]\n",
         )
         .unwrap();
-        let mods = [rule(Kind::Recipe, "Tool_Torch01_T0_PK")];
+        let mods = [rule(Kind::Recipe, "enshrouded:Tool_Torch01_T0_PK")];
         let (disabled, problems) = compose(&index, &names, &mods, &[&server]);
         assert_eq!(disabled.into_iter().collect::<Vec<_>>(), [1, 2, 4, 5]);
         assert!(problems.is_empty());
         let (disabled, problems) = compose(&index, &names, &mods, &[&server, &world]);
         assert_eq!(disabled.into_iter().collect::<Vec<_>>(), [2, 3, 4, 5]);
-        assert_eq!(problems, ["world.toml:2: no recipe \"Nope\""]);
+        assert_eq!(problems, ["world.toml:2: no recipe \"enshrouded:Nope\""]);
     }
 
     #[test]
@@ -839,10 +838,11 @@ mod tests {
             .map(|r| r.id)
             .collect();
         assert_eq!(found, [3, 4, 5]);
+        assert_eq!(find(&index, &names, "enshrouded:torch").len(), 2);
         assert_eq!(
             describe(&index.recipes[1], &names),
             format!(
-                "Tool_Torch01_T0_bench ({}) at Craftingstation_Workbench, makes Tool_Torch01_T0 (item {})",
+                "enshrouded:Tool_Torch01_T0_bench ({}) at enshrouded:Craftingstation_Workbench, makes enshrouded:Tool_Torch01_T0 (item {})",
                 index.recipes[1].guid, index.recipes[1].outputs[0]
             )
         );
@@ -869,7 +869,7 @@ mod tests {
         let index = Index::new(recipes).with_content(&content);
         let names = names().with_content(&content);
         assert_eq!(
-            resolve(&rule(Kind::Recipe, "Block_Wood"), &index, &names),
+            resolve(&rule(Kind::Recipe, "enshrouded:Block_Wood"), &index, &names),
             Ok(vec![3])
         );
         assert_eq!(
@@ -885,7 +885,7 @@ mod tests {
         assert_eq!(
             describe(found[0], &names),
             format!(
-                "you.lanterns:lantern.recipe ({copy}) at Craftingstation_Workbench, makes you.lanterns:lantern (item {})",
+                "you.lanterns:lantern.recipe ({copy}) at enshrouded:Craftingstation_Workbench, makes you.lanterns:lantern (item {})",
                 found[0].outputs[0]
             )
         );

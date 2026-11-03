@@ -162,7 +162,7 @@ The alias then names the owner in the point's declaration:
 [naming dependencies](concepts/loader-and-abi.md#the-manifest)).
 
 With `after`, a missing owner leaves the link inert, which is no error:
-the mod runs and `loader.log` says
+the mod runs and the loader's log says
 `point you.trading-post:price: the link stays inert: you.trading-post does not run`. Use
 `requires` when the mod is pointless without the owner: the loader then skips
 the mod with a reason. A required owner initialises first, so the loader
@@ -184,8 +184,8 @@ What a refused export does, in the game and in a test, is in
 
 ## When the loader leaves a link inert
 
-The linking mod's log names the point and why, and `status.log` lists every
-point with its links and every inert link:
+The linking mod's log names the point and why, and the status summary lists
+every point with its links and every inert link:
 
 | Reason                                                                              | What it means                                          |
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------ |

@@ -16,6 +16,22 @@ use crate::abi::{ModInfo, Side, Str};
 /// ```
 pub const LOADER_ID: &str = "enshwick";
 
+/// The id the game's own content goes under where a person reads or writes it.
+///
+/// As a mod's content goes under its mod id, the game's reads
+/// `enshrouded:<debug name>`, such as `enshrouded:Tool_Torch01_T0_PK` in a
+/// file of disabled recipes. No mod may take it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::mods::GAME_ID;
+///
+/// let torch = format!("{GAME_ID}:Tool_Torch01_T0_PK");
+/// assert_eq!(torch, "enshrouded:Tool_Torch01_T0_PK");
+/// ```
+pub const GAME_ID: &str = "enshrouded";
+
 /// The file, relative to the game's folder, that turns developer tools on.
 ///
 /// The loader reads it once at start. Developer tools are mods with

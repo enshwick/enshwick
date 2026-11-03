@@ -17,33 +17,37 @@ The loader writes the file on first start, with every list empty:
 
 ```toml
 [disable]
-recipes = ["Tool_Torch01_T0_PK", "you.lockers:locker.recipe"]
-outputs = ["Tool_Torch01_T0"]
-workshops = ["hand", "NPC_Crafter_Blacksmith01"]
+recipes = ["enshrouded:Tool_Torch01_T0_PK", "you.lockers:locker.recipe"]
+outputs = ["enshrouded:Tool_Torch01_T0"]
+workshops = ["hand", "enshrouded:NPC_Crafter_Blacksmith01"]
 
 [enable]
-recipes = ["Armor_T1_Grassland_Fighter_Arms"]
+recipes = ["enshrouded:Armor_T1_Grassland_Fighter_Arms"]
 outputs = []
 workshops = []
 ```
 
+Every name is a full id: the game's recipes, items and workshops as
+`enshrouded:<debug name>`, a mod's by its [content id](../content.md#content-ids),
+`<mod id>:<name>`, and any by its GUID. A debug name without `enshrouded:`
+is a problem in the log that says how to write it.
+
 | List | Disables |
 | --- | --- |
-| `recipes` | one recipe: its debug name, a mod's recipe by its [content id](../content.md#content-ids), any by its GUID |
-| `outputs` | every recipe that makes an item: the item's debug name, content id or GUID |
-| `workshops` | every recipe made at a workshop: `hand` for crafting by hand, the debug name of the station's or survivor's item, such as `Craftingstation_Workbench` or `NPC_Crafter_Blacksmith01`, or the workshop's content id or GUID |
+| `recipes` | one recipe |
+| `outputs` | every recipe that makes an item |
+| `workshops` | every recipe made at a workshop: `hand` for crafting by hand, or the id of the station's or survivor's item, such as `enshrouded:Craftingstation_Workbench` or `enshrouded:NPC_Crafter_Blacksmith01` |
 
-`[enable]` takes recipes back, in the same three forms, from the file's
-`[disable]` and from mods' rules: the example disables every recipe of the
-Blacksmith but one. Debug names of items and workshops come from the game's
-data, so name a mod's item or workshop by its content id.
+`[enable]` takes recipes back, in the same forms, from the file's `[disable]`
+and from mods' rules: the example disables every recipe of the Blacksmith
+but one.
 
 A name the loader cannot resolve is a line in the loader's log with the
 file, the line and the names that look like it, and the other rules still
 apply:
 
 ```text
-warn  [enshwick] disabled recipes: mod-configs/enshwick.recipes.toml:3: no recipe "Tool_Torch01_T0_PKK"; near: Tool_Torch01_T0_PK
+warn  [enshwick] disabled recipes: mod-configs/enshwick.recipes.toml:3: no recipe "enshrouded:Tool_Torch01_T0_PKK"; near: enshrouded:Tool_Torch01_T0_PK
 info  [enshwick] disabled recipes: 224
 ```
 
@@ -69,8 +73,8 @@ the recipes and the server's refusals follow. No restart is needed.
 
 ## Finding names and changing rules from the console
 
-The server's [console](../chat.md#the-console), such as a mod's command
-file, finds names and changes the rules:
+The server's [console](../chat.md#the-console) finds names and changes the
+rules:
 
 | Line | Answer |
 | --- | --- |
@@ -82,7 +86,7 @@ file, finds names and changes the rules:
 ```text
 enshwick recipes find torch01
 Recipes that match "torch01": 1.
-Tool_Torch01_T0_PK (7fa62007-a38e-4790-8591-873055fc3f34) at hand, makes Tool_Torch01 (item 1234) (disabled)
+enshrouded:Tool_Torch01_T0_PK (7fa62007-a38e-4790-8591-873055fc3f34) at hand, makes enshrouded:Tool_Torch01 (item 1234) (disabled)
 ```
 
 ## Players who join
@@ -110,7 +114,8 @@ adds a rule of the mod's, in the forms of the file, at init or later, from
 any thread; `recipes::enable` takes the mod's own rule back, and
 `recipes::is_disabled` asks whether a recipe, by GUID or content id, is
 disabled now. A rule names its recipe, item or workshop item by `Guid`,
-content `Id` or `DebugName`, and `RecipeRule::Hand` stands for crafting by
+content `Id` or `DebugName`, which goes to the loader as
+`enshrouded:<debug name>`, and `RecipeRule::Hand` stands for crafting by
 hand:
 
 ```rust

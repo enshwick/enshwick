@@ -1,0 +1,27 @@
+error[E0428]: the name `__enshwick_two_settings_types_write_settings_toml` is defined multiple times
+  --> tests/ui/group_not_declared.rs:12:8
+   |
+ 4 | struct Comfort {
+   |        ------- previous definition of the macro `__enshwick_two_settings_types_write_settings_toml` here
+...
+12 | struct Settings {
+   |        ^^^^^^^^ `__enshwick_two_settings_types_write_settings_toml` redefined here
+   |
+   = note: `__enshwick_two_settings_types_write_settings_toml` must be defined only once in the macro namespace of this module
+
+error[E0277]: `Comfort` is a `#[config(group)]` field, so declare it `#[enshwick::config(group)]`
+  --> tests/ui/group_not_declared.rs:15:14
+   |
+15 |     comfort: Comfort,
+   |              ^^^^^^^ declared without `group`
+   |
+help: the trait `enshwick::config::__Group` is not implemented for `Comfort`
+  --> tests/ui/group_not_declared.rs:4:1
+   |
+ 4 | struct Comfort {
+   | ^^^^^^^^^^^^^^
+note: required by a bound in `enshwick::config::__group`
+  --> src/config.rs
+   |
+   | pub const fn __group<T: __Group>() {}
+   |                         ^^^^^^^ required by this bound in `__group`

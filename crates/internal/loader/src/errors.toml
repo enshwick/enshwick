@@ -47,7 +47,7 @@ fix = "Under Proton, check that the launch options read WINEDLLOVERRIDES=\"powrp
 [[error]]
 code = "E1007"
 title = "Enshwick's settings file has a mistake"
-cause = "A line in mod-configs/enshwick.toml does not read. Enshwick uses every line that reads. If allowlist, require_enshwick or knowledge_guard does not read, or may be the misspelled name or the misplaced table the log names, it is held in its safe state until the file is fixed: the allowlist on when its file exists, the join check on, the guard enforcing. A file that is not TOML at all holds all three, and the log names the line and column where it stops reading. A mistake never opens the server."
+cause = "A line in enshwick.toml in the game's folder, or in a world's <save>-mod-settings/enshwick/enshwick.toml, does not read. Enshwick uses every line that reads; a line that does not read keeps its default, so a world's require_enshwick stays on. A file that is not TOML at all reads as the defaults, and the log names the line and column where it stops reading."
 fix = "Fix the lines the log names and restart, or delete the file to get a fresh one on the next start."
 
 [[error]]
@@ -118,7 +118,7 @@ no = "E1002"
 
 [[step]]
 id = "loader-log"
-question = "With powrprof.dll back, is there a file logs/enshwick/loader.log beside the game?"
+question = "With powrprof.dll back, is there a file logs/enshwick_<date>_<time>.log beside the game?"
 yes = "game-stops"
 no = "other-proxy"
 

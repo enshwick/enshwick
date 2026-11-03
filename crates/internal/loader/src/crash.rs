@@ -224,7 +224,7 @@ impl Line {
     }
 }
 
-/// The fault in words, as `crash.log` keeps it: time, code, address, whom it
+/// The fault in words, as the crash file keeps it: time, code, address, whom it
 /// is blamed on and where, and what was accessed.
 pub(crate) fn describe(
     line: &mut Line,

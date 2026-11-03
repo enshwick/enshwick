@@ -18,7 +18,8 @@ the platform offers it in the game's own interface:
   at hand, such as "[F7] Who may use it: your locker at (2, 10, -4)", with a
   key that opens a window of the mod's actions right there;
 - on the server's [console](chat.md#the-console), as the mod's id, the
-  action and its values, such as a line in a dedicated server's command file.
+  action and its values, such as a line typed in a dedicated server's
+  console window.
 
 Actions are the only way players and administrators act in game: the client
 keeps typed `/` lines to itself, and single player has no chat.
@@ -115,8 +116,8 @@ hosts a game, single player included. The interface needs Enshwick on the
 player's client. The window and
 the Mods screen page ask the server each time they open, and the server
 sends the hints a player has at hand once a second while they change. The
-key is `F7`, `actions_key` in the loader's settings, read only while the
-game's window has the focus and the HUD shows.
+key is `F7`, read only while the game's window has the focus and the HUD
+shows.
 
 ## Worked example
 

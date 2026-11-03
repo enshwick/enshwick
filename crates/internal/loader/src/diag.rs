@@ -336,7 +336,7 @@ mod tests {
             conflicts: vec![
                 "interaction filter: you.trading-post, you.market-stalls, chained".into(),
             ],
-            knowledge_guard: Some("watching; 3 requests it would refuse let through".into()),
+            knowledge_guard: Some("enforcing; 3 refused".into()),
             messages: messages_line(0, 3, 1),
             settings: Vec::new(),
             parts: vec![
@@ -447,7 +447,7 @@ mod tests {
         assert!(text.contains("4 resources served (4 built, 0 failed), 12 texts"));
         assert!(text.contains(
             "
-knowledge guard: watching; 3 requests it would refuse"
+knowledge guard: enforcing; 3 refused"
         ));
         assert!(text.contains(
             "
@@ -508,16 +508,16 @@ conflicts:
     #[test]
     fn a_broken_settings_file_shows_in_the_summary_and_the_menu_line() {
         let mut summary = summary();
-        summary.settings = vec!["enshwick.toml: allowlist: invalid type".into()];
+        summary.settings = vec!["enshwick.toml: log_level: invalid type".into()];
         assert!(
             summary
                 .render()
-                .contains("enshwick.toml: allowlist: invalid type")
+                .contains("enshwick.toml: log_level: invalid type")
         );
         assert!(
             summary
                 .short()
-                .contains("enshwick.toml: allowlist: invalid type")
+                .contains("enshwick.toml: log_level: invalid type")
         );
         let good = menu_line("0.1.5", 2, 0, &[]);
         let broken = menu_line("0.1.5", 2, 0, &[MenuNote::BadSettings]);
