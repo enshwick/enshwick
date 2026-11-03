@@ -25,7 +25,7 @@ mod tests {
         Minimap,
         r#"
         id = "you.minimap"
-        side = "client"
+        side = "both"
         "#
     );
 

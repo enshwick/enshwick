@@ -48,8 +48,8 @@ pub enum ManifestError {
         /// Why it does not parse.
         reason: String,
     },
-    /// The side is none the loader knows.
-    #[error("unknown side {0}")]
+    /// The side is not a mod's side: server or both.
+    #[error("side {0} is not a mod's side: a mod runs on the server or on both")]
     UnknownSide(u8),
     /// A dependency's range does not parse.
     #[error("range {range:?} of {id}: {reason}")]
@@ -69,9 +69,6 @@ pub enum ManifestError {
         /// The relation's raw value.
         relation: u8,
     },
-    /// A rename or replacement names the loader's own id.
-    #[error("{0} is the loader's own id; no mod takes it over")]
-    TakesLoadersId(String),
 }
 
 /// Copies the manifest a mod's `enshwick_mod_query` returned, for the
@@ -266,7 +263,7 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
                 version: version.to_owned(),
                 reason: e.to_string(),
             })?;
-    if !matches!(manifest.side, Side::SERVER | Side::CLIENT | Side::BOTH) {
+    if !matches!(manifest.side, Side::SERVER | Side::BOTH) {
         return Err(ManifestError::UnknownSide(manifest.side.0));
     }
     let raw = if manifest.dependencies.is_null() || manifest.dependency_count == 0 {
@@ -440,19 +437,12 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, ManifestEr
     };
     if !matches!(
         raw.relation,
-        Relation::REQUIRES
-            | Relation::AFTER
-            | Relation::BREAKS
-            | Relation::RECOMMENDS
-            | Relation::REPLACES
+        Relation::REQUIRES | Relation::AFTER | Relation::BREAKS
     ) {
         return Err(ManifestError::UnknownRelation {
             id: id.to_owned(),
             relation: raw.relation.0,
         });
-    }
-    if id == crate::settings::LOADER_ID && raw.relation == Relation::REPLACES {
-        return Err(ManifestError::TakesLoadersId(id.to_owned()));
     }
     Ok(resolve::Dependency {
         id: id.to_owned(),
@@ -479,7 +469,7 @@ mod tests {
             id: Str::new(id),
             version: Str::new(version),
             side: Side::BOTH,
-            flags: ManifestFlags::JOIN,
+            flags: ManifestFlags::NONE,
             dependencies: DEPENDENCIES.as_ptr(),
             dependency_count: DEPENDENCIES.len(),
             builds: core::ptr::null(),
@@ -586,28 +576,35 @@ mod tests {
     }
 
     #[test]
-    fn an_old_form_id_is_replaced_and_the_loader_s_own_id_never_is() {
-        static FORMER: [Dependency; 1] = [Dependency {
-            id: Str::new("market-stalls"),
-            range: Str::EMPTY,
-            relation: Relation::REPLACES,
-        }];
-        static LOADER: [Dependency; 1] = [Dependency {
-            id: Str::new("enshwick"),
-            range: Str::EMPTY,
-            relation: Relation::REPLACES,
-        }];
-        let mut renamed = manifest("you.market-stalls", "0.2.0");
-        renamed.dependencies = FORMER.as_ptr();
+    fn the_client_side_and_the_removed_relations_are_refused() {
+        // Former `recommends` and `replaces`.
+        static FORMER: [Dependency; 2] = [
+            Dependency {
+                id: Str::new("you.bags"),
+                range: Str::EMPTY,
+                relation: Relation(3),
+            },
+            Dependency {
+                id: Str::new("market-stalls"),
+                range: Str::EMPTY,
+                relation: Relation(4),
+            },
+        ];
+        let mut client = manifest("you.lanterns", "0.1.0");
+        client.side = Side::CLIENT;
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        let candidate = unsafe { parse(&renamed) }.unwrap();
-        assert_eq!(candidate.dependencies[0].relation, Relation::REPLACES);
-        renamed.dependencies = LOADER.as_ptr();
-        // SAFETY: every string and list in the manifest points at `'static`
-        // literals and statics, readable and never written.
-        let why = unsafe { parse(&renamed) }.unwrap_err().to_string();
-        assert!(why.contains("loader's own"), "{why}");
+        let why = unsafe { parse(&client) }.unwrap_err().to_string();
+        assert!(why.contains("not a mod's side"), "{why}");
+        for former in &FORMER {
+            let mut old = manifest("you.market-stalls", "0.2.0");
+            old.dependencies = core::ptr::from_ref(former);
+            old.dependency_count = 1;
+            // SAFETY: every string and list in the manifest points at
+            // `'static` literals and statics, readable and never written.
+            let why = unsafe { parse(&old) }.unwrap_err().to_string();
+            assert!(why.contains("unknown relation"), "{why}");
+        }
     }
 
     #[test]

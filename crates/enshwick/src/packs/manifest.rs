@@ -17,14 +17,13 @@ use crate::abi::Relation;
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum PackSide {
-    /// The server and the clients: the default, as both read content.
+    /// Where the world runs and on every client playing in it, which must
+    /// run the same pack, files and all: the default, as both read content.
     #[default]
     Both,
-    /// The dedicated server and hosting clients only, such as a pack of
-    /// loot alone.
+    /// Only where the world runs: the dedicated server, or a client that
+    /// hosts or plays alone, such as a pack of loot alone.
     Server,
-    /// Clients only.
-    Client,
 }
 
 /// A pack folder's `pack.toml`: what the loader reads before it runs the
@@ -47,7 +46,6 @@ pub enum PackSide {
 /// assert_eq!(manifest.id, "you.lanterns");
 /// assert_eq!(manifest.exports, ["event:lit"]);
 /// assert_eq!(manifest.side, PackSide::Both);
-/// assert!(manifest.join);
 /// assert_eq!(manifest.requires["market"].id, "you.trading-post");
 /// # Ok::<(), enshwick::packs::PackError>(())
 /// ```
@@ -79,10 +77,6 @@ pub struct PackManifest {
     /// Where it runs.
     #[serde(default)]
     pub side: PackSide,
-    /// Whether server and clients must run the same pack, files and all, to
-    /// play together; on unless the pack says otherwise.
-    #[serde(default = "yes")]
-    pub join: bool,
     /// Mods and packs it needs, by the aliases its files and scripts know
     /// them by; the loader runs them first and leaves the pack off without
     /// them.
@@ -91,17 +85,10 @@ pub struct PackManifest {
     /// Mods it loads after when they run, by alias; they take no version.
     #[serde(default)]
     pub after: BTreeMap<String, PackDependency>,
-    /// Mods it works with when they run, by alias, loaded first.
-    #[serde(default)]
-    pub recommends: BTreeMap<String, PackDependency>,
     /// Mods it cannot run beside, by alias; with a `version`, only those
     /// versions.
     #[serde(default)]
     pub breaks: BTreeMap<String, PackDependency>,
-    /// The ids of mods it takes the place of; the loader runs only this
-    /// one.
-    #[serde(default)]
-    pub replaces: Vec<String>,
     /// The Enshwick releases it is made for, as a Cargo-style version
     /// requirement such as `=1.0.0-alpha.12` (empty for any); a loader of
     /// another release skips the pack and names both.
@@ -172,7 +159,7 @@ pub struct PackSetting {
 }
 
 /// One dependency of a pack, the value under its alias in `requires`,
-/// `after`, `recommends` or `breaks`: a mod id, or a table with the `id`
+/// `after` or `breaks`: a mod id, or a table with the `id`
 /// and a `version` requirement.
 ///
 /// # Examples
@@ -255,14 +242,9 @@ const VANILLA: &str = "vanilla";
 const fn table_of(relation: Relation) -> &'static str {
     match relation {
         Relation::AFTER => "after",
-        Relation::RECOMMENDS => "recommends",
         Relation::BREAKS => "breaks",
         _ => "requires",
     }
-}
-
-pub(super) const fn yes() -> bool {
-    true
 }
 
 impl PackManifest {
@@ -293,7 +275,7 @@ impl PackManifest {
     }
 
     /// Every dependency by alias, with the relation of the table that names
-    /// it: `requires`, `after`, `recommends` or `breaks`.
+    /// it: `requires`, `after` or `breaks`.
     ///
     /// # Examples
     ///
@@ -319,7 +301,6 @@ impl PackManifest {
         [
             (Relation::REQUIRES, &self.requires),
             (Relation::AFTER, &self.after),
-            (Relation::RECOMMENDS, &self.recommends),
             (Relation::BREAKS, &self.breaks),
         ]
         .into_iter()
@@ -332,8 +313,8 @@ impl PackManifest {
 
     /// Refuses an alias that is no `[a-z][a-z0-9_]*`, a Luau keyword,
     /// `vanilla` or given twice across the tables, a dependency that is no
-    /// mod id, a version on `after`, and an id in `replaces` that is none,
-    /// as `declare_mod!` refuses them in `[package.metadata.enshwick]`.
+    /// mod id and a version on `after`, as `declare_mod!` refuses them in
+    /// `[package.metadata.enshwick]`.
     fn check_dependencies(&self, text: &str) -> Result<(), PackError> {
         let mut seen = std::collections::BTreeSet::new();
         for (relation, alias, dependency) in self.dependencies() {
@@ -363,16 +344,6 @@ impl PackManifest {
             };
             let line = find(text, &format!("{alias} ="));
             return Err(PackError::at(MANIFEST_FILE, text, line, &problem));
-        }
-        for id in &self.replaces {
-            if !crate::abi::is_valid_id(id) && !crate::abi::is_valid_old_form_id(id) {
-                return Err(PackError::at(
-                    MANIFEST_FILE,
-                    text,
-                    find(text, "replaces"),
-                    &format!("`replaces`: {id:?} is not <author>.<name> or [a-z0-9-]+"),
-                ));
-            }
         }
         Ok(())
     }
@@ -474,18 +445,19 @@ impl PackSetting {
 
 impl PackManifest {
     /// Whether `pack` may run under this manifest, whose file reads `text`:
-    /// a pack that [reaches players](Pack::reaches_players) keeps `join` on.
+    /// a pack that [reaches players](Pack::reaches_players) runs on both
+    /// sides.
     ///
     /// # Errors
     ///
-    /// The problem, at the line of `join`.
+    /// The problem, at the line of `side`.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::packs::{Pack, PackFiles, PackManifest};
     ///
-    /// let text = "id = \"you.stacks\"\nversion = \"1.0.0\"\njoin = false\n";
+    /// let text = "id = \"you.stacks\"\nversion = \"1.0.0\"\nside = \"server\"\n";
     /// let manifest = PackManifest::parse(text)?;
     /// let files = PackFiles::new().with("items.toml", r#"
     /// [[change]]
@@ -498,14 +470,14 @@ impl PackManifest {
     /// # Ok::<(), enshwick::packs::PackError>(())
     /// ```
     pub fn check(&self, text: &str, pack: &Pack) -> Result<(), PackError> {
-        if self.join || !pack.reaches_players() {
+        if self.side == PackSide::Both || !pack.reaches_players() {
             return Ok(());
         }
         Err(PackError::at(
             MANIFEST_FILE,
             text,
-            find(text, "join"),
-            "join = false, but the pack adds or changes what players' games read, so server and players must run it alike; remove the line",
+            find(text, "side"),
+            "side = \"server\", but the pack adds or changes what players' games read, so server and players must run it alike; make it \"both\"",
         ))
     }
 }

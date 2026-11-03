@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use crate::abi::{HostApi, Level, ManifestFlags, ModHandle, Status};
+use crate::abi::{HostApi, Level, ModHandle, Side, Status};
 use crate::{Host, Load, Mod};
 
 pub use crate::content::recipes::derive::{RecipeEdit, modify_recipes_in};
@@ -635,11 +635,7 @@ pub unsafe fn init<M: Mod>(
         return Status::REFUSED;
     }
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        M::init(&mut Load::of(
-            host,
-            manifest.flags.contains(ManifestFlags::JOIN),
-            texts,
-        ))
+        M::init(&mut Load::of(host, manifest.side == Side::BOTH, texts))
     }));
     match outcome {
         Ok(Ok(state)) => match slot.0.set(state) {

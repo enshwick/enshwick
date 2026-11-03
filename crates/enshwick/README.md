@@ -25,7 +25,6 @@ from `[package]`:
 [package.metadata.enshwick]
 id = "you.hello"
 side = "both"
-join = true
 ```
 
 ```rust

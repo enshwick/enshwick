@@ -54,9 +54,6 @@ static-is-registry-fuse-or-state crates/internal/loader/src/fog.rs static OPENER
 # The game event subscriptions mods make during init; they move into a
 # `Registry<T>`.
 static-is-registry-fuse-or-state crates/internal/loader/src/game_events.rs static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
-# The join mods the last refused join found missing, runtime state of the
-# join; it moves into the join's state struct with `KEPT` and `ADVERTISED`.
-static-is-registry-fuse-or-state crates/internal/loader/src/host/join.rs pub(crate) static JOIN_MISSING: Mutex<Vec<Missing>> = Mutex::new(Vec::new());
 # Inventory changes finished off the game thread, runtime state; they move
 # into the inventory domain's state struct with `QUEUE`.
 static-is-registry-fuse-or-state crates/internal/loader/src/inventory.rs static FINISHED: Mutex<Vec<Finished>> = Mutex::new(Vec::new());

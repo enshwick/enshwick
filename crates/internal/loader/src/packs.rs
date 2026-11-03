@@ -12,8 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use enshwick::abi::{
-    Dependency, Header, HostApi, Level, Manifest, ManifestFlags, ModHandle, Relation, Side, Status,
-    Str,
+    Dependency, Header, HostApi, Level, Manifest, ManifestFlags, ModHandle, Side, Status, Str,
 };
 use enshwick::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSide};
 use rustc_hash::FxHashMap;
@@ -73,10 +72,9 @@ fn keep_slice<T: 'static>(items: Vec<T>) -> (*const T, usize) {
 fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
     let side = match manifest.side {
         PackSide::Server => Side::SERVER,
-        PackSide::Client => Side::CLIENT,
         _ => Side::BOTH,
     };
-    let mut dependencies: Vec<Dependency> = manifest
+    let dependencies: Vec<Dependency> = manifest
         .dependencies()
         .map(|(relation, _, dependency)| Dependency {
             id: keep(&dependency.id),
@@ -84,11 +82,6 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
             relation,
         })
         .collect();
-    dependencies.extend(manifest.replaces.iter().map(|id| Dependency {
-        id: keep(id),
-        range: Str::EMPTY,
-        relation: Relation::REPLACES,
-    }));
     let (dependencies, dependency_count) = keep_slice(dependencies);
     let authors: Vec<Str> = manifest.authors.iter().map(|a| keep(a)).collect();
     let (authors, author_count) = keep_slice(authors);
@@ -99,11 +92,7 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
         id: keep(&manifest.id),
         version: keep(&manifest.version),
         side,
-        flags: if manifest.join {
-            ManifestFlags::JOIN
-        } else {
-            ManifestFlags::NONE
-        },
+        flags: ManifestFlags::NONE,
         dependencies,
         dependency_count,
         builds: core::ptr::null(),
@@ -338,12 +327,14 @@ pub(crate) fn forget(id: &str) {
 
 #[cfg(test)]
 mod tests {
+    use enshwick::abi::Relation;
+
     use super::*;
 
     #[test]
     fn a_pack_manifest_reads_as_a_mod_s() {
         let manifest = PackManifest::parse(
-            "id = \"you.lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"\nreplaces = [\"lamps\"]\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5\" }\n[after]\nlockers = \"you.lockers\"\n[recommends]\nbags = \"ann.bags\"\n[breaks]\nold = \"old.lanterns\"\n",
+            "id = \"you.lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5\" }\n[after]\nlockers = \"you.lockers\"\n[breaks]\nold = \"old.lanterns\"\n",
         )
         .unwrap();
         let manifest = manifest_of(&manifest);
@@ -373,12 +364,10 @@ mod tests {
                     Relation::REQUIRES
                 ),
                 ("you.lockers", None, Relation::AFTER),
-                ("ann.bags", None, Relation::RECOMMENDS),
                 ("old.lanterns", None, Relation::BREAKS),
-                ("lamps", None, Relation::REPLACES),
             ]
         );
-        assert!(manifest.flags.contains(ManifestFlags::JOIN));
+        assert_eq!(manifest.flags, ManifestFlags::NONE);
         // SAFETY: `manifest_of` leaks the manifest and every string and slice
         // in it, so all its pointers are valid for the process.
         let meta = unsafe { crate::manifest::meta(manifest) };

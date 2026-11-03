@@ -1,6 +1,5 @@
 //! The gate at work on a server: hellos, kicks and notes in the game.
 
-use std::collections::BTreeMap;
 use std::hash::BuildHasher as _;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -24,6 +23,12 @@ type KickFn = unsafe extern "system" fn(session: *mut u8, machine: u32, ban: boo
 
 /// How often the step looks at the players.
 const LOOK_EVERY: Duration = Duration::from_secs(1);
+/// How long a joining player's game has to say which mods it runs before
+/// the server takes it for a game without Enshwick.
+const HELLO_WAIT: Duration = Duration::from_secs(30);
+/// How long between the chat line and the disconnect, for the player to
+/// read it.
+const NOTE_GRACE: Duration = Duration::from_secs(10);
 
 /// The game's kick and where the server keeps its session.
 #[derive(Debug)]
@@ -39,7 +44,6 @@ struct Kick {
 struct Serving {
     rules: Rules,
     names: Names,
-    pages: BTreeMap<String, String>,
     side: Side,
 }
 
@@ -92,15 +96,14 @@ static STATE: State = State {
 pub(crate) fn configure(settings: &crate::settings::Settings) {
     if settings.require_enshwick {
         let _first = STATE.rules.set(Rules {
-            wait: Duration::from_secs(settings.join_hello_seconds.into()),
-            grace: Duration::from_secs(settings.join_note_seconds.into()),
+            wait: HELLO_WAIT,
+            grace: NOTE_GRACE,
         });
     }
 }
 
-/// Starts admitting players, naming mods by `names` with the homepages
-/// `pages` by id.
-pub(crate) fn start(loader: &Loader, names: Names, pages: BTreeMap<String, String>) {
+/// Starts admitting players, naming mods by `names`.
+pub(crate) fn start(loader: &Loader, names: Names) {
     let kick = STATE.kick.get_or_init(|| {
         loader
             .address(pinned::session::KICK)
@@ -143,7 +146,6 @@ pub(crate) fn start(loader: &Loader, names: Names, pages: BTreeMap<String, Strin
     let _first = STATE.serving.set(Serving {
         rules,
         names,
-        pages,
         side: loader.side,
     });
 }
@@ -524,8 +526,13 @@ fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
                 .map(|_| serving.rules.grace);
             let text = crate::texts::for_player(key, || {
                 let names = loader.map_or_else(|| serving.names.clone(), reader_names);
-                super::note(&needs, hello, &names, &serving.pages, leaving)
+                super::note(&needs, hello, &names, leaving)
             });
+            if hello {
+                // A game that said hello runs Enshwick: it lists the
+                // difference itself once it is back in the menu.
+                crate::net::refused_mods(key, &server_mods());
+            }
             let ids: Vec<&str> = needs.iter().map(|n| n.id.as_str()).collect();
             let why = if hello {
                 "runs other join mods"

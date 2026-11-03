@@ -210,7 +210,7 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::{Header, ManifestFlags, ModInfo, Side, Str};
+    /// use enshwick::abi::{Header, ModInfo, Side, Str};
     ///
     /// let loader = enshwick::test::FakeHost::new()
     ///     .join_missing(ModInfo {
@@ -218,10 +218,7 @@ impl FakeHost {
     ///         id: Str::new("you.trading-post"),
     ///         version: Str::new("0.2.0"),
     ///         side: Side::BOTH,
-    ///         flags: ManifestFlags::JOIN,
     ///         off: 1,
-    ///         file: Str::EMPTY,
-    ///         homepage: Str::new("https://github.com/enshwick/enshwick"),
     ///         ..ModInfo::EMPTY
     ///     })
     ///     .install();
@@ -237,38 +234,6 @@ impl FakeHost {
     #[must_use]
     pub fn join_missing(mut self, info: ModInfo) -> Self {
         self.join_missing.push(info);
-        self
-    }
-
-    /// A mod in `mods/` that another mod replaces, which
-    /// `enshwick::mods::replaced()` lists, in order.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::abi::{ModInfo, Str};
-    ///
-    /// let loader = enshwick::test::FakeHost::new()
-    ///     .replaced(ModInfo {
-    ///         id: Str::new("you.stalls"),
-    ///         version: Str::new("0.1.0"),
-    ///         file: Str::new("mods/stalls.dll"),
-    ///         replaced_by: Str::new("you.market-stalls"),
-    ///         ..ModInfo::EMPTY
-    ///     })
-    ///     .install();
-    /// // SAFETY: the installed fake's table.
-    /// let api = unsafe { &*loader.api() };
-    /// let mut count = 0;
-    /// let size = u32::try_from(size_of::<ModInfo>())?;
-    /// let status = (api.replaced)(loader.handle(), core::ptr::null_mut(), size, 0, &mut count);
-    /// assert!(status.is_ok());
-    /// assert_eq!(count, 1);
-    /// # Ok::<(), core::num::TryFromIntError>(())
-    /// ```
-    #[must_use]
-    pub fn replaced(mut self, info: ModInfo) -> Self {
-        self.replaced.push(info);
         self
     }
 

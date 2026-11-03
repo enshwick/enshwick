@@ -63,7 +63,6 @@ mod tests {
         r#"
         id = "you.kinds"
         side = "both"
-        join = true
         "#
     );
 

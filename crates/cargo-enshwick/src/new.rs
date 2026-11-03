@@ -214,7 +214,6 @@ fn files(
     let name = crate_name(id)?;
     let side = match side {
         Side::Server => "server",
-        Side::Client => "client",
         Side::Both => "both",
     };
     let shown = display_name(name);

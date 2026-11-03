@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PackManifest",
-  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's `[package.metadata.enshwick]` says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\nexports = [\"event:lit\"]\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.exports, [\"event:lit\"]);\nassert_eq!(manifest.side, PackSide::Both);\nassert!(manifest.join);\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
+  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's `[package.metadata.enshwick]` says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\nexports = [\"event:lit\"]\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.exports, [\"event:lit\"]);\nassert_eq!(manifest.side, PackSide::Both);\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
   "type": "object",
   "properties": {
     "after": {
@@ -53,11 +53,6 @@
       "description": "The pack id, `<author>.<name>` like a mod's; it names the folder, the\nnamespace of the pack's content and its settings folder in each world.",
       "type": "string"
     },
-    "join": {
-      "description": "Whether server and clients must run the same pack, files and all, to\nplay together; on unless the pack says otherwise.",
-      "type": "boolean",
-      "default": true
-    },
     "license": {
       "description": "An SPDX licence expression.",
       "type": "string",
@@ -67,21 +62,6 @@
       "description": "The name players read; the id when empty.",
       "type": "string",
       "default": ""
-    },
-    "recommends": {
-      "description": "Mods it works with when they run, by alias, loaded first.",
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/PackDependency"
-      }
-    },
-    "replaces": {
-      "description": "The ids of mods it takes the place of; the loader runs only this\none.",
-      "type": "array",
-      "default": [],
-      "items": {
-        "type": "string"
-      }
     },
     "requires": {
       "description": "Mods and packs it needs, by the aliases its files and scripts know\nthem by; the loader runs them first and leaves the pack off without\nthem.",
@@ -132,7 +112,7 @@
       ]
     },
     "PackDependency": {
-      "description": "One dependency of a pack, the value under its alias in `requires`,\n`after`, `recommends` or `breaks`: a mod id, or a table with the `id`\nand a `version` requirement.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\nlockers = \"you.lockers\"\n\"#)?;\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\nassert_eq!(manifest.requires[\"market\"].version, \">=0.5, <1.0\");\nassert_eq!(manifest.requires[\"lockers\"].version, \"\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
+      "description": "One dependency of a pack, the value under its alias in `requires`,\n`after` or `breaks`: a mod id, or a table with the `id`\nand a `version` requirement.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\nlockers = \"you.lockers\"\n\"#)?;\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\nassert_eq!(manifest.requires[\"market\"].version, \">=0.5, <1.0\");\nassert_eq!(manifest.requires[\"lockers\"].version, \"\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
       "anyOf": [
         {
           "description": "The mod's id alone, for any version.",
@@ -198,19 +178,14 @@
       "description": "Where a pack runs, in `pack.toml`.\n\n# Examples\n\nSee [`PackManifest`].",
       "oneOf": [
         {
-          "description": "The server and the clients: the default, as both read content.",
+          "description": "Where the world runs and on every client playing in it, which must\nrun the same pack, files and all: the default, as both read content.",
           "type": "string",
           "const": "both"
         },
         {
-          "description": "The dedicated server and hosting clients only, such as a pack of\nloot alone.",
+          "description": "Only where the world runs: the dedicated server, or a client that\nhosts or plays alone, such as a pack of loot alone.",
           "type": "string",
           "const": "server"
-        },
-        {
-          "description": "Clients only.",
-          "type": "string",
-          "const": "client"
         }
       ]
     }

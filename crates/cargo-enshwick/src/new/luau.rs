@@ -54,10 +54,9 @@ pub(crate) fn create(
 /// them, and a README.
 pub(crate) fn files(id: &str, side: Side, game: Option<String>) -> Vec<(PathBuf, String)> {
     let name = super::display_name(id.split_once('.').map_or(id, |(_, name)| name));
-    let (side, join) = match side {
-        Side::Server => ("server", "false"),
-        Side::Client => ("client", "false"),
-        Side::Both => ("both", "true"),
+    let side = match side {
+        Side::Server => "server",
+        Side::Both => "both",
     };
     let (game_setting, game_analyze, game_step) = if game.is_some() {
         (
@@ -77,7 +76,6 @@ pub(crate) fn files(id: &str, side: Side, game: Option<String>) -> Vec<(PathBuf,
             .replace("{id}", id)
             .replace("{name}", &name)
             .replace("{side}", side)
-            .replace("{join}", join)
             .replace("{definitions}", &definitions_path())
     };
     let mut files = vec![
@@ -111,7 +109,6 @@ description = "What {name} does, in one sentence."
 authors = ["Your Name"]
 license = "MIT"
 side = "{side}"
-join = {join}
 
 # Settings players change on the Mods screen; `enshwick.settings()` reads them.
 # [[setting]]
@@ -189,16 +186,17 @@ mod tests {
         let root = dir.join("you.greeter");
         let (_, manifest, files) = crate::pack::check(&root, None).unwrap();
         assert_eq!(manifest.id, "you.greeter");
-        assert!(!manifest.join);
+        assert_eq!(manifest.side, enshwick::packs::PackSide::Server);
         let scripts: Vec<&str> = files.scripts().map(|(name, _)| name).collect();
         assert_eq!(scripts, [MAIN_FILE]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
-    fn a_mod_on_both_sides_joins() {
+    fn a_mod_on_both_sides_says_so_and_no_join_flag() {
         let files = files("you.greeter", Side::Both, None);
-        assert!(files[0].1.contains("join = true"));
+        assert!(files[0].1.contains("side = \"both\""));
+        assert!(!files[0].1.contains("join ="));
     }
 
     #[test]

@@ -29,7 +29,7 @@ mod tests {
         Pins,
         r#"
         id = "you.pins"
-        side = "client"
+        side = "both"
         "#
     );
 

@@ -1,7 +1,8 @@
-//! The one dialog a client shows when it stays out of a server.
+//! The one dialog a client shows when it stays out of a server and the
+//! mismatch screen cannot show on this build.
 //
 // The game's popup centres every line and wraps it at a fixed width (client
-// build 426), so lines stay short: a heading per place, then one mod per
+// build 426), so lines stay short: a heading per group, then one mod per
 // line, and no more lines than keep the button on a 1080p screen.
 
 use std::collections::BTreeMap;
@@ -23,7 +24,7 @@ const MAX_LINES: usize = 12;
 /// use enshwick_loader::join::{Names, refusal};
 ///
 /// let need = Need { id: "you.trading-post".into(), version: "0.3.0".into(), yours: None };
-/// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new(), &Default::default());
+/// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new());
 /// assert!(dialog.detail.lines().any(|line| line == "you.trading-post 0.3.0"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,7 +33,7 @@ pub struct Dialog {
     pub title: String,
     /// What happened and what to do, over the list.
     pub message: String,
-    /// The mods, grouped by where to get them.
+    /// The mods, grouped by what to do.
     pub detail: String,
 }
 
@@ -44,60 +45,41 @@ pub struct Off {
     pub this_game: Vec<String>,
 }
 
-/// Where the player gets a mod, in the order the dialog lists them.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+/// What the player does for a mod, in the order the dialog lists them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Get {
-    /// From the homepage the server advertises for it.
-    From(String),
-    /// From the server's admin: the server names no source.
+    /// Gets it: from the server's admin, as the dialog names no place.
     Ask,
-    /// By restarting the game, which turned it off.
+    /// Restarts the game, which turned it off.
     Restart,
 }
 
 /// The dialog for a client that lacks `needs`, the server's mods it does not
-/// run in the server's version; mods named by `names`, places from the
-/// homepages the server advertises, `pages` by id.
+/// run in the server's version; mods named by `names`, the client's own.
 ///
 /// # Examples
 ///
 /// ```
-/// use std::collections::BTreeMap;
-///
 /// use enshwick_loader::admission::Need;
 /// use enshwick_loader::join::{Names, refusal};
 ///
 /// let need = Need { id: "you.trading-post".into(), version: "0.3.0".into(), yours: Some("0.2.0".into()) };
-/// let pages = BTreeMap::from([("you.trading-post".to_owned(), "https://github.com/someone/trading-post".to_owned())]);
-/// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new(), &pages);
-/// assert!(dialog.detail.contains("github.com/someone/trading-post"));
+/// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new());
+/// assert!(dialog.detail.contains("you.trading-post 0.3.0, yours 0.2.0"));
 /// ```
 #[must_use]
-pub fn dialog(
-    needs: &[Need],
-    off: &Off,
-    names: &Names,
-    pages: &BTreeMap<String, String>,
-) -> Dialog {
+pub fn dialog(needs: &[Need], off: &Off, names: &Names) -> Dialog {
     let mut groups: BTreeMap<Get, Vec<String>> = BTreeMap::new();
     for need in needs {
         let get = if off.this_game.contains(&need.id) {
             Get::Restart
         } else {
-            pages
-                .get(&need.id)
-                .and_then(|page| crate::admission::place(page))
-                .map_or(Get::Ask, |place| {
-                    let shown = place
-                        .strip_prefix("https://")
-                        .or_else(|| place.strip_prefix("http://"));
-                    Get::From(shown.unwrap_or(&place).to_owned())
-                })
+            Get::Ask
         };
         let name = super::label(names, &need.id);
         let mut args = vec![("mod", name.as_str()), ("version", need.version.as_str())];
         let line = match &need.yours {
-            Some(yours) if matches!(get, Get::From(_) | Get::Ask) => {
+            Some(yours) if get == Get::Ask => {
                 args.push(("yours", yours.as_str()));
                 texts::fill("join.dialog.mod.yours", &args)
             }
@@ -113,7 +95,6 @@ pub fn dialog(
             break;
         }
         lines.push(match get {
-            Get::From(place) => texts::fill("join.dialog.from", &[("place", place)]),
             Get::Ask => texts::fill("join.dialog.ask", &[]),
             Get::Restart => texts::fill("join.dialog.restart", &[]),
         });
@@ -154,18 +135,8 @@ mod tests {
     }
 
     #[test]
-    fn missing_mods_are_listed_under_where_to_get_them() {
+    fn missing_mods_are_listed_by_the_client_s_names_and_no_place() {
         let names = Names::from([("you.lanterns".to_owned(), "Lanterns".to_owned())]);
-        let pages = BTreeMap::from([
-            (
-                "you.lanterns".to_owned(),
-                "https://github.com/someone/mods".to_owned(),
-            ),
-            (
-                "you.trading-post".to_owned(),
-                "https://github.com/someone/mods".to_owned(),
-            ),
-        ]);
         let dialog = dialog(
             &[
                 need("you.lanterns", "0.3.0", None),
@@ -174,15 +145,13 @@ mod tests {
             ],
             &Off::default(),
             &names,
-            &pages,
         );
         assert_eq!(
             lines(&dialog),
             [
-                "From github.com/someone/mods:",
+                "Ask the server's admin for:",
                 "Lanterns 0.3.0",
                 "you.trading-post 0.2.0, yours 0.1.0",
-                "Ask the server's admin for:",
                 "zones 0.1.0",
             ]
         );
@@ -195,7 +164,6 @@ mod tests {
             &[need("you.trading-post", "0.2.0", None)],
             &Off::default(),
             &Names::new(),
-            &BTreeMap::new(),
         );
         let all = format!("{} {} {}", dialog.title, dialog.message, dialog.detail).to_lowercase();
         assert!(!all.contains("download"), "{all}");
@@ -206,10 +174,6 @@ mod tests {
         let off = Off {
             this_game: vec!["count".to_owned()],
         };
-        let pages = BTreeMap::from([(
-            "you.trading-post".to_owned(),
-            "https://github.com/someone/mods".to_owned(),
-        )]);
         let dialog = dialog(
             &[
                 need("count", "0.2.0", None),
@@ -217,12 +181,11 @@ mod tests {
             ],
             &off,
             &Names::new(),
-            &pages,
         );
         assert_eq!(
             lines(&dialog),
             [
-                "From github.com/someone/mods:",
+                "Ask the server's admin for:",
                 "you.trading-post 0.3.0",
                 "Turned off in this game; restart it:",
                 "count 0.2.0",
@@ -232,24 +195,18 @@ mod tests {
 
     #[test]
     fn every_line_is_short_enough_to_stay_on_one_line() {
-        let id = "you.market-stalls";
-        let pages = BTreeMap::from([(
-            id.to_owned(),
-            "https://github.com/enshwick/enshwick".to_owned(),
-        )]);
         let off = Off {
             this_game: vec!["count".to_owned()],
         };
         let dialog = dialog(
             &[
-                need(id, "0.1.4", Some("0.1.3")),
+                need("you.market-stalls", "0.1.4", Some("0.1.3")),
                 need("you.trading-post", "0.1.0", None),
                 need("count", "0.1.0", None),
                 need("zones", "0.1.0", None),
             ],
             &off,
             &Names::new(),
-            &pages,
         );
         for line in lines(&dialog) {
             assert!(line.chars().count() <= 44, "{line}");
@@ -261,7 +218,7 @@ mod tests {
         let needs: Vec<Need> = (0..20)
             .map(|i| need(&format!("mod-{i:02}"), "1.0.0", None))
             .collect();
-        let dialog = dialog(&needs, &Off::default(), &Names::new(), &BTreeMap::new());
+        let dialog = dialog(&needs, &Off::default(), &Names::new());
         let lines = lines(&dialog);
         assert_eq!(lines.len(), MAX_LINES, "{}", dialog.detail);
         assert_eq!(lines[0], "Ask the server's admin for:");
@@ -273,7 +230,7 @@ mod tests {
         let needs: Vec<Need> = (0..11)
             .map(|i| need(&format!("mod-{i:02}"), "1.0.0", None))
             .collect();
-        let dialog = dialog(&needs, &Off::default(), &Names::new(), &BTreeMap::new());
+        let dialog = dialog(&needs, &Off::default(), &Names::new());
         let lines = lines(&dialog);
         assert_eq!(lines.len(), MAX_LINES);
         assert_eq!(lines[MAX_LINES - 1], "mod-10 1.0.0");

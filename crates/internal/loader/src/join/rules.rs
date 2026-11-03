@@ -6,75 +6,8 @@ use std::time::{Duration, Instant};
 
 use super::plan::entries;
 
-/// The longest mod name a server may advertise, in characters.
-const MAX_NAME: usize = 64;
-
 /// The check holds the join, so a server that does not answer is not waited on long.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
-
-/// The homepage a server advertises for mod `id`, as a link players can
-/// open; `None` when it advertises none or something else.
-///
-/// # Examples
-///
-/// ```
-/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
-/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
-/// #     for (key, value) in rules {
-/// #         reply.extend_from_slice(key.as_bytes());
-/// #         reply.push(0);
-/// #         reply.extend_from_slice(value.as_bytes());
-/// #         reply.push(0);
-/// #     }
-/// #     reply
-/// # }
-/// use enshwick_loader::join::page;
-///
-/// let reply = reply(&[("enshwick.page.you.trading-post", "https://github.com/enshwick/enshwick")]);
-/// assert!(page(&reply, "you.trading-post").is_some());
-/// assert!(page(&reply, "camera").is_none());
-/// ```
-#[must_use]
-pub fn page(reply: &[u8], id: &str) -> Option<String> {
-    let page = rule(reply, &format!("{}.{id}", crate::advertise::RULE_PAGE))?;
-    crate::admission::place(&page)
-}
-
-/// The name a server advertises for mod `id`, on one line and at most
-/// [`MAX_NAME`] characters; empty when it advertises none.
-///
-/// # Examples
-///
-/// ```
-/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
-/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
-/// #     for (key, value) in rules {
-/// #         reply.extend_from_slice(key.as_bytes());
-/// #         reply.push(0);
-/// #         reply.extend_from_slice(value.as_bytes());
-/// #         reply.push(0);
-/// #     }
-/// #     reply
-/// # }
-/// use enshwick_loader::join::name;
-///
-/// let reply = reply(&[("enshwick.name.you.trading-post", "Trading Post")]);
-/// assert_eq!(name(&reply, "you.trading-post"), "Trading Post");
-/// assert_eq!(name(&reply, "camera"), "");
-/// ```
-#[must_use]
-pub fn name(reply: &[u8], id: &str) -> String {
-    rule(reply, &format!("{}.{id}", crate::advertise::RULE_NAME))
-        .map(|name| {
-            name.chars()
-                .filter(|c| !c.is_control())
-                .take(MAX_NAME)
-                .collect::<String>()
-                .trim()
-                .to_owned()
-        })
-        .unwrap_or_default()
-}
 
 /// The whole mod list a server advertises across its mod rules.
 ///
@@ -414,21 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn pages_are_read_from_the_rules() {
-        let reply = reply(&[
-            ("enshwick.page.a", "https://github.com/enshwick/enshwick"),
-            ("enshwick.page.b", "github:enshwick/enshwick:enshwick-b"),
-        ]);
-        assert_eq!(
-            page(&reply, "a").as_deref(),
-            Some("https://github.com/enshwick/enshwick")
-        );
-        assert_eq!(page(&reply, "b"), None);
-        assert_eq!(page(&reply, "c"), None);
-    }
-
-    #[test]
-    fn a_server_s_ids_versions_and_names_are_checked_before_anyone_reads_them() {
+    fn a_server_s_ids_and_versions_are_checked_before_anyone_reads_them() {
         let server =
             "ok@1.2.0,../evil@1.0.0,x\ny@1.0.0,Caps@1.0.0,pack@0.1.0+ab12,bad@1.0\nInstall,@1";
         assert_eq!(
@@ -440,12 +359,6 @@ mod tests {
         );
         let missing = plan("ab", "", Some(("cd", server)), true);
         assert_eq!(missing.missing.len(), 2, "{:?}", missing.missing);
-        let reply = reply(&[
-            ("enshwick.name.ok", "Trading Post\n\nVerified by Enshwick"),
-            ("enshwick.name.long", &"n".repeat(500)),
-        ]);
-        assert_eq!(name(&reply, "ok"), "Trading PostVerified by Enshwick");
-        assert_eq!(name(&reply, "long").chars().count(), MAX_NAME);
     }
 
     #[test]

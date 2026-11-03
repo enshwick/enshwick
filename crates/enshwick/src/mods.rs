@@ -1,7 +1,7 @@
 //! The mods the loader loaded, for mods that look after other mods.
 
 use crate::Host;
-use crate::abi::{ManifestFlags, ModInfo, Side, Str};
+use crate::abi::{ModInfo, Side, Str};
 
 /// The id the loader lists itself under in [`all`]; no mod may take it.
 ///
@@ -134,19 +134,17 @@ pub struct ModEntry {
     pub id: String,
     /// The mod's SemVer version.
     pub version: String,
-    /// The sides the mod runs on.
+    /// Where the mod runs, [`Side::SERVER`] or [`Side::BOTH`]; a
+    /// [`Side::BOTH`] mod counts in the join check.
     pub side: Side,
-    /// Whether the mod counts in the join check.
-    pub join: bool,
     /// Whether the mod runs: not refused at init and not faulted since.
     pub running: bool,
     /// The DLL's path relative to the game's folder, with `/` separators,
     /// such as `mods/you.trading-post/trading_post.dll`. Empty in [`join_missing`] for a
     /// mod this client does not have.
     pub file: String,
-    /// The name players read; empty when the manifest names none. In
-    /// [`join_missing`], the name the server advertises.
-    /// [`ModEntry::label`] gives the name, or the id without one.
+    /// The name players read; empty when the manifest names none, and
+    /// always in [`join_missing`]. [`ModEntry::label`] gives the name, or the id without one.
     pub name: String,
     /// One sentence on what the mod does; empty for none.
     pub description: String,
@@ -156,11 +154,8 @@ pub struct ModEntry {
     pub license: String,
     /// Where players read about the mod; empty for none.
     pub homepage: String,
-    /// In [`replaced`], the id of the mod that replaces this one; empty
-    /// elsewhere.
-    pub replaced_by: String,
     /// The mod's place in load order in [`all`]; `None` for the loader and
-    /// in [`join_missing`] and [`replaced`].
+    /// in [`join_missing`].
     pub index: Option<ModIndex>,
 }
 
@@ -181,7 +176,6 @@ impl Default for ModEntry {
             id: String::new(),
             version: String::new(),
             side: Side(0),
-            join: false,
             running: false,
             file: String::new(),
             name: String::new(),
@@ -189,7 +183,6 @@ impl Default for ModEntry {
             authors: Vec::new(),
             license: String::new(),
             homepage: String::new(),
-            replaced_by: String::new(),
             index: None,
         }
     }
@@ -231,7 +224,7 @@ pub fn label(name: &str, id: &str) -> String {
 ///
 /// ```
 /// let mods = enshwick::mods::all();
-/// let joining = mods.iter().filter(|m| m.join).count();
+/// let joining = mods.iter().filter(|m| m.side == enshwick::abi::Side::BOTH).count();
 /// assert!(joining <= mods.len());
 /// ```
 #[must_use]
@@ -260,11 +253,12 @@ pub fn is_running(id: &str) -> bool {
     all().iter().any(|entry| entry.id == id && entry.running)
 }
 
-/// The server's join mods that the last refused join found missing on this
-/// client or in another version.
+/// The server's [`Side::BOTH`] mods that the last refused join found missing
+/// on this client or in another version.
 ///
-/// Each carries the server's version, `running` false, the client's DLL path
-/// when it has the mod, and the name and homepage the server advertises.
+/// Each carries the id and version the server advertises, `running` false
+/// and the client's DLL path when it has the mod; name and homepage stay
+/// empty, since a server chooses neither.
 ///
 /// Read it on [`JoinRefused`](crate::events::JoinRefused).
 ///
@@ -288,26 +282,6 @@ pub fn is_running(id: &str) -> bool {
 pub fn join_missing() -> Vec<ModEntry> {
     crate::host()
         .map(|host| host.listing(host.api().join_missing, false))
-        .unwrap_or_default()
-}
-
-/// The mods in `mods/` that a present mod replaces (see
-/// [`Relation::REPLACES`](crate::abi::Relation::REPLACES)): their DLLs the
-/// loader never started, each with [`ModEntry::replaced_by`] and its `file`,
-/// which is safe to delete.
-///
-///
-/// # Examples
-///
-/// ```
-/// for old in enshwick::mods::replaced() {
-///     enshwick::info!("{} is replaced by {}; delete {}", old.id, old.replaced_by, old.file);
-/// }
-/// ```
-#[must_use]
-pub fn replaced() -> Vec<ModEntry> {
-    crate::host()
-        .map(|host| host.listing(host.api().replaced, false))
         .unwrap_or_default()
 }
 
@@ -406,12 +380,10 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
         text(&info.license),
         text(&info.homepage),
     );
-    let replaced_by = text(&info.replaced_by);
     Some(ModEntry {
         id: id.to_owned(),
         version: version.to_owned(),
         side: info.side,
-        join: info.flags.contains(ManifestFlags::JOIN),
         running: info.off == 0,
         file: file.to_owned(),
         name,
@@ -419,7 +391,6 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
         authors,
         license,
         homepage,
-        replaced_by,
         index: None,
     })
 }
@@ -436,7 +407,7 @@ mod tests {
             id: Str::new("you.trading-post"),
             version: Str::new("0.1.0"),
             side: Side::BOTH,
-            flags: ManifestFlags::JOIN,
+            flags: crate::abi::ManifestFlags::NONE,
             off: 1,
             file: Str::new("mods/you.trading-post/trading_post.dll"),
             name: Str::new("Trading Post"),
@@ -445,12 +416,11 @@ mod tests {
             author_count: AUTHORS.len(),
             license: Str::new("MIT"),
             homepage: Str::EMPTY,
-            replaced_by: Str::EMPTY,
         };
         // SAFETY: every `Str` in `info` and `AUTHORS` points at a static
         // string, alive and unchanged for the process.
         let entry = unsafe { entry(&info) }.unwrap();
-        assert!(entry.join);
+        assert_eq!(entry.side, Side::BOTH);
         assert!(!entry.running);
         assert_eq!(entry.file, "mods/you.trading-post/trading_post.dll");
         assert_eq!(entry.label(), "Trading Post");

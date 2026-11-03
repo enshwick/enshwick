@@ -62,8 +62,8 @@ mod tests {
         id = "you.extender"
         side = "server"
 
-        [recommends]
-        my_mod = { id = "you.my-mod", version = ">=0.0.0-dev, <1.0" }
+        [after]
+        my_mod = "you.my-mod"
         "#
     );
 

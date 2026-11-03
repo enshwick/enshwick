@@ -113,6 +113,7 @@ mod resource_types;
 mod schedule;
 mod services;
 mod shapes;
+mod sides;
 mod skills;
 #[cfg(feature = "unstable")]
 mod stat_kinds;

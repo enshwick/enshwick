@@ -9,7 +9,7 @@ use syn::Ident;
 use super::cargo_metadata;
 
 /// Expands `deps!()`: a module per dependency the crate's `Cargo.toml`
-/// names by alias in `requires`, `after` or `recommends`, with the
+/// names by alias in `requires` or `after`, with the
 /// dependency's id and its content ids, and the declarations
 /// `cargo enshwick deps` wrote to `src/deps/<alias>.rs`, if any.
 pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
@@ -20,7 +20,6 @@ pub(crate) fn expand_deps() -> syn::Result<TokenStream> {
     let modules = metadata.dependencies.iter().filter_map(|d| {
         let relation = match d.relation {
             "REQUIRES" => "requires",
-            "RECOMMENDS" => "recommends",
             "AFTER" => "loads after",
             _ => return None,
         };

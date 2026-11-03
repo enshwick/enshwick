@@ -109,7 +109,6 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
                 name: record.name(),
                 version: record.version.clone(),
                 credits: record.meta.credits(),
-                notes: record.notes.clone(),
                 features: {
                     let features = record.features.relock().clone();
                     crate::features::shown(&features, record.texts.relock().as_ref())
@@ -162,10 +161,6 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         at: crate::diag::now(),
         mods,
         others: crate::others::lines(&loader.others),
-        replaced: crate::record::replaced()
-            .iter()
-            .map(crate::record::Replaced::line)
-            .collect(),
         turned_off: crate::diag::history(),
         parts_off: crate::diag::parts_off(),
         links: {

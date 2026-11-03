@@ -48,7 +48,7 @@ pub(crate) fn plan(
             .map(|id| enshwick::mods::label(names.get(id).map_or("", String::as_str), id))
             .collect();
         parts.push(format!(
-            "The host of this game does not run these Enshwick mods, so they are off until you restart the game:\n\n{}",
+            "The host of this game does not run these Enshwick mods, so they are off while you play in it:\n\n{}",
             lines.join("\n")
         ));
     }
@@ -365,14 +365,12 @@ mod runtime {
         );
         crate::net::joining(false);
         crate::host::forget_server_values();
+        crate::host::back_on();
         let ours = crate::advertise::mod_list(&crate::host::join_mods());
         let names = crate::join::names();
         let (turn_off, note) = super::plan(&host, &ours, &names);
         for id in &turn_off {
-            crate::host::turn_off_mod(
-                id,
-                "the host does not run it; restart the game to use it again",
-            );
+            crate::host::turn_off_for_world(id);
         }
         if let Some(text) = note {
             crate::ui::show("Enshwick", &text, "", 1 << UiDialog::OK, |_| {});

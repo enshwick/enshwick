@@ -39,7 +39,6 @@ same version of it. Its [manifest](concepts/loader-and-abi.md#the-manifest) says
 [package.metadata.enshwick]
 id = "you.my-mod"
 side = "both"
-join = true
 ```
 
 `join = true` puts the mod in the mod set the server advertises, so a player

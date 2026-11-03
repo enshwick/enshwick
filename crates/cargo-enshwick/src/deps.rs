@@ -66,8 +66,8 @@ fn dlls(from: &Path) -> anyhow::Result<Vec<PathBuf>> {
     Ok(found)
 }
 
-/// The dependencies a mod's manifest names by alias in `requires`, `after`
-/// and `recommends`, the ones its code reaches.
+/// The dependencies a mod's manifest names by alias in `requires` and
+/// `after`, the ones its code reaches.
 struct Dependencies {
     /// The manifest, as messages show it.
     shown: String,
@@ -80,10 +80,11 @@ struct Dependencies {
 }
 
 /// The tables of a `Cargo.toml` that name dependencies by alias.
-const CARGO_TABLES: &str = "[package.metadata.enshwick.requires], [package.metadata.enshwick.recommends] or [package.metadata.enshwick.after]";
+const CARGO_TABLES: &str =
+    "[package.metadata.enshwick.requires] or [package.metadata.enshwick.after]";
 
 /// The tables of a `pack.toml` that name dependencies by alias.
-const PACK_TABLES: &str = "[requires], [recommends] or [after]";
+const PACK_TABLES: &str = "[requires] or [after]";
 
 impl Dependencies {
     /// Reads the `Cargo.toml` at `path`, or with `luau` the `pack.toml`.
@@ -134,7 +135,7 @@ impl Dependencies {
     }
 }
 
-/// The aliases of `requires`, `after` and `recommends` in the
+/// The aliases of `requires` and `after` in the
 /// `[package.metadata.enshwick]` table of the `Cargo.toml` text `text`.
 fn cargo_aliases(text: &str) -> anyhow::Result<Vec<(String, String)>> {
     let cargo: toml::Table = toml::from_str(text)?;
@@ -145,7 +146,7 @@ fn cargo_aliases(text: &str) -> anyhow::Result<Vec<(String, String)>> {
         .and_then(toml::Value::as_table)
         .context("no [package.metadata.enshwick] table: is this a mod's Cargo.toml?")?;
     let mut aliases = Vec::new();
-    for relation in ["requires", "after", "recommends"] {
+    for relation in ["requires", "after"] {
         let Some(value) = table.get(relation) else {
             continue;
         };
@@ -250,7 +251,7 @@ side = "server"
 [package.metadata.enshwick.requires]
 lockers = { id = "you.lockers", version = ">=0.1" }
 
-[package.metadata.enshwick.recommends]
+[package.metadata.enshwick.after]
 trading_post = "you.trading-post"
 
 [package.metadata.enshwick.breaks]
@@ -311,7 +312,7 @@ old = "you.old"
         .unwrap_err()
         .to_string();
         assert!(
-            error.contains("names no dependency `stalls` in [package.metadata.enshwick.requires], [package.metadata.enshwick.recommends] or [package.metadata.enshwick.after]"),
+            error.contains("names no dependency `stalls` in [package.metadata.enshwick.requires] or [package.metadata.enshwick.after]"),
             "{error}"
         );
         let old = run(

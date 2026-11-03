@@ -11,7 +11,7 @@
 use enshwick::abi::{Dependency, Header, Manifest, ManifestFlags, Relation, Side, Str};
 use enshwick_fuzz::text_fields;
 use enshwick_loader::manifest::{meta, parse};
-use enshwick_loader::resolve::{Candidate, notes, resolve};
+use enshwick_loader::resolve::{Candidate, resolve};
 use libfuzzer_sys::fuzz_target;
 
 /// The byte between mods; like the field separator, no UTF-8 text holds it.
@@ -46,7 +46,7 @@ fn candidate(record: &[u8]) -> Option<Candidate> {
         id: Str::new(id),
         version: Str::new(version),
         side: Side(side.parse().unwrap_or(3)),
-        flags: ManifestFlags::JOIN,
+        flags: ManifestFlags::NONE,
         dependencies: dependencies.as_ptr(),
         dependency_count: dependencies.len(),
         builds: core::ptr::null(),
@@ -71,8 +71,8 @@ fn candidate(record: &[u8]) -> Option<Candidate> {
     unsafe { parse(&manifest) }.ok()
 }
 
-fn check(candidates: &[Candidate], side: Side) {
-    let plan = resolve(candidates, side);
+fn check(candidates: &[Candidate]) {
+    let plan = resolve(candidates);
     let mut seen = vec![false; candidates.len()];
     for &i in plan.order.iter().chain(plan.skipped.iter().map(|(i, _)| i)) {
         assert!(!seen[i], "#{i} is both loaded and skipped, or twice");
@@ -95,7 +95,6 @@ fn check(candidates: &[Candidate], side: Side) {
             );
         }
     }
-    drop(notes(candidates, &plan));
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -104,7 +103,5 @@ fuzz_target!(|data: &[u8]| {
         .take(MAX_MODS)
         .filter_map(candidate)
         .collect();
-    for side in [Side::SERVER, Side::CLIENT] {
-        check(&candidates, side);
-    }
+    check(&candidates);
 });

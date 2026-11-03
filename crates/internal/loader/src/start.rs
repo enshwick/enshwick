@@ -31,8 +31,8 @@ pub(crate) use join_check::TABLE_IDS;
 
 use arm::arm;
 use game::{begin, game, wait_for_window};
-use join_check::{link_join, names, pages};
-use library::{Library, Run, libraries, unload};
+use join_check::{link_join, names};
+use library::{Library, Run, libraries};
 
 /// The client starts under Steam's DRM wrapper, which may check the game's code
 /// before it runs. The game opens its window only once its own code runs, so
@@ -149,8 +149,8 @@ pub(crate) fn start(
             )
         })
         .collect();
-    let plan = resolve::resolve(&candidates, game.side);
-    skip(&libraries, &candidates, &plan);
+    let plan = resolve::resolve(&candidates);
+    skip(&libraries, &plan);
     if let Some(w) = watching.as_mut() {
         w.check("", Stage::Skip);
     }
@@ -220,11 +220,7 @@ fn start_services(loader: &'static Loader) {
     if loader.side == Side::SERVER {
         serve(loader);
     }
-    crate::admission::start(
-        loader,
-        names(loader).into_iter().collect(),
-        pages(loader).into_iter().collect(),
-    );
+    crate::admission::start(loader, names(loader).into_iter().collect());
     crate::allowlist::start(loader, crate::admission::can_kick());
     crate::chat_mute::start(loader);
 }
@@ -233,14 +229,7 @@ fn start_services(loader: &'static Loader) {
 /// the console's command file.
 fn serve(loader: &'static Loader) {
     if let Some(game_dir) = loader.mods_dir.parent() {
-        crate::advertise::start(
-            game_dir,
-            host::join_mods,
-            crate::advertise::Lines {
-                pages: pages(loader),
-                names: names(loader),
-            },
-        );
+        crate::advertise::start(game_dir, host::join_mods);
     }
     crate::console::start(loader);
 }
@@ -263,55 +252,24 @@ fn release_server(release: Option<extern "system" fn() -> u32>, began: std::time
     }
 }
 
-/// Logs the mods `plan` skips; unloads the DLLs of those that present mods
-/// replace, so their code never runs and the files can be deleted.
-fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
+/// Logs the mods `plan` skips.
+fn skip(libraries: &[Library], plan: &resolve::Plan) {
     for (index, reason) in &plan.skipped {
-        if plan.replaced.iter().any(|&(old, _)| old == *index) {
-            continue;
-        }
-        if reason == resolve::OTHER_SIDE {
-            crate::log!(INFO, "{} skipped: {reason}", libraries[*index].file);
-        } else {
-            crate::log!(
-                WARN,
-                "{} skipped: {reason} ({})",
-                libraries[*index].file,
-                crate::errors::UNMET_RELATIONS
-            );
-        }
+        crate::log!(
+            WARN,
+            "{} skipped: {reason} ({})",
+            libraries[*index].file,
+            crate::errors::UNMET_RELATIONS
+        );
     }
-    let replaced = plan
-        .replaced
-        .iter()
-        .map(|&(old, by)| (old, candidates[by].id.as_str()))
-        .map(|(old, by)| {
-            let library = &libraries[old];
-            unload(library);
-            let replaced = crate::record::Replaced {
-                id: candidates[old].id.clone(),
-                version: candidates[old].version.to_string(),
-                folder: library.folder.clone(),
-                by: by.to_owned(),
-            };
-            crate::log!(WARN, "{}", replaced.line());
-            replaced
-        })
-        .collect();
-    crate::record::set_replaced(replaced);
 }
 
-/// The records of the mods `plan` loads, in load order, with their notes
-/// logged.
+/// The records of the mods `plan` loads, in load order.
 fn records(
     libraries: &[Library],
     candidates: &[Candidate],
     plan: &resolve::Plan,
 ) -> Vec<ModRecord> {
-    let notes = resolve::notes(candidates, plan);
-    for (index, note) in &notes {
-        crate::log!(INFO, "{} {note}", candidates[*index].id);
-    }
     plan.order
         .iter()
         .map(|&i| ModRecord {
@@ -324,11 +282,6 @@ fn records(
             // strings and lists readable and never written; a string `read`
             // left in the DLL is read while the planned mod's DLL is loaded.
             meta: unsafe { crate::manifest::meta(libraries[i].manifest) },
-            notes: notes
-                .iter()
-                .filter(|(index, _)| *index == i)
-                .map(|(_, note)| note.clone())
-                .collect(),
             off: AtomicBool::new(false),
             off_reason: Mutex::new(None),
             waiting: AtomicBool::new(false),

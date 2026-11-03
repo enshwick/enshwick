@@ -16,7 +16,9 @@ pub struct Candidate {
     pub id: String,
     /// Its version.
     pub version: Version,
-    /// The sides it runs on.
+    /// Where it runs, [`Side::SERVER`] or [`Side::BOTH`]: every game binary
+    /// loads both, since a client runs the server's code while it hosts a
+    /// game, solo play included.
     pub side: Side,
     /// Its relations to other mods.
     pub dependencies: Vec<Dependency>,
@@ -41,23 +43,6 @@ pub struct Plan {
     pub order: Vec<usize>,
     /// Indices of skipped candidates and why.
     pub skipped: Vec<(usize, String)>,
-    /// Skipped candidates that a present mod replaces: the replaced index
-    /// and the replacing one.
-    pub replaced: Vec<(usize, usize)>,
-}
-
-/// Why a mod made for the other side of the game is skipped, which is
-/// expected rather than a fault: a player's or a server's folder may hold
-/// mods for the other side.
-pub const OTHER_SIDE: &str = "not for this side of the game";
-
-/// Whether a mod for `mod_side` loads in the game binary `process`.
-///
-/// The dedicated server loads server mods; the client loads every mod, since it
-/// runs the server's code while it hosts a game, solo play included.
-#[must_use]
-pub fn loads(mod_side: Side, process: Side) -> bool {
-    mod_side.includes(process) || (process == Side::CLIENT && mod_side.includes(Side::SERVER))
 }
 
 /// A file in `mods/` that declares a mod, weighed by [`duplicates`] against
@@ -110,50 +95,13 @@ pub fn duplicates(files: &[Installed<'_>]) -> Vec<(usize, usize)> {
         .collect()
 }
 
-/// The candidates present mods replace, `(old, by)` in order, each marked
-/// in `skipped`. An old id gives way to every present mod that replaces it,
-/// whatever else is wrong with either; a mod never replaces the one it gave
-/// way to.
-fn replacements(
-    candidates: &[Candidate],
-    by_id: &BTreeMap<&str, usize>,
-    skipped: &mut BTreeMap<usize, String>,
-) -> Vec<(usize, usize)> {
-    let mut replaced: Vec<(usize, usize)> = Vec::new();
-    for (i, candidate) in candidates.iter().enumerate() {
-        if by_id.get(candidate.id.as_str()) != Some(&i) {
-            continue;
-        }
-        for dependency in &candidate.dependencies {
-            if dependency.relation != Relation::REPLACES || dependency.id == candidate.id {
-                continue;
-            }
-            for (old, _) in candidates
-                .iter()
-                .enumerate()
-                .filter(|(_, c)| c.id == dependency.id)
-            {
-                if replaced.iter().any(|&(o, _)| o == old) || replaced.contains(&(i, old)) {
-                    continue;
-                }
-                skipped.insert(old, format!("replaced by {}", candidate.id));
-                replaced.push((old, i));
-            }
-        }
-    }
-    replaced.sort_unstable();
-    replaced
-}
-
-/// Decides which `candidates` load on `side` and in what order.
+/// Decides which `candidates` load and in what order.
 #[must_use]
-pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
+pub fn resolve(candidates: &[Candidate]) -> Plan {
     let mut skipped: BTreeMap<usize, String> = BTreeMap::new();
     let mut by_id: BTreeMap<&str, usize> = BTreeMap::new();
     for (i, candidate) in candidates.iter().enumerate() {
-        if !loads(candidate.side, side) {
-            skipped.insert(i, OTHER_SIDE.into());
-        } else if let Some(&first) = by_id.get(candidate.id.as_str()) {
+        if let Some(&first) = by_id.get(candidate.id.as_str()) {
             skipped.insert(
                 i,
                 format!("a second copy of {}, after #{first}", candidate.id),
@@ -162,8 +110,6 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
             by_id.insert(&candidate.id, i);
         }
     }
-
-    let replaced = replacements(candidates, &by_id, &mut skipped);
 
     // Requirements and conflicts, until nothing changes: skipping one mod can
     // break another's requirement.
@@ -190,12 +136,11 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
         .collect();
     pending.sort_by(|&a, &b| candidates[a].id.cmp(&candidates[b].id));
     while !pending.is_empty() {
-        // `soft`: whether `AFTER` and `RECOMMENDS` hold the mod back too.
+        // `soft`: whether `AFTER` holds the mod back too.
         let ready = |soft: bool| {
             pending.iter().position(|&i| {
                 candidates[i].dependencies.iter().all(|d| {
                     d.relation == Relation::BREAKS
-                        || d.relation == Relation::REPLACES
                         || (!soft && d.relation != Relation::REQUIRES)
                         || by_id
                             .get(d.id.as_str())
@@ -218,7 +163,6 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
     Plan {
         order,
         skipped: skipped.into_iter().collect(),
-        replaced,
     }
 }
 
@@ -279,43 +223,6 @@ fn unmet(
     None
 }
 
-/// Notes on the mods of `plan` whose recommended mods are missing or in
-/// another version: the candidate's index and the note.
-#[must_use]
-pub fn notes(candidates: &[Candidate], plan: &Plan) -> Vec<(usize, String)> {
-    let loaded = |id: &str| {
-        plan.order
-            .iter()
-            .map(|&j| &candidates[j])
-            .find(|c| c.id == id)
-    };
-    plan.order
-        .iter()
-        .flat_map(|&i| {
-            candidates[i]
-                .dependencies
-                .iter()
-                .filter(|d| d.relation == Relation::RECOMMENDS)
-                .filter_map(move |d| {
-                    let wanted = d
-                        .range
-                        .as_ref()
-                        .map_or_else(|| d.id.clone(), |range| format!("{} {range}", d.id));
-                    match loaded(&d.id) {
-                        None => Some(format!("recommends {wanted}, which is not loaded")),
-                        Some(other)
-                            if d.range.as_ref().is_some_and(|r| !meets(r, &other.version)) =>
-                        {
-                            Some(format!("recommends {wanted}, found {}", other.version))
-                        }
-                        Some(_) => None,
-                    }
-                    .map(|note| (i, note))
-                })
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -355,7 +262,7 @@ mod tests {
             candidate("count", "0.1.0", Side::BOTH, &[]),
             candidate("zones", "0.1.3", Side::BOTH, &[]),
         ];
-        let plan = resolve(&mods, Side::SERVER);
+        let plan = resolve(&mods);
         assert_eq!(plan.order, [1, 2, 0]);
         assert!(plan.skipped.is_empty());
     }
@@ -369,7 +276,7 @@ mod tests {
                 Side::BOTH,
                 &[
                     ("post", ">=0.1, <1.0", Relation::REQUIRES),
-                    ("you.trading-post", ">=0.5", Relation::RECOMMENDS),
+                    ("you.trading-post", "", Relation::AFTER),
                     ("zones", "<0.3", Relation::BREAKS),
                 ],
             ),
@@ -377,9 +284,8 @@ mod tests {
             candidate("you.trading-post", "0.0.0-dev", Side::BOTH, &[]),
             candidate("zones", "0.0.0-dev", Side::BOTH, &[]),
         ];
-        let plan = resolve(&mods, Side::SERVER);
+        let plan = resolve(&mods);
         assert!(plan.skipped.is_empty(), "{:?}", plan.skipped);
-        assert!(notes(&mods, &plan).is_empty());
         let old = [
             candidate(
                 "stalls",
@@ -389,7 +295,7 @@ mod tests {
             ),
             candidate("post", "0.1.0", Side::BOTH, &[]),
         ];
-        assert_eq!(resolve(&old, Side::SERVER).skipped.len(), 1);
+        assert_eq!(resolve(&old).skipped.len(), 1);
     }
 
     #[test]
@@ -409,7 +315,7 @@ mod tests {
                 &[("you.market-stalls", "", Relation::REQUIRES)],
             ),
         ];
-        let plan = resolve(&mods, Side::SERVER);
+        let plan = resolve(&mods);
         assert_eq!(plan.order, [1]);
         assert_eq!(
             plan.skipped[0],
@@ -422,19 +328,19 @@ mod tests {
     }
 
     #[test]
-    fn sides_duplicates_and_breaks() {
+    fn duplicates_and_breaks_are_skipped_and_both_sides_load() {
         let mods = [
-            candidate("ui", "1.0.0", Side::CLIENT, &[]),
+            candidate("ui", "1.0.0", Side::BOTH, &[]),
             candidate("a", "1.0.0", Side::SERVER, &[]),
             candidate("a", "2.0.0", Side::SERVER, &[]),
             candidate("b", "1.0.0", Side::SERVER, &[("a", "", Relation::BREAKS)]),
         ];
-        let plan = resolve(&mods, Side::SERVER);
-        assert_eq!(plan.order, [1]);
+        let plan = resolve(&mods);
+        assert_eq!(plan.order, [1, 0]);
         let reasons: Vec<usize> = plan.skipped.iter().map(|(i, _)| *i).collect();
-        assert_eq!(reasons, [0, 2, 3]);
+        assert_eq!(reasons, [2, 3]);
         assert_eq!(
-            plan.skipped[2].1,
+            plan.skipped[1].1,
             "does not work beside a 1.0.0; remove one of them"
         );
     }
@@ -446,7 +352,7 @@ mod tests {
             candidate("b", "1.0.0", Side::BOTH, &[("a", "", Relation::BREAKS)]),
             candidate("c", "0.1.0", Side::BOTH, &[("a", "<1.0", Relation::BREAKS)]),
         ];
-        let plan = resolve(&mods, Side::SERVER);
+        let plan = resolve(&mods);
         // `a` allows b 1.0, so b, which breaks every a, gives way; c allows a 1.2.
         assert_eq!(plan.order, [0, 2]);
         assert_eq!(plan.skipped.len(), 1);
@@ -454,101 +360,19 @@ mod tests {
     }
 
     #[test]
-    fn recommendations_order_and_note() {
+    fn an_after_dependency_orders_and_its_absence_skips_nothing() {
         let mods = [
             candidate(
                 "a",
                 "1.0.0",
                 Side::BOTH,
-                &[
-                    ("b", "^2", Relation::RECOMMENDS),
-                    ("gone", "", Relation::RECOMMENDS),
-                    ("c", "", Relation::RECOMMENDS),
-                ],
+                &[("b", "", Relation::AFTER), ("gone", "", Relation::AFTER)],
             ),
-            candidate("b", "1.0.0", Side::BOTH, &[]),
-            candidate("c", "1.0.0", Side::BOTH, &[]),
+            candidate("b", "1.0.0", Side::SERVER, &[]),
         ];
-        let plan = resolve(&mods, Side::SERVER);
-        assert_eq!(plan.order, [1, 2, 0]);
-        assert_eq!(
-            notes(&mods, &plan),
-            [
-                (0, "recommends b ^2, found 1.0.0".into()),
-                (0, "recommends gone, which is not loaded".into()),
-            ]
-        );
-    }
-
-    #[test]
-    fn a_renamed_mod_replaces_its_old_id() {
-        let mods = [
-            candidate(
-                "you.market-stalls",
-                "0.2.0",
-                Side::BOTH,
-                &[("you.stalls", "", Relation::REPLACES)],
-            ),
-            candidate("you.stalls", "0.1.0", Side::BOTH, &[]),
-            candidate("you.stalls", "0.1.1", Side::BOTH, &[]),
-            candidate(
-                "uses-old",
-                "1.0.0",
-                Side::BOTH,
-                &[("you.stalls", "", Relation::REQUIRES)],
-            ),
-        ];
-        let plan = resolve(&mods, Side::SERVER);
-        assert_eq!(plan.order, [0]);
-        assert_eq!(plan.replaced, [(1, 0), (2, 0)]);
-        assert_eq!(
-            plan.skipped,
-            [
-                (1, "replaced by you.market-stalls".into()),
-                (2, "replaced by you.market-stalls".into()),
-                (3, "requires you.stalls, which is not loaded".into()),
-            ]
-        );
-        // Alone, the old id loads.
-        let plan = resolve(&mods[1..2], Side::SERVER);
-        assert_eq!(plan.order, [0]);
-        assert!(plan.replaced.is_empty());
-    }
-
-    #[test]
-    fn replacing_needs_the_new_mod_on_this_side_and_never_goes_both_ways() {
-        let mods = [
-            candidate(
-                "new",
-                "1.0.0",
-                Side::CLIENT,
-                &[("old", "", Relation::REPLACES)],
-            ),
-            candidate("old", "1.0.0", Side::SERVER, &[]),
-        ];
-        assert_eq!(resolve(&mods, Side::SERVER).order, [1]);
-        let mutual = [
-            candidate("a", "1.0.0", Side::BOTH, &[("b", "", Relation::REPLACES)]),
-            candidate("b", "1.0.0", Side::BOTH, &[("a", "", Relation::REPLACES)]),
-            candidate("c", "1.0.0", Side::BOTH, &[("c", "", Relation::REPLACES)]),
-        ];
-        let plan = resolve(&mutual, Side::SERVER);
-        assert_eq!(plan.order, [0, 2]);
-        assert_eq!(plan.replaced, [(1, 0)]);
-    }
-
-    #[test]
-    fn the_client_loads_server_mods_for_the_games_it_hosts() {
-        assert!(loads(Side::SERVER, Side::CLIENT));
-        assert!(loads(Side::CLIENT, Side::CLIENT));
-        assert!(loads(Side::BOTH, Side::SERVER));
-        assert!(!loads(Side::CLIENT, Side::SERVER));
-        let mods = [
-            candidate("comfort", "1.0.0", Side::SERVER, &[]),
-            candidate("ui", "1.0.0", Side::CLIENT, &[]),
-        ];
-        assert_eq!(resolve(&mods, Side::CLIENT).order, [0, 1]);
-        assert_eq!(resolve(&mods, Side::SERVER).order, [0]);
+        let plan = resolve(&mods);
+        assert_eq!(plan.order, [1, 0]);
+        assert!(plan.skipped.is_empty());
     }
 
     #[test]
@@ -564,7 +388,7 @@ mod tests {
             candidate("x", "1.0.0", Side::BOTH, &[("y", "", Relation::REQUIRES)]),
             candidate("y", "1.0.0", Side::BOTH, &[("x", "", Relation::REQUIRES)]),
         ];
-        let plan = resolve(&mods, Side::CLIENT);
+        let plan = resolve(&mods);
         assert_eq!(plan.order, [1, 0]);
         assert_eq!(
             plan.skipped,
@@ -578,21 +402,19 @@ mod tests {
     #[test]
     fn a_cycle_of_soft_orders_still_loads_every_mod() {
         let mods = [
-            candidate("a", "1.0.0", Side::BOTH, &[("b", "", Relation::RECOMMENDS)]),
-            candidate("b", "1.0.0", Side::BOTH, &[("a", "", Relation::RECOMMENDS)]),
             candidate("c", "1.0.0", Side::BOTH, &[("d", "", Relation::AFTER)]),
             candidate("d", "1.0.0", Side::BOTH, &[("c", "", Relation::AFTER)]),
             candidate("e", "1.0.0", Side::BOTH, &[("x", "", Relation::AFTER)]),
             candidate("x", "1.0.0", Side::BOTH, &[("y", "", Relation::REQUIRES)]),
             candidate("y", "1.0.0", Side::BOTH, &[("x", "", Relation::REQUIRES)]),
         ];
-        let plan = resolve(&mods, Side::CLIENT);
-        assert_eq!(plan.order, [0, 1, 2, 3, 4]);
+        let plan = resolve(&mods);
+        assert_eq!(plan.order, [0, 1, 2]);
         assert_eq!(
             plan.skipped,
             [
-                (5, "in a dependency cycle".into()),
-                (6, "in a dependency cycle".into())
+                (3, "in a dependency cycle".into()),
+                (4, "in a dependency cycle".into())
             ]
         );
     }

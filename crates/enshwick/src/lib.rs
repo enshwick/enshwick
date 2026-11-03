@@ -379,12 +379,10 @@ pub use enshwick_macros::config;
 /// | Key | What |
 /// | --- | --- |
 /// | `id` | `<author>.<name>`, each of `[a-z0-9-]` (see [`abi::is_valid_id`]); names the settings file, the data folder and every name the mod declares |
-/// | `side` | `"server"`, `"client"` or `"both"` |
+/// | `side` | `"server"`: runs only where the world runs; `"both"`: runs there and on every client playing in the world, which must have it |
 /// | `name` | what players read; the id when left out |
-/// | `join` | `true`: the mod counts in the join check |
 /// | `developer` | `true`: a developer tool; it runs only while [`mods::DEVELOPER_TOOLS`] exists ([`ManifestFlags::DEVELOPER`](abi::ManifestFlags::DEVELOPER)) |
-/// | `replaces` | ids of mods this one takes the place of; the loader never starts them beside it |
-/// | `requires`, `after`, `recommends`, `breaks` | tables of other mods by alias, each a mod id or `{ id, version }` with a Cargo-style range; `after` takes no range; [`deps!`] names them in code |
+/// | `requires`, `after`, `breaks` | tables of other mods by alias, each a mod id or `{ id, version }` with a Cargo-style range; `after` takes no range; [`deps!`] names them in code |
 /// | `builds` | rows of symbols and constants the mod pins for game builds |
 ///
 /// The version, description, authors, licence and homepage (else the
@@ -414,12 +412,11 @@ pub use enshwick_macros::config;
 /// [package.metadata.enshwick]
 /// id = "you.hello"
 /// side = "both"
-/// join = true
 ///
 /// [package.metadata.enshwick.requires]
 /// lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
 ///
-/// [package.metadata.enshwick.recommends]
+/// [package.metadata.enshwick.after]
 /// lanterns = "you.lanterns"
 /// trading_post = "you.trading-post"
 ///
@@ -458,14 +455,14 @@ pub use enshwick_macros::config;
 pub use enshwick_macros::declare_mod;
 /// Names what other mods offer by the aliases the crate's `Cargo.toml`
 /// gives them: `deps!()` writes `pub mod deps`, one module per alias in
-/// `requires`, `after` and `recommends`.
+/// `requires` and `after`.
 ///
 /// Each module holds `ID`, the dependency's mod id, `stat("<name>")`, its
 /// stat kind for [`Load::open_stat`], which checks a `stat:` export, and `id("<name>")`, its
 /// content id `<dependency>:<name>`, once the loader lets this mod name it:
 /// the dependency's `exports` list `content:<name>` or the name it is a part of. A
 /// required dependency's `id` returns [`Off`] for a name it does not export.
-/// An optional one's, from `after` or `recommends`, is `None` while it does
+/// An optional one's, from `after`, is `None` while it does
 /// not run or does not export the name. Ask once, at init, and keep the id.
 /// A malformed name panics, running or not. A call,
 /// point or event of a dependency is declared with its own name and
@@ -481,7 +478,7 @@ pub use enshwick_macros::declare_mod;
 /// # Examples
 ///
 /// The crate's `Cargo.toml`, as on [`declare_mod!`], requires `lockers` and
-/// recommends `lanterns` and `trading_post`:
+/// loads after `lanterns` and `trading_post`:
 ///
 /// ```rust
 /// use enshwick::content::Id;
@@ -519,7 +516,7 @@ pub use enshwick_macros::deps;
 ///
 /// # Examples
 ///
-/// The crate's `Cargo.toml` recommends `trading_post`, which sends `sold`:
+/// The crate's `Cargo.toml` loads after `trading_post`, which sends `sold`:
 ///
 /// ```
 /// #[enshwick::event(of = trading_post, name = "sold")]
@@ -575,7 +572,7 @@ pub use enshwick_macros::hook;
 ///
 /// # Examples
 ///
-/// The crate's `Cargo.toml` recommends `trading_post`, which owns `price`:
+/// The crate's `Cargo.toml` loads after `trading_post`, which owns `price`:
 ///
 /// ```
 /// use enshwick::points::{Order, Verdict};

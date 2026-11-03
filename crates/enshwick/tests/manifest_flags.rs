@@ -45,7 +45,6 @@ mod tests {
             r#"
             id = "you.lanterns"
             side = "both"
-            join = true
             "#
         );
     }
@@ -55,12 +54,11 @@ mod tests {
         // SAFETY: `enshwick_mod_query` returns the manifest of
         // `declare_mod!`, valid for the process.
         let tool = unsafe { &*tool::enshwick_mod_query() };
-        assert!(tool.flags.contains(ManifestFlags::DEVELOPER));
-        assert!(!tool.flags.contains(ManifestFlags::JOIN));
+        assert_eq!(tool.flags, ManifestFlags::DEVELOPER);
         // SAFETY: `enshwick_mod_query` returns the manifest of
         // `declare_mod!`, valid for the process.
         let plain = unsafe { &*plain::enshwick_mod_query() };
-        assert!(plain.flags.contains(ManifestFlags::JOIN));
-        assert!(!plain.flags.contains(ManifestFlags::DEVELOPER));
+        assert_eq!(plain.flags, ManifestFlags::NONE);
+        assert_eq!(plain.side, enshwick::abi::Side::BOTH);
     }
 }

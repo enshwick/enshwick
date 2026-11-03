@@ -198,14 +198,6 @@ impl Relation {
     /// version when the range is empty): when that one loads, this one is
     /// skipped.
     pub const BREAKS: Self = Self(2);
-    /// This mod works better beside the other mod in the version range: it
-    /// loads first when present, and the loader notes when it is missing or
-    /// in another version.
-    pub const RECOMMENDS: Self = Self(3);
-    /// This mod takes the place of the other mod, such as one it folds in
-    /// (any version; the range stays empty): while this one is present, the
-    /// loader never starts the other and names its DLL to delete.
-    pub const REPLACES: Self = Self(4);
 }
 
 /// A relation to another mod, by id and SemVer range.
@@ -240,7 +232,8 @@ pub struct Dependency {
 /// ```
 /// use enshwick::abi::ManifestFlags;
 ///
-/// assert!(ManifestFlags::JOIN.contains(ManifestFlags::JOIN));
+/// assert!(ManifestFlags::DEVELOPER.contains(ManifestFlags::DEVELOPER));
+/// assert!(!ManifestFlags::NONE.contains(ManifestFlags::DEVELOPER));
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
@@ -249,9 +242,6 @@ pub struct ManifestFlags(pub u32);
 impl ManifestFlags {
     /// No flag.
     pub const NONE: Self = Self(0);
-    /// Server and clients must run the same version of this mod to play
-    /// together; it counts in the join check.
-    pub const JOIN: Self = Self(1);
     /// The mod is a developer tool, never for real play: it runs only while
     /// [`DEVELOPER_TOOLS`](crate::mods::DEVELOPER_TOOLS) exists, and every player reads that developer tools are on.
     pub const DEVELOPER: Self = Self(4);
@@ -282,7 +272,7 @@ impl ManifestFlags {
 ///     id: Str::new("you.lanterns"),
 ///     version: Str::new("0.1.0"),
 ///     side: Side::BOTH,
-///     flags: ManifestFlags::JOIN,
+///     flags: ManifestFlags::NONE,
 ///     dependencies: core::ptr::null(),
 ///     dependency_count: 0,
 ///     builds: core::ptr::null(),
@@ -297,7 +287,7 @@ impl ManifestFlags {
 ///     exports: core::ptr::null(),
 ///     export_count: 0,
 /// };
-/// assert!(manifest.flags.contains(ManifestFlags::JOIN));
+/// assert_eq!(manifest.side, Side::BOTH);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -308,7 +298,9 @@ pub struct Manifest {
     pub id: Str,
     /// The mod's SemVer version.
     pub version: Str,
-    /// The sides the mod runs on.
+    /// Where the mod runs: [`Side::SERVER`], only where the world runs, or
+    /// [`Side::BOTH`], there and on every client playing in the world, which
+    /// must have it; the loader refuses any other side.
     pub side: Side,
     /// Manifest flags.
     pub flags: ManifestFlags,

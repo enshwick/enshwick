@@ -8,7 +8,7 @@
 
 use enshwick_fuzz::text_fields;
 use enshwick_loader::admission::{Hello, needs};
-use enshwick_loader::join::{Names, differences, plan, wanted};
+use enshwick_loader::join::{Names, difference, differences, plan, wanted};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
@@ -23,6 +23,7 @@ fuzz_target!(|data: &[u8]| {
     }
     drop(wanted(server_mods, ours_mods));
     drop(differences(server_mods, ours_mods, &Names::new()));
+    drop(difference(server_mods, ours_mods, ours, complete).rows());
     let hello = Hello {
         mods: ours_mods.to_owned(),
         complete,

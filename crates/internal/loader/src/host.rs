@@ -5,9 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi as api_frame;
-use enshwick::abi::{
-    Event, EventFn, HookFlags, Level, Manifest, ManifestFlags, ModHandle, Side, Status, Str,
-};
+use enshwick::abi::{Event, EventFn, HookFlags, Level, Manifest, ModHandle, Side, Status, Str};
 use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use crate::builds::KnownBuild;
@@ -25,8 +23,9 @@ mod memory;
 pub(crate) use api::API;
 pub(crate) use entries::mods::{CheckSettingsError, check_settings};
 pub(crate) use join::{
-    apply_server_value, forget_server_values, join_mods, join_mods_off, report_join_missing,
-    turn_off_mod,
+    admitted, apply_server_value, back_on, difference_waits, forget_server_values, join_missing,
+    join_mods, join_mods_off, kicked_for_mods, report_join_missing, show_difference,
+    take_difference, turn_off_for_world,
 };
 pub(crate) use memory::{find, slice};
 
@@ -43,8 +42,6 @@ pub(crate) struct ModRecord {
     pub(crate) manifest: &'static Manifest,
     /// What its manifest tells players about it.
     pub(crate) meta: crate::manifest::Meta,
-    /// Notes on its relations, such as a recommended mod that is missing.
-    pub(crate) notes: Vec<String>,
     /// Set when the mod is off: refused at init or faulted later.
     pub(crate) off: AtomicBool,
     /// Why it is off, as the mod or the loader gave it: a text of the mod's
@@ -134,14 +131,15 @@ impl ModRecord {
             .description_in(self.texts.relock().as_ref(), crate::texts::language())
     }
 
-    /// Whether it takes part in the join check while it runs.
+    /// Whether it runs on both sides, so it takes part in the join check
+    /// while it runs.
     pub(crate) fn joins_when_on(&self) -> bool {
-        self.manifest.flags.contains(ManifestFlags::JOIN)
+        self.manifest.side == Side::BOTH
     }
 
     /// Whether the mod runs and counts in the join check.
     pub(crate) fn joins(&self) -> bool {
-        !self.off.load(Ordering::Acquire) && self.manifest.flags.contains(ManifestFlags::JOIN)
+        !self.off.load(Ordering::Acquire) && self.joins_when_on()
     }
 
     /// The version the join check compares: a pack's carries the hash of its
@@ -561,6 +559,37 @@ impl Loader {
         if record.joins_when_on() {
             crate::advertise::wake();
         }
+    }
+
+    /// Turns a mod the loader turned off for a world back on: relinks its
+    /// hooks and points and logs it. Only for a mod whose code never ran
+    /// while it was off, so nothing of it changed.
+    pub(crate) fn turn_back_on(&self, index: ModIndex) {
+        let Some(record) = self.mods.get(index.get()) else {
+            return;
+        };
+        if !record.off.swap(false, Ordering::AcqRel) {
+            return;
+        }
+        *record.off_reason.relock() = None;
+        crate::log::write(Level::INFO, &record.id, "back on");
+        let chains = self.chains.relock();
+        let off = |owner: ModIndex| {
+            owner != ModIndex::LOADER
+                && self
+                    .mods
+                    .get(owner.get())
+                    .is_none_or(|m| m.off.load(Ordering::Acquire))
+        };
+        chains.rewire(|owner| {
+            off(owner)
+                || self
+                    .mods
+                    .get(owner.get())
+                    .is_some_and(|m| m.waiting.load(Ordering::Acquire))
+        });
+        drop(chains);
+        crate::points::rearm(off);
     }
 
     /// Ends subscribing: from now on events go to the subscriptions made so

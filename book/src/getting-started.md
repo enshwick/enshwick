@@ -127,7 +127,6 @@ Without settings, the whole mod fits in a few lines. This one always allows
 [package.metadata.enshwick]
 id = "you.my-altar-count"
 side = "both"
-join = true
 ```
 
 Its code:

@@ -17,7 +17,7 @@ use crate::abi::{Header, ManifestFlags, Side, Str};
 ///     id: Str::new("you.trading-post"),
 ///     version: Str::new("0.1.0"),
 ///     side: Side::BOTH,
-///     flags: ManifestFlags::JOIN,
+///     flags: ManifestFlags::NONE,
 ///     off: 0,
 ///     file: Str::new("mods/you.trading-post/trading_post.dll"),
 ///     name: Str::new("Trading Post"),
@@ -26,7 +26,6 @@ use crate::abi::{Header, ManifestFlags, Side, Str};
 ///     author_count: 0,
 ///     license: Str::new("MIT"),
 ///     homepage: Str::EMPTY,
-///     replaced_by: Str::EMPTY,
 /// };
 /// assert_eq!(post.off, 0);
 /// ```
@@ -39,19 +38,19 @@ pub struct ModInfo {
     pub id: Str,
     /// The mod's SemVer version.
     pub version: Str,
-    /// The sides the mod runs on.
+    /// Where the mod runs, [`Side::SERVER`] or [`Side::BOTH`]; a
+    /// [`Side::BOTH`] mod counts in the join check.
     pub side: Side,
-    /// The manifest's flags; [`ManifestFlags::JOIN`] when it counts in the
-    /// join check.
+    /// The manifest's flags.
     pub flags: ManifestFlags,
     /// 1 when the mod is off: refused at init or faulted since.
     pub off: u8,
     /// The DLL's path relative to the game's folder, with `/` separators,
     /// such as `mods/you.trading-post/trading_post.dll`.
     pub file: Str,
-    /// The manifest's human metadata, as in [`Manifest`](super::Manifest); in
-    /// [`HostApi::join_missing`](super::HostApi::join_missing), the name and homepage the server advertises
-    /// and empty strings for the rest.
+    /// The manifest's human metadata, as in [`Manifest`](super::Manifest);
+    /// empty in [`HostApi::join_missing`](super::HostApi::join_missing),
+    /// which never passes on text a server chose.
     pub name: Str,
     /// One sentence on what the mod does.
     pub description: Str,
@@ -63,9 +62,6 @@ pub struct ModInfo {
     pub license: Str,
     /// Where players read about the mod.
     pub homepage: Str,
-    /// In [`HostApi::replaced`](super::HostApi::replaced), the id of the mod that replaces this one;
-    /// empty elsewhere.
-    pub replaced_by: Str,
 }
 
 impl_headed!(ModInfo);
@@ -95,7 +91,6 @@ impl ModInfo {
         author_count: 0,
         license: Str::EMPTY,
         homepage: Str::EMPTY,
-        replaced_by: Str::EMPTY,
     };
 }
 

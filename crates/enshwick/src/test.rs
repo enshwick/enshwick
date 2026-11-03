@@ -284,7 +284,6 @@ pub struct FakeHost {
     host_key: Option<crate::PlayerKey>,
     server_world: u64,
     join_missing: Vec<ModInfo>,
-    replaced: Vec<ModInfo>,
     /// What other mods export, by id; a mod left out exports every name.
     exports: FxHashMap<String, Vec<String>>,
     language: u32,
@@ -374,7 +373,6 @@ impl FakeHost {
             host_key: None,
             server_world: 0,
             join_missing: Vec::new(),
-            replaced: Vec::new(),
             exports: FxHashMap::default(),
             language: 0,
             services: Vec::new(),
@@ -579,7 +577,10 @@ impl Installed {
     /// returns the answer of `init`, or [`Status::REFUSED`] for a refused mod.
     ///
     /// A mod with `developer: true` is refused before its init while
-    /// [`FakeHost::developer_tools`] is off, as the loader refuses it.
+    /// [`FakeHost::developer_tools`] is off, and a mod whose side is not
+    /// [`Side::SERVER`](crate::abi::Side::SERVER) or
+    /// [`Side::BOTH`](crate::abi::Side::BOTH) always, as the loader refuses
+    /// them.
     ///
     /// # Safety
     ///
@@ -593,7 +594,8 @@ impl Installed {
     pub unsafe fn start(&self, query: QueryFn, init: InitFn, ready: ReadyFn) -> Status {
         // SAFETY: `query` returns null or a manifest valid for the process.
         if let Some(manifest) = unsafe { query().as_ref() }
-            && table::refuses_developer(self.api(), manifest)
+            && (table::refuses_side(self.api(), manifest)
+                || table::refuses_developer(self.api(), manifest))
         {
             return Status::REFUSED;
         }

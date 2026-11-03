@@ -78,7 +78,6 @@ mod tests {
         r#"
         id = "you.test-mod"
         side = "both"
-        join = true
 
         [requires]
         other = { id = "other", version = "^1" }

@@ -11,10 +11,6 @@ pub use enshwick::mods::LOADER_ID;
 
 /// Minutes between status summaries by default.
 pub const STATUS_MINUTES: u32 = 10;
-/// Seconds a joining player's game has to say hello by default.
-pub const JOIN_HELLO_SECONDS: u32 = 30;
-/// Seconds between the join note and the disconnect by default.
-pub const JOIN_NOTE_SECONDS: u32 = 10;
 
 /// Enshwick loader settings.
 #[enshwick::config]
@@ -55,18 +51,12 @@ pub struct Settings {
     /// The key that opens a mod's actions where the HUD hints at one: "F1"
     /// to "F12", a letter or a digit; "off" for none. Read at start.
     pub actions_key: String,
-    /// On a server that runs join mods, or in a game this client hosts,
-    /// disconnect a player whose game does not run them all, in the server's
-    /// versions, or runs without Enshwick, after a chat line naming what it
-    /// needs; administrators too, never the host. false lets such players
-    /// in. Read at start.
+    /// On a server that runs mods of side "both", or in a game this client
+    /// hosts, disconnect a player whose game does not run them all, in the
+    /// server's versions, or runs without Enshwick, after a chat line naming
+    /// what it needs; administrators too, never the host. false lets such
+    /// players in. Read at start.
     pub require_enshwick: bool,
-    /// Seconds a joining player's game has to say which join mods it runs
-    /// before the server takes it for a game without Enshwick. Read at start.
-    pub join_hello_seconds: u32,
-    /// Seconds between the chat line and the disconnect, for the player to
-    /// read it. Read at start.
-    pub join_note_seconds: u32,
     /// On a dedicated server, let only the accounts in
     /// mods/enshwick/allowlist.txt, and administrators, stay in the
     /// game; the console's enshwick allowlist add and remove change the
@@ -110,8 +100,6 @@ impl Default for Settings {
             knowledge_guard: KnowledgeGuard::Watch,
             actions_key: "F7".to_owned(),
             require_enshwick: true,
-            join_hello_seconds: JOIN_HELLO_SECONDS,
-            join_note_seconds: JOIN_NOTE_SECONDS,
             allowlist: false,
             language: String::new(),
             motd: String::new(),

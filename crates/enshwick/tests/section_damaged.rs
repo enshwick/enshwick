@@ -16,7 +16,6 @@ mod broken {
         r#"
         id = "you.broken"
         side = "both"
-        join = true
         exports = ["content:locker"]
         "#
     );

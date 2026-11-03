@@ -13,12 +13,10 @@ loader features: 1 of 3 work on this build
 mods: 1 of 2 running
   Flame Altar Zones (you.lockers) 0.1.4
     by themaiby; MIT
-    note: recommends you.lanterns, which is not loaded
     feature glow off: symbol lantern.glow: missing on this game build
     feature light on
     3 zones merged
   you.trading-post 0.1.1 (off)
-  not started: you.stalls is replaced by you.market-stalls; delete mods/stalls/
   other mods' proxies in the game's folder: dbghelp.dll
 
 turned off:

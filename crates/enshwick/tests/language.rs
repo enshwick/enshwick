@@ -23,7 +23,7 @@ mod tests {
         Reader,
         r#"
         id = "you.reader"
-        side = "client"
+        side = "both"
         "#
     );
 

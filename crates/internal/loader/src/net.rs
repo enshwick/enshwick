@@ -114,11 +114,7 @@ pub(crate) fn open(
         return Err(Status::TOO_LATE);
     }
     let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
-    if !record
-        .manifest
-        .flags
-        .contains(enshwick::abi::ManifestFlags::JOIN)
-    {
+    if !record.joins_when_on() {
         return Err(Status::REFUSED);
     }
     if name.is_empty() || name.len() > 64 {
@@ -271,6 +267,19 @@ pub(crate) fn item_data(key: u64, records: &[u8]) -> bool {
     sent.is_ok() && whole
 }
 
+/// Sends the client of the player with account key `key`, whose hello named
+/// other mods, `mods`, the server's mods of side both, so it lists the
+/// difference once it is back in its menu. A link with no room drops it:
+/// the chat note still names the mods.
+pub(crate) fn refused_mods(key: u64, mods: &str) {
+    if !carry(key, CONTROL, &crate::wire::mods(mods)) {
+        crate::log!(
+            INFO,
+            "join check: the list of mods for {key:016x} did not go; the chat note names them"
+        );
+    }
+}
+
 /// Tells the client of the player with account key `key` to open the
 /// interface demo, with where the player stands.
 pub(crate) fn ui_demo(key: u64, at: Option<[i64; 3]>) -> Result<(), Status> {
@@ -344,7 +353,10 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
         if fresh {
             crate::log!(INFO, "mod messages: the server answered");
             crate::actions::joined();
+            crate::host::admitted();
         }
+    } else if let Some((list, complete)) = crate::wire::read_mods(data) {
+        crate::host::kicked_for_mods(&list, complete);
     } else if let Some(records) = data.strip_prefix(control(ITEM_DATA).as_slice()) {
         crate::item_data::received(records);
     } else if let Some(rest) = data.strip_prefix(control(NOTICE).as_slice())

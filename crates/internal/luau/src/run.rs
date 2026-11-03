@@ -339,8 +339,8 @@ pub fn start(
 }
 
 /// Starts the scripts of the pack `manifest` describes, as [`start`] does,
-/// with the settings it declares and its dependencies of `requires`,
-/// `after` and `recommends` in `enshwick.deps`, by alias.
+/// with the settings it declares and its dependencies of `requires` and
+/// `after` in `enshwick.deps`, by alias.
 ///
 /// # Errors
 ///

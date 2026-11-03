@@ -211,7 +211,6 @@ mod tests {
                 name: "Flame Altar Zones".into(),
                 version: "0.1.4".into(),
                 credits: "by themaiby; MIT".into(),
-                notes: vec!["recommends you.lanterns, which is not loaded".into()],
                 running: true,
                 waiting: false,
                 lines: vec!["3 zones merged".into()],
@@ -231,7 +230,6 @@ mod tests {
                 name: String::new(),
                 version: "0.1.1".into(),
                 credits: String::new(),
-                notes: Vec::new(),
                 running: false,
                 waiting: false,
                 lines: Vec::new(),
@@ -303,9 +301,6 @@ mod tests {
             at: 45_000,
             mods: mods(),
             others: vec!["other mods' proxies in the game's folder: dbghelp.dll".into()],
-            replaced: vec![
-                "you.stalls is replaced by you.market-stalls; delete mods/stalls/".into(),
-            ],
             turned_off: vec![TurnedOff {
                 id: "you.trading-post".into(),
                 reason: "panic in an action".into(),
@@ -444,13 +439,11 @@ mod tests {
         assert!(text.contains("mods: 1 of 2 running"));
         assert!(text.contains(
             "  Flame Altar Zones (you.lockers) 0.1.4\n    by themaiby; MIT\n    \
-             note: recommends you.lanterns, which is not loaded\n    \
              feature glow off: symbol lantern.glow: missing on this game build\n    \
              feature light on\n    3 zones merged\n"
         ));
         assert!(text.contains(
             "  you.trading-post 0.1.1 (off)\n  \
-             not started: you.stalls is replaced by you.market-stalls; delete mods/stalls/\n  \
              other mods' proxies in the game's folder: dbghelp.dll\n"
         ));
         assert!(text.contains("12:13:20Z you.trading-post: panic in an action"));
@@ -545,8 +538,7 @@ conflicts:
     #[test]
     fn the_chat_summary_is_short() {
         let short = summary().short();
-        assert_eq!(short.lines().count(), 5);
-        assert!(short.contains("you.stalls is replaced by you.market-stalls; delete"));
+        assert_eq!(short.lines().count(), 4);
         assert!(short.starts_with("Enshwick 0.1.5, up 2h 03m, server running: 1 of 2 mods"));
         assert!(short.contains("you.trading-post off: panic in an action"));
         assert!(short.contains("busiest building.max_altars with 1.2M calls"));

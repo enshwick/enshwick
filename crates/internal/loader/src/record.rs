@@ -6,9 +6,7 @@
 //!
 //! The record is taken once at start, since the mod set never changes in a
 //! process, and written at every world load into that world's data; what
-//! changed since the world last loaded goes to the log. Mods that a present
-//! mod replaces are listed apart, with the mod that replaces them, since
-//! their DLLs never ran.
+//! changed since the world last loaded goes to the log.
 
 use std::sync::OnceLock;
 
@@ -23,20 +21,6 @@ const RECORD_HEADER: &str = "\
 # Written by Enshwick at every load of this world: the mods that ran with it.
 # Copy their folders with it to set up the same server again; do not edit it.
 ";
-
-/// The mods a present mod replaced at start.
-static REPLACED: OnceLock<Vec<Replaced>> = OnceLock::new();
-
-/// Records the mods a present mod replaced at start.
-pub fn set_replaced(replaced: Vec<Replaced>) {
-    let _first = REPLACED.set(replaced);
-}
-
-/// The mods a present mod replaced at start.
-#[must_use]
-pub fn replaced() -> &'static [Replaced] {
-    REPLACED.get().map_or(&[], Vec::as_slice)
-}
 
 /// The record taken at start, once its hashes are read.
 static TAKEN: OnceLock<Record> = OnceLock::new();
@@ -65,30 +49,6 @@ pub struct Ran {
     pub sha256: String,
 }
 
-/// A mod in `mods/` that a present mod replaces, never started.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Replaced {
-    /// The old mod id.
-    pub id: String,
-    /// Its version.
-    pub version: String,
-    /// Its folder in `mods/`.
-    pub folder: String,
-    /// The id of the mod that replaces it.
-    pub by: String,
-}
-
-impl Replaced {
-    /// The line the log, the status and `enshwick` on the console show.
-    #[must_use]
-    pub fn line(&self) -> String {
-        format!(
-            "{} is replaced by {}; delete mods/{}/",
-            self.id, self.by, self.folder
-        )
-    }
-}
-
 /// The record: the loader, the game build and the mods that ran.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Record {
@@ -101,9 +61,6 @@ pub struct Record {
     /// The mods that ran, in load order.
     #[serde(default, rename = "mod")]
     pub mods: Vec<Ran>,
-    /// The mods present mods replaced, never started.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub replaced: Vec<Replaced>,
 }
 
 impl Record {
@@ -185,30 +142,7 @@ mod tests {
                     sha256: sha.into(),
                 })
                 .collect(),
-            replaced: Vec::new(),
         }
-    }
-
-    #[test]
-    fn replaced_mods_are_kept_apart_in_the_record() {
-        let mut new = record(&[("you.market-stalls", "0.2.0", "01")]);
-        new.replaced.push(Replaced {
-            id: "you.stalls".into(),
-            version: "0.1.0".into(),
-            folder: "stalls".into(),
-            by: "you.market-stalls".into(),
-        });
-        let text = new.render();
-        assert!(text.contains(
-            "[[replaced]]
-id = \"you.stalls\""
-        ));
-        assert_eq!(Record::parse(&text), Some(new.clone()));
-        assert!(!record(&[]).render().contains("replaced"));
-        assert_eq!(
-            new.replaced[0].line(),
-            "you.stalls is replaced by you.market-stalls; delete mods/stalls/"
-        );
     }
 
     #[test]

@@ -462,7 +462,7 @@ impl Load<'_> {
     /// running mod defining `P`, the link stays inert, which is no error;
     /// with a definition whose input lacks or changed a field of `P`, or
     /// whose answer or mode differs, it logs why and the link stays inert.
-    /// Declare the owner in the manifest with `recommends`, or `requires`
+    /// Declare the owner in the manifest with `after`, or `requires`
     /// when this mod is pointless without it: a required owner initialises
     /// first, so the loader matches the link at once.
     ///

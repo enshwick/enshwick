@@ -18,17 +18,14 @@ pub(crate) use deps::expand_deps;
 pub(crate) const EXPORT_KINDS: [&str; 6] = ["point", "event", "call", "service", "content", "stat"];
 
 /// The keys of the table, the identity the platform reads.
-const KEYS: [&str; 12] = [
+const KEYS: [&str; 9] = [
     "id",
     "name",
     "side",
-    "join",
     "developer",
     "exports",
-    "replaces",
     "requires",
     "after",
-    "recommends",
     "breaks",
     "builds",
 ];
@@ -38,10 +35,9 @@ const KEYS: [&str; 12] = [
 const VANILLA: &str = "vanilla";
 
 /// The tables of dependencies by alias, with the ABI relation of each.
-const RELATIONS: [(&str, &str); 4] = [
+const RELATIONS: [(&str, &str); 3] = [
     ("requires", "REQUIRES"),
     ("after", "AFTER"),
-    ("recommends", "RECOMMENDS"),
     ("breaks", "BREAKS"),
 ];
 
@@ -110,7 +106,7 @@ impl Side {
 
 /// One relation to another mod.
 struct Dependency {
-    /// The name the mod's code knows it by; empty for `replaces`.
+    /// The name the mod's code knows it by.
     alias: String,
     id: String,
     range: String,
@@ -131,7 +127,6 @@ struct Metadata {
     id: String,
     name: String,
     side: Side,
-    join: bool,
     developer: bool,
     /// The content and stat kinds other mods may use, each
     /// `content:<name>` or `stat:<name>`.
@@ -229,8 +224,7 @@ pub(crate) fn full_name(
         None => metadata.id.clone(),
         Some(of) => {
             let alias = of.to_string();
-            let names_code =
-                |d: &&Dependency| matches!(d.relation, "REQUIRES" | "RECOMMENDS" | "AFTER");
+            let names_code = |d: &&Dependency| matches!(d.relation, "REQUIRES" | "AFTER");
             let found = metadata
                 .dependencies
                 .iter()
@@ -251,7 +245,7 @@ pub(crate) fn full_name(
                     syn::Error::new(
                         of.span(),
                         format!(
-                            "`of = {alias}`: {shown} names no dependency `{alias}` in `requires`, `after` or `recommends`; {known}"
+                            "`of = {alias}`: {shown} names no dependency `{alias}` in `requires` or `after`; {known}"
                         ),
                     )
                 })?;
@@ -346,16 +340,15 @@ impl Metadata {
         }
         let side = match string(table, "side")?.as_deref() {
             Some("server") => Side::Server,
-            Some("client") => Side::Client,
             Some("both") => Side::Both,
             Some(other) => {
                 return Err(refuse(format!(
-                    "`side = {other:?}` is not \"server\", \"client\" or \"both\""
+                    "`side = {other:?}` is not \"server\" (only where the world runs) or \"both\" (players need it too)"
                 )));
             }
             None => {
                 return Err(refuse(
-                    "needs the mod's `side`: \"server\", \"client\" or \"both\"",
+                    "needs the mod's `side`: \"server\" (only where the world runs) or \"both\" (players need it too)",
                 ));
             }
         };
@@ -388,27 +381,6 @@ impl Metadata {
                 dependencies.push(dependency(key, alias, entry, relation)?);
             }
         }
-        if let Some(value) = table.get("replaces") {
-            let ids = value
-                .as_array()
-                .ok_or_else(|| refuse("`replaces` is a list of mod ids"))?;
-            for id in ids {
-                let id = id
-                    .as_str()
-                    .ok_or_else(|| refuse("`replaces` is a list of mod ids"))?;
-                if !is_old_or_new_id(id) {
-                    return Err(refuse(format!(
-                        "`replaces`: {id:?} is not <author>.<name> or [a-z0-9-]+"
-                    )));
-                }
-                dependencies.push(Dependency {
-                    alias: String::new(),
-                    id: id.to_owned(),
-                    range: String::new(),
-                    relation: "REPLACES",
-                });
-            }
-        }
         let builds = match table.get("builds") {
             None => Vec::new(),
             Some(value) => value
@@ -424,7 +396,6 @@ impl Metadata {
             id,
             name,
             side,
-            join: flag(table, "join")?,
             developer: flag(table, "developer")?,
             exports: exports_of(table)?,
             dependencies,
@@ -642,7 +613,7 @@ fn is_id(id: &str) -> bool {
 }
 
 /// Whether `id` is a mod id or one of the old form without an author that
-/// `replaces` still takes; the API's `abi::is_valid_old_form_id`.
+/// a dependency still names; the API's `abi::is_valid_old_form_id`.
 fn is_old_or_new_id(id: &str) -> bool {
     is_id(id) || (id.len() <= 64 && is_part(id))
 }
@@ -754,18 +725,10 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
 /// The manifest's flags expression.
 fn flags_of(metadata: &Metadata) -> TokenStream {
     let abi = quote!(::enshwick::abi);
-    let flags: Vec<TokenStream> = [(metadata.join, "JOIN"), (metadata.developer, "DEVELOPER")]
-        .into_iter()
-        .filter(|(on, _)| *on)
-        .map(|(_, flag)| {
-            let flag = Ident::new(flag, Span::call_site());
-            quote!(#abi::ManifestFlags::#flag.0)
-        })
-        .collect();
-    if flags.is_empty() {
-        quote!(#abi::ManifestFlags::NONE)
+    if metadata.developer {
+        quote!(#abi::ManifestFlags::DEVELOPER)
     } else {
-        quote!(#abi::ManifestFlags(#(#flags)|*))
+        quote!(#abi::ManifestFlags::NONE)
     }
 }
 
@@ -792,9 +755,7 @@ mod tests {
             id = "you.market-stalls"
             name = "Market Stalls"
             side = "both"
-            join = true
             exports = ["content:stall", "stat:luck"]
-            replaces = ["stalls"]
 
             [requires]
             lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
@@ -817,7 +778,7 @@ mod tests {
         .unwrap();
         assert_eq!(metadata.id, "you.market-stalls");
         assert_eq!(metadata.side, Side::Both);
-        assert!(metadata.join && !metadata.developer);
+        assert!(!metadata.developer);
         assert_eq!(metadata.exports, ["content:stall", "stat:luck"]);
         let relations: Vec<(&str, &str, &str)> = metadata
             .dependencies
@@ -830,7 +791,6 @@ mod tests {
                 ("REQUIRES", "you.lockers", ">=0.1, <1.0"),
                 ("AFTER", "you.lanterns", ""),
                 ("BREAKS", "old-stalls", "<0.3"),
-                ("REPLACES", "stalls", ""),
             ]
         );
         assert_eq!(
@@ -845,6 +805,18 @@ mod tests {
         let refused = |text: &str| read(text).err().unwrap_or_default();
         assert!(refused("id = \"you.a\"\nside = \"both\"\nversion = \"1\"").contains("`version`"));
         assert!(refused("id = \"you.a\"\nside = \"all\"").contains("\"all\""));
+        assert!(refused("id = \"you.a\"\nside = \"client\"").contains("\"client\"` is not"));
+        for removed in [
+            "join = true",
+            "replaces = [\"you.b\"]",
+            "[recommends]\nb = \"you.b\"",
+        ] {
+            assert!(
+                refused(&format!("id = \"you.a\"\nside = \"both\"\n{removed}"))
+                    .contains("has no key"),
+                "{removed}"
+            );
+        }
         assert!(refused("id = \"lanterns\"\nside = \"both\"").contains("<author>.<name>"));
         assert!(refused("side = \"both\"").contains("`id`"));
         assert!(
@@ -874,7 +846,7 @@ mod tests {
                 .contains("no keyword")
         );
         assert!(
-            refused("id = \"you.a\"\nside = \"both\"\n[recommends]\nvanilla = \"you.b\"")
+            refused("id = \"you.a\"\nside = \"both\"\n[after]\nvanilla = \"you.b\"")
                 .contains("the game's own content")
         );
         assert!(

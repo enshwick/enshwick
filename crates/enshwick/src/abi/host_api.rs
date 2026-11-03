@@ -199,15 +199,16 @@ pub struct HostApi {
     /// `enshwick_mod_init` only.
     pub rename_filter:
         extern "system" fn(me: ModHandle, callback: RenameCallFn, user: *mut c_void) -> Status,
-    /// Up to `capacity` of the server's join mods that the last refused join
-    /// found missing on this client or in another version, and how many
-    /// there are; laid out as [`HostApi::mods`] lays out its entries. Each
-    /// entry has the server's version, [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN), `off` 1, the
-    /// client's DLL path when it has the mod (empty otherwise), and the name
-    /// and homepage the server advertises. The strings stay valid for the
-    /// process; once 64 KiB of advertised text is kept, an entry with new
-    /// text is left out. Empty before a refused join; see
-    /// [`Event::JOIN_REFUSED`].
+    /// Up to `capacity` of the server's [`Side::BOTH`](super::Side::BOTH)
+    /// mods that the last refused join found missing on this client or in
+    /// another version, and how many there are; laid out as
+    /// [`HostApi::mods`] lays out its entries. Each entry has the id and
+    /// version the server advertises, [`Side::BOTH`](super::Side::BOTH),
+    /// `off` 1 and the client's DLL path when it has the mod (empty
+    /// otherwise); name, homepage and the rest stay empty, since the server
+    /// chose none of them. The strings stay valid for the process; once
+    /// 64 KiB of advertised text is kept, an entry with new text is left
+    /// out. Empty before a refused join; see [`Event::JOIN_REFUSED`].
     pub join_missing: extern "system" fn(
         me: ModHandle,
         out: *mut ModInfo,
@@ -895,17 +896,9 @@ pub struct HostApi {
     /// during `enshwick_mod_init` only.
     pub entity_data_open:
         extern "system" fn(me: ModHandle, id: Str, flags: EntityDataFlags, out: *mut u32) -> Status,
-    /// Lists the mods in `mods/` that a present mod replaces (see
-    /// [`Relation::REPLACES`](super::Relation::REPLACES)), which the loader never started, as
-    /// [`HostApi::mods`] lists the loaded ones, with
-    /// [`ModInfo::replaced_by`] set. Any thread.
-    pub replaced: extern "system" fn(
-        me: ModHandle,
-        out: *mut ModInfo,
-        entry_size: u32,
-        capacity: u32,
-        count: *mut u32,
-    ) -> Status,
+    /// The mod's folder in `mods/`, which holds its installation; the path
+    /// stays valid for the process. Any thread.
+    pub mod_dir: extern "system" fn(me: ModHandle, out: *mut Str) -> Status,
     /// Registers a filter on the knowledge clients ask the server for in
     /// their input, which a vanilla game grants unchecked. Filters run in
     /// load order after the loader's guard, each with the verdict so far,
@@ -1086,7 +1079,7 @@ pub struct HostApi {
     /// [`HostApi::set_rate`]. [`Status::MISSING`] on a build that lacks
     /// what the rate needs, [`Status::BAD_ARGS`] for a rate this loader
     /// does not know, [`Status::REFUSED`] for a rate clients count too in a
-    /// mod without [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN). A second declaration of the same rate is
+    /// [`Side::SERVER`](super::Side::SERVER) mod. A second declaration of the same rate is
     /// [`Status::OK`]. [`Status::TOO_LATE`] after `enshwick_mod_init`,
     /// [`Status::FAULTED`] for a mod that is off. Allowed during
     /// `enshwick_mod_init` only.
@@ -1214,8 +1207,8 @@ pub struct HostApi {
     /// [`Status::BAD_ARGS`] for a null `change` or `out`, an unknown field
     /// or selection, and an ingredient, whose change alters a recipe's
     /// length; [`Status::MISSING`] when the build does not reflect the
-    /// field; [`Status::REFUSED`] for a field clients read in a mod without
-    /// [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN); [`Status::TOO_LATE`] after
+    /// field; [`Status::REFUSED`] for a field clients read in a
+    /// [`Side::SERVER`](super::Side::SERVER) mod; [`Status::TOO_LATE`] after
     /// `enshwick_mod_init`.
     pub declare_change:
         extern "system" fn(me: ModHandle, change: *const DataChange, out: *mut ChangeId) -> Status,
@@ -1557,7 +1550,4 @@ pub struct HostApi {
     /// loader returns [`Status::REFUSED`].
     pub chat_mute_has:
         extern "system" fn(me: ModHandle, account: PlayerKey, muted: *mut u8) -> Status,
-    /// The mod's folder in `mods/`, which holds its installation; the path
-    /// stays valid for the process. Any thread.
-    pub mod_dir: extern "system" fn(me: ModHandle, out: *mut Str) -> Status,
 }

@@ -16,7 +16,6 @@ publish.workspace = true
 id = "you.waypoints"
 side = "both"
 name = "Waypoints"
-join = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]
