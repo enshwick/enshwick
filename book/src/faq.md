@@ -85,7 +85,7 @@ On an unknown build every mod's hold applies; see
 ### Some features are off after a game update
 
 `loader.log` reads `game build <guid>/<age> has no build table yet: <n>
-entries found by their code patterns, <m> missing; ...`, and at `debug` the
+entries found by engine routes or their code patterns, <m> missing; ...`, and at `debug` the
 missing entries. The game was updated, and
 the loader runs it on the code patterns of the newest build table it has.
 Whatever those patterns do not find stays off: a loader feature logs

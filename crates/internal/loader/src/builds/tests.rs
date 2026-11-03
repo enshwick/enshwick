@@ -59,10 +59,10 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
             .unwrap()
             .1;
         let mut doc: toml_edit::DocumentMut = text.parse().unwrap();
-        let routed: Vec<&str> = routes.ids().filter(|id| routes.routes(id, side)).collect();
+        let ids: Vec<&str> = routes.ids().filter(|id| routes.routes(id, side)).collect();
         for section in ["symbols", "constants"] {
             let rows = doc[section].as_table_mut().unwrap();
-            for id in &routed {
+            for id in &ids {
                 rows.remove(id);
                 rows.remove(&format!("{id}.bytes"));
             }
@@ -77,10 +77,10 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
         let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
         assert_eq!(
             build.route(&routes, &image, &reflection, running),
-            routed.len()
+            ids.len()
         );
         let pinned = full.resolve();
-        for id in routed {
+        for id in ids {
             assert!(build.routed(id), "{var}: {id}");
             let (have, want) = match pinned.symbol(id) {
                 Some(rva) => (build.symbol(id), Some(rva)),

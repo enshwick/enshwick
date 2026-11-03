@@ -105,11 +105,11 @@ fn every_entry_a_class_names_is_in_a_table() {
 #[test]
 fn the_engine_class_is_what_the_loader_finds_without_a_table() {
     let rows = rows();
-    let routes = Routes::embedded().unwrap();
+    let all = Routes::embedded().unwrap();
     let routed = |id: &str| {
         [Side::Server, Side::Client]
             .iter()
-            .any(|&s| routes.routes(id, s))
+            .any(|&s| all.routes(id, s))
     };
     let mut wrong = Vec::new();
     for table in tables() {

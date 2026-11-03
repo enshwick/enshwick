@@ -256,7 +256,8 @@ impl Routes {
     /// let image = Image::parse(&bytes, Layout::File, None)?;
     /// let reflection = Reflection::scan(&image);
     /// let table = Table::parse("name = \"t\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 1")?;
-    /// let found = Routes::embedded()?.find(&image, &reflection, Side::Server, &table.resolve());
+    /// let routes = Routes::embedded()?;
+    /// let found = routes.find(&image, &reflection, Side::Server, &table.resolve());
     /// assert!(found.iter().any(|(id, routed)| *id == "knowledge.push" && routed.is_some()));
     /// # Ok(())
     /// # }
