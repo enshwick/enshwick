@@ -303,3 +303,13 @@ pub(crate) fn matches<'s>(
             })
     })
 }
+
+/// Whether `instructions` start with `steps`.
+pub(crate) fn starts(steps: &[Step], instructions: &[Instruction]) -> bool {
+    let mut taken = None;
+    steps.len() <= instructions.len()
+        && steps
+            .iter()
+            .zip(instructions)
+            .all(|(step, ins)| step.matches(ins, &|_: &str| None, &mut taken))
+}

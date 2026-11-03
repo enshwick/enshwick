@@ -732,32 +732,23 @@ reason = "an engine route finds it"
 
 [[class]]
 entries = [
-  "inventory.view_fill.bytes",
-  "pacing.background_workers.bytes",
-  "pacing.default_workers.bytes",
-  "pacing.server_wait.bytes",
-  "pacing.wait_divide.bytes",
-  "textures.request_post.bytes",
-  "textures.request_ring.bytes",
-  "textures.request_signal.bytes",
-  "ui.pause_menu_site.bytes",
-]
-class = "engine"
-reason = "the engine route of its symbol checks the code"
-
-[[class]]
-entries = [
   "inventory.actions_row.bytes",
+  "inventory.view_fill.bytes",
   "map.fog_destroy.bytes",
   "npc.lookup.bytes",
   "npc.lookup_cursor.bytes",
   "npc.update.bytes",
+  "pacing.background_workers.bytes",
+  "pacing.default_workers.bytes",
   "pacing.loop_wait.bytes",
   "pacing.message_wait.bytes",
+  "pacing.server_wait.bytes",
+  "pacing.wait_divide.bytes",
   "textures.keys.bytes",
-  "textures.registry_fill.bytes",
-  "textures.registry_listed_at.bytes",
   "textures.request.bytes",
+  "textures.request_post.bytes",
+  "textures.request_ring.bytes",
+  "textures.request_signal.bytes",
   "textures.signal.bytes",
   "ui.action_new.bytes",
   "ui.action_query.bytes",
@@ -797,6 +788,7 @@ entries = [
   "ui.node_width.bytes",
   "ui.panel.bytes",
   "ui.pause_entry.bytes",
+  "ui.pause_menu_site.bytes",
   "ui.persist.bytes",
   "ui.popup.bytes",
   "ui.progress.bytes",
@@ -819,8 +811,13 @@ entries = [
   "ui.window_end.bytes",
   "user.start_interaction.bytes",
 ]
+class = "engine"
+reason = "the engine route of its symbol checks the code"
+
+[[class]]
+entries = ["textures.registry_fill.bytes", "textures.registry_listed_at.bytes"]
 class = "pattern"
-reason = "its symbol's engine route reaches it without matching its code, so its first bytes stay the hook's check"
+reason = "no check shape holds at its symbol on every build, so its first bytes stay the hook's check"
 
 [[class]]
 entries = [

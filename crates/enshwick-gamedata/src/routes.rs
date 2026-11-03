@@ -25,9 +25,11 @@
 //! a taken constant `v` into `1 << v`, and `plus` then adds to it. `sides`
 //! limits a route to some sides; it defaults to every side.
 //!
-//! Only a shape's start checks the code of the symbol it finds
-//! ([`Routed::Symbol`]); every other symbol is [`Routed::Reached`], and one in
-//! the code must start a function. A route that finds another symbol than
+//! A shape's start checks the code of the symbol it finds
+//! ([`Routed::Symbol`]), and so does `check`, a shape the code at any symbol
+//! the route finds must start with: a symbol that does not finds nothing.
+//! Every other symbol is [`Routed::Reached`], and one in the code must start
+//! a function. A route that finds another symbol than
 //! `known` holds stands for nothing to the routes that name it.
 //!
 //! A route whose id starts with `~` or has no `.` is a waypoint: a function
@@ -98,6 +100,8 @@ struct Route {
     sides: Vec<Side>,
     how: How,
     take: Take,
+    /// The shape the code at a found symbol must start with.
+    check: Vec<Step>,
     /// Whether a taken constant `v` becomes `1 << v`.
     shift: bool,
     /// What is added to a taken constant.
@@ -113,7 +117,7 @@ impl Route {
     /// Whether the route's match checks the code at the symbol it finds:
     /// the start of its shape.
     fn checks_code(&self) -> bool {
-        self.take == Take::Start && matches!(self.how, How::Shape { .. })
+        !self.check.is_empty() || self.take == Take::Start && matches!(self.how, How::Shape { .. })
     }
 }
 
@@ -137,6 +141,7 @@ struct RouteRow {
     within: Option<String>,
     shape: Option<Vec<String>>,
     take: Option<Take>,
+    check: Option<Vec<String>>,
     shift: Option<bool>,
     plus: Option<i64>,
 }
@@ -201,6 +206,17 @@ impl RouteRow {
                 "a taken constant needs a shape of two steps, an exact operand or an `{entry}`",
             ));
         }
+        let check: Vec<Step> = self
+            .check
+            .unwrap_or_default()
+            .iter()
+            .map(|step| Step::parse(step).map_err(|e| bad(&e.to_string())))
+            .collect::<Result<_, _>>()?;
+        if !check.is_empty()
+            && (matches!(take, Take::Value | Take::Cell) || check.iter().any(|s| s.takes() > 0))
+        {
+            return Err(bad("`check` is a shape without `*` for a symbol"));
+        }
         if (self.shift.is_some() || self.plus.is_some())
             && !matches!(take, Take::Value | Take::Cell)
         {
@@ -213,6 +229,7 @@ impl RouteRow {
             id,
             how,
             take,
+            check,
             shift: self.shift.unwrap_or(false),
             plus: self.plus.unwrap_or(0),
         })

@@ -324,6 +324,16 @@ id = "t.leaf"
 called_by = ["~fn:a", "sys_b"]
 
 [[route]]
+id = "t.checked"
+called_by = ["~fn:a", "sys_b"]
+check = ["mov eax,[rcx+0x78]", "shl eax,0x3"]
+
+[[route]]
+id = "t.unchecked"
+called_by = ["~fn:a", "sys_b"]
+check = ["mov eax,[rcx+0x70]"]
+
+[[route]]
 id = "t.caller"
 calls = ["~fn:a", "sys_b"]
 
@@ -397,6 +407,7 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
         [
             ("t.ambiguous", None),
             ("t.caller", Some(Routed::Reached(0x1020))),
+            ("t.checked", Some(Routed::Symbol(0x1040))),
             ("t.disp", Some(Routed::Constant(0x79))),
             ("t.inside", None),
             ("t.leaf", Some(Routed::Reached(0x1040))),
@@ -406,10 +417,12 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
             ("t.string", Some(Routed::Reached(0x2180))),
             ("t.tail", Some(Routed::Symbol(0x1062))),
             ("t.twice", None),
+            ("t.unchecked", None),
             ("t.untail", None),
         ]
     );
     assert!(routes.checks("t.once", Side::Server));
+    assert!(routes.checks("t.checked", Side::Server));
     assert!(!routes.checks("t.leaf", Side::Server));
 }
 
@@ -430,12 +443,14 @@ fn nothing_builds_on_a_route_the_table_contradicts() {
 }
 
 #[test]
-fn a_constant_taken_by_one_loose_step_or_a_fixed_value_is_refused() {
+fn a_loose_constant_a_fixed_value_or_a_taking_check_is_refused() {
     let row = |keys: &str| format!("[[route]]\nid = \"a.b\"\nin = \"s\"\n{keys}");
     for bad in [
         "shape = [\"mov eax,[rcx+*]\"]\ntake = \"value\"",
         "shape = [\"mov eax,[rip+*]\"]\ntake = \"cell\"",
         "shape = [\"mov eax,?\"]\ntake = \"fixed\"\nvalue = 4",
+        "shape = [\"call *\"]\ntake = \"address\"\ncheck = [\"mov eax,*\"]",
+        "shape = [\"mov eax,[rcx+?]\", \"ret\"]\ntake = \"value\"\ncheck = [\"ret\"]",
     ] {
         assert!(Routes::parse(&row(bad)).is_err(), "{bad}");
     }

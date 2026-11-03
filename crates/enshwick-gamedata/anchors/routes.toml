@@ -7,11 +7,13 @@ sides = ["client"]
 system = "player_ui"
 shape = ["call *", "mov rax,[rbp+?]", "mov rdx,[rbp+?]"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "access.base_stock"
 sides = ["server"]
 called_by = ["~c0:access.base_stock", "~c1:access.base_stock"]
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "access.base_stock_ui_return"
@@ -49,6 +51,7 @@ sides = ["client"]
 in = "~c1:access.dismantle_method"
 shape = ["call *", "xor r14d,r14d"]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x18],rbp"]
 
 [[route]]
 id = "access.dismantle_method"
@@ -56,6 +59,7 @@ sides = ["server"]
 in = "~caller:access.dismantle_method"
 shape = ["call *", "xor r14d,r14d"]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x18],rbp"]
 
 [[route]]
 id = "access.object_id"
@@ -97,12 +101,14 @@ id = "access.offer_test"
 system = "interaction_query_new"
 shape = ["call *", "cmp [rbp+?],r15l"]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x18],r8"]
 
 [[route]]
 id = "access.sort"
 loads = [
   "[sortInventory] takeItem stack with pide has more than 1 item, invalid state",
 ]
+check = ["mov [rsp+0x8],rcx", "push rbp", "push rbx", "push rdi"]
 
 [[route]]
 id = "access.sort_target"
@@ -131,6 +137,7 @@ take = "value"
 [[route]]
 id = "access.transfer"
 loads = ["Setting Target Slot Id & Target Entity id is not spupported"]
+check = ["push rbp", "push rbx", "push rsi", "push r12", "push r15"]
 
 [[route]]
 id = "access.transfer_source"
@@ -271,6 +278,7 @@ take = "value"
 id = "balancing.zone_size"
 sides = ["client"]
 called_by = ["client_cursor_entity", "upgrade_building_range"]
+check = ["mov r9,[rdx+0x20]", "test r9,r9", "je ?"]
 
 [[route]]
 id = "balancing.zone_size"
@@ -278,6 +286,7 @@ sides = ["server"]
 system = "upgrade_building_range"
 shape = ["lea rcx,[rbp-?]", "call *"]
 take = "address"
+check = ["mov r9,[rdx+0x20]", "test r9,r9", "je ?"]
 
 [[route]]
 id = "balancing.zone_size_valid"
@@ -343,11 +352,13 @@ sides = ["client"]
 in = "access.base_stock"
 shape = ["call *", "movzx eax,[rsp+?]", "mov [rbx+?],?", "test eax,eax", "je ?"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x10"]
 
 [[route]]
 id = "bases.base_at"
 sides = ["server"]
 called_by = ["bases.zones_at"]
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x10"]
 
 [[route]]
 id = "bases.base_ids"
@@ -355,10 +366,12 @@ sides = ["client"]
 in = "~caller:bases.base_ids"
 shape = ["call *", "mov r14,[rsp+?]"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "bases.bed_cleanup"
 called_by = ["base_bed_counts_cleanup_server"]
+check = ["xor r9d,r9d", "mov r8,rcx", "mov edx,r9d"]
 
 [[route]]
 id = "bases.changes"
@@ -372,6 +385,7 @@ sides = ["client"]
 in = "~caller:bases.client_create"
 shape = ["lea rdx,[r15+?]", "mov rcx,[r12]", "call *"]
 take = "address"
+check = ["mov [rsp+0x10],rbp", "mov [rsp+0x18],rsi"]
 
 [[route]]
 id = "bases.client_size"
@@ -385,6 +399,7 @@ id = "bases.comfort_cleanup"
 in = "base_comfort_cleanup"
 shape = ["mov rcx,[rsp+?]", "call *"]
 take = "address"
+check = ["xor edx,edx", "mov r8,rcx", "cmp [rcx+0x24],edx"]
 
 [[route]]
 id = "bases.container_box"
@@ -417,6 +432,7 @@ sides = ["client"]
 in = "update_ui_bases_info"
 shape = ["mov [rsp+?],r13", "call *"]
 take = "address"
+check = ["mov eax,[rcx+0x24]", "ret"]
 
 [[route]]
 id = "bases.ctor"
@@ -424,6 +440,7 @@ sides = ["client"]
 in = "bases.client_create"
 shape = ["call *", "xor eax,eax"]
 take = "address"
+check = ["xor r10d,r10d", "lea rdx,[rcx+0x30]", "mov [rcx],r10"]
 
 [[route]]
 id = "bases.ctor"
@@ -431,16 +448,19 @@ sides = ["server"]
 in = "bases.server_create"
 shape = ["call *", "lea rcx,[rdi+?]"]
 take = "address"
+check = ["xor r10d,r10d", "lea rdx,[rcx+0x30]", "mov [rcx],r10"]
 
 [[route]]
 id = "bases.cursor"
 sides = ["client"]
 calls = ["building.in_building_area", "npc.lookup_cursor"]
+check = ["mov rax,rsp", "mov [rax+0x20],r9", "mov [rax+0x18],r8"]
 
 [[route]]
 id = "bases.cursor"
 sides = ["server"]
 calls = ["balancing.zone_size", "building.in_building_area"]
+check = ["mov rax,rsp", "mov [rax+0x20],r9", "mov [rax+0x18],r8"]
 
 [[route]]
 id = "bases.cursor_balancing"
@@ -473,6 +493,7 @@ id = "bases.entity_query"
 in = "~c6:bases.entity_query"
 shape = ["call *", "test al,al"]
 take = "address"
+check = ["add rdx,?", "jmp ?"]
 
 [[route]]
 id = "bases.grouped"
@@ -486,6 +507,7 @@ sides = ["client"]
 in = "~c0:bases.grouping"
 shape = ["call *", "mov rcx,rbx"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rbp"]
 
 [[route]]
 id = "bases.grouping"
@@ -493,6 +515,7 @@ sides = ["server"]
 in = "bases.server_update"
 shape = ["call *", "mov rcx,rsi"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rbp"]
 
 [[route]]
 id = "bases.heap_allocate"
@@ -511,12 +534,14 @@ take = "value"
 id = "bases.holder_at"
 sides = ["client"]
 called_by = ["~c0:bases.holder_at"]
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "bases.in_base"
 in = "bases.rebuild"
 shape = ["mov rcx,rdi", "call *"]
 take = "address"
+check = ["sub rsp,0x18", "movsd xmm3,[r8]"]
 
 [[route]]
 id = "bases.kind"
@@ -559,6 +584,7 @@ id = "bases.new_base"
 in = "bases.grouping"
 shape = ["mov rcx,r13", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "bases.npc_kind"
@@ -578,6 +604,7 @@ id = "bases.npc_totals"
 in = "bases.server_update"
 shape = ["call *", "mov r14,r13"]
 take = "address"
+check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rsi"]
 
 [[route]]
 id = "bases.npcs"
@@ -606,10 +633,12 @@ take = "value"
 [[route]]
 id = "bases.props_cleanup"
 called_by = ["base_crafting_props_cleanup"]
+check = ["xor r9d,r9d", "mov r8d,r9d", "cmp [rcx+0x24],r8d"]
 
 [[route]]
 id = "bases.rebuild"
 calls = ["bases.entity_query", "bases.set_insert"]
+check = ["push rbp", "push rdi", "push r14", "lea rbp,[rsp-0x1fa0]"]
 
 [[route]]
 id = "bases.rebuilt"
@@ -725,12 +754,14 @@ id = "bases.server_create"
 in = "~fn:buffs.registry"
 shape = ["lea rdx,[rdi+?]", "mov rcx,r15", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "bases.server_destroy"
 in = "bases.server_create"
 shape = ["mov rcx,rbx", "call *"]
 take = "address"
+check = ["push rsi", "sub rsp,0x30", "mov rsi,rcx"]
 
 [[route]]
 id = "bases.server_size"
@@ -752,6 +783,7 @@ shape = [
   "call {ecs.attribute_find}",
 ]
 take = "address"
+check = ["push rsi", "push r12", "sub rsp,0x38"]
 
 [[route]]
 id = "bases.server_update"
@@ -767,12 +799,14 @@ shape = [
   "call {ecs.attribute_find}",
 ]
 take = "address"
+check = ["push rsi", "push r12", "sub rsp,0x38"]
 
 [[route]]
 id = "bases.set_insert"
 in = "predict_player_inventory"
 shape = ["mov [rbp+?],ebx", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "bases.slot"
@@ -785,12 +819,14 @@ id = "bases.slot_free"
 in = "bases.server_destroy"
 shape = ["call *", "nop [rax]"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x20"]
 
 [[route]]
 id = "bases.slot_init"
 in = "bases.server_create"
 shape = ["call *", "add rdi,?"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rbp"]
 
 [[route]]
 id = "bases.slots"
@@ -809,6 +845,7 @@ shape = [
   "call *",
 ]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "bases.sort_all"
@@ -816,6 +853,7 @@ sides = ["client"]
 in = "~c0:bases.grouping"
 shape = ["call *", "mov rdx,rdi", "mov rcx,rbx", "call {bases.rebuild}"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rbp"]
 
 [[route]]
 id = "bases.sort_all"
@@ -823,6 +861,7 @@ sides = ["server"]
 in = "bases.server_update"
 shape = ["call *", "add rsp,?"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rbp"]
 
 [[route]]
 id = "bases.sort_answer_word"
@@ -847,6 +886,7 @@ id = "bases.stock_advance"
 in = "bases.stock_cache"
 shape = ["call *", "xor eax,eax"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "cmp [rcx+0x1be4],0x0"]
 
 [[route]]
 id = "bases.stock_answer_size"
@@ -860,6 +900,7 @@ id = "bases.stock_cache"
 in = "cache_building_stock"
 shape = ["lea rcx,[rbp+?]", "call *"]
 take = "address"
+check = ["push rsi", "push r14", "push r15", "sub rsp,0x30"]
 
 [[route]]
 id = "bases.stock_count"
@@ -876,12 +917,14 @@ take = "value"
 [[route]]
 id = "bases.stock_find"
 called_by = ["bases.stock_cache", "~c0:bases.stock_find"]
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "bases.teardown"
 in = "bases.server_destroy"
 shape = ["call *", "mov rax,[r14]"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "bases.zone_list_allocator"
@@ -892,10 +935,12 @@ take = "value"
 [[route]]
 id = "bases.zones_at"
 called_by = ["~c1:bases.zones_at"]
+check = ["push rbp", "push rdi", "push r14", "sub rsp,0x40"]
 
 [[route]]
 id = "buffs.cleanse"
 called_by = ["actor_wet_soaked_cleanup", "daytime_temp"]
+check = ["xor r9d,r9d", "lea r8,[rcx+0x4]", "mov eax,r9d"]
 
 [[route]]
 id = "buffs.record_has_level"
@@ -971,15 +1016,18 @@ calls = [
   "world.time",
   "~c1:~c0:~c0:~fn:ecs.type_record_static",
 ]
+check = ["mov [rsp+0x20],r9", "mov [rsp+0x8],rcx"]
 
 [[route]]
 id = "buffs.restore"
 sides = ["server"]
 calls = ["buffs.type_by_id", "world.time"]
+check = ["mov [rsp+0x20],r9", "mov [rsp+0x8],rcx"]
 
 [[route]]
 id = "buffs.type_by_id"
 called_by = ["actor_wet_soaked_apply", "load_buff"]
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "building.block_box"
@@ -1000,6 +1048,7 @@ id = "building.blueprint_lookup"
 system = "server_cursor_no_prediction"
 shape = ["call *", "mov rbx,rax"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rdi"]
 
 [[route]]
 id = "building.ctx_player"
@@ -1019,6 +1068,7 @@ sides = ["client"]
 system = "client_cursor"
 shape = ["call *", "test r15,r15"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "building.cursor_check"
@@ -1026,6 +1076,7 @@ sides = ["server"]
 system = "server_cursor_no_prediction"
 shape = ["mov r9,r15", "mov [rsp+?],bl", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "building.cursor_item_info"
@@ -1038,6 +1089,7 @@ id = "building.in_building_area"
 system = "player_update_important_locations"
 shape = ["mov rcx,[rsp+?]", "call *"]
 take = "address"
+check = ["mov r11,[rcx+0xb8]", "mov r10,rdx"]
 
 [[route]]
 id = "building.material_feedback"
@@ -1045,6 +1097,7 @@ sides = ["client"]
 in = "~c3:building.block_box"
 shape = ["call *", "test rsi,rsi"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "building.material_feedback"
@@ -1052,22 +1105,26 @@ sides = ["server"]
 in = "~c2:building.block_box"
 shape = ["call *", "test rsi,rsi"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "building.max_altars"
 called_by = ["base_player_action", "player_building_place_prop"]
+check = ["mov rax,[rcx+0x20]", "test rax,rax", "jne ?"]
 
 [[route]]
 id = "building.no_build_test"
 in = "bases.cursor"
 shape = ["call *", "movzx eax,[rbp+?]"]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x10],rbx", "mov [rax+0x18],rbp"]
 
 [[route]]
 id = "building.pickup"
 system = "player_building_dismantle"
 shape = ["lea rcx,[rbp+?]", "call *", "movzx r14d,al"]
 take = "address"
+check = ["push rbp", "push rbx", "push rsi", "push rdi", "push r13", "push r14"]
 
 [[route]]
 id = "building.pickup_mode"
@@ -1080,6 +1137,7 @@ id = "building.spawn_prop"
 in = "~caller:building.spawn_prop"
 shape = ["call *", "mov esi,eax"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "push rbp", "push rsi", "push rdi"]
 
 [[route]]
 id = "building.zone_entry_shape"
@@ -1090,6 +1148,7 @@ take = "value"
 [[route]]
 id = "building.zone_touches"
 called_by = ["access.dismantle_method", "~c2:building.zone_touches"]
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x10],rbp"]
 
 [[route]]
 id = "cache_building_stock"
@@ -1106,6 +1165,7 @@ sides = ["client"]
 in = "~c2:~fn:label.max_text"
 shape = ["and rcx,?", "call ?", "mov rcx,r13", "call *"]
 take = "address"
+check = ["push rbp", "push rbx", "push rsi", "lea rbp,[rsp-0x3f0]"]
 
 [[route]]
 id = "chat.handle_slot"
@@ -1124,6 +1184,7 @@ id = "chat.mark_delivered"
 in = "~fn:chat.handle_slot"
 shape = ["mov rdx,rbx", "call *"]
 take = "address"
+check = ["mov eax,[rdx+0x20]", "bts eax,r8d", "mov [rdx+0x20],eax"]
 
 [[route]]
 id = "chat.max_text"
@@ -1142,12 +1203,23 @@ id = "chat.post"
 system = "player_control_not_predicted"
 shape = ["mov [rbp+?],r15", "call *"]
 take = "address"
+check = ["push rbp", "push rsi", "push r12", "push r13", "push r15"]
 
 [[route]]
 id = "chat.post_return"
+sides = ["client"]
 in = "~fn:chat.post_return"
 shape = ["call {chat.post}"]
 take = "end"
+check = ["jmp ?"]
+
+[[route]]
+id = "chat.post_return"
+sides = ["server"]
+in = "~fn:chat.post_return"
+shape = ["call {chat.post}"]
+take = "end"
+check = ["mov rcx,[rsp+0x50]", "test rcx,rcx"]
 
 [[route]]
 id = "chat.reply_type"
@@ -1194,6 +1266,7 @@ take = "value"
 [[route]]
 id = "chunks.step"
 loads = ["Invalid state"]
+check = ["mov [rsp+0x18],r8", "push rbp", "push rbx", "push rsi"]
 
 [[route]]
 id = "chunks.width"
@@ -1284,6 +1357,7 @@ id = "comfort.base_register"
 in = "~c1:comfort.base_register"
 shape = ["jmp *"]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x10],rsi"]
 
 [[route]]
 id = "copy_parent_level"
@@ -1314,6 +1388,7 @@ id = "damage.faction_kill"
 system = "debug_kill_faction"
 shape = ["bt bx,cx"]
 take = "end"
+check = ["jae ?", "lea rdx,[rbp+0x6f]"]
 
 [[route]]
 id = "damage.fall"
@@ -1417,12 +1492,14 @@ id = "daytime.set_speed"
 in = "server_nighttime_skip"
 shape = ["mov r8,[rax]", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x30"]
 
 [[route]]
 id = "daytime.set_time"
 system = "admin_player"
 shape = ["mov rcx,[rbp+?]", "call *"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "mov rbx,rcx"]
 
 [[route]]
 id = "daytime.speed"
@@ -1484,6 +1561,7 @@ take = "value"
 [[route]]
 id = "ecs.attribute_find"
 called_by = ["debug_draw_level"]
+check = ["mov [rsp+0x10],edx", "push rbx", "sub rsp,0x20"]
 
 [[route]]
 id = "ecs.attribute_slot"
@@ -1500,6 +1578,7 @@ take = "value"
 [[route]]
 id = "ecs.command_append"
 called_by = ["collider_physics_velocity", "gravity_static_collider"]
+check = ["mov [rsp+0x10],rsi", "push rdi", "sub rsp,0x20"]
 
 [[route]]
 id = "ecs.command_buffers"
@@ -1557,6 +1636,7 @@ sides = ["client"]
 in = "~c0:ecs.component_read"
 shape = ["mov [rbp],rax", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x30"]
 
 [[route]]
 id = "ecs.component_read"
@@ -1570,6 +1650,7 @@ shape = [
   "call *",
 ]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x30"]
 
 [[route]]
 id = "ecs.component_read_raw"
@@ -1583,16 +1664,19 @@ shape = [
   "call *",
 ]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "ecs.component_read_static"
 in = "~c0:ecs.component_read_static"
 shape = ["jmp *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x18],r8d"]
 
 [[route]]
 id = "ecs.component_write"
 called_by = ["~c2:ecs.component_write"]
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "ecs.context_entity_world"
@@ -1617,6 +1701,7 @@ id = "ecs.destroy_request"
 system = "animal_upgrade_interaction"
 shape = ["mov edx,[rax]", "call *"]
 take = "address"
+check = ["push rbx", "sub rsp,0x30", "mov ebx,r8d"]
 
 [[route]]
 id = "ecs.entities_entry_size"
@@ -1637,6 +1722,7 @@ sides = ["client"]
 in = "ui_non_modal_hints"
 shape = ["call *", "test al,al"]
 take = "address"
+check = ["push rsi", "push rdi", "push r12", "push r13", "sub rsp,0x38"]
 
 [[route]]
 id = "ecs.entities_with"
@@ -1644,6 +1730,7 @@ sides = ["server"]
 system = "magical_barrier_connection_init"
 shape = ["mov rdx,rax", "call *"]
 take = "address"
+check = ["push rsi", "push rdi", "push r12", "push r13", "sub rsp,0x38"]
 
 [[route]]
 id = "ecs.entity_map"
@@ -1673,6 +1760,7 @@ id = "ecs.entity_slot"
 in = "~c0:~c0:~fn:ecs.type_record_static"
 shape = ["call *", "cmp rax,[r12+?]"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rdi"]
 
 [[route]]
 id = "ecs.event_merge"
@@ -1688,12 +1776,14 @@ shape = [
   "call *",
 ]
 take = "address"
+check = ["push rsi", "push r13", "push r14", "sub rsp,0x40"]
 
 [[route]]
 id = "ecs.event_push"
 system = "special_ability_update"
 shape = ["mov rcx,rax", "call *"]
 take = "address"
+check = ["sub rsp,0x28", "mov r11,rcx", "cmp r8d,0x100"]
 
 [[route]]
 id = "ecs.event_record_align"
@@ -1743,6 +1833,7 @@ sides = ["client"]
 in = "animal_clear_ui"
 shape = ["call *"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "push rbp", "push rsi", "push rdi"]
 
 [[route]]
 id = "ecs.iterator_init"
@@ -1750,12 +1841,14 @@ sides = ["server"]
 in = "home_base_count_reset"
 shape = ["call *"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "push rbp", "push rsi", "push rdi"]
 
 [[route]]
 id = "ecs.iterator_next"
 system = "animal_pet_interaction"
 shape = ["call *", "test al,al"]
 take = "address"
+check = ["push rdi", "sub rsp,0x20", "mov r8,[rcx]"]
 
 [[route]]
 id = "ecs.level_data_offset"
@@ -1782,6 +1875,7 @@ shape = [
   "call {ecs.template_guid}",
 ]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "ecs.mark_changed"
@@ -1789,6 +1883,7 @@ sides = ["server"]
 system = "actor_spawn_entity"
 shape = ["mov rcx,r10", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "ecs.record_template"
@@ -1836,12 +1931,14 @@ id = "ecs.row_entity"
 system = "player_cooking"
 shape = ["call {knowledge.push}", "lea rdx,[rbp+?]", "mov rcx,r15", "call *"]
 take = "address"
+check = ["mov eax,[rcx+0x8]", "mov r8,rdx", "test eax,eax"]
 
 [[route]]
 id = "ecs.slot_root"
 system = "durability_burndown"
 shape = ["mov rdx,[rdx]", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "ecs.spawn_component_bytes"
@@ -1878,6 +1975,7 @@ id = "ecs.spawn_request"
 system = "admin_player"
 shape = ["call *", "cmp [r15+?],?"]
 take = "address"
+check = ["push rbx", "sub rsp,0x30", "mov [rsp+0x20],r9"]
 
 [[route]]
 id = "ecs.spawn_request_size"
@@ -1900,10 +1998,12 @@ called_by = [
   "add_no_buildzones",
   "server_update_animation_graph_2",
 ]
+check = ["mov edx,[rcx+0x8]", "mov rcx,[rcx]", "dec edx"]
 
 [[route]]
 id = "ecs.type_index"
 called_by = ["ecs.entities_with", "~c6:~c0:~c0:~fn:ecs.type_record_static"]
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rdi"]
 
 [[route]]
 id = "ecs.type_info_hash"
@@ -1945,12 +2045,14 @@ id = "experience.kill"
 in = "combat_experience_source"
 shape = ["movss xmm2,[rax+?]", "call *"]
 take = "address"
+check = ["mov r10,[rsp+0x28]", "movaps xmm4,xmm2"]
 
 [[route]]
 id = "experience.level_cap"
 system = "player_level"
 shape = ["mov rcx,[rbp-?]", "call *"]
 take = "address"
+check = ["mov rax,[rcx+0x20]", "test rax,rax", "jne ?"]
 
 [[route]]
 id = "experience.need"
@@ -1963,6 +2065,7 @@ id = "experience.need_for_level"
 system = "admin_player"
 shape = ["inc ecx", "call *"]
 take = "address"
+check = ["mov r9,[rdx+0x20]", "mov r10d,ecx", "test r9,r9"]
 
 [[route]]
 id = "experience.progress"
@@ -1975,6 +2078,7 @@ id = "experience.source_factor"
 in = "~c0:experience.source_factor"
 shape = ["call *", "mov eax,[rsi+r14*4+?]"]
 take = "address"
+check = ["mov r8,[rcx+0x90]", "movzx eax,dl"]
 
 [[route]]
 id = "factory_station_info"
@@ -2052,6 +2156,7 @@ id = "inventory.actions_row"
 system = "inventory_actions"
 shape = ["movss xmm7,[rip+?]", "nop [rax+rax*1]"]
 take = "end"
+check = ["mov r12,[rbp-0x50]", "lea rdx,[rbp+?]"]
 
 [[route]]
 id = "inventory.actor_flag"
@@ -2060,6 +2165,7 @@ called_by = [
   "immediate_loot_action",
   "random_loot_on_interaction",
 ]
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x30"]
 
 [[route]]
 id = "inventory.copy_100.desc"
@@ -2360,16 +2466,19 @@ id = "inventory.desc_zero"
 system = "handle_crafting_events"
 shape = ["call *", "xorps xmm0,xmm0"]
 take = "address"
+check = ["xor eax,eax", "mov [rcx],0x0", "mov [rcx+0x8],rax"]
 
 [[route]]
 id = "inventory.destroy_slot"
 loads = ["Broken stack encountered on destroyItemStack"]
+check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rbp"]
 
 [[route]]
 id = "inventory.give"
 system = "item_state"
 shape = ["mov [rsp+?],eax", "call *"]
 take = "address"
+check = ["mov [rsp+0x20],r9", "mov [rsp+0x10],rdx"]
 
 [[route]]
 id = "inventory.move_all"
@@ -2382,56 +2491,66 @@ shape = [
   "call {inventory.txn_commit}",
 ]
 take = "address"
+check = ["mov [rsp+0x8],rcx", "push rbp", "push rbx", "push rsi"]
 
 [[route]]
 id = "inventory.move_amount"
 in = "access.transfer"
 shape = ["call *", "jmp ?", "call {inventory.txn_new}"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "inventory.move_slot"
 in = "immediate_loot_action"
 shape = ["call *", "lea rcx,[rbp+?]"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "inventory.resend"
 called_by = ["fuel_setup", "player_crafting"]
+check = ["sub rsp,0x8", "mov r11,rcx", "test edx,edx"]
 
 [[route]]
 id = "inventory.take"
 system = "actor_apply_buff"
 shape = ["mov r8d,[rax]", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x18],rsi"]
 
 [[route]]
 id = "inventory.txn_commit"
 loads = ["Invalid Item Stack: EntityId %k ItemId 0x%08x, Count %k, Pide %k"]
+check = ["push rbp", "push rbx", "push r13", "lea rbp,[rsp-0x3d0]"]
 
 [[route]]
 id = "inventory.txn_drop"
 system = "inventory_actions"
 shape = ["call *", "movzx eax,[r14+?]"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "inventory.txn_init"
 system = "actor_interaction"
 shape = ["call *", "xor edx,edx"]
 take = "address"
+check = ["mov [rcx+0x71a8],0x0", "mov rax,[rdx+0x8]"]
 
 [[route]]
 id = "inventory.txn_new"
 system = "player_building_blueprints"
 shape = ["call *", "xor eax,eax"]
 take = "address"
+check = ["xor edx,edx", "xor eax,eax", "mov [rcx],rdx", "mov [rcx+0x8],rdx"]
 
 [[route]]
 id = "inventory.txn_rollback"
 in = "interaction_attempt"
 shape = ["call *", "movdqa xmm0,xmm6"]
 take = "address"
+check = ["mov r11,rsp", "push rbp", "push rsi", "push r13", "push r14"]
 
 [[route]]
 id = "inventory.txn_size"
@@ -2491,6 +2610,7 @@ take = "value"
 [[route]]
 id = "item.info"
 called_by = ["pickup_item_setup", "server_player_input_begin_frame"]
+check = ["mov [rsp+0x8],ecx", "sub rsp,0x28"]
 
 [[route]]
 id = "journal_ui"
@@ -2540,6 +2660,7 @@ id = "knowledge.input_check"
 system = "handle_knowledge_trigger_input"
 shape = ["lea rcx,[rbx+?]", "call ?"]
 take = "end"
+check = ["test al,al", "je ?", "movsd xmm0,[rbx+0x18c]"]
 
 [[route]]
 id = "knowledge.journal"
@@ -2557,6 +2678,7 @@ take = "value"
 id = "knowledge.journal_blob_get"
 sides = ["client"]
 called_by = ["journal_ui", "trigger_item_set_rewards", "trigger_quest_rewards"]
+check = ["mov rax,[rcx+0x48]", "ret"]
 
 [[route]]
 id = "knowledge.journal_blob_get"
@@ -2564,6 +2686,7 @@ sides = ["server"]
 system = "trigger_item_set_rewards"
 shape = ["mov rcx,[rbp]", "call *"]
 take = "address"
+check = ["mov rax,[rcx+0x48]", "ret"]
 
 [[route]]
 id = "knowledge.log_entry_size"
@@ -2591,6 +2714,7 @@ sides = ["client"]
 in = "~c0:knowledge.player_value"
 shape = ["jmp *"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "cmp [rcx+0xd2],0x0"]
 
 [[route]]
 id = "knowledge.player_value"
@@ -2598,6 +2722,7 @@ sides = ["server"]
 in = "~c1:knowledge.player_value"
 shape = ["mov rcx,r14", "call *"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "cmp [rcx+0xd2],0x0"]
 
 [[route]]
 id = "knowledge.push"
@@ -2612,6 +2737,7 @@ called_by = [
   "trigger_knowledge_in_shape",
   "trigger_knowledge_toggle_server",
 ]
+check = ["mov r8,rcx", "mov eax,0x1"]
 
 [[route]]
 id = "knowledge.queue"
@@ -2686,6 +2812,7 @@ sides = ["client"]
 in = "~c2:knowledge.set_values"
 shape = ["lea r8,[rsp+?]", "call *"]
 take = "address"
+check = ["push rsi", "push r12", "push r13", "push r14"]
 
 [[route]]
 id = "knowledge.state"
@@ -2730,6 +2857,7 @@ shape = [
   "call {knowledge.player_value}",
 ]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "lea rbx,[rcx+0x10]"]
 
 [[route]]
 id = "knowledge.world_value"
@@ -2737,6 +2865,7 @@ sides = ["server"]
 in = "~c1:~c3:knowledge.player_value"
 shape = ["call *", "movzx ecx,[rbx+?]"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "lea rbx,[rcx+0x10]"]
 
 [[route]]
 id = "knowledge_trigger_ui_world_event"
@@ -2753,6 +2882,7 @@ sides = ["client"]
 in = "~fn:chat.post_return"
 shape = ["call *", "xor ebx,ebx"]
 take = "address"
+check = ["sub rsp,0x38", "movups xmm0,[r9]"]
 
 [[route]]
 id = "label.add"
@@ -2760,6 +2890,7 @@ sides = ["server"]
 in = "~fn:server.chat_store"
 shape = ["call *", "jmp ?", "dec al"]
 take = "address"
+check = ["sub rsp,0x38", "movups xmm0,[r9]"]
 
 [[route]]
 id = "label.find"
@@ -2767,6 +2898,7 @@ sides = ["client"]
 in = "~c2:~fn:label.max_text"
 shape = ["call *", "mov rsi,[rax]"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "label.find"
@@ -2774,6 +2906,7 @@ sides = ["server"]
 in = "~c2:~c3:label.add"
 shape = ["mov rdx,[r14]", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "label.max_text"
@@ -2799,15 +2932,26 @@ take = "value"
 
 [[route]]
 id = "label.rename_return"
+sides = ["client"]
 in = "~fn:chat.post_return"
 shape = ["call {label.replace}"]
 take = "end"
+check = ["cmp [rbp+0x30],0x0", "jne ?", "mov rax,[rbp+0x38]"]
+
+[[route]]
+id = "label.rename_return"
+sides = ["server"]
+in = "~fn:chat.post_return"
+shape = ["call {label.replace}"]
+take = "end"
+check = ["cmp [rbp+0x8],r12l", "je ?", "mov rcx,[rsp+0x50]"]
 
 [[route]]
 id = "label.replace"
 in = "update_logic_graph_system"
 shape = ["cmove r8,[rbp-?]", "call *"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "push rbp", "push rsi", "push rdi"]
 
 [[route]]
 id = "limited_spawn_init"
@@ -2839,18 +2983,21 @@ id = "loot.roll"
 in = "random_loot_on_interaction"
 shape = ["call *", "lea rcx,[rbp+?]"]
 take = "address"
+check = ["push rbp", "push rsi", "push r12", "push r15", "lea rbp,[rsp-0x33c8]"]
 
 [[route]]
 id = "loot.roll_one"
 system = "random_pickup_loot_spawner"
 shape = ["movups [rbp+?],xmm0", "call *"]
 take = "address"
+check = ["push rbp", "push rbx", "push rdi", "push r13", "push r15"]
 
 [[route]]
 id = "loot.stack_roll"
 in = "loot.roll_one"
 shape = ["mov rdx,rsi", "mov rcx,r13", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "loot.txn_entity"
@@ -2919,6 +3066,7 @@ sides = ["client"]
 in = "~caller:bases.client_destroy"
 shape = ["mov rcx,[rbx]", "call *", "mov [rbx+?],r12", "mov rcx,[rbx+?]"]
 take = "address"
+check = ["test rdx,rdx", "je ?", "mov [rsp+0x18],rbx"]
 
 [[route]]
 id = "map.fog_reveal"
@@ -2926,6 +3074,7 @@ sides = ["client"]
 system = "fog_of_war"
 shape = ["movss xmm2,[rax]", "call *"]
 take = "address"
+check = ["push rbx", "push rsi", "push rdi", "push r14", "push r15"]
 
 [[route]]
 id = "map.fog_size_z"
@@ -3051,6 +3200,7 @@ sides = ["client"]
 in = "~c2:~fn:label.max_text"
 shape = ["call *", "inc rdi"]
 take = "address"
+check = ["mov rdx,[rdx]", "add rcx,0x16b18"]
 
 [[route]]
 id = "net.message_abort"
@@ -3058,24 +3208,28 @@ sides = ["server"]
 in = "~c1:server.save_request"
 shape = ["call *", "inc rbx"]
 take = "address"
+check = ["mov rdx,[rdx]", "add rcx,0x165a8"]
 
 [[route]]
 id = "net.message_commit"
 in = "~c1:server.save_request"
 shape = ["mov rcx,[rcx]", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "net.message_open"
 loads = [
   "[session] Requested minimum message size(%u) exceeds the requested maximum message size(%u) for game channel %u",
 ]
+check = ["push rbp", "push rbx", "push rdi", "push r14", "lea rbp,[rsp-0x3f]"]
 
 [[route]]
 id = "net.message_receive"
 in = "~fn:chat.post_return"
 shape = ["mov r8,[r8+r14*1]", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x40"]
 
 [[route]]
 id = "net.message_release"
@@ -3083,6 +3237,7 @@ sides = ["client"]
 in = "~c1:net.message_release"
 shape = ["mov rcx,[rcx]", "call *", "mov rdx,[r15+?]"]
 take = "address"
+check = ["mov rdx,[rdx]", "xor r8d,r8d", "test [rdx+0x30],0x10"]
 
 [[route]]
 id = "net.message_release"
@@ -3090,12 +3245,14 @@ sides = ["server"]
 in = "~fn:chat.post_return"
 shape = ["call *", "movups xmm1,[rip+?]", "lea r10,[rip+?]"]
 take = "address"
+check = ["mov rdx,[rdx]", "xor r8d,r8d", "test [rdx+0x30],0x10"]
 
 [[route]]
 id = "net.session_limit"
 in = "net.message_open"
 shape = ["mov [rsp+?],r15", "call *"]
 take = "address"
+check = ["push rdi", "sub rsp,0x20", "movzx eax,dl"]
 
 [[route]]
 id = "net.session_manager"
@@ -3114,6 +3271,7 @@ id = "net.socket_create"
 loads = [
   "[session] Server to Client message socket can just created on host machine.",
 ]
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rdi"]
 
 [[route]]
 id = "net.socket_destroy"
@@ -3121,11 +3279,13 @@ sides = ["client"]
 in = "~c7:net.socket_create"
 shape = ["mov rcx,[rbx+?]", "call *"]
 take = "address"
+check = ["add rcx,0x4dd0", "xor r8d,r8d"]
 
 [[route]]
 id = "net.socket_destroy"
 sides = ["server"]
 called_by = ["~c3:net.socket_create", "~c3:net.socket_destroy"]
+check = ["add rcx,0x4dd0", "xor r8d,r8d"]
 
 [[route]]
 id = "net.socket_kind_local_machine"
@@ -3160,6 +3320,7 @@ shape = [
   "call *",
 ]
 take = "address"
+check = ["push rbx", "sub rsp,0x40", "mov rbx,rcx"]
 
 [[route]]
 id = "npc.lookup"
@@ -3169,6 +3330,7 @@ called_by = [
   "player_assign_npc",
   "unique_npc_spawns",
 ]
+check = ["push rbx", "sub rsp,0x20", "lea rbx,[rcx+0x1560]"]
 
 [[route]]
 id = "npc.lookup_cursor"
@@ -3176,18 +3338,21 @@ sides = ["client"]
 system = "unique_npc_spawns_client"
 shape = ["call *", "test eax,eax"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "lea rbx,[rcx+0x1560]"]
 
 [[route]]
 id = "npc.move"
 in = "~caller:npc.move"
 shape = ["call ?", "mov rcx,rbx", "call *", "mov rcx,rbx"]
 take = "address"
+check = ["mov [rsp+0x20],rbx", "push rdi", "sub rsp,0x70"]
 
 [[route]]
 id = "npc.update"
 system = "unique_npc_init"
 shape = ["call *", "lea rdx,[rbp+?]"]
 take = "address"
+check = ["jmp ?"]
 
 [[route]]
 id = "npc_unlock_state_client"
@@ -3213,6 +3378,7 @@ id = "pacing.loop_wait"
 in = "~fn:pacing.loop_wait"
 shape = ["cmovl r9d,edx"]
 take = "end"
+check = ["mov rdx,[rbp-0x28]", "xor r8d,r8d", "mov ecx,[rbp-0x20]"]
 
 [[route]]
 id = "pacing.message_wait"
@@ -3220,6 +3386,7 @@ sides = ["client"]
 in = "~fn:pacing.loop_wait"
 shape = ["cmovl r8d,edx"]
 take = "end"
+check = ["mov rdx,[rbp-0x28]", "mov r9d,0x1cff"]
 
 [[route]]
 id = "pacing.server_wait"
@@ -3257,6 +3424,7 @@ id = "player.death_sink"
 system = "oxygen_update"
 shape = ["movss [rbp+?],xmm2", "call *"]
 take = "address"
+check = ["mov [rsp+0x20],rbx", "push rbp", "push rsi", "push rdi"]
 
 [[route]]
 id = "player_daytime_ui"
@@ -3307,6 +3475,7 @@ shape = ["lea r8,[rip+?]"]
 [[route]]
 id = "recipe.list_lookup"
 called_by = ["npc_recipe_comfort_requirements"]
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "resource.key_of"
@@ -3322,6 +3491,7 @@ shape = [
   "lea rax,[rip+*]",
 ]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x20"]
 
 [[route]]
 id = "resource.open"
@@ -3335,6 +3505,7 @@ shape = [
   "lea rax,[rip+*]",
 ]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "resource.resolve"
@@ -3350,6 +3521,7 @@ shape = [
   "lea rax,{textures.request}",
 ]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "resource.resolve"
@@ -3357,6 +3529,7 @@ sides = ["server"]
 in = "~loader:resource.key_of"
 shape = ["lea rax,{resource.key_of}", "mov [rsi+?],rax", "lea rax,[rip+*]"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "resource_conclusion"
@@ -3376,6 +3549,7 @@ take = "value"
 [[route]]
 id = "save.path"
 loads = ["[savedata2] Could not create directory path '%k', error:%k"]
+check = ["mov [rsp+0x8],rbx", "push rbp", "push rsi", "push rdi"]
 
 [[route]]
 id = "save.path_data"
@@ -3398,6 +3572,7 @@ take = "value"
 [[route]]
 id = "server.account_action"
 loads = ["[server] Unable to find character name for '%s'"]
+check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rsi"]
 
 [[route]]
 id = "server.ban_list_changed"
@@ -3533,6 +3708,7 @@ take = "value"
 [[route]]
 id = "server.player_remove"
 loads = ["[server] Destroying a Player that requested a save game is BAD!"]
+check = ["mov rax,rsp", "mov [rax+0x18],rsi", "push rdi"]
 
 [[route]]
 id = "server.player_slot_character"
@@ -3615,6 +3791,7 @@ take = "value"
 [[route]]
 id = "server.post_step"
 loads = ["[server] Failed to open Server Info message. error='%s'"]
+check = ["mov rax,rsp", "push rbp", "push rbx", "push r12", "push r13"]
 
 [[route]]
 id = "server.save_blocked"
@@ -3629,10 +3806,12 @@ called_by = [
   "~c1:server.save_request",
   "~fn:chat.post_return",
 ]
+check = ["push rbx", "sub rsp,0x20", "cmp [rcx+0x18aa],0x0"]
 
 [[route]]
 id = "server.save_step"
 loads = ["[server] Failed to save 'ServerSaveGame', while getting base zones"]
+check = ["mov [rsp+0x18],r8", "mov [rsp+0x10],rdx"]
 
 [[route]]
 id = "server.save_system"
@@ -3649,6 +3828,7 @@ take = "value"
 [[route]]
 id = "server.set_state"
 loads = ["[game_server] Switching state from %k to %k after %k"]
+check = ["mov [rsp+0x20],rsi", "mov [rsp+0x10],dl"]
 
 [[route]]
 id = "server.world"
@@ -3699,6 +3879,7 @@ id = "session.kick"
 in = "server.account_action"
 shape = ["mov edx,[r14+?]", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rdi"]
 
 [[route]]
 id = "set_cluster_combat_state"
@@ -3709,12 +3890,14 @@ id = "settings.factory_speed"
 system = "factory_station"
 shape = ["mov rcx,[rbp-?]", "call *"]
 take = "address"
+check = ["mov rax,[rcx+0x90]", "movss xmm1,[rax+0x3c]"]
 
 [[route]]
 id = "settings.resource_drops"
 in = "random_loot_on_interaction"
 shape = ["call *", "mov rax,[rbp-?]"]
 take = "address"
+check = ["mov rax,[rcx+0x90]", "movss xmm0,[rax+0x38]"]
 
 [[route]]
 id = "skill.airborne_architect"
@@ -3733,16 +3916,19 @@ id = "skill.fly_mode_gate_return"
 system = "player_control_action_sequence"
 shape = ["call {skill.node_unlocked}"]
 take = "end"
+check = ["test al,al", "je ?", "mov bl,0x1", "jmp ?"]
 
 [[route]]
 id = "skill.node_unlocked"
 called_by = ["actor_basics", "airwolf_skill", "player_control_action_sequence"]
+check = ["push rbx", "sub rsp,0x20", "mov rbx,rdx"]
 
 [[route]]
 id = "skill.points_per_level"
 in = "~caller:skill.points_per_level"
 shape = ["mov rcx,rsi", "call *"]
 take = "address"
+check = ["mov rax,[rcx+0x20]", "test rax,rax", "jne ?"]
 
 [[route]]
 id = "survivors.assign_bed"
@@ -3766,6 +3952,7 @@ id = "survivors.assign_return_b"
 system = "player_assign_npc"
 shape = ["mov rdx,rbx", "call ?"]
 take = "end"
+check = ["test eax,eax", "je ?", "mov rdx,[rsp+0x68]"]
 
 [[route]]
 id = "survivors.assign_targets"
@@ -3812,6 +3999,7 @@ id = "survivors.map_find_slot"
 in = "survivors.registry_load"
 shape = ["call *", "cmp rax,[rbp+?]"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "survivors.map_keys"
@@ -3885,6 +4073,7 @@ sides = ["client"]
 in = "~c1:survivors.registry_load"
 shape = ["mov rcx,[rdi+0x200]", "call *"]
 take = "address"
+check = ["push rsi", "push rdi", "sub rsp,0x68", "cmp [rcx+0x20],0x0"]
 
 [[route]]
 id = "survivors.registry_load"
@@ -3892,6 +4081,7 @@ sides = ["server"]
 in = "~caller:survivors.registry_load"
 shape = ["mov rcx,[rdi+0x200]", "call *"]
 take = "address"
+check = ["push rsi", "push rdi", "sub rsp,0x68", "cmp [rcx+0x20],0x0"]
 
 [[route]]
 id = "survivors.registry_loaded"
@@ -3915,6 +4105,13 @@ id = "survivors.spawn"
 system = "actor_spawn_entity"
 shape = ["mov rcx,r13", "call *"]
 take = "address"
+check = [
+  "push rbp",
+  "push rsi",
+  "push r12",
+  "push r14",
+  "lea rbp,[rsp-0x165d8]",
+]
 
 [[route]]
 id = "survivors.spawn_ammo_item"
@@ -3933,6 +4130,7 @@ id = "survivors.spawn_return"
 in = "survivors.spawn"
 shape = ["call {npc.lookup}"]
 take = "end"
+check = ["mov r15d,eax", "test eax,eax", "je ?", "mov rcx,[r14]"]
 
 [[route]]
 id = "survivors.spawn_target"
@@ -4076,6 +4274,7 @@ sides = ["client"]
 in = "~c0:text.lookup"
 shape = ["mov rdx,rbx", "call *"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi"]
 
 [[route]]
 id = "text.pool_language"
@@ -4098,6 +4297,7 @@ sides = ["client"]
 in = "~loader:resource.key_of"
 shape = ["mov rcx,rsi", "lea rax,[rip+?]", "mov [rsi+?],rax", "lea rax,[rip+*]"]
 take = "address"
+check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rdi"]
 
 [[route]]
 id = "textures.registry_fill"
@@ -4122,6 +4322,7 @@ take = "end"
 id = "textures.request"
 sides = ["client"]
 loads = ["[resource] Could not find content '%k' in kfc!"]
+check = ["mov [rsp+0x10],rdx", "push rbx", "push rdi", "push r12"]
 
 [[route]]
 id = "textures.request_context"
@@ -4247,6 +4448,7 @@ take = "value"
 id = "textures.signal"
 sides = ["client"]
 loads = ["[os] Signal event notifier '%s' (%p)"]
+check = ["mov r11,rsp", "push rbx", "sub rsp,0x90"]
 
 [[route]]
 id = "toggle_on_hit"
@@ -4281,6 +4483,7 @@ sides = ["client"]
 in = "ui.main_entry"
 shape = ["xor edx,edx", "call *"]
 take = "address"
+check = ["push rbx", "sub rsp,0x40", "xor r10d,r10d"]
 
 [[route]]
 id = "ui.action_node"
@@ -4295,11 +4498,13 @@ sides = ["client"]
 in = "ui.main_entry"
 shape = ["movzx r8d,r12w", "call *"]
 take = "address"
+check = ["push rbx", "push r15", "sub rsp,0x2c8"]
 
 [[route]]
 id = "ui.button"
 sides = ["client"]
 loads = ["contentLayer"]
+check = ["mov rax,rsp", "mov [rax+0x18],rbx", "push rbp"]
 
 [[route]]
 id = "ui.button_align"
@@ -4385,6 +4590,7 @@ sides = ["client"]
 in = "ui.slider"
 shape = ["xorps xmm9,xmm9", "call *"]
 take = "address"
+check = ["push rbx", "sub rsp,0x30", "mov rax,[rip+?]"]
 
 [[route]]
 id = "ui.context"
@@ -4420,6 +4626,7 @@ sides = ["client"]
 in = "~c0:ui.dropdown"
 shape = ["call *", "lea rcx,[r13+?]", "movzx esi,al", "call {ui.loca_id}"]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x18],rbx", "mov [rax+0x10],rdx"]
 
 [[route]]
 id = "ui.dropdown_capacity"
@@ -4463,6 +4670,7 @@ sides = ["client"]
 in = "~c0:ui.dropdown"
 shape = ["call *", "mov rbx,r12", "nop [rax]"]
 take = "address"
+check = ["sub rsp,0x28", "movups xmm1,[rip+?]"]
 
 [[route]]
 id = "ui.entry_size"
@@ -4491,6 +4699,7 @@ sides = ["client"]
 in = "ui.slider"
 shape = ["mov r13,rax", "call *"]
 take = "address"
+check = ["movzx eax,[rcx-0x10]", "ret"]
 
 [[route]]
 id = "ui.focus_request"
@@ -4498,6 +4707,7 @@ sides = ["client"]
 in = "ui.main_entry"
 shape = ["call *", "xor edx,edx"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "mov rax,[rip+?]"]
 
 [[route]]
 id = "ui.frame_close"
@@ -4505,6 +4715,7 @@ sides = ["client"]
 in = "ui.hud"
 shape = ["lea rcx,[rsp+?]", "call *"]
 take = "address"
+check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rsi"]
 
 [[route]]
 id = "ui.frame_color"
@@ -4512,6 +4723,7 @@ sides = ["client"]
 in = "ui.popup"
 shape = ["call *", "xor edx,edx", "lea rcx,[rbp+?]", "call {ui.frame_open}"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x60"]
 
 [[route]]
 id = "ui.frame_extent"
@@ -4534,6 +4746,7 @@ shape = [
   "call *",
 ]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "mov rbx,rcx"]
 
 [[route]]
 id = "ui.frame_hit"
@@ -4541,6 +4754,7 @@ sides = ["client"]
 in = "ui.slider"
 shape = ["mov [rsp+?],dil", "call *"]
 take = "address"
+check = ["push rbx", "sub rsp,0x30", "mov rax,[rip+?]"]
 
 [[route]]
 id = "ui.frame_node"
@@ -4555,6 +4769,7 @@ sides = ["client"]
 in = "ui.main_entry"
 shape = ["movaps [rax-?],xmm13", "call *"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "mov rax,[rip+?]"]
 
 [[route]]
 id = "ui.frame_stretch"
@@ -4562,6 +4777,7 @@ sides = ["client"]
 in = "~c0:~fn:ui.state_screen"
 shape = ["call *", "call {~caller:~c1:ui.slider_init}"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "movss xmm1,[rip+?]"]
 
 [[route]]
 id = "ui.host_answer"
@@ -4581,6 +4797,7 @@ take = "value"
 id = "ui.hud"
 sides = ["client"]
 loads = ["doHudScreenSpace", "HudScreenSpaceRoot"]
+check = ["mov [rsp+0x8],rbx", "push rbp", "push rsi", "push rdi"]
 
 [[route]]
 id = "ui.hud_visible"
@@ -4588,6 +4805,7 @@ sides = ["client"]
 in = "ui.hud"
 shape = ["mov ecx,?", "call *", "test al,al"]
 take = "address"
+check = ["push rdi", "sub rsp,0x20", "mov rax,[rip+?]"]
 
 [[route]]
 id = "ui.label_align"
@@ -4602,6 +4820,7 @@ sides = ["client"]
 in = "ui.slider"
 shape = ["mov [rbp+?],rbx", "call *"]
 take = "address"
+check = ["push rbp", "push rsi", "push rdi", "lea rbp,[rsp-0x47]"]
 
 [[route]]
 id = "ui.label_extent"
@@ -4636,6 +4855,7 @@ sides = ["client"]
 in = "ui.main_entry"
 shape = ["movsd [rsp+?],xmm1", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "ui.label_shown"
@@ -4651,6 +4871,7 @@ sides = ["client"]
 in = "~fn:ui.legal_line_site"
 shape = ["call {ui.label_draw}", "mov rbx,{ui.context}"]
 take = "end"
+check = ["mov rbx,[rbx+0xc8]", "lea rcx,[rbx+?]"]
 
 [[route]]
 id = "ui.loca_id"
@@ -4658,6 +4879,7 @@ sides = ["client"]
 system = "locomotion_animation"
 shape = ["lea rcx,[rip+?]", "call *"]
 take = "address"
+check = ["movzx eax,[rcx]", "mov r9,rcx", "xor eax,0x811c9dc5"]
 
 [[route]]
 id = "ui.loca_text"
@@ -4668,11 +4890,20 @@ called_by = [
   "~c1:ui.progress",
   "~c1:~c4:~c4:~fn:ui.nav_config_size",
 ]
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi"]
 
 [[route]]
 id = "ui.main_entry"
 sides = ["client"]
 loads = ["interactionFrameLayoutLimiter"]
+check = [
+  "mov rax,rsp",
+  "push rbp",
+  "push rbx",
+  "push rsi",
+  "push rdi",
+  "push r12",
+]
 
 [[route]]
 id = "ui.main_menu_site"
@@ -4680,6 +4911,7 @@ sides = ["client"]
 in = "~fn:ui.main_menu_site"
 shape = ["jne ?", "mov [rsi+?],?"]
 take = "end"
+check = ["xor eax,eax", "mov [rsp+?],?"]
 
 [[route]]
 id = "ui.menu_entry_extent"
@@ -4724,6 +4956,7 @@ sides = ["client"]
 in = "~caller:~caller:~c5:settings.factory_speed"
 shape = ["call *", "lea rcx,[rbp+?]", "call {ui.label_draw}"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x20"]
 
 [[route]]
 id = "ui.nav_end"
@@ -4731,6 +4964,7 @@ sides = ["client"]
 in = "~caller:~c1:settings.factory_speed"
 shape = ["call *", "mov r15d,eax", "lea rcx,[rbp+?]", "call {ui.frame_close}"]
 take = "address"
+check = ["push rbx", "push rbp", "push rdi", "push r12", "push r15"]
 
 [[route]]
 id = "ui.nav_extent"
@@ -4770,6 +5004,7 @@ sides = ["client"]
 in = "~caller:~c6:settings.factory_speed"
 shape = ["cmova rdi,rax", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "ui.nav_input"
@@ -4783,6 +5018,7 @@ shape = [
   "call *",
 ]
 take = "address"
+check = ["mov [rsp+0x18],rbx", "push rbp", "push rsi", "push rdi"]
 
 [[route]]
 id = "ui.nav_input_kind"
@@ -4811,6 +5047,7 @@ sides = ["client"]
 in = "ui.popup"
 shape = ["mov rcx,{ui.context}", "lea rdx,[rbp+?]", "call *"]
 take = "address"
+check = ["mov rax,[rcx+0x8]", "mov [rcx+0x8],rdx"]
 
 [[route]]
 id = "ui.nav_set"
@@ -4818,6 +5055,7 @@ sides = ["client"]
 in = "ui.popup"
 shape = ["call *", "mov rcx,{ui.context}", "lea rdx,[rbp+?]"]
 take = "address"
+check = ["cmp [rcx+0x10],0x0", "movups xmm0,[rdx]", "movups [rcx],xmm0"]
 
 [[route]]
 id = "ui.nav_sound"
@@ -4839,6 +5077,7 @@ sides = ["client"]
 in = "ui.main_entry"
 shape = ["call *", "test r15l,r15l"]
 take = "address"
+check = ["movzx eax,[rdx]", "mov [rcx+0x6c],ax", "ret"]
 
 [[route]]
 id = "ui.node_height"
@@ -4851,6 +5090,7 @@ shape = [
   "call {ui.node_stretch}",
 ]
 take = "address"
+check = ["xorps xmm0,xmm0", "mov [rcx+0x94],0x0"]
 
 [[route]]
 id = "ui.node_id"
@@ -4865,6 +5105,7 @@ sides = ["client"]
 in = "ui.slider"
 shape = ["call *", "mov [rbp+?],rax"]
 take = "address"
+check = ["mov rax,[rcx+0x30]", "ret"]
 
 [[route]]
 id = "ui.node_min_height"
@@ -4881,6 +5122,7 @@ shape = [
   "call {ui.node_stretch}",
 ]
 take = "address"
+check = ["xorps xmm0,xmm0", "maxss xmm0,xmm1", "movss [rcx+0x7c],xmm0"]
 
 [[route]]
 id = "ui.node_padding"
@@ -4888,6 +5130,7 @@ sides = ["client"]
 in = "ui.hud"
 shape = ["call *", "test r15,r15"]
 take = "address"
+check = ["movups xmm0,[rdx]", "movups [rcx+0xa8],xmm0"]
 
 [[route]]
 id = "ui.node_spacing"
@@ -4895,6 +5138,7 @@ sides = ["client"]
 in = "ui.hud"
 shape = ["mov [rbp+?],ebx", "mov [rbp+?],?", "call *"]
 take = "address"
+check = ["mov [rcx+0xb8],0x2"]
 
 [[route]]
 id = "ui.node_stretch"
@@ -4902,6 +5146,7 @@ sides = ["client"]
 in = "ui.slider"
 shape = ["call *", "xor edx,edx"]
 take = "address"
+check = ["mov [rcx+0x90],rdx", "ret"]
 
 [[route]]
 id = "ui.node_width"
@@ -4909,6 +5154,7 @@ sides = ["client"]
 in = "ui.slider"
 shape = ["call *", "xorps xmm0,xmm0"]
 take = "address"
+check = ["xorps xmm0,xmm0", "mov [rcx+0x90],0x0"]
 
 [[route]]
 id = "ui.panel"
@@ -4916,6 +5162,7 @@ sides = ["client"]
 in = "~c5:~fn:ui.nav_config_size"
 shape = ["call *", "mov r8,{ui.context}", "xor r14d,r14d"]
 take = "address"
+check = ["mov rax,rsp", "push rbp", "push r14", "lea rbp,[rax-0x148]"]
 
 [[route]]
 id = "ui.panel_alpha"
@@ -4944,6 +5191,7 @@ shape = [
   "mov rcx,{ui.context}",
 ]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x18],r8l", "mov [rax+0x10],dl"]
 
 [[route]]
 id = "ui.pause_menu_site"
@@ -4957,11 +5205,13 @@ sides = ["client"]
 in = "ui.slider"
 shape = ["call *", "mov rcx,rax", "mov r13,rax"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x20],r9"]
 
 [[route]]
 id = "ui.popup"
 sides = ["client"]
 loads = ["errorMessageWindow"]
+check = ["mov rax,rsp", "push rbp", "push rsi", "lea rbp,[rax-0x6b8]"]
 
 [[route]]
 id = "ui.popup_active"
@@ -5038,11 +5288,13 @@ take = "value"
 id = "ui.progress"
 sides = ["client"]
 loads = ["doBasicProgressBar()"]
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x18],rdi"]
 
 [[route]]
 id = "ui.scroll_begin"
 sides = ["client"]
 loads = ["GameUiScrollingLayout"]
+check = ["mov rax,rsp", "push rbp", "push rdi", "push r12", "push r13"]
 
 [[route]]
 id = "ui.scroll_config"
@@ -5050,6 +5302,7 @@ sides = ["client"]
 in = "~caller:~c3:settings.factory_speed"
 shape = ["call {ui.node_stretch}", "lea rcx,[rbp+?]", "call *"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "push rbp", "lea rbp,[rsp-0x57]"]
 
 [[route]]
 id = "ui.scroll_config_extent"
@@ -5065,6 +5318,14 @@ sides = ["client"]
 in = "~caller:~c3:settings.factory_speed"
 shape = ["call {ui.frame_close}", "lea rcx,[rbp+?]", "call *"]
 take = "address"
+check = [
+  "mov rax,rsp",
+  "push rbp",
+  "push rbx",
+  "push rsi",
+  "push rdi",
+  "push r14",
+]
 
 [[route]]
 id = "ui.scroll_extent"
@@ -5080,6 +5341,7 @@ sides = ["client"]
 in = "~c2:~c0:~c4:~fn:ui.nav_config_size"
 shape = ["call {ui.scroll_begin}", "lea rcx,[rbp+?]", "call *"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "push rdi", "sub rsp,0x150"]
 
 [[route]]
 id = "ui.scroll_input"
@@ -5087,6 +5349,7 @@ sides = ["client"]
 in = "~c2:~c4:~fn:ui.nav_config_size"
 shape = ["call *", "cmp [r15+?],?", "mov edi,?", "je ?", "mov rax,{ui.context}"]
 take = "address"
+check = ["cmp [rcx+0x190],0x0", "movups xmm0,[rdx]"]
 
 [[route]]
 id = "ui.scroll_nav"
@@ -5099,6 +5362,7 @@ shape = [
   "call *",
 ]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "mov rbx,rcx"]
 
 [[route]]
 id = "ui.scroll_set_focus"
@@ -5106,6 +5370,7 @@ sides = ["client"]
 in = "~c0:~c4:~c4:~fn:ui.nav_config_size"
 shape = ["lea rcx,[rbp+?]", "call *", "mov rax,{ui.context}"]
 take = "address"
+check = ["cmp [rcx+0x468],0x0", "jne ?"]
 
 [[route]]
 id = "ui.scrollbar_look"
@@ -5113,11 +5378,13 @@ sides = ["client"]
 in = "~c2:~c0:~c4:~fn:ui.nav_config_size"
 shape = ["call *", "mov rcx,{ui.context}"]
 take = "address"
+check = ["mov [rsp+0x8],0xffffffff"]
 
 [[route]]
 id = "ui.slider"
 sides = ["client"]
 loads = ["doSettingSlider()"]
+check = ["push rbp", "push rbx", "push rsi", "push rdi", "push r13", "push r14"]
 
 [[route]]
 id = "ui.slider_discrete"
@@ -5147,6 +5414,7 @@ sides = ["client"]
 in = "~c0:ui.dropdown"
 shape = ["movsd [rbp+0x940],xmm1", "call *", "mov rax,{ui.context}"]
 take = "address"
+check = ["sub rsp,0x28", "movups xmm1,[rip+?]"]
 
 [[route]]
 id = "ui.slider_max"
@@ -5210,6 +5478,7 @@ sides = ["client"]
 loads = [
   "[game_ui] no more space in sound instance map to play game ui sound '%s'.",
 ]
+check = ["mov rax,rsp", "mov [rax+0x10],rdi", "mov [rax+0x18],r14"]
 
 [[route]]
 id = "ui.state_screen"
@@ -5237,6 +5506,7 @@ shape = [
   "call {ui.node_stretch}",
 ]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi"]
 
 [[route]]
 id = "ui.text_field_editing"
@@ -5264,6 +5534,7 @@ sides = ["client"]
 in = "~c6:~c4:~fn:ui.nav_config_size"
 shape = ["lea rdx,[rbp+?]", "lea rcx,[rbp+?]", "call *"]
 take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rbp"]
 
 [[route]]
 id = "ui.text_field_state"
@@ -5271,6 +5542,7 @@ sides = ["client"]
 in = "~fn:ui.text_field_editing"
 shape = ["call *", "mov [rax+?],?", "jmp ?", "mov rcx,{ui.context}"]
 take = "address"
+check = ["push rbx", "sub rsp,0x30", "mov rcx,[rcx+0x8]"]
 
 [[route]]
 id = "ui.text_field_state_size"
@@ -5307,6 +5579,7 @@ shape = [
   "call *",
 ]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x10],rdx", "push rbp"]
 
 [[route]]
 id = "ui.toggle_count"
@@ -5357,6 +5630,7 @@ sides = ["client"]
 in = "ui.hud"
 shape = ["mov [rsp+?],rax", "lea rcx,[rbp-?]", "call *"]
 take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
 id = "ui.window_end"
@@ -5364,6 +5638,7 @@ sides = ["client"]
 in = "ui.hud"
 shape = ["call *", "mov rbx,[rsp+?]"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "mov [rsp+0x38],rsi"]
 
 [[route]]
 id = "ui.window_extent"
@@ -5545,6 +5820,7 @@ sides = ["client"]
 loads = [
   "[user] Calling user::startInteraction before user interactions are enabled",
 ]
+check = ["push rbp", "push r14", "sub rsp,0x88"]
 
 [[route]]
 id = "voxel.building_first"
@@ -5581,6 +5857,7 @@ id = "voxel.read_box"
 in = "~caller:~c2:~fn:voxel.grids"
 shape = ["mov [rsp+?],?", "call *", "test al,al"]
 take = "address"
+check = ["mov [rsp+0x20],r9d", "mov [rsp+0x18],r8"]
 
 [[route]]
 id = "voxel.store"
@@ -5593,6 +5870,7 @@ id = "voxel.undo_apply"
 in = "~c1:voxel.undo_apply"
 shape = ["movsd [rbp-?],xmm0", "call *"]
 take = "address"
+check = ["mov rax,rsp", "sub rsp,0xa8"]
 
 [[route]]
 id = "voxel.undo_extent"
@@ -5606,6 +5884,7 @@ id = "voxel.write_block"
 in = "~c2:voxel.write_block"
 shape = ["xor edx,edx", "call *"]
 take = "address"
+check = ["mov [rsp+0x20],r9", "mov [rsp+0x18],r8"]
 
 [[route]]
 id = "wakeup_attach_to_surface"
@@ -5620,6 +5899,7 @@ id = "weather.clock"
 in = "~c1:server.save_request"
 shape = ["call *", "mov rcx,[r14+?]", "mov rbx,rax"]
 take = "address"
+check = ["push rbx", "sub rsp,0x20", "mov rbx,rcx"]
 
 [[route]]
 id = "weather.entry_data"
@@ -5638,6 +5918,7 @@ take = "value"
 [[route]]
 id = "weather.free"
 called_by = ["~fn:weather.layer_count"]
+check = ["test edx,edx", "je ?"]
 
 [[route]]
 id = "weather.generation"
@@ -5832,6 +6113,7 @@ id = "weather.resource_lock"
 in = "weather.sample"
 shape = ["movdqu [rsp+?],xmm0", "call *"]
 take = "address"
+check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rsi"]
 
 [[route]]
 id = "weather.resource_release"
@@ -5839,6 +6121,7 @@ sides = ["client"]
 system = "animation_cloth_simulation_events_2"
 shape = ["mov edx,esi", "call *"]
 take = "address"
+check = ["mov rax,[rcx+0x7f0]", "test rax,rax"]
 
 [[route]]
 id = "weather.resource_release"
@@ -5846,6 +6129,7 @@ sides = ["server"]
 system = "entity_animation"
 shape = ["mov edx,r12d", "call *"]
 take = "address"
+check = ["mov rax,[rcx+0x7f0]", "test rax,rax"]
 
 [[route]]
 id = "weather.sample"
@@ -5853,6 +6137,7 @@ sides = ["client"]
 in = "footdown_effects"
 shape = ["call *", "movaps xmm2,xmm7"]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x18],rbx", "mov [rax+0x8],rcx"]
 
 [[route]]
 id = "weather.sample"
@@ -5860,6 +6145,7 @@ sides = ["server"]
 system = "actor_wet_soaked_apply"
 shape = ["call *", "movaps xmm2,xmm6"]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x20],rbx", "mov [rax+0x18],r8"]
 
 [[route]]
 id = "weather.slot_current"
@@ -5893,6 +6179,7 @@ take = "value"
 
 [[route]]
 id = "weather.spawn"
+sides = ["client"]
 in = "~fn:weather.slot_phenomenon"
 shape = [
   "call *",
@@ -5905,6 +6192,24 @@ shape = [
   "call {weather.free}",
 ]
 take = "address"
+check = ["mov [rsp+0x20],r9", "push rbx", "push rbp", "push rsi"]
+
+[[route]]
+id = "weather.spawn"
+sides = ["server"]
+in = "~fn:weather.slot_phenomenon"
+shape = [
+  "call *",
+  "mov r8,?",
+  "jmp ?",
+  "cmp [rdi+?],?",
+  "je ?",
+  "mov edx,[rdi+?]",
+  "mov rcx,r14",
+  "call {weather.free}",
+]
+take = "address"
+check = ["mov [rsp+0x18],rbx", "push rbp", "push rsi", "push rdi"]
 
 [[route]]
 id = "weather.system"
@@ -5946,6 +6251,7 @@ id = "world.step"
 in = "~c1:server.save_request"
 shape = ["movzx r12d,[rbp+?]", "mov rcx,[r14+?]", "call *"]
 take = "address"
+check = ["push rbx", "push rdi", "sub rsp,0x38", "cmp [rcx],0x2"]
 
 [[route]]
 id = "world.time"
@@ -5955,6 +6261,7 @@ called_by = [
   "~c1:~c3:label.add",
   "~c3:~c3:label.add",
 ]
+check = ["mov edx,[rcx+?]", "mov rax,[rcx+?]"]
 
 [[route]]
 id = "~c0:access.base_stock"

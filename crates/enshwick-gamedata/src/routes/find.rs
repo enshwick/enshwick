@@ -77,9 +77,23 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             State::Open => {}
         }
         self.states[i] = State::Running;
-        let found = self.run(self.routes[i]);
+        let route = self.routes[i];
+        let found = self.run(route).and_then(|found| self.checked(route, found));
         self.states[i] = State::Done(found);
         found
+    }
+
+    /// `found` once the code at a symbol starts with the route's `check`,
+    /// which makes it a checked [`Routed::Symbol`]; nothing when it does not.
+    fn checked(&self, route: &Route, found: Routed) -> Option<Routed> {
+        match found {
+            Routed::Symbol(rva) | Routed::Reached(rva) if !route.check.is_empty() => {
+                let at = u32::try_from(rva).ok()?;
+                let code = self.code.instructions_at(at, route.check.len());
+                shape::starts(&route.check, &code).then_some(Routed::Symbol(rva))
+            }
+            found => Some(found),
+        }
     }
 
     fn run(&mut self, route: &'f Route) -> Option<Routed> {
