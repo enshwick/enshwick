@@ -110,7 +110,7 @@ fn answer(loader: &Loader, tool: Tool<'_>) -> String {
         Tool::Mods => super::tools::mods(loader),
         Tool::World => super::tools::world(loader),
         Tool::Entity(args) => super::tools::entity(loader, args),
-        Tool::Placed(args) => super::tools::placed(args),
+        Tool::Placed(args) => super::tools::placed(loader, args),
         Tool::About(id) => loader
             .mods
             .iter()

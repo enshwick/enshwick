@@ -409,6 +409,24 @@ pub(crate) fn is_disabled(id: u32) -> bool {
     DISABLED.load().ids.contains(&id)
 }
 
+/// The item with game id `id` in words, by the item names, read from the
+/// archive at the first call; the number alone when they do not read. Off
+/// the game thread.
+pub(crate) fn item_words(loader: &Loader, id: u32) -> String {
+    names(loader).item_words(id)
+}
+
+/// The recipe with id `id` in words, its full id and the number, once the
+/// recipe registry is read; the number alone before.
+pub(crate) fn recipe_words(id: u32) -> String {
+    live(|l| l.index.clone())
+        .and_then(|index| {
+            let recipe = index.recipes().iter().find(|r| r.id == id)?;
+            Some(format!("{} ({id})", super::full_id(&recipe.name)))
+        })
+        .unwrap_or_else(|| id.to_string())
+}
+
 /// Disables exactly `ids`, for tests.
 #[cfg(test)]
 pub(crate) fn disable_for_test(ids: &[u32]) {

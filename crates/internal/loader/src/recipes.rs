@@ -355,6 +355,16 @@ impl Names {
         self.item_labels.get(&id).map(String::as_str)
     }
 
+    /// The item with game id `id` in words for logs and answers: its full
+    /// id and the number, or the number alone for an item without a name.
+    #[must_use]
+    pub fn item_words(&self, id: u32) -> String {
+        self.item_name(id).map_or_else(
+            || id.to_string(),
+            |name| format!("{} ({id})", full_id(name)),
+        )
+    }
+
     /// A workshop in words: `hand`, its item's full id, or its number.
     #[must_use]
     pub fn workshop_name(&self, workshop: u32) -> String {
@@ -638,8 +648,8 @@ pub fn describe(recipe: &Recipe, names: &Names) -> String {
 
 #[cfg(windows)]
 pub(crate) use live::{
-    command, filter, hello, init, is_disabled, joining, left, poll, received, registry_built, rule,
-    world_changed,
+    command, filter, hello, init, is_disabled, item_words, joining, left, poll, received,
+    recipe_words, registry_built, rule, world_changed,
 };
 
 #[cfg(all(windows, test))]
@@ -842,6 +852,16 @@ mod tests {
                 index.recipes[1].guid, index.recipes[1].outputs[0]
             )
         );
+    }
+
+    #[test]
+    fn an_item_in_words_is_its_full_id_and_number_or_the_number_alone() {
+        let names = names();
+        assert_eq!(
+            names.item_words(TORCH.fnv1a()),
+            format!("enshrouded:Tool_Torch01_T0 ({})", TORCH.fnv1a())
+        );
+        assert_eq!(names.item_words(7), "7");
     }
 
     #[test]
