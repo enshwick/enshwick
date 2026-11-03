@@ -812,6 +812,26 @@ impl<'a> Reflection<'a> {
     pub fn system_count(&self) -> usize {
         self.systems.len()
     }
+
+    /// Every system record found, those sharing a name included, in no set
+    /// order.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let reflection = Reflection::scan(&image);
+    /// assert!(reflection.systems().any(|s| s.name() == "inventory_actions"));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn systems(&self) -> impl Iterator<Item = &System<'a>> + '_ {
+        self.systems.values().flatten()
+    }
 }
 
 fn unique<'r, T>(found: Option<&'r Vec<T>>, name: &str) -> Result<&'r T, LookupError> {

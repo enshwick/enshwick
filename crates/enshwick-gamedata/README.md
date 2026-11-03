@@ -17,6 +17,22 @@ game update that moves a field changes this crate, not the mods.
 
 - The loader embeds every table of this folder, and reads no other: a table
   for a newer game build ships with the next loader build.
+- Before any table, the engine routes in
+  [`anchors/routes.toml`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/anchors/routes.toml)
+  find their entries in the game's own code, the same way on every build:
+  the one function a set of reflected ECS systems calls (`called_by`), the
+  one function that loads a set of the interface's debug strings (`loads`),
+  or a run of decoded instructions in a system's code (`system` and
+  `shape`, such as `lea rdx,[rbp-*]`), which survives a changed encoding or
+  displacement. A route that finds nothing, or more than one answer, leaves
+  its entry to the table; a route that disagrees with the table turns the
+  entry off. The route's own match is the check a hook makes before it
+  patches. A test checks every route against the table of every build whose
+  executable it is given.
+- [`anchors/classes.toml`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/anchors/classes.toml)
+  says for every entry whether the engine gives it (`engine`), whether its
+  route is still to research (`research`), or why research found none
+  (`pattern`).
 - On a build without a table, the loader takes the newest table of the same
   side, by Steam build id, and finds each entry by its `pattern`: a symbol at or through the
   code it matches, a constant read from the operand of the instruction that

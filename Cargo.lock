@@ -480,6 +480,8 @@ version = "1.0.0-alpha.11"
 dependencies = [
  "criterion",
  "enshwick",
+ "iced-x86",
+ "memchr",
  "proptest",
  "rustc-hash",
  "ruzstd",

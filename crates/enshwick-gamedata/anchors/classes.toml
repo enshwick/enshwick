@@ -1,0 +1,171 @@
+# How each build table entry is anchored to the game. `engine`: the loader
+# finds it in the game without a table row. `research`: no engine route is
+# known yet. `pattern`: research found no engine route, so it stays a
+# pattern. `entries` are ids, or prefixes ending in `*`; an id takes the row
+# that names it, else the longest prefix.
+
+[[class]]
+entries = [
+  "ecs.template_guid",
+  "knowledge.push",
+  "skill.node_unlocked",
+  "skill.fly_mode_gate_return",
+  "skill.airborne_architect_cell",
+  "skill.airborne_architect",
+  "inventory.view_fill",
+  "inventory.view_frame",
+  "ui.slider",
+  "ui.hud",
+  "ui.main_entry",
+]
+class = "engine"
+reason = "an engine route finds it"
+
+[[class]]
+entries = [
+  "inventory.view_fill.bytes",
+  "ui.slider.bytes",
+  "ui.hud.bytes",
+  "ui.main_entry.bytes",
+]
+class = "engine"
+reason = "the engine route of its symbol checks the code"
+
+[[class]]
+entries = [
+  "attribute.experience_needed_slot",
+  "attribute.fuel_max_slot",
+  "attribute.health_adder_slot",
+  "attribute.health_max_slot",
+  "attribute.mana_adder_slot",
+  "attribute.mana_max_slot",
+  "attribute.shroud_max_slot",
+  "attribute.stamina_adder_slot",
+  "attribute.stamina_max_slot",
+]
+class = "engine"
+reason = "read from the game's archive by the attribute's name"
+
+[[class]]
+entries = ["inventory.actions_row", "inventory.actions_row.bytes"]
+class = "research"
+reason = "a route is proposed, not built: the loop head before the first call to ecs.row_entity in system inventory_actions"
+
+[[class]]
+entries = ["ui.pause_menu_site.bytes"]
+class = "research"
+reason = "a route is proposed, not built: in the function loading \"SystemMenu\", the je target of the ui.pause_entry call after its load of \"%s <img attention_dot>\""
+
+[[class]]
+entries = ["ui.main_menu_site.bytes"]
+class = "research"
+reason = "a route is proposed, not built: in the function loading \"pregameMainMenuWindow\", the join after the entry that posts UI event 0x6b, an unnamed code"
+
+[[class]]
+entries = [
+  "ui.slider_bounded",
+  "ui.slider_steps",
+  "ui.slider_stop_capacity",
+  "ui.slider_discrete",
+]
+class = "research"
+reason = "decoded from the stores of ui.slider_init, which only a pattern finds"
+
+[[class]]
+entries = ["ui.entry_text"]
+class = "research"
+reason = "decoded in ui.toggle, the first \"doSettingOptionWidget()\" instance by address, which is a guess"
+
+[[class]]
+entries = ["ui.menu_entry_text"]
+class = "research"
+reason = "a fixed 0 that could be read inside ui.main_entry; the read is not decoded yet"
+
+[[class]]
+entries = [
+  "textures.registry_listed",
+  "textures.registry_listed_at",
+  "textures.registry_listed_at.bytes",
+]
+class = "research"
+reason = "decoded from the first byte compare of textures.registry_fill, which only a pattern finds"
+
+[[class]]
+entries = ["textures.registry_fill", "textures.registry_fill.bytes"]
+class = "pattern"
+reason = "no system calls it and it holds no string or reflected hash; only two anonymous calls from the app's creation step reach it"
+
+[[class]]
+entries = ["label.add"]
+class = "pattern"
+reason = "a short thunk that adds world.entities; its callers are message handlers that share ten callees"
+
+[[class]]
+entries = ["ui.slider_init.bytes", "ui.dropdown_init.bytes"]
+class = "pattern"
+reason = "the function has no name, string or system, and its callers share no callee only they call"
+
+[[class]]
+entries = ["ui.*", "ui_image.*", "text.*", "chat.*"]
+class = "research"
+reason = "no engine route researched yet (interface)"
+
+[[class]]
+entries = ["inventory.*", "item.*", "recipe.*", "loot.*", "textures.*"]
+class = "research"
+reason = "no engine route researched yet (items and textures)"
+
+[[class]]
+entries = [
+  "ecs.*",
+  "world.*",
+  "npc.*",
+  "actor.*",
+  "label.*",
+  "resource.*",
+  "save.*",
+  "settings.*",
+  "game.*",
+  "player.*",
+  "session.*",
+  "user.*",
+]
+class = "research"
+reason = "no engine route researched yet (world and entities)"
+
+[[class]]
+entries = [
+  "bases.*",
+  "building.*",
+  "access.*",
+  "map.*",
+  "terrain.*",
+  "voxel.*",
+  "chunks.*",
+  "altar.*",
+  "comfort.*",
+]
+class = "research"
+reason = "no engine route researched yet (bases and terrain)"
+
+[[class]]
+entries = [
+  "survivors.*",
+  "knowledge.*",
+  "skill.*",
+  "experience.*",
+  "attribute.*",
+  "buffs.*",
+  "damage.*",
+  "balancing.*",
+  "weather.*",
+  "daytime.*",
+  "pacing.*",
+]
+class = "research"
+reason = "no engine route researched yet (survival rules)"
+
+[[class]]
+entries = ["net.*", "join.*", "server.*"]
+class = "research"
+reason = "no engine route researched yet (network and server)"

@@ -6,7 +6,9 @@
 //! For the running build it takes the table
 //! made for it ([`exact`], [`Table::resolve`]); on a build without one, the
 //! newest table of the same side ([`newest`]) finds each entry by its pattern
-//! ([`Table::fall_back`]), and what no pattern finds stays missing. The
+//! ([`Table::fall_back`]), and what no pattern finds stays missing. Before
+//! either, the [`Routes`] find entries in the game's own code through what
+//! the engine names, the same way on every build ([`Resolved::route`]). The
 //! game's own archive reads with [`archive::Archive`], and the engine's
 //! reflection data with [`reflect::Reflection`].
 //! The [`catalogue`] maps the ids the API asks engine facts by to the
@@ -16,6 +18,8 @@
 
 pub mod archive;
 pub mod catalogue;
+#[cfg(test)]
+mod classes;
 mod entries;
 #[cfg(test)]
 mod game_names;
@@ -23,6 +27,7 @@ mod locks;
 mod parts;
 pub mod reflect;
 mod resolve;
+mod routes;
 mod table;
 mod version;
 
@@ -30,7 +35,8 @@ pub use parts::{Part, PartState};
 
 pub use entries::{Body, Constant, Locate, Operand, Symbol};
 pub use reflect::Fingerprint;
-pub use resolve::{Kind, Resolved, embedded, exact, newest};
+pub use resolve::{Kind, Resolved, Routing, embedded, exact, newest};
+pub use routes::{Routed, Routes};
 pub use table::{MAX_PATTERN, Table, TableError, file_name};
 pub use version::{GameVersion, SteamBuild};
 

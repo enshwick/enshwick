@@ -265,12 +265,13 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
     if let Some(game_dir) = mods_dir.parent() {
         crate::attribute_slots::supply(&mut build, &reflection, game_dir, side);
     }
+    route(&mut build, image, &reflection, side);
     let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
     match build.kind {
         builds::Kind::Exact => crate::log!(INFO, "game: {}", build.name),
         builds::Kind::Fallback => crate::log!(
             WARN,
-            "game build {} has no build table yet: {} entries found by their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table ({})",
+            "game build {} has no build table yet: {} entries found by engine routes or their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table ({})",
             builds::fingerprint_name(fingerprint),
             build.entries(),
             build.missing().len(),
@@ -292,6 +293,29 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
         build,
         reflection,
     })
+}
+
+/// Takes the entries the engine routes find on this build into `build`.
+fn route(
+    build: &mut builds::KnownBuild,
+    image: &Image<'_>,
+    reflection: &Reflection<'_>,
+    side: Side,
+) {
+    let routes = match enshwick_gamedata::Routes::embedded() {
+        Ok(routes) => routes,
+        Err(e) => {
+            crate::log!(ERROR, "embedded engine routes: {e}");
+            return;
+        }
+    };
+    let start = std::time::Instant::now();
+    let found = build.route(&routes, image, reflection, side);
+    crate::log!(
+        INFO,
+        "engine routes found {found} entries in {} ms",
+        start.elapsed().as_millis()
+    );
 }
 
 /// Warns about each loader feature `build` serves only partly or not at all.

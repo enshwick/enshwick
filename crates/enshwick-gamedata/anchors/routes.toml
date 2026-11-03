@@ -1,0 +1,69 @@
+# Engine routes, in the order they resolve; the format is in the routes
+# module of this crate.
+
+[[route]]
+id = "ecs.template_guid"
+sides = ["client"]
+called_by = ["unique_npc_init", "add_no_buildzones", "server_update_animation_graph_2"]
+
+[[route]]
+id = "knowledge.push"
+called_by = [
+  "actor_trigger_knowledge",
+  "handle_crafting_events",
+  "handle_knowledge_trigger_input",
+  "pickup_loot",
+  "player_cooking",
+  "trigger_collection_knowledge",
+  "trigger_item_set_rewards",
+  "trigger_knowledge_in_shape",
+  "trigger_knowledge_toggle_server",
+]
+
+[[route]]
+id = "skill.node_unlocked"
+called_by = ["actor_basics", "airwolf_skill", "player_control_action_sequence"]
+
+[[route]]
+id = "skill.fly_mode_gate_return"
+system = "player_control_action_sequence"
+shape = ["call {skill.node_unlocked}"]
+take = "end"
+
+[[route]]
+id = "skill.airborne_architect_cell"
+system = "player_control_action_sequence"
+shape = ["mov ecx,[rip+*]", "call {skill.node_unlocked}"]
+take = "address"
+
+[[route]]
+id = "skill.airborne_architect"
+system = "player_control_action_sequence"
+shape = ["mov ecx,[rip+*]", "call {skill.node_unlocked}"]
+take = "cell"
+
+[[route]]
+id = "inventory.view_fill"
+system = "inventory_actions"
+shape = ["lea rdx,[rbp-?]", "mov rcx,r13", "call ?"]
+
+[[route]]
+id = "inventory.view_frame"
+system = "inventory_actions"
+shape = ["lea rdx,[rbp-*]", "mov rcx,r13", "call ?"]
+take = "value"
+
+[[route]]
+id = "ui.slider"
+sides = ["client"]
+loads = ["doSettingSlider()"]
+
+[[route]]
+id = "ui.hud"
+sides = ["client"]
+loads = ["doHudScreenSpace", "HudScreenSpaceRoot"]
+
+[[route]]
+id = "ui.main_entry"
+sides = ["client"]
+loads = ["interactionFrameLayoutLimiter"]

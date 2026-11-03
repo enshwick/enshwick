@@ -67,10 +67,17 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
   patterns live in the loader and in `enshwick-gamedata`'s tables, never in
   `enshwick` or in a mod.
 - Facts the engine reflects are found by name through `reflect` and hold across
-  game builds. The rest is in one TOML table per build under
-  `crates/enshwick-gamedata/tables/`. On a build without a table, the newest
-  table of the same side carries over by its patterns, and only what no pattern
-  finds turns off.
+  game builds. Entries an engine route reaches come next: the loader finds
+  them in the game's code through what the engine names (its ECS systems,
+  its debug strings), on every build, from the data in
+  `crates/enshwick-gamedata/anchors/routes.toml`. The rest is in one TOML table
+  per build under `crates/enshwick-gamedata/tables/`, kept as the fallback and
+  the cross-check of a routed entry. On a build without a table, the newest
+  table of the same side carries over by its patterns, and only what neither a
+  route nor a pattern finds turns off.
+- `crates/enshwick-gamedata/anchors/classes.toml` classes every table entry:
+  found from the engine, still to research, or a pattern because research
+  found no route, each with its reason; a test fails on an entry without one.
 - In the loader, each symbol and constant of the build table is declared once in
   `pinned/<part>.rs` as a typed `Symbol` or `Constant`, and code names it by
   path, such as `pinned::world::TIME`. Each part lists the ids it needs in its
