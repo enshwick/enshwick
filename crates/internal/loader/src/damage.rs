@@ -82,6 +82,27 @@ enum Site {
     FactionKill,
 }
 
+/// Each site's mid-hook target and handler.
+const SITES: [(Symbol, Site, MidFn); 9] = [
+    (pinned::damage::HIT, Site::Hit, hit),
+    (pinned::damage::FALL, Site::Fall, fall),
+    (pinned::damage::SHROUD, Site::Fog, shroud),
+    (pinned::damage::SHROUD_DEATH, Site::DeadlyFog, shroud_death),
+    (pinned::damage::DROWNING, Site::Drowning, drowning),
+    (
+        pinned::damage::DROWNING_DEATH,
+        Site::DrowningDeath,
+        drowning_death,
+    ),
+    (pinned::damage::FREEZING, Site::Freezing, freezing),
+    (pinned::damage::ADMIN_KILL, Site::AdminKill, admin_kill),
+    (
+        pinned::damage::FACTION_KILL,
+        Site::FactionKill,
+        faction_kill,
+    ),
+];
+
 /// Registers mod `owner`'s damage filter.
 pub(crate) fn register(
     loader: &Loader,
@@ -119,27 +140,8 @@ pub(crate) fn link(loader: &Loader) {
         return;
     };
     let _first = LAYOUT.set(layout);
-    let sites: [(Symbol, Site, MidFn); 9] = [
-        (pinned::damage::HIT, Site::Hit, hit),
-        (pinned::damage::FALL, Site::Fall, fall),
-        (pinned::damage::SHROUD, Site::Fog, shroud),
-        (pinned::damage::SHROUD_DEATH, Site::DeadlyFog, shroud_death),
-        (pinned::damage::DROWNING, Site::Drowning, drowning),
-        (
-            pinned::damage::DROWNING_DEATH,
-            Site::DrowningDeath,
-            drowning_death,
-        ),
-        (pinned::damage::FREEZING, Site::Freezing, freezing),
-        (pinned::damage::ADMIN_KILL, Site::AdminKill, admin_kill),
-        (
-            pinned::damage::FACTION_KILL,
-            Site::FactionKill,
-            faction_kill,
-        ),
-    ];
     let mut linked = 0;
-    for (name, site, handler) in sites {
+    for (name, site, handler) in SITES {
         let Some(address) = loader.address(name) else {
             crate::log!(WARN, "damage filters: {site:?} off, not in this build");
             continue;
@@ -166,7 +168,7 @@ pub(crate) fn link(loader: &Loader) {
             crate::log!(WARN, "damage filters: {site:?} off, refused ({})", status.0);
         }
     }
-    crate::log!(INFO, "damage filters on: {linked} of {} sites", sites.len());
+    crate::log!(INFO, "damage filters on: {linked} of {} sites", SITES.len());
 }
 
 type MidFn = unsafe extern "system" fn(registers: *mut Registers, user: *mut c_void);
@@ -517,6 +519,76 @@ mod tests {
         assert!((kept(-3.0)).abs() < f32::EPSILON);
         assert!((kept(f32::NAN)).abs() < f32::EPSILON);
         assert!((kept(2.5) - 2.5).abs() < f32::EPSILON);
+    }
+
+    /// No branch of a site's function lands inside the bytes its hook's
+    /// jump replaces, so every site arms, on each executable
+    /// `ENSH_SERVER_EXE`, `ENSH_CLIENT_EXE` and the opt-in `ENSH_EXES` path
+    /// list name, a server when its file is `enshrouded_server.exe`;
+    /// skipped without them.
+    #[test]
+    fn every_site_arms_on_the_game_executables() {
+        use enshwick_gamedata::reflect::{Image, Layout};
+        use enshwick_gamedata::{Side, exact};
+
+        let tables = crate::builds::load();
+        let list = std::env::var_os("ENSH_EXES");
+        let paths = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
+            .into_iter()
+            .filter_map(std::env::var_os)
+            .map(std::path::PathBuf::from)
+            .chain(list.iter().flat_map(std::env::split_paths));
+        for path in paths {
+            let server = path
+                .file_name()
+                .is_some_and(|name| name.eq_ignore_ascii_case("enshrouded_server.exe"));
+            let side = if server { Side::Server } else { Side::Client };
+            let bytes = std::fs::read(&path).unwrap();
+            let image = Image::parse(&bytes, Layout::File, None).unwrap();
+            let resolved = exact(&tables, side, image.fingerprint().unwrap())
+                .unwrap()
+                .resolve();
+            let pdata = image.range(image.section(".pdata").unwrap());
+            let rows = image.read(pdata.start, pdata.end - pdata.start).unwrap();
+            let base = image.base();
+            for (symbol, site, _) in SITES {
+                let Some(rva) = resolved.symbol(symbol.id()) else {
+                    continue;
+                };
+                let (begin, end) = rows
+                    .as_chunks::<12>()
+                    .0
+                    .iter()
+                    .map(|row| {
+                        let at = |i: usize| {
+                            u64::from(u32::from_le_bytes(row[i..i + 4].try_into().unwrap()))
+                        };
+                        (at(0), at(4))
+                    })
+                    .find(|&(begin, end)| (begin..end).contains(&rva))
+                    .unwrap();
+                let code = image.read(base + begin, end - begin).unwrap();
+                let at = usize::try_from(rva - begin).unwrap();
+                let mut decoder = iced_x86::Decoder::with_ip(
+                    64,
+                    &code[at..],
+                    base + rva,
+                    iced_x86::DecoderOptions::NONE,
+                );
+                let mut stolen = 0;
+                while stolen < crate::detour::PATCH {
+                    stolen += decoder.decode().len();
+                }
+                let branch =
+                    crate::detour::branch_into(code, base + begin, base + rva, stolen as u64);
+                assert_eq!(
+                    branch.map(|at| at - base),
+                    None,
+                    "{}: {site:?} at {rva:#x}",
+                    path.display()
+                );
+            }
+        }
     }
 
     #[test]
