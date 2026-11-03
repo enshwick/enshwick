@@ -237,21 +237,15 @@ the client's archive holds texts: on a dedicated server every call returns
 `None`, and a mod falls back to a name of its own there, which no player
 sees.
 
-## Overrides
+## Who translates a mod?
 
-A file `mod-configs/<id>.texts.toml`, in the same form as the mod's own,
-overrides or adds texts: `load.texts` merges it over the embedded file. It
-lets a server owner reword a mod or translate it into another language
-without rebuilding it.
+A mod's texts are its author's: the embedded `src/texts.toml` is the only
+source, and no file beside the game overrides it. A translation into another
+language goes into the mod, or into a data pack of its own that adds texts
+for the mod's content.
 
 The loader's own texts, the words of the Mods screen, the answers of the
 [console](../chat.md#the-console)'s tools, the reasons a settings change is refused and the
 name of an item whose mod is gone, ship in
 [`texts/`](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/texts),
-a file per language, and `mod-configs/enshwick.texts.toml` overrides them or adds a language the
-same way.
-
-The file is read on the machine the mod runs on. On a dedicated server it
-changes the texts the mod uses there, such as its chat replies. Names and
-descriptions a player sees come from the player's client, so they follow the
-override file on that client.
+a file per language.

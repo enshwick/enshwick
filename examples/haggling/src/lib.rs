@@ -21,13 +21,11 @@ use deps::trading_post::{Deal, Price};
 #[derive(Debug, Default)]
 struct Settings {
     /// Account keys, 16 hex digits, of regular customers.
-    #[config(runtime)]
     regulars: Vec<String>,
     /// How much more regulars get for what they sell, in percent.
-    #[config(runtime, range = 0..=100)]
+    #[config(range = 0..=100)]
     bonus_percent: u32,
     /// Items the trading post buys from nobody.
-    #[config(runtime)]
     refused_items: Vec<u32>,
 }
 
@@ -89,10 +87,8 @@ pub struct Haggling;
 
 impl Mod for Haggling {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let settings: Settings = load.config()?;
-        rules().store(Arc::new(Rules::from_settings(&settings)));
-        load.on_config_change(|settings: Settings| {
-            rules().store(Arc::new(Rules::from_settings(&settings)));
+        load.on_settings_change(|settings: &Settings| {
+            rules().store(Arc::new(Rules::from_settings(settings)));
         })?;
         load.extend_point(&Order::new(), |price: &Price, paid: &u32| {
             rules().load().judge(price, *paid)
@@ -139,6 +135,11 @@ mod tests {
             )
         };
         assert_eq!(status, Status::OK);
+        assert_eq!(
+            loader.raise::<enshwick::events::SettingsReplaced>(&()),
+            1,
+            "the world loads"
+        );
         assert_eq!(loader.attached_points(), ["you.trading-post:price"]);
         assert_eq!(
             loader.ask_point(&price(REGULAR, 1, Deal::SELL), 10),

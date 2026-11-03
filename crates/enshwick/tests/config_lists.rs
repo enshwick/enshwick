@@ -2,14 +2,14 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::config::{Config, Field, Stage};
+    use enshwick::config::{Config, Field};
 
     /// Altar rules.
-    #[enshwick::config(default)]
+    #[enshwick::config]
     #[derive(Debug, PartialEq)]
     struct Altars {
         /// Altars allowed at each Flame level.
-        #[config(startup, range = 1..=32)]
+        #[config(range = 1..=32)]
         per_level: Vec<u16>,
     }
 
@@ -23,8 +23,7 @@ mod tests {
 
     #[test]
     fn a_range_checks_every_element_of_a_list() {
-        let field =
-            Field::new("per_level", Stage::Startup, &[2, 4]).with_range(Some(1.0), Some(32.0));
+        let field = Field::new("per_level", &[2, 4]).with_range(Some(1.0), Some(32.0));
         assert!(
             field
                 .check(&toml::Value::try_from([1, 32]).unwrap())
@@ -52,11 +51,11 @@ mod clamping {
     use enshwick::abi::Status;
 
     /// Rules with ranges.
-    #[enshwick::config(default)]
+    #[enshwick::config]
     #[derive(Debug, PartialEq)]
     struct Rules {
         /// Altars allowed at each Flame level.
-        #[config(startup, range = 1..=32)]
+        #[config(range = 1..=32)]
         per_level: Vec<u16>,
         /// How far, in metres.
         #[config(range = 0.5..=10.0)]
@@ -78,10 +77,14 @@ mod clamping {
 
     impl enshwick::Mod for Clamped {
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-            let rules: Rules = load.config()?;
-            *READ
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(rules);
+            load.on_settings(|rules: &Rules| {
+                *READ
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Rules {
+                    per_level: rules.per_level.clone(),
+                    reach: rules.reach,
+                });
+            })?;
             Ok(Self)
         }
     }
@@ -103,6 +106,7 @@ mod clamping {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
+        assert_eq!(loader.raise::<enshwick::events::SettingsReplaced>(&()), 1);
         let read = READ.lock().unwrap().take().unwrap();
         assert_eq!(read.per_level, [1, 4, 32]);
         assert!((read.reach - 10.0).abs() < f32::EPSILON);
@@ -116,7 +120,7 @@ mod clamping {
         assert!(
             warned
                 .iter()
-                .any(|l| l == "settings: per_level[2] is outside 1 to 32; 32 applies"),
+                .any(|l| l == "settings.toml: per_level[2] is outside 1 to 32; 32 applies"),
             "{warned:?}"
         );
         assert!(!warned.iter().any(|l| l.contains("40")), "{warned:?}");

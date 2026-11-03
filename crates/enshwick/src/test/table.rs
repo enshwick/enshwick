@@ -52,7 +52,7 @@ use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
 use mods::{
     config_check, config_schema, fault, join_missing, language, log, mods, rename_content,
-    replaced, settings, sync, texts,
+    replaced, settings, texts,
 };
 use net::{net_channel, net_ready, net_send};
 pub(crate) use services::view;
@@ -130,8 +130,6 @@ pub(crate) struct State {
     pub(crate) content_renames: Option<Vec<([u8; 16], [u8; 16])>>,
     /// Content ids the mod declared, in order.
     pub(crate) content_ids: Vec<String>,
-    pub(crate) defaults: Vec<String>,
-    pub(crate) synced: Vec<String>,
     /// The mod's player actions callback, once registered.
     pub(crate) actions: Option<(crate::abi::ActionFn, usize)>,
     pub(crate) chat: Vec<(crate::PlayerKey, String)>,
@@ -207,7 +205,8 @@ pub(crate) struct State {
     pub(crate) edits: WorldEdits,
     /// Whether the mod opened the fog of war.
     pub(crate) fog_opened: bool,
-    pub(crate) config_schema: Option<String>,
+    /// The schemas of the mod's settings files, by name, as TOML.
+    pub(crate) config_schemas: std::collections::BTreeMap<String, String>,
     /// Frame callbacks: callback and pointer.
     pub(crate) frames: Vec<(UiFrameFn, usize)>,
     /// HUD callbacks: callback and pointer.
@@ -217,8 +216,8 @@ pub(crate) struct State {
     pub(crate) hud: Option<(u64, Vec<(u32, super::Drawn)>)>,
     /// The mod's markers on the map.
     pub(crate) markers: Vec<super::FakeMarker>,
-    /// The mod's check of new settings texts.
-    pub(crate) config_check: Option<(ConfigCheckFn, usize)>,
+    /// The mod's checks of new settings texts, by file.
+    pub(crate) config_checks: std::collections::BTreeMap<String, (ConfigCheckFn, usize)>,
     /// The texts the mod handed the loader last, as TOML.
     pub(crate) published_texts: Option<String>,
     /// The mod's answer to an update pick.
@@ -277,8 +276,6 @@ pub(crate) struct State {
     run_out: Option<Box<str>>,
     /// The settings texts handed out, alive while the fake is installed.
     settings: Vec<Box<str>>,
-    /// The join values handed out, alive while the fake is installed.
-    sync_out: Vec<Box<str>>,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -560,10 +557,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         sent_events: Vec::new(),
         content_renames: None,
         content_ids: Vec::new(),
-        defaults: Vec::new(),
-        synced: Vec::new(),
         inventory_requests: Vec::new(),
-        sync_out: Vec::new(),
         actions: None,
         chat: Vec::new(),
         labels: Vec::new(),
@@ -600,7 +594,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         terrain: None,
         edits: WorldEdits::default(),
         fog_opened: false,
-        config_schema: None,
+        config_schemas: std::collections::BTreeMap::new(),
         channels: Vec::new(),
         net_sent: Vec::new(),
         notices: Vec::new(),
@@ -608,7 +602,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         huds: Vec::new(),
         hud: None,
         markers: Vec::new(),
-        config_check: None,
+        config_checks: std::collections::BTreeMap::new(),
         published_texts: None,
         frame: None,
         inputs: Vec::new(),
@@ -817,7 +811,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     serve_resource,
     add_text,
     mods,
-    sync,
     code_range,
     patch_code,
     workshop_recipes,

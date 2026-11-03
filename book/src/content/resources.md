@@ -68,7 +68,7 @@ the builder never runs.
 ## Rebuilding
 
 When values a builder reads change after the game built the resource, such
-as a server's join values on a joined client, the mod can have it built
+as the settings a server sends a joined client, the mod can have it built
 again: `load.allow_rebuild(key)` during `init`, after `serve`, has the loader
 keep a copy of the base, and `content::rebuild(key)` later, from any thread,
 runs every mod's patch on that copy and writes the bytes that differ over

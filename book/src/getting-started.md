@@ -82,8 +82,9 @@ reads them only at the workspace root; put `panic = "unwind"` and the static C
 runtime there. Lints and dependencies come from the workspace where it
 declares them. A folder the workspace excludes gets a workspace of its own.
 
-It builds and loads as it is: on first start it writes
-`mod-configs/you.my-mod.toml` and logs one line.
+It builds and loads as it is: as a world loads, the loader writes its
+settings file beside the world's save, in
+`<stem>-mod-settings/you.my-mod/settings.toml`.
 
 ## Install it into the game
 
@@ -168,20 +169,17 @@ impl Default for Settings {
     }
 }
 
-/// What the limit answers; replaced whole when the settings change.
+/// What the limit answers; replaced as each world loads.
 static ALTARS: AtomicU8 = AtomicU8::new(16);
-
-fn apply(settings: &Settings) {
-    ALTARS.store(settings.altars.clamp(1, 16), Ordering::Relaxed);
-}
 
 struct AltarCount;
 
 impl Mod for AltarCount {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let settings: Settings = load.apply_config(apply)?;
+        load.on_settings(|settings: &Settings| {
+            ALTARS.store(settings.altars.clamp(1, 16), Ordering::Relaxed);
+        })?;
         load.on_altar_limit(|limit| limit.allowed = ALTARS.load(Ordering::Relaxed))?;
-        enshwick::info!("{} altars per Flame level", settings.altars);
         Ok(Self)
     }
 }
@@ -191,26 +189,26 @@ enshwick::declare_mod!(AltarCount);
 
 What each piece does:
 
-- `Settings` derives [`Config`](settings.md): the file
-  `mod-configs/you.my-altar-count.toml` is written from its doc comments and
-  `Default` on first start, and `load.apply_config(apply)` reads it.
+- `Settings` derives [`Config`](settings.md): each world's file
+  `<stem>-mod-settings/you.my-altar-count/settings.toml` is written from its
+  doc comments and `Default` as the world first loads.
 - `[package.metadata.enshwick]` names the mod and where it runs. `side = "both"`
   and `join = true` because the client's interface asks the same limit, so
   players and their server must agree. See
   [The loader and the ABI](concepts/loader-and-abi.md).
-- `init` reads the settings and adds its answer to the game's limit with
-  `on_altar_limit`, which the loader asks with the Flame level, the game's own
+- `init` takes the settings with `on_settings`, which hands them over now,
+  as the defaults, and again as each world loads. It adds its answer to the
+  game's limit with `on_altar_limit`, which the loader asks with the Flame level, the game's own
   count and the count so far each time the game needs the number. Any `?` that fails turns the mod off with the reason in
   the log; the game then runs vanilla. See
   [The life of a mod](concepts/lifecycle.md).
-- `apply_config` runs `apply` once now and again on each edit of the file
-  while the game runs. The limit reads an atomic, so `apply` can change it
-  under a running game.
+- The limit reads an atomic, so the settings handler can change it under a
+  running game. A change to the file applies when the world loads again.
 - `declare_mod!` exports the mod and adds `AltarCount::instance()`.
 
 [`enshwick-better-altars`](https://github.com/enshwick/mods/tree/main/better-altars)
 started as this mod. It adds a table per Flame level swapped with
-`arc-swap`, the table as a join value, and more than 16 altars.
+`arc-swap`, and more than 16 altars.
 
 Most of what mods do has such a call: [events](events.md), the
 [world](world.md), [content](content.md), [settings](settings.md) and the

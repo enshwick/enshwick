@@ -42,42 +42,23 @@ pub(crate) extern "system" fn log(me: ModHandle, level: Level, message: Str) {
     });
 }
 
-pub(crate) extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Status {
+pub(crate) extern "system" fn settings(me: ModHandle, file: Str, out: *mut Str) -> Status {
     entry("settings", || {
-        let (Some(loader), Some(defaults)) = (loader(), text(defaults)) else {
+        let (Some(loader), Some(file)) = (loader(), text(file)) else {
             return Status::BAD_ARGS;
         };
         let Some((_, record)) = loader.record(me) else {
             return Status::BAD_ARGS;
         };
-        let path = loader.configs_dir.join(format!("{}.toml", record.id));
-        let old = loader.mods_dir.join(format!("{}.toml", record.id));
-        if !path.exists() && old.exists() && std::fs::rename(&old, &path).is_ok() {
-            crate::log::write(Level::INFO, &record.id, "settings moved to mod-configs");
+        if !record
+            .settings_files
+            .relock()
+            .iter()
+            .any(|f| f.file == file)
+        {
+            return Status::MISSING;
         }
-        let content = match enshwick::files::read_to_string_if_present(&path) {
-            Ok(Some(content)) => content,
-            Ok(None) => {
-                if enshwick::files::write_atomically(&path, defaults).is_err() {
-                    crate::log::write(
-                        Level::WARN,
-                        &record.id,
-                        "could not write the default settings",
-                    );
-                }
-                defaults.to_owned()
-            }
-            // The player's file stays as it is, for them to fix.
-            Err(e) => {
-                crate::log::write(
-                    Level::WARN,
-                    &record.id,
-                    &format!("{}: {e}; the defaults apply", path.display()),
-                );
-                defaults.to_owned()
-            }
-        };
-        let content = crate::worlds::effective(record, &content);
+        let content = crate::worlds::file_text(record, file);
         let kept = record.settings.keep(&content);
         // SAFETY: `HostApi::settings` has the mod pass `out` null or pointing
         // at a writable, aligned `Str` that no other thread touches during the
@@ -298,85 +279,85 @@ pub(crate) unsafe fn list<T: Copy>(
     unsafe { put(count, u32::try_from(infos.len()).unwrap_or(u32::MAX)) }
 }
 
-pub(crate) extern "system" fn config_schema(me: ModHandle, schema: Str) -> Status {
+pub(crate) extern "system" fn config_schema(
+    me: ModHandle,
+    file: Str,
+    schema: Str,
+    template: Str,
+) -> Status {
     entry("config_schema", || {
-        let (Some(loader), Some(schema)) = (loader(), text(schema)) else {
+        let (Some(loader), Some(file), Some(schema), Some(template)) =
+            (loader(), text(file), text(schema), text(template))
+        else {
             return Status::BAD_ARGS;
         };
         let Some((_, record)) = loader.record(me) else {
             return Status::BAD_ARGS;
         };
-        let Ok(schema) = enshwick::config::Schema::parse(schema) else {
+        let Ok(parsed) = enshwick::config::Schema::parse(schema) else {
             return Status::BAD_ARGS;
         };
-        let mut slot = record.schema.relock();
-        *slot = Some(schema);
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) -> Status {
-    entry("sync", || {
-        let (Some(loader), Some(synced)) = (loader(), text(synced)) else {
+        if !enshwick::config::__file_name(file) {
             return Status::BAD_ARGS;
-        };
-        let Some((_, record)) = loader.record(me) else {
-            return Status::BAD_ARGS;
-        };
-        {
-            let mut reported = record.synced.relock();
-            let now = (!synced.is_empty()).then(|| synced.to_owned());
-            // A server whose join values changed tells the joined clients at
-            // once; the first report, at init, finds none joined.
-            if reported.is_some()
-                && *reported != now
-                && (loader.side == Side::SERVER || crate::world::hosting())
-            {
-                crate::remote::push_sync(&record.id, now.as_deref().unwrap_or("{}"));
-                crate::advertise::wake();
-            }
-            *reported = now;
         }
-        let server = record.server_synced.relock().clone().unwrap_or_default();
-        let kept = record.sync_out.keep(&server);
-        // SAFETY: `HostApi::sync` has the mod pass `out` null or pointing at a
-        // writable, aligned `Str` that no other thread touches during the call.
-        unsafe { put(out, kept) }
+        let mut files = record.settings_files.relock();
+        if let Some(known) = files.iter().find(|f| f.file == file) {
+            return if known.schema == parsed {
+                Status::OK
+            } else {
+                Status::REFUSED
+            };
+        }
+        files.push(crate::worlds::SettingsFile {
+            file: file.to_owned(),
+            schema: parsed,
+            template: template.to_owned(),
+        });
+        Status::OK
     })
 }
 
 pub(crate) extern "system" fn config_check(
     me: ModHandle,
+    file: Str,
     callback: api_frame::ConfigCheckFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    entry("config_check", || match calling(me) {
-        Ok((_, index, _)) if !crate::host::in_init(index.get()) => Status::TOO_LATE,
-        Ok((_, _, record)) => {
-            if record
-                .check
-                .set((callback, user.expose_provenance()))
-                .is_ok()
-            {
-                Status::OK
-            } else {
-                Status::REFUSED
+    entry("config_check", || match (calling(me), text(file)) {
+        (Ok((_, index, _)), _) if !crate::host::in_init(index.get()) => Status::TOO_LATE,
+        (Ok((_, _, record)), Some(file)) => {
+            let mut checks = record.checks.relock();
+            if checks.iter().any(|(known, _, _)| known == file) {
+                return Status::REFUSED;
             }
+            checks.push((file.to_owned(), callback, user.expose_provenance()));
+            Status::OK
         }
-        Err(status) => status,
+        (Ok(_), None) => Status::BAD_ARGS,
+        (Err(status), _) => status,
     })
 }
 
-/// Runs mod `index`'s check of the new settings text `text`; `Ok` for a mod
-/// without one.
-pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), CheckSettingsError> {
+/// Runs mod `index`'s check of `text`, a new text of its settings file
+/// `file`; `Ok` for a file without one.
+pub(crate) fn check_settings(
+    index: usize,
+    file: &str,
+    text: &str,
+) -> Result<(), CheckSettingsError> {
     let Some(record) = loader()
         .and_then(|loader| loader.mods.get(index))
         .filter(|record| !record.off.load(Ordering::Acquire))
     else {
         return Ok(());
     };
-    let Some(&(callback, user)) = record.check.get() else {
+    let found = record
+        .checks
+        .relock()
+        .iter()
+        .find(|(known, _, _)| known == file)
+        .map(|&(_, callback, user)| (callback, user));
+    let Some((callback, user)) = found else {
         return Ok(());
     };
     let mut why = Str::EMPTY;

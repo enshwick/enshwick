@@ -34,7 +34,7 @@ mod tests {
 
     impl Mod for Altars {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _settings: Settings = load.config()?;
+            load.on_settings(|_: &Settings| {})?;
             Ok(Self)
         }
     }
@@ -56,20 +56,31 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        assert_eq!(loader.check_settings("first = 2\nlast = 4\n"), Ok(()));
         assert_eq!(
-            loader.check_settings("first = 5\nlast = 4\n"),
+            loader.check_settings("settings", "first = 2\nlast = 4\n"),
+            Ok(())
+        );
+        assert_eq!(
+            loader.check_settings("settings", "first = 5\nlast = 4\n"),
             Err(enshwick::test::SettingsRefused {
                 reason: "first is more than last".to_owned()
             })
         );
         assert_eq!(
-            loader.check_settings("first = 2\nlast = 20\n"),
+            loader.check_settings("settings", "first = 2\nlast = 20\n"),
             Err(enshwick::test::SettingsRefused {
                 reason: "config.last.max\tmax=19".to_owned()
             })
         );
-        assert!(loader.check_settings("first = 50\nlast = 60\n").is_err());
-        assert!(loader.check_settings("first = \"many\"").is_err());
+        assert!(
+            loader
+                .check_settings("settings", "first = 50\nlast = 60\n")
+                .is_err()
+        );
+        assert!(
+            loader
+                .check_settings("settings", "first = \"many\"")
+                .is_err()
+        );
     }
 }

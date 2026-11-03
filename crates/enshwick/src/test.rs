@@ -1,8 +1,8 @@
 //! A fake Enshwick loader for a mod's unit tests.
 //!
 //! [`FakeHost`] is configured with what the game and the loader would answer:
-//! symbols, systems, constants, reflected types, settings text, the side, the
-//! players. [`FakeHost::install`] hands the loader's table to the test as an
+//! symbols, systems, constants, reflected types, the running world's
+//! settings files, the side, the players. [`FakeHost::install`] hands the loader's table to the test as an
 //! [`Installed`] fake, which starts the mod through its exports, records what
 //! the mod asks for, raises events and calls a linked detour as the game
 //! would. A linked hook's chain continues to its target address, so a target
@@ -20,6 +20,8 @@
 //! # Examples
 //!
 //! ```rust,standalone_crate
+//! use std::sync::atomic::{AtomicU32, Ordering};
+//!
 //! use enshwick::abi::{Level, Status};
 //! use enshwick::{Load, Mod, Next, Off, events, hook};
 //!
@@ -31,23 +33,23 @@
 //!     bonus: u32,
 //! }
 //!
-//! struct Bonus {
-//!     bonus: u32,
-//! }
+//! static BONUS: AtomicU32 = AtomicU32::new(0);
+//!
+//! struct Bonus;
 //!
 //! #[hook]
 //! fn reward(next: Next<'_, extern "system" fn(u32) -> u32>, base: u32) -> u32 {
-//!     next.call(base) + Bonus::instance().map_or(0, |state| state.bonus)
+//!     next.call(base) + BONUS.load(Ordering::Relaxed)
 //! }
 //!
 //! impl Mod for Bonus {
 //!     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-//!         let settings: Settings = load.config()?;
+//!         load.on_settings(|settings: &Settings| BONUS.store(settings.bonus, Ordering::Relaxed))?;
 //!         let reward = load.symbol("quest.reward")?;
 //!         // SAFETY: the game's reward function has the type `REWARD` declares.
 //!         unsafe { load.hook(&REWARD, reward) }?;
 //!         load.on::<events::WorldLoaded>(|()| enshwick::info!("world loaded"))?;
-//!         Ok(Self { bonus: settings.bonus })
+//!         Ok(Self)
 //!     }
 //! }
 //!
@@ -67,6 +69,8 @@
 //! assert_eq!(status, Status::OK);
 //!
 //! let reward = loader.detour(&REWARD).ok_or("not linked")?;
+//! assert_eq!(reward(10), 10, "no world yet: the defaults");
+//! assert_eq!(loader.raise::<events::SettingsReplaced>(&()), 1);
 //! assert_eq!(reward(10), 15);
 //!
 //! assert_eq!(loader.raise::<events::WorldLoaded>(&()), 1);
@@ -230,8 +234,9 @@ pub(crate) enum BaseCode {
 /// [`FakeHost::install`].
 ///
 /// Lookups the test did not configure answer [`Status::MISSING`], as a game
-/// build without them would. Settings default to the mod's own defaults, the
-/// side to [`Side::SERVER`] and the log level to [`Level::INFO`].
+/// build without them would. A world's settings files are empty, so the mod
+/// reads its own defaults; the side is [`Side::SERVER`] and the log level
+/// [`Level::INFO`].
 ///
 /// # Examples
 ///
@@ -264,8 +269,8 @@ pub struct FakeHost {
     type_sizes: FxHashMap<String, u32>,
     type_hashes: FxHashMap<String, u32>,
     event_types: Vec<(&'static str, u32, u32)>,
-    settings: Option<String>,
-    server_synced: Option<String>,
+    /// The running world's settings files of the mod, by name.
+    settings: std::collections::BTreeMap<String, String>,
     data_dir: String,
     mod_dir: String,
     log_level: Level,
@@ -355,8 +360,7 @@ impl FakeHost {
             type_sizes: FxHashMap::default(),
             type_hashes: FxHashMap::default(),
             event_types: Vec::new(),
-            settings: None,
-            server_synced: None,
+            settings: std::collections::BTreeMap::new(),
             data_dir: "world0-mod-data/test".to_owned(),
             mod_dir: "mods/test".to_owned(),
             log_level: Level::INFO,

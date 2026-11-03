@@ -2,7 +2,7 @@
 //! the screen closes with its menu, which settings a mod's page shows under
 //! which heading and how a settings row reads.
 
-use enshwick::config::{Schema, Scope, Stage};
+use enshwick::config::Schema;
 
 use crate::configure::rows::{Lock, Row};
 use crate::texts;
@@ -83,21 +83,6 @@ pub const fn back(kind: Kind) -> Back {
     }
 }
 
-/// The settings of `schema` a mod's page shows, each player's own first.
-///
-/// The world's follow; in another's world (`away`) only those the server
-/// sends at join, which the page shows read-only. `None` when none are left.
-#[must_use]
-pub fn page_settings(mut schema: Schema, away: bool) -> Option<Schema> {
-    if away {
-        schema
-            .fields
-            .retain(|f| f.scope == Scope::User || f.follows_server());
-    }
-    schema.fields.sort_by_key(|f| f.scope != Scope::User);
-    (!schema.fields.is_empty()).then_some(schema)
-}
-
 /// Where the Mods screen shows a mod's settings, from the game's state as
 /// the page opens: the page is built again when it changes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -127,37 +112,19 @@ impl Place {
     }
 }
 
-/// Makes the world's rows of `rows`, whose fields `schema` describes,
-/// read-only in another's world: set by the server once it sent its join
-/// values (`sent`), else plainly read-only.
-pub fn lock_world_rows(schema: &Schema, rows: &mut [Row], sent: bool) {
-    let lock = if sent { Lock::Server } else { Lock::File };
-    for row in rows {
-        let key = crate::configure::element(&row.key).0;
-        if schema.field(key).is_some_and(|f| f.scope == Scope::World) {
-            row.lock = lock;
-        }
-    }
-}
-
-/// Whether `schema` has settings of the world, which a server keeps.
+/// The rows of a mod's settings page in another's world: `schema` without
+/// its secrets over `values`, what the server sent, every row marked as set
+/// by the server, which takes no changes here.
 #[must_use]
-pub fn has_world_settings(schema: &Schema) -> bool {
-    schema.fields.iter().any(|f| f.scope == Scope::World)
-}
-
-/// The text keys of the heading over a mod's settings of `scope` and of the
-/// note under it.
-///
-/// While this process runs a world (`world`) its settings are that world's;
-/// with none they are the defaults of new worlds.
-#[must_use]
-pub fn section(scope: Scope, world: bool) -> (&'static str, Option<&'static str>) {
-    match scope {
-        Scope::World if world => ("mods.settings.world", Some("world.belongs")),
-        Scope::World => ("mods.settings.new-worlds", Some("world.new")),
-        _ => ("mods.settings.yours", None),
-    }
+pub fn server_rows(
+    mut schema: Schema,
+    values: &str,
+    words: Option<crate::configure::rows::Words<'_>>,
+) -> Vec<Row> {
+    schema.fields.retain(|f| !f.secret);
+    let mut rows = crate::configure::rows::rows(&schema, values, words);
+    lock_to_server(&mut rows);
+    rows
 }
 
 /// Marks every row as set by the server, which takes no changes here.
@@ -167,31 +134,22 @@ pub fn lock_to_server(rows: &mut [Row]) {
     }
 }
 
-/// The label of `row`, marked with when a change takes effect and with the
-/// server that sets it.
+/// The label of `row`, marked with the server that sets it.
 #[must_use]
 pub fn row_label(row: &Row) -> String {
-    let mut label = row.label.clone();
-    match row.stage {
-        Stage::Startup => label = texts::fill("row.startup", &[("label", &label)]),
-        Stage::Restart => label = texts::fill("row.restart", &[("label", &label)]),
-        _ => {}
-    }
     if row.lock == Lock::Server {
-        label = texts::fill("row.server", &[("label", &label)]);
+        texts::fill("row.server", &[("label", &row.label)])
+    } else {
+        row.label.clone()
     }
-    label
 }
 
-/// A joined server's join values, an inline table, as a table.
+/// Whether a mod's gear shows: in a world this process runs, or in
+/// another's world whose server sent the mod's settings. In the main menu
+/// settings belong to no world, and the screen says so once.
 #[must_use]
-pub fn server_table(values: &str) -> Option<toml::Table> {
-    format!("v = {values}")
-        .parse::<toml::Table>()
-        .ok()?
-        .remove("v")?
-        .as_table()
-        .cloned()
+pub const fn gear(world: bool, sent: bool) -> bool {
+    world || sent
 }
 
 #[cfg(test)]

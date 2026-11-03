@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn a_client_that_says_hello_gets_every_mod_s_join_values() {
+fn a_client_that_says_hello_gets_every_mod_s_settings() {
     let values = std::collections::BTreeMap::from([
         ("you.trading-post".to_owned(), "{cost = 5}".to_owned()),
         ("zones".to_owned(), "{clusters = false}".to_owned()),
@@ -18,15 +18,15 @@ fn a_client_that_says_hello_gets_every_mod_s_join_values() {
         matches!(&messages[0], Message::Sync { id, values } if id == "you.trading-post" && values == "{cost = 5}")
     );
 }
-use enshwick::config::{Field, Stage};
+use enshwick::config::Field;
 
 fn schema() -> Schema {
     Schema::new(
         "",
         "config",
         vec![
-            Field::new("limit", Stage::Runtime, &4),
-            Field::new("token", Stage::Runtime, "x").with_secret(true),
+            Field::new("limit", &4),
+            Field::new("token", "x").with_secret(true),
         ],
     )
 }
@@ -117,7 +117,6 @@ fn secrets_never_leave_and_never_change() {
     assert!(admit(&schema(), "limit", false, None, now).is_err());
     assert!(admit(&schema(), "token", true, None, now).is_err());
     assert!(admit(&schema(), "limit", true, Some(now), now).is_err());
-    assert_eq!(values_text("{ a = 1, b = \"x\" }"), "a = 1\nb = \"x\"\n");
 }
 
 #[test]
@@ -126,10 +125,10 @@ fn secrets_in_inline_tables_never_leave() {
         "",
         "config",
         vec![
-            Field::new("auth.token", Stage::Runtime, "x").with_secret(true),
-            Field::new("auth.user", Stage::Runtime, "x"),
-            Field::new("outer.inner.key", Stage::Runtime, "x").with_secret(true),
-            Field::new("outer.keep", Stage::Runtime, &1),
+            Field::new("auth.token", "x").with_secret(true),
+            Field::new("auth.user", "x"),
+            Field::new("outer.inner.key", "x").with_secret(true),
+            Field::new("outer.keep", &1),
         ],
     );
     for text in [

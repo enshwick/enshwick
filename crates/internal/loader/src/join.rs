@@ -3,9 +3,8 @@
 //!
 //! Mods the server does not run are turned off on the client, with a note; when
 //! the server runs mods the client lacks, or in another version, the client
-//! says which and does not join. A client that joins runs its join mods with
-//! the server's join values over its own settings files, and with its files'
-//! values again on joining a server without them; the files stay as they are.
+//! says which and does not join. A client that joins runs its join mods on
+//! the settings the server sends once it joined, never written to its disk.
 //!
 //! A client kept out shows one dialog naming each of the server's mods it
 //! lacks, the server's version and where to get it ([`refusal`]), and tells
@@ -37,10 +36,7 @@ mod target;
 pub(crate) use plan::entries;
 use plan::label;
 pub use plan::{Plan, differences, plan, wanted};
-pub use rules::{
-    changes, mod_rules_value, mods_complete, name, page, query_rules, rule, server_values,
-    sync_value,
-};
+pub use rules::{mod_rules_value, mods_complete, name, page, query_rules, rule};
 pub use target::{Destination, Layout, LayoutError, TARGET_BYTES, Target};
 
 /// The names players read, by mod id: the client's own and those the server

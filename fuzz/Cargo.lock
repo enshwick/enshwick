@@ -339,6 +339,8 @@ name = "enshwick-gamedata"
 version = "1.0.0-alpha.11"
 dependencies = [
  "enshwick",
+ "iced-x86",
+ "memchr",
  "rustc-hash",
  "ruzstd",
  "serde",

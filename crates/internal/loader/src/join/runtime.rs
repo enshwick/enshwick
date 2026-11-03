@@ -90,11 +90,10 @@ pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) 
     state_changed
 }
 
-/// Joins a game whose mods the check cannot read, on the client's own
-/// join values.
+/// Joins a game whose mods the check cannot read.
 fn unchecked() -> bool {
     crate::net::joining(false);
-    crate::host::apply_join_values(&BTreeMap::new());
+    crate::host::forget_server_values();
     true
 }
 
@@ -119,8 +118,9 @@ fn query_address(layout: &super::Layout, target: &super::Target) -> Option<std::
     }
 }
 
-/// Compares mod sets, turns off what the server lacks, takes the server's
-/// join values and tells the player; false when the client must not join.
+/// Compares mod sets, turns off what the server lacks and tells the player;
+/// false when the client must not join. The server sends its settings once
+/// the client joined.
 fn check(layout: &super::Layout, target: &super::Target) -> bool {
     let Some(own_names) = NAMES.get() else {
         return true;
@@ -140,14 +140,7 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
     let server = super::rule(&reply, crate::advertise::RULE)
         .map(|fingerprint| (fingerprint, super::mod_rules_value(&reply)));
     crate::net::joining(server.is_some());
-    // The client runs with the server's join values, so its own
-    // fingerprint counts them.
-    let values = if server.is_some() {
-        super::server_values(&reply, mods.iter().map(|(id, _)| id.as_str()))
-    } else {
-        BTreeMap::new()
-    };
-    let ours = crate::advertise::fingerprint(env!("CARGO_PKG_VERSION"), mods, &values);
+    let ours = crate::advertise::fingerprint(env!("CARGO_PKG_VERSION"), mods);
     let ours_mods = crate::advertise::mod_list(mods);
     crate::log!(INFO, "joining {address}: server {server:?}, ours {ours}");
     let mut names = own_names.clone();
@@ -173,7 +166,7 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
         complete,
     );
     if plan.joins() {
-        crate::host::apply_join_values(&values);
+        crate::host::forget_server_values();
     }
     for id in plan.turned_off() {
         crate::host::turn_off_mod(

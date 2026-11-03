@@ -63,10 +63,14 @@ pub struct HostApi {
     pub fault: extern "system" fn(me: ModHandle, reason: Str),
     /// Writes a line to the log under the mod's id.
     pub log: extern "system" fn(me: ModHandle, level: Level, message: Str),
-    /// The text of the mod's settings file, written from `defaults` first when
-    /// it is missing; the text stays valid for the life of the process, so
-    /// a thread may read it while another asks again.
-    pub settings: extern "system" fn(me: ModHandle, defaults: Str, out: *mut Str) -> Status,
+    /// The text of the mod's settings file `file` (its name without
+    /// `.toml`) in force: the running world's, which the loader made or
+    /// brought in line with the schema [`HostApi::config_schema`] handed it
+    /// as the world loaded; on a client in another's world, the values that
+    /// world's server sent; empty while no world runs. The text stays valid
+    /// for the life of the process, so a thread may read it while another
+    /// asks again. [`Status::MISSING`] for a file no schema names.
+    pub settings: extern "system" fn(me: ModHandle, file: Str, out: *mut Str) -> Status,
     /// Publishes the service `spec` describes, table and layout, for other
     /// mods; [`Status::REFUSED`] when another mod publishes its name and
     /// major. Allowed during `enshwick_mod_init` only.
@@ -155,13 +159,6 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
-    /// Reports the mod's join values as its settings file holds them,
-    /// `synced` (an inline TOML table), and writes the values to run with
-    /// over them: the server's while this client is joined to a server that
-    /// advertises values for the mod, else an empty string. A server
-    /// advertises the `synced` of each join mod. The text written stays valid
-    /// for the life of the process.
-    pub sync: extern "system" fn(me: ModHandle, synced: Str, out: *mut Str) -> Status,
     /// Writes where the game's code section (`.text`) is loaded and how many
     /// bytes it spans.
     pub code_range: extern "system" fn(start: *mut u64, len: *mut u64) -> Status,
@@ -619,12 +616,19 @@ pub struct HostApi {
     /// the server's game thread only.
     pub terrain_edit:
         extern "system" fn(me: ModHandle, edit: *const TerrainEdit, amount: *mut f32) -> Status,
-    /// Hands the loader the mod's settings schema, `schema`, the TOML text
-    /// of a [`config::Schema`](crate::config::Schema); a later call replaces
-    /// it. The loader answers `enshwick config` on the console from it and checks values against it
-    /// before it writes them. [`Status::BAD_ARGS`] for text that is not a
-    /// schema. Any time.
-    pub config_schema: extern "system" fn(me: ModHandle, schema: Str) -> Status,
+    /// Hands the loader the schema of the mod's settings file `file`, its
+    /// name without `.toml`: `schema`, the TOML text of a
+    /// [`config::Schema`](crate::config::Schema), and `template`, the file
+    /// written from the defaults with their comments. As each world loads,
+    /// the loader writes the file from `template` beside the save, or adds
+    /// the keys it lacks and removes the ones the schema lacks. The console
+    /// and the Mods screen read and check values against `schema`.
+    /// [`Status::BAD_ARGS`] for text that is not a schema or a file name
+    /// that is not lowercase letters, digits, `-` and `_`;
+    /// [`Status::REFUSED`] for a file another schema names. Any time; a
+    /// schema handed while a world runs is written as the next world loads.
+    pub config_schema:
+        extern "system" fn(me: ModHandle, file: Str, schema: Str, template: Str) -> Status,
     /// Calls `callback` with `user` after a summoning staff's use spawned or
     /// moved a survivor, with [`Summon::consumed`](super::Summon::consumed) set; its return value is
     /// ignored. On the thread of the use, as [`HostApi::summon_filter`].
@@ -710,12 +714,17 @@ pub struct HostApi {
     /// Every entry is as large as the header of the first one says.
     pub ui_markers:
         extern "system" fn(me: ModHandle, markers: *const UiMarker, count: u32) -> Status,
-    /// Makes `callback` with `user` the mod's check of a new settings text,
-    /// which the loader runs before it writes a change from the console or the
-    /// Mods screen; a refusal keeps the file. Allowed during
+    /// Makes `callback` with `user` the mod's check of a new text of its
+    /// settings file `file`, which the loader runs before it writes a change
+    /// from the console or the Mods screen; a refusal keeps the file.
+    /// [`Status::REFUSED`] for a file that has a check. Allowed during
     /// `enshwick_mod_init` only.
-    pub config_check:
-        extern "system" fn(me: ModHandle, callback: ConfigCheckFn, user: *mut c_void) -> Status,
+    pub config_check: extern "system" fn(
+        me: ModHandle,
+        file: Str,
+        callback: ConfigCheckFn,
+        user: *mut c_void,
+    ) -> Status,
     /// Hands the loader the mod's texts, a TOML table per language code as
     /// [`crate::i18n::Texts`] reads them, for the loader's own screens: the
     /// Mods screen labels the mod's settings with them. A later call

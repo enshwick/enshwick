@@ -34,7 +34,7 @@ mod tests {
 
     impl Mod for Vault {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _settings: Settings = load.config()?;
+            load.on_settings(|_: &Settings| {})?;
             Ok(Self)
         }
     }
@@ -60,7 +60,7 @@ mod tests {
 
     /// The check's reason for `text`, asserted to hold nothing of `secret`.
     fn refused(loader: &Installed, text: &str, secret: &str) -> String {
-        let reason = loader.check_settings(text).unwrap_err().reason;
+        let reason = loader.check_settings("settings", text).unwrap_err().reason;
         assert!(!reason.contains(secret), "{reason}");
         reason
     }

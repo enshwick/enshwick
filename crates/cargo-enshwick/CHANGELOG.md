@@ -8,6 +8,8 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- A new mod takes its settings with `on_settings`, from each world's
+  `<stem>-mod-settings/<id>/settings.toml` (#917).
 - **Breaking:** `cargo enshwick deps` reads schema format 3 and writes each
   exported service table as `#[enshwick::service(name = .., of = <alias>,
   version = ..)]` with checks that hold every field to the publisher's

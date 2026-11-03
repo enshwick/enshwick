@@ -18,11 +18,11 @@ speed keeps at least 0.01 and a loot stack at least 1.
 ```rust
 use enshwick::rates::{ExperienceGroup, Rate};
 
-#[enshwick::config(default)]
+#[enshwick::config]
 #[derive(Debug)]
 struct Settings {
     /// Experience from defeated enemies, times this.
-    #[config(runtime, range = 0.0..=100.0)]
+    #[config(range = 0.0..=100.0)]
     combat: f32,
 }
 
@@ -34,9 +34,7 @@ impl Default for Settings {
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let combat = load.rate(Rate::Experience(ExperienceGroup::Combat))?;
-    let settings: Settings = load.config()?;
-    combat.set(settings.combat)?;
-    load.on_config_change(move |settings: Settings| {
+    load.on_settings(move |settings: &Settings| {
         if let Err(why) = combat.set(settings.combat) {
             enshwick::warn!("combat experience unchanged: {why}");
         }

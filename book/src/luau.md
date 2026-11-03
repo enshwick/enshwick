@@ -327,8 +327,8 @@ doc = "How often the log counts the players online, in minutes."
 
 | Field | Meaning |
 | --- | --- |
-| `key` | the key in `mod-configs/<id>.toml`, of `[a-z0-9_]` |
-| `default` | the value on first start; its type is the setting's |
+| `key` | the key in each world's `<stem>-mod-settings/<id>/settings.toml`, of `[a-z0-9_]` |
+| `default` | the value until a world sets another; its type is the setting's |
 | `doc` | what it does, for the file's comments and the Mods screen |
 | `stage` | when a change takes effect, as for a Rust mod's [settings](settings.md): `runtime` (the default), `startup`, `restart`, `client` or `sync` |
 | `synced` | with `stage = "startup"`, a joined player takes the server's value |

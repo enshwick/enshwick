@@ -438,8 +438,7 @@ an `items.toml` change may have raised.
 ## `texts.toml`
 
 The pack's texts, in the form of a mod's [texts file](texts.md): a table per
-language, `en` the fallback. A server owner's `mod-configs/<id>.texts.toml`
-overrides them as it does a mod's.
+language, `en` the fallback.
 
 ## Problems
 

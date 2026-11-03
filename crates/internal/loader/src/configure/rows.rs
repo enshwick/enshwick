@@ -4,7 +4,7 @@
 //! Which game widget shows each setting, its value, whether the player may
 //! change it, and the TOML a change writes.
 
-use enshwick::config::{Field, Kind, Schema, Stage, value_at};
+use enshwick::config::{Field, Kind, Schema, value_at};
 use enshwick::i18n::{Language, Texts};
 
 /// The most stops a slider row gets; longer whole-number ranges slide
@@ -87,8 +87,6 @@ pub struct Row {
     pub widget: Widget,
     /// Whether it takes changes.
     pub lock: Lock,
-    /// When a change takes effect.
-    pub stage: Stage,
 }
 
 /// `max_altars` as `Max altars`.
@@ -201,30 +199,19 @@ fn widget(field: &Field, value: &toml::Value, words: Option<Words<'_>>) -> Widge
     }
 }
 
-/// The rows of `schema` with the values of the settings file `file`, and a
-/// joined server's join values `server` over them, labelled with the mod's
-/// `words` where it has them.
+/// The rows of `schema` with the values of the settings file `file`,
+/// labelled with the mod's `words` where it has them.
 ///
 /// `<text>` for a row's label, `<text>.doc` for its description,
 /// `<text>.<choice>` for a choice.
 #[must_use]
-pub fn rows(
-    schema: &Schema,
-    file: &str,
-    server: Option<&toml::Table>,
-    words: Option<Words<'_>>,
-) -> Vec<Row> {
+pub fn rows(schema: &Schema, file: &str, words: Option<Words<'_>>) -> Vec<Row> {
     let table: toml::Table = file.parse().unwrap_or_default();
     schema
         .fields
         .iter()
         .flat_map(|field| {
-            let from_server =
-                field.follows_server() && server.is_some_and(|s| value_at(s, &field.key).is_some());
-            let value = server
-                .filter(|_| from_server)
-                .and_then(|s| value_at(s, &field.key))
-                .or_else(|| value_at(&table, &field.key))
+            let value = value_at(&table, &field.key)
                 .cloned()
                 .or_else(|| default(field))
                 .unwrap_or_else(|| toml::Value::String(String::new()));
@@ -233,9 +220,7 @@ pub fn rows(
                 .and_then(|w| w.get(&format!("{}.doc", field.text)))
                 .unwrap_or_else(|| field.doc.clone());
             let row = |key: String, label: String, widget: Widget| {
-                let lock = if from_server {
-                    Lock::Server
-                } else if matches!(widget, Widget::Text(_)) {
+                let lock = if matches!(widget, Widget::Text(_)) {
                     Lock::File
                 } else {
                     Lock::Open
@@ -247,7 +232,6 @@ pub fn rows(
                     doc: doc.clone(),
                     widget,
                     lock,
-                    stage: field.stage,
                 }
             };
             if field.secret {
@@ -381,14 +365,14 @@ mod tests {
             "",
             "config",
             vec![
-                Field::new("enabled", Stage::Runtime, &true),
-                Field::new("max_altars", Stage::Startup, &4)
+                Field::new("enabled", &true),
+                Field::new("max_altars", &4)
                     .with_range(Some(1.0), Some(20.0))
                     .with_doc("Altars per level.", ""),
-                Field::new("radius", Stage::Sync, &8.0).with_range(Some(0.0), Some(5.0)),
-                Field::new("mode", Stage::Runtime, "auto").with_choices(&["auto", "on"]),
-                Field::new("note", Stage::Client, "hi"),
-                Field::new("count", Stage::Runtime, &500).with_range(Some(0.0), Some(1000.0)),
+                Field::new("radius", &8.0).with_range(Some(0.0), Some(5.0)),
+                Field::new("mode", "auto").with_choices(&["auto", "on"]),
+                Field::new("note", "hi"),
+                Field::new("count", &500).with_range(Some(0.0), Some(1000.0)),
             ],
         )
     }
@@ -403,10 +387,9 @@ mod tests {
     #[test]
     fn settings_show_as_rows_with_their_values() {
         let file = "enabled = false\nmax_altars = 6\nradius = 2.5\nmode = \"on\"\n";
-        let rows = rows(&schema(), file, None, None);
+        let rows = rows(&schema(), file, None);
         assert_eq!(rows[0].widget, Widget::Toggle(false));
         assert_eq!(rows[1].label, "Max altars");
-        assert_eq!(rows[1].stage, Stage::Startup);
         assert_eq!(
             rows[1].widget,
             Widget::Slider {
@@ -441,27 +424,16 @@ mod tests {
     }
 
     #[test]
-    fn a_joined_servers_values_show_locked() {
-        let server: toml::Table = "radius = 4.0".parse().unwrap();
-        let rows = rows(&schema(), "radius = 1.0", Some(&server), None);
-        assert_eq!(rows[2].lock, Lock::Server);
-        assert!(
-            matches!(rows[2].widget, Widget::Slider { value, .. } if (value - 4.0).abs() < 1e-3)
-        );
-        assert_eq!(rows[0].lock, Lock::Open);
-    }
-
-    #[test]
     fn a_secret_setting_shows_its_mark_never_its_value() {
         let schema = Schema::new(
             "",
             "config",
             vec![
-                Field::new("token", Stage::Runtime, "").with_secret(true),
-                Field::new("pin", Stage::Runtime, &0).with_secret(true),
+                Field::new("token", "").with_secret(true),
+                Field::new("pin", &0).with_secret(true),
             ],
         );
-        let rows = rows(&schema, "token = \"hunter2\"\npin = 4815\n", None, None);
+        let rows = rows(&schema, "token = \"hunter2\"\npin = 4815\n", None);
         assert_eq!(rows.len(), 2);
         for row in rows {
             assert_eq!(
@@ -475,29 +447,6 @@ mod tests {
     }
 
     #[test]
-    fn a_joined_servers_startup_sync_value_shows_locked() {
-        let schema = Schema::new(
-            "",
-            "config",
-            vec![
-                Field::new("rule", Stage::Startup, &true).with_synced(true),
-                Field::new("limit", Stage::Startup, &4),
-            ],
-        );
-        let server: toml::Table = "rule = false\nlimit = 9".parse().unwrap();
-        let rows = rows(&schema, "rule = true\nlimit = 2", Some(&server), None);
-        assert_eq!(
-            (rows[0].lock, &rows[0].widget),
-            (Lock::Server, &Widget::Toggle(false))
-        );
-        assert_ne!(
-            rows[1].lock,
-            Lock::Server,
-            "a startup value stays this side's"
-        );
-    }
-
-    #[test]
     fn a_mods_texts_label_its_rows_in_the_players_language() {
         let texts = Texts::parse(
             "[en]\n\"config.max_altars\" = \"Altars\"\n[uk]\n\"config.max_altars\" = \"Вівтарі\"\n\"config.max_altars.doc\" = \"На рівень.\"\n\"config.mode.on\" = \"Увімк.\"\n",
@@ -507,7 +456,7 @@ mod tests {
             texts: &texts,
             language: Language::UK_UA,
         };
-        let rows = rows(&schema(), "", None, Some(words));
+        let rows = rows(&schema(), "", Some(words));
         assert_eq!(rows[1].label, "Вівтарі");
         assert_eq!(rows[1].doc, "На рівень.");
         assert_eq!(rows[0].label, "Enabled");
@@ -519,7 +468,7 @@ mod tests {
     }
 
     fn rows_in(texts: &Texts, language: Language) -> Vec<Row> {
-        rows(&schema(), "", None, Some(Words { texts, language }))
+        rows(&schema(), "", Some(Words { texts, language }))
     }
 
     #[test]
@@ -547,14 +496,14 @@ mod tests {
             "",
             "config",
             vec![
-                Field::new("motd", Stage::Runtime, "hello"),
-                Field::new("token", Stage::Runtime, "").with_secret(true),
-                Field::new("banner", Stage::Runtime, ""),
-                Field::new("tags", Stage::Runtime, &["a"]),
+                Field::new("motd", "hello"),
+                Field::new("token", "").with_secret(true),
+                Field::new("banner", ""),
+                Field::new("tags", &["a"]),
             ],
         );
         let file = format!("motd = \"Привіт\"\ntoken = \"hunter2\"\nbanner = \"{long}\"\n");
-        let rows = rows(&schema, &file, None, None);
+        let rows = rows(&schema, &file, None);
         assert_eq!(
             (&rows[0].widget, rows[0].lock),
             (&entry("Привіт"), Lock::Open)
@@ -585,7 +534,7 @@ mod tests {
 
     #[test]
     fn typed_text_writes_a_toml_string_the_schema_accepts() {
-        let field = Field::new("motd", Stage::Runtime, "");
+        let field = Field::new("motd", "");
         for text in ["42", "true", "a \"quoted\" \\ line", "Привіт", ""] {
             let toml = entered(text);
             let table: toml::Table = format!("v = {toml}").parse().unwrap();
@@ -599,13 +548,10 @@ mod tests {
         let schema = Schema::new(
             "",
             "config",
-            vec![
-                Field::new("comfort.multiplier", Stage::Runtime, &1.0)
-                    .with_range(Some(0.0), Some(10.0)),
-            ],
+            vec![Field::new("comfort.multiplier", &1.0).with_range(Some(0.0), Some(10.0))],
         )
         .with_groups(vec![enshwick::config::Group::new("comfort", "")]);
-        let rows = rows(&schema, "[comfort]\nmultiplier = 2.5\n", None, None);
+        let rows = rows(&schema, "[comfort]\nmultiplier = 2.5\n", None);
         assert_eq!(rows[0].label, "Comfort: Multiplier");
         assert_eq!(rows[0].group.as_deref(), Some("comfort"));
         assert!(
@@ -619,11 +565,11 @@ mod tests {
             "",
             "config",
             vec![
-                Field::new("per_level", Stage::Startup, &[2, 4]).with_range(Some(1.0), Some(32.0)),
-                Field::new("names", Stage::Runtime, &["a"]),
+                Field::new("per_level", &[2, 4]).with_range(Some(1.0), Some(32.0)),
+                Field::new("names", &["a"]),
             ],
         );
-        let shown = rows(&schema, "per_level = [2, 30, 5]\n", None, None);
+        let shown = rows(&schema, "per_level = [2, 30, 5]\n", None);
         let keys: Vec<&str> = shown.iter().map(|r| r.key.as_str()).collect();
         assert_eq!(
             keys,
@@ -637,7 +583,7 @@ mod tests {
         assert_eq!(shown[1].lock, Lock::Open);
         assert_eq!(shown[3].lock, Lock::File);
         let long = format!("per_level = {:?}\n", vec![1; MAX_LIST_ROWS + 1]);
-        assert_eq!(rows(&schema, &long, None, None)[0].lock, Lock::File);
+        assert_eq!(rows(&schema, &long, None)[0].lock, Lock::File);
     }
 
     #[test]
@@ -646,12 +592,12 @@ mod tests {
             "",
             "config",
             vec![
-                Field::new("per_level", Stage::Startup, &[2, 4])
+                Field::new("per_level", &[2, 4])
                     .with_range(Some(1.0), Some(32.0))
                     .with_first(0),
             ],
         );
-        let plain = rows(&schema, "per_level = [2, 4]\n", None, None);
+        let plain = rows(&schema, "per_level = [2, 4]\n", None);
         assert_eq!(plain[0].label, "Per level 0");
         let texts = Texts::parse(
             "[en]\n\"config.per_level.element\" = \"Flame level {n}\"\n[uk]\n\"config.per_level.element\" = \"Рівень Полум'я {n}\"\n",
@@ -665,7 +611,6 @@ mod tests {
         rows(
             schema,
             "per_level = [2, 4]\n",
-            None,
             Some(Words { texts, language }),
         )
     }

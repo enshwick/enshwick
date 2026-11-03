@@ -1,109 +1,74 @@
 use core::ffi::c_void;
+use std::sync::Arc;
 
-use crate::abi::{Event, Status, Str};
-use crate::config::{Config, ConfigError, Stage, reason};
-use crate::host::Host;
-use crate::locks::Relock;
+use crate::abi::{Event, Level, Status, Str};
+use crate::config::{Config, ConfigError, reason};
 
-use super::{CHECK_WHY, Kept, Load, Off, RESTART, STARTED, keep, with_server};
+use super::{CHECK_WHY, Load, Off};
 
 impl Load<'_> {
-    /// The mod's typed settings: `mod-configs/<id>.toml`, written from
-    /// [`Config::template`] when missing, parsed and checked with
-    /// [`Config::validate`].
+    /// Calls `handler` with the mod's settings of type `T`: the defaults
+    /// now, the world's as each world loads, before
+    /// [`WorldLoaded`](crate::events::WorldLoaded), and the defaults again
+    /// as it stops. A change to the world's file applies at its next load;
+    /// [`on_settings_change`](Self::on_settings_change) follows it while
+    /// the world runs.
     ///
-    /// On a server, the fields marked `#[config(sync)]` are reported to the
-    /// loader, which advertises them to players; see
-    /// [`on_config_change`](Self::on_config_change) for the client's side.
+    /// The world's file is `<stem>-mod-settings/<id>/<file>.toml` beside its
+    /// save, [`Config::FILE`] naming it: the loader writes it from
+    /// [`Config::template`] as the world first loads, and adds the keys a
+    /// newer `T` has and removes the ones it lacks as later worlds load. On
+    /// a client in another's world, the values come from that world's
+    /// server. A value that does not read takes its default, and a file
+    /// [`Config::validate`] refuses reads as the defaults, each with a line
+    /// in the log; settings never turn the mod off.
+    ///
+    /// Settings never change what the mod registers in init: install hooks
+    /// and content there and let `handler` set the values they read.
     ///
     /// # Errors
     ///
-    /// [`Off`] when the file does not parse into `T` or a value is refused.
+    /// [`Off`] when the loader refuses the settings type, such as a second
+    /// type of the mod with the same file.
     ///
     /// # Examples
     ///
     /// ```
+    /// use std::sync::atomic::{AtomicU32, Ordering};
+    ///
     /// /// Altar settings.
     /// #[enshwick::config]
     /// #[derive(Default)]
     /// struct Settings {
-    ///     /// Altars allowed at each Flame level.
-    ///     altars: Vec<u8>,
+    ///     /// Altars allowed per player.
+    ///     #[config(range = 1..=16)]
+    ///     altars: u32,
     /// }
     ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<Settings, enshwick::Off> {
-    ///     load.config()
-    /// }
-    /// ```
-    pub fn config<T: Config>(&mut self) -> Result<T, Off> {
-        self.host.config_schema(&T::schema().to_text());
-        self.config_check::<T>();
-        read_config(self.host, |settings: &mut T| {
-            keep(&STARTED, settings, Stage::Startup);
-            keep(&RESTART, settings, Stage::Restart);
-        })
-    }
-
-    /// Reads the mod's settings, hands them to `apply` now and after every
-    /// change, and returns them: [`config`](Self::config) and
-    /// [`on_config_change`](Self::on_config_change) in one call, for a mod
-    /// that keeps its running values in step with its settings.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the file does not parse into `T`, a value is refused, or
-    /// the loader cannot watch settings.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::sync::atomic::{AtomicU32, Ordering};
-    ///
-    /// /// Comfort settings.
-    /// #[enshwick::config]
-    /// #[derive(Default)]
-    /// struct Settings {
-    ///     /// Comfort per piece of furniture, times this factor.
-    ///     multiplier: f32,
-    /// }
-    ///
-    /// static MULTIPLIER: AtomicU32 = AtomicU32::new(0);
+    /// static ALTARS: AtomicU32 = AtomicU32::new(0);
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.apply_config(|settings: &Settings| {
-    ///         MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
-    ///     })?;
-    ///     Ok(())
+    ///     load.on_settings(|settings: &Settings| ALTARS.store(settings.altars, Ordering::Relaxed))
     /// }
     /// ```
-    pub fn apply_config<T, F>(&mut self, apply: F) -> Result<T, Off>
+    pub fn on_settings<T, F>(&mut self, handler: F) -> Result<(), Off>
     where
-        T: Config,
+        T: Config + 'static,
         F: Fn(&T) + Send + Sync + 'static,
     {
-        let settings: T = self.config()?;
-        apply(&settings);
-        self.on_config_change(move |settings: T| apply(&settings))?;
-        Ok(settings)
+        self.follow_settings(handler, false)
     }
 
-    /// Calls `handler` with the mod's settings each time `mod-configs/<id>.toml`
-    /// changes, after the console or the Mods screen sets one of them, and as a
-    /// world loads or stops; the thread is not fixed. A file that no longer
-    /// parses or validates is logged and skipped, and the running values stay.
-    /// `startup` values change only as a world loads or stops, and `restart`
-    /// values never: `handler` gets the ones in force.
-    ///
-    /// On a client, it also runs when the join values change: on joining a
-    /// server, `handler` gets the settings with the server's
-    /// [`synced`](Config::synced) fields over the file's (the file stays as
-    /// it is), and on joining a server without them, the file's values again.
-    /// A mod with join values applies them here; without a handler it runs
-    /// with the file's values until the next start.
+    /// Calls `handler` as [`on_settings`](Self::on_settings) does, and also
+    /// each time the world's settings change while it runs: a person
+    /// edited the file, the console or the Mods screen set a value, or the
+    /// server of another's world sent new values. A changed file
+    /// [`Config::validate`] refuses is skipped with a line in the log, and
+    /// the values the mod has stay. For a mod whose values may change live.
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader cannot watch settings.
+    /// [`Off`] as for [`on_settings`](Self::on_settings).
     ///
     /// # Examples
     ///
@@ -121,80 +86,89 @@ impl Load<'_> {
     /// static MULTIPLIER: AtomicU32 = AtomicU32::new(0);
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let settings: Settings = load.config()?;
-    ///     MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
-    ///     load.on_config_change(|settings: Settings| {
+    ///     load.on_settings_change(|settings: &Settings| {
     ///         MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
     ///     })
     /// }
     /// ```
-    pub fn on_config_change<T, F>(&mut self, handler: F) -> Result<(), Off>
+    pub fn on_settings_change<T, F>(&mut self, handler: F) -> Result<(), Off>
     where
-        T: Config,
-        F: Fn(T) + Send + Sync + 'static,
+        T: Config + 'static,
+        F: Fn(&T) + Send + Sync + 'static,
     {
-        let handler = std::sync::Arc::new(handler);
-        let on_world = std::sync::Arc::clone(&handler);
+        self.follow_settings(handler, true)
+    }
+
+    /// Declares `T` to the loader, hands `handler` the defaults, and follows
+    /// world loads, and changes too when `live`.
+    fn follow_settings<T, F>(&mut self, handler: F, live: bool) -> Result<(), Off>
+    where
+        T: Config + 'static,
+        F: Fn(&T) + Send + Sync + 'static,
+    {
+        let host = self.host();
+        host.config_schema(T::FILE, &T::schema().to_text(), &T::template())?;
+        // A second type or handler on the file keeps the first check.
+        let _checked = (host.api().config_check)(
+            host.handle(),
+            Str::new(T::FILE),
+            check_text::<T>,
+            core::ptr::null_mut(),
+        );
+        handler(&T::default());
+        let handler = Arc::new(handler);
+        let on_world = Arc::clone(&handler);
         self.on_raw_event(Event::SETTINGS_REPLACED, move |_| {
-            let Some(host) = crate::host() else {
-                return;
-            };
-            let world = |settings: &mut T| {
-                hold(&RESTART, settings, Stage::Restart);
-                keep(&STARTED, settings, Stage::Startup);
-            };
-            match read_config::<T>(host, world) {
-                Ok(settings) => {
-                    on_world(settings);
-                    crate::info!("the world's settings apply");
-                }
-                Err(off) => crate::warn!("the world's settings are skipped: {off}"),
+            if let Some(settings) = world_settings::<T>(true) {
+                on_world(&settings);
             }
         })?;
-        self.on_raw_event(Event::SETTINGS_CHANGED, move |_| {
-            let Some(host) = crate::host() else {
-                return;
-            };
-            let running = |settings: &mut T| {
-                hold(&RESTART, settings, Stage::Restart);
-                hold(&STARTED, settings, Stage::Startup);
-            };
-            match read_config::<T>(host, running) {
-                Ok(settings) => {
-                    handler(settings);
-                    crate::info!("settings reloaded");
+        if live {
+            self.on_raw_event(Event::SETTINGS_CHANGED, move |_| {
+                if let Some(settings) = world_settings::<T>(false) {
+                    handler(&settings);
                 }
-                Err(off) => crate::warn!("settings change skipped, the running values stay: {off}"),
-            }
-        })
+            })?;
+        }
+        Ok(())
     }
 }
 
-/// Puts the values at `stage` in force back over `settings`, noting the
-/// changes that wait.
-pub(super) fn hold<T: Config>(kept: &Kept, settings: &mut T, stage: Stage) {
-    let kept = kept.get_or_init(std::sync::Mutex::default).relock().clone();
-    let (Some(kept), Some(now)) = (kept, settings.values(stage)) else {
-        return;
+/// The settings of `T` in force, read as [`crate::config::read`] reads
+/// them; when [`Config::validate`] refuses them, the defaults as a world
+/// loads (`loading`) and `None` for a change, so the values the mod has
+/// stay.
+fn world_settings<T: Config>(loading: bool) -> Option<T> {
+    let host = crate::host()?;
+    let log = |level: Level, line: &str| host.log(level, line);
+    let text = match host.settings_text(T::FILE) {
+        Ok(text) => text,
+        Err(off) => {
+            log(Level::WARN, &format!("{off}; the defaults apply"));
+            return loading.then(T::default);
+        }
     };
-    if kept == now {
-        return;
-    }
-    let waits = if stage == Stage::Restart {
-        "the game starts again"
-    } else {
-        "the world loads"
-    };
-    match settings.merge_values(stage, &kept) {
-        Ok(()) => crate::info!(
-            "settings that take effect when {waits} changed: {}",
-            crate::config::changed_keys(&kept, &now)
-        ),
-        Err(why) => crate::warn!("{} settings not kept: {why}", stage.name()),
+    let settings: T = crate::config::read(&text, &log);
+    match settings.validate() {
+        Ok(()) => Some(settings),
+        Err(why) if loading => {
+            log(
+                Level::WARN,
+                &format!("{}.toml: {why}; the defaults apply", T::FILE),
+            );
+            Some(T::default())
+        }
+        Err(why) => {
+            log(
+                Level::WARN,
+                &format!("{}.toml: {why}; the values in force stay", T::FILE),
+            );
+            None
+        }
     }
 }
 
-/// Parses and validates `text` as the mod's settings, for the loader's
+/// Reads and validates `text` as the mod's settings `T`, for the loader's
 /// check before it writes a change.
 pub(super) unsafe extern "system" fn check_text<T: Config>(
     text: Str,
@@ -224,32 +198,4 @@ pub(super) unsafe extern "system" fn check_text<T: Config>(
             Status::REFUSED
         },
     )
-}
-
-/// Reads the file's settings, puts the values in force over them with
-/// `stages`, reports the join values in force and, while this client is
-/// joined, puts the server's over them: a `startup, sync` value comes from
-/// the server even where `stages` held this side's.
-pub(super) fn read_config<T: Config>(host: Host, stages: impl FnOnce(&mut T)) -> Result<T, Off> {
-    let text = host.settings_text(&T::template())?;
-    let mut table: toml::Table = toml::from_str(&text)
-        .map_err(|e| Off::new(format!("settings: {}", reason(Some(&text), &e))))?;
-    for held in T::schema().clamp(&mut table) {
-        crate::warn!("settings: {held}");
-    }
-    let mut settings: T = toml::Value::Table(table)
-        .try_into()
-        .map_err(|e: toml::de::Error| Off::new(format!("settings: {}", reason(None, &e))))?;
-    settings
-        .validate()
-        .map_err(|why| Off::new(format!("settings: {why}")))?;
-    stages(&mut settings);
-    let Some(server) = settings.synced().and_then(|local| host.sync(&local)) else {
-        return Ok(settings);
-    };
-    match with_server(&mut settings, &server) {
-        Ok(()) => crate::info!("the server's join values apply over the settings file: {server}"),
-        Err(why) => crate::warn!("the server's join values are refused, the file's apply: {why}"),
-    }
-    Ok(settings)
 }

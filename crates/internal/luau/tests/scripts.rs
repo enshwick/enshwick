@@ -7,8 +7,8 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use enshwick::abi::{Header, PlayerData, PlayerInfo, Status, TickData};
-    use enshwick::config::{Field, Schema, Stage};
-    use enshwick::events::{PlayerJoined, SettingsChanged, Ticked, WorldSaved};
+    use enshwick::config::{Field, Schema};
+    use enshwick::events::{PlayerJoined, SettingsChanged, SettingsReplaced, Ticked, WorldSaved};
     use enshwick::test::{FakeHost, Installed};
     use enshwick::{Load, Mod, Off};
     use enshwick_luau::{Limits, Runtime, Scripts};
@@ -402,7 +402,7 @@ mod tests {
         Schema::new(
             "",
             "config",
-            vec![Field::new("greeting", Stage::Runtime, "hi").with_doc("What to say.", "")],
+            vec![Field::new("greeting", "hi").with_doc("What to say.", "")],
         )
     }
 
@@ -419,9 +419,10 @@ mod tests {
             FakeHost::new().settings("greeting = \"yo\"\n"),
         );
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        assert!(logged(&loader, "greeting yo"), "{:?}", loader.logs());
-        assert_eq!(loader.config_schema(), Some(greeting_schema()));
-        loader.set_settings("greeting = \"hey\"\n");
+        assert!(logged(&loader, "greeting hi"), "{:?}", loader.logs());
+        assert_eq!(loader.config_schema("settings"), Some(greeting_schema()));
+        let _handled = loader.raise::<SettingsReplaced>(&());
+        loader.set_settings("settings", "greeting = \"hey\"\n");
         let _handled = loader.raise::<SettingsChanged>(&());
         assert!(logged(&loader, "now hey"), "{:?}", loader.logs());
     }

@@ -313,7 +313,7 @@ fn config(loader: &Loader, args: &str) -> String {
             let with: Vec<&str> = loader
                 .mods
                 .iter()
-                .filter(|m| m.schema.relock().is_some())
+                .filter(|m| !m.settings_files.relock().is_empty())
                 .map(|m| m.id.as_str())
                 .collect();
             return if with.is_empty() {
@@ -328,14 +328,10 @@ fn config(loader: &Loader, args: &str) -> String {
         return texts::fill("config.unknown", &[("id", id)]);
     };
     let id = record.id.as_str();
-    let Some(schema) = record.schema.relock().clone() else {
-        return texts::fill("config.no-schema", &[("id", id)]);
+    let Some(schema) = record.settings_schema() else {
+        return texts::fill("remote.no-schema", &[("id", id)]);
     };
-    let path = loader.configs_dir.join(format!("{id}.toml"));
-    if !path.is_file() {
-        return texts::fill("config.missing", &[("id", id)]);
-    }
-    let text = crate::worlds::show_text(loader, record);
+    let text = crate::worlds::show_text(record);
     match request {
         Request::Set(_, key, value) => match configure::apply(loader, index, key, value, "console")
         {

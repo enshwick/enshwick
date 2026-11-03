@@ -240,7 +240,6 @@ fn serve(loader: &'static Loader) {
                 pages: pages(loader),
                 names: names(loader),
             },
-            host::join_values,
         );
     }
     crate::console::start(loader);
@@ -334,11 +333,9 @@ fn records(
             off_reason: Mutex::new(None),
             waiting: AtomicBool::new(false),
             settings: host::Kept::default(),
-            synced: Mutex::new(None),
-            server_synced: Mutex::new(None),
-            sync_out: host::Kept::default(),
-            schema: Mutex::new(None),
-            check: OnceLock::new(),
+            server_values: Mutex::new(None),
+            settings_files: Mutex::new(Vec::new()),
+            checks: Mutex::new(Vec::new()),
             texts: Mutex::new(None),
             pack: libraries[i].pack,
             features: Mutex::new(Vec::new()),

@@ -102,13 +102,17 @@
 //!
 //! impl enshwick::Mod for Hello {
 //!     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-//!         let settings: Settings = load.config()?;
-//!         let extra = settings.extra_altars;
-//!         load.on_altar_limit(move |limit| limit.allowed = limit.allowed.saturating_add(extra))?;
-//!         enshwick::info!("{extra} more altars per Flame level");
+//!         // Each world's settings arrive as it loads; the hook reads them.
+//!         load.on_settings(|settings: &Settings| EXTRA.store(settings.extra_altars, Relaxed))?;
+//!         load.on_altar_limit(|limit| {
+//!             limit.allowed = limit.allowed.saturating_add(EXTRA.load(Relaxed));
+//!         })?;
 //!         Ok(Self)
 //!     }
 //! }
+//!
+//! static EXTRA: AtomicU8 = AtomicU8::new(0);
+//! use std::sync::atomic::{AtomicU8, Ordering::Relaxed};
 //!
 //! enshwick::declare_mod!(Hello);
 //! ```
@@ -323,10 +327,10 @@ pub use enshwick_macros::call;
 /// unknown keys refused and [`trait@config::Config`], so the mod needs no
 /// serde of its own.
 ///
-/// `#[enshwick::config(default)]` fills the keys a file leaves out from
-/// `Default`. `validate = path` and `text = "key"` are the struct
-/// attributes of [`trait@config::Config`]; field attributes stay
-/// `#[config(..)]` and `#[serde(..)]`.
+/// A key the file leaves out reads from `Default`. `file = "name"`,
+/// `validate = path` and `text = "key"` are the struct attributes of
+/// [`trait@config::Config`]; field attributes stay `#[config(..)]` and
+/// `#[serde(..)]`.
 ///
 /// # Examples
 ///
@@ -334,15 +338,16 @@ pub use enshwick_macros::call;
 /// use enshwick::config::Config;
 ///
 /// /// Locker settings.
-/// #[enshwick::config(default)]
+/// #[enshwick::config(file = "lockers")]
 /// #[derive(Default)]
 /// struct Settings {
 ///     /// How many lockers one player may own.
-///     #[config(startup, range = 1..=16)]
+///     #[config(range = 1..=16)]
 ///     limit: u32,
 /// }
 ///
 /// assert!(Settings::template().contains("limit = 0"));
+/// assert_eq!(Settings::FILE, "lockers");
 /// ```
 ///
 /// A misspelt key is refused with its name, not read past:

@@ -8,19 +8,15 @@ use enshwick::{Load, Mod, Off};
 // among them.
 enshwick::texts!();
 
-/// Whether the mod does its work now; a settings change updates it.
+/// Whether the mod does its work now; each world's settings set it.
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
-/// The settings, in `mod-configs/{id}.toml`.
+/// The settings, in each world's `<stem>-mod-settings/{id}/settings.toml`.
 #[enshwick::config]
 #[derive(Debug)]
 struct Settings {
     /// Whether the mod does its work.
-    // `startup` (applied when a world loads), `runtime` (applied by
-    // on_config_change), `client` (each player's own), `sync` (the server's
-    // value) or `restart` (read once as the game starts), and for numbers
-    // `range = 1..=10`, for lists of values `choices = [..]`.
-    #[config(runtime)]
+    // For numbers `range = 1..=10`, for lists of values `choices = [..]`.
     enabled: bool,
 }
 
@@ -37,12 +33,10 @@ pub struct {type};
 impl Mod for {type} {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         load.texts()?;
-        let settings: Settings = load.config()?;
-        ENABLED.store(settings.enabled, Ordering::Relaxed);
-        load.on_config_change(|settings: Settings| {
+        // Defaults now, each world's values as it loads.
+        load.on_settings(|settings: &Settings| {
             ENABLED.store(settings.enabled, Ordering::Relaxed);
         })?;
-        enshwick::info!("enabled: {}", settings.enabled);
         Ok(Self)
     }
 }
@@ -63,13 +57,15 @@ mod tests {
     }
 
     #[test]
-    fn starts_with_the_settings_it_reads() {
+    fn runs_on_the_settings_of_the_world_that_loads() {
         let loader = enshwick::test::FakeHost::new()
             .settings("enabled = false\n")
             .install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
+        assert!(ENABLED.load(Ordering::Relaxed), "the defaults before a world");
+        assert_eq!(loader.raise::<enshwick::events::SettingsReplaced>(&()), 1);
         assert!(!ENABLED.load(Ordering::Relaxed));
     }
 }

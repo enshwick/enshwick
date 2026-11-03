@@ -60,9 +60,7 @@ fn reward(next: Next<'_, extern "system" fn(u32) -> u32>, base: u32) -> u32 {
 
 impl Mod for Bonus {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let settings: Settings = load.config()?;
-        BONUS.store(settings.bonus, Ordering::Relaxed);
-        load.on_config_change(|settings: Settings| {
+        load.on_settings_change(|settings: &Settings| {
             BONUS.store(settings.bonus, Ordering::Relaxed);
         })?;
         let reward = load.symbol("quest.reward")?;
@@ -89,13 +87,17 @@ assert_eq!(status, Status::OK);
 assert_eq!(loader.hooks().len(), 1);
 
 let reward = loader.detour(&REWARD).ok_or("not linked")?;
+assert_eq!(reward(10), 10, "the defaults until a world loads");
+
+// A world loads: the loader raises SettingsReplaced with its settings.
+assert_eq!(loader.raise::<events::SettingsReplaced>(&()), 1);
 assert_eq!(reward(10), 15);
 
-// A player edits the settings file; the loader then raises SettingsChanged.
-loader.set_settings("bonus = 7\n");
+// A player edits the world's file; the loader then raises SettingsChanged.
+loader.set_settings("settings", "bonus = 7\n");
 assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
 assert_eq!(reward(10), 17);
-assert_eq!(loader.logs(), [(Level::INFO, "settings reloaded".to_owned())]);
+assert!(loader.logs().iter().all(|(level, _)| *level != Level::WARN));
 assert!(loader.faults().is_empty());
 # Ok::<(), &str>(())
 ```
@@ -108,8 +110,11 @@ that function plays the original.
 ## What the fake answers
 
 Lookups you did not configure answer `Status::MISSING`, as a game build without
-them would. Settings default to the mod's own defaults, as on first start; the
-side defaults to `Side::SERVER` and the log level to `Level::INFO`.
+them would. A world's settings files are empty unless `settings` or
+`settings_file` gives their text, so the mod reads its own defaults; the side
+defaults to `Side::SERVER` and the log level to `Level::INFO`. Raise
+`SettingsReplaced` for a world that loads, `SettingsChanged` for an edit while
+it runs.
 
 The fake refuses what the loader refuses, with the same status. A second
 hook of the mod on one function, one hook slot on two functions, a code

@@ -13,7 +13,7 @@
 // Any change to the layout other than an append is a new major, with
 // `ABI_MINOR` back at 0; the layout tests of this crate hold the pair to
 // the committed layout.
-#define ENSHWICK_ABI_MAJOR 8
+#define ENSHWICK_ABI_MAJOR 9
 
 // The minor version of this interface: one more for each append to the
 // layout of this `ABI_MAJOR`, a field at the end of a struct that starts
@@ -944,10 +944,11 @@ typedef struct EnshwickEntityPlace {
 // Something the loader tells subscribed mods about, with
 // `HostApi::subscribe`.
 typedef uint32_t EnshwickEvent;
-// The mod's settings changed: its file on disk, a setting set by
-// the console or the Mods screen, or a client's join values; no data. The
-// thread is not fixed: a loader thread about a second after a file
-// edit, the thread that made any other change.
+// The mod's settings changed while a world runs: its file on disk, a
+// setting set by the console or the Mods screen, or the values the
+// server of another's world sent; no data. The thread is not fixed: a
+// loader thread about a second after a file edit, the thread that made
+// any other change.
 #define EnshwickEvent_SETTINGS_CHANGED 1
 // The loader's settings changed, log levels among them; no data. Raised
 // on a loader thread.
@@ -1015,10 +1016,11 @@ typedef uint32_t EnshwickEvent;
 // entities are gone; data is a `ChunkData`. Raised on the game thread
 // after the step. Server only.
 #define EnshwickEvent_CHUNK_UNLOADED 18
-// The settings a mod reads were replaced whole, as a world loads in this
-// process (its own settings from then on) or stops (the settings file
-// again); no data. The settings that wait for a start apply too.
-// Raised on the server's game thread.
+// The settings a mod reads were replaced whole: a world loaded in this
+// process (its settings from then on) or stopped (the defaults again),
+// or on a client the server of another's world sent its settings or the
+// client left it; no data. Raised on the game thread as a world loads
+// or stops, else on the thread that took the server's message.
 #define EnshwickEvent_SETTINGS_REPLACED 19
 // A player died, from a hit, a fall, the shroud or drowning; data is a
 // `PlayerDeathData`. Raised on the game thread after the step.
@@ -2827,12 +2829,14 @@ typedef struct EnshwickHostApi {
   void (*fault)(EnshwickModHandle me, struct EnshwickStr reason);
   // Writes a line to the log under the mod's id.
   void (*log)(EnshwickModHandle me, EnshwickLevel level, struct EnshwickStr message);
-  // The text of the mod's settings file, written from `defaults` first when
-  // it is missing; the text stays valid for the life of the process, so
-  // a thread may read it while another asks again.
-  EnshwickStatus (*settings)(EnshwickModHandle me,
-                             struct EnshwickStr defaults,
-                             struct EnshwickStr *out);
+  // The text of the mod's settings file `file` (its name without
+  // `.toml`) in force: the running world's, which the loader made or
+  // brought in line with the schema `HostApi::config_schema` handed it
+  // as the world loaded; on a client in another's world, the values that
+  // world's server sent; empty while no world runs. The text stays valid
+  // for the life of the process, so a thread may read it while another
+  // asks again. `Status::MISSING` for a file no schema names.
+  EnshwickStatus (*settings)(EnshwickModHandle me, struct EnshwickStr file, struct EnshwickStr *out);
   // Publishes the service `spec` describes, table and layout, for other
   // mods; `Status::REFUSED` when another mod publishes its name and
   // major. Allowed during `enshwick_mod_init` only.
@@ -2913,13 +2917,6 @@ typedef struct EnshwickHostApi {
                          uint32_t entry_size,
                          uint32_t capacity,
                          uint32_t *count);
-  // Reports the mod's join values as its settings file holds them,
-  // `synced` (an inline TOML table), and writes the values to run with
-  // over them: the server's while this client is joined to a server that
-  // advertises values for the mod, else an empty string. A server
-  // advertises the `synced` of each join mod. The text written stays valid
-  // for the life of the process.
-  EnshwickStatus (*sync)(EnshwickModHandle me, struct EnshwickStr synced, struct EnshwickStr *out);
   // Writes where the game's code section (`.text`) is loaded and how many
   // bytes it spans.
   EnshwickStatus (*code_range)(uint64_t *start, uint64_t *len);
@@ -3345,12 +3342,21 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*terrain_edit)(EnshwickModHandle me,
                                  const struct EnshwickTerrainEdit *edit,
                                  float *amount);
-  // Hands the loader the mod's settings schema, `schema`, the TOML text
-  // of a `config::Schema`; a later call replaces
-  // it. The loader answers `enshwick config` on the console from it and checks values against it
-  // before it writes them. `Status::BAD_ARGS` for text that is not a
-  // schema. Any time.
-  EnshwickStatus (*config_schema)(EnshwickModHandle me, struct EnshwickStr schema);
+  // Hands the loader the schema of the mod's settings file `file`, its
+  // name without `.toml`: `schema`, the TOML text of a
+  // `config::Schema`, and `template`, the file
+  // written from the defaults with their comments. As each world loads,
+  // the loader writes the file from `template` beside the save, or adds
+  // the keys it lacks and removes the ones the schema lacks. The console
+  // and the Mods screen read and check values against `schema`.
+  // `Status::BAD_ARGS` for text that is not a schema or a file name
+  // that is not lowercase letters, digits, `-` and `_`;
+  // `Status::REFUSED` for a file another schema names. Any time; a
+  // schema handed while a world runs is written as the next world loads.
+  EnshwickStatus (*config_schema)(EnshwickModHandle me,
+                                  struct EnshwickStr file,
+                                  struct EnshwickStr schema,
+                                  struct EnshwickStr template);
   // Calls `callback` with `user` after a summoning staff's use spawned or
   // moved a survivor, with `Summon::consumed` set; its return value is
   // ignored. On the thread of the use, as `HostApi::summon_filter`.
@@ -3429,11 +3435,15 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*ui_markers)(EnshwickModHandle me,
                                const struct EnshwickUiMarker *markers,
                                uint32_t count);
-  // Makes `callback` with `user` the mod's check of a new settings text,
-  // which the loader runs before it writes a change from the console or the
-  // Mods screen; a refusal keeps the file. Allowed during
+  // Makes `callback` with `user` the mod's check of a new text of its
+  // settings file `file`, which the loader runs before it writes a change
+  // from the console or the Mods screen; a refusal keeps the file.
+  // `Status::REFUSED` for a file that has a check. Allowed during
   // `enshwick_mod_init` only.
-  EnshwickStatus (*config_check)(EnshwickModHandle me, EnshwickConfigCheckFn callback, void *user);
+  EnshwickStatus (*config_check)(EnshwickModHandle me,
+                                 struct EnshwickStr file,
+                                 EnshwickConfigCheckFn callback,
+                                 void *user);
   // Hands the loader the mod's texts, a TOML table per language code as
   // `crate::i18n::Texts` reads them, for the loader's own screens: the
   // Mods screen labels the mod's settings with them. A later call

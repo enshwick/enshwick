@@ -12,7 +12,6 @@ mod actions;
 mod affixes;
 mod altar_limit;
 mod altar_zones;
-mod apply_config;
 mod base_limits;
 mod buffs;
 #[cfg(feature = "unstable")]
@@ -115,7 +114,6 @@ mod schedule;
 mod services;
 mod shapes;
 mod skills;
-mod startup_sync;
 #[cfg(feature = "unstable")]
 mod stat_kinds;
 #[cfg(feature = "unstable")]
@@ -128,7 +126,6 @@ mod symbols;
 mod table_config;
 mod task_workers;
 mod terrain;
-mod texts_override;
 mod ticks;
 #[cfg(feature = "unstable")]
 mod transactions;

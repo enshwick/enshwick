@@ -8,10 +8,9 @@ its own folder in `mods/`.
 
 | Folder | Holds | Who edits it |
 | --- | --- | --- |
-| `<stem>-mod-settings/<id>/`, beside the save | the world's [settings](settings.md) of the mod | the player or admin |
+| `<stem>-mod-settings/<id>/`, beside the save | the world's [settings](settings.md) of the mod, a file per settings type, which the loader writes from the mod's types | the player or admin |
 | `<stem>-mod-data/<id>/`, beside the save | what the mod keeps for that world | the mod |
 | `mods/<folder>/` | the mod's installation: its DLL or pack, and an installation [hold](#holds) | the installer |
-| `mod-configs/` | `<id>.toml`, the template of the mod's settings; `<id>.texts.toml`, a server owner's [text overrides](content/texts.md) | the player |
 
 `<stem>` is the save's file name without `.ksd`, such as `world0`. The game
 keeps every world of a machine in one folder: a dedicated server's

@@ -1,9 +1,9 @@
-//! A settings type's schema: each field's key, stage, kind and default, as
-//! the loader and the settings screen read it.
+//! A settings type's schema: each field's key, kind and default, as the
+//! loader and the settings screen read it.
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::{ConfigError, Scope, Stage};
+use crate::config::ConfigError;
 
 /// The TOML type of a setting's value.
 ///
@@ -73,9 +73,9 @@ impl Kind {
 /// # Examples
 ///
 /// ```
-/// use enshwick::config::{Field, Stage};
+/// use enshwick::config::Field;
 ///
-/// let field = Field::new("radius", Stage::Runtime, &8.0_f32).with_range(Some(1.0), Some(50.0));
+/// let field = Field::new("radius", &8.0_f32).with_range(Some(1.0), Some(50.0));
 /// assert!(field.check(&toml::Value::Float(10.0)).is_ok());
 /// assert!(field.check(&toml::Value::Float(80.0)).is_err());
 /// ```
@@ -84,11 +84,6 @@ impl Kind {
 pub struct Field {
     /// The key in the settings file.
     pub key: String,
-    /// When a change takes effect.
-    pub stage: Stage,
-    /// Where it lives, as its stage says.
-    #[serde(default)]
-    pub scope: Scope,
     /// The type of its value; `None` when the default has none TOML can
     /// write, such as `None`.
     pub kind: Option<Kind>,
@@ -105,14 +100,10 @@ pub struct Field {
     /// The key of its translated label in the mod's texts; the description
     /// is under this key with `.doc` appended.
     pub text: String,
-    /// A secret, such as a password: never sent to a client, and changed in
-    /// the file only.
+    /// A secret, such as a password: never shown, sent to a client or
+    /// logged, and changed in the file only.
     #[serde(default, skip_serializing_if = "core::ops::Not::not")]
     pub secret: bool,
-    /// A `startup` setting a joined client takes from the server, as it
-    /// would a `sync` one: `#[config(startup, sync)]`.
-    #[serde(default, skip_serializing_if = "core::ops::Not::not")]
-    pub synced: bool,
     /// The number a list's first element shows with on the Mods screen,
     /// such as 0 for a list by Flame level: `#[config(first = 0)]`.
     #[serde(default = "first_element", skip_serializing_if = "is_first_element")]
@@ -133,19 +124,17 @@ const fn is_first_element(first: &u32) -> bool {
 }
 
 impl Field {
-    /// A field at `stage` whose default is `default`, documented by nothing
-    /// yet and translated under `config.<key>`.
+    /// A field whose default is `default`, documented by nothing yet and
+    /// translated under `config.<key>`.
     ///
     /// # Examples
     ///
     /// See [`Field`].
     #[must_use]
-    pub fn new<T: Serialize + ?Sized>(key: &str, stage: Stage, default: &T) -> Self {
+    pub fn new<T: Serialize + ?Sized>(key: &str, default: &T) -> Self {
         let value = toml::Value::try_from(default).ok().map(tidy);
         Self {
             key: key.to_owned(),
-            stage,
-            scope: stage.scope(),
             kind: value.as_ref().map(Kind::of),
             default: value.map(|v| v.to_string()).unwrap_or_default(),
             text: format!("config.{key}"),
@@ -160,9 +149,9 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::config::{Field, Stage};
+    /// use enshwick::config::Field;
     ///
-    /// let per_level = Field::new("per_level", Stage::Startup, &[2, 4]).with_first(0);
+    /// let per_level = Field::new("per_level", &[2, 4]).with_first(0);
     /// assert_eq!(per_level.first, 0);
     /// ```
     #[must_use]
@@ -202,9 +191,9 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::config::{Field, Stage};
+    /// use enshwick::config::Field;
     ///
-    /// let field = Field::new("mode", Stage::Runtime, "auto").with_choices(&["auto", "on", "off"]);
+    /// let field = Field::new("mode", "auto").with_choices(&["auto", "on", "off"]);
     /// assert!(field.check(&toml::Value::String("on".into())).is_ok());
     /// assert!(field.check(&toml::Value::String("maybe".into())).is_err());
     /// ```
@@ -224,9 +213,9 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::config::{Field, Stage};
+    /// use enshwick::config::Field;
     ///
-    /// let field = Field::new("limit", Stage::Startup, &4).with_doc("How many.", "lockers.limit");
+    /// let field = Field::new("limit", &4).with_doc("How many.", "lockers.limit");
     /// assert_eq!((field.doc.as_str(), field.text.as_str()), ("How many.", "lockers.limit"));
     /// ```
     #[must_use]
@@ -243,48 +232,15 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::config::{Field, Stage};
+    /// use enshwick::config::Field;
     ///
-    /// let field = Field::new("password", Stage::Runtime, "").with_secret(true);
+    /// let field = Field::new("password", "").with_secret(true);
     /// assert!(field.secret);
     /// ```
     #[must_use]
     pub const fn with_secret(mut self, secret: bool) -> Self {
         self.secret = secret;
         self
-    }
-
-    /// The field, at [`Stage::Startup`], also taken from the server by a
-    /// joined client, or not.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::config::{Field, Stage};
-    ///
-    /// let field = Field::new("rules", Stage::Startup, &true).with_synced(true);
-    /// assert!(field.follows_server());
-    /// ```
-    #[must_use]
-    pub const fn with_synced(mut self, synced: bool) -> Self {
-        self.synced = synced;
-        self
-    }
-
-    /// Whether a joined client runs with the server's value of the field:
-    /// a `sync` field, or a `startup` one marked `sync` too.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::config::{Field, Stage};
-    ///
-    /// assert!(Field::new("radius", Stage::Sync, &8).follows_server());
-    /// assert!(!Field::new("limit", Stage::Startup, &4).follows_server());
-    /// ```
-    #[must_use]
-    pub fn follows_server(&self) -> bool {
-        self.stage == Stage::Sync || self.synced
     }
 
     /// Checks `value` against the field's type, range and choices; the range
@@ -367,9 +323,9 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::config::{Field, Kind, Stage};
+    /// use enshwick::config::{Field, Kind};
     ///
-    /// let per_level = Field::new("per_level", Stage::Startup, &[2, 4, 8]);
+    /// let per_level = Field::new("per_level", &[2, 4, 8]);
     /// assert_eq!(per_level.element_kind(), Some(Kind::Integer));
     /// ```
     #[must_use]
@@ -414,9 +370,9 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::config::{Field, Stage};
+    /// use enshwick::config::Field;
     ///
-    /// let field = Field::new("limit", Stage::Startup, &4).with_range(Some(1.0), Some(16.0));
+    /// let field = Field::new("limit", &4).with_range(Some(1.0), Some(16.0));
     /// assert_eq!(field.accepts(), "1 to 16");
     /// ```
     #[must_use]
@@ -452,9 +408,9 @@ const fn kind_name(kind: Kind) -> &'static str {
 /// # Examples
 ///
 /// ```
-/// use enshwick::config::{Field, Schema, Stage};
+/// use enshwick::config::{Field, Schema};
 ///
-/// let schema = Schema::new("Locker settings.", "config", vec![Field::new("limit", Stage::Startup, &4)]);
+/// let schema = Schema::new("Locker settings.", "config", vec![Field::new("limit", &4)]);
 /// assert_eq!(Schema::parse(&schema.to_text())?, schema);
 /// # Ok::<(), enshwick::config::ConfigError>(())
 /// ```
@@ -523,6 +479,19 @@ impl Group {
     }
 }
 
+/// Takes the dotted `key` out of `settings`, if it is there.
+pub(crate) fn remove_at(settings: &mut toml::Table, key: &str) {
+    let (path, leaf) = key.rsplit_once('.').unwrap_or(("", key));
+    let mut table = settings;
+    for part in path.split('.').filter(|p| !p.is_empty()) {
+        let Some(next) = table.get_mut(part).and_then(toml::Value::as_table_mut) else {
+            return;
+        };
+        table = next;
+    }
+    let _removed = table.remove(leaf);
+}
+
 /// The value at the dotted `key` of `settings`, to change.
 fn value_at_mut<'a>(settings: &'a mut toml::Table, key: &str) -> Option<&'a mut toml::Value> {
     let mut parts = key.split('.');
@@ -577,9 +546,9 @@ impl Schema {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::config::{Field, Group, Schema, Stage};
+    /// use enshwick::config::{Field, Group, Schema};
     ///
-    /// let multiplier = Field::new("comfort.multiplier", Stage::Runtime, &1.0);
+    /// let multiplier = Field::new("comfort.multiplier", &1.0);
     /// let schema = Schema::new("", "config", vec![multiplier])
     ///     .with_groups(vec![Group::new("comfort", "Comfort rules.")]);
     /// assert_eq!(schema.groups[0].key, "comfort");
@@ -590,30 +559,50 @@ impl Schema {
         self
     }
 
-    /// Holds every number of `settings` that lies outside its field's range,
-    /// list elements too, to the nearest end of the range; returns a line
-    /// per value held, for the log. A file a player wrote keeps reading.
+    /// Brings `settings` in line with the fields, for a file a person wrote
+    /// that must keep reading: a value of the wrong type, or outside its
+    /// field's choices, is taken out so its default applies, and a number
+    /// outside its range, list elements too, is held to the nearest end.
+    /// Returns a line per value, for the log, naming keys and never a
+    /// value from the file.
     #[must_use]
-    pub(crate) fn clamp(&self, settings: &mut toml::Table) -> Vec<String> {
-        let mut held = Vec::new();
+    pub(crate) fn settle(&self, settings: &mut toml::Table) -> Vec<String> {
+        let mut lines = Vec::new();
         for field in &self.fields {
-            if field.min.is_none() && field.max.is_none() {
-                continue;
-            }
             let Some(value) = value_at_mut(settings, &field.key) else {
                 continue;
             };
+            let typed = field.kind.is_none_or(|kind| kind.accepts(Kind::of(value)));
+            let element = field.element_kind();
+            let elements_typed = match value {
+                toml::Value::Array(items) => items
+                    .iter()
+                    .all(|item| element.is_none_or(|kind| kind.accepts(Kind::of(item)))),
+                _ => true,
+            };
+            if !typed || !elements_typed {
+                let need = field.kind.map_or("its type", kind_name);
+                lines.push(format!("{} takes {need}; the default applies", field.key));
+                remove_at(settings, &field.key);
+                continue;
+            }
             if let toml::Value::Array(items) = value {
                 for (i, item) in items.iter_mut().enumerate() {
-                    if let Some(line) = field.clamp_one(item, &format!("{}[{i}]", field.key)) {
-                        held.push(line);
-                    }
+                    lines.extend(field.clamp_one(item, &format!("{}[{i}]", field.key)));
                 }
-            } else if let Some(line) = field.clamp_one(value, &field.key) {
-                held.push(line);
+            } else {
+                lines.extend(field.clamp_one(value, &field.key));
+            }
+            if !field.choices.is_empty() && field.check(value).is_err() {
+                lines.push(format!(
+                    "{} is {}; the default applies",
+                    field.key,
+                    field.accepts()
+                ));
+                remove_at(settings, &field.key);
             }
         }
-        held
+        lines
     }
 
     /// The group a field with key `key` belongs to, if any.
@@ -690,9 +679,9 @@ impl Schema {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::config::{Field, Schema, Stage};
+    /// use enshwick::config::{Field, Schema};
     ///
-    /// let limit = Field::new("limit", Stage::Startup, &4).with_range(Some(1.0), Some(16.0));
+    /// let limit = Field::new("limit", &4).with_range(Some(1.0), Some(16.0));
     /// let schema = Schema::new("", "config", vec![limit]);
     /// assert!(schema.check(&toml::from_str("limit = 20")?).is_err());
     /// # Ok::<(), Box<dyn std::error::Error>>(())

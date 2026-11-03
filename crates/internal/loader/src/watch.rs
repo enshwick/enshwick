@@ -1,15 +1,13 @@
-//! Settings files watched for changes: a mod's own raise
-//! [`Event::SETTINGS_CHANGED`] for it, the loader's re-reads the log levels
-//! and raises [`Event::LOADER_SETTINGS_CHANGED`] for every mod. While a world
-//! runs, each mod's settings of that world are watched too, since they are
-//! what the mod reads.
+//! Settings files watched for changes: the loader's own re-reads the log
+//! levels and raises [`Event::LOADER_SETTINGS_CHANGED`] for every mod. While
+//! a world runs, each settings file of each mod in that world is watched,
+//! and a change raises [`Event::SETTINGS_CHANGED`] for the mod.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
-use enshwick::abi::{Event, Level};
-use enshwick::config::Stage;
+use enshwick::abi::Event;
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -71,9 +69,11 @@ struct Watched {
     seen: Stamp,
 }
 
-/// A mod's settings file of the running world, `owner` its mod index.
+/// A mod's settings file of the running world, `owner` its mod index and
+/// `file` its name.
 struct WorldWatched {
     owner: ModIndex,
+    file: String,
     key: Option<String>,
     seen: Stamp,
 }
@@ -108,30 +108,13 @@ fn stamp(path: &Path) -> Stamp {
 
 /// Starts watching on a thread of its own.
 pub(crate) fn start(loader: &'static Loader) {
-    let mut files: Vec<Watched> = loader
-        .mods
-        .iter()
-        .enumerate()
-        .map(|(index, record)| {
-            (
-                Some(index),
-                loader.configs_dir.join(format!("{}.toml", record.id)),
-            )
-        })
-        .chain([(None, loader.configs_dir.join(format!("{LOADER_ID}.toml")))])
-        .map(|(owner, path)| Watched {
-            owner,
-            seen: stamp(&path),
-            path,
-        })
-        .collect();
-    let mut worlds: Vec<WorldWatched> = (0..loader.mods.len())
-        .map(|owner| WorldWatched {
-            owner: ModIndex::new(owner),
-            key: None,
-            seen: None,
-        })
-        .collect();
+    let own = loader.configs_dir.join(format!("{LOADER_ID}.toml"));
+    let mut files = vec![Watched {
+        owner: None,
+        seen: stamp(&own),
+        path: own,
+    }];
+    let mut worlds: Vec<WorldWatched> = Vec::new();
     let started = std::thread::Builder::new()
         .name("enshwick-settings".into())
         .spawn(move || {
@@ -147,20 +130,38 @@ pub(crate) fn start(loader: &'static Loader) {
                         continue;
                     }
                     changed(loader, file.owner);
-                    if let Some(index) = file.owner {
-                        note_shadowed(loader, index);
+                }
+                // A mod may declare a settings file after the watch started.
+                for (owner, record) in loader.mods.iter().enumerate() {
+                    for declared in record.settings_files.relock().iter() {
+                        let known = worlds
+                            .iter()
+                            .any(|w| w.owner.get() == owner && w.file == declared.file);
+                        if !known {
+                            worlds.push(WorldWatched {
+                                owner: ModIndex::new(owner),
+                                file: declared.file.clone(),
+                                key: None,
+                                seen: None,
+                            });
+                        }
                     }
                 }
                 let key = crate::worlds::current();
+                let mut edited = Vec::new();
                 for file in &mut worlds {
                     let path = key.as_deref().and_then(|key| {
                         let record = loader.mods.get(file.owner.get())?;
-                        Some(crate::worlds::world_file(&record.id, key))
+                        Some(crate::worlds::world_file(&record.id, &file.file, key))
                     });
                     let now = path.as_deref().and_then(stamp);
                     if file.changed(key.as_deref(), path.as_deref(), now) {
-                        changed(loader, Some(file.owner.get()));
+                        edited.push(file.owner.get());
                     }
+                }
+                edited.dedup();
+                for index in edited {
+                    crate::worlds::changed(loader, index);
                 }
                 crate::recipes::poll(loader);
             }
@@ -170,37 +171,9 @@ pub(crate) fn start(loader: &'static Loader) {
     }
 }
 
-/// Tells the mod's log, when its settings file changed while a world runs,
-/// that the world's own settings stay in force and where they are.
-fn note_shadowed(loader: &Loader, index: usize) {
-    let (Some(key), Some(record)) = (crate::worlds::current(), loader.mods.get(index)) else {
-        return;
-    };
-    let per_world = record
-        .schema
-        .relock()
-        .clone()
-        .is_some_and(|schema| schema.fields.iter().any(|f| f.stage != Stage::Client));
-    if !per_world {
-        return;
-    }
-    let world = crate::worlds::world_file(&record.id, &key);
-    crate::log::write(
-        Level::INFO,
-        &record.id,
-        &format!(
-            "{}.toml changed while world {key} runs: its own player settings apply now; \
-             this world reads the rest from {}, changed there, with enshwick config or in the world \
-             settings; the file is the template for new worlds",
-            record.id,
-            world.display()
-        ),
-    );
-}
-
 fn changed(loader: &Loader, owner: Option<usize>) {
     if let Some(index) = owner {
-        loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
+        crate::worlds::changed(loader, index);
         return;
     }
     let path = loader.configs_dir.join(format!("{LOADER_ID}.toml"));
@@ -270,6 +243,7 @@ mod tests {
         let at = |len| Some((SystemTime::UNIX_EPOCH + Duration::from_secs(len), len));
         let mut file = WorldWatched {
             owner: ModIndex::new(0),
+            file: "settings".to_owned(),
             key: None,
             seen: None,
         };

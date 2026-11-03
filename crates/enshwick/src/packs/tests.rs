@@ -678,10 +678,6 @@ fn a_setting_that_cannot_hold_is_a_problem_at_its_key() {
             "[[setting]]\nkey = \"every\"\ndefault = 0\nmin = 1\n",
             "the default is refused: every is at least 1",
         ),
-        (
-            "[[setting]]\nkey = \"rule\"\ndefault = true\nsynced = true\n",
-            "synced goes with stage = \"startup\"",
-        ),
     ];
     for (settings, problem) in cases {
         let text = format!("{head}{settings}");
