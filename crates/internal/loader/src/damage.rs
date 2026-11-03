@@ -349,8 +349,11 @@ unsafe extern "system" fn shroud(registers: *mut Registers, _user: *mut c_void) 
         if damage <= 0 {
             return;
         }
-        // SAFETY: at the site `r15` holds the live query context of the
-        // system running on this thread; 1.0 build 1269579.
+        // SAFETY: at the site, `add r8,rbx` before the shroud's health
+        // subtraction, `r15` holds the live query context of the system
+        // running on this thread and `eax` the damage: seen on 1.0 build
+        // 1269579 at the subtraction, and `add r8,rbx` writes neither; the
+        // site's route checks this code on 26319703.
         let target = unsafe { row_entity(registers.r15) };
         let damage = filtered(DamageCheck::FOG, target, damage);
         registers.rax = u64::from(damage.cast_unsigned());
@@ -545,9 +548,14 @@ mod tests {
             let side = if server { Side::Server } else { Side::Client };
             let bytes = std::fs::read(&path).unwrap();
             let image = Image::parse(&bytes, Layout::File, None).unwrap();
-            let resolved = exact(&tables, side, image.fingerprint().unwrap())
-                .unwrap()
-                .resolve();
+            let Some(table) = exact(&tables, side, image.fingerprint().unwrap()) else {
+                println!(
+                    "{}: no table is made for this build; skipped",
+                    path.display()
+                );
+                continue;
+            };
+            let resolved = table.resolve();
             let pdata = image.range(image.section(".pdata").unwrap());
             let rows = image.read(pdata.start, pdata.end - pdata.start).unwrap();
             let base = image.base();

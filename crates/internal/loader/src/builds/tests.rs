@@ -574,12 +574,10 @@ fn checked_symbols_read_their_bytes_in_the_client() {
         }
     }
     assert!(checked >= 42);
-    // The offsets of client 26320373; other builds lay these types out
-    // differently.
-    if client.steam_build() != Some(enshwick_gamedata::SteamBuild::new(26_320_373)) {
-        return;
-    }
     let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
+    // The offsets of client 26320373; other builds lay these types out
+    // differently, so there each field only has to resolve.
+    let exact = client.steam_build() == Some(enshwick_gamedata::SteamBuild::new(26_320_373));
     let moved = [
         ("keen::FbUiBundle", "namedStyles", 0x10bbc),
         ("keen::FbUiBundle", "sounds", 0x12210),
@@ -598,7 +596,12 @@ fn checked_symbols_read_their_bytes_in_the_client() {
     .into_iter()
     .filter_map(|(ty, field, offset)| {
         let found = reflection.field_offset(ty, field);
-        (found != Ok(offset)).then(|| format!("{ty}.{field}: {found:x?}, not {offset:#x}"))
+        let wrong = if exact {
+            found != Ok(offset)
+        } else {
+            found.is_err()
+        };
+        wrong.then(|| format!("{ty}.{field}: {found:x?}, not {offset:#x}"))
     })
     .collect::<Vec<_>>();
     assert!(moved.is_empty(), "{moved:#?}");

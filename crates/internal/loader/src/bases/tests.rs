@@ -207,10 +207,11 @@ fn the_cursor_s_body_fixes_the_offsets_its_detour_reads() {
             .resolve();
         let id = pinned::bases::CURSOR.id();
         // The oldest tables have no cursor entry; the feature is off there.
-        let Some(body) = resolved.body(id) else {
+        let Some(symbol) = resolved.symbol(id) else {
             continue;
         };
-        let start = image.base() + resolved.symbol(id).unwrap();
+        let body = resolved.body(id).unwrap();
+        let start = image.base() + symbol;
         let code = image.read(start, body.len() as u64).unwrap();
         assert!(body.holds(code), "{variable}");
         let constant = |id: Constant| resolved.constant(id.id()).unwrap();
