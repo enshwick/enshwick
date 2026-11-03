@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `#[enshwick::config]` takes `file = "name"` and always reads
+  missing keys from `Default`; the stage attributes (`startup`, `runtime`,
+  `client`, `sync`, `restart`) and the `default` argument are refused with
+  why (#917).
 - **Breaking:** `#[point]`, `#[call]`, `#[event]` and `#[service]` take
   `export`, which writes the declaration's `.enshpt` entry; a declaration
   without it ships nothing. `exports` in `[package.metadata.enshwick]` takes

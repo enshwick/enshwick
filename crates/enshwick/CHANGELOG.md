@@ -8,6 +8,23 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** settings exist only per world. Each settings type writes
+  `<stem>-mod-settings/<mod>/<file>.toml`, `settings.toml` unless
+  `#[enshwick::config(file = "name")]` names another; the loader writes it
+  from the type as a world loads, adds the keys a newer type has and removes
+  the ones it lacks, with one log line each and one `.bak`. A value that does
+  not read, or sits outside its choices, takes its default and a range
+  clamps, each with a log line; a `validate` refusal keeps the values in
+  force; settings never turn a mod off. `Load::on_settings` hands a type's
+  values over at init (the defaults) and as each world loads;
+  `Load::on_settings_change` also follows changes while it runs. A client in
+  another's world runs on every non-secret setting its server sends after
+  the hello. `Load::config`, `apply_config`, `on_config_change`, `Stage`,
+  `Scope`, `Field::{stage, scope, synced}`, `Config::{values, merge_values,
+  synced, merge_synced}`, `config(default)`, `HostApi::sync`, the
+  `enshwick.sync.*` rules, `mod-configs/<id>.toml`, `<id>.next.toml` and the
+  text overrides `mod-configs/<id>.texts.toml` are gone. `HostApi::settings`,
+  `config_schema` and `config_check` take the file; ABI 9.0 (#917).
 - **Breaking:** a world's mod settings live in `<stem>-mod-settings/<mod>/`
   and the data mods write for it in `<stem>-mod-data/<mod>/`, beside its
   save, so copying the save folder moves a world with its mod data. The
