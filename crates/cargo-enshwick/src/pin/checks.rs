@@ -6,7 +6,7 @@
 
 use anyhow::Context as _;
 use enshwick_gamedata::reflect::Image;
-use enshwick_gamedata::{Resolved, check_holds, make_check, shape_checks};
+use enshwick_gamedata::{Resolved, ShapeNames, check_holds, make_check, shape_checks};
 use toml_edit::{Array, DocumentMut, Item, Table, Value};
 
 use super::rows::Side;
@@ -28,6 +28,7 @@ pub(crate) fn refresh(
     builds: &[(&Image<'_>, &Resolved)],
 ) -> anyhow::Result<(String, Vec<String>)> {
     let mut doc: DocumentMut = text.parse().context("routes file")?;
+    let names = ShapeNames::new();
     let mut notes = Vec::new();
     let rows = doc
         .get_mut("route")
@@ -60,7 +61,7 @@ pub(crate) fn refresh(
         if take == "start"
             && shape.is_some_and(|shape| {
                 code.iter()
-                    .all(|&(image, rva)| shape_checks(&shape, image, rva))
+                    .all(|&(image, rva)| shape_checks(&names, &shape, image, rva))
             })
         {
             row.remove("check");
@@ -73,7 +74,7 @@ pub(crate) fn refresh(
         });
         if current.as_ref().is_some_and(|check| {
             code.iter()
-                .all(|&(image, rva)| check_holds(check, image, rva))
+                .all(|&(image, rva)| check_holds(&names, check, image, rva))
         }) {
             continue;
         }
@@ -85,7 +86,7 @@ pub(crate) fn refresh(
             }
             continue;
         }
-        if let Some(check) = make_check(&code) {
+        if let Some(check) = make_check(&names, &code) {
             let check: Array = check.iter().collect();
             row.insert("check", Item::Value(Value::Array(check)));
         } else {
@@ -212,7 +213,7 @@ loads = ["d"]
         assert_eq!(routes.ids().count(), 7);
         let doc: toml_edit::DocumentMut = text.parse().unwrap();
         let check = |i: usize| doc["route"][i].get("check").map(ToString::to_string);
-        let made = Some(r#" ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,?"]"#.to_owned());
+        let made = Some(r#" ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,?i"]"#.to_owned());
         assert_eq!(
             check(0).as_deref(),
             Some(r#" ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]"#)

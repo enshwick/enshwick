@@ -8,7 +8,8 @@
 //! its scale and a displacement (`[rcx]`, `[rbp-*]`, `[rbp+?]`, `[rdx+0x78]`,
 //! `[rcx+r10*4+?]`) or RIP-relative (`[rip+*]`); an exact immediate
 //! (`0x1`); memory with its size first where the registers do not give it
-//! (`dword [rcx+0xb8]`); `?` for any operand; `*` for any operand whose value the route
+//! (`dword [rcx+0xb8]`); `?` for any operand; `?r`, `?i`, `?b` and `?m` for
+//! any register, immediate, branch target and memory operand; `*` for any operand whose value the route
 //! takes; and `{id}` for the address of another entry, as a branch target or
 //! a RIP-relative operand. A `*` or `?` displacement is not zero and has the
 //! sign written.
@@ -43,7 +44,57 @@ enum Op {
     Any {
         take: bool,
     },
+    /// Any operand of one kind.
+    Wild(Wild),
     Entry(String),
+}
+
+/// The kind a typed wildcard operand must be.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Wild {
+    /// `?r`: a register.
+    Register,
+    /// `?i`: an immediate.
+    Immediate,
+    /// `?b`: a direct branch target.
+    Branch,
+    /// `?m`: memory.
+    Memory,
+}
+
+impl Wild {
+    const TOKENS: [(&str, Self); 4] = [
+        ("?r", Self::Register),
+        ("?i", Self::Immediate),
+        ("?b", Self::Branch),
+        ("?m", Self::Memory),
+    ];
+
+    fn holds(self, kind: OpKind) -> bool {
+        match self {
+            Self::Register => kind == OpKind::Register,
+            Self::Immediate => is_immediate(kind),
+            Self::Branch => matches!(
+                kind,
+                OpKind::NearBranch16 | OpKind::NearBranch32 | OpKind::NearBranch64
+            ),
+            Self::Memory => kind == OpKind::Memory,
+        }
+    }
+}
+
+fn is_immediate(kind: OpKind) -> bool {
+    matches!(
+        kind,
+        OpKind::Immediate8
+            | OpKind::Immediate16
+            | OpKind::Immediate32
+            | OpKind::Immediate64
+            | OpKind::Immediate8to16
+            | OpKind::Immediate8to32
+            | OpKind::Immediate8to64
+            | OpKind::Immediate32to64
+    )
 }
 
 /// One instruction of a shape.
@@ -58,15 +109,36 @@ pub(crate) struct Step {
 #[error("{0}")]
 pub(crate) struct ShapeError(String);
 
-/// The lowercase names of the mnemonics and registers, made once per read
-/// of many steps.
-pub(crate) struct Names {
+/// The names shape steps use for instructions and registers, made once and
+/// passed to every function that reads steps, since making them takes a
+/// millisecond.
+///
+/// # Examples
+///
+/// ```
+/// let names = enshwick_gamedata::ShapeNames::new();
+/// # let _ = names;
+/// ```
+#[derive(Debug)]
+pub struct ShapeNames {
     mnemonics: FxHashMap<String, Mnemonic>,
     registers: FxHashMap<String, Register>,
 }
 
-impl Names {
-    pub(crate) fn new() -> Self {
+impl Default for ShapeNames {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ShapeNames {
+    /// Makes the names of every mnemonic and register, lowercase.
+    ///
+    /// # Examples
+    ///
+    /// See [`ShapeNames`].
+    #[must_use]
+    pub fn new() -> Self {
         let name = |x: &dyn core::fmt::Debug| format!("{x:?}").to_lowercase();
         Self {
             mnemonics: Mnemonic::values().map(|m| (name(&m), m)).collect(),
@@ -97,7 +169,7 @@ const SIZES: [(&str, usize); 6] = [
 
 impl Step {
     /// Reads one step, such as `lea rdx,[rbp-*]`.
-    pub(crate) fn parse(text: &str, names: &Names) -> Result<Self, ShapeError> {
+    pub(crate) fn parse(text: &str, names: &ShapeNames) -> Result<Self, ShapeError> {
         let text = text.trim();
         let (name, ops) = text.split_once(' ').unwrap_or((text, ""));
         let mnemonic = names
@@ -190,6 +262,7 @@ impl Step {
                         && value(ins, i, kind) == Some(*want)
                 }
                 Op::Any { take } => !take || value(ins, i, kind).is_some_and(|v| set(taken, v)),
+                Op::Wild(wild) => wild.holds(kind),
                 Op::Entry(id) => entry(id).is_some_and(|want| value(ins, i, kind) == Some(want)),
             }
         })
@@ -242,11 +315,14 @@ fn hex(text: &str) -> Option<u64> {
     u64::from_str_radix(text.strip_prefix("0x")?, 16).ok()
 }
 
-fn operand(text: &str, names: &Names) -> Result<Op, ShapeError> {
+fn operand(text: &str, names: &ShapeNames) -> Result<Op, ShapeError> {
     match text {
         "?" => return Ok(Op::Any { take: false }),
         "*" => return Ok(Op::Any { take: true }),
         _ => {}
+    }
+    if let Some(&(_, wild)) = Wild::TOKENS.iter().find(|(token, _)| *token == text) {
+        return Ok(Op::Wild(wild));
     }
     if let Some(id) = text.strip_prefix('{').and_then(|t| t.strip_suffix('}')) {
         return Ok(Op::Entry(id.to_owned()));
@@ -269,7 +345,7 @@ fn operand(text: &str, names: &Names) -> Result<Op, ShapeError> {
 
 /// Reads the inside of a memory operand: `base`, then `+index*scale`, then
 /// a signed `*`, `?` or hexadecimal displacement, each but the base optional.
-fn memory_operand(inner: &str, size: Option<usize>, names: &Names) -> Result<Op, ShapeError> {
+fn memory_operand(inner: &str, size: Option<usize>, names: &ShapeNames) -> Result<Op, ShapeError> {
     let cut = |text: &str| text.find(['+', '-']).unwrap_or(text.len());
     let at = cut(inner);
     let base = names.register(&inner[..at])?;

@@ -54,7 +54,8 @@ use crate::reflect::{Image, Reflection};
 use crate::{Resolved, Side, TableError};
 pub use check::{check_holds, make_check, shape_checks};
 use code::Code;
-use shape::{Names, Step};
+pub use shape::ShapeNames;
+use shape::Step;
 
 /// What an engine route found.
 ///
@@ -153,7 +154,7 @@ struct RouteRow {
 }
 
 impl RouteRow {
-    fn route(self, names: &Names) -> Result<Route, TableError> {
+    fn route(self, names: &ShapeNames) -> Result<Route, TableError> {
         let id = self.id;
         let bad = |why: &str| TableError::Toml(format!("{id}: {why}"));
         let listed = |list: Option<Vec<String>>| list.filter(|l| !l.is_empty());
@@ -279,7 +280,7 @@ impl Routes {
     /// See [`Routes`].
     pub fn parse(text: &str) -> Result<Self, TableError> {
         let file: RoutesFile = toml::from_str(text).map_err(|e| TableError::Toml(e.to_string()))?;
-        let names = Names::new();
+        let names = ShapeNames::new();
         let mut routes: Vec<Route> = file
             .route
             .into_iter()

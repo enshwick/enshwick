@@ -127,7 +127,7 @@ fn decoded() -> Vec<Instruction> {
 }
 
 fn steps(text: &[&str]) -> Vec<Step> {
-    let names = shape::Names::new();
+    let names = shape::ShapeNames::new();
     text.iter()
         .map(|s| Step::parse(s, &names).unwrap())
         .collect()

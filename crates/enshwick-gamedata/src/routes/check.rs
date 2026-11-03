@@ -5,7 +5,7 @@
 
 use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register};
 
-use super::shape::{Names, Step};
+use super::shape::{ShapeNames, Step};
 use crate::reflect::Image;
 
 /// The bytes a check covers past its last jump, as a `<id>.bytes` check does.
@@ -61,9 +61,8 @@ pub(crate) fn runs(steps: &[Step], image: &Image<'_>, rva: u64) -> bool {
     matched && (covered >= COVER || ended)
 }
 
-fn parse(steps: &[String]) -> Option<Vec<Step>> {
-    let names = Names::new();
-    steps.iter().map(|s| Step::parse(s, &names).ok()).collect()
+fn parse(names: &ShapeNames, steps: &[String]) -> Option<Vec<Step>> {
+    steps.iter().map(|s| Step::parse(s, names).ok()).collect()
 }
 
 /// Whether the code at `rva` in `image` runs as the check shape `check`
@@ -73,53 +72,58 @@ fn parse(steps: &[String]) -> Option<Vec<Step>> {
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick_gamedata::check_holds;
 /// use enshwick_gamedata::reflect::{Image, Layout};
+/// use enshwick_gamedata::{ShapeNames, check_holds};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
 /// let image = Image::parse(&bytes, Layout::File, None)?;
-/// let holds = check_holds(&["push rbx".to_owned()], &image, 0x1000);
+/// let holds = check_holds(&ShapeNames::new(), &["push rbx".to_owned()], &image, 0x1000);
 /// # let _ = holds;
 /// # Ok(())
 /// # }
 /// ```
 #[must_use]
-pub fn check_holds(check: &[String], image: &Image<'_>, rva: u64) -> bool {
-    parse(check).is_some_and(|steps| runs(&steps, image, rva))
+pub fn check_holds(names: &ShapeNames, check: &[String], image: &Image<'_>, rva: u64) -> bool {
+    parse(names, check).is_some_and(|steps| runs(&steps, image, rva))
 }
 
 /// Whether a route's start shape checks the code at `rva` as a hook needs:
 /// two steps or more, matching there one after the other, over eight bytes.
 ///
+/// A step naming another entry does not match here, where no entry is known.
+///
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick_gamedata::shape_checks;
 /// use enshwick_gamedata::reflect::{Image, Layout};
+/// use enshwick_gamedata::{ShapeNames, shape_checks};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
 /// let image = Image::parse(&bytes, Layout::File, None)?;
-/// let checks = shape_checks(&["push rbx".to_owned(), "sub rsp,?".to_owned()], &image, 0x1000);
+/// let shape = ["push rbx".to_owned(), "sub rsp,?".to_owned()];
+/// let checks = shape_checks(&ShapeNames::new(), &shape, &image, 0x1000);
 /// # let _ = checks;
 /// # Ok(())
 /// # }
 /// ```
 #[must_use]
-pub fn shape_checks(shape: &[String], image: &Image<'_>, rva: u64) -> bool {
-    let Some(steps) = parse(shape) else {
+pub fn shape_checks(names: &ShapeNames, shape: &[String], image: &Image<'_>, rva: u64) -> bool {
+    let Some(steps) = parse(names, shape) else {
         return false;
     };
     let start = image.base().saturating_add(rva);
     let mut va = start;
-    for _ in &steps {
+    let mut taken = None;
+    let matched = steps.iter().all(|step| {
         let Some(ins) = one_at(image, va) else {
             return false;
         };
         va = ins.next_ip();
-    }
-    steps.len() >= 2 && va - start >= COVER
+        step.matches(&ins, &|_: &str| None, &mut taken)
+    });
+    matched && match_checks(steps.len(), start, va)
 }
 
 /// Whether a start shape's match from `start` to `end` checks the code at
@@ -139,20 +143,20 @@ pub(crate) fn match_checks(steps: usize, start: u64, end: u64) -> bool {
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick_gamedata::make_check;
 /// use enshwick_gamedata::reflect::{Image, Layout};
+/// use enshwick_gamedata::{ShapeNames, make_check};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let old = std::fs::read("old/enshrouded_server.exe")?;
 /// let new = std::fs::read("new/enshrouded_server.exe")?;
 /// let (old, new) = (Image::parse(&old, Layout::File, None)?, Image::parse(&new, Layout::File, None)?);
-/// let check = make_check(&[(&old, 0x1000), (&new, 0x1040)]);
+/// let check = make_check(&ShapeNames::new(), &[(&old, 0x1000), (&new, 0x1040)]);
 /// # let _ = check;
 /// # Ok(())
 /// # }
 /// ```
 #[must_use]
-pub fn make_check(code: &[(&Image<'_>, u64)]) -> Option<Vec<String>> {
+pub fn make_check(names: &ShapeNames, code: &[(&Image<'_>, u64)]) -> Option<Vec<String>> {
     if code.is_empty() {
         return None;
     }
@@ -197,7 +201,7 @@ pub fn make_check(code: &[(&Image<'_>, u64)]) -> Option<Vec<String>> {
         if ends || covered.iter().all(|&c| c >= COVER) {
             let holds = code
                 .iter()
-                .all(|&(image, rva)| check_holds(&steps, image, rva));
+                .all(|&(image, rva)| check_holds(names, &steps, image, rva));
             return holds.then_some(steps);
         }
     }
@@ -216,7 +220,7 @@ enum Level {
     /// Registers and the sign of each displacement.
     Loose,
     /// The sign of each displacement and the memory operand's base, index
-    /// and size; other registers may differ.
+    /// and size; other registers may differ, but stay registers.
     Registers,
 }
 
@@ -225,14 +229,14 @@ fn step_text(ins: &Instruction, level: Level) -> String {
     let exact = level == Level::Exact;
     let ops: Vec<String> = (0..ins.op_count())
         .map(|i| match ins.op_kind(i) {
-            OpKind::Register if level == Level::Registers => "?".to_owned(),
+            OpKind::Register if level == Level::Registers => "?r".to_owned(),
             OpKind::Register => name(ins.op_register(i)),
             OpKind::Memory if ins.is_ip_rel_memory_operand() => "[rip+?]".to_owned(),
             OpKind::Memory
                 if ins.memory_base() == Register::None
                     || ins.segment_prefix() != Register::None =>
             {
-                "?".to_owned()
+                "?m".to_owned()
             }
             OpKind::Memory => {
                 let index = if ins.memory_index() == Register::None {
@@ -270,11 +274,14 @@ fn step_text(ins: &Instruction, level: Level) -> String {
             | OpKind::Immediate8to16
             | OpKind::Immediate8to32
             | OpKind::Immediate8to64
-            | OpKind::Immediate32to64
-                if exact =>
-            {
-                format!("{:#x}", ins.immediate(i))
+            | OpKind::Immediate32to64 => {
+                if exact {
+                    format!("{:#x}", ins.immediate(i))
+                } else {
+                    "?i".to_owned()
+                }
             }
+            OpKind::NearBranch16 | OpKind::NearBranch32 | OpKind::NearBranch64 => "?b".to_owned(),
             _ => "?".to_owned(),
         })
         .collect();
@@ -288,7 +295,7 @@ fn step_text(ins: &Instruction, level: Level) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{check_holds, make_check};
+    use super::{ShapeNames, check_holds, make_check};
     use crate::reflect::{Image, Layout};
 
     /// A PE32+ file of one `.text` section at 0x1000 holding `code`.
@@ -313,16 +320,17 @@ mod tests {
 
     #[test]
     fn a_check_covers_eight_bytes_exact_where_the_builds_agree() {
+        let n = ShapeNames::new();
         // `mov [rsp+0x8],rbx; push rdi; sub rsp,0x20` and the same with 0x30.
         let old = image_bytes(&[0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x20]);
         let new = image_bytes(&[0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x30]);
         let old = Image::parse(&old, Layout::File, None).unwrap();
         let new = Image::parse(&new, Layout::File, None).unwrap();
-        let check = make_check(&[(&old, 0x1000), (&new, 0x1000)]).unwrap();
-        assert_eq!(check, ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,?"]);
-        assert!(check_holds(&check, &new, 0x1000));
-        assert!(!check_holds(&check, &new, 0x1005));
-        assert!(!check_holds(&["frobnicate".to_owned()], &new, 0x1000));
+        let check = make_check(&n, &[(&old, 0x1000), (&new, 0x1000)]).unwrap();
+        assert_eq!(check, ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,?i"]);
+        assert!(check_holds(&n, &check, &new, 0x1000));
+        assert!(!check_holds(&n, &check, &new, 0x1005));
+        assert!(!check_holds(&n, &["frobnicate".to_owned()], &new, 0x1000));
     }
 
     fn image_at(code: &[(usize, &[u8])]) -> Vec<u8> {
@@ -335,6 +343,7 @@ mod tests {
 
     #[test]
     fn a_thunk_s_check_goes_on_at_the_code_it_jumps_to() {
+        let n = ShapeNames::new();
         // `jmp 0x1100` at 0x1000; `mov [rsp+0x8],rbx; push rdi; sub rsp,0x20` at 0x1100.
         let bytes = image_at(&[
             (0x1000, &[0xe9, 0xfb, 0x00, 0x00, 0x00]),
@@ -344,29 +353,31 @@ mod tests {
             ),
         ]);
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
-        let check = make_check(&[(&image, 0x1000), (&image, 0x1000)]).unwrap();
+        let check = make_check(&n, &[(&image, 0x1000), (&image, 0x1000)]).unwrap();
         assert_eq!(
             check,
-            ["jmp ?", "mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x20"]
+            ["jmp ?b", "mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x20"]
         );
-        assert!(check_holds(&check, &image, 0x1000));
-        assert!(!check_holds(&["jmp ?".to_owned()], &image, 0x1000));
+        assert!(check_holds(&n, &check, &image, 0x1000));
+        assert!(!check_holds(&n, &["jmp ?".to_owned()], &image, 0x1000));
     }
 
     #[test]
     fn a_store_s_check_names_its_size() {
+        let n = ShapeNames::new();
         // `mov dword [rcx+0xb8],0x2` and `mov byte [rcx+0xb8],0x2; ret`.
         let dword = image_bytes(&[0xc7, 0x81, 0xb8, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00]);
         let byte = image_bytes(&[0xc6, 0x81, 0xb8, 0x00, 0x00, 0x00, 0x02, 0xc3]);
         let dword = Image::parse(&dword, Layout::File, None).unwrap();
         let byte = Image::parse(&byte, Layout::File, None).unwrap();
-        let check = make_check(&[(&dword, 0x1000)]).unwrap();
+        let check = make_check(&n, &[(&dword, 0x1000)]).unwrap();
         assert_eq!(check, ["mov dword [rcx+0xb8],0x2"]);
-        assert!(!check_holds(&check, &byte, 0x1000));
+        assert!(!check_holds(&n, &check, &byte, 0x1000));
     }
 
     #[test]
     fn builds_that_keep_other_registers_get_a_check_over_the_rest() {
+        let n = ShapeNames::new();
         // `mov rax,rsp; mov [rax+0x8],rbx; mov [rax+0x10],rsi|rbp; push rbp`.
         let old = image_bytes(&[
             0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x08, 0x48, 0x89, 0x70, 0x10, 0x55,
@@ -376,20 +387,49 @@ mod tests {
         ]);
         let old = Image::parse(&old, Layout::File, None).unwrap();
         let new = Image::parse(&new, Layout::File, None).unwrap();
-        let check = make_check(&[(&old, 0x1000), (&new, 0x1000)]).unwrap();
+        let check = make_check(&n, &[(&old, 0x1000), (&new, 0x1000)]).unwrap();
         assert_eq!(
             check,
-            ["mov rax,rsp", "mov [rax+0x8],rbx", "mov qword [rax+?],?"]
+            ["mov rax,rsp", "mov [rax+0x8],rbx", "mov qword [rax+?],?r"]
         );
-        assert!(check_holds(&check, &old, 0x1000) && check_holds(&check, &new, 0x1000));
+        assert!(check_holds(&n, &check, &old, 0x1000) && check_holds(&n, &check, &new, 0x1000));
+    }
+
+    #[test]
+    fn a_register_and_an_immediate_at_one_place_get_no_check() {
+        let n = ShapeNames::new();
+        // `mov [rax+0x10],rsi; push rbp; ...` and `mov qword [rax+0x10],0x5; push rbp; ...`.
+        let register = image_bytes(&[0x48, 0x89, 0x70, 0x10, 0x55, 0x90, 0x90, 0x90, 0x90]);
+        let immediate = image_bytes(&[
+            0x48, 0xc7, 0x40, 0x10, 0x05, 0x00, 0x00, 0x00, 0x55, 0x90, 0x90,
+        ]);
+        let register = Image::parse(&register, Layout::File, None).unwrap();
+        let immediate = Image::parse(&immediate, Layout::File, None).unwrap();
+        assert_eq!(
+            make_check(&n, &[(&register, 0x1000), (&immediate, 0x1000)]),
+            None
+        );
+        let typed = ["mov qword [rax+?],?r".to_owned(), "push ?r".to_owned()];
+        assert!(!check_holds(&n, &typed, &immediate, 0x1000));
+    }
+
+    #[test]
+    fn a_branch_wildcard_takes_no_indirect_jump() {
+        let n = ShapeNames::new();
+        // `jmp [rip+0x10]`, then padding.
+        let bytes = image_bytes(&[0xff, 0x25, 0x10, 0x00, 0x00, 0x00]);
+        let image = Image::parse(&bytes, Layout::File, None).unwrap();
+        assert!(!check_holds(&n, &["jmp ?b".to_owned()], &image, 0x1000));
+        assert!(check_holds(&n, &["jmp [rip+?]".to_owned()], &image, 0x1000));
     }
 
     #[test]
     fn code_that_differs_in_kind_gets_no_check() {
+        let n = ShapeNames::new();
         let old = image_bytes(&[0x53, 0x48, 0x83, 0xec, 0x20, 0x90, 0x90, 0x90, 0x90]);
         let new = image_bytes(&[0x90, 0x48, 0x83, 0xec, 0x20, 0x90, 0x90, 0x90, 0x90]);
         let old = Image::parse(&old, Layout::File, None).unwrap();
         let new = Image::parse(&new, Layout::File, None).unwrap();
-        assert_eq!(make_check(&[(&old, 0x1000), (&new, 0x1000)]), None);
+        assert_eq!(make_check(&n, &[(&old, 0x1000), (&new, 0x1000)]), None);
     }
 }

@@ -20,7 +20,9 @@ Each entry names the pull request that made the change.
   `plus`. A route's `check` is a shape the code at its symbol must start
   with, so the route stands for the symbol's table checks, and
   `Routes::checks` tells whether a route checks its symbol's code;
-  `make_check`, `check_holds` and `shape_checks` make and test checks.
+  `make_check`, `check_holds` and `shape_checks` make and test checks with
+  one `ShapeNames`; `?r`, `?i`, `?b` and `?m` match any register,
+  immediate, branch target or memory operand only.
   The route finder indexes code outside `.pdata`, and the routes find 720
   client and 499 server entries without a table row (#920).
 - `Body`, `Resolved::body` and `MAX_PATTERN`: a symbol whose whole function

@@ -278,7 +278,7 @@ take = "value"
 id = "balancing.zone_size"
 sides = ["client"]
 called_by = ["client_cursor_entity", "upgrade_building_range"]
-check = ["mov r9,[rdx+0x20]", "test r9,r9", "je ?"]
+check = ["mov r9,[rdx+0x20]", "test r9,r9", "je ?b"]
 
 [[route]]
 id = "balancing.zone_size"
@@ -286,7 +286,7 @@ sides = ["server"]
 system = "upgrade_building_range"
 shape = ["lea rcx,[rbp-?]", "call *"]
 take = "address"
-check = ["mov r9,[rdx+0x20]", "test r9,r9", "je ?"]
+check = ["mov r9,[rdx+0x20]", "test r9,r9", "je ?b"]
 
 [[route]]
 id = "balancing.zone_size_valid"
@@ -494,8 +494,8 @@ in = "~c6:bases.entity_query"
 shape = ["call *", "test al,al"]
 take = "address"
 check = [
-  "add rdx,?",
-  "jmp ?",
+  "add rdx,?i",
+  "jmp ?b",
   "push rsi",
   "push rdi",
   "push r12",
@@ -894,7 +894,7 @@ id = "bases.stock_advance"
 in = "bases.stock_cache"
 shape = ["call *", "xor eax,eax"]
 take = "address"
-check = ["push rbx", "sub rsp,0x20", "cmp [rcx+0x1be4],0x0"]
+check = ["push rbx", "sub rsp,0x20", "cmp dword [rcx+0x1be4],0x0"]
 
 [[route]]
 id = "bases.stock_answer_size"
@@ -1043,7 +1043,7 @@ sides = ["client"]
 system = "client_cursor"
 shape = ["cvttss2si rax,xmm2", "mov [rbp+?],rax", "call *"]
 take = "address"
-check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov qword [rax+?],?"]
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov qword [rax+?],?r"]
 
 [[route]]
 id = "building.block_box"
@@ -1051,7 +1051,7 @@ sides = ["server"]
 system = "server_cursor_no_prediction"
 shape = ["cvttss2si rax,xmm2", "mov [rbp+?],rax", "call *"]
 take = "address"
-check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov qword [rax+?],?"]
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov qword [rax+?],?r"]
 
 [[route]]
 id = "building.blueprint_lookup"
@@ -1120,7 +1120,7 @@ check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 [[route]]
 id = "building.max_altars"
 called_by = ["base_player_action", "player_building_place_prop"]
-check = ["mov rax,[rcx+0x20]", "test rax,rax", "jne ?"]
+check = ["mov rax,[rcx+0x20]", "test rax,rax", "jne ?b"]
 
 [[route]]
 id = "building.no_build_test"
@@ -1221,7 +1221,7 @@ sides = ["client"]
 in = "~fn:chat.post_return"
 shape = ["call {chat.post}"]
 take = "end"
-check = ["jmp ?", "mov rcx,[rsp+0x50]", "test rcx,rcx"]
+check = ["jmp ?b", "mov rcx,[rsp+0x50]", "test rcx,rcx"]
 
 [[route]]
 id = "chat.post_return"
@@ -1382,7 +1382,7 @@ system = "custom_map_markers_ui"
 id = "damage.admin_kill"
 system = "admin_player"
 shape = ["mov rdi,[rax]"]
-check = ["mov rdi,[rax]", "test rdi,rdi", "je ?"]
+check = ["mov rdi,[rax]", "test rdi,rdi", "je ?b"]
 
 [[route]]
 id = "damage.drowning"
@@ -1393,20 +1393,20 @@ shape = ["sub [r8+rcx*4],eax", "mov rcx,rbx", "call ?", "mov rcx,[rbp-?]"]
 id = "damage.drowning_death"
 system = "oxygen_update"
 shape = ["mov [r8+rcx*4],r14d"]
-check = ["mov [r8+rcx*4],r14d", "mov rcx,rbx", "call ?"]
+check = ["mov [r8+rcx*4],r14d", "mov rcx,rbx", "call ?b"]
 
 [[route]]
 id = "damage.faction_kill"
 system = "debug_kill_faction"
 shape = ["bt bx,cx"]
 take = "end"
-check = ["jae ?", "lea rdx,[rbp+0x6f]"]
+check = ["jae ?b", "lea rdx,[rbp+0x6f]"]
 
 [[route]]
 id = "damage.fall"
 system = "fall_damage_infliction"
 shape = ["mov [r8+rcx*4],r9d"]
-check = ["mov [r8+rcx*4],r9d", "mov rcx,rbx", "call ?"]
+check = ["mov [r8+rcx*4],r9d", "mov rcx,rbx", "call ?b"]
 
 [[route]]
 id = "damage.freezing"
@@ -1447,7 +1447,13 @@ check = ["sub [r8+rcx*4],eax", "mov rdx,rdi", "mov rcx,rbx"]
 id = "damage.shroud_death"
 system = "fog_resistance_update"
 shape = ["mov [r8+rcx*4],edx"]
-check = ["mov [r8+rcx*4],edx", "jmp ?", "mov rdx,rdi", "mov rcx,rbx", "call ?"]
+check = [
+  "mov [r8+rcx*4],edx",
+  "jmp ?b",
+  "mov rdx,rdi",
+  "mov rcx,rbx",
+  "call ?b",
+]
 
 [[route]]
 id = "daytime.anchor"
@@ -2068,7 +2074,7 @@ id = "experience.level_cap"
 system = "player_level"
 shape = ["mov rcx,[rbp-?]", "call *"]
 take = "address"
-check = ["mov rax,[rcx+0x20]", "test rax,rax", "jne ?"]
+check = ["mov rax,[rcx+0x20]", "test rax,rax", "jne ?b"]
 
 [[route]]
 id = "experience.need"
@@ -2482,7 +2488,7 @@ id = "inventory.desc_zero"
 system = "handle_crafting_events"
 shape = ["call *", "xorps xmm0,xmm0"]
 take = "address"
-check = ["xor eax,eax", "mov [rcx],0x0", "mov [rcx+0x8],rax"]
+check = ["xor eax,eax", "mov word [rcx],0x0", "mov [rcx+0x8],rax"]
 
 [[route]]
 id = "inventory.destroy_slot"
@@ -2552,7 +2558,7 @@ id = "inventory.txn_init"
 system = "actor_interaction"
 shape = ["call *", "xor edx,edx"]
 take = "address"
-check = ["mov [rcx+0x71a8],0x0", "mov rax,[rdx+0x8]"]
+check = ["mov byte [rcx+0x71a8],0x0", "mov rax,[rdx+0x8]"]
 
 [[route]]
 id = "inventory.txn_new"
@@ -2676,7 +2682,7 @@ id = "knowledge.input_check"
 system = "handle_knowledge_trigger_input"
 shape = ["lea rcx,[rbx+?]", "call ?"]
 take = "end"
-check = ["test al,al", "je ?", "movsd xmm0,[rbx+0x18c]"]
+check = ["test al,al", "je ?b", "movsd xmm0,[rbx+0x18c]"]
 
 [[route]]
 id = "knowledge.journal"
@@ -2730,7 +2736,7 @@ sides = ["client"]
 in = "~c0:knowledge.player_value"
 shape = ["jmp *"]
 take = "address"
-check = ["push rbx", "sub rsp,0x20", "cmp [rcx+0xd2],0x0"]
+check = ["push rbx", "sub rsp,0x20", "cmp byte [rcx+0xd2],0x0"]
 
 [[route]]
 id = "knowledge.player_value"
@@ -2738,7 +2744,7 @@ sides = ["server"]
 in = "~c1:knowledge.player_value"
 shape = ["mov rcx,r14", "call *"]
 take = "address"
-check = ["push rbx", "sub rsp,0x20", "cmp [rcx+0xd2],0x0"]
+check = ["push rbx", "sub rsp,0x20", "cmp byte [rcx+0xd2],0x0"]
 
 [[route]]
 id = "knowledge.push"
@@ -2952,7 +2958,7 @@ sides = ["client"]
 in = "~fn:chat.post_return"
 shape = ["call {label.replace}"]
 take = "end"
-check = ["cmp [rbp+0x30],0x0", "jne ?", "mov rax,[rbp+0x38]"]
+check = ["cmp byte [rbp+0x30],0x0", "jne ?b", "mov rax,[rbp+0x38]"]
 
 [[route]]
 id = "label.rename_return"
@@ -2960,7 +2966,7 @@ sides = ["server"]
 in = "~fn:chat.post_return"
 shape = ["call {label.replace}"]
 take = "end"
-check = ["cmp [rbp+0x8],r12l", "je ?", "mov rcx,[rsp+0x50]"]
+check = ["cmp [rbp+0x8],r12l", "je ?b", "mov rcx,[rsp+0x50]"]
 
 [[route]]
 id = "label.replace"
@@ -3082,7 +3088,7 @@ sides = ["client"]
 in = "~caller:bases.client_destroy"
 shape = ["mov rcx,[rbx]", "call *", "mov [rbx+?],r12", "mov rcx,[rbx+?]"]
 take = "address"
-check = ["test rdx,rdx", "je ?", "mov [rsp+0x18],rbx"]
+check = ["test rdx,rdx", "je ?b", "mov [rsp+0x18],rbx"]
 
 [[route]]
 id = "map.fog_reveal"
@@ -3253,7 +3259,7 @@ sides = ["client"]
 in = "~c1:net.message_release"
 shape = ["mov rcx,[rcx]", "call *", "mov rdx,[r15+?]"]
 take = "address"
-check = ["mov rdx,[rdx]", "xor r8d,r8d", "test [rdx+0x30],0x10"]
+check = ["mov rdx,[rdx]", "xor r8d,r8d", "test byte [rdx+0x30],0x10"]
 
 [[route]]
 id = "net.message_release"
@@ -3261,7 +3267,7 @@ sides = ["server"]
 in = "~fn:chat.post_return"
 shape = ["call *", "movups xmm1,[rip+?]", "lea r10,[rip+?]"]
 take = "address"
-check = ["mov rdx,[rdx]", "xor r8d,r8d", "test [rdx+0x30],0x10"]
+check = ["mov rdx,[rdx]", "xor r8d,r8d", "test byte [rdx+0x30],0x10"]
 
 [[route]]
 id = "net.session_limit"
@@ -3368,7 +3374,7 @@ id = "npc.update"
 system = "unique_npc_init"
 shape = ["call *", "lea rdx,[rbp+?]"]
 take = "address"
-check = ["jmp ?", "mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
+check = ["jmp ?b", "mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "npc_unlock_state_client"
@@ -3828,7 +3834,7 @@ called_by = [
   "~c1:server.save_request",
   "~fn:chat.post_return",
 ]
-check = ["push rbx", "sub rsp,0x20", "cmp [rcx+0x18aa],0x0"]
+check = ["push rbx", "sub rsp,0x20", "cmp byte [rcx+0x18aa],0x0"]
 
 [[route]]
 id = "server.save_step"
@@ -3940,9 +3946,9 @@ shape = ["call {skill.node_unlocked}"]
 take = "end"
 check = [
   "test al,al",
-  "je ?",
+  "je ?b",
   "mov bl,0x1",
-  "jmp ?",
+  "jmp ?b",
   "mov rcx,[rbp+?]",
   "test rcx,rcx",
 ]
@@ -3957,7 +3963,7 @@ id = "skill.points_per_level"
 in = "~caller:skill.points_per_level"
 shape = ["mov rcx,rsi", "call *"]
 take = "address"
-check = ["mov rax,[rcx+0x20]", "test rax,rax", "jne ?"]
+check = ["mov rax,[rcx+0x20]", "test rax,rax", "jne ?b"]
 
 [[route]]
 id = "survivors.assign_bed"
@@ -3981,7 +3987,7 @@ id = "survivors.assign_return_b"
 system = "player_assign_npc"
 shape = ["mov rdx,rbx", "call ?"]
 take = "end"
-check = ["test eax,eax", "je ?", "mov rdx,[rsp+0x68]"]
+check = ["test eax,eax", "je ?b", "mov rdx,[rsp+0x68]"]
 
 [[route]]
 id = "survivors.assign_targets"
@@ -3993,13 +3999,13 @@ take = "value"
 id = "survivors.bed_init_return"
 system = "npc_bed_init"
 shape = ["test eax,eax"]
-check = ["test eax,eax", "je ?"]
+check = ["test eax,eax", "je ?b"]
 
 [[route]]
 id = "survivors.bed_return"
 system = "npc_bed"
 shape = ["mov edi,eax"]
-check = ["mov edi,eax", "test eax,eax", "je ?"]
+check = ["mov edi,eax", "test eax,eax", "je ?b"]
 
 [[route]]
 id = "survivors.bed_transform"
@@ -4104,7 +4110,7 @@ sides = ["client"]
 in = "~c1:survivors.registry_load"
 shape = ["mov rcx,[rdi+0x200]", "call *"]
 take = "address"
-check = ["push rsi", "push rdi", "sub rsp,0x68", "cmp [rcx+0x20],0x0"]
+check = ["push rsi", "push rdi", "sub rsp,0x68", "cmp qword [rcx+0x20],0x0"]
 
 [[route]]
 id = "survivors.registry_load"
@@ -4112,7 +4118,7 @@ sides = ["server"]
 in = "~caller:survivors.registry_load"
 shape = ["mov rcx,[rdi+0x200]", "call *"]
 take = "address"
-check = ["push rsi", "push rdi", "sub rsp,0x68", "cmp [rcx+0x20],0x0"]
+check = ["push rsi", "push rdi", "sub rsp,0x68", "cmp qword [rcx+0x20],0x0"]
 
 [[route]]
 id = "survivors.registry_loaded"
@@ -4130,7 +4136,7 @@ take = "value"
 id = "survivors.roaming_return"
 system = "npc_active_input"
 shape = ["mov ebx,eax"]
-check = ["mov ebx,eax", "test eax,eax", "je ?", "mov rbp,[rsp+0x88]"]
+check = ["mov ebx,eax", "test eax,eax", "je ?b", "mov rbp,[rsp+0x88]"]
 
 [[route]]
 id = "survivors.spawn"
@@ -4162,7 +4168,7 @@ id = "survivors.spawn_return"
 in = "survivors.spawn"
 shape = ["call {npc.lookup}"]
 take = "end"
-check = ["mov r15d,eax", "test eax,eax", "je ?", "mov rcx,[r14]"]
+check = ["mov r15d,eax", "test eax,eax", "je ?b", "mov rcx,[r14]"]
 
 [[route]]
 id = "survivors.spawn_target"
@@ -4260,13 +4266,13 @@ take = "value"
 id = "survivors.unique_return_a"
 system = "unique_npc_spawns"
 shape = ["mov ebx,eax", "test dil,dil"]
-check = ["mov ebx,eax", "test dil,dil", "jne ?", "call ?"]
+check = ["mov ebx,eax", "test dil,dil", "jne ?b", "call ?b"]
 
 [[route]]
 id = "survivors.unique_return_b"
 system = "unique_npc_spawns"
 shape = ["mov ebx,eax", "mov rcx,rsi"]
-check = ["mov ebx,eax", "mov rcx,rsi", "test ebx,ebx", "jne ?"]
+check = ["mov ebx,eax", "mov rcx,rsi", "test ebx,ebx", "jne ?b"]
 
 [[route]]
 id = "survivors.unique_saved_state"
@@ -4337,7 +4343,7 @@ check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rdi"]
 id = "textures.registry_fill"
 sides = ["client"]
 loads = ["out of game ui textures"]
-check = ["push ?", "sub rsp,0x40", "cmp byte [rcx+0x36c0],0x1"]
+check = ["push ?r", "sub rsp,0x40", "cmp byte [rcx+0x36c0],0x1"]
 
 [[route]]
 id = "textures.registry_listed"
@@ -4352,7 +4358,7 @@ sides = ["client"]
 in = "textures.registry_fill"
 shape = ["sub rsp,?"]
 take = "end"
-check = ["cmp byte [rcx+0x36c0],0x1", "mov ?,?"]
+check = ["cmp byte [rcx+0x36c0],0x1", "mov ?r,?r"]
 
 [[route]]
 id = "textures.request"
@@ -4398,6 +4404,7 @@ id = "textures.request_signal"
 sides = ["client"]
 in = "textures.request"
 shape = ["mov rcx,[rdi+?]", "test rcx,rcx", "je ?", "call {textures.signal}"]
+check = ["mov rcx,[rdi+0x8]", "test rcx,rcx", "je ?b"]
 
 [[route]]
 id = "textures.request_size"
@@ -4947,7 +4954,7 @@ sides = ["client"]
 in = "~fn:ui.main_menu_site"
 shape = ["jne ?", "mov [rsi+?],?"]
 take = "end"
-check = ["xor eax,eax", "mov [rsp+?],?"]
+check = ["xor eax,eax", "mov dword [rsp+?],?i"]
 
 [[route]]
 id = "ui.menu_entry_extent"
@@ -5091,7 +5098,7 @@ sides = ["client"]
 in = "ui.popup"
 shape = ["call *", "mov rcx,{ui.context}", "lea rdx,[rbp+?]"]
 take = "address"
-check = ["cmp [rcx+0x10],0x0", "movups xmm0,[rdx]", "movups [rcx],xmm0"]
+check = ["cmp byte [rcx+0x10],0x0", "movups xmm0,[rdx]", "movups [rcx],xmm0"]
 
 [[route]]
 id = "ui.nav_sound"
@@ -5126,7 +5133,7 @@ shape = [
   "call {ui.node_stretch}",
 ]
 take = "address"
-check = ["xorps xmm0,xmm0", "mov [rcx+0x94],0x0"]
+check = ["xorps xmm0,xmm0", "mov dword [rcx+0x94],0x0"]
 
 [[route]]
 id = "ui.node_id"
@@ -5174,7 +5181,7 @@ sides = ["client"]
 in = "ui.hud"
 shape = ["mov [rbp+?],ebx", "mov [rbp+?],?", "call *"]
 take = "address"
-check = ["mov [rcx+0xb8],0x2"]
+check = ["mov dword [rcx+0xb8],0x2"]
 
 [[route]]
 id = "ui.node_stretch"
@@ -5190,7 +5197,7 @@ sides = ["client"]
 in = "ui.slider"
 shape = ["call *", "xorps xmm0,xmm0"]
 take = "address"
-check = ["xorps xmm0,xmm0", "mov [rcx+0x90],0x0"]
+check = ["xorps xmm0,xmm0", "mov dword [rcx+0x90],0x0"]
 
 [[route]]
 id = "ui.panel"
@@ -5234,6 +5241,7 @@ id = "ui.pause_menu_site"
 sides = ["client"]
 in = "~fn:ui.context_state"
 shape = ["mov rax,{ui.context}", "mov r14,[rax+?]"]
+check = ["mov rax,[rip+?]", "mov r14,[rax+0xc8]"]
 
 [[route]]
 id = "ui.persist"
@@ -5385,7 +5393,7 @@ sides = ["client"]
 in = "~c2:~c4:~fn:ui.nav_config_size"
 shape = ["call *", "cmp [r15+?],?", "mov edi,?", "je ?", "mov rax,{ui.context}"]
 take = "address"
-check = ["cmp [rcx+0x190],0x0", "movups xmm0,[rdx]"]
+check = ["cmp byte [rcx+0x190],0x0", "movups xmm0,[rdx]"]
 
 [[route]]
 id = "ui.scroll_nav"
@@ -5406,7 +5414,7 @@ sides = ["client"]
 in = "~c0:~c4:~c4:~fn:ui.nav_config_size"
 shape = ["lea rcx,[rbp+?]", "call *", "mov rax,{ui.context}"]
 take = "address"
-check = ["cmp [rcx+0x468],0x0", "jne ?"]
+check = ["cmp byte [rcx+0x468],0x0", "jne ?b"]
 
 [[route]]
 id = "ui.scrollbar_look"
@@ -5414,7 +5422,7 @@ sides = ["client"]
 in = "~c2:~c0:~c4:~fn:ui.nav_config_size"
 shape = ["call *", "mov rcx,{ui.context}"]
 take = "address"
-check = ["mov [rsp+0x8],0xffffffff"]
+check = ["mov dword [rsp+0x8],0xffffffff"]
 
 [[route]]
 id = "ui.slider"
@@ -5954,7 +5962,7 @@ take = "value"
 [[route]]
 id = "weather.free"
 called_by = ["~fn:weather.layer_count"]
-check = ["test edx,edx", "je ?"]
+check = ["test edx,edx", "je ?b"]
 
 [[route]]
 id = "weather.generation"
@@ -6287,7 +6295,7 @@ id = "world.step"
 in = "~c1:server.save_request"
 shape = ["movzx r12d,[rbp+?]", "mov rcx,[r14+?]", "call *"]
 take = "address"
-check = ["push rbx", "push rdi", "sub rsp,0x38", "cmp [rcx],0x2"]
+check = ["push rbx", "push rdi", "sub rsp,0x38", "cmp byte [rcx],0x2"]
 
 [[route]]
 id = "world.time"
