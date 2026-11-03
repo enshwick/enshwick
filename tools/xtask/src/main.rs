@@ -42,7 +42,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the

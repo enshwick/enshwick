@@ -138,8 +138,16 @@ row.
    header in the table file, where it was in a mod's row), and a flagged
    constant has one above it. Read `git diff`, build, and try the new build in
    game.
-5. **Open a pull request** with the new table, the rows and the report's
-   summary. Never commit an executable or anything else from the game. Once
+5. **Write the report data** of the new table, which the compatibility page
+   reads, under the table's file name:
+
+   ```bash
+   cargo xtask compat server/enshrouded_server.exe \
+     --data crates/enshwick-gamedata/reports/<table file name>
+   ```
+
+6. **Open a pull request** with the new table, its report data, the rows and
+   the report's summary. Never commit an executable or anything else from the game. Once
    it is merged, the next loader build embeds the table.
 
 `--patterns <exe>` rewrites the patterns of the table for that executable's

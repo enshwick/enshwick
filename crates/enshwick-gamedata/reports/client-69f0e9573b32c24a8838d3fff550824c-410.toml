@@ -1,0 +1,44 @@
+# What the loader finds on this game build; `cargo xtask compat <exe> --data <file>`
+# writes it.
+
+table = "1.0 client (1269579)"
+side = "client"
+game_version = 1269579
+entries = 850
+routed = 717
+missing = ["bases.allocator", "bases.animal_value", "bases.answer_error", "bases.base_ids", "bases.client_destroy", "bases.container_data", "bases.npc_value", "bases.record_base_id", "building.box_extent", "building.box_min", "building.box_size", "ecs.spawn_component_hash", "ecs.spawn_requester", "net.message_release", "server.ban_count", "server.ban_entry_account", "server.ban_entry_character_name", "server.ban_entry_date", "server.ban_entry_display_name", "server.ban_entry_size", "server.ban_list", "server.ban_name_length", "server.ban_name_text", "ui.no_construct", "ui.scroll_state_size", "voxel.finest_level", "voxel.grid_stride"]
+
+[[feature]]
+name = "bases"
+state = "partly"
+missing = ["bases.base_ids", "bases.client_destroy", "bases.allocator", "bases.animal_value", "bases.answer_error", "bases.container_data", "bases.npc_value", "bases.record_base_id"]
+
+[[feature]]
+name = "carrier"
+state = "partly"
+missing = ["net.message_release"]
+
+[[feature]]
+name = "console"
+state = "partly"
+missing = ["server.ban_count", "server.ban_entry_account", "server.ban_entry_character_name", "server.ban_entry_date", "server.ban_entry_display_name", "server.ban_entry_size", "server.ban_list", "server.ban_name_length", "server.ban_name_text"]
+
+[[feature]]
+name = "spawns"
+state = "partly"
+missing = ["ecs.spawn_component_hash", "ecs.spawn_requester"]
+
+[[feature]]
+name = "transactions"
+state = "partly"
+missing = ["building.box_extent", "building.box_min", "building.box_size"]
+
+[[feature]]
+name = "ui"
+state = "partly"
+missing = ["ui.no_construct", "ui.scroll_state_size"]
+
+[[feature]]
+name = "voxels"
+state = "partly"
+missing = ["voxel.finest_level", "voxel.grid_stride"]
