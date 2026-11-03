@@ -30,8 +30,8 @@ fn the_join_target_copies_read_on_each_client() {
 }
 
 /// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
-/// skipped without it), their own table with every routed row and its
-/// `.bytes` check taken out gets each entry back from the engine routes,
+/// skipped without it), their own table with every routed row it pins and
+/// its `.bytes` check taken out gets each entry back from the engine routes,
 /// with the value the full table pins, and nothing goes missing.
 #[test]
 fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
@@ -59,7 +59,12 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
             .unwrap()
             .1;
         let mut doc: toml_edit::DocumentMut = text.parse().unwrap();
-        let ids: Vec<&str> = routes.ids().filter(|id| routes.routes(id, side)).collect();
+        let pinned = full.resolve();
+        let ids: Vec<&str> = routes
+            .ids()
+            .filter(|id| routes.routes(id, side))
+            .filter(|id| pinned.symbol(id).or_else(|| pinned.constant(id)).is_some())
+            .collect();
         for section in ["symbols", "constants"] {
             let rows = doc[section].as_table_mut().unwrap();
             for id in &ids {
@@ -75,11 +80,7 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
             lacking: OnceLock::new(),
         };
         let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
-        assert_eq!(
-            build.route(&routes, &image, &reflection, running),
-            ids.len()
-        );
-        let pinned = full.resolve();
+        assert!(build.route(&routes, &image, &reflection, running) >= ids.len());
         for id in ids {
             assert!(build.routed(id), "{var}: {id}");
             let (have, want) = match pinned.symbol(id) {

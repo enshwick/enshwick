@@ -4,10 +4,13 @@
 //! still matches.
 //!
 //! A step is a mnemonic and its operands, comma separated: a register
-//! (`r13`), memory through a register with a displacement (`[rbp-*]`,
-//! `[rbp+?]`, `[rcx]`) or RIP-relative (`[rip+*]`), `?` for any operand, `*`
-//! for any operand whose value the route takes, and `{id}` for the address
-//! of another entry, as a branch target or a RIP-relative operand.
+//! (`r13`); memory through a base register, an optional index register with
+//! its scale and a displacement (`[rcx]`, `[rbp-*]`, `[rbp+?]`, `[rdx+0x78]`,
+//! `[rcx+r10*4+?]`) or RIP-relative (`[rip+*]`); an exact immediate
+//! (`0x1`); `?` for any operand; `*` for any operand whose value the route
+//! takes; and `{id}` for the address of another entry, as a branch target or
+//! a RIP-relative operand. A `*` or `?` displacement is not zero and has the
+//! sign written.
 
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
 
@@ -18,14 +21,24 @@ enum Disp {
     None,
     /// A displacement of this sign, taken when `take` is set.
     Signed { negative: bool, take: bool },
+    /// This displacement.
+    Exact(i64),
 }
 
 /// One operand of a step.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Op {
     Register(Register),
-    Memory { base: Register, disp: Disp },
-    Any { take: bool },
+    Memory {
+        base: Register,
+        /// The index register and its scale; `Register::None` for none.
+        index: (Register, u32),
+        disp: Disp,
+    },
+    Immediate(u64),
+    Any {
+        take: bool,
+    },
     Entry(String),
 }
 
@@ -75,6 +88,14 @@ impl Step {
             .count()
     }
 
+    /// The ids of the entries the step names.
+    pub(crate) fn entries(&self) -> impl Iterator<Item = &str> {
+        self.ops.iter().filter_map(|op| match op {
+            Op::Entry(id) => Some(id.as_str()),
+            _ => None,
+        })
+    }
+
     /// Whether `ins` is this step, with `entry` giving the address of a named
     /// entry; the taken value, if the step takes one, goes to `taken`.
     pub(crate) fn matches(
@@ -91,11 +112,17 @@ impl Step {
             let kind = ins.op_kind(i);
             match op {
                 Op::Register(want) => kind == OpKind::Register && ins.op_register(i) == *want,
-                Op::Memory { base, disp } => {
+                Op::Memory { base, index, disp } => {
                     kind == OpKind::Memory
                         && ins.memory_base() == *base
-                        && ins.memory_index() == Register::None
+                        && ins.memory_index() == index.0
+                        && (index.0 == Register::None || ins.memory_index_scale() == index.1)
                         && memory(ins, *base, *disp, taken)
+                }
+                Op::Immediate(want) => {
+                    kind != OpKind::Memory
+                        && kind != OpKind::NearBranch64
+                        && value(ins, i, kind) == Some(*want)
                 }
                 Op::Any { take } => !take || value(ins, i, kind).is_some_and(|v| set(taken, v)),
                 Op::Entry(id) => entry(id).is_some_and(|want| value(ins, i, kind) == Some(want)),
@@ -115,12 +142,13 @@ fn memory(ins: &Instruction, base: Register, disp: Disp, taken: &mut Option<u64>
     if base == Register::RIP {
         return match disp {
             Disp::Signed { take, .. } => !take || set(taken, ins.ip_rel_memory_address()),
-            Disp::None => false,
+            Disp::None | Disp::Exact(_) => false,
         };
     }
     let signed = ins.memory_displacement64().cast_signed();
     match disp {
         Disp::None => signed == 0,
+        Disp::Exact(want) => signed == want,
         Disp::Signed { negative, take } => {
             (signed < 0) == negative && signed != 0 && (!take || set(taken, signed.unsigned_abs()))
         }
@@ -151,6 +179,10 @@ fn register(name: &str) -> Result<Register, ShapeError> {
         .ok_or_else(|| ShapeError(format!("{name:?} is no register")))
 }
 
+fn hex(text: &str) -> Option<u64> {
+    u64::from_str_radix(text.strip_prefix("0x")?, 16).ok()
+}
+
 fn operand(text: &str) -> Result<Op, ShapeError> {
     match text {
         "?" => return Ok(Op::Any { take: false }),
@@ -160,32 +192,71 @@ fn operand(text: &str) -> Result<Op, ShapeError> {
     if let Some(id) = text.strip_prefix('{').and_then(|t| t.strip_suffix('}')) {
         return Ok(Op::Entry(id.to_owned()));
     }
+    if let Some(value) = hex(text) {
+        return Ok(Op::Immediate(value));
+    }
     let Some(inner) = text.strip_prefix('[').and_then(|t| t.strip_suffix(']')) else {
         return register(text).map(Op::Register);
     };
-    let (base, disp) = match inner.find(['+', '-']) {
-        None => (inner, Disp::None),
-        Some(at) => {
-            let take = match &inner[at + 1..] {
-                "*" => true,
-                "?" => false,
+    memory_operand(inner)
+}
+
+/// Reads the inside of a memory operand: `base`, then `+index*scale`, then
+/// a signed `*`, `?` or hexadecimal displacement, each but the base optional.
+fn memory_operand(inner: &str) -> Result<Op, ShapeError> {
+    let cut = |text: &str| text.find(['+', '-']).unwrap_or(text.len());
+    let at = cut(inner);
+    let base = register(&inner[..at])?;
+    let mut rest = &inner[at..];
+    let mut index = (Register::None, 1);
+    if let Some(after) = rest.strip_prefix('+')
+        && let Some((name, tail)) = after[..cut(after)].split_once('*')
+        && !name.is_empty()
+    {
+        let scale = tail
+            .parse()
+            .ok()
+            .filter(|s| [1, 2, 4, 8].contains(s))
+            .ok_or_else(|| ShapeError(format!("{tail:?}: a scale is 1, 2, 4 or 8")))?;
+        index = (register(name)?, scale);
+        rest = &after[cut(after)..];
+    }
+    let disp = match rest.split_at_checked(1) {
+        None => Disp::None,
+        Some((sign, value)) => {
+            let negative = sign == "-";
+            match value {
+                "*" => Disp::Signed {
+                    negative,
+                    take: true,
+                },
+                "?" => Disp::Signed {
+                    negative,
+                    take: false,
+                },
                 other => {
-                    return Err(ShapeError(format!(
-                        "{other:?}: a displacement is `*` or `?`"
-                    )));
+                    let exact = hex(other)
+                        .and_then(|v| i64::try_from(v).ok())
+                        .filter(|&v| v != 0)
+                        .ok_or_else(|| {
+                            ShapeError(format!(
+                                "{other:?}: a displacement is `*`, `?` or a hexadecimal number"
+                            ))
+                        })?;
+                    Disp::Exact(if negative { -exact } else { exact })
                 }
-            };
-            let negative = inner.as_bytes()[at] == b'-';
-            (&inner[..at], Disp::Signed { negative, take })
+            }
         }
     };
-    let base = register(base)?;
-    if base == Register::RIP && disp == Disp::None {
+    if base == Register::RIP && !matches!(disp, Disp::Signed { .. }) {
         return Err(ShapeError(
             "a RIP-relative operand is `[rip+*]` or `[rip+?]`".to_owned(),
         ));
     }
-    Ok(Op::Memory { base, disp })
+    if base == Register::RIP && index.0 != Register::None {
+        return Err(ShapeError("a RIP-relative operand has no index".to_owned()));
+    }
+    Ok(Op::Memory { base, index, disp })
 }
 
 /// Where a shape matched: the first instruction's address, the address after
@@ -197,13 +268,13 @@ pub(crate) struct Match {
     pub(crate) taken: Option<u64>,
 }
 
-/// The first run of `instructions` that is `steps`, in order.
-pub(crate) fn find(
-    steps: &[Step],
-    instructions: &[Instruction],
-    entry: &impl Fn(&str) -> Option<u64>,
-) -> Option<Match> {
-    instructions.windows(steps.len()).find_map(|run| {
+/// Every run of `instructions` that is `steps`, in order.
+pub(crate) fn matches<'s>(
+    steps: &'s [Step],
+    instructions: &'s [Instruction],
+    entry: &'s impl Fn(&str) -> Option<u64>,
+) -> impl Iterator<Item = Match> + 's {
+    instructions.windows(steps.len()).filter_map(move |run| {
         let mut taken = None;
         steps
             .iter()

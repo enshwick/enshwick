@@ -21,7 +21,13 @@ fn a_route_without_exactly_one_way_or_with_a_wrong_take_is_refused() {
         r#"id = "a"
            called_by = []"#,
         r#"id = "a"
-           system = "s""#,
+           calls = []"#,
+        r#"id = "a"
+           system = "s"
+           in = "t"
+           shape = ["call ?"]"#,
+        r#"id = "a"
+           in = "t""#,
         r#"id = "a"
            loads = ["t"]
            take = "end""#,
@@ -38,6 +44,26 @@ fn a_route_without_exactly_one_way_or_with_a_wrong_take_is_refused() {
         r#"id = "a"
            system = "s"
            shape = ["mov ecx,[rip]"]"#,
+        r#"id = "a"
+           in = "s"
+           shape = ["call ?"]
+           take = "fixed""#,
+        r#"id = "a"
+           in = "s"
+           shape = ["call *"]
+           take = "address"
+           value = 1"#,
+        r#"id = "a"
+           in = "s"
+           shape = ["call *"]
+           take = "address"
+           plus = 1"#,
+        r#"id = "a"
+           in = "s"
+           shape = ["mov eax,[rcx+r10*3+?]"]"#,
+        r#"id = "a"
+           in = "s"
+           shape = ["mov eax,[rcx+0x0]"]"#,
     ] {
         assert!(
             Routes::parse(&format!("[[route]]\n{bad}")).is_err(),
@@ -49,21 +75,46 @@ fn a_route_without_exactly_one_way_or_with_a_wrong_take_is_refused() {
 }
 
 #[test]
-fn a_route_is_limited_to_the_sides_it_names() {
+fn an_id_has_one_route_per_side() {
     let routes = Routes::parse(
-        "[[route]]\nid = \"a\"\nloads = [\"t\"]\nsides = [\"client\"]\n[[route]]\nid = \"b\"\nloads = [\"u\"]",
+        "[[route]]\nid = \"a.b\"\nloads = [\"t\"]\nsides = [\"client\"]\n[[route]]\nid = \"a.b\"\nloads = [\"u\"]\nsides = [\"server\"]",
     )
     .unwrap();
-    assert!(routes.routes("a", Side::Client));
-    assert!(!routes.routes("a", Side::Server));
-    assert!(routes.routes("b", Side::Server) && routes.routes("b", Side::Client));
+    assert!(routes.routes("a.b", Side::Client) && routes.routes("a.b", Side::Server));
+    assert_eq!(routes.ids().collect::<Vec<_>>(), ["a.b"]);
+    let overlap = "[[route]]\nid = \"a.b\"\nloads = [\"t\"]\n[[route]]\nid = \"a.b\"\nloads = [\"u\"]\nsides = [\"server\"]";
+    assert!(Routes::parse(overlap).is_err());
+}
+
+#[test]
+fn a_route_is_limited_to_the_sides_it_names() {
+    let routes = Routes::parse(
+        "[[route]]\nid = \"a.x\"\nloads = [\"t\"]\nsides = [\"client\"]\n[[route]]\nid = \"b.x\"\nloads = [\"u\"]",
+    )
+    .unwrap();
+    assert!(routes.routes("a.x", Side::Client));
+    assert!(!routes.routes("a.x", Side::Server));
+    assert!(routes.routes("b.x", Side::Server) && routes.routes("b.x", Side::Client));
+}
+
+#[test]
+fn waypoints_are_no_entries() {
+    let routes = Routes::parse(
+        "[[route]]\nid = \"~fn:a.x\"\nloads = [\"t\"]\n[[route]]\nid = \"some_system\"\nsystem = \"some_system\"\n[[route]]\nid = \"a.x\"\nin = \"~fn:a.x\"\nshape = [\"ret\"]",
+    )
+    .unwrap();
+    assert_eq!(routes.ids().collect::<Vec<_>>(), ["a.x"]);
+    assert!(!routes.routes("~fn:a.x", Side::Server));
+    assert!(!routes.routes("some_system", Side::Server));
 }
 
 /// `mov r8d, 0x1b8; lea rdx, [rbp-0x60]; mov rcx, r13; call +0; mov ecx,
-/// [rip+0x10]; call -0x0a`, at 0x1000: the calls go to 0x1012 and 0x1013.
-const CODE: [u8; 29] = [
+/// [rip+0x10]; call -0x0a; mov eax, [rcx+r10*4+0x10]`, at 0x1000: the calls
+/// go to 0x1012 and 0x1013.
+const CODE: [u8; 34] = [
     0x41, 0xb8, 0xb8, 0x01, 0x00, 0x00, 0x48, 0x8d, 0x55, 0xa0, 0x49, 0x8b, 0xcd, 0xe8, 0x00, 0x00,
-    0x00, 0x00, 0x8b, 0x0d, 0x10, 0x00, 0x00, 0x00, 0xe8, 0xf6, 0xff, 0xff, 0xff,
+    0x00, 0x00, 0x8b, 0x0d, 0x10, 0x00, 0x00, 0x00, 0xe8, 0xf6, 0xff, 0xff, 0xff, 0x42, 0x8b, 0x44,
+    0x91, 0x10,
 ];
 
 fn decoded() -> Vec<Instruction> {
@@ -79,39 +130,238 @@ fn steps(text: &[&str]) -> Vec<Step> {
     text.iter().map(|s| Step::parse(s).unwrap()).collect()
 }
 
+fn first(text: &[&str], entry: &impl Fn(&str) -> Option<u64>) -> Option<shape::Match> {
+    let steps = steps(text);
+    let code = decoded();
+    shape::matches(&steps, &code, entry).next()
+}
+
 #[test]
 fn a_shape_matches_what_the_instructions_do_and_takes_its_hole() {
     let none = |_: &str| None;
-    let found = shape::find(
-        &steps(&["lea rdx,[rbp-*]", "mov rcx,r13", "call ?"]),
-        &decoded(),
-        &none,
-    )
-    .unwrap();
+    let found = first(&["lea rdx,[rbp-*]", "mov rcx,r13", "call ?"], &none).unwrap();
     assert_eq!(
         (found.start, found.end, found.taken),
         (0x1006, 0x1012, Some(0x60))
     );
-    let rip = shape::find(&steps(&["mov ecx,[rip+*]"]), &decoded(), &none).unwrap();
+    let rip = first(&["mov ecx,[rip+*]"], &none).unwrap();
     assert_eq!(rip.taken, Some(0x1018 + 0x10));
-    assert!(shape::find(&steps(&["lea rdx,[rbp+?]"]), &decoded(), &none).is_none());
-    assert!(shape::find(&steps(&["mov rcx,r12"]), &decoded(), &none).is_none());
+    assert!(first(&["lea rdx,[rbp+?]"], &none).is_none());
+    assert!(first(&["mov rcx,r12"], &none).is_none());
+}
+
+#[test]
+fn a_shape_matches_an_index_register_an_exact_displacement_and_an_exact_immediate() {
+    let none = |_: &str| None;
+    let indexed = first(&["mov eax,[rcx+r10*4+*]"], &none).unwrap();
+    assert_eq!((indexed.start, indexed.taken), (0x101d, Some(0x10)));
+    assert!(first(&["mov eax,[rcx+r10*4+0x10]"], &none).is_some());
+    assert!(first(&["mov eax,[rcx+r10*4+0x18]"], &none).is_none());
+    assert!(first(&["mov eax,[rcx+r10*8+?]"], &none).is_none());
+    assert!(first(&["mov eax,[rcx+?]"], &none).is_none());
+    assert!(first(&["lea rdx,[rbp-0x60]"], &none).is_some());
+    assert!(first(&["lea rdx,[rbp+0x60]"], &none).is_none());
+    assert!(first(&["mov r8d,0x1b8"], &none).is_some());
+    assert!(first(&["mov r8d,0x1b9"], &none).is_none());
 }
 
 #[test]
 fn a_shape_names_another_entry_by_its_address() {
     let at = |want: u64| move |id: &str| (id == "f.callee").then_some(want);
-    let shape = steps(&["call {f.callee}"]);
-    let found = shape::find(&shape, &decoded(), &at(0x1012)).unwrap();
+    let found = first(&["call {f.callee}"], &at(0x1012)).unwrap();
     assert_eq!((found.start, found.end), (0x100d, 0x1012));
-    let second = shape::find(&shape, &decoded(), &at(0x1013)).unwrap();
+    let second = first(&["call {f.callee}"], &at(0x1013)).unwrap();
     assert_eq!(second.start, 0x1018);
-    assert!(shape::find(&shape, &decoded(), &at(0x2000)).is_none());
+    assert!(first(&["call {f.callee}"], &at(0x2000)).is_none());
+}
+
+/// A PE32+ file with `.text`, `.rdata` and `.pdata`, each at the same
+/// offset in the file as its RVA.
+struct Fake {
+    bytes: Vec<u8>,
+}
+
+const BASE: u64 = 0x1_4000_0000;
+const TEXT: u64 = 0x1000;
+const RDATA: u64 = 0x2000;
+const PDATA: u64 = 0x3000;
+const SIZE: u64 = 0x1000;
+
+impl Fake {
+    fn new() -> Self {
+        let mut bytes = vec![0u8; usize::try_from(PDATA + SIZE).unwrap()];
+        bytes[usize::try_from(TEXT).unwrap()..usize::try_from(TEXT + SIZE).unwrap()].fill(0xcc);
+        bytes[..2].copy_from_slice(b"MZ");
+        bytes[0x3c..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+        bytes[0x80..0x84].copy_from_slice(b"PE\0\0");
+        bytes[0x86..0x88].copy_from_slice(&3u16.to_le_bytes());
+        bytes[0x94..0x96].copy_from_slice(&0xf0u16.to_le_bytes());
+        let optional = 0x98;
+        bytes[optional..optional + 2].copy_from_slice(&0x20bu16.to_le_bytes());
+        bytes[optional + 24..optional + 32].copy_from_slice(&BASE.to_le_bytes());
+        let headers = optional + 0xf0;
+        for (i, (name, rva)) in [
+            (&b".text\0\0\0"[..], TEXT),
+            (&b".rdata\0\0"[..], RDATA),
+            (&b".pdata\0\0"[..], PDATA),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let at = headers + i * 40;
+            bytes[at..at + 8].copy_from_slice(name);
+            for (field, value) in [(8, SIZE), (12, rva), (16, SIZE), (20, rva)] {
+                let value = u32::try_from(value).unwrap();
+                bytes[at + field..at + field + 4].copy_from_slice(&value.to_le_bytes());
+            }
+        }
+        Self { bytes }
+    }
+
+    fn put(&mut self, rva: u64, data: &[u8]) {
+        let at = usize::try_from(rva).unwrap();
+        self.bytes[at..at + data.len()].copy_from_slice(data);
+    }
+
+    /// Writes `code` at `rva`, with a `.pdata` row when `pdata` is set.
+    fn function(&mut self, rva: u64, code: &[u8], row: Option<u64>) {
+        self.put(rva, code);
+        if let Some(row) = row {
+            let end = rva + code.len() as u64;
+            // The unwind info points at zeros: no chained parent.
+            for (at, word) in [rva, end, RDATA + 0x800].into_iter().enumerate() {
+                let word = u32::try_from(word).unwrap();
+                self.put(PDATA + row * 12 + at as u64 * 4, &word.to_le_bytes());
+            }
+        }
+    }
+}
+
+/// `rel32` from the instruction ending at `next` to `target`.
+fn rel(next: u64, target: u64) -> [u8; 4] {
+    i32::try_from(target.cast_signed() - next.cast_signed())
+        .unwrap()
+        .to_le_bytes()
+}
+
+/// Function `a` loads "hello" and calls the leaf; `b`, the code of system
+/// record `sys_b`, calls the leaf and holds `mov eax, 7` twice; `c` calls
+/// `a` and `b`; the leaf at 0x1040 has no `.pdata` row.
+fn fake() -> Fake {
+    let mut fake = Fake::new();
+    let hello = RDATA + 0x180;
+    fake.put(hello, b"hello\0");
+    let mut a = vec![0x48, 0x8d, 0x0d];
+    a.extend(rel(0x1007, hello));
+    a.push(0xe8);
+    a.extend(rel(0x100c, 0x1040));
+    a.push(0xc3);
+    fake.function(0x1000, &a, Some(0));
+    let mut b = vec![0xe8];
+    b.extend(rel(0x1015, 0x1040));
+    b.extend([0xb8, 7, 0, 0, 0, 0xb8, 7, 0, 0, 0, 0xc3]);
+    fake.function(0x1010, &b, Some(1));
+    let mut c = vec![0xe8];
+    c.extend(rel(0x1025, 0x1000));
+    c.push(0xe8);
+    c.extend(rel(0x102a, 0x1010));
+    c.push(0xc3);
+    fake.function(0x1020, &c, Some(2));
+    fake.function(0x1040, &[0x8b, 0x41, 0x78, 0xc1, 0xe0, 0x03, 0xc3], None);
+    let name = RDATA + 0x100;
+    fake.put(name, b"sys_b\0");
+    let record = RDATA + 0x200;
+    for (at, word) in [BASE + name, 5, BASE + 0x1010].into_iter().enumerate() {
+        fake.put(record + at as u64 * 8, &word.to_le_bytes());
+    }
+    fake
+}
+
+/// Routes of every kind over [`fake`], each row before the ones it names.
+const FAKE_ROUTES: &str = r#"
+[[route]]
+id = "t.disp"
+in = "t.leaf"
+shape = ["mov eax,[rcx+*]"]
+take = "value"
+plus = 1
+
+[[route]]
+id = "t.shift"
+in = "t.leaf"
+shape = ["shl eax,*"]
+take = "value"
+shift = true
+
+[[route]]
+id = "t.fixed"
+in = "t.leaf"
+shape = ["mov eax,[rcx+0x78]"]
+take = "fixed"
+value = 5
+
+[[route]]
+id = "t.leaf"
+called_by = ["~fn:a", "sys_b"]
+
+[[route]]
+id = "t.caller"
+calls = ["~fn:a", "sys_b"]
+
+[[route]]
+id = "t.twice"
+in = "sys_b"
+shape = ["mov eax,0x7"]
+
+[[route]]
+id = "t.once"
+in = "sys_b"
+shape = ["mov eax,0x7", "ret"]
+
+[[route]]
+id = "t.loop"
+in = "t.loop"
+shape = ["ret"]
+
+[[route]]
+id = "sys_b"
+system = "sys_b"
+
+[[route]]
+id = "~fn:a"
+loads = ["hello"]
+"#;
+
+#[test]
+fn every_kind_of_route_finds_its_entry_in_any_row_order() {
+    let fake = fake();
+    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+    let reflection = Reflection::scan(&image);
+    let empty = Table::parse(
+        "name = \"empty\"\nside = \"server\"\nguid = \"00000000000000000000000000000000\"\nage = 0",
+    )
+    .unwrap()
+    .resolve();
+    let routes = Routes::parse(FAKE_ROUTES).unwrap();
+    let found: Vec<(&str, Option<Routed>)> = routes.find(&image, &reflection, Side::Server, &empty);
+    assert_eq!(
+        found,
+        [
+            ("t.caller", Some(Routed::Symbol(0x1020))),
+            ("t.disp", Some(Routed::Constant(0x79))),
+            ("t.fixed", Some(Routed::Constant(5))),
+            ("t.leaf", Some(Routed::Symbol(0x1040))),
+            ("t.loop", None),
+            ("t.once", Some(Routed::Symbol(0x101a))),
+            ("t.shift", Some(Routed::Constant(8))),
+            ("t.twice", None),
+        ]
+    );
 }
 
 /// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
 /// skipped without it), every route of their side finds, with no table
-/// behind it, the value their own table pins.
+/// behind it, the value their own table pins, where it pins one.
 #[test]
 #[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
 fn every_route_finds_what_the_own_table_pins() {
@@ -142,18 +392,20 @@ fn every_route_finds_what_the_own_table_pins() {
             .find(&image, &reflection, side, &empty)
             .into_iter()
             .filter_map(|(id, routed)| {
-                let pinned = match routed {
-                    Some(Routed::Constant(_)) => own.constant(id).map(Routed::Constant),
-                    _ => own.symbol(id).map(Routed::Symbol),
+                let pinned = match (own.symbol(id), own.constant(id)) {
+                    (Some(rva), _) => Routed::Symbol(rva),
+                    (None, Some(value)) => Routed::Constant(value),
+                    (None, None) => return None,
                 };
-                (routed.is_none() || routed != pinned)
+                (routed != Some(pinned))
                     .then(|| format!("{id}: route {routed:x?}, table {pinned:x?}"))
             })
             .collect();
         assert!(
             wrong.is_empty(),
-            "{var} ({}):\n{}",
+            "{var} ({}), {} wrong:\n{}",
             own.name(),
+            wrong.len(),
             wrong.join("\n")
         );
     }
