@@ -31,7 +31,7 @@ cargo enshwick deps trading_post --from <game folder>
 ```
 
 The alias is the one the mod's `Cargo.toml` gives the owner in
-`[package.metadata.enshwick.requires]`, `recommends` or `after`; without an
+`[package.metadata.enshwick.requires]` or `after`; without an
 alias the tool writes a file for every dependency. Each definition names the
 point by its local name and the alias, as
 `#[enshwick::point(name = "price", of = trading_post, ..)]`. `--from` is the
@@ -149,10 +149,10 @@ breaks the cycle by priority and logs which link's order it dropped.
 ## Depending on the owner
 
 Declare the owner in the [manifest](concepts/loader-and-abi.md#the-manifest),
-under an alias, with a version range or none:
+under an alias:
 
 ```toml
-[package.metadata.enshwick.recommends]
+[package.metadata.enshwick.after]
 trading_post = "you.trading-post"
 ```
 
@@ -161,7 +161,7 @@ The alias then names the owner in the point's declaration:
 `you.trading-post:price` (see
 [naming dependencies](concepts/loader-and-abi.md#the-manifest)).
 
-With `recommends`, a missing owner leaves the link inert, which is no error:
+With `after`, a missing owner leaves the link inert, which is no error:
 the mod runs and `loader.log` says
 `point you.trading-post:price: the link stays inert: you.trading-post does not run`. Use
 `requires` when the mod is pointless without the owner: the loader then skips

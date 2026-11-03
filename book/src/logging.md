@@ -108,9 +108,7 @@ The keys of `mod-configs/enshwick.toml`:
 | `diagnostics_timing` | `false`   | with `diagnostics`, also time every 256th call; read at start                                                           |
 | `build_patterns`     | `true`    | run a build without its table on patterns; read at start                                                                |
 | `knowledge_guard`    | `"watch"` | watch, enforce or turn off the [knowledge guard](knowledge.md#what-clients-ask-for); read at start                      |
-| `require_enshwick`   | `true`    | kick players whose game lacks the [join mods](concepts/join-check.md); read at start                                    |
-| `join_hello_seconds` | `30`      | seconds a joining player's game has to name its join mods; read at start                                                |
-| `join_note_seconds`  | `10`      | seconds between the chat line and the disconnect; read at start                                                         |
+| `require_enshwick`   | `true`    | kick players whose game lacks the server's [mods of side both](concepts/join-check.md); read at start                   |
 | `allowlist`          | `false`   | on a dedicated server, let in only the [allowlist](world.md#the-allowlist)'s accounts and administrators; read at start |
 | `language`           | `""`      | on a dedicated server, language code of the console's and other texts no player's game names; empty for English         |
 | `motd`               | `""`      | the [message of the day](https://enshwick.com/guides/run-a-server-in-docker/#greet-players-when-they-join) players read in chat; at most 4 lines and 500 bytes |

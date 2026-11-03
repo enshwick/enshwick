@@ -68,10 +68,8 @@ lockers = "you.lockers"
 | `id` | `<author>.<name>` like a mod id, the folder's name; the namespace of the pack's content |
 | `version` | the pack's SemVer version |
 | `name`, `description`, `authors`, `license`, `homepage` | what players read, as a mod's [manifest](../releasing.md) says it |
-| `side` | `both` (the default), `server` or `client` |
-| `join` | whether server and players must run the same pack to play together; on unless `false`, and required for a pack that adds or changes anything players' games read (everything but loot) |
-| `requires`, `after`, `recommends`, `breaks` | the mods and packs it relates to, as a Rust mod's [manifest](../concepts/loader-and-abi.md#the-manifest) names them: tables keyed by an alias of `[a-z][a-z0-9_]*`, each a mod id or `{ id, version }`; `after` takes no version. An alias is unique across the four tables, and neither `vanilla` nor a Luau keyword |
-| `replaces` | the ids of mods the pack takes the place of |
+| `side` | `both` (the default): server and players run the same pack, files and all, which a pack that adds or changes anything players' games read (everything but loot) needs; `server`: it runs only where the world runs |
+| `requires`, `after`, `breaks` | the mods and packs it relates to, as a Rust mod's [manifest](../concepts/loader-and-abi.md#the-manifest) names them: tables keyed by an alias of `[a-z][a-z0-9_]*`, each a mod id or `{ id, version }`; `after` takes no version. An alias is unique across the three tables, and neither `vanilla` nor a Luau keyword |
 | `exports` | what the pack offers other mods, each `event:<name>` for an event its scripts define or `content:<name>` for its content, such as `["event:greeted"]` for the event `<id>:greeted`; the loader refuses other mods the rest, matching kind and name (see [what other mods may use](../concepts/loader-and-abi.md#what-other-mods-may-use)) |
 | `enshwick` | the Enshwick releases the pack is made for, as a version requirement such as `"=1.0.0-alpha.12"`; a loader of another release skips the pack and logs both versions. Empty for any |
 | `[[setting]]` | a setting of a [Luau mod](../luau.md#settings), one table each |
@@ -86,7 +84,7 @@ of `[a-z0-9_./-]` and unique across the pack's files. A reference is one of:
 - a name of the pack: `lantern`;
 - a required mod's name after the alias `requires` gives it: with
   `lockers = "you.lockers"` in `[requires]`, `lockers:locker` names
-  `you.lockers:locker`. A mod of `after` or `recommends` may not run, so its
+  `you.lockers:locker`. A mod of `after` may not run, so its
   alias in a reference is a problem at its line;
 - another mod's content id in full: `you.lockers:locker`;
 - a vanilla GUID: `6943053a-32c1-4718-ae22-e61427ddf54d`;
@@ -410,7 +408,8 @@ count = { times = 2 }
 Random loot fills world chests, corpses and animals by the item's labels;
 fill tables are the fixed lists a container names. A change reaches every
 fill table that lists the item. Only the server rolls loot, so a pack of
-loot changes alone may run `side = "server"` and turn `join` off.
+loot changes alone may run `side = "server"`, and players need not install
+it.
 
 `table` narrows a change to the fill tables of some containers, named by
 their templates, and needs the game's data at hand:
@@ -446,7 +445,7 @@ The loader checks every file before the pack adds anything: unknown fields,
 names defined twice, references to names neither the pack nor the game has,
 stations that cannot be cloned, text keys without text, icons the pack
 lacks, chances outside 0 to 1, changes out of range or made twice, and
-`join = false` on a pack that players' games read. Each problem is a line
+`side = "server"` on a pack that players' games read. Each problem is a line
 in the pack's log with its file, line and column, and the pack stays off:
 
 ```text

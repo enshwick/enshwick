@@ -9,7 +9,7 @@ and none is released. The book's own examples cover the smaller cases.
 | [trading-post](trading-post/)                         | publishing a service, sending an event, defining a point    |
 | [haggling](haggling/)                                 | extending another mod's rule at its extension point         |
 | [hello-c](hello-c/)                                   | a mod written in C against `enshwick.h`                     |
-| [waypoints](waypoints/)                               | a join mod whose server sends a mark its client draws       |
+| [waypoints](waypoints/)                               | a mod of side both whose server sends a mark its client draws |
 | [you.material-stacks](you.material-stacks/)           | a data pack that raises the stack size of materials         |
 | [you.recipe-cost-and-time](you.recipe-cost-and-time/) | a data pack that halves three recipes' cost and time        |
 | [you.storage-slots](you.storage-slots/)               | a data pack that gives storage boxes more slots             |

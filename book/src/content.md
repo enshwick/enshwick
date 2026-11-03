@@ -41,8 +41,9 @@ id = "you.my-mod"
 side = "both"
 ```
 
-`join = true` puts the mod in the mod set the server advertises, so a player
-without it is warned before joining; see [The join check](concepts/join-check.md).
+`side = "both"` puts the mod in the mod set the server advertises, so a
+player without it is kept out before joining and told which mod to get; see
+[The join check](concepts/join-check.md).
 [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
 and
 [`enshwick-game-rates`](https://github.com/enshwick/mods/tree/main/game-rates)

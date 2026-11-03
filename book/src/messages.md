@@ -1,7 +1,7 @@
 # Messages between server and client
 
-A join mod with a client part, such as one that draws something the server
-decides, sends messages between its two halves through a channel.
+A mod of side `both` with a client part, such as one that draws something the
+server decides, sends messages between its two halves through a channel.
 
 ## Opening a channel
 
@@ -75,12 +75,12 @@ Enshwick, or a game whose host's Steam lobby names Enshwick
 says hello on it; the server answers, and from then on both sides send. A
 vanilla client never says hello, so the server never sends it anything, and
 the [join check](concepts/join-check.md) makes sure a client that said hello
-runs the server's join mods. A client hosting a game is both server and
+runs the server's mods of side `both`. A client hosting a game is both server and
 client: its server part talks to the clients, itself among them, and its
 client part to its own server, in process.
 
-Channels are only for join mods, since both ends must run the mod; another
-mod's `load.channel` turns it off. A message is encoded with `postcard`, so
+Channels are only for mods of side `both`, since both ends must run the mod;
+a server mod's `load.channel` turns it off. A message is encoded with `postcard`, so
 both sides must agree on `M`: change the type, change the `version`, and a
 peer on another version never hears the channel. Each side drops what goes
 over a peer's rate and logs the drops.

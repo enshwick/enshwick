@@ -125,7 +125,7 @@ name and major, and the input and the answer must agree field by field and in
 size. Without a match it logs the reason, such as a server that serves another
 major, and every call answers `CallError::Unmatched`. A call to a server
 switched off later answers `CallError::Off`, and a failed handler
-`CallError::Failed`. Declare the server with `recommends`, or `requires` when
+`CallError::Failed`. Declare the server with `after`, or `requires` when
 the mod is pointless without it.
 
 A required server initialises first, so the loader matches a call to it at

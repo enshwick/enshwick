@@ -76,7 +76,7 @@ events, for typed settings; see [Settings](settings.md). The loader re-reads log
 
 When and how `JoinRefused` is raised, and `mods::join_missing()`, which lists
 the mods the player lacks, are in
-[A server's pages and the join check](releasing.md#a-servers-pages-and-the-join-check).
+[The join check and a refused join](releasing.md#the-join-check-and-a-refused-join).
 
 ## Ticks
 
