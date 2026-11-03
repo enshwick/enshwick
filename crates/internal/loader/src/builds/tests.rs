@@ -574,8 +574,12 @@ fn checked_symbols_read_their_bytes_in_the_client() {
         }
     }
     assert!(checked >= 42);
+    // The offsets of client 26320373; other builds lay these types out
+    // differently.
+    if client.steam_build() != Some(enshwick_gamedata::SteamBuild::new(26_320_373)) {
+        return;
+    }
     let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
-    // The offsets of client 26320373.
     let moved = [
         ("keen::FbUiBundle", "namedStyles", 0x10bbc),
         ("keen::FbUiBundle", "sounds", 0x12210),
