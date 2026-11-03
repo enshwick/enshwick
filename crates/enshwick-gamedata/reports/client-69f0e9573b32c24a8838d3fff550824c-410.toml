@@ -19,11 +19,6 @@ state = "partly"
 missing = ["net.message_release"]
 
 [[feature]]
-name = "console"
-state = "partly"
-missing = ["server.ban_count", "server.ban_entry_account", "server.ban_entry_character_name", "server.ban_entry_date", "server.ban_entry_display_name", "server.ban_entry_size", "server.ban_list", "server.ban_name_length", "server.ban_name_text"]
-
-[[feature]]
 name = "spawns"
 state = "partly"
 missing = ["ecs.spawn_component_hash", "ecs.spawn_requester"]
