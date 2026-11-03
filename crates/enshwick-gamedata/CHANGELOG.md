@@ -17,7 +17,9 @@ Each entry names the pull request that made the change.
   `system` alone, a shape in any routed function through `in`, and
   `called_by` over route ids; shapes match index registers, exact
   displacements and exact immediates; a taken constant takes `shift` and
-  `plus`. `Routes::checks` tells whether a route checks its symbol's code.
+  `plus`. A route's `check` is a shape the code at its symbol must start
+  with, so the route stands for the symbol's table checks, and
+  `Routes::checks` tells whether a route checks its symbol's code.
   The route finder indexes code outside `.pdata`, and the routes find 720
   client and 499 server entries without a table row (#920).
 - `Body`, `Resolved::body` and `MAX_PATTERN`: a symbol whose whole function

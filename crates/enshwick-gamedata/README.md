@@ -28,9 +28,9 @@ game update that moves a field changes this crate, not the mods.
   Routes build on each other through waypoints, anonymous functions no table
   pins. A route that finds nothing, or more than one answer, leaves its entry
   to the table; a route that disagrees with the table turns the entry off,
-  and nothing builds on it. A route whose shape starts at its symbol is the
-  check a hook makes before it patches; a symbol a route only reaches keeps
-  its table's check. A test checks every route against the table of every build whose
+  and nothing builds on it. A route whose shape starts at its symbol, or
+  whose `check` shape matches the code there, is the check a hook makes
+  before it patches; a symbol a route only reaches keeps its table's check. A test checks every route against the table of every build whose
   executable it is given.
 - [`anchors/classes.toml`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/anchors/classes.toml)
   says for every entry whether the engine gives it (`engine`) or why research

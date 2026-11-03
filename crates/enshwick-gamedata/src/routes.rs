@@ -357,7 +357,8 @@ impl Routes {
     /// use enshwick_gamedata::{Routes, Side};
     ///
     /// let routes = Routes::embedded()?;
-    /// assert!(!routes.checks("ui.slider", Side::Client));
+    /// assert!(routes.checks("ui.slider", Side::Client));
+    /// assert!(!routes.checks("ui.slider", Side::Server));
     /// # Ok::<(), enshwick_gamedata::TableError>(())
     /// ```
     #[must_use]
