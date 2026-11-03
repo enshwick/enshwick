@@ -1,11 +1,10 @@
-//! Disabled recipes: the server's recipe file, a world's own and mods' rules
-//! name recipes nobody crafts. They leave every crafting menu and the server
-//! refuses to craft them.
+//! Disabled recipes: a world's recipe file and mods' rules name recipes
+//! nobody crafts. They leave every crafting menu and the server refuses to
+//! craft them.
 //!
-//! `mod-configs/enshwick.recipes.toml` holds the rules of every world this
-//! process runs, and `<stem>-mod-settings/enshwick/recipes.toml` a world's
-//! own, applied over it; mods add rules through the API, under both files.
-//! Each file disables recipes by name, by the item they make or by the
+//! `<stem>-mod-settings/enshwick/recipes.toml` beside a world's save holds
+//! its rules, written from [`TEMPLATE`] as the world first loads; mods add
+//! rules through the API, under the file's. The file disables recipes by name, by the item they make or by the
 //! workshop they are made at, and enables some back.
 //!
 //! The game keeps the recipes of each workshop in a list it asks for by
@@ -24,20 +23,17 @@ use enshwick::content::recipes::RecipeLayout;
 use enshwick::content::{Blob, Guid};
 use enshwick::mods::GAME_ID;
 
-/// The server's recipe file, in `mod-configs`.
-pub const FILE: &str = "enshwick.recipes.toml";
-/// A world's own recipe file, in its folder of the loader's data.
+/// A world's recipe file, in its folder of the loader's settings.
 pub const WORLD_FILE: &str = "recipes.toml";
 /// The workshop of crafting by hand.
 pub const HAND: &str = "hand";
 /// The most near names a problem suggests.
 const NEAR: usize = 5;
 
-/// The recipe file the loader writes on first start.
-pub const TEMPLATE: &str = r#"# Recipes nobody crafts in this game. They leave every crafting menu (by
+/// The recipe file the loader writes as a world first loads.
+pub const TEMPLATE: &str = r#"# Recipes nobody crafts in this world. They leave every crafting menu (by
 # hand, at stations and at survivors), and the server refuses to craft them;
-# items that exist stay. A world's own <save>-mod-settings/enshwick/recipes.toml
-# applies over this file. Changes apply within a second.
+# items that exist stay. Changes apply within a second.
 #
 # recipes names a recipe by its full id: the game's as
 # enshrouded:<debug name> (enshrouded:Tool_Torch01_T0_PK), a mod's as its
@@ -359,6 +355,16 @@ impl Names {
         self.item_labels.get(&id).map(String::as_str)
     }
 
+    /// The item with game id `id` in words for logs and answers: its full
+    /// id and the number, or the number alone for an item without a name.
+    #[must_use]
+    pub fn item_words(&self, id: u32) -> String {
+        self.item_name(id).map_or_else(
+            || id.to_string(),
+            |name| format!("{} ({id})", full_id(name)),
+        )
+    }
+
     /// A workshop in words: `hand`, its item's full id, or its number.
     #[must_use]
     pub fn workshop_name(&self, workshop: u32) -> String {
@@ -642,8 +648,8 @@ pub fn describe(recipe: &Recipe, names: &Names) -> String {
 
 #[cfg(windows)]
 pub(crate) use live::{
-    command, filter, hello, init, is_disabled, joining, left, poll, received, registry_built, rule,
-    world_changed,
+    command, filter, hello, init, is_disabled, item_words, joining, left, poll, received,
+    recipe_words, registry_built, rule, world_changed,
 };
 
 #[cfg(all(windows, test))]
@@ -846,6 +852,16 @@ mod tests {
                 index.recipes[1].guid, index.recipes[1].outputs[0]
             )
         );
+    }
+
+    #[test]
+    fn an_item_in_words_is_its_full_id_and_number_or_the_number_alone() {
+        let names = names();
+        assert_eq!(
+            names.item_words(TORCH.fnv1a()),
+            format!("enshrouded:Tool_Torch01_T0 ({})", TORCH.fnv1a())
+        );
+        assert_eq!(names.item_words(7), "7");
     }
 
     #[test]

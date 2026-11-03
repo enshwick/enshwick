@@ -169,8 +169,8 @@ fn rule(rule: RecipeRule<'_>, disable: bool) -> Result<(), Off> {
 ///
 /// On the server and in single player, the server's rules sync to the players
 /// who join. The loader resolves the name against the recipe registry and logs
-/// one it cannot resolve in the mod's log; the server's recipe file (`mod-
-/// configs/enshwick.recipes.toml`) wins over every mod's rules. Call it at any
+/// one it cannot resolve in the mod's log; the world's recipe file
+/// (`<save>-mod-settings/enshwick/recipes.toml`) wins over every mod's rules. Call it at any
 /// time, from any thread; it applies within a second.
 ///
 /// # Errors

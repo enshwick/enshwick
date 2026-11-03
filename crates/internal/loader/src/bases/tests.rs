@@ -254,3 +254,26 @@ fn limit_filters_chain_on_the_count_so_far_within_the_zones() {
         64
     );
 }
+
+#[test]
+fn the_lowest_cap_of_every_mod_lowers_the_bases_asked_for() {
+    let asked = Asked {
+        zones: AtomicU32::new(16),
+        bases: AtomicU32::new(16),
+        capped: AtomicU32::new(u32::MAX),
+        caps: Mutex::new(Vec::new()),
+    };
+    asked.take(Limits {
+        zones: 64,
+        bases: 40,
+    });
+    assert_eq!(asked.limits().bases, 40);
+    asked.cap(ModIndex::new(0), 30);
+    asked.cap(ModIndex::new(1), 20);
+    assert_eq!(asked.limits().bases, 20);
+    asked.cap(ModIndex::new(1), 50);
+    assert_eq!(asked.limits().bases, 30);
+    asked.cap(ModIndex::new(0), 179);
+    assert_eq!(asked.limits().bases, 40);
+    assert_eq!(asked.limits().zones, 64);
+}

@@ -47,7 +47,7 @@ mod tests;
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
 use enshwick::abi::{AltarLimitFilterFn, HookFlags, Status};
@@ -61,6 +61,7 @@ use crate::builds::Unhooked;
 use crate::chains::Next;
 use crate::code::{CodePatch, Verdict};
 use crate::host::{Loader, Registered, Target};
+use crate::locks::Relock as _;
 use crate::registry::Registry;
 
 /// The build table ids this part of the loader names.
@@ -396,6 +397,8 @@ static RAISED: AtomicBool = AtomicBool::new(false);
 static ASKED: Asked = Asked {
     zones: AtomicU32::new(VANILLA_ZONES),
     bases: AtomicU32::new(MAX_BASES),
+    capped: AtomicU32::new(u32::MAX),
+    caps: Mutex::new(Vec::new()),
 };
 /// How many bases the game's own grouping may start, per bases object kind:
 /// set at its first new base, at most the array's 16, 16 until then.
@@ -420,11 +423,16 @@ fn most_bases() -> usize {
     }
 }
 
-/// The largest limits the mods asked for, each at least the game's own.
+/// The largest limits the mods asked for, each at least the game's own,
+/// and the bases the mods let this world hold below them.
 #[derive(Debug)]
 struct Asked {
     zones: AtomicU32,
     bases: AtomicU32,
+    /// The lowest of `caps`, `u32::MAX` while no mod set one.
+    capped: AtomicU32,
+    /// Each mod's latest base cap.
+    caps: Mutex<Vec<(ModIndex, u32)>>,
 }
 
 impl Asked {
@@ -433,17 +441,35 @@ impl Asked {
         self.bases.fetch_max(asked.bases, Ordering::Relaxed);
     }
 
+    /// Puts mod `owner`'s cap at `bases`, replacing its last.
+    fn cap(&self, owner: ModIndex, bases: u32) {
+        let mut caps = self.caps.relock();
+        match caps.iter_mut().find(|(mod_index, _)| *mod_index == owner) {
+            Some(cap) => cap.1 = bases,
+            None => caps.push((owner, bases)),
+        }
+        let lowest = caps.iter().map(|&(_, cap)| cap).min().unwrap_or(u32::MAX);
+        self.capped.store(lowest, Ordering::Relaxed);
+    }
+
+    /// The bases asked for, lowered to every mod's cap.
+    fn world_bases(&self) -> u32 {
+        self.bases
+            .load(Ordering::Relaxed)
+            .min(self.capped.load(Ordering::Relaxed))
+    }
+
     fn limits(&self) -> Limits {
         Limits {
             zones: self.zones.load(Ordering::Relaxed),
-            bases: self.bases.load(Ordering::Relaxed),
+            bases: self.world_bases(),
         }
     }
 
     /// The most bases a grouping on a `kind` object holds: what was asked
-    /// on the server, every base the game can hold on the client.
+    /// and capped on the server, every base the game can hold on the client.
     fn bases(&self, kind: Kind) -> usize {
-        let asked = usize::try_from(self.bases.load(Ordering::Relaxed)).unwrap_or(usize::MAX);
+        let asked = usize::try_from(self.world_bases()).unwrap_or(usize::MAX);
         window::cap(kind, asked, most_bases())
     }
 
@@ -573,6 +599,17 @@ pub(crate) fn request(loader: &Loader, asked: Limits) -> Status {
         }
     }
     ASKED.take(asked);
+    Status::OK
+}
+
+/// Puts mod `owner`'s cap on the bases this world holds at `bases`; the
+/// lowest cap of every mod holds, below the largest request. Any time, so a
+/// mod sets it from its settings at world load; refused below the game's 16.
+pub(crate) fn cap(owner: ModIndex, bases: u32) -> Status {
+    if bases < MAX_BASES {
+        return Status::BAD_ARGS;
+    }
+    ASKED.cap(owner, bases);
     Status::OK
 }
 

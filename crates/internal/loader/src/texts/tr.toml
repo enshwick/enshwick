@@ -102,6 +102,7 @@
 "recipes.off" = "Bu oyun derlemesinde tarifleri devre dışı bırakma kapalı; nedeni yükleyicinin günlüğünde."
 "recipes.waiting" = "Tarifler henüz okunmadı; dünya çalışınca yeniden sorun."
 "recipes.usage" = "Kullanım: enshwick recipes; enshwick recipes find <metin>; enshwick recipes disable|enable recipe|output|workshop <ad>"
+"recipes.no_world" = "Tarif kuralları bir dünyaya aittir; dünyayı başlatıp yeniden deneyin."
 "recipes.none" = "Devre dışı tarif yok."
 "recipes.list" = "Devre dışı tarifler: {count}."
 "recipes.more" = "... ve {count} tane daha."

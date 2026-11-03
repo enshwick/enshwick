@@ -18,7 +18,7 @@ const WINDOW_POLL: Duration = Duration::from_millis(100);
 const HEADER_PAGE: usize = 0x400; // bound, not a game offset: the loader's read
 
 /// The folders beside the game's executable the loader keeps.
-pub(super) const GAME_DIRS: [&str; 3] = ["mods", "mod-configs", "logs"];
+pub(super) const GAME_DIRS: [&str; 2] = ["mods", "logs"];
 
 /// The stub contract the loader speaks.
 const STUB_ABI: u32 = 2;

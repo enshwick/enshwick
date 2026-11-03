@@ -64,9 +64,9 @@ pub struct Seen {
     pub player: Option<String>,
 }
 
-/// What `enshwick entity` answers.
+/// What `enshwick entity` answers, with each item in `item_words`.
 #[must_use]
-pub fn entity(seen: &Seen) -> String {
+pub fn entity(seen: &Seen, item_words: impl Fn(u32) -> String) -> String {
     if seen.template.is_none() && seen.item.is_none() && seen.position.is_none() {
         return format!("entity {}: the server knows nothing of it", seen.entity);
     }
@@ -75,7 +75,7 @@ pub fn entity(seen: &Seen) -> String {
         seen.entity,
         seen.template
             .map_or_else(|| "-".to_owned(), |t| Guid(t).to_string()),
-        seen.item.map_or_else(|| "-".to_owned(), |i| i.to_string()),
+        seen.item.map_or_else(|| "-".to_owned(), item_words),
         place(seen.position)
     );
     if let Some(player) = &seen.player {
@@ -97,9 +97,10 @@ pub struct Placed {
     pub position: [f32; 3],
 }
 
-/// What `enshwick placed` answers for `placed`, newest first.
+/// What `enshwick placed` answers for `placed`, newest first, with each
+/// item in `item_words`.
 #[must_use]
-pub fn placed(placed: &[Placed]) -> String {
+pub fn placed(placed: &[Placed], item_words: impl Fn(u32) -> String) -> String {
     if placed.is_empty() {
         return "nothing placed since the server started".to_owned();
     }
@@ -109,7 +110,7 @@ pub fn placed(placed: &[Placed]) -> String {
             format!(
                 "entity {}: item {}, template {}, at {}",
                 p.entity,
-                p.item,
+                item_words(p.item),
                 Guid(p.template),
                 place(Some(p.position.map(f64::from)))
             )
@@ -224,10 +225,13 @@ mod tests {
     #[test]
     fn replies_name_what_the_server_knows() {
         assert_eq!(
-            entity(&Seen {
-                entity: 7,
-                ..Seen::default()
-            }),
+            entity(
+                &Seen {
+                    entity: 7,
+                    ..Seen::default()
+                },
+                |i| i.to_string()
+            ),
             "entity 7: the server knows nothing of it"
         );
         let seen = Seen {
@@ -238,8 +242,8 @@ mod tests {
             player: Some("Ann".into()),
         };
         assert_eq!(
-            entity(&seen),
-            "entity 12: template 6943053a-32c1-4718-ae22-e61427ddf54d, item 77, at 1.0, 2.0, 3.0, the character of Ann"
+            entity(&seen, |i| format!("enshrouded:Tool_Torch01 ({i})")),
+            "entity 12: template 6943053a-32c1-4718-ae22-e61427ddf54d, item enshrouded:Tool_Torch01 (77), at 1.0, 2.0, 3.0, the character of Ann"
         );
         let piece = Placed {
             entity: 5,
@@ -248,10 +252,13 @@ mod tests {
             position: [0.5, 1.0, 2.0],
         };
         assert_eq!(
-            placed(&[piece]),
+            placed(&[piece], |i| i.to_string()),
             "entity 5: item 9, template 00000000-0000-0000-0000-000000000000, at 0.5, 1.0, 2.0"
         );
-        assert_eq!(placed(&[]), "nothing placed since the server started");
+        assert_eq!(
+            placed(&[], |i| i.to_string()),
+            "nothing placed since the server started"
+        );
     }
 
     #[test]

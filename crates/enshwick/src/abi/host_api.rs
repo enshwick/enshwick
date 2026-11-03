@@ -1526,4 +1526,14 @@ pub struct HostApi {
     /// loader returns [`Status::REFUSED`].
     pub chat_mute_has:
         extern "system" fn(me: ModHandle, account: PlayerKey, muted: *mut u8) -> Status,
+    /// Caps the bases the server holds at `bases`, below the largest
+    /// [`HostApi::request_base_limits`]: an altar that would start a base
+    /// past it is refused. Each call replaces the mod's own cap, and the
+    /// lowest cap of every mod holds, so a mod asks for its most at init
+    /// and sets each world's cap from its settings as the world loads; a
+    /// cap at or past the request leaves the request. [`HostApi::base_limit`]
+    /// reads the capped bases. [`Status::BAD_ARGS`] below the game's 16.
+    /// Any time, any thread. A panic in the loader returns
+    /// [`Status::REFUSED`].
+    pub set_base_cap: extern "system" fn(me: ModHandle, bases: u32) -> Status,
 }

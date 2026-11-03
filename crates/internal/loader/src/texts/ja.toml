@@ -102,6 +102,7 @@
 "recipes.off" = "このゲームビルドではレシピの無効化はオフです。理由はローダーのログにあります。"
 "recipes.waiting" = "レシピはまだ読み込まれていません。ワールドが動き出してからもう一度お試しください。"
 "recipes.usage" = "使い方：enshwick recipes；enshwick recipes find <テキスト>；enshwick recipes disable|enable recipe|output|workshop <名前>"
+"recipes.no_world" = "レシピのルールはワールドごとにあります。ワールドを起動してからもう一度お試しください。"
 "recipes.none" = "無効にしたレシピはありません。"
 "recipes.list" = "無効にしたレシピ：{count} 件。"
 "recipes.more" = "…ほか {count} 件。"

@@ -143,3 +143,47 @@ mod zones_only {
         assert_eq!((limit.max_zones, limit.max_bases), (255, 16));
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "unstable")]
+mod world_cap {
+    use enshwick::abi::Status;
+    use enshwick::{Load, Mod, Off};
+
+    struct ManyBases;
+
+    impl Mod for ManyBases {
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            assert!(load.request_base_limits(64, 179)?);
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        ManyBases,
+        r#"
+        id = "you.many-bases"
+        side = "both"
+        "#
+    );
+
+    #[test]
+    fn a_world_caps_the_bases_below_the_request_and_never_past_it() {
+        let loader = enshwick::test::FakeHost::new().install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let bases = || enshwick::altars::base_limit().unwrap().bases;
+        assert_eq!(bases(), 179);
+        enshwick::altars::set_base_cap(20).unwrap();
+        assert_eq!(bases(), 20);
+        enshwick::altars::set_base_cap(16).unwrap();
+        assert_eq!(bases(), 16, "the latest cap replaces the mod's last");
+        enshwick::altars::set_base_cap(500).unwrap();
+        assert_eq!(bases(), 179, "a cap past the request leaves the request");
+        assert!(enshwick::altars::set_base_cap(15).is_err());
+        assert_eq!(bases(), 179);
+        assert_eq!(enshwick::altars::base_limit().unwrap().zones, 64);
+    }
+}

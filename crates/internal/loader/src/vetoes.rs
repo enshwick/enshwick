@@ -252,8 +252,8 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
         unsafe { write_at(payload, layout.amount, 0u16) };
         crate::log!(
             DEBUG,
-            "craft of recipe {:#x} by player {} refused{}",
-            call.recipe_id,
+            "craft of recipe {} by player {} refused{}",
+            crate::recipes::recipe_words(call.recipe_id.0),
             call.crafting_operator_id.0,
             if disabled {
                 ": the recipe is disabled"

@@ -102,6 +102,7 @@
 "recipes.off" = "이 게임 빌드에서는 레시피 비활성화가 꺼져 있습니다. 이유는 로더의 로그에 있습니다."
 "recipes.waiting" = "레시피를 아직 읽지 않았습니다. 월드가 실행된 뒤 다시 물어보세요."
 "recipes.usage" = "사용법: enshwick recipes; enshwick recipes find <텍스트>; enshwick recipes disable|enable recipe|output|workshop <이름>"
+"recipes.no_world" = "레시피 규칙은 월드에 속합니다. 월드를 실행한 뒤 다시 시도하세요."
 "recipes.none" = "비활성화한 레시피가 없습니다."
 "recipes.list" = "비활성화한 레시피: {count}개."
 "recipes.more" = "... 외 {count}개."

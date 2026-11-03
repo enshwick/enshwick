@@ -144,7 +144,6 @@ pub(crate) fn start(
         fingerprint: game.fingerprint,
         build: game.build,
         reflection: game.reflection,
-        configs_dir: mods_dir.with_file_name("mod-configs"),
         developer_tools,
         mods_dir,
         mods: records(&libraries, &candidates, &plan),

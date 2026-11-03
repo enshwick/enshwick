@@ -115,6 +115,12 @@ keeps 16 bases with the zones raised, the log says what was missing, and
 `max_bases` reads 16. A server holds the bases its mods asked for. A joined
 client with bases past 16 armed groups every base the server does; one
 whose bases past 16 could not arm groups 16, and its log says so.
+Settings arrive only as a world loads, so a mod whose bases count is a
+setting asks for its most at init and calls
+`altars::set_base_cap(bases)` from its settings handler: the server then
+refuses an altar that would start a base past the cap. Each call replaces
+the mod's own cap, the lowest cap of every mod holds, a cap at or past the
+request leaves the request, and a cap below 16 is refused.
 `altars::grouping()` tells how many zones and bases the last grouping
 found, `altars::base_limit()` the most the game groups now, and `BaseLimit::past_vanilla` whether a world needs the raised
 limit to open.

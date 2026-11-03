@@ -102,6 +102,7 @@
 "recipes.off" = "การปิดใช้สูตรไม่ทำงานในบิลด์เกมนี้ ล็อกของตัวโหลดบอกสาเหตุ"
 "recipes.waiting" = "ยังไม่ได้อ่านสูตร ให้ถามอีกครั้งเมื่อโลกทำงานแล้ว"
 "recipes.usage" = "วิธีใช้: enshwick recipes; enshwick recipes find <ข้อความ>; enshwick recipes disable|enable recipe|output|workshop <ชื่อ>"
+"recipes.no_world" = "กฎของสูตรเป็นของโลก ให้เริ่มโลกแล้วลองอีกครั้ง"
 "recipes.none" = "ไม่มีสูตรที่ปิดใช้"
 "recipes.list" = "สูตรที่ปิดใช้: {count}"
 "recipes.more" = "... และอีก {count} รายการ"

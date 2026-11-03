@@ -67,7 +67,8 @@ pub(super) fn container_patches(
         let Some(template) = template else {
             crate::log!(
                 WARN,
-                "container slots of {item} are not changed: it is no vanilla item that places a container or carries one"
+                "container slots of {} are not changed: it is no vanilla item that places a container or carries one",
+                crate::recipes::item_words(loader, item.fnv1a())
             );
             continue;
         };
@@ -85,7 +86,7 @@ pub(super) fn container_patches(
             "container slots change on template {template}, which {} places, and so for every item that places it",
             items
                 .iter()
-                .map(ToString::to_string)
+                .map(|item| crate::recipes::item_words(loader, item.fnv1a()))
                 .collect::<Vec<_>>()
                 .join(", ")
         );

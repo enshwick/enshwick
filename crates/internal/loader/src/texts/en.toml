@@ -102,6 +102,7 @@
 "recipes.off" = "Disabled recipes are off on this game build; the loader's log says why."
 "recipes.waiting" = "The recipes are not read yet; ask again once the world runs."
 "recipes.usage" = "Usage: enshwick recipes; enshwick recipes find <text>; enshwick recipes disable|enable recipe|output|workshop <name>"
+"recipes.no_world" = "Recipe rules belong to a world; run the world and try again."
 "recipes.none" = "No recipe is disabled."
 "recipes.list" = "Recipes disabled: {count}."
 "recipes.more" = "... and {count} more."

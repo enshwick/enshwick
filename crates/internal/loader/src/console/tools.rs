@@ -60,19 +60,24 @@ pub(crate) fn entity(loader: &Loader, args: &str) -> String {
             .find(|p| p.entity == Entity(entity))
             .map(name)
     });
-    answers::entity(&Seen {
-        entity,
-        template: crate::world::template(loader, Entity(entity)).ok(),
-        item: crate::world::used_item(loader, Entity(entity)),
-        position: position(loader, entity),
-        player,
-    })
+    answers::entity(
+        &Seen {
+            entity,
+            template: crate::world::template(loader, Entity(entity)).ok(),
+            item: crate::world::used_item(loader, Entity(entity)),
+            position: position(loader, entity),
+            player,
+        },
+        |item| crate::recipes::item_words(loader, item),
+    )
 }
 
 /// `enshwick placed [n]`: the pieces placed lately, newest first.
-pub(crate) fn placed(args: &str) -> String {
+pub(crate) fn placed(loader: &Loader, args: &str) -> String {
     match answers::placed_count(args) {
-        Ok(count) => answers::placed(&super::newest(count)),
+        Ok(count) => answers::placed(&super::newest(count), |item| {
+            crate::recipes::item_words(loader, item)
+        }),
         Err(_) => texts::fill(
             "console.usage",
             &[("usage", &texts::fill("usage.placed", &[]))],

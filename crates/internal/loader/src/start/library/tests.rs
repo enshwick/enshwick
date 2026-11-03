@@ -391,6 +391,7 @@ fn each_file_of_the_layout_before_mod_folders_gets_one_line() {
     std::fs::create_dir_all(mods.join(crate::settings::LOADER_ID)).unwrap();
     std::fs::write(mods.join("lanterns.dll"), "").unwrap();
     std::fs::write(mods.join("enshwick/mods.toml"), "").unwrap();
+    std::fs::create_dir_all(dir.join("mod-configs")).unwrap();
     crate::log::capture();
     super::note_old_layout(&mods);
     let lines = loader_lines();
@@ -403,7 +404,12 @@ fn each_file_of_the_layout_before_mod_folders_gets_one_line() {
         .collect();
     assert_eq!(
         old,
-        ["mods/lanterns.dll", "mods/chain", "mods/enshwick/mods.toml"],
+        [
+            "mods/lanterns.dll",
+            "mods/chain",
+            "mods/enshwick/mods.toml",
+            "mod-configs/"
+        ],
         "{lines:#?}"
     );
     std::fs::remove_dir_all(&dir).unwrap();

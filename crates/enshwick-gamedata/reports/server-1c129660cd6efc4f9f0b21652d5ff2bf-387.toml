@@ -14,11 +14,6 @@ state = "partly"
 missing = ["bases.base_ids", "bases.client_create", "bases.client_destroy", "bases.client_size", "bases.holder_at", "bases.allocator", "bases.animal_value", "bases.answer_box", "bases.answer_error", "bases.answer_size", "bases.container_data", "bases.npc_value", "bases.record_base_id", "bases.heap_allocate"]
 
 [[feature]]
-name = "console"
-state = "partly"
-missing = ["server.ban_count", "server.ban_entry_account", "server.ban_entry_character_name", "server.ban_entry_date", "server.ban_entry_display_name", "server.ban_entry_size", "server.ban_list", "server.ban_name_length", "server.ban_name_text"]
-
-[[feature]]
 name = "spawns"
 state = "partly"
 missing = ["ecs.spawn_component_hash", "ecs.spawn_requester"]
