@@ -225,7 +225,7 @@ every mod, with the [extension points](extending.md) it defines and the ones
 it extends. Each mod that derives `Config` has a Settings button there, with
 nothing to write in the mod: it opens the mod's settings, each player's own
 first, then the world's (see
-[Settings per world](settings.md#settings-per-world)). Mod settings show
+[How a world's file is kept](settings.md#how-a-worlds-file-is-kept)). Mod settings show
 nowhere else; the game's world settings have no mod rows. Back, Escape or the
 gamepad's B steps back from a mod's settings to the list, and from the list
 out. While a text field has the caret, Back takes the caret from the field
