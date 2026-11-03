@@ -144,6 +144,14 @@ pub(crate) fn link(loader: &Loader) {
             crate::log!(WARN, "damage filters: {site:?} off, not in this build");
             continue;
         };
+        if !loader.code_holds(name) {
+            crate::log!(
+                WARN,
+                "damage filters: {site:?} off on {}: {name} does not read as the build table says",
+                loader.build.name
+            );
+            continue;
+        }
         let link = MidLink {
             owner: ModIndex::LOADER,
             handler,

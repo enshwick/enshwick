@@ -36,7 +36,7 @@ pub use parts::{Part, PartState};
 pub use entries::{Body, Constant, Locate, Operand, Symbol};
 pub use reflect::Fingerprint;
 pub use resolve::{Kind, Resolved, Routing, embedded, exact, newest};
-pub use routes::{Routed, Routes};
+pub use routes::{Routed, Routes, ShapeNames, check_holds, make_check, shape_checks};
 pub use table::{MAX_PATTERN, Table, TableError, file_name};
 pub use version::{GameVersion, SteamBuild};
 
@@ -384,6 +384,37 @@ mod tests {
         let changed = table.fall_back(&code, 0x5000, |_| None);
         assert_eq!(changed.symbol("f.whole"), None);
         assert_eq!(changed.missing(), ["f.whole"]);
+    }
+
+    /// A symbol a route supplies where the carried table's pattern found
+    /// nothing keeps none of the table's checks, which were made for other
+    /// code; one the route agrees on keeps them.
+    #[test]
+    fn a_supplied_symbol_keeps_none_of_the_carried_checks() {
+        let body = Body::of(&FUNCTION, vec![3]).unwrap();
+        let row = format!(
+            r#""f.whole" = {{ rva = 0x1000, pattern = "48 8B 05 ?? ?? ?? ??", body = {{ len = 15, open = [3], hash = "{:032x}" }} }}"#,
+            body.hash()
+        );
+        let table = body_table(&row).unwrap();
+        let mut code = vec![0x90; 8];
+        code.extend_from_slice(&FUNCTION);
+        let found = table.fall_back(&code, 0x5000, |_| None);
+        let mut agreed = found.clone();
+        assert_eq!(
+            agreed.route("f.whole", Some(Routed::Reached(0x5008))),
+            Routing::Agrees
+        );
+        assert!(agreed.body("f.whole").is_some() && agreed.head("f.whole").is_some());
+        let mut lost = table.fall_back(&[0xcc; 32], 0x5000, |_| None);
+        assert!(lost.body("f.whole").is_some() || lost.head("f.whole").is_some());
+        assert_eq!(
+            lost.route("f.whole", Some(Routed::Reached(0x9000))),
+            Routing::Supplied
+        );
+        assert_eq!(lost.symbol("f.whole"), Some(0x9000));
+        assert!(lost.body("f.whole").is_none() && lost.head("f.whole").is_none());
+        assert!(!lost.routed("f.whole"));
     }
 
     /// A pattern finds code by a short window; one longer than

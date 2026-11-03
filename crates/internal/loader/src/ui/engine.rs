@@ -653,26 +653,30 @@ fn looks(loader: &Loader) -> Option<Looks> {
 }
 
 /// The address of game function `name`, once its first eight bytes read as
-/// its `<name>.bytes` constant says, or an engine route found it, whose own
-/// match checked it.
+/// its `<name>.bytes` constant says, or, without one, an engine route found
+/// it whose own match checked its code.
 fn verify(loader: &Loader, name: Symbol) -> Result<usize, Missing> {
     let address = loader.address(name).ok_or(Missing::Entry(name.id()))?;
-    if loader.build.routed(name.id()) {
-        return usize::try_from(address).map_err(|_| Missing::Entry(name.id()));
-    }
-    let expected = loader
-        .build
-        .constant(&format!("{name}.bytes"))
-        .ok_or(Missing::Bytes(name.id()))?;
     let address = usize::try_from(address).map_err(|_| Missing::Entry(name.id()))?;
-    // SAFETY: `loader.address` resolves `name` to a function in the game's
-    // executable, mapped for the process, so eight bytes at its entry are
-    // readable; code is not written while it runs.
-    let found = unsafe { crate::memory::read::<u64>(address, 0) };
-    if found != expected {
-        return Err(Missing::Bytes(name.id()));
+    let expected = loader.build.constant(&format!("{name}.bytes"));
+    let read = || {
+        // SAFETY: `loader.address` resolves `name` to a function in the game's
+        // executable, mapped for the process, so eight bytes at its entry are
+        // readable; code is not written while it runs.
+        unsafe { crate::memory::read::<u64>(address, 0) }
+    };
+    if code_checks(expected, loader.build.routed(name.id()), read) {
+        Ok(address)
+    } else {
+        Err(Missing::Bytes(name.id()))
     }
-    Ok(address)
+}
+
+/// Whether a function's code holds: its first eight bytes, `read` only when
+/// needed, equal its `.bytes` when the table has them; without them, an
+/// engine route's own match must have checked it (`routed`).
+fn code_checks(expected: Option<u64>, routed: bool, read: impl FnOnce() -> u64) -> bool {
+    expected.map_or(routed, |want| read() == want)
 }
 
 /// Game function `name`, checked by [`verify`], as a function pointer of

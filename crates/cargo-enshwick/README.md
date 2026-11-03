@@ -91,6 +91,13 @@ read `via` a symbol is read again in that symbol's code, and a slot named by
 its `attribute` is kept as it is (see
 [Patterns](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/README.md#patterns)).
 
+For each table it ports, `pin` also refreshes the `check` shapes of the
+engine routes in `crates/enshwick-gamedata/anchors/routes.toml` for that
+side: a check that still holds at its symbol on the old and the new build
+stays, a route of that side alone takes one made from their code, and the
+report lists each route left without one, whose hook then needs its table
+row.
+
 ### Workflow
 
 1. **Keep the old executables.** The tool needs the executable the current

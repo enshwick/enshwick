@@ -302,6 +302,7 @@ fn route(
     reflection: &Reflection<'_>,
     side: Side,
 ) {
+    let start = std::time::Instant::now();
     let routes = match enshwick_gamedata::Routes::embedded() {
         Ok(routes) => routes,
         Err(e) => {
@@ -309,12 +310,14 @@ fn route(
             return;
         }
     };
-    let start = std::time::Instant::now();
+    let read = start.elapsed();
+    let routing = std::time::Instant::now();
     let found = build.route(&routes, image, reflection, side);
     crate::log!(
         INFO,
-        "engine routes found {found} entries in {} ms",
-        start.elapsed().as_millis()
+        "engine routes read in {} ms, found {found} entries in {} ms",
+        read.as_millis(),
+        routing.elapsed().as_millis()
     );
 }
 

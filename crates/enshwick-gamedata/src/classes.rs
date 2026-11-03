@@ -100,8 +100,9 @@ fn every_entry_a_class_names_is_in_a_table() {
 }
 
 /// An entry is classed `engine` exactly when the loader finds it without
-/// its row: an engine route finds it or its symbol, or it is an
-/// attribute's slot the loader reads from the game's archive.
+/// its row: an engine route finds it, a route checks the code of the symbol
+/// a `.bytes` entry checks, or it is an attribute's slot the loader reads
+/// from the game's archive.
 #[test]
 fn the_engine_class_is_what_the_loader_finds_without_a_table() {
     let rows = rows();
@@ -110,6 +111,11 @@ fn the_engine_class_is_what_the_loader_finds_without_a_table() {
         [Side::Server, Side::Client]
             .iter()
             .any(|&s| all.routes(id, s))
+    };
+    let checked = |id: &str| {
+        [Side::Server, Side::Client]
+            .iter()
+            .any(|&s| all.checks(id, s))
     };
     let mut wrong = Vec::new();
     for table in tables() {
@@ -121,7 +127,7 @@ fn the_engine_class_is_what_the_loader_finds_without_a_table() {
         };
         for id in ids(&table) {
             let finds =
-                routed(id) || id.strip_suffix(".bytes").is_some_and(routed) || attribute(id);
+                routed(id) || id.strip_suffix(".bytes").is_some_and(checked) || attribute(id);
             let engine = class_of(&rows, id).is_some_and(|r| r.class == Class::Engine);
             if finds != engine {
                 wrong.push(format!(
