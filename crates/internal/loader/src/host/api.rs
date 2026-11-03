@@ -231,4 +231,5 @@ pub(crate) static API: HostApi = HostApi {
     chat_mute_set,
     chat_mute_has,
     mod_dir,
+    set_base_cap: super::entries::gameplay::set_base_cap,
 };

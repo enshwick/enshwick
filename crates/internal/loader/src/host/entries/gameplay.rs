@@ -608,6 +608,13 @@ pub(crate) extern "system" fn request_base_limits(me: ModHandle, zones: u32, bas
     })
 }
 
+pub(crate) extern "system" fn set_base_cap(me: ModHandle, bases: u32) -> Status {
+    entry("set_base_cap", || match caller_index(me) {
+        Ok((_, owner)) => crate::bases::cap(owner, bases),
+        Err(status) => status,
+    })
+}
+
 pub(crate) extern "system" fn base_zones(
     me: ModHandle,
     zones: *mut u32,

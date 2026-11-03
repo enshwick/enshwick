@@ -22,6 +22,8 @@
 //! }
 //! ```
 
+mod limits;
+
 use core::ffi::c_void;
 
 use crate::Entity;
@@ -619,6 +621,40 @@ pub fn base_limit() -> Option<BaseLimit> {
     })
 }
 
+/// Caps the bases the server holds in this world at `bases`, below the most
+/// the mod asked for at init.
+///
+/// An altar that would start a base past the cap is refused. Each call replaces the mod's own cap, the lowest cap of every
+/// mod holds, and a cap at or past the request leaves the request; so a mod
+/// asks for its most at init and sets each world's cap from its settings as
+/// the world loads. [`base_limit`] reads the capped bases. Any thread.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
+/// # Errors
+///
+/// [`Off`] below the game's 16 bases ([`BaseLimit::vanilla_bases`]) or
+/// without a loader.
+///
+/// # Examples
+///
+/// ```
+/// fn apply(bases: u32) -> Result<(), enshwick::Off> {
+///     enshwick::altars::set_base_cap(bases)
+/// }
+/// # let _ = apply;
+/// ```
+#[cfg(feature = "unstable")]
+pub fn set_base_cap(bases: u32) -> Result<(), Off> {
+    let host = crate::host().ok_or_else(|| Off::new("the base cap: no loader"))?;
+    let status = (host.api().set_base_cap)(host.handle(), bases);
+    if status.is_ok() {
+        Ok(())
+    } else {
+        Err(Off::status("the base cap", status))
+    }
+}
+
 /// A placement the game refused because the object does not lie in a single
 /// building zone; see [`Load::on_building_zone_check`]. Coordinates are 32.32
 /// fixed-point metres.
@@ -856,84 +892,6 @@ impl Load<'_> {
             |user| (host.api().altar_limit_filter)(host.handle(), run_limit::<F>, user),
             "the altar limit filter",
         )
-    }
-
-    /// Lets the game group every listed altar zone into its bases, up to 32
-    /// altars a Flame level in 16 bases, refusing an altar that would start a
-    /// 17th base; `Ok(false)` when the platform does not recognise this
-    /// build's code, and the game keeps its own. The loader's hooks go in
-    /// together: when one cannot be armed, none does and the game keeps 16,
-    /// which [`base_limit`] tells from [`Mod::ready`](crate::Mod::ready) on.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     if !load.raise_base_limit()? {
-    ///         enshwick::info!("the game keeps its own altar zones on this build");
-    ///     }
-    ///     Ok(())
-    /// }
-    /// ```
-    pub fn raise_base_limit(&mut self) -> Result<bool, Off> {
-        let host = self.host();
-        armed((host.api().raise_base_limit)(host.handle()))
-    }
-
-    /// As [`Load::raise_base_limit`], up to `zones` altars a Flame level in
-    /// up to `bases` bases; values below the game's own count as the game's,
-    /// and the largest request of every mod holds. Bases past 16 need more
-    /// of the game's code; where the loader cannot arm all of it, the game
-    /// keeps 16 bases with the zones raised, which [`base_limit`] tells.
-    ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init, or for a value past the most the loader takes
-    /// ([`BaseLimit::max_zones`], [`BaseLimit::max_bases`]).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     if !load.request_base_limits(128, 32)? {
-    ///         enshwick::info!("the game keeps its own altar zones on this build");
-    ///     }
-    ///     Ok(())
-    /// }
-    /// ```
-    #[cfg(feature = "unstable")]
-    pub fn request_base_limits(&mut self, zones: u32, bases: u32) -> Result<bool, Off> {
-        let host = self.host();
-        armed((host.api().request_base_limits)(
-            host.handle(),
-            zones,
-            bases,
-        ))
-        .map_err(|off| match base_limit() {
-            Some(most) if zones > most.max_zones || bases > most.max_bases => Off::new(format!(
-                "{zones} altar zones in {bases} bases asked for; the most is {} in {}",
-                most.max_zones, most.max_bases
-            )),
-            _ => off,
-        })
-    }
-}
-
-/// Whether a base limit `status` is in force: `false` on a build whose code
-/// the platform does not know.
-fn armed(status: crate::abi::Status) -> Result<bool, Off> {
-    if status.is_ok() {
-        Ok(true)
-    } else if status == crate::abi::Status::MISSING {
-        Ok(false)
-    } else {
-        Err(Off::status("the base limit", status))
     }
 }
 

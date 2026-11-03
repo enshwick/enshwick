@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 0
+#define ENSHWICK_ABI_MINOR 1
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -4200,6 +4200,16 @@ typedef struct EnshwickHostApi {
   // dedicated one or the one a client hosts. Any thread. A panic in the
   // loader returns `Status::REFUSED`.
   EnshwickStatus (*chat_mute_has)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t *muted);
+  // Caps the bases the server holds at `bases`, below the largest
+  // `HostApi::request_base_limits`: an altar that would start a base
+  // past it is refused. Each call replaces the mod's own cap, and the
+  // lowest cap of every mod holds, so a mod asks for its most at init
+  // and sets each world's cap from its settings as the world loads; a
+  // cap at or past the request leaves the request. `HostApi::base_limit`
+  // reads the capped bases. `Status::BAD_ARGS` below the game's 16.
+  // Any time, any thread. A panic in the loader returns
+  // `Status::REFUSED`.
+  EnshwickStatus (*set_base_cap)(EnshwickModHandle me, uint32_t bases);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

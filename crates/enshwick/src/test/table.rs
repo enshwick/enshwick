@@ -468,6 +468,8 @@ pub(crate) struct BaseLimitState {
     pub(crate) requested: Option<(u32, u32)>,
     /// The mod's init returned and its hooks are armed.
     pub(crate) armed: bool,
+    /// The mod's latest base cap, once it set one.
+    pub(crate) cap: Option<u32>,
 }
 
 /// The mod's altar zone filters, and how often it asked for a new sizing.
@@ -977,4 +979,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     chat_mute_set,
     chat_mute_has,
     mod_dir,
+    set_base_cap: gameplay::set_base_cap,
 };

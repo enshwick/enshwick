@@ -212,7 +212,10 @@ pub(crate) fn zones_and_bases() -> (u32, u32) {
     with(None, |s| {
         s.base_limit.requested.filter(|_| s.base_limit.armed)
     })
-    .map_or(VANILLA, |(zones, bases)| (zones, bases.min(most.1)))
+    .map_or(VANILLA, |(zones, bases)| {
+        let cap = with(None, |s| s.base_limit.cap).unwrap_or(u32::MAX);
+        (zones, bases.min(most.1).min(cap))
+    })
 }
 
 /// The most a mod may ask for, as the loader's: its own most, or 16 bases
@@ -278,6 +281,16 @@ pub(crate) extern "system" fn request_base_limits(
     bases: u32,
 ) -> Status {
     request(zones, bases)
+}
+
+pub(crate) extern "system" fn set_base_cap(_me: ModHandle, bases: u32) -> Status {
+    if bases < VANILLA.1 {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        s.base_limit.cap = Some(bases);
+        Status::OK
+    })
 }
 
 pub(crate) extern "system" fn base_zones(
