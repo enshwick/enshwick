@@ -8,6 +8,20 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** a mod's side is `server` or `both`: the `client` side, the
+  `join` flag (`ManifestFlags::JOIN`, `ModEntry::join`, a pack's `join`) and
+  the relations `recommends` and `replaces` (`Relation::{RECOMMENDS,
+  REPLACES}`, `mods::replaced`, `HostApi::replaced`, `ModInfo::replaced_by`,
+  the lock's `[[replaced]]`) are gone. Every running mod of side `both`
+  counts in the join check, and only such a mod opens message channels. A
+  client turns its mods the joined world does not run off for that world and
+  back on before the next; a data pack stays off until the game restarts.
+  After a refused join or a kick for its mods, the client lists every mod
+  that differs in the main menu, by id with the needed and the installed
+  version. Servers no longer advertise `enshwick.page.*` or `enshwick.name.*`,
+  and `mods::join_missing` carries ids and versions alone. The join timers
+  `join_hello_seconds` and `join_note_seconds` are gone, fixed at 30 and 10
+  seconds; ABI 10.0 (#919).
 - **Breaking:** settings exist only per world. Each settings type writes
   `<stem>-mod-settings/<mod>/<file>.toml`, `settings.toml` unless
   `#[enshwick::config(file = "name")]` names another; the loader writes it

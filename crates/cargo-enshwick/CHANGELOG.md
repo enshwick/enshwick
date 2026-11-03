@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `cargo enshwick new --side` takes `server` or `both`, a new
+  Luau mod writes no `join` key, `cargo enshwick deps` reads `requires` and
+  `after` alone, and `cargo enshwick manifest` shows the side instead of a
+  join check line (#919).
 - A new mod takes its settings with `on_settings`, from each world's
   `<stem>-mod-settings/<id>/settings.toml` (#917).
 - **Breaking:** `cargo enshwick deps` reads schema format 3 and writes each
