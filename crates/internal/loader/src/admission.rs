@@ -31,46 +31,10 @@ pub const TABLE_IDS: &[&str] = &[
 ];
 
 /// Players the loader follows at most, in the gate and the player reads;
-/// the game has 16 slots. The gate's refused players may pass it for a
-/// moment; see [`Gate::guarded`].
+/// the game has 16 slots.
 pub(crate) const MAX_PLAYERS: usize = 64;
 /// How long a kick that did not remove the player waits to be tried again.
 const KICK_AGAIN: Duration = Duration::from_secs(10);
-/// What a join's guard, the allowlist or the offline ban, did with a player.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Guard {
-    /// The guard let the player stay.
-    Passed,
-    /// The guard removed the player.
-    Removed,
-    /// The guard refused the player, but the kick did not remove it yet: it
-    /// is tried again.
-    Kicking,
-    /// The guard refused the player, but this build has no kick, so the
-    /// player stays.
-    Unkickable,
-    /// The guard could not run: it panicked, or an earlier panic turned it
-    /// off. The player must still go, so a broken guard never lets anyone in.
-    Broken,
-}
-
-impl Guard {
-    /// The guard's run through its fuse: what it did, or `None` when it
-    /// could not run.
-    #[must_use]
-    pub const fn of(ran: Option<Self>) -> Self {
-        match ran {
-            Some(guard) => guard,
-            None => Self::Broken,
-        }
-    }
-
-    /// Whether the player must not stay.
-    #[must_use]
-    pub const fn keeps_out(self) -> bool {
-        !matches!(self, Self::Passed)
-    }
-}
 
 /// How long the server waits on a player who entered the world.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -167,9 +131,6 @@ pub struct Gate {
     host: Option<u64>,
     /// Whether the host's key holds a player slot in the game.
     host_in_game: bool,
-    /// The players a join's guard refused, by account key: when the guards
-    /// run on each again, or `None` when this build cannot kick them.
-    refused: FxHashMap<u64, Option<Instant>>,
 }
 
 impl Gate {
@@ -304,68 +265,13 @@ impl Gate {
     }
 
     /// Forgets the player `key`, who left.
-    /// Players without an account share key 0, so a refusal of key 0 stays
-    /// until no live slot lacks an account, as [`Self::keep`] finds.
     pub fn left(&mut self, key: u64) {
         self.players.remove(&key);
-        if key != 0 {
-            self.refused.remove(&key);
-        }
     }
 
     /// Forgets every player whose key holds no live slot in `live`.
     pub fn keep(&mut self, live: &[u64]) {
         self.players.retain(|key, _| live.contains(key));
-        self.refused.retain(|key, _| live.contains(key));
-    }
-
-    /// Follows what a join's guards did with the player `key` at `now`, so
-    /// a refusal fails closed: a refused player is refused again every
-    /// [`KICK_AGAIN`] while its slot stays, whether the kick seemed to work
-    /// or not; one this build cannot kick is followed without tries; one the
-    /// guards now let in is forgotten; a broken guard counts as refusing,
-    /// tried again only when the build `kicks`. A full list first forgets
-    /// the players whose key holds no live slot in `live`, read only then,
-    /// and follows the newcomer even past [`MAX_PLAYERS`]: the step forgets
-    /// the gone slots each second. Whether the player is newly refused with
-    /// no kick, for its one error.
-    pub fn guarded(
-        &mut self,
-        key: u64,
-        guard: Guard,
-        kicks: bool,
-        now: Instant,
-        live: impl FnOnce() -> Option<Vec<u64>>,
-    ) -> bool {
-        let next = match guard {
-            Guard::Passed => {
-                self.refused.remove(&key);
-                return false;
-            }
-            Guard::Unkickable => None,
-            Guard::Broken if !kicks => None,
-            Guard::Removed | Guard::Kicking | Guard::Broken => Some(now + KICK_AGAIN),
-        };
-        if !self.refused.contains_key(&key)
-            && self.refused.len() >= MAX_PLAYERS
-            && let Some(live) = live()
-        {
-            self.refused.retain(|key, _| live.contains(key));
-        }
-        let before = self.refused.insert(key, next);
-        next.is_none() && before != Some(None)
-    }
-
-    /// The refused players whose guards run again at `now`.
-    pub fn refusals_due(&mut self, now: Instant) -> Vec<u64> {
-        let mut due = Vec::new();
-        for (&key, next) in &mut self.refused {
-            if next.is_some_and(|at| now >= at) {
-                *next = Some(now + KICK_AGAIN);
-                due.push(key);
-            }
-        }
-        due
     }
 
     /// The steps due at `now` on a server that runs `server`.
@@ -403,7 +309,7 @@ impl Gate {
     /// Whether the gate follows anyone, so a step has work.
     #[must_use]
     pub fn busy(&self) -> bool {
-        !self.players.is_empty() || !self.refused.is_empty()
+        !self.players.is_empty()
     }
 }
 
@@ -500,9 +406,7 @@ fn machine_to_kick(
 }
 
 #[cfg(windows)]
-pub(crate) use runtime::{
-    after_step, can_kick, configure, forget, hello, host, joined, left, nonce, start,
-};
+pub(crate) use runtime::{after_step, forget, hello, host, joined, left, nonce, require, start};
 
 #[cfg(windows)]
 mod runtime;

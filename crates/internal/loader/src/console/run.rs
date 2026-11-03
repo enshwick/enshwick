@@ -9,112 +9,42 @@ use crate::host::Loader;
 use crate::locks::Relock;
 use crate::texts;
 
-use super::file::{Note, Watched, watch};
 use super::input::{self, End};
-use super::{Line, Source, Tool, command_files, log_query, parse, submit, take};
+use super::{Line, Tool, log_query, parse, submit, take};
 
-/// Starts reading the command files and the console input of a dedicated
-/// server.
-pub(crate) fn start(loader: &'static Loader) {
-    let Some(game) = loader.mods_dir.parent() else {
-        return;
-    };
-    let files: Vec<Watched> = command_files(&loader.mods_dir)
-        .into_iter()
-        .map(Watched::new)
-        .collect();
-    for file in &files {
-        crate::log!(INFO, "the console reads {}", shown(game, file.path()));
-    }
-    let game = game.to_path_buf();
-    let started = std::thread::Builder::new()
-        .name("enshwick-command-file".into())
-        .spawn(move || {
-            watch(
-                files,
-                |path, line| submit(line, Source::File(shown(&game, path))),
-                |path, note| {
-                    let file = shown(&game, path);
-                    match note {
-                        Note::Edited => crate::log!(
-                            WARN,
-                            "{file} was edited, not appended to: lines that ran do not run again, \
-                             and only lines past their count run; empty the file to start over"
-                        ),
-                        Note::Unread { error, quiet: 0 } => crate::log!(
-                            WARN,
-                            "{file} does not read, so no line in it runs until it does: {error}"
-                        ),
-                        Note::Unread { error, quiet } => crate::log!(
-                            WARN,
-                            "{file} does not read, so no line in it runs until it does: {error} \
-                             ({quiet} more times since the last warning)"
-                        ),
-                        Note::ReadsAgain { skipped: 0 } => {
-                            crate::log!(INFO, "{file} reads again");
-                        }
-                        Note::ReadsAgain { skipped: 1 } => crate::log!(
-                            WARN,
-                            "{file} reads again; the line it held at start does not run"
-                        ),
-                        Note::ReadsAgain { skipped } => crate::log!(
-                            WARN,
-                            "{file} reads again; the {skipped} lines it held at start do not run"
-                        ),
-                    }
-                },
-            )
-        });
-    if let Err(e) = started {
-        crate::log!(WARN, "the command file is not read: {e}");
-    }
+/// Starts reading the console input of a dedicated server.
+pub(crate) fn start() {
     let started = std::thread::Builder::new()
         .name("enshwick-console-input".into())
-        .spawn(|| {
-            match input::read(std::io::stdin().lock(), |line| {
-                submit(line, Source::Input);
-            }) {
-                End::Closed => crate::log!(DEBUG, "the console has no more input"),
-                End::Failed(why) => crate::log!(WARN, "the console input stopped: {why}"),
-            }
+        .spawn(|| match input::read(std::io::stdin().lock(), submit) {
+            End::Closed => crate::log!(DEBUG, "the console has no more input"),
+            End::Failed(why) => crate::log!(WARN, "the console input stopped: {why}"),
         });
     if let Err(e) = started {
         crate::log!(WARN, "the console input is not read: {e}");
     }
 }
 
-/// `path` as the log names it: from the game's folder, with `/`.
-fn shown(game: &std::path::Path, path: &std::path::Path) -> String {
-    path.strip_prefix(game)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .replace('\\', "/")
-}
-
-/// Runs the console lines queued since the last step and logs each answer;
-/// on the game thread, after the step.
+/// Runs the console lines queued since the last step, logs each answer and
+/// shows it in the console; on the game thread, after the step.
 pub(crate) fn after_step(loader: &Loader) {
-    for pending in take() {
-        let line = &pending.line;
-        let from = &pending.source;
-        let answer = match run(loader, line) {
+    for line in take() {
+        let answer = match run(loader, &line) {
             Ok(answer) if answer.is_empty() => {
-                crate::log!(INFO, "{from}: {line}: no answer");
+                crate::log!(INFO, "console: {line}: no answer");
                 texts::fill("console.no-answer", &[])
             }
             Ok(answer) => {
-                crate::log!(INFO, "{from}: {line}:\n{answer}");
+                crate::log!(INFO, "console: {line}:\n{answer}");
                 answer
             }
             Err(status) => {
-                let why = refusal(line, status);
-                crate::log!(WARN, "{from}: {line}: {why}");
+                let why = refusal(&line, status);
+                crate::log!(WARN, "console: {line}: {why}");
                 why
             }
         };
-        if *from == Source::Input {
-            show(&answer);
-        }
+        show(&answer);
     }
 }
 
@@ -181,16 +111,15 @@ fn answer(loader: &Loader, tool: Tool<'_>) -> String {
         Tool::World => super::tools::world(loader),
         Tool::Entity(args) => super::tools::entity(loader, args),
         Tool::Placed(args) => super::tools::placed(args),
-        Tool::Account(act, args) => super::tools::account(loader, act, args),
-        Tool::Order(order, args) => super::world_orders::order(loader, order, args),
         Tool::About(id) => loader
             .mods
             .iter()
             .find(|m| m.id.eq_ignore_ascii_case(id))
             .map_or_else(|| texts::fill("enshwick.unknown", &[("id", id)]), about),
         Tool::Status => {
-            crate::status::request();
-            crate::status::summary(loader).short()
+            let summary = crate::status::summary(loader);
+            crate::log!(INFO, "status summary:\n{}", summary.render());
+            summary.short()
         }
         Tool::Profile { reset: true } => {
             crate::status::reset_profile(loader);
@@ -211,7 +140,6 @@ fn answer(loader: &Loader, tool: Tool<'_>) -> String {
         }
         Tool::Log(args) => log_lines(loader, args),
         Tool::Recipes(args) => crate::recipes::command(loader, args),
-        Tool::Allowlist(args) => crate::allowlist::command(loader, args),
         Tool::Config(args) => config(loader, args),
         Tool::UiDemo(name) => ui_demo(loader, name),
     }

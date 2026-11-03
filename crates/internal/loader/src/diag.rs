@@ -11,7 +11,7 @@ mod menu;
 mod summary;
 
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -30,17 +30,15 @@ const HISTORY: usize = 64;
 
 /// Counting and timing, fixed by the settings read at start.
 static COUNTING: OnceLock<(bool, bool)> = OnceLock::new();
-static STATUS_MINUTES: AtomicU32 = AtomicU32::new(crate::settings::STATUS_MINUTES);
 static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
 static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
 static ANY_PART_OFF: AtomicBool = AtomicBool::new(false);
 static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
 static PATCHES: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
 
-/// Takes the diagnostics settings: the period at every call, counting and
-/// timing only at the first, since thunks are written once.
+/// Takes the diagnostics settings: counting and timing only at the first
+/// call, since thunks are written once.
 pub fn configure(settings: &Settings) {
-    STATUS_MINUTES.store(settings.status_minutes, Ordering::Relaxed);
     let _first = COUNTING.set((
         settings.diagnostics,
         settings.diagnostics && settings.diagnostics_timing,
@@ -57,12 +55,6 @@ pub fn counting() -> bool {
 #[must_use]
 pub fn timing() -> bool {
     COUNTING.get().is_some_and(|&(_, timed)| timed)
-}
-
-/// Minutes between status summaries; 0 for on demand only.
-#[must_use]
-pub fn status_minutes() -> u32 {
-    STATUS_MINUTES.load(Ordering::Relaxed)
 }
 
 /// Seconds since the Unix epoch.

@@ -245,3 +245,26 @@ fn a_line_never_overflows() {
     line.hex(0).text(b" ").hex(u64::MAX).text(b" ").dec(7, 3);
     assert_eq!(line.as_bytes(), b"0x0 0xffffffffffffffff 007");
 }
+
+#[test]
+fn a_crash_file_is_named_for_its_time_and_never_overflows() {
+    let time = SYSTEMTIME {
+        wYear: 2026,
+        wMonth: 11,
+        wDayOfWeek: 2,
+        wDay: 3,
+        wHour: 9,
+        wMinute: 5,
+        wSecond: 7,
+        wMilliseconds: 0,
+    };
+    let prefix: Vec<u16> = r"logs\enshwick-crash_".encode_utf16().collect();
+    let mut out = [0u16; 64];
+    let len = crash_file_name(&prefix, &time, &mut out).unwrap();
+    assert_eq!(
+        String::from_utf16(&out[..len]).unwrap(),
+        "logs\\enshwick-crash_2026-11-03_09-05-07.log\0"
+    );
+    let mut short = [0u16; 30];
+    assert_eq!(crash_file_name(&prefix, &time, &mut short), None);
+}

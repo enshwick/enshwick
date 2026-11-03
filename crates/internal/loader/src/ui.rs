@@ -31,7 +31,6 @@ use enshwick::abi::{
     HookFlags, Side, Status, Str, UiAnswerFn, UiDialog, UiFrame, UiFrameFn, UiWidget,
 };
 
-pub(crate) use actions::configure as configure_actions_key;
 pub(crate) use demo::open as open_demo;
 pub(crate) use dialog::show;
 use engine::{Engine, HudWindow, PopupFn, UiText, Window};

@@ -29,8 +29,10 @@ pub fn read(mut input: impl BufRead, mut submit: impl FnMut(String)) -> End {
             Ok(0) => return End::Closed,
             Ok(_) => {
                 buffer.truncate(LONGEST);
-                if let Some(line) = super::file::line(&String::from_utf8_lossy(&buffer)) {
-                    submit(line);
+                let text = String::from_utf8_lossy(&buffer);
+                let line = text.trim();
+                if !line.is_empty() && !line.starts_with('#') {
+                    submit(line.to_owned());
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}

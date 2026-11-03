@@ -14,7 +14,6 @@
 mod actions;
 pub mod admission;
 pub mod advertise;
-pub mod allowlist;
 #[cfg(windows)]
 mod altars;
 pub mod archive;
@@ -214,11 +213,6 @@ pub mod recipes;
 pub mod record;
 pub mod registry;
 pub mod remote;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "written from the start, which runs on Windows")
-)]
-mod report;
 pub mod resolve;
 #[cfg_attr(
     not(windows),

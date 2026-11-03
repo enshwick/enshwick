@@ -1,11 +1,10 @@
 //! The status summary: what the loader knows of every mod, the lines the
 //! mods' status sources give, what mods serve and patch, and the hook
-//! counters. Written to `logs/enshwick/status.log` a minute after start,
-//! then every `status_minutes`, and whenever an administrator asks with
-//! `enshwick status` on the console; each write replaces the last.
+//! counters. Written to the loader's log when an administrator asks with
+//! `enshwick status` on the console.
 
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -17,10 +16,8 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::settings::LOADER_ID;
 
-/// How often the writer looks at the clock and for requests.
+/// How often the housekeeping thread looks.
 const POLL: Duration = Duration::from_secs(1);
-/// The first summary after start, so a fresh server shows one soon.
-const FIRST: Duration = Duration::from_secs(60);
 
 /// A mod's status source.
 #[derive(Clone, Copy, Debug)]
@@ -31,8 +28,6 @@ struct Source {
 }
 
 static SOURCES: Mutex<Vec<Source>> = Mutex::new(Vec::new());
-/// Set by `enshwick status` on the console; the writer writes on its next look.
-static REQUESTED: AtomicBool = AtomicBool::new(false);
 static STARTED: OnceLock<Instant> = OnceLock::new();
 
 /// Marks the loader's start, for the uptime.
@@ -48,11 +43,6 @@ pub(crate) fn register(owner: ModIndex, callback: StatusFn, user: *mut c_void) -
         user: user.expose_provenance(),
     });
     Status::OK
-}
-
-/// Asks the writer to write the summary now.
-pub(crate) fn request() {
-    REQUESTED.store(true, Ordering::Release);
 }
 
 /// The lines mod `owner`'s sources give now.
@@ -184,25 +174,12 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
     }
 }
 
-/// Writes the summary to `status.log`.
-fn write(loader: &Loader) {
-    let Some(game_dir) = loader.mods_dir.parent() else {
-        return;
-    };
-    let path = game_dir.join("logs").join(LOADER_ID).join("status.log");
-    let text = summary(loader).render();
-    if let Err(e) = std::fs::write(&path, &text) {
-        crate::log!(WARN, "status summary not written: {e}");
-    }
-    crate::report::write(game_dir, loader.stub, Some(text));
-}
-
-/// Starts the writer on a thread of its own.
-pub(crate) fn start(loader: &'static Loader) {
+/// Starts the housekeeping thread: it puts the crash filter back on top and
+/// keeps the measured clock rate for the profile.
+pub(crate) fn start() {
     let started = std::thread::Builder::new()
         .name("enshwick-status".into())
-        .spawn(move || {
-            let mut next = Instant::now() + FIRST;
+        .spawn(|| {
             loop {
                 std::thread::sleep(POLL);
                 crate::crash::reassert();
@@ -212,16 +189,10 @@ pub(crate) fn start(loader: &'static Loader) {
                 {
                     crate::profile::keep_tsc_hz(hz);
                 }
-                let minutes = crate::diag::status_minutes();
-                let due = minutes > 0 && Instant::now() >= next;
-                if REQUESTED.swap(false, Ordering::AcqRel) || due {
-                    write(loader);
-                    next = Instant::now() + Duration::from_secs(u64::from(minutes.max(1)) * 60);
-                }
             }
         });
     if let Err(e) = started {
-        crate::log!(WARN, "no status summaries: {e}");
+        crate::log!(WARN, "no housekeeping thread: {e}");
     }
 }
 

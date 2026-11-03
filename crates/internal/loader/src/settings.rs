@@ -1,4 +1,4 @@
-//! The loader's own settings, `mod-configs/enshwick.toml`.
+//! The loader's installation settings, `enshwick.toml` in the game's folder.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -9,83 +9,28 @@ use enshwick::config::Config as _;
 /// The id the loader logs and keeps settings under; no mod may take it.
 pub use enshwick::mods::LOADER_ID;
 
-/// Minutes between status summaries by default.
-pub const STATUS_MINUTES: u32 = 10;
+/// The settings file's name in the game's folder.
+pub const FILE: &str = "enshwick.toml";
 
-/// Enshwick loader settings.
+/// Enshwick loader settings, read once at start.
 #[enshwick::config]
 #[derive(Debug, PartialEq, Eq)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each is a switch of its own in the settings file"
-)]
 pub struct Settings {
-    /// The most detailed lines kept in `logs/enshwick`: "error", "warn", "info" or "debug".
+    /// The most detailed lines kept in `logs/`: "error", "warn", "info" or "debug".
     pub log_level: Level,
     /// The same per mod id, over `log_level`; "enshwick" is the loader itself.
     ///
     /// For example, `log_levels = { "you.my-mod" = "debug" }`.
     pub log_levels: BTreeMap<String, Level>,
     /// Count the calls of every hooked game function for the status summary.
-    /// A few instructions per call; read at start.
+    /// A few instructions per call.
     pub diagnostics: bool,
     /// With diagnostics, also time every 256th call of each hooked function.
-    /// Read at start.
     pub diagnostics_timing: bool,
-    /// Minutes between status summaries in `logs/enshwick/status.log`;
-    /// 0 writes one only when the console asks with enshwick status.
-    pub status_minutes: u32,
     /// On a game build without a build table yet, find the table's entries
     /// by their code patterns and run what they cover; false leaves such a
-    /// build vanilla until its table arrives. Read at start.
+    /// build vanilla until its table arrives.
     pub build_patterns: bool,
-    /// What the server does with knowledge a client asks for in its input
-    /// that a vanilla client never asks for: ids of the world's, counters,
-    /// flag bits other than the seen bit, ids that give experience or skill
-    /// points, and quests. A vanilla server grants whatever a client asks,
-    /// so a modified client could grant itself any of it. "watch" lets it
-    /// through and logs it, "enforce" refuses it, "off" does neither. Read
-    /// at start.
-    #[config(choices = [KnowledgeGuard::Watch, KnowledgeGuard::Enforce, KnowledgeGuard::Off])]
-    pub knowledge_guard: KnowledgeGuard,
-    /// The key that opens a mod's actions where the HUD hints at one: "F1"
-    /// to "F12", a letter or a digit; "off" for none. Read at start.
-    pub actions_key: String,
-    /// On a server that runs mods of side "both", or in a game this client
-    /// hosts, disconnect a player whose game does not run them all, in the
-    /// server's versions, or runs without Enshwick, after a chat line naming
-    /// what it needs; administrators too, never the host. false lets such
-    /// players in. Read at start.
-    pub require_enshwick: bool,
-    /// On a dedicated server, let only the accounts in
-    /// mods/enshwick/allowlist.txt, and administrators, stay in the
-    /// game; the console's enshwick allowlist add and remove change the
-    /// file, and changes apply at the next join. Read at start.
-    pub allowlist: bool,
-    /// On a dedicated server, the language of the loader's texts where no
-    /// player's game names its own, such as the console's answers: a code
-    /// such as "de", "pt-br" or "uk"; empty for English. A player with
-    /// Enshwick, and a game's own client, always read the loader's texts in
-    /// their game's language. Read at start.
-    pub language: String,
-    /// A message of the day: plain text every player reads in chat on
-    /// joining this server or loading a world here; empty for none. At most
-    /// 4 lines and 500 bytes are kept, so write more lines with "\n" or a
-    /// """ string. Changes apply at the next join or world load.
-    pub motd: String,
-}
-
-/// What the knowledge guard does with a request a vanilla client never makes.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum KnowledgeGuard {
-    /// Lets it through and logs it.
-    #[default]
-    Watch,
-    /// Refuses it.
-    Enforce,
-    /// Leaves it alone.
-    Off,
 }
 
 impl Default for Settings {
@@ -95,14 +40,7 @@ impl Default for Settings {
             log_levels: BTreeMap::new(),
             diagnostics: false,
             diagnostics_timing: false,
-            status_minutes: STATUS_MINUTES,
             build_patterns: true,
-            knowledge_guard: KnowledgeGuard::Watch,
-            actions_key: "F7".to_owned(),
-            require_enshwick: true,
-            allowlist: false,
-            language: String::new(),
-            motd: String::new(),
         }
     }
 }
@@ -117,20 +55,32 @@ impl Settings {
             .unwrap_or(self.log_level)
     }
 
+    /// The file written on first start: the template with every key
+    /// commented out, so the file holds no value until someone sets one.
+    #[must_use]
+    pub fn commented() -> String {
+        Self::template()
+            .lines()
+            .map(|line| {
+                if line.is_empty() || line.starts_with('#') {
+                    format!("{line}\n")
+                } else {
+                    format!("# {line}\n")
+                }
+            })
+            .collect()
+    }
+
     /// Reads `path`, writing the commented defaults there first when it is
     /// missing, with its problems for the log.
-    ///
-    /// A file that cannot be read or parsed holds every protection closed,
-    /// as [`Settings::parse`] describes; `listed` says whether the
-    /// allowlist's file exists.
     #[must_use]
-    pub fn read(path: &Path, listed: bool) -> (Self, Problems) {
+    pub fn read(path: &Path) -> (Self, Problems) {
         let (settings, mut problems) = match std::fs::read_to_string(path) {
-            Ok(text) => Self::parse(&text, listed),
+            Ok(text) => Self::parse(&text),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => (
                 Self::default(),
                 Problems {
-                    lines: enshwick::files::write_atomically(path, Self::template())
+                    lines: enshwick::files::write_atomically(path, Self::commented())
                         .err()
                         .map(|e| format!("the defaults could not be written there: {e}"))
                         .into_iter()
@@ -138,7 +88,7 @@ impl Settings {
                     unread: false,
                 },
             ),
-            Err(e) => Self::closed(listed, e.to_string()),
+            Err(e) => (Self::default(), Problems::unread(e.to_string())),
         };
         for line in &mut problems.lines {
             *line = format!("{}: {line}", path.display());
@@ -146,119 +96,111 @@ impl Settings {
         (settings, problems)
     }
 
-    /// Parses the settings file's `text` key by key, with its problems.
-    ///
-    /// Every valid key applies and every bad one is named. A protection
-    /// ([`PROTECTIONS`]) is held closed until the file is fixed when its
-    /// own key is bad, or when it is missing and a bad key could have held
-    /// it: an unknown key, which may be it misspelled, or a table, which a
-    /// misplaced header fills with the keys after it. Closed is the
-    /// allowlist on when its file exists (`listed`), the join check on and
-    /// the knowledge guard enforcing. Text that is
-    /// not TOML holds them all.
+    /// Parses the settings file's `text` key by key, with its problems:
+    /// every valid key applies, every bad one is named and keeps its
+    /// default.
     #[must_use]
-    pub fn parse(text: &str, listed: bool) -> (Self, Problems) {
-        let table: toml::Table = match toml::from_str(text) {
-            Ok(table) => table,
-            Err(e) => {
-                let at = match e.span() {
-                    Some(span) => {
-                        let before = text.get(..span.start).unwrap_or(text);
-                        let line = before.matches('\n').count() + 1;
-                        let column =
-                            before.rsplit('\n').next().unwrap_or(before).chars().count() + 1;
-                        format!("line {line}, column {column}: ")
-                    }
-                    None => String::new(),
-                };
-                return Self::closed(listed, format!("{at}{}", e.message()));
-            }
-        };
-        let known = toml::Table::try_from(Self::default()).unwrap_or_default();
-        let mut good = toml::Table::new();
-        let mut bad = Vec::new();
-        let mut hiding = false;
-        let mut lines = Vec::new();
-        for (key, value) in table {
-            let alone = toml::Table::from_iter([(key.clone(), value.clone())]);
-            match alone.try_into::<Self>() {
-                Ok(_) => {
-                    good.insert(key, value);
-                }
-                Err(e) => {
-                    hiding |= value.is_table() || !known.contains_key(&key);
-                    lines.push(format!("{key}: {}", e.message()));
-                    bad.push(key);
-                }
-            }
-        }
-        let Ok(mut settings) = good.clone().try_into::<Self>() else {
-            return Self::closed(listed, "the keys do not read together".to_owned());
-        };
-        let held: Vec<&str> = PROTECTIONS
-            .into_iter()
-            .filter(|key| !good.contains_key(*key) && (hiding || bad.iter().any(|b| b == key)))
-            .collect();
-        for key in &held {
-            settings.close(key, listed);
-        }
-        if !held.is_empty() {
-            lines.push(format!("held closed until fixed: {}", held.join(", ")));
-        }
-        (
-            settings,
-            Problems {
-                lines,
-                unread: false,
-            },
-        )
+    pub fn parse(text: &str) -> (Self, Problems) {
+        parse_keys(text)
     }
+}
 
-    /// The defaults with every protection closed, and `problem` naming why.
-    fn closed(listed: bool, problem: String) -> (Self, Problems) {
-        let mut settings = Self::default();
-        for key in PROTECTIONS {
-            settings.close(key, listed);
-        }
-        (
-            settings,
-            Problems {
-                lines: vec![
-                    problem,
-                    format!("held closed until fixed: {}", PROTECTIONS.join(", ")),
-                ],
-                unread: true,
-            },
-        )
-    }
+/// The loader's rules for one world, `enshwick.toml` in the loader's folder
+/// of the world's settings, generated like a mod's and read as the world
+/// loads.
+#[enshwick::config(file = "enshwick")]
+#[derive(Debug, PartialEq, Eq)]
+pub struct WorldRules {
+    /// On a server that runs mods of side "both", or in a game this client
+    /// hosts, disconnect a player whose game does not run them all, in the
+    /// server's versions, or runs without Enshwick, after a chat line naming
+    /// what it needs; administrators too, never the host. false lets such
+    /// players into this world.
+    pub require_enshwick: bool,
+}
 
-    /// Sets the protection `key` to its closed state.
-    fn close(&mut self, key: &str, listed: bool) {
-        match key {
-            ALLOWLIST => self.allowlist = listed,
-            REQUIRE_ENSHWICK => self.require_enshwick = true,
-            KNOWLEDGE_GUARD => self.knowledge_guard = KnowledgeGuard::Enforce,
-            _ => {}
+impl Default for WorldRules {
+    fn default() -> Self {
+        Self {
+            require_enshwick: true,
         }
     }
+}
+
+impl WorldRules {
+    /// Parses a world's rules file `text` key by key, with its problems: a
+    /// key whose value does not read keeps its default.
+    #[must_use]
+    pub fn parse(text: &str) -> (Self, Problems) {
+        parse_keys(text)
+    }
+}
+
+/// `text` read key by key into `T`: every valid key applies, every bad one
+/// is named and keeps its default; text that is no TOML reads as the
+/// defaults.
+fn parse_keys<T: serde::de::DeserializeOwned + Default>(text: &str) -> (T, Problems) {
+    let table: toml::Table = match toml::from_str(text) {
+        Ok(table) => table,
+        Err(e) => {
+            let at = match e.span() {
+                Some(span) => {
+                    let before = text.get(..span.start).unwrap_or(text);
+                    let line = before.matches('\n').count() + 1;
+                    let column = before.rsplit('\n').next().unwrap_or(before).chars().count() + 1;
+                    format!("line {line}, column {column}: ")
+                }
+                None => String::new(),
+            };
+            return (
+                T::default(),
+                Problems::unread(format!("{at}{}", e.message())),
+            );
+        }
+    };
+    let mut good = toml::Table::new();
+    let mut lines = Vec::new();
+    for (key, value) in table {
+        let alone = toml::Table::from_iter([(key.clone(), value.clone())]);
+        match alone.try_into::<T>() {
+            Ok(_) => {
+                good.insert(key, value);
+            }
+            Err(e) => lines.push(format!("{key}: {}", e.message())),
+        }
+    }
+    let read = good.try_into::<T>().unwrap_or_else(|e| {
+        lines.push(format!("the keys do not read together: {}", e.message()));
+        T::default()
+    });
+    (
+        read,
+        Problems {
+            lines,
+            unread: false,
+        },
+    )
 }
 
 /// What did not read in the settings file.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Problems {
-    /// A line per problem for the log, protections held closed last.
+    /// A line per problem for the log.
     pub lines: Vec<String>,
     /// The file did not read or parse at all, so the defaults apply instead
     /// of the rest of the file.
     pub unread: bool,
 }
 
-const ALLOWLIST: &str = "allowlist";
-const REQUIRE_ENSHWICK: &str = "require_enshwick";
-const KNOWLEDGE_GUARD: &str = "knowledge_guard";
-
-/// The settings that keep players out; a broken file never opens them.
-pub const PROTECTIONS: [&str; 3] = [ALLOWLIST, REQUIRE_ENSHWICK, KNOWLEDGE_GUARD];
+impl Problems {
+    /// The file as a whole did not read, for `why`.
+    fn unread(why: String) -> Self {
+        Self {
+            lines: vec![why],
+            unread: true,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -270,38 +212,33 @@ mod tests {
         assert_eq!(settings, Settings::default());
         assert_eq!(settings.level("any-mod"), Level::INFO);
         assert!(!settings.diagnostics);
-        assert_eq!(settings.status_minutes, STATUS_MINUTES);
+        assert!(settings.build_patterns);
     }
 
     #[test]
-    fn the_knowledge_guard_watches_unless_told_otherwise() {
-        assert_eq!(Settings::default().knowledge_guard, KnowledgeGuard::Watch);
-        let settings: Settings = toml::from_str(
-            "knowledge_guard = \"enforce\"
-",
-        )
-        .unwrap();
-        assert_eq!(settings.knowledge_guard, KnowledgeGuard::Enforce);
-        assert!(
-            toml::from_str::<Settings>(
-                "knowledge_guard = true
-"
-            )
-            .is_err()
+    fn the_written_file_holds_every_key_commented_out() {
+        let file = Settings::commented();
+        assert_eq!(
+            Settings::parse(&file),
+            (Settings::default(), Problems::default())
         );
+        assert!(toml::from_str::<toml::Table>(&file).unwrap().is_empty());
+        for key in [
+            "log_level",
+            "log_levels",
+            "diagnostics",
+            "diagnostics_timing",
+            "build_patterns",
+        ] {
+            assert!(file.contains(&format!("# {key} = ")), "{key}:\n{file}");
+        }
     }
 
     #[test]
     fn diagnostics_are_turned_on_in_the_file() {
-        let settings: Settings = toml::from_str(
-            "diagnostics = true
-status_minutes = 0
-",
-        )
-        .unwrap();
+        let settings: Settings = toml::from_str("diagnostics = true\n").unwrap();
         assert!(settings.diagnostics);
         assert!(!settings.diagnostics_timing);
-        assert_eq!(settings.status_minutes, 0);
     }
 
     #[test]
@@ -338,126 +275,46 @@ status_minutes = 0
     fn a_missing_file_is_written_and_read_back() {
         let dir = std::env::temp_dir().join(format!("enshwick-settings-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("enshwick.toml");
+        let path = dir.join(FILE);
         let _fresh = std::fs::remove_file(&path);
         assert_eq!(
-            Settings::read(&path, true),
+            Settings::read(&path),
             (Settings::default(), Problems::default())
         );
         assert!(path.exists());
         assert_eq!(
-            Settings::read(&path, true),
+            Settings::read(&path),
             (Settings::default(), Problems::default())
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    fn closed(listed: bool) -> Settings {
-        Settings {
-            allowlist: listed,
-            require_enshwick: true,
-            knowledge_guard: KnowledgeGuard::Enforce,
-            ..Settings::default()
-        }
-    }
-
-    #[test]
-    fn the_template_parses_without_problems() {
-        assert_eq!(
-            Settings::parse(&Settings::template(), true),
-            (Settings::default(), Problems::default())
-        );
-    }
-
-    #[test]
-    fn a_file_that_does_not_parse_holds_every_protection_closed() {
-        let (settings, problems) =
-            Settings::parse("allowlist = = true\nlog_level = \"debug\"\n", true);
-        assert_eq!(settings, closed(true));
-        assert!(!problems.lines.is_empty());
-        assert!(
-            problems
-                .lines
-                .iter()
-                .any(|p| p.contains("allowlist") && p.contains("knowledge_guard")),
-            "{problems:?}"
-        );
-    }
-
-    #[test]
-    fn without_an_allowlist_file_a_broken_file_leaves_the_allowlist_off() {
-        let (settings, _) = Settings::parse("[[[", false);
-        assert_eq!(settings, closed(false));
-    }
-
     #[test]
     fn a_bad_value_keeps_the_valid_keys_and_names_the_bad_one() {
-        let text = "log_level = \"warn\"\nstatus_minutes = \"ten\"\nallowlist = true\n\
-                    require_enshwick = false\nknowledge_guard = \"off\"\n";
-        let (settings, problems) = Settings::parse(text, false);
+        let text = "log_level = \"warn\"\ndiagnostics = \"yes\"\nbuild_patterns = false\n";
+        let (settings, problems) = Settings::parse(text);
         assert_eq!(settings.log_level, Level::WARN);
-        assert_eq!(settings.status_minutes, STATUS_MINUTES);
-        assert!(settings.allowlist);
-        assert!(!settings.require_enshwick);
-        assert_eq!(settings.knowledge_guard, KnowledgeGuard::Off);
+        assert!(!settings.diagnostics);
+        assert!(!settings.build_patterns);
         assert_eq!(problems.lines.len(), 1, "{problems:?}");
-        assert!(problems.lines[0].contains("status_minutes"), "{problems:?}");
-    }
-
-    #[test]
-    fn a_bad_protection_value_holds_that_protection_closed() {
-        let text = "allowlist = \"yes\"\nrequire_enshwick = false\nknowledge_guard = \"loud\"\n";
-        let (settings, problems) = Settings::parse(text, true);
-        assert!(settings.allowlist);
-        assert!(!settings.require_enshwick);
-        assert_eq!(settings.knowledge_guard, KnowledgeGuard::Enforce);
-        for key in ["allowlist", "knowledge_guard"] {
-            assert!(
-                problems.lines.iter().any(|p| p.contains(key)),
-                "{key}: {problems:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_misspelled_protection_holds_it_closed() {
-        let text = "alowlist = false\nrequire_enshwick = true\nknowledge_guard = \"watch\"\n";
-        let (settings, problems) = Settings::parse(text, true);
-        assert!(settings.allowlist);
-        assert_eq!(settings.knowledge_guard, KnowledgeGuard::Watch);
         assert!(
-            problems.lines.iter().any(|p| p.contains("alowlist")),
+            problems.lines[0].starts_with("diagnostics: "),
             "{problems:?}"
         );
     }
 
     #[test]
-    fn a_bad_setting_holds_no_protection_it_cannot_be() {
-        let (settings, problems) = Settings::parse("log_level = \"loud\"\n", true);
-        assert_eq!(settings, Settings::default());
+    fn a_removed_key_is_named_and_the_rest_applies() {
+        let (settings, problems) = Settings::parse("motd = \"hi\"\nlog_level = \"debug\"\n");
+        assert_eq!(settings.log_level, Level::DEBUG);
         assert!(!problems.unread);
-        assert_eq!(problems.lines.len(), 1, "{problems:?}");
-        assert!(problems.lines[0].starts_with("log_level: "), "{problems:?}");
-    }
-
-    #[test]
-    fn a_misplaced_table_holds_the_protections_it_may_swallow() {
-        let (settings, problems) = Settings::parse("[log_levels]\nallowlist = false\n", true);
-        assert_eq!(settings, closed(true));
-        assert!(!problems.unread);
-        assert!(
-            problems
-                .lines
-                .iter()
-                .any(|p| p.starts_with("held closed until fixed: allowlist")),
-            "{problems:?}"
-        );
+        assert!(problems.lines[0].starts_with("motd: "), "{problems:?}");
     }
 
     #[test]
     fn a_file_that_does_not_parse_names_where_and_reads_as_the_defaults() {
-        let (settings, problems) = Settings::parse("log_level = \"debug\"\n[[[\n", true);
-        assert_eq!(settings, closed(true));
+        let (settings, problems) = Settings::parse("log_level = \"debug\"\n[[[\n");
+        assert_eq!(settings, Settings::default());
         assert!(problems.unread);
         assert!(
             problems.lines[0].starts_with("line 2, column "),
@@ -466,15 +323,39 @@ status_minutes = 0
     }
 
     #[test]
+    fn a_world_requires_enshwick_unless_its_file_says_false() {
+        use enshwick::config::Config as _;
+
+        assert_eq!(WorldRules::FILE, "enshwick");
+        let template = WorldRules::template();
+        assert!(template.contains("require_enshwick = true"), "{template}");
+        assert_eq!(
+            WorldRules::parse(&template),
+            (WorldRules::default(), Problems::default())
+        );
+        assert!(WorldRules::default().require_enshwick);
+        let (rules, problems) = WorldRules::parse("require_enshwick = false\n");
+        assert!(!rules.require_enshwick);
+        assert!(problems.lines.is_empty());
+        let (rules, problems) = WorldRules::parse("require_enshwick = \"no\"\n");
+        assert!(rules.require_enshwick, "a bad value keeps the default");
+        assert!(
+            problems.lines[0].starts_with("require_enshwick: "),
+            "{problems:?}"
+        );
+        assert!(WorldRules::parse("").0.require_enshwick);
+    }
+
+    #[test]
     #[cfg_attr(miri, ignore = "Miri isolates the file system")]
-    fn a_file_that_cannot_be_read_holds_every_protection_closed() {
+    fn a_file_that_cannot_be_read_reads_as_the_defaults() {
         let dir =
             std::env::temp_dir().join(format!("enshwick-settings-dir-{}", std::process::id()));
-        let path = dir.join("enshwick.toml");
+        let path = dir.join(FILE);
         std::fs::create_dir_all(&path).unwrap();
-        let (settings, problems) = Settings::read(&path, true);
-        assert_eq!(settings, closed(true));
-        assert!(!problems.lines.is_empty());
+        let (settings, problems) = Settings::read(&path);
+        assert_eq!(settings, Settings::default());
+        assert!(problems.unread);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

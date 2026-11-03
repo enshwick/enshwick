@@ -1,16 +1,15 @@
-//! The server's console: lines a mod runs on the server as an administrator
-//! with no character, such as each line of a dedicated server's command file.
+//! The server's console: lines run on the server as an administrator with
+//! no character, typed in a dedicated server's own console window or
+//! terminal, or run by a mod.
 //!
 //! `enshwick ...` reaches the loader's own tools; any other first word names a
 //! mod, whose actions take the rest of the line.
 //!
-//! On a dedicated server the loader feeds it from the command file
-//! ([`file`]) and from the server's own console window or terminal
+//! On a dedicated server the loader reads the console's input
 //! ([`input`]). Reading a line is pure logic here; the run module answers it
 //! on the game thread, after the step.
 
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -23,11 +22,7 @@ pub mod accounts;
 #[cfg(windows)]
 mod admin;
 pub mod answers;
-#[cfg(windows)]
-mod ban_list;
-pub mod file;
 pub mod input;
-pub mod orders;
 #[cfg(windows)]
 mod run;
 #[cfg(windows)]
@@ -35,79 +30,31 @@ pub(crate) use admin::{TABLE_IDS, account_action};
 #[cfg(windows)]
 mod tools;
 #[cfg(windows)]
-pub(crate) use tools::{is_admin as player_is_admin, name as player_name};
-#[cfg(windows)]
-mod world_orders;
-#[cfg(windows)]
 pub(crate) use run::{after_step, run, start, the_console};
-
-/// The command files a server reads in `data_dir`: the loader's own.
-#[must_use]
-pub fn command_files(data_dir: &Path) -> Vec<PathBuf> {
-    vec![data_dir.join(LOADER_ID).join(file::FILE)]
-}
-
-/// Where a console line came from.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Source {
-    /// A command file, as the log names it.
-    File(String),
-    /// The server's console window or terminal, which also reads the answer.
-    Input,
-}
-
-impl std::fmt::Display for Source {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::File(name) => f.write_str(name),
-            Self::Input => f.write_str("console"),
-        }
-    }
-}
-
-/// A console line waiting for the game thread, and where it came from.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pending {
-    /// The line, trimmed.
-    pub line: String,
-    /// Where it came from.
-    pub source: Source,
-}
+#[cfg(windows)]
+pub(crate) use tools::is_admin as player_is_admin;
 
 /// What the console keeps while the game runs.
 struct State {
-    /// Lines waiting for the game thread.
-    pending: Mutex<Vec<Pending>>,
+    /// Lines typed, waiting for the game thread.
+    pending: Mutex<Vec<String>>,
     /// Set while `pending` holds a line, so a step with none takes no lock.
     waiting: AtomicBool,
     /// The pieces placed lately, newest last.
     placed: Mutex<VecDeque<answers::Placed>>,
-    /// The accounts put on the ban list while not online, this run: the
-    /// game checks joins against its session's own list, which it fills
-    /// from the ban list only when hosting starts, so the loader removes
-    /// them when they join.
-    #[cfg(windows)]
-    offline_bans: Mutex<Vec<u64>>,
     /// The game's account action handler and its action's layout, or why
     /// this build lacks them.
     #[cfg(windows)]
     handler: std::sync::OnceLock<Result<admin::Handler, FindGameCodeError>>,
-    /// The game's ban list add and its entry's layout, or why this build
-    /// lacks them.
-    #[cfg(windows)]
-    ban_list: std::sync::OnceLock<Result<ban_list::BanList, FindGameCodeError>>,
 }
 
-/// What this build lacks for one of the console's account tools.
+/// What this build lacks for the game's account actions.
 #[cfg(windows)]
 #[derive(Debug, thiserror::Error)]
 enum FindGameCodeError {
     /// A build table entry.
     #[error("the table entry {id}")]
     Entry { id: &'static str },
-    /// A build table entry whose code matches its pattern.
-    #[error("the table entry {id} with code that matches it")]
-    Code { id: &'static str },
     /// A reflected type.
     #[error("the reflected {ty}")]
     Type { ty: &'static str },
@@ -120,9 +67,6 @@ enum FindGameCodeError {
     /// A reflected type too small for its fields.
     #[error("a reflected {ty} that holds its fields")]
     Layout { ty: &'static str },
-    /// A ban entry whose fields do not fit in it.
-    #[error("a ban entry its fields fit in ({entry:x?})")]
-    BanEntry { entry: accounts::BanFields },
 }
 
 static STATE: State = State {
@@ -130,56 +74,14 @@ static STATE: State = State {
     waiting: AtomicBool::new(false),
     placed: Mutex::new(VecDeque::new()),
     #[cfg(windows)]
-    offline_bans: Mutex::new(Vec::new()),
-    #[cfg(windows)]
     handler: std::sync::OnceLock::new(),
-    #[cfg(windows)]
-    ban_list: std::sync::OnceLock::new(),
 };
 
-/// Queues `line` from `source` for the game thread.
-pub fn submit(line: String, source: Source) {
+/// Queues `line`, typed in the console, for the game thread.
+pub fn submit(line: String) {
     let mut pending = STATE.pending.relock();
-    pending.push(Pending { line, source });
+    pending.push(line);
     STATE.waiting.store(true, Ordering::Release);
-}
-
-/// Notes that `account` went onto the ban list while not online.
-#[cfg(windows)]
-pub(crate) fn remember_offline_ban(account: u64) {
-    let mut bans = STATE.offline_bans.relock();
-    if !bans.contains(&account) {
-        bans.push(account);
-    }
-}
-
-/// Forgets an offline ban of `account`, which the game took back.
-#[cfg(windows)]
-pub(crate) fn forget_offline_ban(account: u64) {
-    STATE
-        .offline_bans
-        .relock()
-        .retain(|&banned| banned != account);
-}
-
-/// Forgets every offline ban, when a hosted game ends.
-#[cfg(windows)]
-pub(crate) fn forget_offline_bans() {
-    STATE.offline_bans.relock().clear();
-}
-
-/// Whether the game's ban list still holds `account`; true when it does
-/// not read, so a ban stays in force.
-#[cfg(windows)]
-pub(crate) fn still_banned(loader: &crate::host::Loader, account: u64) -> bool {
-    ban_list::holds(loader, account).unwrap_or(true)
-}
-
-/// Whether `account` went onto the ban list while not online this run, so
-/// its join must be refused.
-#[cfg(windows)]
-pub(crate) fn banned_offline(account: u64) -> bool {
-    STATE.offline_bans.relock().contains(&account)
 }
 
 /// Keeps the pieces placed among `built`, one step's building events, among
@@ -221,7 +123,7 @@ pub fn newest(count: usize) -> Vec<answers::Placed> {
 
 /// The lines queued since the last call, oldest first.
 #[must_use]
-pub fn take() -> Vec<Pending> {
+pub fn take() -> Vec<String> {
     if !STATE.waiting.load(Ordering::Acquire) {
         return Vec::new();
     }
@@ -262,12 +164,6 @@ pub enum Tool<'a> {
     Entity(&'a str),
     /// `enshwick placed [n]`: the pieces placed lately.
     Placed(&'a str),
-    /// `enshwick kick|ban|unban <player or account>`: the game's account
-    /// actions.
-    Account(accounts::Act, &'a str),
-    /// `enshwick give|give-to|spawn|teleport ...`: the game's admin
-    /// orders on the world.
-    Order(Order, &'a str),
     /// `enshwick help`: the tools and the mods with actions.
     Help,
     /// `enshwick <mod id>`: what a mod is.
@@ -285,25 +181,10 @@ pub enum Tool<'a> {
     Log(&'a str),
     /// `enshwick recipes ...`: disabled recipes.
     Recipes(&'a str),
-    /// `enshwick allowlist [add|remove <player or account>]`: who may join.
-    Allowlist(&'a str),
     /// `enshwick config [mod [key [value]]]`: mods' settings.
     Config(&'a str),
     /// `enshwick ui-demo <player>`: the interface demo on a player's client.
     UiDemo(&'a str),
-}
-
-/// The game's admin orders on the world the console gives.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Order {
-    /// Items for every player online.
-    Give,
-    /// Items for one player.
-    GiveTo,
-    /// Entities from a template.
-    Spawn,
-    /// A player moved.
-    Teleport,
 }
 
 /// The first word of `text` and the rest, trimmed.
@@ -331,13 +212,6 @@ pub fn parse(line: &str) -> Line<'_> {
         "world" => Tool::World,
         "entity" => Tool::Entity(args),
         "placed" => Tool::Placed(args),
-        "kick" => Tool::Account(accounts::Act::Kick, args),
-        "ban" => Tool::Account(accounts::Act::Ban, args),
-        "unban" => Tool::Account(accounts::Act::Unban, args),
-        "give" => Tool::Order(Order::Give, args),
-        "give-to" => Tool::Order(Order::GiveTo, args),
-        "spawn" => Tool::Order(Order::Spawn, args),
-        "teleport" => Tool::Order(Order::Teleport, args),
         "status" => Tool::Status,
         "profile" => Tool::Profile {
             reset: args.eq_ignore_ascii_case("reset"),
@@ -345,7 +219,6 @@ pub fn parse(line: &str) -> Line<'_> {
         "conflicts" => Tool::Conflicts,
         "log" => Tool::Log(args),
         "recipes" => Tool::Recipes(args),
-        "allowlist" => Tool::Allowlist(args),
         "config" => Tool::Config(args),
         "ui-demo" => Tool::UiDemo(args),
         _ => Tool::About(word),
@@ -392,17 +265,6 @@ pub struct ParseLogQueryError {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(windows)]
-    #[test]
-    fn an_offline_ban_is_remembered_until_the_game_takes_it_back() {
-        assert!(!banned_offline(0x77));
-        remember_offline_ban(0x77);
-        remember_offline_ban(0x77);
-        assert!(banned_offline(0x77));
-        forget_offline_ban(0x77);
-        assert!(!banned_offline(0x77));
-    }
-
     use super::*;
 
     #[test]
@@ -416,19 +278,7 @@ mod tests {
             Line::Loader(Tool::Entity("12"))
         );
         assert_eq!(parse("enshwick placed"), Line::Loader(Tool::Placed("")));
-        assert_eq!(
-            parse("enshwick ban Ann Lee"),
-            Line::Loader(Tool::Account(accounts::Act::Ban, "Ann Lee"))
-        );
         assert_eq!(parse("Enshwick  HELP"), Line::Loader(Tool::Help));
-        assert_eq!(
-            parse("enshwick give-to 7 1 Ann"),
-            Line::Loader(Tool::Order(Order::GiveTo, "7 1 Ann"))
-        );
-        assert_eq!(
-            parse("enshwick teleport 1 2 3 Ann"),
-            Line::Loader(Tool::Order(Order::Teleport, "1 2 3 Ann"))
-        );
         assert_eq!(
             parse("enshwick you.trading-post"),
             Line::Loader(Tool::About("you.trading-post"))
@@ -462,9 +312,23 @@ mod tests {
     }
 
     #[test]
-    fn a_server_reads_the_loader_s_command_file() {
-        let data = Path::new("mods");
-        assert_eq!(command_files(data), [data.join(LOADER_ID).join(file::FILE)]);
+    fn the_removed_admin_tools_are_no_tools_of_the_loader() {
+        for word in [
+            "kick",
+            "ban",
+            "unban",
+            "give",
+            "give-to",
+            "spawn",
+            "teleport",
+            "allowlist",
+        ] {
+            assert_eq!(
+                parse(&format!("enshwick {word} Ann")),
+                Line::Loader(Tool::About(word)),
+                "{word}"
+            );
+        }
     }
 
     #[test]
@@ -491,10 +355,9 @@ mod tests {
 
     #[test]
     fn queued_lines_come_out_once_in_order() {
-        submit("enshwick status".into(), Source::File("a".into()));
-        submit("enshwick help".into(), Source::Input);
-        let lines: Vec<String> = take().into_iter().map(|p| p.line).collect();
-        assert_eq!(lines, ["enshwick status", "enshwick help"]);
+        submit("enshwick status".into());
+        submit("enshwick help".into());
+        assert_eq!(take(), ["enshwick status", "enshwick help"]);
         assert!(take().is_empty());
     }
 

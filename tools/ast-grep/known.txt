@@ -93,7 +93,6 @@ static-is-registry-fuse-or-state crates/internal/loader/src/survivors.rs static 
 static-is-registry-fuse-or-state crates/internal/loader/src/survivors.rs static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
 # The actions window's key name and the hint it was asked to open at, UI
 # state; they move into the window's state struct with `KEY`.
-static-is-registry-fuse-or-state crates/internal/loader/src/ui/actions.rs static KEY_NAME: Mutex<String> = Mutex::new(String::new());
 static-is-registry-fuse-or-state crates/internal/loader/src/ui/actions.rs static OPEN: Mutex<Option<(String, String)>> = Mutex::new(None);
 # The UI demo's answer, HUD samples and position, a developer tool's
 # state; they move into the thread-local `Demo` or one demo state struct.

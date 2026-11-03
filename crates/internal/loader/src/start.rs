@@ -41,22 +41,6 @@ const CLIENT_ARM_DELAY: Duration = Duration::from_secs(15);
 static FRAME: OnceLock<Option<FrameSlot>> = OnceLock::new();
 static STARTED: AtomicBool = AtomicBool::new(false);
 
-/// Writes the player's report once the loader knows it cannot serve the
-/// game, after the first report, so this one is the last.
-fn no_game(
-    mods_dir: &std::path::Path,
-    stub: u32,
-    first_report: Option<std::thread::JoinHandle<()>>,
-) -> Option<game::Game> {
-    if let Some(first) = first_report {
-        let _joined = first.join();
-    }
-    if let Some(game_dir) = mods_dir.parent() {
-        crate::report::write(game_dir, stub, None);
-    }
-    None
-}
-
 /// Stops the game when a mod that holds a world is not running.
 fn enforce_holds(loader: &Loader) {
     let running = crate::holds::running(loader);
@@ -122,14 +106,13 @@ pub(crate) fn start(
     let began = std::time::Instant::now();
     let Some(game::Begun {
         mods_dir,
-        report: first_report,
         settings_problems,
         developer_tools,
     }) = begin(stub_abi, missing_forwards)
     else {
         return;
     };
-    let Some(game) = game(&mods_dir).or_else(|| no_game(&mods_dir, stub_abi, first_report)) else {
+    let Some(game) = game(&mods_dir) else {
         return;
     };
     let mut watching = Watching::start(game.base);
@@ -164,7 +147,6 @@ pub(crate) fn start(
         configs_dir: mods_dir.with_file_name("mod-configs"),
         developer_tools,
         mods_dir,
-        stub: stub_abi,
         mods: records(&libraries, &candidates, &plan),
         others,
         chains: Mutex::new(Chains::default()),
@@ -216,22 +198,20 @@ pub(crate) fn start(
 /// summary, the server's own services and the join's guards.
 fn start_services(loader: &'static Loader) {
     crate::watch::start(loader);
-    crate::status::start(loader);
+    crate::status::start();
     if loader.side == Side::SERVER {
         serve(loader);
     }
     crate::admission::start(loader, names(loader).into_iter().collect());
-    crate::allowlist::start(loader, crate::admission::can_kick());
-    crate::chat_mute::start(loader);
 }
 
 /// Starts what only a dedicated server runs: the advertised join mods and
-/// the console's command file.
+/// the console.
 fn serve(loader: &'static Loader) {
     if let Some(game_dir) = loader.mods_dir.parent() {
         crate::advertise::start(game_dir, host::join_mods);
     }
-    crate::console::start(loader);
+    crate::console::start();
 }
 
 /// Lets the dedicated server's own code run once the hooks are armed, and
@@ -296,7 +276,8 @@ fn records(
         .collect()
 }
 
-/// Names the mod or the loader in `crash.log` when a fault involves its code.
+/// Names the mod or the loader in the crash report when a fault involves its
+/// code.
 fn attribute_crashes(loader: &Loader, order: &[&Library]) {
     let mut modules: Vec<(usize, String, usize, usize)> = order
         .iter()
@@ -327,11 +308,7 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
         ));
     }
     if let Some(game_dir) = loader.mods_dir.parent() {
-        crate::crash::install(
-            &modules,
-            &game_dir.join("logs").join(crate::settings::LOADER_ID),
-            &loader.mods_dir,
-        );
+        crate::crash::install(&modules, &game_dir.join(crate::log::LOGS), &loader.mods_dir);
     }
 }
 

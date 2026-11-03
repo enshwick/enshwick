@@ -1,6 +1,6 @@
 //! The game's account action handler, which kicks, bans and unbans by
-//! account for the server's administrators; the console calls it the same
-//! way, so the server keeps its own ban list (`bannedAccounts` in
+//! account for the server's administrators; mods call it the same way, so
+//! the server keeps its own ban list (`bannedAccounts` in
 //! `enshrouded_server.json`).
 
 use enshwick::abi::Status;
@@ -8,25 +8,11 @@ use enshwick::abi::Status;
 use crate::host::Loader;
 use crate::pinned;
 
-use super::accounts::{Act, Decision, Online, Route, Target, decide, event};
+use super::accounts::{Act, Online, Target, decide, event};
 use super::{FindGameCodeError, STATE};
 
 /// The build table ids the console names.
-pub(crate) const TABLE_IDS: &[&str] = &[
-    pinned::server::ACCOUNT_ACTION.id(),
-    pinned::server::BAN_ADD.id(),
-    pinned::server::BAN_COUNT.id(),
-    pinned::server::BAN_ENTRY_ACCOUNT.id(),
-    pinned::server::BAN_ENTRY_CHARACTER_NAME.id(),
-    pinned::server::BAN_ENTRY_DATE.id(),
-    pinned::server::BAN_ENTRY_DISPLAY_NAME.id(),
-    pinned::server::BAN_ENTRY_SIZE.id(),
-    pinned::server::BAN_LIST.id(),
-    pinned::server::BAN_LIST_CHANGED.id(),
-    pinned::server::BAN_NAME_LENGTH.id(),
-    pinned::server::BAN_NAME_TEXT.id(),
-    pinned::server::CONFIG.id(),
-];
+pub(crate) const TABLE_IDS: &[&str] = &[pinned::server::ACCOUNT_ACTION.id()];
 
 /// The reflected account action the handler takes.
 const EVENT: &str = "keen::ecs::AccountActionEvent";
@@ -58,7 +44,7 @@ fn handler(loader: &Loader) -> Option<&'static Handler> {
             if let Err(lacks) = &found {
                 crate::log!(
                     WARN,
-                    "console kicks and bans off: {} lacks {lacks}",
+                    "account actions off: {} lacks {lacks}",
                     loader.build.name
                 );
             }
@@ -132,37 +118,14 @@ pub(crate) fn act(loader: &Loader, act: Act, account: u64) -> Result<(), Status>
     Ok(())
 }
 
-/// Asks the game for `decision`: through the account action handler, or
-/// for a ban of an account not online, straight onto the ban list.
-///
-/// # Errors
-///
-/// [`Status::REFUSED`] for a kick or a ban of a hosted game's host; as
-/// [`act`] and [`super::ban_list::add`] otherwise.
-pub(crate) fn carry(loader: &Loader, act: Act, decision: &Decision) -> Result<(), Status> {
-    if act != Act::Unban && crate::admission::host() == Some(decision.key) {
-        return Err(Status::REFUSED);
-    }
-    match decision.route {
-        Route::Handler => {
-            self::act(loader, act, decision.key)?;
-            if act == Act::Unban {
-                super::forget_offline_ban(decision.key);
-            }
-            Ok(())
-        }
-        Route::BanList => super::ban_list::add(loader, decision.key),
-    }
-}
-
-/// A mod's account action on `account`: the console's checks, then
-/// [`carry`].
+/// A mod's account action on `account`, through the game's account action
+/// handler.
 ///
 /// # Errors
 ///
 /// [`Status::BAD_ARGS`] for account 0; [`Status::REFUSED`] for an
 /// administrator online or a hosted game's host, unless unbanned, and for a
-/// kick of an account not online; as [`carry`] otherwise.
+/// kick or a ban of an account not online; as [`act`] otherwise.
 pub(crate) fn account_action(loader: &Loader, act: Act, account: u64) -> Result<(), Status> {
     if account == 0 {
         return Err(Status::BAD_ARGS);
@@ -179,6 +142,9 @@ pub(crate) fn account_action(loader: &Loader, act: Act, account: u64) -> Result<
         .iter()
         .find(|p| p.key == account)
         .map_or(Target::Account(account), |p| Target::Player(p.clone()));
-    let decision = decide(act, &target).map_err(|_| Status::REFUSED)?;
-    carry(loader, act, &decision)
+    let key = decide(act, &target).map_err(|_| Status::REFUSED)?;
+    if act != Act::Unban && crate::admission::host() == Some(key) {
+        return Err(Status::REFUSED);
+    }
+    self::act(loader, act, key)
 }
