@@ -520,7 +520,10 @@ impl Status {
     }
 }
 
-/// Which side of the game a mod or a binary is.
+/// Which binary of the game runs, or where a mod runs.
+///
+/// A mod is [`Side::SERVER`] or [`Side::BOTH`]; [`Side::CLIENT`] names only
+/// the game client as a binary.
 ///
 /// # Examples
 ///
@@ -535,12 +538,14 @@ impl Status {
 pub struct Side(pub u8);
 
 impl Side {
-    /// The dedicated server; as a mod's side, server features, which the
-    /// client also loads to run while it hosts a game (solo play included).
+    /// The dedicated server; as a mod's side, a mod that runs only where the
+    /// world runs: the dedicated server, or a client that hosts or plays
+    /// alone. Players need not install it.
     pub const SERVER: Self = Self(1);
-    /// The game client.
+    /// The game client, as a binary; never a mod's side.
     pub const CLIENT: Self = Self(2);
-    /// Both binaries.
+    /// As a mod's side, a mod that runs where the world runs and on every
+    /// client playing in it, which must have it in the world's version.
     pub const BOTH: Self = Self(3);
 
     /// Whether `self` covers every side in `other`.
@@ -719,8 +724,7 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 178 * 8);
-    assert!(core::mem::offset_of!(HostApi, mod_dir) == 24 + 177 * 8);
+    assert!(size_of::<HostApi>() == 24 + 177 * 8);
     assert!(core::mem::offset_of!(HostApi, chat_mute_has) == 24 + 176 * 8);
     assert!(core::mem::offset_of!(HostApi, chat_mute_set) == 24 + 175 * 8);
     assert!(core::mem::offset_of!(HostApi, use_content) == 24 + 174 * 8);
@@ -790,7 +794,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 129 * 8);
     assert!(core::mem::offset_of!(HostApi, game_text) == 24 + 128 * 8);
     assert!(core::mem::offset_of!(HostApi, account_knowledge) == 24 + 126 * 8);
-    assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 120 * 8);
+    assert!(core::mem::offset_of!(HostApi, mod_dir) == 24 + 120 * 8);
     assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 119 * 8);
     assert!(core::mem::offset_of!(HostApi, knowledge_input_filter) == 24 + 121 * 8);
     assert!(core::mem::offset_of!(HostApi, forget_game_settings) == 24 + 124 * 8);

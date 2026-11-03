@@ -54,7 +54,7 @@ mod tests {
         Panel,
         r#"
         id = "you.panel"
-        side = "client"
+        side = "both"
         "#
     );
 

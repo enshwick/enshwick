@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use enshwick::abi::{Manifest, ManifestFlags, Relation, Side, Str};
+use enshwick::abi::{Manifest, Relation, Side, Str};
 
 /// Describes the mod in `dll`; an error when its version is not `expected`.
 pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String> {
@@ -53,8 +53,7 @@ unsafe fn describe(manifest: &Manifest) -> String {
     let text = |s: &Str| unsafe { s.as_str() }.unwrap_or("<not UTF-8>").to_owned();
     let side = match manifest.side {
         Side::SERVER => "server",
-        Side::CLIENT => "client",
-        Side::BOTH => "both",
+        Side::BOTH => "both, in the join check",
         _ => "unknown",
     };
     let mut lines = vec![
@@ -89,17 +88,7 @@ unsafe fn describe(manifest: &Manifest) -> String {
             lines.push(format!("{key}: {value}"));
         }
     }
-    lines.extend([
-        format!("side: {side}"),
-        format!(
-            "join check: {}",
-            if manifest.flags.contains(ManifestFlags::JOIN) {
-                "yes"
-            } else {
-                "no"
-            }
-        ),
-    ]);
+    lines.push(format!("side: {side}"));
     let dependencies = if manifest.dependencies.is_null() {
         &[][..]
     } else {
@@ -112,8 +101,6 @@ unsafe fn describe(manifest: &Manifest) -> String {
             Relation::REQUIRES => "requires",
             Relation::AFTER => "after",
             Relation::BREAKS => "breaks",
-            Relation::RECOMMENDS => "recommends",
-            Relation::REPLACES => "replaces",
             _ => "unknown relation",
         };
         let range = text(&dependency.range);
@@ -281,13 +268,11 @@ mod tests {
         let dependencies = [
             relation("you.trading-post", ">=0.1, <1.0", Relation::REQUIRES),
             relation("you.lanterns", "", Relation::AFTER),
-            relation("you.lanterns", "", Relation::RECOMMENDS),
             relation("old-stalls", "<0.3", Relation::BREAKS),
-            relation("stalls", "", Relation::REPLACES),
         ];
         let manifest = Manifest {
             side: Side::BOTH,
-            flags: ManifestFlags::JOIN,
+            flags: ManifestFlags::NONE,
             dependencies: dependencies.as_ptr(),
             dependency_count: dependencies.len(),
             name: Str::new("Market Stalls"),
@@ -307,10 +292,9 @@ mod tests {
             "id: you.market-stalls\nversion: 0.2.0\nname: Market Stalls\n\
              description: Stalls that sell what players craft\nauthors: themaiby, a friend\n\
              license: MIT\nhomepage: https://github.com/enshwick/enshwick\n\
-             exports: content:stall, event:opened\nside: both\njoin check: yes\n\
+             exports: content:stall, event:opened\nside: both, in the join check\n\
              requires: you.trading-post >=0.1, <1.0\nafter: you.lanterns\n\
-             recommends: you.lanterns\nbreaks: old-stalls <0.3\n\
-             replaces: stalls"
+             breaks: old-stalls <0.3"
         );
     }
 }

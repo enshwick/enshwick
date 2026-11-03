@@ -21,7 +21,7 @@ use crate::pinned;
 
 mod note;
 
-pub use note::{note, place};
+pub use note::note;
 
 /// The build table ids this part of the loader names.
 pub const TABLE_IDS: &[&str] = &[

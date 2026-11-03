@@ -82,7 +82,7 @@ the time, the points and the counts their screens show, and the server checks ev
 its own count. Lowering `SkillPoints` mid-game leaves a character that spent
 more than its new total unable to unlock more skills until it resets its
 tree. Only a
-mod with `join: true` may declare it, and `Rate::seen_by_clients` says which
+mod of side `both` may declare it, and `Rate::seen_by_clients` says which
 rates need it. Set such a rate from a `sync` setting: every player who joins
 then runs the mod with the server's factor, and a player without the mod
 does not join ([the join check](concepts/join-check.md)).
@@ -99,7 +99,7 @@ world loads, and again whenever a mod changes a recipe output factor.
 ## Errors
 
 `load.rate` answers `Off` on a game build that lacks what the rate needs,
-and for a rate clients count in a mod without `join: true`. Carry on without
+and for a rate clients count in a mod of side `server`. Carry on without
 that rate with `.ok()` when the rest of the mod still makes sense. `set`
 answers `RateError::OutOfRange` for a factor that is not finite or lies
 outside 0 to 100.

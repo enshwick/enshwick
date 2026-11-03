@@ -136,7 +136,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         std::fs::create_dir_all(&dir).map_err(io(&dir))?;
     }
     let (libraries, candidates, others) = libraries(&mods_dir, Run::Dry, &mut |_| {});
-    let plan = resolve::resolve(&candidates, side);
+    let plan = resolve::resolve(&candidates);
     let loader = Loader {
         side,
         base,

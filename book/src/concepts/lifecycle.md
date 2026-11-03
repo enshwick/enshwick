@@ -6,9 +6,9 @@ The loader takes every mod through five steps, all at game start.
 
 1. **Query.** The loader calls `enshwick_mod_query` and reads the manifest:
    id, version, side, dependencies, pinned build rows. No other code of the
-   mod runs yet. A malformed manifest skips the mod.
+   mod runs yet. A malformed manifest skips the mod, and so does a side
+   other than `server` or `both`.
 2. **Resolve.** The loader skips, each with a reason in `loader.log`:
-   - mods for the other side (a dedicated server skips `CLIENT` mods);
    - a second mod with an id already taken, in file name order;
    - mods whose `requires` is missing, skipped or out of range, as in
      `requires trading-post ^0.2, found 0.1.3`;

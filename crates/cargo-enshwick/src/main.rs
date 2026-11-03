@@ -95,8 +95,8 @@ enum Command {
     /// makes `deps::<alias>`, read from the owners' DLLs without running
     /// them.
     Deps {
-        /// The dependency, by its alias in `requires`, `recommends` or
-        /// `after`; every one when omitted.
+        /// The dependency, by its alias in `requires` or `after`; every one
+        /// when omitted.
         alias: Option<String>,
         /// The owners' DLL, a folder (such as the game's) with their DLLs in
         /// it or in its `mods/`, or a schema file (`.toml`) an owner
@@ -145,11 +145,11 @@ enum Command {
     },
 }
 
-/// Where a mod runs, as `[package.metadata.enshwick]` spells it.
+/// Where a mod runs, as `[package.metadata.enshwick]` spells it: only where
+/// the world runs, or there and on every client playing in it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 enum Side {
     Server,
-    Client,
     Both,
 }
 

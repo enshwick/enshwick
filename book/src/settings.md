@@ -251,7 +251,7 @@ Settings never turn a mod off. No log line holds the value of a `secret`.
 ## On a joined server
 
 On a client in a dedicated server's world or another player's hosted game,
-the server sends every setting of its join mods, without a `secret`, once
+the server sends every setting of its mods of side `both`, without a `secret`, once
 the client joined, and again after each change. The client's mods read those
 values for the world they play in, and the client never writes them to its
 disk. When the client leaves, its mods run on their defaults again.

@@ -46,7 +46,6 @@ fn files(id: &str, side: Side) -> Vec<(PathBuf, String)> {
     let name = super::display_name(id.split_once('.').map_or(id, |(_, name)| name));
     let side = match side {
         Side::Server => "server",
-        Side::Client => "client",
         Side::Both => "both",
     };
     let fill = |template: &str| {

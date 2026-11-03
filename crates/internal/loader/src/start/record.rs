@@ -47,7 +47,6 @@ pub(super) fn take(loader: &'static Loader, folders: Vec<(String, String, String
                 loader_sha256: hash(&loader_dll),
                 game: loader.build.name.clone(),
                 mods,
-                replaced: record::replaced().to_vec(),
             });
         });
     if let Err(e) = spawned {

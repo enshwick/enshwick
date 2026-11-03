@@ -57,7 +57,6 @@ mod tests {
         r#"
         id = "you.cheap"
         side = "both"
-        join = true
         "#
     );
 

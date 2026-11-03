@@ -51,8 +51,6 @@ pub struct ModStatus {
     pub version: String,
     /// Authors, licence and homepage, as `Meta::credits` writes them.
     pub credits: String,
-    /// Notes on its relations, such as a recommended mod that is missing.
-    pub notes: Vec<String>,
     /// Whether it runs.
     pub running: bool,
     /// Whether it waits for a code patch, its hooks bypassed.
@@ -78,9 +76,6 @@ impl ModStatus {
         };
         if !self.credits.is_empty() {
             let _w = writeln!(out, "    {}", self.credits);
-        }
-        for note in &self.notes {
-            let _w = writeln!(out, "    note: {note}");
         }
         for feature in &self.features {
             let _w = match &feature.off {
@@ -126,8 +121,6 @@ pub struct Summary {
     pub mods: Vec<ModStatus>,
     /// The other mods' proxies that run beside the mods without the API.
     pub others: Vec<String>,
-    /// Mods that present mods replace, never started, a line each.
-    pub replaced: Vec<String>,
     /// Mods turned off, oldest first.
     pub turned_off: Vec<TurnedOff>,
     /// The loader's parts turned off while the game runs, oldest first.
@@ -271,9 +264,6 @@ impl Summary {
         let _w = writeln!(out, "\nmods: {running} of {} running", self.mods.len());
         for m in &self.mods {
             m.render(&mut out);
-        }
-        for line in &self.replaced {
-            let _w = writeln!(out, "  not started: {line}");
         }
         for line in &self.others {
             let _w = writeln!(out, "  {line}");
@@ -447,7 +437,6 @@ conflicts:"
                 .iter()
                 .map(|problem| crate::texts::fill("status.settings", &[("problem", problem)])),
         );
-        lines.extend(self.replaced.iter().map(|line| format!("{line}.")));
         for t in self.turned_off.iter().rev().take(3) {
             lines.push(crate::texts::fill(
                 "status.off",

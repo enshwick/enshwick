@@ -21,6 +21,7 @@
 
 use std::collections::BTreeMap;
 
+mod difference;
 pub mod interaction;
 #[cfg_attr(
     all(not(windows), not(test)),
@@ -33,10 +34,11 @@ pub mod refusal;
 mod rules;
 mod target;
 
+pub use difference::{Difference, Line, MAX_LINES, Row, difference};
 pub(crate) use plan::entries;
 use plan::label;
 pub use plan::{Plan, differences, plan, wanted};
-pub use rules::{mod_rules_value, mods_complete, name, page, query_rules, rule};
+pub use rules::{mod_rules_value, mods_complete, query_rules, rule};
 pub use target::{Destination, Layout, LayoutError, TARGET_BYTES, Target};
 
 /// The names players read, by mod id: the client's own and those the server

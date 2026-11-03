@@ -5,13 +5,20 @@ and `enshrouded.exe`, the client. The loader runs in both.
 
 ## A mod's side
 
-`side:` in the manifest says where a mod's features belong:
+`side` in the manifest says where a mod runs. Both binaries load every mod;
+the side says who must have it:
 
-- `SERVER`: server features. The dedicated server loads the mod, and so does
-  the client, to run them while it hosts a game.
-- `CLIENT`: client features only. The dedicated server skips the mod.
-- `BOTH`: features on both, such as content or a value the client's interface
-  also reads.
+- `server`: the mod runs only where the world runs, on the dedicated server
+  or on a client that hosts a game, solo play included. Players need not
+  install it.
+- `both`: the mod runs there and on every client playing in the world, such
+  as content or a value the client's interface also reads. Every player in
+  the world must have it in the world's version; see
+  [The join check](join-check.md).
+
+A mod for the client alone does not exist: the loader refuses any other side.
+A client runs only the mods the world it plays in runs, and turns its others
+off for that world.
 
 ## Hosting
 
@@ -62,6 +69,6 @@ worlds are unrelated. [ECS inside systems](../ecs.md) has more.
 
 The client binary holds its own copies of the server's functions, at other
 addresses. A mod that pins server symbols itself pins them for the client too,
-in a build row with `side: CLIENT`. When a mod's server and client halves hook
+in a build row with `side = "client"`, the binary the row is for. When a mod's server and client halves hook
 the same function, one link answers for both. See
 [Finding the game](../finding-the-game.md).

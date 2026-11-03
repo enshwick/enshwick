@@ -25,6 +25,10 @@
 //! takes typed text in the game's own text field, set on Enter; typing left
 //! without Enter is dropped. A build without either pages its lists and
 //! shows its texts read-only.
+//!
+//! After a server refused or kicked this client for its mods, the screen
+//! opens by itself over the main menu, once, on the mods that differ;
+//! Ok closes it.
 
 use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
@@ -110,13 +114,19 @@ enum Page {
     },
     /// The actions the server offers.
     Actions(super::actions::View),
+    /// The mods that differ from those of a server that refused or kicked
+    /// this client, from row `first` while they page.
+    Mismatch {
+        rows: Vec<crate::join::Row>,
+        first: usize,
+    },
 }
 
 impl Page {
     /// Which page this is, as far as Back cares.
     const fn kind(&self) -> Kind {
         match self {
-            Self::List { .. } => Kind::List,
+            Self::List { .. } | Self::Mismatch { .. } => Kind::List,
             Self::Settings { .. } => Kind::Settings,
             Self::ServerList { .. } => Kind::ServerList,
             Self::ServerSettings {
@@ -248,9 +258,22 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
         BACK.store(BACK_PRESSED, Ordering::Relaxed);
     }
     let text = copy(&[texts::text("mods.title").as_bytes()]);
-    if draw(engine, &text) && !showing {
+    let clicked = draw(engine, &text);
+    // A refusal or a kick for the mods opens the screen in the main menu.
+    let differs = from == FROM_MAIN && crate::host::difference_waits();
+    if (clicked || differs) && !showing {
         OPEN.store(from, Ordering::Relaxed);
     }
+}
+
+/// Whether the mismatch screen can show on this build: the interface draws
+/// frames, the main menu's entry has run, and neither it nor the screen
+/// turned off.
+pub(crate) fn mismatch_screen_on() -> bool {
+    FRAME.load(Ordering::Relaxed) > 0
+        && MAIN_SEEN.load(Ordering::Relaxed) > 0
+        && !MAIN_MENU_FUSE.is_off()
+        && !super::MODS_SCREEN_FUSE.is_off()
 }
 
 /// The hook before the main menu's Credits entry: draws the Mods entry.
@@ -316,9 +339,15 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
             } else {
                 OVER_PAUSE
             };
+            let differs = (opened == FROM_MAIN)
+                .then(crate::host::take_difference)
+                .flatten();
             *slot = Some(Screen {
                 from: opened,
-                page: Page::List { first: 0 },
+                page: differs.map_or(Page::List { first: 0 }, |rows| Page::Mismatch {
+                    rows,
+                    first: 0,
+                }),
                 message: None,
                 window: Window::screen(layer, GAP),
                 scroll: Scroll::new(),
@@ -408,6 +437,7 @@ fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
             copy(&[texts::fill("mods.server.of", &[("id", id)]).as_bytes()])
         }
         Page::Actions(view) => copy(&[view.title().as_bytes()]),
+        Page::Mismatch { .. } => copy(&[texts::text("join.dialog.title").as_bytes()]),
     }
 }
 
@@ -449,7 +479,12 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
     // this window; it did not move, and the painter's widgets close every
     // frame they open.
     unsafe { engine.scroll_end(&mut screen.scroll) };
-    let back = paint.button(texts::text("mods.back").as_bytes(), true);
+    let close = if matches!(screen.page, Page::Mismatch { .. }) {
+        "join.screen.ok"
+    } else {
+        "mods.back"
+    };
+    let back = paint.button(texts::text(close).as_bytes(), true);
     // SAFETY: `window_begin` started `screen.window` in this frame, on this
     // thread, with this `context`; it did not move, and the scroll area and
     // the painter's widgets closed every frame they opened.
@@ -568,6 +603,10 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             super::actions::body(paint, view);
             Next::Stay
         }
+        Page::Mismatch { rows, first } => {
+            mismatch::body(paint, rows, first);
+            Next::Stay
+        }
     }
 }
 
@@ -633,5 +672,6 @@ fn server_page(id: String, from_mod: bool) -> Next {
 }
 
 mod list;
+mod mismatch;
 mod server;
 mod settings;

@@ -229,16 +229,6 @@ fn mods(loader: &Loader) -> String {
             &[("version", version), ("mods", &mods.join(", "))],
         )
     }];
-    sentences.extend(crate::record::replaced().iter().map(|old| {
-        texts::fill(
-            "enshwick.replaced",
-            &[
-                ("id", &old.id),
-                ("by", &old.by),
-                ("file", &format!("{}/", old.folder)),
-            ],
-        )
-    }));
     sentences.push(texts::fill("enshwick.more", &[]));
     sentences.join(" ")
 }
@@ -267,7 +257,6 @@ fn about(record: &crate::host::ModRecord) -> String {
     if !credits.is_empty() {
         lines.push(credits);
     }
-    lines.extend(record.notes.iter().cloned());
     lines.join("\n")
 }
 

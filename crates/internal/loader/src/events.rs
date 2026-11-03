@@ -585,6 +585,8 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
     guarded(&STATE_FUSE, "the server state link", || match state {
         STATE_INITIALIZE if old != STATE_INITIALIZE && loader.side == Side::CLIENT => {
             crate::saves::hosting_begins();
+            // The client's own world runs every mod of its own.
+            crate::host::back_on();
         }
         STATE_RUN if old != STATE_RUN => {
             if loader.side == Side::CLIENT {

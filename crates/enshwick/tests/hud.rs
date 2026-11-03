@@ -37,7 +37,7 @@ mod tests {
         Raid,
         r#"
         id = "you.raid"
-        side = "client"
+        side = "both"
         "#
     );
 

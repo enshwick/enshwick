@@ -1,6 +1,5 @@
 //! Host functions about the mods: logs, faults, settings and what is loaded.
 
-use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
 use enshwick::abi as api_frame;
@@ -9,7 +8,6 @@ use enshwick::abi::{
 };
 use enshwick::mods::LOADER_FILE;
 
-use crate::host::join::JOIN_MISSING;
 use crate::host::memory::{put, slice, text};
 use crate::host::{LOADER_HANDLE, ModRecord, calling, entry, loader};
 use crate::locks::Relock;
@@ -107,7 +105,6 @@ pub(crate) fn loader_info() -> ModInfo {
         author_count: LOADER_AUTHORS.len(),
         license: Str::new(env!("CARGO_PKG_LICENSE")),
         homepage: Str::new(env!("CARGO_PKG_REPOSITORY")),
-        replaced_by: Str::EMPTY,
     }
 }
 
@@ -130,7 +127,6 @@ pub(crate) fn mod_info(record: &'static ModRecord) -> ModInfo {
         author_count: record.manifest.author_count,
         license: record.manifest.license,
         homepage: record.manifest.homepage,
-        replaced_by: Str::EMPTY,
     }
 }
 
@@ -172,7 +168,7 @@ pub(crate) extern "system" fn join_missing(
         if loader.record(me).is_none() {
             return Status::BAD_ARGS;
         }
-        let held = JOIN_MISSING.relock().clone();
+        let held = crate::host::join_missing();
         let infos: Vec<ModInfo> = held
             .iter()
             .map(|missing| ModInfo {
@@ -180,11 +176,8 @@ pub(crate) extern "system" fn join_missing(
                 id: Str::new(missing.id),
                 version: Str::new(missing.version),
                 side: Side::BOTH,
-                flags: ManifestFlags::JOIN,
                 off: 1,
                 file: Str::new(missing.file),
-                name: Str::new(missing.name),
-                homepage: Str::new(missing.page),
                 ..ModInfo::EMPTY
             })
             .collect();
@@ -192,45 +185,6 @@ pub(crate) extern "system" fn join_missing(
         // `capacity` entries of `entry_size` bytes and `count` null or a
         // writable `u32`, untouched by the mod during the call.
         unsafe { list(&infos, out, entry_size, capacity, count) }
-    })
-}
-
-pub(crate) extern "system" fn replaced(
-    me: ModHandle,
-    out: *mut ModInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    /// The listing entries, built once: the mods replaced at start never
-    /// change.
-    static INFOS: OnceLock<Vec<ModInfo>> = OnceLock::new();
-    entry("replaced", || {
-        let Some(loader) = loader() else {
-            return Status::BAD_ARGS;
-        };
-        if loader.record(me).is_none() {
-            return Status::BAD_ARGS;
-        }
-        let infos = INFOS.get_or_init(|| {
-            let text = |s: String| Str::new(Box::leak(s.into_boxed_str()));
-            crate::record::replaced()
-                .iter()
-                .map(|old| ModInfo {
-                    header: Header::of::<ModInfo>(),
-                    id: Str::new(&old.id),
-                    version: Str::new(&old.version),
-                    off: 1,
-                    file: text(format!("mods/{}/", old.folder)),
-                    replaced_by: Str::new(&old.by),
-                    ..ModInfo::EMPTY
-                })
-                .collect()
-        });
-        // SAFETY: the ABI has the mod pass `out` null or writable for
-        // `capacity` entries of `entry_size` bytes and `count` null or a
-        // writable `u32`, untouched by the mod during the call.
-        unsafe { list(infos, out, entry_size, capacity, count) }
     })
 }
 
@@ -274,7 +228,7 @@ pub(crate) unsafe fn list<T: Copy>(
             unsafe { entry.cast::<u32>().write_unaligned(size) };
         }
     }
-    // SAFETY: `HostApi::replaced` has the mod pass `count` null or pointing at
+    // SAFETY: the caller guarantees a non-null `count` points at
     // a writable, aligned `u32` that no other thread touches during the call.
     unsafe { put(count, u32::try_from(infos.len()).unwrap_or(u32::MAX)) }
 }

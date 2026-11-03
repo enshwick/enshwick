@@ -16,7 +16,6 @@ mod stale {
         r#"
         id = "you.stale"
         side = "both"
-        join = true
         exports = ["content:locker"]
         "#
     );

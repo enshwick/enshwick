@@ -127,7 +127,6 @@ Without settings, the whole mod fits in a few lines. This one always allows
 [package.metadata.enshwick]
 id = "you.my-altar-count"
 side = "both"
-join = true
 ```
 
 Its code:
@@ -192,9 +191,9 @@ What each piece does:
 - `Settings` derives [`Config`](settings.md): each world's file
   `<stem>-mod-settings/you.my-altar-count/settings.toml` is written from its
   doc comments and `Default` as the world first loads.
-- `[package.metadata.enshwick]` names the mod and where it runs. `side = "both"`
-  and `join = true` because the client's interface asks the same limit, so
-  players and their server must agree. See
+- `[package.metadata.enshwick]` names the mod and where it runs:
+  `side = "both"` because the client's interface asks the same limit, so
+  players and their server must run the mod alike. See
   [The loader and the ABI](concepts/loader-and-abi.md).
 - `init` takes the settings with `on_settings`, which hands them over now,
   as the defaults, and again as each world loads. It adds its answer to the

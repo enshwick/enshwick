@@ -1,6 +1,6 @@
 //! A mod that links a point of a mod it requires: the fake loader, as the
 //! loader, refuses the link when the required mod defines no such point by
-//! the mod's init, and keeps it when the mod is only recommended.
+//! the mod's init, and keeps it when the mod is only loaded after.
 
 #[cfg(test)]
 mod tests {
@@ -41,7 +41,7 @@ mod tests {
         [requires]
         lockers = "you.lockers"
 
-        [recommends]
+        [after]
         lanterns = "you.lanterns"
         "#
     );

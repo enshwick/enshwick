@@ -1,5 +1,5 @@
 //! The version ranges in the workspace's mod manifests, held to the crates
-//! they name: a `requires` or `recommends` range the named mod's version
+//! they name: a `requires` range the named mod's version
 //! does not meet, a `breaks` range it does meet, or a range that does not
 //! parse is a problem, so a version bump cannot quietly turn a mod off.
 
@@ -23,7 +23,7 @@ struct Declared {
 }
 
 /// The relations a manifest names other mods in, by alias.
-const RELATIONS: [&str; 3] = ["requires", "recommends", "breaks"];
+const RELATIONS: [&str; 2] = ["requires", "breaks"];
 
 /// The problems with the ranges of the manifests of the mods under `root`,
 /// one line each: the packages with a `[package.metadata.enshwick]` table,
@@ -180,7 +180,7 @@ mod tests {
     fn dev_builds_meet_every_range_and_unknown_mods_are_skipped() {
         let mut all = declared(
             "id = \"a\"\n[package.metadata.enshwick.requires]\nb = { id = \"b\", version = \">=0.2\" }\n\
-             [package.metadata.enshwick.recommends]\nout = { id = \"outside\", version = \">=9\" }",
+             [package.metadata.enshwick.breaks]\nout = { id = \"outside\", version = \"<9\" }",
             "0.0.0-dev",
         );
         all.extend(declared("id = \"b\"", "0.0.0-dev"));

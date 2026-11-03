@@ -202,7 +202,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_pack_that_changes_items_keeps_join_on() {
+    fn a_pack_that_changes_items_runs_on_both_sides() {
         let dir = pack(
             "join",
             "[[change]]\nitems = [\"6943053a-32c1-4718-ae22-e61427ddf54d\"]\nmax_stack = 50\n",
@@ -211,11 +211,14 @@ pub(crate) mod tests {
         assert!(summary.contains("1 changes"), "{summary}");
         std::fs::write(
             dir.join(MANIFEST_FILE),
-            "id = \"you.lanterns\"\nversion = \"1.0.0\"\njoin = false\n",
+            "id = \"you.lanterns\"\nversion = \"1.0.0\"\nside = \"server\"\n",
         )
         .unwrap();
         let error = check(&dir, None).unwrap_err().to_string();
-        assert!(error.starts_with("pack.toml:3:1: join = false"), "{error}");
+        assert!(
+            error.starts_with("pack.toml:3:1: side = \"server\""),
+            "{error}"
+        );
         let _gone = std::fs::remove_dir_all(&dir);
     }
 

@@ -154,10 +154,8 @@ pub struct Loaded<'a> {
     pub id: &'a str,
     /// Its version.
     pub version: &'a str,
-    /// Where it runs.
+    /// Where it runs: players need a mod of side both to join.
     pub side: Side,
-    /// Whether players need it to join.
-    pub join: bool,
     /// Whether it runs, or was turned off.
     pub running: bool,
 }
@@ -171,14 +169,13 @@ pub fn mods(loaded: &[Loaded<'_>]) -> String {
     loaded
         .iter()
         .map(|m| {
-            let side = match m.side {
-                Side::SERVER => "server",
-                Side::CLIENT => "client",
-                _ => "both",
+            let side = if m.side == Side::SERVER {
+                "server"
+            } else {
+                "both"
             };
-            let join = if m.join { ", join" } else { "" };
             let state = if m.running { "running" } else { "off" };
-            format!("{} {} ({side}{join}): {state}", m.id, m.version)
+            format!("{} {} ({side}): {state}", m.id, m.version)
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -267,27 +264,25 @@ mod tests {
     }
 
     #[test]
-    fn mods_name_side_join_and_state() {
+    fn mods_name_side_and_state() {
         assert_eq!(mods(&[]), "no mods loaded");
         let loaded = [
             Loaded {
                 id: "you.trading-post",
                 version: "0.3.0",
                 side: Side::SERVER,
-                join: true,
                 running: true,
             },
             Loaded {
                 id: "you.zones",
                 version: "0.1.0",
-                side: Side::CLIENT,
-                join: false,
+                side: Side::BOTH,
                 running: false,
             },
         ];
         assert_eq!(
             mods(&loaded),
-            "you.trading-post 0.3.0 (server, join): running\nyou.zones 0.1.0 (client): off"
+            "you.trading-post 0.3.0 (server): running\nyou.zones 0.1.0 (both): off"
         );
     }
 

@@ -28,7 +28,7 @@ use super::entries::hooks::{
 use super::entries::inventory::{inventory_open, inventory_submit, item_info};
 use super::entries::mods::{
     config_check, config_schema, fault, join_missing, language, log, mods, rename_content,
-    replaced, settings, texts,
+    settings, texts,
 };
 use super::entries::net::{net_channel, net_ready, net_send};
 use super::entries::services::{
@@ -176,7 +176,6 @@ pub(crate) static API: HostApi = HostApi {
     rename_content,
     declare_content,
     entity_data_open,
-    replaced,
     knowledge_input_filter,
     language,
     keep_game_settings,

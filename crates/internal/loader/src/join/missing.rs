@@ -1,5 +1,5 @@
-//! The server's join mods a refused join found missing, as the loader lists
-//! them to mods: their text kept for the process, within a budget.
+//! The server's mods a refused join found missing, as the loader lists them
+//! to mods: their ids and versions kept for the process, within a budget.
 
 use crate::kept_text::KeptText;
 
@@ -8,28 +8,22 @@ use crate::kept_text::KeptText;
 /// process: each refused join may bring new text, and none of it is freed.
 pub(crate) const ADVERTISED_BYTES: usize = 64 << 10;
 
-/// One of the server's join mods the join check found missing on this
-/// client, as the server advertises it.
+/// One of the server's mods the join check found missing on this client, as
+/// the server advertises it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Wanted {
     /// The mod id.
     pub(crate) id: String,
-    /// The name players read; empty for none.
-    pub(crate) name: String,
     /// The server's version.
     pub(crate) version: String,
-    /// The mod's homepage; empty for none.
-    pub(crate) page: String,
 }
 
-/// One of the server's join mods the last refused join found missing.
+/// One of the server's mods the last refused join found missing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Missing {
     pub(crate) id: &'static str,
-    pub(crate) name: &'static str,
     pub(crate) version: &'static str,
     pub(crate) file: &'static str,
-    pub(crate) page: &'static str,
 }
 
 /// `wanted` as listed to mods, the server's text kept in `advertised` and
@@ -56,10 +50,8 @@ pub(crate) fn listed(
 fn entry(advertised: &mut KeptText, wanted: &Wanted, file: &'static str) -> Option<Missing> {
     Some(Missing {
         id: advertised.keep(&wanted.id)?,
-        name: advertised.keep(&wanted.name)?,
         version: advertised.keep(&wanted.version)?,
         file,
-        page: advertised.keep(&wanted.page)?,
     })
 }
 
@@ -71,9 +63,7 @@ mod tests {
         (0..4)
             .map(|i| Wanted {
                 id: format!("server.mod-{join}-{i}"),
-                name: format!("Mod {join} {i}"),
-                version: "1.0.0".to_owned(),
-                page: format!("https://example.com/{join}/{i}"),
+                version: format!("1.{join}.{i}"),
             })
             .collect()
     }
@@ -85,7 +75,7 @@ mod tests {
         assert_eq!(left_out, 0);
         assert_eq!(entries.len(), 4);
         assert_eq!(entries[1].id, "server.mod-0-1");
-        assert_eq!(entries[1].page, "https://example.com/0/1");
+        assert_eq!(entries[1].version, "1.0.1");
         assert_eq!(entries[1].file, "mods/a.dll");
     }
 
@@ -96,11 +86,7 @@ mod tests {
         let mut left_total = 0;
         for join in 0..2000 {
             let (entries, left_out) = listed(&mut advertised, &wanted(join), |_| "");
-            texts.extend(
-                entries
-                    .iter()
-                    .flat_map(|e| [e.id, e.name, e.version, e.page]),
-            );
+            texts.extend(entries.iter().flat_map(|e| [e.id, e.version]));
             left_total += left_out;
         }
         assert!(left_total > 0, "the budget ran out");

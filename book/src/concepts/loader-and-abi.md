@@ -45,9 +45,7 @@ folder. The loader keeps no list of mods. A DLL directly in `mods/`, a
 At every world load the loader writes `mods.lock` into that world's data,
 `<stem>-mod-data/enshwick/mods.lock` beside its save: the loader's version and
 SHA-256, the game build, and each running mod's id, version, folder and
-SHA-256, in load order, then under `[[replaced]]` the mods a present mod
-replaces (see `replaces` in [the manifest](#the-manifest)). Copying the
-folders it names sets up the same server again, and comparing two records
+SHA-256, in load order. Copying the folders it names sets up the same server again, and comparing two records
 shows where two servers differ. What changed since the world last loaded
 goes to `loader.log`, such as
 `since this world last loaded: you.trading-post 0.3.0 -> 0.3.1`.
@@ -92,20 +90,15 @@ homepage = "https://github.com/you/trading-post"
 
 [package.metadata.enshwick]
 id = "you.trading-post"            # <author>.<name>, each of [a-z0-9-]
-side = "both"                      # "server", "client" or "both"
+side = "both"                      # "server" or "both"
 name = "Trading post"              # what players read; the id when left out
-join = true                        # counts in the join check
 exports = ["content:locker"]       # content and stat kinds other mods may use
-replaces = ["barter"]              # a mod this one folds in
 
 [package.metadata.enshwick.requires]
 stalls = { id = "you.market-stalls", version = ">=0.2, <1.0" }
 
 [package.metadata.enshwick.after]
-stalls_order = "you.market-stalls"
-
-[package.metadata.enshwick.recommends]
-caravans = { id = "you.caravans", version = ">=0.3, <1.0" }
+caravans = "you.caravans"
 
 [package.metadata.enshwick.breaks]
 old_market = { id = "old-market", version = "<0.5" }
@@ -130,16 +123,17 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
   `<stem>-mod-settings/<id>` and data folder `<stem>-mod-data/<id>` in each world, and is the namespace of its content,
   stats, points, services and events (`you.trading-post:prices`). An invalid
   id fails the build; `enshwick` is the loader's own and is refused.
-- `side`: see [Sides and hosting](sides-and-hosting.md).
+- `side` is `"server"`, a mod that runs only where the world runs, or
+  `"both"`, a mod every player in the world must have too; see
+  [Sides and hosting](sides-and-hosting.md) and
+  [The join check](join-check.md).
 - The version is the crate's, SemVer; the loader names it in every message
   about the mod.
 - `name`, and the crate's `description`, `authors`, `license` and `homepage`
   (else `repository`), are what players read: on the Mods screen, in the
-  status summary and in the join check's notes, where the homepage is the
-  place a player who lacks the mod is sent to. A mod without a name is shown
-  by its id. The mod's texts translate its name and description under
+  status summary and in the join check's notes. A mod without a name is
+  shown by its id. The mod's texts translate its name and description under
   [`mod.name` and `mod.description`](../content/texts.md#the-mods-own-name).
-- `join = true`: see [The join check](join-check.md).
 - `developer = true`: the mod is a developer tool, such as a probe that logs
   what the game does. While it runs, every player reads a warning that
   developer tools are on; see [The interface](../interface.md).
@@ -147,39 +141,30 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
   `content:<name>` and `stat:<name>`; a call, point, service or event says it
   on its declaration. See
   [What other mods may use](#what-other-mods-may-use).
-- `requires`, `after`, `recommends` and `breaks` are tables of other mods,
-  each under an alias of the mod's choosing (a Rust name in snake case,
-  unique across the four), as a mod id alone or `{ id, version }` with a
-  Cargo-style version range; no range is any version.
-- `requires` names mods that must be present in the range; they load first.
-  `after` names mods that load first when present, and takes no range.
-- `recommends` names mods that work well beside this one: they load first when
-  present, and the loader notes in `loader.log` and the status summary when
-  one is missing or outside its range. The mod loads either way.
+- `requires`, `after` and `breaks` are tables of other mods, each under an
+  alias of the mod's choosing (a Rust name in snake case, unique across the
+  three), as a mod id alone or `{ id, version }` with a Cargo-style version
+  range; no range is any version.
+- `requires` names mods that must be present in the range; they load first,
+  and this mod is skipped without them.
+- `after` names mods that load first when present, and takes no range. The
+  mod loads either way.
 - `breaks` names mods this one does not work beside, in the range: when one
   of them loads, this mod is skipped with
   `does not work beside <id> <version>; remove one of them`.
-- A dev build, version `0.0.0-dev`, meets every range of `requires` and
-  `recommends`, and no range of `breaks` names it, as two dev builds join each
-  other.
-- `replaces` names mods this one takes the place of, such as mods it folds
-  in. Players rarely delete the old DLL, so without it both would run. While
-  this mod is present, the loader never starts a replaced mod: it unloads
-  that DLL right after reading its manifest and logs once
-  `<old> is replaced by <new>; delete mods/<file>`, which `enshwick` on the
-  console and the status summary repeat and the lock lists under
-  `[[replaced]]`. Their settings stay where they are.
+- A dev build, version `0.0.0-dev`, meets every range of `requires`, and no
+  range of `breaks` names it, as two dev builds join each other.
 - `builds` pins symbols and constants for game builds the loader's table does
   not cover, per side, by the build's GUID and age; see
   [Finding the game](../finding-the-game.md).
 
 The aliases name the dependencies in code too, so a mod writes another mod's
 id once. `enshwick::deps!()` writes a module `deps` with a module per alias of
-`requires`, `after` and `recommends`. Each holds `ID`, the mod's id, and
+`requires` and `after`. Each holds `ID`, the mod's id, and
 `id("<name>")`, its content id `<id>:<name>`, once the loader lets this mod
 name it (see [what other mods may use](#what-other-mods-may-use)). A required
 mod's `id` returns the id, or `Off` when that mod does not export the name.
-An optional mod's `id`, from `after` or `recommends`, is `None` while that
+An optional mod's `id`, from `after`, is `None` while that
 mod does not run or does not export the name. Ask at init and keep the id.
 `deps::vanilla` names the game's own content by the debug names its data
 gives it, such as `deps::vanilla::item("Prop_Production_T1_Forge")`; no
@@ -189,13 +174,13 @@ A call, point, service or event takes a local name: `name = "price"` is this
 mod's `<id>:price`, and `of = <alias>` puts the dependency's id in front. An
 alias the table lacks fails the build and lists the aliases it has. A name
 with a `:` stays as written, for tests and tools. With `lockers` required and
-`lanterns` recommended:
+`lanterns` loaded first when it runs:
 
 ```toml
 [package.metadata.enshwick.requires]
 lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
 
-[package.metadata.enshwick.recommends]
+[package.metadata.enshwick.after]
 lanterns = "you.lanterns"
 ```
 
@@ -226,8 +211,7 @@ assert_eq!(Opened::NAME, "you.lockers:opened");
 ```
 
 A [data pack or Luau mod](../content/packs.md#packtoml) names its
-dependencies in the same tables of its `pack.toml`, with `replaces` beside
-them.
+dependencies in the same tables of its `pack.toml`.
 
 ### What other mods may use
 

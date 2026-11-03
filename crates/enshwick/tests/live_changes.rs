@@ -38,7 +38,6 @@ mod tests {
         r#"
         id = "you.stacks"
         side = "both"
-        join = true
         "#
     );
 

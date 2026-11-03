@@ -186,7 +186,8 @@ pub trait Mod: Sized + Send + Sync + 'static {
 #[derive(Debug)]
 pub struct Load<'a> {
     host: Host,
-    /// Whether the mod takes part in the join check, as its manifest says.
+    /// Whether the mod runs on both sides, so it takes part in the join
+    /// check, as its manifest says.
     joins: bool,
     /// The mod's `src/texts.toml`, as `declare_mod!` embedded it.
     embedded_texts: Option<&'static str>,
@@ -214,7 +215,8 @@ impl Load<'_> {
         self.embedded_texts
     }
 
-    /// Whether the mod takes part in the join check, as its manifest says.
+    /// Whether the mod runs on both sides, so it takes part in the join
+    /// check, as its manifest says.
     pub(crate) fn joins(&self) -> bool {
         self.joins
     }

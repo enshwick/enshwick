@@ -57,7 +57,7 @@ mod tests {
             Some(enshwick::mods::DEVELOPER_TOOL_OFF)
         );
         assert_eq!(refused(true, tool), None);
-        assert_eq!(refused(false, ManifestFlags::JOIN), None);
+        assert_eq!(refused(false, ManifestFlags::NONE), None);
     }
 
     #[test]

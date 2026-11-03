@@ -34,7 +34,6 @@ mod tests {
         r#"
         id = "you.talker"
         side = "both"
-        join = true
         "#
     );
 

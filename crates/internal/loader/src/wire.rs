@@ -53,6 +53,9 @@ pub const PROBES: u8 = 100;
 pub const PROBE_SIZE: usize = 6000;
 /// A probe's kind, version, number and hash, before its filler.
 const PROBE_HEAD: usize = 2 + 1 + 8;
+/// A control message from the server: the mods of side both its world
+/// runs, to a client whose hello named others, before the kick.
+pub const MODS: u8 = 7;
 /// Messages each peer may send per second.
 pub const RATE: f64 = 20.0;
 /// Messages each peer may send in one burst.
@@ -98,16 +101,7 @@ pub fn control(kind: u8) -> Vec<u8> {
 #[must_use]
 pub fn hello(mods: &str, nonce: u64, language: Language) -> Vec<u8> {
     let mut data = control(HELLO);
-    let room = MAX_CONTROL - data.len() - HELLO_HEAD;
-    let kept = if mods.len() <= room {
-        mods
-    } else {
-        let cut = mods.as_bytes()[..=room]
-            .iter()
-            .rposition(|&b| b == b',')
-            .unwrap_or(0);
-        &mods[..cut]
-    };
+    let kept = whole_entries(mods, MAX_CONTROL - data.len() - HELLO_HEAD);
     data.push(if kept.len() == mods.len() {
         HELLO_COMPLETE
     } else {
@@ -117,6 +111,58 @@ pub fn hello(mods: &str, nonce: u64, language: Language) -> Vec<u8> {
     data.extend_from_slice(&language.0.to_le_bytes());
     data.extend_from_slice(kept.as_bytes());
     data
+}
+
+/// `mods`, an `id@version,...` list, cut after the last whole entry within
+/// `room` bytes.
+fn whole_entries(mods: &str, room: usize) -> &str {
+    if mods.len() <= room {
+        return mods;
+    }
+    let cut = mods.as_bytes()[..=room]
+        .iter()
+        .rposition(|&b| b == b',')
+        .unwrap_or(0);
+    &mods[..cut]
+}
+
+/// The server's list of the mods of side both its world runs, for a client
+/// it refuses: the control kind and version, flags, then the mods,
+/// `id@version,...`, cut after the last whole entry that fits.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{mods, read_mods};
+///
+/// let read = read_mods(&mods("you.zones@1.0.0")).ok_or("no list")?;
+/// assert_eq!(read, ("you.zones@1.0.0".to_owned(), true));
+/// # Ok::<(), &str>(())
+/// ```
+#[must_use]
+pub fn mods(list: &str) -> Vec<u8> {
+    let mut data = control(MODS);
+    let kept = whole_entries(list, MAX_CONTROL - data.len() - 1);
+    data.push(if kept.len() == list.len() {
+        HELLO_COMPLETE
+    } else {
+        0
+    });
+    data.extend_from_slice(kept.as_bytes());
+    data
+}
+
+/// The list and whether it is whole, from the server's [`mods`] message;
+/// `None` for another message. An unreadable list reads as empty and not
+/// whole, so it turns nothing off.
+#[must_use]
+pub fn read_mods(data: &[u8]) -> Option<(String, bool)> {
+    let rest = data.strip_prefix(control(MODS).as_slice())?;
+    let (&flags, list) = rest.split_first()?;
+    Some(match core::str::from_utf8(list) {
+        Ok(list) => (list.to_owned(), flags & HELLO_COMPLETE != 0),
+        Err(_) => (String::new(), false),
+    })
 }
 
 /// What a hello says; `None` when `data` is no hello. A hello without its
@@ -401,6 +447,26 @@ mod tests {
             cut.mods.split(',').all(|entry| entry.ends_with("@1.0.0")),
             "cut at an entry"
         );
+    }
+
+    #[test]
+    fn the_server_s_mod_list_fits_a_control_message_and_says_when_it_is_cut() {
+        assert_eq!(
+            read_mods(&mods("a.b@1.0.0,c.d@2.0.0")),
+            Some(("a.b@1.0.0,c.d@2.0.0".to_owned(), true))
+        );
+        assert_eq!(read_mods(&mods("")), Some((String::new(), true)));
+        let many: Vec<String> = (0..1000).map(|i| format!("you.mod-{i:04}@1.0.0")).collect();
+        let long = mods(&many.join(","));
+        assert!(long.len() <= MAX_CONTROL);
+        let (list, complete) = read_mods(&long).unwrap();
+        assert!(!complete);
+        assert!(list.split(',').all(|entry| entry.ends_with("@1.0.0")));
+        assert_eq!(read_mods(&control(MODS)), None, "no flags byte");
+        let mut broken = control(MODS);
+        broken.extend([1, 0xff, 0xfe]);
+        assert_eq!(read_mods(&broken), Some((String::new(), false)));
+        assert_eq!(read_mods(&control(WELCOME)), None);
     }
 
     #[test]

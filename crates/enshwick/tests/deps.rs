@@ -1,7 +1,7 @@
 //! `deps!` and local names: what a mod names by the aliases of its
 //! `Cargo.toml` and by its own id, `you.hello`.
 //!
-//! The `Cargo.toml` requires `lockers` (`you.lockers`) and recommends
+//! The `Cargo.toml` requires `lockers` (`you.lockers`) and loads after
 //! `lanterns` (`you.lanterns`) and `trading_post` (`you.trading-post`).
 
 enshwick::deps!();

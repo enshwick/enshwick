@@ -111,7 +111,7 @@ These lines read `<file> skipped: <reason>`, or name the file alone:
 | `<file> is not an Enshwick mod`                                                                                 | The DLL lacks the four required exports of `declare_mod!`              |
 | `<file> could not be loaded`                                                                                    | Windows could not load the DLL, such as a missing dependency           |
 | `<file> skipped: built for another Enshwick: rebuild it for Enshwick <version>`                                 | The mod was built for another Enshwick release                         |
-| `skipped: not for this side of the game`                                                                        | A client-only mod on the dedicated server                              |
+| `skipped: side 2 is not a mod's side: a mod runs on the server or on both`                                      | A mod built for the client alone, which no Enshwick takes now          |
 | `old.dll skipped: you.trading-post 0.1.0 is also in trading_post.dll, which runs 0.2.0; old.dll can be deleted` | Two files hold one mod; the highest version runs, then the newest file |
 | `skipped: requires trading-post, which is not loaded`                                                           | A required mod is absent or was skipped itself                         |
 | `skipped: requires trading-post ^0.2, found 0.1.3`                                                              | A required mod is too old or too new                                   |
@@ -119,7 +119,7 @@ These lines read `<file> skipped: <reason>`, or name the file alone:
 | `skipped: in a dependency cycle`                                                                                | Mods require each other in a circle                                    |
 | `skipped: the id "My Mod" is not <author>.<name>, each of [a-z0-9-]`                                            | The manifest's id is invalid; other manifest errors read the same way  |
 
-The client loads server mods too, since it runs the server's code while it
+Both sides load every mod, since a client runs the server's code while it
 hosts a game; see [Sides and hosting](concepts/sides-and-hosting.md).
 
 ### The mod turned itself off in init
@@ -151,11 +151,12 @@ not turn the mod off: the mod logs
 | `panic in an event handler`                                    | An event handler panicked                                                         |
 | `panic in an action`, `panic in a rename filter`               | An action's handler or a rename filter panicked                                   |
 | `panic in an inventory callback`, `panic in ready`             | An inventory callback or `Mod::ready` panicked                                    |
-| `the server does not run it; restart the game to use it again` | On a client: the joined server does not run this join mod                         |
+| `off for this world: it does not run this mod`                 | On a client: the joined world does not run this mod; it is back on for the next  |
+| `the world you joined does not run it; restart the game to use it again` | On a client: as above, for a data pack                                 |
 | any other text                                                 | The mod reported a fault with `Host::fault`                                       |
 
 A mod turned off has its hooks unlinked, so the game runs vanilla where it
-acted. It stays off until the game restarts.
+acted. It stays off until the game restarts, except a mod off for one world.
 
 ## The game stops before the world loads
 
@@ -200,31 +201,31 @@ for a dedicated server.
 
 ## The join was refused
 
-The client compares its join mods with the server's before it joins. When the
-server runs join mods the client lacks or has in another version, the client
-stays out and goes back to the menu, and one dialog, "Mods missing", lists
-them by where to get them:
+The client compares its mods of side `both` with the server's before it
+joins. When the server runs mods the client lacks or has in another version,
+the client stays out and goes back to the menu, which shows the mods that
+differ, "Mods missing", by id and versions:
 
 ```text
-From github.com/enshwick/enshwick:
-Trading Post 0.2.0, yours 0.1.0
-Ask the server's admin for:
-Survivors per altar 0.1.4
+Missing: 1
+you.survivors-per-altar: needs 0.1.4, you have none
+In another version: 1
+you.trading-post: needs 0.2.0, you have 0.1.0
 ```
 
-A mod's place is the homepage the server advertises for it, or the server's
-admin when it advertises none. `loader.log` then has
-`join refused: the server runs mods this client lacks`. Other cases do not keep
-the player out:
+`loader.log` then has
+`join refused: the server runs mods this client lacks`. A server that lets a
+client in and kicks it later for its mods sends the same list, which shows
+once the client is back in the menu. Other cases do not keep the player out:
 
-- the client runs join mods the server does not: they are turned off for the
-  session, with a note;
+- the client runs mods the server does not: they are turned off for that
+  world, with a note, and listed on the screen as off for this server;
 - the mods match but the loaders differ: a note asks to install the server's
   version;
 - the server does not answer the query: the client joins without a check
   (`joining <address>: no rules answer`).
 
-Only mods with `join: true` count; see [The join check](concepts/join-check.md).
+Only mods of side `both` count; see [The join check](concepts/join-check.md).
 
 ## How do I remove a mod or Enshwick?
 

@@ -90,17 +90,6 @@ pub(crate) extern "system" fn join_missing(
     list(&mods, out, entry_size, capacity, count)
 }
 
-pub(crate) extern "system" fn replaced(
-    _me: ModHandle,
-    out: *mut ModInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let mods = with(Vec::new(), |s| s.host.replaced.clone());
-    list(&mods, out, entry_size, capacity, count)
-}
-
 /// Copies up to `capacity` of `items` to `out`, `entry_size` bytes apart, and
 /// writes how many there are; refuses a non-null `out` whose entries are
 /// shorter than a header, as the loader does.

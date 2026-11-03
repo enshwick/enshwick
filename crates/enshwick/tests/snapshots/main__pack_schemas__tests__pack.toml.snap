@@ -80,10 +80,6 @@ expression: shape
         {
           "const": "server",
           "type": "string"
-        },
-        {
-          "const": "client",
-          "type": "string"
         }
       ]
     }
@@ -132,10 +128,6 @@ expression: shape
     "id": {
       "type": "string"
     },
-    "join": {
-      "default": true,
-      "type": "boolean"
-    },
     "license": {
       "default": "",
       "type": "string"
@@ -143,19 +135,6 @@ expression: shape
     "name": {
       "default": "",
       "type": "string"
-    },
-    "recommends": {
-      "additionalProperties": {
-        "$ref": "#/$defs/PackDependency"
-      },
-      "type": "object"
-    },
-    "replaces": {
-      "default": [],
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
     },
     "requires": {
       "additionalProperties": {

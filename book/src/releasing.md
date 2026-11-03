@@ -79,26 +79,19 @@ The list is empty before the loader initialises the mod. The loader lists itself
 `mods::LOADER_ID`; `mods::LOADER_FILES` names the files it is made of, the
 stub and the loader's DLL.
 
-## A server's pages and the join check
+## The join check and a refused join
 
-A server advertises each running join mod's homepage in the Steam rule
-`enshwick.page.<id>`: the manifest's `homepage`, an `https://` or `http://`
-address. A page longer than a Steam rule holds (127 bytes) is left out. A
-client the join check keeps out names that page in its dialog as the place to
-get the mod, and the server's own chat note to such a player does the same;
-a mod without a page is "ask the server's admin".
-
-When the join check keeps a client out because the server runs join mods the
-client lacks or has in another version, the loader shows the player a dialog,
-then raises
+When the join check keeps a client out because the server runs mods of side
+`both` the client lacks or has in another version, the loader lists them on
+the mismatch screen, then raises
 [`events::JoinRefused`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs)
 on the client.
 [`mods::join_missing()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
-then lists those mods: the server's version, `running` false, the client's
-DLL path when it has the mod (empty otherwise), and the name and homepage the
-server advertises.
+then lists those mods: the id and version the server advertises, `running`
+false, and the client's DLL path when it has the mod (empty otherwise). A
+server advertises no homepage or name, so players find a mod by its id.
 
-The handler runs on the game thread once the player closed the dialog:
+The handler runs on the game thread:
 
 ```rust
 use enshwick::events::JoinRefused;
@@ -115,15 +108,11 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 `join_missing()` is empty before a refused join. See [The join check](concepts/join-check.md) for the check
 itself.
 
-`mods::replaced()` lists the mods in `mods/` that a present mod replaces
-(`replaces:` in the [manifest](concepts/loader-and-abi.md#the-manifest)),
-which the loader never started, each with `replaced_by` and its `file`.
-
 ## Where to publish
 
 - **Publish every release on a page players can open**, such as GitHub
   releases, and set it as the crate's `homepage` (or `repository`) in
-  `Cargo.toml`: the manifest takes it, and a refused join sends players there.
+  `Cargo.toml`: the manifest takes it, and the Mods screen shows it.
 - **Use the same files everywhere.** Upload the release archive to Nexus or
   other mod sites as it is, so players who install through a mod manager get
   what the release page has.

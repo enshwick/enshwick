@@ -369,7 +369,7 @@ declare enshwick: {
 	caller: (call: { name: string }) -> (input: any) -> (any, string?),
 	--- Defines a mod event of this mod for others to hear, at the top level of main.luau, by its local name (`greeted` for `<mod id>:greeted`); `send` hands every subscriber the data.
 	define_event: (event: { name: string }) -> { send: (data: any) -> () },
-	--- The mods `pack.toml` names in `requires`, `after` and `recommends`, by alias: each mod's id, and whether it runs now.
+	--- The mods `pack.toml` names in `requires` and `after`, by alias: each mod's id, and whether it runs now.
 	deps: { [string]: { id: string, running: () -> boolean } },
 	--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.
 	settings: () -> { [string]: any },

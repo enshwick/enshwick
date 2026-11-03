@@ -102,7 +102,7 @@ mod extender {
         id = "you.extender"
         side = "server"
 
-        [recommends]
+        [after]
         hello = "you.hello"
         "#
     );

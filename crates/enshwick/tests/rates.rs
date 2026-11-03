@@ -34,7 +34,6 @@ mod tests {
         r#"
         id = "you.rates"
         side = "both"
-        join = true
         "#
     );
 

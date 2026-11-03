@@ -16,7 +16,7 @@ publish.workspace = true
 id = "you.haggling"
 side = "server"
 
-[package.metadata.enshwick.recommends]
+[package.metadata.enshwick.after]
 trading_post = "you.trading-post"
 
 [lib]

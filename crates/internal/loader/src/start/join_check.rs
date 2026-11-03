@@ -142,17 +142,7 @@ fn verified_join(
     Ok((join, code))
 }
 
-/// The homepages of the running join mods that declare one, `(id, page)`.
-pub(super) fn pages(loader: &Loader) -> Vec<(String, String)> {
-    loader
-        .mods
-        .iter()
-        .filter(|m| m.joins() && !m.meta.homepage.is_empty())
-        .map(|m| (m.id.clone(), m.meta.homepage.clone()))
-        .collect()
-}
-
-/// The names of the running join mods that declare one, `(id, name)`.
+/// The names of the running mods of side both that declare one, `(id, name)`.
 pub(super) fn names(loader: &Loader) -> Vec<(String, String)> {
     loader
         .mods

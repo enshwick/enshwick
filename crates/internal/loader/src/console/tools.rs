@@ -90,7 +90,6 @@ pub(crate) fn mods(loader: &Loader) -> String {
                 id: &m.id,
                 version: &m.version,
                 side: m.manifest.side,
-                join: m.joins_when_on(),
                 running: !m.off.load(Ordering::Acquire),
             })
             .collect::<Vec<_>>(),

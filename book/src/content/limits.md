@@ -70,7 +70,7 @@ The server decides. Its game cuts every stack above an item's stack size
 and sizes every chest it places. A player's game uses its own stack sizes
 for the split and merge it offers and for what it shows, so every side
 needs the same value. A change of an item or a recipe therefore needs a
-mod with `join: true`, which sets the value from its settings: a player
+mod of side `both`, which sets the value from its settings: a player
 joining a server runs on the [settings the server sends](../settings.md#on-a-joined-server). Loot changes reach the server
 alone and need no join.
 

@@ -84,7 +84,7 @@ end)
 | `enshwick.extend(point, handler)` | a link into another mod's [extension point](#extending-another-mod) |
 | `enshwick.on_mod_event(event, handler)`, `enshwick.define_event(event)` | [mod events](#mod-events), heard and sent |
 | `enshwick.caller(call)` | a function that runs [another mod's call](#calling-another-mod); unstable |
-| `enshwick.deps` | the mods `pack.toml` names in `requires`, `after` and `recommends`, [by alias](#other-mods-by-alias) |
+| `enshwick.deps` | the mods `pack.toml` names in `requires` and `after`, [by alias](#other-mods-by-alias) |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md); unstable |
 | `enshwick.inventory` | slots and counts of [inventories](inventories.md), and items given, taken and moved, on the server |
@@ -184,13 +184,12 @@ for a Rust mod; on a client, only while it hosts a game.
 
 `pack.toml` names the mods a Luau mod depends on under aliases, as a
 [data pack](content/packs.md#packtoml) does. `enshwick.deps` holds a table
-per alias of `requires`, `after` and `recommends`, as `deps!` does for a Rust
-mod: `id` is the mod's id, and `running()` says whether it runs now. A mod of
-`requires` always runs beside this one. Read `running()` for one of `after`
-or `recommends`:
+per alias of `requires` and `after`, as `deps!` does for a Rust mod: `id` is
+the mod's id, and `running()` says whether it runs now. A mod of `requires`
+always runs beside this one. Read `running()` for one of `after`:
 
 ```toml
-[recommends]
+[after]
 lanterns = "you.lanterns"
 ```
 
@@ -205,7 +204,7 @@ end
 A Luau mod links into another mod's [extension point](extending.md) as a
 Rust mod does. `cargo enshwick deps <alias> --from <owner's DLL> --luau`
 writes a module for each point, call and event of the dependency that
-`pack.toml` names `<alias>` in `[requires]`, `[recommends]` or `[after]`, as
+`pack.toml` names `<alias>` in `[requires]` or `[after]`, as
 `deps/<alias>/<name>.luau` with the owner's local name. A point's module holds
 the types it reaches, its named values, and each field's place with the layout hash the
 owner's build wrote. The loader links only when every hash matches the

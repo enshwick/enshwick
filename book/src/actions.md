@@ -57,7 +57,7 @@ the actions.
 
 [`load.actions(texts)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/actions.rs)
 returns the mod's `Actions`; call it once,
-during `init`, on both sides of a join mod alike. Texts are keys of
+during `init`, on both sides of a mod of side `both` alike. Texts are keys of
 `texts`, the mod's [translations](settings.md), shown in each player's
 language; a key without a text shows as it is, so plain English works too.
 `actions.add(action, handler)` declares one action:

@@ -52,7 +52,7 @@ use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
 use mods::{
     config_check, config_schema, fault, join_missing, language, log, mods, rename_content,
-    replaced, settings, texts,
+    settings, texts,
 };
 use net::{net_channel, net_ready, net_send};
 pub(crate) use services::view;
@@ -329,7 +329,8 @@ pub(crate) enum Registration {
 pub(crate) struct ManifestFacts {
     /// The mod's id.
     pub(crate) id: String,
-    /// Whether the mod takes part in the join check.
+    /// Whether the mod runs on both sides, so it takes part in the join
+    /// check.
     pub(crate) joins: bool,
     /// The ids of the mods it requires.
     pub(crate) requires: Vec<String>,
@@ -347,7 +348,7 @@ impl ManifestFacts {
         };
         Self {
             id: text(manifest.id),
-            joins: manifest.flags.contains(crate::abi::ManifestFlags::JOIN),
+            joins: manifest.side == crate::abi::Side::BOTH,
             requires: dependencies
                 .iter()
                 .filter(|d| d.relation == crate::abi::Relation::REQUIRES)
@@ -393,7 +394,7 @@ pub(crate) fn warn_unexported(s: &mut State, kind: crate::schema_section::Kind, 
 }
 
 /// Notes the manifest of the mod whose init runs on `api`, when `api` is the
-/// fake's table, so the fake refuses by the mod's names and join flag.
+/// fake's table, so the fake refuses by the mod's names and side.
 /// Why the fake refuses the manifest, as the loader refuses one with an
 /// export that lacks its kind or its local name; `None` when it takes it.
 pub(crate) fn note_manifest(
@@ -420,6 +421,24 @@ pub(crate) fn note_manifest(
     }
     with((), |s| s.manifest = Some(ManifestFacts::of(manifest)));
     None
+}
+
+/// Whether the fake, when `api` is its table, refuses the mod of `manifest`
+/// before its init, as the loader skips a mod whose side is not server or
+/// both; records the reason as a fault.
+pub(crate) fn refuses_side(api: *const HostApi, manifest: &crate::abi::Manifest) -> bool {
+    use crate::abi::Side;
+    core::ptr::eq(api, &raw const TABLE)
+        && !matches!(manifest.side, Side::SERVER | Side::BOTH)
+        && with(false, |s| {
+            let reason = format!(
+                "side {} is not a mod's side: a mod runs on the server or on both",
+                manifest.side.0
+            );
+            s.logs.push((Level::WARN, format!("skipped: {reason}")));
+            s.faults.push(reason);
+            true
+        })
 }
 
 /// Whether the fake, when `api` is its table, turns the mod of `manifest`
@@ -910,7 +929,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     rename_content,
     declare_content,
     entity_data_open,
-    replaced,
     knowledge_input_filter,
     language,
     keep_game_settings,

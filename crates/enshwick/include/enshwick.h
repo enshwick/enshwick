@@ -13,7 +13,7 @@
 // Any change to the layout other than an append is a new major, with
 // `ABI_MINOR` back at 0; the layout tests of this crate hold the pair to
 // the committed layout.
-#define ENSHWICK_ABI_MAJOR 9
+#define ENSHWICK_ABI_MAJOR 10
 
 // The minor version of this interface: one more for each append to the
 // layout of this `ABI_MAJOR`, a field at the end of a struct that starts
@@ -446,14 +446,19 @@ typedef struct EnshwickBuildCheck {
   int64_t position[3];
 } EnshwickBuildCheck;
 
-// Which side of the game a mod or a binary is.
+// Which binary of the game runs, or where a mod runs.
+//
+// A mod is `Side::SERVER` or `Side::BOTH`; `Side::CLIENT` names only
+// the game client as a binary.
 typedef uint8_t EnshwickSide;
-// The dedicated server; as a mod's side, server features, which the
-// client also loads to run while it hosts a game (solo play included).
+// The dedicated server; as a mod's side, a mod that runs only where the
+// world runs: the dedicated server, or a client that hosts or plays
+// alone. Players need not install it.
 #define EnshwickSide_SERVER 1
-// The game client.
+// The game client, as a binary; never a mod's side.
 #define EnshwickSide_CLIENT 2
-// Both binaries.
+// As a mod's side, a mod that runs where the world runs and on every
+// client playing in it, which must have it in the world's version.
 #define EnshwickSide_BOTH 3
 
 // A game build's identity: the CodeView GUID, in file order, and age.
@@ -902,14 +907,6 @@ typedef uint8_t EnshwickRelation;
 // version when the range is empty): when that one loads, this one is
 // skipped.
 #define EnshwickRelation_BREAKS 2
-// This mod works better beside the other mod in the version range: it
-// loads first when present, and the loader notes when it is missing or
-// in another version.
-#define EnshwickRelation_RECOMMENDS 3
-// This mod takes the place of the other mod, such as one it folds in
-// (any version; the range stays empty): while this one is present, the
-// loader never starts the other and names its DLL to delete.
-#define EnshwickRelation_REPLACES 4
 
 // A relation to another mod, by id and SemVer range.
 typedef struct EnshwickDependency {
@@ -1270,9 +1267,6 @@ typedef EnshwickStatus (*EnshwickResourcePatchFn)(const uint8_t *base,
 typedef uint32_t EnshwickManifestFlags;
 // No flag.
 #define EnshwickManifestFlags_NONE 0
-// Server and clients must run the same version of this mod to play
-// together; it counts in the join check.
-#define EnshwickManifestFlags_JOIN 1
 // The mod is a developer tool, never for real play: it runs only while
 // `DEVELOPER_TOOLS` exists, and every player reads that developer tools are on.
 #define EnshwickManifestFlags_DEVELOPER 4
@@ -1288,19 +1282,19 @@ typedef struct EnshwickModInfo {
   struct EnshwickStr id;
   // The mod's SemVer version.
   struct EnshwickStr version;
-  // The sides the mod runs on.
+  // Where the mod runs, `Side::SERVER` or `Side::BOTH`; a
+  // `Side::BOTH` mod counts in the join check.
   EnshwickSide side;
-  // The manifest's flags; `ManifestFlags::JOIN` when it counts in the
-  // join check.
+  // The manifest's flags.
   EnshwickManifestFlags flags;
   // 1 when the mod is off: refused at init or faulted since.
   uint8_t off;
   // The DLL's path relative to the game's folder, with `/` separators,
   // such as `mods/you.trading-post/trading_post.dll`.
   struct EnshwickStr file;
-  // The manifest's human metadata, as in `Manifest`; in
-  // `HostApi::join_missing`, the name and homepage the server advertises
-  // and empty strings for the rest.
+  // The manifest's human metadata, as in `Manifest`;
+  // empty in `HostApi::join_missing`,
+  // which never passes on text a server chose.
   struct EnshwickStr name;
   // One sentence on what the mod does.
   struct EnshwickStr description;
@@ -1312,9 +1306,6 @@ typedef struct EnshwickModInfo {
   struct EnshwickStr license;
   // Where players read about the mod.
   struct EnshwickStr homepage;
-  // In `HostApi::replaced`, the id of the mod that replaces this one;
-  // empty elsewhere.
-  struct EnshwickStr replaced_by;
 } EnshwickModInfo;
 
 // A player renaming an entity, handed to the filters registered with
@@ -2954,15 +2945,16 @@ typedef struct EnshwickHostApi {
   // rename of an entity; any filter returning 0 refuses it. Allowed during
   // `enshwick_mod_init` only.
   EnshwickStatus (*rename_filter)(EnshwickModHandle me, EnshwickRenameCallFn callback, void *user);
-  // Up to `capacity` of the server's join mods that the last refused join
-  // found missing on this client or in another version, and how many
-  // there are; laid out as `HostApi::mods` lays out its entries. Each
-  // entry has the server's version, `ManifestFlags::JOIN`, `off` 1, the
-  // client's DLL path when it has the mod (empty otherwise), and the name
-  // and homepage the server advertises. The strings stay valid for the
-  // process; once 64 KiB of advertised text is kept, an entry with new
-  // text is left out. Empty before a refused join; see
-  // `Event::JOIN_REFUSED`.
+  // Up to `capacity` of the server's `Side::BOTH`
+  // mods that the last refused join found missing on this client or in
+  // another version, and how many there are; laid out as
+  // `HostApi::mods` lays out its entries. Each entry has the id and
+  // version the server advertises, `Side::BOTH`,
+  // `off` 1 and the client's DLL path when it has the mod (empty
+  // otherwise); name, homepage and the rest stay empty, since the server
+  // chose none of them. The strings stay valid for the process; once
+  // 64 KiB of advertised text is kept, an entry with new text is left
+  // out. Empty before a refused join; see `Event::JOIN_REFUSED`.
   EnshwickStatus (*join_missing)(EnshwickModHandle me,
                                  struct EnshwickModInfo *out,
                                  uint32_t entry_size,
@@ -3612,15 +3604,9 @@ typedef struct EnshwickHostApi {
                                      struct EnshwickStr id,
                                      EnshwickEntityDataFlags flags,
                                      uint32_t *out);
-  // Lists the mods in `mods/` that a present mod replaces (see
-  // `Relation::REPLACES`), which the loader never started, as
-  // `HostApi::mods` lists the loaded ones, with
-  // `ModInfo::replaced_by` set. Any thread.
-  EnshwickStatus (*replaced)(EnshwickModHandle me,
-                             struct EnshwickModInfo *out,
-                             uint32_t entry_size,
-                             uint32_t capacity,
-                             uint32_t *count);
+  // The mod's folder in `mods/`, which holds its installation; the path
+  // stays valid for the process. Any thread.
+  EnshwickStatus (*mod_dir)(EnshwickModHandle me, struct EnshwickStr *out);
   // Registers a filter on the knowledge clients ask the server for in
   // their input, which a vanilla game grants unchecked. Filters run in
   // load order after the loader's guard, each with the verdict so far,
@@ -3795,7 +3781,7 @@ typedef struct EnshwickHostApi {
   // `HostApi::set_rate`. `Status::MISSING` on a build that lacks
   // what the rate needs, `Status::BAD_ARGS` for a rate this loader
   // does not know, `Status::REFUSED` for a rate clients count too in a
-  // mod without `ManifestFlags::JOIN`. A second declaration of the same rate is
+  // `Side::SERVER` mod. A second declaration of the same rate is
   // `Status::OK`. `Status::TOO_LATE` after `enshwick_mod_init`,
   // `Status::FAULTED` for a mod that is off. Allowed during
   // `enshwick_mod_init` only.
@@ -3912,8 +3898,8 @@ typedef struct EnshwickHostApi {
   // `Status::BAD_ARGS` for a null `change` or `out`, an unknown field
   // or selection, and an ingredient, whose change alters a recipe's
   // length; `Status::MISSING` when the build does not reflect the
-  // field; `Status::REFUSED` for a field clients read in a mod without
-  // `ManifestFlags::JOIN`; `Status::TOO_LATE` after
+  // field; `Status::REFUSED` for a field clients read in a
+  // `Side::SERVER` mod; `Status::TOO_LATE` after
   // `enshwick_mod_init`.
   EnshwickStatus (*declare_change)(EnshwickModHandle me,
                                    const struct EnshwickDataChange *change,
@@ -4237,9 +4223,6 @@ typedef struct EnshwickHostApi {
   // dedicated one or the one a client hosts. Any thread. A panic in the
   // loader returns `Status::REFUSED`.
   EnshwickStatus (*chat_mute_has)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t *muted);
-  // The mod's folder in `mods/`, which holds its installation; the path
-  // stays valid for the process. Any thread.
-  EnshwickStatus (*mod_dir)(EnshwickModHandle me, struct EnshwickStr *out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.
@@ -4265,7 +4248,9 @@ typedef struct EnshwickManifest {
   struct EnshwickStr id;
   // The mod's SemVer version.
   struct EnshwickStr version;
-  // The sides the mod runs on.
+  // Where the mod runs: `Side::SERVER`, only where the world runs, or
+  // `Side::BOTH`, there and on every client playing in the world, which
+  // must have it; the loader refuses any other side.
   EnshwickSide side;
   // Manifest flags.
   EnshwickManifestFlags flags;

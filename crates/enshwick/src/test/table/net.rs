@@ -14,7 +14,9 @@ pub(crate) extern "system" fn net_channel(
 ) -> Status {
     let name = text(name);
     let id = with(None, |s| {
-        if s.channels.iter().any(|c| c.0 == name) {
+        // The loader opens channels to clients for mods of side both alone.
+        let joins = s.manifest.as_ref().is_none_or(|manifest| manifest.joins);
+        if !joins || s.channels.iter().any(|c| c.0 == name) {
             return None;
         }
         let id = u32::try_from(s.channels.len() + 1).unwrap_or(u32::MAX);

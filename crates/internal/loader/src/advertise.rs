@@ -1,13 +1,11 @@
 //! The server tells the server browser which mod set it runs.
 //!
 //! Once the dedicated server has logged on to Steam, the loader appends
-//! `[mods: <count of join mods>]` to its Steam name and sets the rules `enshwick`
-//! (the fingerprint) and `enshwick.mods`, `enshwick.mods.1`, ... (the mods that
-//! count, `id@version`, split to fit Steam's rule length), and for each join
-//! mod with a homepage `enshwick.page.<id>` (an `https://` address), so a
-//! client that lacks the mod knows where to get it, and for each join mod with
-//! a name `enshwick.name.<id>`, so the client's notes name a mod it lacks as
-//! players know it.
+//! `[mods: <count of mods of side both>]` to its Steam name and sets the
+//! rules `enshwick` (the fingerprint) and `enshwick.mods`, `enshwick.mods.1`,
+//! ... (the mods that count, `id@version`, split to fit Steam's rule length).
+//! It advertises no homepage or name: a client shows a mod by id and version
+//! alone, so a server points no player anywhere.
 //! Players see it before they join, with or without mods, and a modded client
 //! compares it with its own. The game sets its name once at start, so the
 //! loader sets it again now and then.
@@ -27,20 +25,6 @@ pub const MOD_RULES: usize = 32;
 /// The rule that gives the number of mods when the list did not fit in
 /// [`MOD_RULES`] rules, so a client knows it reads only part of it.
 pub const RULE_MOD_COUNT: &str = "enshwick.mods.count";
-/// The prefix of a mod's homepage rule, `enshwick.page.<id>`.
-pub const RULE_PAGE: &str = "enshwick.page";
-/// The prefix of a mod's name rule, `enshwick.name.<id>`.
-pub const RULE_NAME: &str = "enshwick.name";
-
-/// The per-mod lines a server advertises beside its mod list, each
-/// `(id, line)`; they stay out of the fingerprint.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Lines {
-    /// Homepages, `https://` addresses.
-    pub pages: Vec<(String, String)>,
-    /// Names players read.
-    pub names: Vec<(String, String)>,
-}
 
 /// The fingerprint of a mod set: FNV-1a over the loader version and every
 /// `id@version`, sorted, as eight hex digits.
@@ -58,29 +42,6 @@ pub fn fingerprint(loader_version: &str, mods: &[(String, String)]) -> String {
     )
 }
 
-/// The homepage rules of the mods `pages`, `(id, page)`: one
-/// `enshwick.page.<id>` each, leaving out a page too long for one rule.
-#[must_use]
-pub fn page_rules(pages: &[(String, String)]) -> Vec<(String, String)> {
-    line_rules(RULE_PAGE, pages)
-}
-
-/// The name rules of the mods `names`, `(id, name)`: one
-/// `enshwick.name.<id>` each, leaving out a name too long for one rule.
-#[must_use]
-pub fn name_rules(names: &[(String, String)]) -> Vec<(String, String)> {
-    line_rules(RULE_NAME, names)
-}
-
-/// One `<prefix>.<id>` rule per `(id, line)` that fits in one rule.
-fn line_rules(prefix: &str, lines: &[(String, String)]) -> Vec<(String, String)> {
-    lines
-        .iter()
-        .filter(|(_, line)| !line.is_empty() && line.len() <= RULE_LIMIT)
-        .map(|(id, line)| (format!("{prefix}.{id}"), line.clone()))
-        .collect()
-}
-
 /// What a server advertises at a moment: its Steam name, the fingerprint and
 /// every rule.
 #[derive(Debug, PartialEq, Eq)]
@@ -89,7 +50,7 @@ pub struct Advert {
     pub name: String,
     /// The fingerprint, the value of [`RULE`].
     pub fingerprint: String,
-    /// The mod list, page and name rules.
+    /// The mod list rules.
     pub rules: Vec<(String, String)>,
     /// Mods left out of the mod list rules, which hold at most
     /// [`MOD_RULES`]; they still count in the fingerprint.
@@ -97,21 +58,13 @@ pub struct Advert {
 }
 
 impl Advert {
-    /// The advert of a server named `configured` running `mods` with the
-    /// per-mod `lines`, which stay out of the fingerprint.
+    /// The advert of a server named `configured` running `mods`.
     #[must_use]
-    pub fn new(
-        loader_version: &str,
-        configured: &str,
-        mods: &[(String, String)],
-        lines: &Lines,
-    ) -> Self {
+    pub fn new(loader_version: &str, configured: &str, mods: &[(String, String)]) -> Self {
         let (mut rules, mods_cut) = mod_rules(mods);
         if mods_cut > 0 {
             rules.push((RULE_MOD_COUNT.to_owned(), mods.len().to_string()));
         }
-        rules.extend(page_rules(&lines.pages));
-        rules.extend(name_rules(&lines.names));
         Self {
             name: server_name(configured, mods.len()),
             fingerprint: fingerprint(loader_version, mods),
@@ -265,7 +218,7 @@ mod runtime {
     }
 
     /// Starts the thread that advertises the mod set.
-    pub(crate) fn start(game_dir: &Path, mods: JoinMods, lines: super::Lines) {
+    pub(crate) fn start(game_dir: &Path, mods: JoinMods) {
         let config = std::fs::read_to_string(game_dir.join("enshrouded_server.json")).ok();
         let configured = config
             .and_then(|json| super::configured_name(&json))
@@ -274,14 +227,14 @@ mod runtime {
             .name("enshwick-advertise".into())
             .spawn(move || {
                 let _first = THREAD.set(std::thread::current());
-                if std::panic::catch_unwind(|| run(&configured, mods, &lines)).is_err() {
+                if std::panic::catch_unwind(|| run(&configured, mods)).is_err() {
                     crate::log!(WARN, "mod set advertisement stopped: it panicked");
                 }
             });
         drop(spawned);
     }
 
-    fn run(configured: &str, mods: JoinMods, lines: &super::Lines) {
+    fn run(configured: &str, mods: JoinMods) {
         let Some(api) = Api::load() else {
             crate::log!(
                 WARN,
@@ -312,7 +265,7 @@ mod runtime {
         };
         let mut last: Option<super::Advert> = None;
         loop {
-            let advert = super::Advert::new(env!("CARGO_PKG_VERSION"), configured, &mods(), lines);
+            let advert = super::Advert::new(env!("CARGO_PKG_VERSION"), configured, &mods());
             let mut stale = Vec::new();
             if last.as_ref() != Some(&advert) {
                 describe(&advert);
@@ -436,7 +389,7 @@ mod tests {
 
     #[test]
     fn the_advert_lists_the_mods_and_no_settings() {
-        let advert = Advert::new("0.1.0", "Homelab", &mods(), &Lines::default());
+        let advert = Advert::new("0.1.0", "Homelab", &mods());
         assert_eq!(
             advert.rules,
             [(
@@ -449,64 +402,6 @@ mod tests {
     }
 
     #[test]
-    fn pages_are_rules_that_fit_and_stay_out_of_the_fingerprint() {
-        let pages = vec![
-            (
-                "count".to_owned(),
-                "https://github.com/enshwick/enshwick".to_owned(),
-            ),
-            ("zones".to_owned(), format!("https://{}", "x".repeat(200))),
-            ("plain".to_owned(), String::new()),
-        ];
-        assert_eq!(
-            page_rules(&pages),
-            [(
-                "enshwick.page.count".to_owned(),
-                "https://github.com/enshwick/enshwick".to_owned()
-            )]
-        );
-        let with = Advert::new(
-            "0.1.0",
-            "Homelab",
-            &mods(),
-            &Lines {
-                pages: pages.clone(),
-                ..Lines::default()
-            },
-        );
-        let without = Advert::new("0.1.0", "Homelab", &mods(), &Lines::default());
-        assert_eq!(with.fingerprint, without.fingerprint);
-        assert_eq!(with.rules.len(), without.rules.len() + 1);
-    }
-
-    #[test]
-    fn names_are_rules_that_fit_and_stay_out_of_the_fingerprint() {
-        let names = vec![
-            ("count".to_owned(), "Flame Altar Count".to_owned()),
-            ("zones".to_owned(), "x".repeat(200)),
-        ];
-        assert_eq!(
-            name_rules(&names),
-            [(
-                "enshwick.name.count".to_owned(),
-                "Flame Altar Count".to_owned()
-            )]
-        );
-        let with = Advert::new(
-            "0.1.0",
-            "Homelab",
-            &mods(),
-            &Lines {
-                names,
-                ..Lines::default()
-            },
-        );
-        let without = Advert::new("0.1.0", "Homelab", &mods(), &Lines::default());
-        assert_eq!(with.fingerprint, without.fingerprint);
-        assert_eq!(with.rules.len(), without.rules.len() + 1);
-    }
-
-    #[test]
     fn the_name_counts_the_mods_once_and_fits() {
         assert_eq!(server_name("Homelab", 6), "Homelab [mods: 6]");
         assert_eq!(server_name("Homelab [mods: 2]", 6), "Homelab [mods: 6]");
@@ -516,7 +411,7 @@ mod tests {
         );
         let long = server_name(&"ї".repeat(40), 12);
         assert!(long.len() <= NAME_LIMIT && long.ends_with("ї [mods: 12]"));
-        let advert = Advert::new("0.1.0", "Homelab", &mods(), &Lines::default());
+        let advert = Advert::new("0.1.0", "Homelab", &mods());
         assert_eq!(advert.name, format!("Homelab [mods: {}]", mods().len()));
     }
 
@@ -557,14 +452,14 @@ mod tests {
         assert!(cut > 0);
         let joined: Vec<&str> = rules.iter().map(|(_, v)| v.as_str()).collect();
         assert!(mod_list(&many).starts_with(&joined.join(",")));
-        let advert = Advert::new("0.1.0", "Homelab", &many, &Lines::default());
+        let advert = Advert::new("0.1.0", "Homelab", &many);
         assert_eq!(advert.mods_cut, cut);
         assert!(
             advert
                 .rules
                 .contains(&(RULE_MOD_COUNT.to_owned(), "400".to_owned()))
         );
-        let small = Advert::new("0.1.0", "Homelab", &mods(), &Lines::default());
+        let small = Advert::new("0.1.0", "Homelab", &mods());
         assert_eq!(small.mods_cut, 0);
         assert!(small.rules.iter().all(|(key, _)| key != RULE_MOD_COUNT));
     }

@@ -17,8 +17,8 @@ mod tests {
         [requires]
         lockers = "you.lockers"
 
-        [recommends]
-        lanterns = { id = "you.lanterns", version = ">=0.2" }
+        [after]
+        lanterns = "you.lanterns"
 
         [breaks]
         old = "old.luau"
