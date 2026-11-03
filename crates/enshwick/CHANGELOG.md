@@ -6,7 +6,26 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `altars::set_base_cap` caps the bases of the world that runs below the
+  mod's `Load::request_base_limits`, so a mod asks for its most at init and
+  sets each world's cap from its settings; each call replaces the mod's own
+  cap, the lowest of every mod holds, below 16 is refused, and
+  `altars::base_limit` reads the capped bases. Behind `unstable`;
+  `HostApi::set_base_cap`, ABI 11.1 (#923).
+
 ### Changed
+
+- **Breaking:** disabled recipes live only in each world's
+  `<stem>-mod-settings/enshwick/recipes.toml`, written from the template as
+  the world first loads; `mod-configs/enshwick.recipes.toml` is gone, the
+  loader no longer makes `mod-configs/` and logs once at start that an old
+  one is not read, and the console's `enshwick recipes disable|enable`
+  answers that a world must run while none does. The console's `entity` and
+  `placed` answers, the craft refusal log and container slot changes name
+  the game's items and recipes as `enshrouded:<debug name>` with their
+  number (#923).
 
 - **Breaking:** the loader keeps few files of its own. Every log is in
   `logs/`, one file per source and run, `logs/<source>_<date>_<time>.log`,
