@@ -1,8 +1,9 @@
 # Disabling recipes
 
-A server owner takes recipes out of the game, vanilla ones or a mod's, with
-a file and no mod: `mod-configs/enshwick.recipes.toml`. Mods disable recipes
-too, through [`recipes::disable`](#from-a-mod).
+A server owner takes recipes out of a world, vanilla ones or a mod's, with
+a file and no mod: `<stem>-mod-settings/enshwick/recipes.toml` beside the
+world's save. Mods disable recipes too, through
+[`recipes::disable`](#from-a-mod).
 
 ## What disabling does
 
@@ -13,7 +14,8 @@ which makes items without a recipe.
 
 ## The recipe file
 
-The loader writes the file on first start, with every list empty:
+The loader writes the file as the world first loads, with every list
+empty; filled, it reads:
 
 ```toml
 [disable]
@@ -47,7 +49,7 @@ file, the line and the names that look like it, and the other rules still
 apply:
 
 ```text
-warn  [enshwick] disabled recipes: mod-configs/enshwick.recipes.toml:3: no recipe "enshrouded:Tool_Torch01_T0_PKK"; near: enshrouded:Tool_Torch01_T0_PK
+warn  [enshwick] disabled recipes: savegame/3ad85aea-mod-settings/enshwick/recipes.toml:3: no recipe "enshrouded:Tool_Torch01_T0_PKK"; near: enshrouded:Tool_Torch01_T0_PK
 info  [enshwick] disabled recipes: 224
 ```
 
@@ -56,18 +58,17 @@ pick from.
 
 ## Worlds
 
-The file in `mod-configs` holds the rules of every world the process runs:
-the dedicated server's world, or each world of a player who plays alone or
-hosts. A world's own file, `<stem>-mod-settings/enshwick/recipes.toml` beside the world's save, in
-the same form, applies over it while that world runs, so a host can disable
-recipes in one world only. The rules apply in turn: mods' rules, then the
-`mod-configs` file, then the world's; each file disables what its
-`[disable]` names and enables back what its `[enable]` names, over
-everything before it.
+Each world has its own file, and no file applies to every world: the
+dedicated server's world, and each world of a player who plays alone or
+hosts, keeps its rules beside its save, so they travel with it. The rules
+apply in turn: mods' rules, then the world's file, which disables what its
+`[disable]` names and enables back what its `[enable]` names. A
+`mod-configs/` folder of an older loader is not read; the log says so once
+at start.
 
 ## Changes while the game runs
 
-The loader looks at both files once a second and applies a change at once,
+The loader looks at the running world's file once a second and applies a change at once,
 on the dedicated server and in a game a player hosts: menus lose or regain
 the recipes and the server's refusals follow. No restart is needed.
 
@@ -80,7 +81,7 @@ rules:
 | --- | --- |
 | `enshwick recipes` | the disabled recipes, each with its GUID, workshop and output |
 | `enshwick recipes find <text>` | recipes whose debug name or whose output's name holds the text, the disabled ones marked |
-| `enshwick recipes disable <recipe\|output\|workshop> <name>` | checks the name and adds it to the running world's file (the `mod-configs` file while no world runs) |
+| `enshwick recipes disable <recipe\|output\|workshop> <name>` | checks the name and adds it to the running world's file; while no world runs, it answers that a world must run |
 | `enshwick recipes enable <recipe\|output\|workshop> <name>` | the same for `[enable]` |
 
 ```text
@@ -93,7 +94,7 @@ enshrouded:Tool_Torch01_T0_PK (7fa62007-a38e-4790-8591-873055fc3f34) at hand, ma
 
 The server decides. A client that runs Enshwick and joins gets the server's
 disabled recipes over the loader's messages and hides them from its menus;
-its own recipe files do not count while it plays there, and apply again
+its own worlds' recipe files do not count while it plays there, and apply again
 when it hosts or plays alone. A client without Enshwick keeps showing the
 recipes, and the server still refuses to craft them, so nothing is made and
 nothing is taken.
@@ -135,7 +136,7 @@ fn init(_load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-The file wins: mods' rules apply first, so a server's `[enable]` takes back
+The file wins: mods' rules apply first, so a world's `[enable]` takes back
 any recipe a mod disables, and a mod's `enable` takes back only its own
 rules. A name the loader cannot resolve is logged in the mod's log and the
 loader's. On a client joined to a server, the server's rules apply, mods'

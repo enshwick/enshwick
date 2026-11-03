@@ -102,6 +102,7 @@
 "recipes.off" = "此遊戲版本上的停用配方功能已關閉；原因請見載入器的記錄。"
 "recipes.waiting" = "配方尚未讀取；請在世界執行後再試。"
 "recipes.usage" = "用法：enshwick recipes；enshwick recipes find <文字>；enshwick recipes disable|enable recipe|output|workshop <名稱>"
+"recipes.no_world" = "配方規則屬於某個世界；請執行世界後再試。"
 "recipes.none" = "沒有停用的配方。"
 "recipes.list" = "已停用的配方：{count} 個。"
 "recipes.more" = "……還有 {count} 個。"

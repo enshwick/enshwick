@@ -102,6 +102,7 @@
 "recipes.off" = "此游戏版本上的禁用配方功能已关闭；原因见加载器的日志。"
 "recipes.waiting" = "配方尚未读取；请在世界运行后再试。"
 "recipes.usage" = "用法：enshwick recipes；enshwick recipes find <文本>；enshwick recipes disable|enable recipe|output|workshop <名称>"
+"recipes.no_world" = "配方规则属于某个世界；请运行世界后再试。"
 "recipes.none" = "没有禁用的配方。"
 "recipes.list" = "已禁用的配方：{count} 个。"
 "recipes.more" = "……还有 {count} 个。"

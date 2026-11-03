@@ -102,6 +102,7 @@
 "recipes.off" = "Wyłączanie przepisów nie działa w tej kompilacji gry; przyczyna jest w dzienniku loadera."
 "recipes.waiting" = "Przepisy nie są jeszcze odczytane; zapytaj ponownie, gdy świat będzie działał."
 "recipes.usage" = "Użycie: enshwick recipes; enshwick recipes find <tekst>; enshwick recipes disable|enable recipe|output|workshop <nazwa>"
+"recipes.no_world" = "Reguły przepisów należą do świata; uruchom świat i spróbuj ponownie."
 "recipes.none" = "Żaden przepis nie jest wyłączony."
 "recipes.list" = "Wyłączone przepisy: {count}."
 "recipes.more" = "... i jeszcze {count}."

@@ -102,6 +102,7 @@
 "recipes.off" = "На цій збірці гри вимкнення рецептів не працює; причина в журналі завантажувача."
 "recipes.waiting" = "Рецепти ще не прочитано; спитайте знову, коли світ запуститься."
 "recipes.usage" = "Використання: enshwick recipes; enshwick recipes find <текст>; enshwick recipes disable|enable recipe|output|workshop <назва>"
+"recipes.no_world" = "Правила рецептів належать світу; запустіть світ і спробуйте знову."
 "recipes.none" = "Жоден рецепт не вимкнено."
 "recipes.list" = "Вимкнених рецептів: {count}."
 "recipes.more" = "... і ще {count}."

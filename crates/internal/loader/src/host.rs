@@ -205,8 +205,6 @@ pub(crate) struct Loader {
     pub(crate) reflection: Reflection<'static>,
     /// The `mods` folder.
     pub(crate) mods_dir: PathBuf,
-    /// The `mod-configs` folder.
-    pub(crate) configs_dir: PathBuf,
     /// Whether developer tools are on, by the marker file read at start.
     pub(crate) developer_tools: bool,
     /// Loaded mods, in load order; handle `n` is index `n - 1`.

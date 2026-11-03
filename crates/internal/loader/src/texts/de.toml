@@ -102,6 +102,7 @@
 "recipes.off" = "Deaktivierte Rezepte sind in diesem Spiel-Build aus; das Log des Loaders sagt, warum."
 "recipes.waiting" = "Die Rezepte sind noch nicht gelesen; frag noch einmal, sobald die Welt läuft."
 "recipes.usage" = "Verwendung: enshwick recipes; enshwick recipes find <Text>; enshwick recipes disable|enable recipe|output|workshop <Name>"
+"recipes.no_world" = "Rezeptregeln gehören zu einer Welt; starte die Welt und versuche es erneut."
 "recipes.none" = "Kein Rezept ist deaktiviert."
 "recipes.list" = "Deaktivierte Rezepte: {count}."
 "recipes.more" = "... und {count} weitere."

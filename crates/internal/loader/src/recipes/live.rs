@@ -22,8 +22,8 @@ use crate::settings::LOADER_ID;
 use crate::texts;
 
 use super::{
-    FILE, Index, Kind, Names, Rule, RuleFile, Source, TEMPLATE, WORLD_FILE, compose, describe,
-    edit_file, find, parts, resolve,
+    Index, Kind, Names, Rule, RuleFile, Source, TEMPLATE, WORLD_FILE, compose, describe, edit_file,
+    find, parts, resolve,
 };
 
 /// The most ids one message to a client carries.
@@ -64,8 +64,8 @@ struct Live {
     incoming: crate::wire::Gathered<u32, MAX_SERVER_RECIPES>,
     index: Option<Arc<Index>>,
     names: Option<Arc<Names>>,
-    /// The server's file and the world's, as last seen.
-    stamps: (Stamp, Option<PathBuf>, Stamp),
+    /// The world's file, as last seen.
+    stamps: (Option<PathBuf>, Stamp),
     /// Whether the archive's registry failed to read, logged once.
     unreadable: bool,
     /// The problems last logged, so the same ones are not logged again.
@@ -88,8 +88,7 @@ fn layout() -> Option<&'static RecipeLayout> {
     LAYOUT.get().and_then(Option::as_ref)
 }
 
-/// Sets disabled recipes up: the layout, the server's recipe file when it
-/// is missing, and the lookup hook. Before arming.
+/// Sets disabled recipes up: the layout and the lookup hook. Before arming.
 pub(crate) fn init(loader: &'static Loader) {
     let resolved = RecipeLayout::resolve(&Reflected(&loader.reflection));
     if let Err(off) = &resolved {
@@ -98,12 +97,6 @@ pub(crate) fn init(loader: &'static Loader) {
     let _first = LAYOUT.set(resolved.ok());
     if layout().is_none() {
         return;
-    }
-    let path = loader.configs_dir.join(FILE);
-    if !path.exists()
-        && let Err(e) = enshwick::files::write_atomically(&path, TEMPLATE)
-    {
-        crate::log!(WARN, "{} not written: {e}", path.display());
     }
     if !crate::code::link_recipe_lookup(loader) {
         crate::log!(
@@ -128,16 +121,15 @@ fn stamp(path: &Path) -> Stamp {
     Some((meta.modified().ok()?, meta.len()))
 }
 
-/// Looks at the recipe files and applies the rules when anything changed;
-/// on the settings thread, once a second.
+/// Looks at the world's recipe file and applies the rules when anything
+/// changed; on the settings thread, once a second.
 pub(crate) fn poll(loader: &Loader) {
     if layout().is_none() {
         return;
     }
-    let global = stamp(&loader.configs_dir.join(FILE));
     let world = world_path();
     let world_stamp = world.as_deref().and_then(stamp);
-    let seen = (global, world, world_stamp);
+    let seen = (world, world_stamp);
     let moved = live(|l| {
         let moved = l.stamps != seen;
         l.stamps = seen;
@@ -312,17 +304,8 @@ fn apply(loader: &Loader, index: &Index) {
             .collect();
         let mut problems = Vec::new();
         let mut files = Vec::new();
-        let global = format!("mod-configs/{FILE}");
-        let world = world_path();
-        let world_shown = world.as_ref().map(|path| path.display().to_string());
-        for (path, shown) in [
-            (Some(loader.configs_dir.join(FILE)), Some(global)),
-            (world, world_shown),
-        ] {
-            let (Some(path), Some(shown)) = (path, shown) else {
-                continue;
-            };
-            match read_file(&path, &shown) {
+        if let Some(path) = world_path() {
+            match read_file(&path, &path.display().to_string()) {
                 Ok(Some(file)) => files.push(file),
                 Ok(None) => {}
                 Err(why) => problems.push(format!("{why}; its rules are skipped")),
@@ -435,11 +418,18 @@ pub(crate) fn disable_for_test(ids: &[u32]) {
     }));
 }
 
-/// A world loaded or stopped: its own file applies or stops applying, and
-/// a client that hosts it runs its own rules.
+/// A world loaded or stopped: its file, written from the template when it
+/// is missing, applies or stops applying, and a client that hosts it runs
+/// its own rules.
 pub(crate) fn world_changed(loader: &Loader) {
     if loader.side == Side::CLIENT {
         live(|l| l.server = None);
+    }
+    if layout().is_some()
+        && let Some(path) = world_path().filter(|path| !path.exists())
+        && let Err(e) = crate::worlds::write_target(&path, TEMPLATE)
+    {
+        crate::log!(WARN, "{} not written: {e}", path.display());
     }
     DIRTY.store(true, Ordering::Release);
 }
@@ -628,7 +618,7 @@ pub(crate) fn command(loader: &Loader, args: &str) -> String {
             let (kind, name) = rest.split_once(' ').unwrap_or((rest, ""));
             match Kind::from_word(kind) {
                 Some(kind) if !name.trim().is_empty() => {
-                    change(loader, &index, &names, kind, name.trim(), word == "disable")
+                    change(&index, &names, kind, name.trim(), word == "disable")
                 }
                 _ => texts::fill("recipes.usage", &[]),
             }
@@ -685,16 +675,11 @@ fn found_list(index: &Index, names: &Names, text: &str) -> String {
     lines.join("\n")
 }
 
-/// Writes a rule into the running world's recipe file, or the server's
-/// when no world runs.
-fn change(
-    loader: &Loader,
-    index: &Index,
-    names: &Names,
-    kind: Kind,
-    name: &str,
-    disable: bool,
-) -> String {
+/// Writes a rule into the running world's recipe file.
+fn change(index: &Index, names: &Names, kind: Kind, name: &str, disable: bool) -> String {
+    let Some(path) = world_path() else {
+        return texts::fill("recipes.no_world", &[]);
+    };
     let probe = Rule {
         kind,
         name: name.to_owned(),
@@ -703,13 +688,7 @@ fn change(
     if let Err(why) = resolve(&probe, index, names) {
         return texts::fill("recipes.unwritten", &[("why", &why.to_string())]);
     }
-    let (path, shown) = match world_path() {
-        Some(path) => {
-            let shown = path.display().to_string();
-            (path, shown)
-        }
-        None => (loader.configs_dir.join(FILE), format!("mod-configs/{FILE}")),
-    };
+    let shown = path.display().to_string();
     // A file that does not read is never replaced by one with this rule alone.
     let written = enshwick::files::read_to_string_if_present(&path)
         .map_err(WriteRuleError::from)
@@ -753,5 +732,18 @@ mod tests {
             Some(&[1_u64, 2][..]),
             "the old list lives on"
         );
+    }
+
+    #[test]
+    fn a_rule_from_the_console_needs_a_running_world() {
+        assert_eq!(world_path(), None);
+        let answer = change(
+            &Index::default(),
+            &Names::default(),
+            Kind::Workshop,
+            super::super::HAND,
+            true,
+        );
+        assert_eq!(answer, texts::fill("recipes.no_world", &[]));
     }
 }

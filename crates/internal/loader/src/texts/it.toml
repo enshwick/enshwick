@@ -102,6 +102,7 @@
 "recipes.off" = "Le ricette disattivate non funzionano su questa build del gioco; il log del loader dice perché."
 "recipes.waiting" = "Le ricette non sono ancora state lette; chiedi di nuovo quando il mondo è in esecuzione."
 "recipes.usage" = "Uso: enshwick recipes; enshwick recipes find <testo>; enshwick recipes disable|enable recipe|output|workshop <nome>"
+"recipes.no_world" = "Le regole delle ricette appartengono a un mondo; avvia il mondo e riprova."
 "recipes.none" = "Nessuna ricetta è disattivata."
 "recipes.list" = "Ricette disattivate: {count}."
 "recipes.more" = "... e altre {count}."

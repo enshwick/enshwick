@@ -90,8 +90,8 @@ server's from the same page. The server's console also takes
 again. A world's `<save>-mod-settings/enshwick/enshwick.toml` holds the
 loader's own rule for it, `require_enshwick`.
 
-`mod-configs/enshwick.recipes.toml` takes recipes out of the game
-([Disabling recipes](book/src/content/disabled-recipes.md)). The logs are in
+A world's `<save>-mod-settings/enshwick/recipes.toml` takes recipes out of
+that world ([Disabling recipes](book/src/content/disabled-recipes.md)). The logs are in
 `logs/`, one file per source and run, such as
 `logs/enshwick_2026-11-03_10-00-00.log`; `enshwick.toml` in the game's folder
 sets how much they keep.

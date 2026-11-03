@@ -143,7 +143,6 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         fingerprint,
         build,
         reflection,
-        configs_dir: game_dir.join("mod-configs"),
         developer_tools: crate::developer_tools::marked(game_dir),
         mods_dir,
         mods: records(&libraries, &candidates, &plan),
