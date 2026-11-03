@@ -17,16 +17,14 @@ const RUNTIME_FUNCTION: usize = 12;
 const CHAIN_INFO: u8 = 0x4;
 /// Chained fragments deeper than this are taken for a loop in bad data.
 const MAX_CHAIN: usize = 8;
-/// `lea r, [rip + disp32]`: the opcode and the `ModRM` bits of a RIP-relative
-/// operand, which every string load the routes follow uses.
-const LEA: u8 = 0x8d;
-const MODRM_RIP: (u8, u8) = (0xc7, 0x05);
 /// The padding MSVC puts between functions.
 const INT3: u8 = 0xcc;
 /// The most code a function outside `.pdata` is read for.
 const MAX_LEAF: u32 = 0x4000;
 /// Parts decoded per task of the first pass, so the cores share the work.
 const PARTS_PER_TASK: usize = 2048;
+/// Pieces the string pass over `.rdata` is cut into, so the cores share it.
+const STRING_PIECES: usize = 64;
 
 /// The code section of an image, indexed by function.
 pub(crate) struct Code<'i, 'a> {
@@ -44,6 +42,9 @@ pub(crate) struct Code<'i, 'a> {
     calls: Vec<u64>,
     /// Every direct call as `callee << 32 | caller function`, sorted.
     called: Vec<u64>,
+    /// Every RIP-relative `lea` of a wanted address as `(address,
+    /// function)`, sorted.
+    loads: Vec<(u64, u32)>,
 }
 
 /// What the decode of one part found.
@@ -53,12 +54,15 @@ struct Branches {
     calls: Vec<(u32, u32)>,
     /// `(target, jumping function)` of jumps that leave their function.
     jumps: Vec<(u32, u32)>,
+    /// `(loaded address, loading function)`.
+    loads: Vec<(u64, u32)>,
 }
 
 impl<'i, 'a> Code<'i, 'a> {
-    /// The functions `image` declares and the code outside them; `None`
-    /// without `.text` or `.pdata`.
-    pub(crate) fn new(image: &'i Image<'a>) -> Option<Self> {
+    /// The functions `image` declares and the code outside them, with the
+    /// functions that load each address of `wanted` with a RIP-relative
+    /// `lea`; `None` without `.text` or `.pdata`.
+    pub(crate) fn new(image: &'i Image<'a>, wanted: &FxHashSet<u64>) -> Option<Self> {
         let base = image.base();
         let text = image.range(image.section(".text")?);
         let pdata = image.range(image.section(".pdata")?);
@@ -86,29 +90,38 @@ impl<'i, 'a> Code<'i, 'a> {
             by_function: Vec::new(),
             calls: Vec::new(),
             called: Vec::new(),
+            loads: Vec::new(),
         };
-        let tasks: Vec<Range<usize>> = (0..code.parts.len())
-            .step_by(PARTS_PER_TASK)
-            .map(|at| at..(at + PARTS_PER_TASK).min(code.parts.len()))
-            .collect();
-        let found = crate::table::search(&tasks, |range| Some(code.branches(range.clone())));
+        let found = crate::table::search(&tasks(code.parts.len()), |range| {
+            Some(code.branches(range.clone(), wanted))
+        });
         let mut branches = Branches::default();
         for part in found.into_iter().flatten() {
             branches.calls.extend(part.calls);
             branches.jumps.extend(part.jumps);
+            branches.loads.extend(part.loads);
         }
-        code.add_outside(&mut branches);
+        code.add_outside(&mut branches, wanted);
         code.index(&branches.calls);
+        branches.loads.sort_unstable();
+        branches.loads.dedup();
+        code.loads = branches.loads;
         Some(code)
     }
 
-    /// The direct calls and the jumps out of their function in the parts
-    /// `range` of the exception directory.
-    fn branches(&self, range: Range<usize>) -> Branches {
+    /// The direct calls, the jumps out of their function and the loads of
+    /// `wanted` addresses in the parts `range` of the exception directory.
+    fn branches(&self, range: Range<usize>, wanted: &FxHashSet<u64>) -> Branches {
         let mut out = Branches::default();
         for i in range {
             let function = self.primary[i];
-            for ins in self.decode(self.parts[i]) {
+            for ins in self.instructions(self.parts[i]) {
+                if ins.mnemonic() == Mnemonic::Lea
+                    && ins.is_ip_rel_memory_operand()
+                    && wanted.contains(&ins.ip_rel_memory_address())
+                {
+                    out.loads.push((ins.ip_rel_memory_address(), function));
+                }
                 if ins.op0_kind() != OpKind::NearBranch64 {
                     continue;
                 }
@@ -132,7 +145,7 @@ impl<'i, 'a> Code<'i, 'a> {
     /// function, up to the first `int3`. A run right after a function's
     /// part with no padding between is the rest of that function, unless
     /// another function calls or jumps to it.
-    fn add_outside(&mut self, branches: &mut Branches) {
+    fn add_outside(&mut self, branches: &mut Branches, wanted: &FxHashSet<u64>) {
         let (starts, tails) = self.gaps();
         let text_end = rva(self.text.end, self.base).unwrap_or(0);
         let called: FxHashSet<u32> = branches.calls.iter().map(|&(_, t)| t).collect();
@@ -150,15 +163,29 @@ impl<'i, 'a> Code<'i, 'a> {
             .collect();
         leaves.sort_unstable();
         leaves.dedup();
+        let caps: Vec<(u32, u32)> = leaves
+            .iter()
+            .enumerate()
+            .map(|(at, &leaf)| {
+                let next = self.parts.partition_point(|&(begin, _)| begin <= leaf);
+                let limit = self.parts.get(next).map_or(text_end, |&(begin, _)| begin);
+                let cap = limit.saturating_sub(leaf).min(MAX_LEAF);
+                let cap = leaves
+                    .get(at + 1)
+                    .map_or(cap, |&after| cap.min(after - leaf));
+                (leaf, cap)
+            })
+            .collect();
+        let ends = crate::table::search(&tasks(caps.len()), |range| {
+            Some(
+                caps[range.clone()]
+                    .iter()
+                    .map(|&(leaf, cap)| (leaf, self.run_end(leaf, cap)))
+                    .collect::<Vec<_>>(),
+            )
+        });
         let mut added: Vec<(u32, u32)> = Vec::new();
-        for (at, &leaf) in leaves.iter().enumerate() {
-            let next = self.parts.partition_point(|&(begin, _)| begin <= leaf);
-            let limit = self.parts.get(next).map_or(text_end, |&(begin, _)| begin);
-            let mut cap = limit.saturating_sub(leaf).min(MAX_LEAF);
-            if let Some(&after) = leaves.get(at + 1) {
-                cap = cap.min(after - leaf);
-            }
-            let end = self.run_end(leaf, cap);
+        for (leaf, end) in ends.into_iter().flatten().flatten() {
             if end > leaf && added.last().is_none_or(|&(_, e)| e <= leaf) {
                 added.push((leaf, end));
             }
@@ -179,7 +206,13 @@ impl<'i, 'a> Code<'i, 'a> {
             })
             .collect();
         for (&part, &owner) in added.iter().zip(&owners) {
-            for ins in self.decode(part) {
+            for ins in self.instructions(part) {
+                if ins.mnemonic() == Mnemonic::Lea
+                    && ins.is_ip_rel_memory_operand()
+                    && wanted.contains(&ins.ip_rel_memory_address())
+                {
+                    branches.loads.push((ins.ip_rel_memory_address(), owner));
+                }
                 if ins.mnemonic() == Mnemonic::Call
                     && ins.op0_kind() == OpKind::NearBranch64
                     && let Some(target) = rva(ins.near_branch64(), self.base)
@@ -203,14 +236,14 @@ impl<'i, 'a> Code<'i, 'a> {
     /// Where each run of code between the parts of `.pdata` starts, and the
     /// runs that start right at a part's end, by the function owning it.
     fn gaps(&self) -> (Vec<u32>, FxHashMap<u32, u32>) {
-        let mut starts = Vec::new();
-        let mut tails = FxHashMap::default();
         let (Some(first), Some(last)) = (
             rva(self.text.start, self.base),
             rva(self.text.end, self.base),
         ) else {
-            return (starts, tails);
+            return (Vec::new(), FxHashMap::default());
         };
+        // Each gap as `(begin, end, function whose part ends at its begin)`.
+        let mut gaps: Vec<(u32, u32, Option<u32>)> = Vec::new();
         let mut prev = first;
         let mut owner: Option<u32> = None;
         let ends = self
@@ -220,33 +253,49 @@ impl<'i, 'a> Code<'i, 'a> {
             .map(|(&part, f)| (part, f))
             .chain([((last, 0), None)]);
         for ((begin, end), function) in ends {
-            let mut at = prev;
-            while at < begin {
-                let Some(bytes) = self
-                    .image
-                    .read(self.base + u64::from(at), u64::from(begin - at))
-                else {
-                    break;
-                };
-                let pad = bytes.iter().position(|&b| b != INT3).unwrap_or(bytes.len());
-                let pad = u32::try_from(pad).unwrap_or(u32::MAX);
-                if pad == 0
-                    && at == prev
-                    && let Some(owner) = owner
-                {
-                    tails.insert(at, owner);
-                }
-                at = at.saturating_add(pad);
-                if at >= begin {
-                    break;
-                }
-                starts.push(at);
-                at = self.run_end(at, begin - at).max(at + 1);
+            if prev < begin {
+                gaps.push((prev, begin, owner));
             }
             if end >= prev {
                 prev = end;
                 owner = function;
             }
+        }
+        let found = crate::table::search(&tasks(gaps.len()), |range| {
+            let mut starts = Vec::new();
+            let mut tails = Vec::new();
+            for &(from, to, owner) in &gaps[range.clone()] {
+                let mut at = from;
+                while at < to {
+                    let Some(bytes) = self
+                        .image
+                        .read(self.base + u64::from(at), u64::from(to - at))
+                    else {
+                        break;
+                    };
+                    let pad = bytes.iter().position(|&b| b != INT3).unwrap_or(bytes.len());
+                    let pad = u32::try_from(pad).unwrap_or(u32::MAX);
+                    if pad == 0
+                        && at == from
+                        && let Some(owner) = owner
+                    {
+                        tails.push((at, owner));
+                    }
+                    at = at.saturating_add(pad);
+                    if at >= to {
+                        break;
+                    }
+                    starts.push(at);
+                    at = self.run_end(at, to - at).max(at + 1);
+                }
+            }
+            Some((starts, tails))
+        });
+        let mut starts = Vec::new();
+        let mut tails = FxHashMap::default();
+        for (s, t) in found.into_iter().flatten() {
+            starts.extend(s);
+            tails.extend(t);
         }
         (starts, tails)
     }
@@ -343,74 +392,80 @@ impl<'i, 'a> Code<'i, 'a> {
         low_halves(&self.called, rva).collect()
     }
 
-    /// For each of `targets`, the begin RVAs of the functions whose code
-    /// loads its address with a RIP-relative `lea`, from one pass over the
-    /// code section.
-    pub(crate) fn loaders(&self, targets: &[u64]) -> Vec<FxHashSet<u32>> {
-        let mut found = vec![FxHashSet::default(); targets.len()];
-        let Some(code) = self
-            .image
-            .read(self.text.start, self.text.end - self.text.start)
-        else {
-            return found;
-        };
-        for at in memchr::memchr_iter(LEA, code) {
-            let Some(window) = code.get(at..at + 6) else {
-                break;
-            };
-            if window[1] & MODRM_RIP.0 != MODRM_RIP.1 {
-                continue;
-            }
-            let disp = i32::from_le_bytes([window[2], window[3], window[4], window[5]]);
-            let next = self.text.start + at as u64 + 6;
-            let Some(target) = next.checked_add_signed(i64::from(disp)) else {
-                continue;
-            };
-            let Some(t) = targets.iter().position(|&want| want == target) else {
-                continue;
-            };
-            // The opcode may sit inside another instruction: only a decode
-            // from its REX prefix, or from the opcode, that ends at the
-            // displacement counts.
-            let confirmed = [1u64, 0].into_iter().any(|rex| {
-                let start = self.text.start + at as u64 - rex;
-                at as u64 >= rex
-                    && self.image.read(start, 6 + rex).is_some_and(|bytes| {
-                        let i = Decoder::with_ip(64, bytes, start, DecoderOptions::NONE).decode();
-                        i.mnemonic() == Mnemonic::Lea
-                            && i.next_ip() == next
-                            && i.ip_rel_memory_address() == target
-                    })
-            });
-            if confirmed && let Some(function) = self.function_of(next - self.base) {
-                found[t].insert(function);
-            }
-        }
-        found
+    /// The begin RVAs of the functions whose code loads the wanted address
+    /// `va` with a RIP-relative `lea`.
+    pub(crate) fn loaders(&self, va: u64) -> impl Iterator<Item = u32> + '_ {
+        let from = self.loads.partition_point(|&(at, _)| at < va);
+        self.loads[from..]
+            .iter()
+            .take_while(move |&&(at, _)| at == va)
+            .map(|&(_, function)| function)
     }
 
-    /// For each of `texts`, the `.rdata` addresses where it lies as a whole
-    /// NUL-terminated string, from one pass over the strings there.
-    pub(crate) fn strings(&self, texts: &[&str]) -> Vec<Vec<u64>> {
-        let mut found = vec![Vec::new(); texts.len()];
-        let Some(rdata) = self.image.section(".rdata").map(|s| self.image.range(s)) else {
-            return found;
-        };
-        let Some(bytes) = self.image.read(rdata.start, rdata.end - rdata.start) else {
-            return found;
-        };
-        let mut at = 0;
-        for end in memchr::memchr_iter(0, bytes) {
-            let string = &bytes[at..end];
-            if !string.is_empty()
-                && let Some(t) = texts.iter().position(|t| t.as_bytes() == string)
+    /// The instructions of one part, in order, decoded as they are read.
+    fn instructions(&self, (begin, end): (u32, u32)) -> impl Iterator<Item = Instruction> + 'a {
+        let va = self.base + u64::from(begin);
+        let bytes = self
+            .image
+            .read(va, u64::from(end - begin))
+            .unwrap_or_default();
+        Decoder::with_ip(64, bytes, va, DecoderOptions::NONE).into_iter()
+    }
+}
+
+/// For each of `texts`, the `.rdata` addresses where it lies as a whole
+/// NUL-terminated string, from one pass over the strings there on all cores.
+pub(crate) fn strings(image: &Image<'_>, texts: &[&str]) -> Vec<Vec<u64>> {
+    let mut found = vec![Vec::new(); texts.len()];
+    let Some(rdata) = image.section(".rdata").map(|s| image.range(s)) else {
+        return found;
+    };
+    let Some(bytes) = image.read(rdata.start, rdata.end - rdata.start) else {
+        return found;
+    };
+    let mut by_text: FxHashMap<&[u8], Vec<usize>> = FxHashMap::default();
+    // Only a string of a wanted length is looked up.
+    let mut wanted_length = vec![false; texts.iter().map(|t| t.len() + 1).max().unwrap_or(0)];
+    for (t, text) in texts.iter().enumerate() {
+        by_text.entry(text.as_bytes()).or_default().push(t);
+        wanted_length[text.len()] = true;
+    }
+    // Pieces of `.rdata` that each start right after a NUL, or at its start.
+    let mut cuts: Vec<usize> = (0..STRING_PIECES)
+        .map(|i| bytes.len() * i / STRING_PIECES)
+        .map(|at| match at {
+            0 => 0,
+            at => memchr::memchr(0, &bytes[at..]).map_or(bytes.len(), |nul| at + nul + 1),
+        })
+        .chain([bytes.len()])
+        .collect();
+    cuts.dedup();
+    let pieces: Vec<Range<usize>> = cuts.windows(2).map(|w| w[0]..w[1]).collect();
+    let hits = crate::table::search(&pieces, |piece| {
+        let mut hits = Vec::new();
+        let mut at = piece.start;
+        for end in memchr::memchr_iter(0, &bytes[piece.clone()]).map(|nul| piece.start + nul) {
+            if wanted_length.get(end - at).copied().unwrap_or(false)
+                && let Some(ts) = by_text.get(&bytes[at..end])
             {
-                found[t].push(rdata.start + at as u64);
+                hits.extend(ts.iter().map(|&t| (t, rdata.start + at as u64)));
             }
             at = end + 1;
         }
-        found
+        Some(hits)
+    });
+    for (t, va) in hits.into_iter().flatten().flatten() {
+        found[t].push(va);
     }
+    found
+}
+
+/// `0..len` cut into ranges of [`PARTS_PER_TASK`], one task each.
+fn tasks(len: usize) -> Vec<Range<usize>> {
+    (0..len)
+        .step_by(PARTS_PER_TASK)
+        .map(|at| at..(at + PARTS_PER_TASK).min(len))
+        .collect()
 }
 
 /// The RVA of `va` in an image at `base`.

@@ -4,11 +4,11 @@
 use iced_x86::Instruction;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::code::Code;
+use super::code::{self, Code};
 use super::shape::{self, Step};
 use super::{How, Route, Routed, Take};
 use crate::Resolved;
-use crate::reflect::{Reflection, System};
+use crate::reflect::{Image, Reflection, System};
 
 /// A quarter or more of all systems calling a function makes it a helper,
 /// such as the ECS query calls nearly every system makes.
@@ -50,14 +50,19 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         reflection: &'f Reflection<'f>,
         known: &'f Resolved,
         routes: &'f [&'f Route],
+        strings: FxHashMap<String, Vec<u64>>,
     ) -> Self {
+        let loaders = strings
+            .into_iter()
+            .map(|(text, at)| (text, at.iter().flat_map(|&va| code.loaders(va)).collect()))
+            .collect();
         Self {
             code,
             reflection,
             known,
             routes,
             states: vec![State::Open; routes.len()],
-            loaders: loaders(code, routes),
+            loaders,
             helpers: None,
             records: None,
             decoded: FxHashMap::default(),
@@ -212,8 +217,8 @@ fn one(mut items: impl Iterator<Item = u32>) -> Option<u32> {
     items.next().is_none().then_some(first)
 }
 
-/// The functions that load each string any of `routes` names, by string.
-fn loaders(code: &Code<'_, '_>, routes: &[&Route]) -> FxHashMap<String, FxHashSet<u32>> {
+/// The `.rdata` addresses of each string any of `routes` names, by string.
+pub(super) fn strings(image: &Image<'_>, routes: &[&Route]) -> FxHashMap<String, Vec<u64>> {
     let texts: Vec<&str> = routes
         .iter()
         .filter_map(|r| match &r.how {
@@ -225,23 +230,11 @@ fn loaders(code: &Code<'_, '_>, routes: &[&Route]) -> FxHashMap<String, FxHashSe
     if texts.is_empty() {
         return FxHashMap::default();
     }
-    let addresses: Vec<(usize, u64)> = code
-        .strings(&texts)
-        .into_iter()
-        .enumerate()
-        .flat_map(|(t, found)| found.into_iter().map(move |va| (t, va)))
-        .collect();
-    let targets: Vec<u64> = addresses.iter().map(|&(_, va)| va).collect();
-    let mut by_text: FxHashMap<String, FxHashSet<u32>> = texts
+    texts
         .iter()
-        .map(|t| ((*t).to_owned(), FxHashSet::default()))
-        .collect();
-    for ((t, _), functions) in addresses.iter().zip(code.loaders(&targets)) {
-        if let Some(set) = by_text.get_mut(texts[*t]) {
-            set.extend(functions);
-        }
-    }
-    by_text
+        .zip(code::strings(image, &texts))
+        .map(|(text, addresses)| ((*text).to_owned(), addresses))
+        .collect()
 }
 
 /// How many systems there are, and how many of them call each function.

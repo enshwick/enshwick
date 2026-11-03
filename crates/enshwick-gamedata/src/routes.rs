@@ -357,10 +357,12 @@ impl Routes {
                 .enumerate()
                 .filter(|(_, r)| r.is_entry())
         };
-        let Some(code) = Code::new(image) else {
+        let strings = find::strings(image, &sided);
+        let wanted: FxHashSet<u64> = strings.values().flatten().copied().collect();
+        let Some(code) = Code::new(image, &wanted) else {
             return entries().map(|(_, r)| (r.id.as_str(), None)).collect();
         };
-        let mut finder = find::Finder::new(&code, reflection, known, &sided);
+        let mut finder = find::Finder::new(&code, reflection, known, &sided, strings);
         entries()
             .map(|(i, r)| (r.id.as_str(), finder.resolve(i)))
             .collect()
