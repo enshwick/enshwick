@@ -179,7 +179,7 @@ fn build(exe: &Path, patterns: bool) -> Result<Build, String> {
         }),
     };
     let routes = tables::Routes::embedded().map_err(|e| e.to_string())?;
-    let (routed, route_ids) = match &mut table {
+    let (count, route_ids) = match &mut table {
         Some((resolved, _)) => route(&routes, &image, &reflection, side, resolved),
         None => (0, Vec::new()),
     };
@@ -196,7 +196,7 @@ fn build(exe: &Path, patterns: bool) -> Result<Build, String> {
         code,
         code_rva: range.start - base,
         table,
-        routed,
+        routed: count,
         route_ids,
         slots,
     })
@@ -213,7 +213,7 @@ fn route(
 ) -> (usize, Vec<String>) {
     let found = routes.find(image, reflection, side, table);
     let ids = found.iter().map(|(id, _)| (*id).to_owned()).collect();
-    let routed = found
+    let count = found
         .into_iter()
         .filter(|&(id, routed)| {
             matches!(
@@ -222,7 +222,7 @@ fn route(
             )
         })
         .count();
-    (routed, ids)
+    (count, ids)
 }
 
 /// Gives `table` the attribute slots the game's archive beside `exe`
@@ -411,11 +411,11 @@ fn data(build: &Build, table: &Resolved, source: &Table) -> Result<String, Strin
     let mut known: std::collections::BTreeSet<&str> =
         build.route_ids.iter().map(String::as_str).collect();
     for other in all.iter().filter(|t| t.side() == source.side()) {
-        known.extend(other.symbols().iter().map(|s| s.id()));
-        known.extend(other.constants().iter().map(|c| c.id()));
+        known.extend(other.symbols().iter().map(tables::Symbol::id));
+        known.extend(other.constants().iter().map(tables::Constant::id));
     }
     // An `<id>.bytes` check is not an entry, and a route drops it.
-    known.retain(|id| !id.ends_with(".bytes"));
+    known.retain(|id| id.rsplit('.').next() != Some("bytes"));
     let missing: Vec<&str> = known
         .iter()
         .copied()
