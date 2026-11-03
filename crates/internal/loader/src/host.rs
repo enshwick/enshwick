@@ -205,8 +205,6 @@ pub(crate) struct Loader {
     pub(crate) reflection: Reflection<'static>,
     /// The `mods` folder.
     pub(crate) mods_dir: PathBuf,
-    /// The contract of the stub that started the loader; 0 in a dry run.
-    pub(crate) stub: u32,
     /// The `mod-configs` folder.
     pub(crate) configs_dir: PathBuf,
     /// Whether developer tools are on, by the marker file read at start.
@@ -634,6 +632,7 @@ impl Loader {
             crate::stats::world_event(self, event);
             crate::data_changes::world_event(self, event);
             crate::rate_links::world_event(event);
+            crate::chat_mute::world_event(self, event);
         }
         let Some(delivery) = self.delivery.get() else {
             return;

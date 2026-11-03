@@ -7,12 +7,13 @@ use windows_sys::Win32::Foundation::SYSTEMTIME;
 use windows_sys::Win32::System::Diagnostics::Debug::OutputDebugStringW;
 use windows_sys::Win32::System::SystemInformation::GetSystemTime;
 
-/// The folder, under the game's, of the loader's logs.
-const LOGS: &str = r"logs\enshwick";
+/// The folder, under the game's, of every log.
+const LOGS: &str = "logs";
 /// The folder, in the temporary folder, that takes the file when the game's
 /// folder takes no files.
 const TEMP_FOLDER: &str = "enshwick";
-/// The file that takes the line; the loader writes its early lines there too.
+/// The file that takes the line; the loader writes its early lines there too,
+/// and moves them all into its own log file once that opens.
 const FILE: &str = "start.log";
 /// Past this size the file starts again empty.
 const KEPT_BYTES: u64 = 64 << 10;

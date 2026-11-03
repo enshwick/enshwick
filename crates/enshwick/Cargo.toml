@@ -38,6 +38,7 @@ toml.workspace = true
 proptest.workspace = true
 criterion.workspace = true
 insta.workspace = true
+trybuild.workspace = true
 syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing"] }
 serde = { workspace = true, features = ["derive"] }
 

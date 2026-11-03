@@ -1,5 +1,5 @@
 //! The game's account actions, kick, ban and unban by account, and the
-//! loader's allowlist and chat mutes.
+//! loader's chat mutes.
 
 use crate::PlayerKey;
 use crate::abi::AccountActionType;
@@ -16,8 +16,8 @@ use super::{World, WorldError};
 pub enum AccountAction {
     /// Removes a player online from the game.
     Kick,
-    /// Puts the account on the server's ban list, online or not, and
-    /// removes its player when online.
+    /// Puts the account of a player online on the server's ban list and
+    /// removes the player.
     Ban,
     /// Takes the account off the server's ban list.
     UnBan,
@@ -35,17 +35,15 @@ impl AccountAction {
 
 impl World {
     /// Asks the game to kick, ban or unban the account `key`, as its
-    /// administrators do; the mod decides who may ask. A ban of an account
-    /// not online goes straight onto the ban list, which a dedicated server
-    /// keeps in `bannedAccounts` of `enshrouded_server.json`; a hosted
-    /// game keeps it until it ends.
+    /// administrators do; the mod decides who may ask. A dedicated server
+    /// keeps its ban list in `bannedAccounts` of `enshrouded_server.json`;
+    /// a hosted game keeps it until it ends.
     ///
     /// # Errors
     ///
     /// [`WorldError::Refused`] for a kick or a ban of an administrator
     /// online, whom the game never removes, or of a hosted game's host, a
-    /// kick of an account not online, a ban the game's list does not take
-    /// and account 0; [`WorldError::WrongThread`] off the server's game
+    /// kick or a ban of an account not online, and account 0; [`WorldError::WrongThread`] off the server's game
     /// thread or inside a step; [`WorldError::Missing`] while no server
     /// runs or on a game build that lacks the action.
     ///
@@ -68,75 +66,19 @@ impl World {
         ))
     }
 
-    /// Puts the account `key` on the loader's allowlist, or takes it off
-    /// when `listed` is false. With the server's `allowlist` setting on,
-    /// only listed accounts and administrators may join; the list keeps
-    /// its accounts with the setting off too, and a change applies from
-    /// the next join. Any thread.
-    ///
-    /// # Errors
-    ///
-    /// [`WorldError::Refused`] for account 0 or when the list's file is
-    /// not written; [`WorldError::Missing`] outside a dedicated server.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::world::World;
-    ///
-    /// fn let_in(world: &World, key: enshwick::PlayerKey) {
-    ///     if let Err(why) = world.set_allowlisted(key, true) {
-    ///         enshwick::warn!("{key:016x} not listed: {why}");
-    ///     }
-    /// }
-    /// ```
-    pub fn set_allowlisted(self, key: PlayerKey, listed: bool) -> Result<(), WorldError> {
-        WorldError::from_status((self.0.host.api().allowlist_set)(
-            self.0.host.handle(),
-            key,
-            u8::from(listed),
-        ))
-    }
-
-    /// Whether the loader's allowlist lists the account `key`, the
-    /// server's `allowlist` setting on or not. Any thread.
-    ///
-    /// # Errors
-    ///
-    /// [`WorldError::Refused`] for account 0; [`WorldError::Missing`]
-    /// outside a dedicated server.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::world::World;
-    ///
-    /// fn may_join(world: &World, key: enshwick::PlayerKey) -> bool {
-    ///     world.allowlisted(key).unwrap_or(false)
-    /// }
-    /// ```
-    pub fn allowlisted(self, key: PlayerKey) -> Result<bool, WorldError> {
-        let mut listed = 0u8;
-        WorldError::from_status((self.0.host.api().allowlist_has)(
-            self.0.host.handle(),
-            key,
-            &raw mut listed,
-        ))?;
-        Ok(listed == 1)
-    }
-
     /// Mutes the account `key` in chat, or lifts its mute when `muted` is
     /// false. The server then drops every line that player types before
     /// anyone else reads it, and tells the player now and then with one of
-    /// the game's notices; a mute lasts across restarts until it is lifted.
-    /// The mod decides who may ask. Any thread.
+    /// the game's notices. A mute belongs to the world: it is kept beside
+    /// its save and lasts across restarts until it is lifted. The mod
+    /// decides who may ask. Any thread.
     ///
     /// # Errors
     ///
     /// [`WorldError::Refused`] for account 0, for a mute of an administrator
-    /// online or of a hosted game's host, and when the list's file is not
+    /// online or of a hosted game's host, and when the world's file is not
     /// written; [`WorldError::Missing`] outside a server, the dedicated one
-    /// or the one a client hosts.
+    /// or the one a client hosts, and while no world runs.
     ///
     /// # Examples
     ///

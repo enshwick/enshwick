@@ -10,10 +10,8 @@
 //! ids that give experience or skill points, and quests. Mods' filters run
 //! after it with the verdict so far.
 //!
-//! The guard watches by default: it logs what it would refuse and lets it
-//! through, so mods' filters see it allowed, with the reason it would
-//! refuse. Enforcing, its refusals stand unless a filter allows them. A
-//! filter's refusal stands in both modes.
+//! The guard always enforces: its refusals stand unless a filter allows
+//! them, and a filter's refusal stands.
 //!
 //! The site is the handler's test of the game's own check, at the server's
 //! worker threads: clearing `al` there takes the path of a malformed action,
@@ -21,7 +19,7 @@
 
 use core::ffi::c_void;
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use enshwick::abi::{
     Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn, Registers, Status,
@@ -33,20 +31,11 @@ use crate::mid::MidLink;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
-use crate::settings::KnowledgeGuard;
 
 use super::{Layout, definition, layout, quest_set, read};
 
-/// What the guard does, from the loader's settings: one of the `MODE_`
-/// values.
-static MODE: AtomicU8 = AtomicU8::new(MODE_WATCH);
-const MODE_WATCH: u8 = 0;
-const MODE_ENFORCE: u8 = 1;
-const MODE_OFF: u8 = 2;
 static FILTERS: Registry<Registered<KnowledgeInputFn>> = Registry::new();
 static SITE: OnceLock<Site> = OnceLock::new();
-/// Requests the guard would refuse but let through, watching.
-static WOULD_REFUSE: AtomicU32 = AtomicU32::new(0);
 /// Requests refused, by the guard enforcing or by a filter.
 static REFUSED: AtomicU32 = AtomicU32::new(0);
 /// Lines logged so far; the log stops at [`LOGGED`].
@@ -67,27 +56,11 @@ struct Site {
     skill_points: usize,
 }
 
-/// Sets what the guard does, from `knowledge_guard`.
-pub(crate) fn configure(mode: KnowledgeGuard) {
-    let mode = match mode {
-        KnowledgeGuard::Watch => MODE_WATCH,
-        KnowledgeGuard::Enforce => MODE_ENFORCE,
-        KnowledgeGuard::Off => MODE_OFF,
-    };
-    MODE.store(mode, Ordering::Release);
-}
-
 /// The guard's line for the status summary, once its site is in.
 pub(crate) fn status() -> Option<String> {
     SITE.get()?;
-    let mode = match MODE.load(Ordering::Acquire) {
-        MODE_WATCH => "watching",
-        MODE_ENFORCE => "enforcing",
-        _ => "mods' filters only",
-    };
     Some(format!(
-        "{mode}; {} requests it would refuse let through, {} refused",
-        WOULD_REFUSE.load(Ordering::Relaxed),
+        "enforcing; {} refused",
         REFUSED.load(Ordering::Relaxed)
     ))
 }
@@ -127,14 +100,9 @@ fn site(loader: &Loader) -> Option<Site> {
     })
 }
 
-/// Seals the filters and adds the site when the guard is on or a mod asked.
+/// Seals the filters and adds the site.
 pub(crate) fn link(loader: &Loader) {
-    let filters = FILTERS.seal();
-    let mode = MODE.load(Ordering::Acquire);
-    let wanted = mode != MODE_OFF || !filters.is_empty();
-    if !wanted {
-        return;
-    }
+    let _filters = FILTERS.seal();
     let (Some(site), Some(_), Some(address)) = (
         site(loader),
         layout(loader),
@@ -159,12 +127,7 @@ pub(crate) fn link(loader: &Loader) {
     if status.is_ok() {
         crate::log!(
             INFO,
-            "knowledge guard on: {}",
-            match mode {
-                MODE_WATCH => "logging what a vanilla client never asks for, refusing nothing",
-                MODE_ENFORCE => "refusing what a vanilla client never asks for",
-                _ => "mods' filters only",
-            }
+            "knowledge guard on: refusing what a vanilla client never asks for"
         );
     } else {
         crate::log!(WARN, "knowledge guard off: refused ({})", status.0);
@@ -258,26 +221,15 @@ fn decide(call: &mut KnowledgeInput) -> bool {
     call.allowed != 0
 }
 
-/// The guard's own verdict on a request it refuses for `refusal`, in `mode`.
-fn guard_allows(mode: u8, refusal: u32) -> bool {
-    refusal == KnowledgeInput::ALLOWED || mode != MODE_ENFORCE
-}
-
-/// Counts and logs a request the guard would refuse, watching, when
-/// `refused` is false, or one refused.
+/// Counts and logs a refused request.
 #[cold]
-fn note(call: &KnowledgeInput, refused: bool) {
-    let (counter, verb) = if refused {
-        (&REFUSED, "refused")
-    } else {
-        (&WOULD_REFUSE, "would refuse, let through")
-    };
-    let _count = counter.fetch_add(1, Ordering::Relaxed);
+fn note(call: &KnowledgeInput) {
+    let _count = REFUSED.fetch_add(1, Ordering::Relaxed);
     let line = LINES.fetch_add(1, Ordering::Relaxed);
     if line < LOGGED {
         crate::log!(
             INFO,
-            "knowledge guard: {verb} id {:#x} (kind {}, value {}, scope {}) asked for by player {}, reason {}",
+            "knowledge guard: refused id {:#x} (kind {}, value {}, scope {}) asked for by player {}, reason {}",
             call.id,
             call.kind,
             call.value,
@@ -342,7 +294,6 @@ unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
         });
         let definition = define(layout, site, id);
         let refusal = refusal(definition, kind, value);
-        let mode = MODE.load(Ordering::Acquire);
         let mut call = KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
             player: enshwick::Entity(player),
@@ -352,13 +303,11 @@ unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
             reserved: 0,
             value,
             refusal,
-            allowed: u32::from(guard_allows(mode, refusal)),
+            allowed: u32::from(refusal == KnowledgeInput::ALLOWED),
         };
         if !decide(&mut call) {
             registers.rax &= !0xff;
-            note(&call, true);
-        } else if mode == MODE_WATCH && refusal != KnowledgeInput::ALLOWED {
-            note(&call, false);
+            note(&call);
         }
     });
 }
@@ -450,15 +399,6 @@ mod tests {
         for (def, kind, value, want) in cases {
             assert_eq!(refusal(def, kind, value), want, "{def:?} {kind} {value}");
         }
-    }
-
-    #[test]
-    fn only_an_enforcing_guard_refuses() {
-        let reason = KnowledgeInput::QUEST;
-        assert!(guard_allows(MODE_WATCH, reason));
-        assert!(guard_allows(MODE_OFF, reason));
-        assert!(!guard_allows(MODE_ENFORCE, reason));
-        assert!(guard_allows(MODE_ENFORCE, KnowledgeInput::ALLOWED));
     }
 
     #[test]

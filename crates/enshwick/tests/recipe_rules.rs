@@ -45,7 +45,10 @@ mod tests {
         assert_eq!(
             loader.recipe_rules(),
             [
-                (RecipeRuleKind::OUTPUT, "Tool_Torch01_T0".to_owned()),
+                (
+                    RecipeRuleKind::OUTPUT,
+                    "enshrouded:Tool_Torch01_T0".to_owned()
+                ),
                 (
                     RecipeRuleKind::RECIPE,
                     "you.lockers:locker.recipe".to_owned()

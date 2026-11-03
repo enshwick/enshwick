@@ -12,7 +12,7 @@ use enshwick::abi::Event;
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
-use crate::settings::{LOADER_ID, Settings};
+use crate::settings::{FILE, Settings};
 
 /// How often the files are looked at; a few stat calls each time.
 const PERIOD: Duration = Duration::from_secs(1);
@@ -108,7 +108,7 @@ fn stamp(path: &Path) -> Stamp {
 
 /// Starts watching on a thread of its own.
 pub(crate) fn start(loader: &'static Loader) {
-    let own = loader.configs_dir.join(format!("{LOADER_ID}.toml"));
+    let own = loader.mods_dir.with_file_name(FILE);
     let mut files = vec![Watched {
         owner: None,
         seen: stamp(&own),
@@ -176,11 +176,9 @@ fn changed(loader: &Loader, owner: Option<usize>) {
         crate::worlds::changed(loader, index);
         return;
     }
-    let path = loader.configs_dir.join(format!("{LOADER_ID}.toml"));
-    let (settings, problems) = Settings::read(&path, crate::allowlist::listed(&loader.mods_dir));
+    let (settings, problems) = Settings::read(&loader.mods_dir.with_file_name(FILE));
     if problems.lines.is_empty() {
         crate::diag::configure(&settings);
-        crate::greeting::configure(&settings.motd);
         crate::log::set_levels(settings);
         crate::log!(INFO, "loader settings reloaded");
         loader.emit(Event::LOADER_SETTINGS_CHANGED, None, core::ptr::null());

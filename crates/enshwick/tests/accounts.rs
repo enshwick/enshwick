@@ -41,7 +41,7 @@ mod tests {
     }
 
     #[test]
-    fn accounts_are_banned_online_or_not_and_administrators_never() {
+    fn accounts_online_are_banned_and_administrators_never() {
         let loader = enshwick::test::FakeHost::new()
             .world()
             .player(player(10, 7, 0))
@@ -59,7 +59,7 @@ mod tests {
         );
         assert_eq!(
             world.account_action(AccountAction::Ban, enshwick::PlayerKey::new(99)),
-            Ok(())
+            Err(WorldError::Refused)
         );
         assert_eq!(
             world.account_action(AccountAction::Ban, enshwick::PlayerKey::new(8)),
@@ -73,21 +73,18 @@ mod tests {
             world.account_action(AccountAction::Ban, enshwick::PlayerKey::new(0)),
             Err(WorldError::Refused)
         );
-        assert_eq!(
-            loader.banned(),
-            [enshwick::PlayerKey::new(7), enshwick::PlayerKey::new(99)]
-        );
+        assert_eq!(loader.banned(), [enshwick::PlayerKey::new(7)]);
         assert_eq!(loader.removed(), [7]);
 
         assert_eq!(
-            world.account_action(AccountAction::UnBan, enshwick::PlayerKey::new(99)),
+            world.account_action(AccountAction::UnBan, enshwick::PlayerKey::new(7)),
             Ok(())
         );
-        assert_eq!(loader.banned(), [enshwick::PlayerKey::new(7)]);
+        assert!(loader.banned().is_empty());
     }
 
     #[test]
-    fn the_allowlist_lists_each_account_once_from_any_thread() {
+    fn chat_mutes_are_missing_while_no_world_runs() {
         let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
         let status =
@@ -95,66 +92,11 @@ mod tests {
         assert_eq!(status, Status::OK);
         let world = *WORLD.get().unwrap();
 
-        assert_eq!(world.allowlisted(enshwick::PlayerKey::new(7)), Ok(false));
         assert_eq!(
-            world.set_allowlisted(enshwick::PlayerKey::new(7), true),
-            Ok(())
-        );
-        assert_eq!(
-            world.set_allowlisted(enshwick::PlayerKey::new(7), true),
-            Ok(())
-        );
-        let other =
-            std::thread::spawn(move || world.set_allowlisted(enshwick::PlayerKey::new(9), true))
-                .join()
-                .unwrap();
-        assert_eq!(other, Ok(()));
-        assert_eq!(
-            loader.allowlisted(),
-            [enshwick::PlayerKey::new(7), enshwick::PlayerKey::new(9)]
-        );
-        assert_eq!(world.allowlisted(enshwick::PlayerKey::new(7)), Ok(true));
-
-        assert_eq!(
-            world.set_allowlisted(enshwick::PlayerKey::new(7), false),
-            Ok(())
-        );
-        assert_eq!(
-            world.set_allowlisted(enshwick::PlayerKey::new(7), false),
-            Ok(())
-        );
-        assert_eq!(loader.allowlisted(), [enshwick::PlayerKey::new(9)]);
-        assert_eq!(
-            world.set_allowlisted(enshwick::PlayerKey::new(0), true),
-            Err(WorldError::Refused)
-        );
-        assert_eq!(
-            world.allowlisted(enshwick::PlayerKey::new(0)),
-            Err(WorldError::Refused)
-        );
-    }
-
-    #[test]
-    fn the_allowlist_is_missing_outside_a_dedicated_server() {
-        let loader = enshwick::test::FakeHost::new()
-            .side(enshwick::abi::Side::CLIENT)
-            .world()
-            .install();
-        // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
-        let status =
-            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, Status::OK);
-        let world = *WORLD.get().unwrap();
-
-        assert_eq!(
-            world.set_allowlisted(enshwick::PlayerKey::new(7), true),
+            world.set_muted(enshwick::PlayerKey::new(7), true),
             Err(WorldError::Missing)
         );
-        assert_eq!(
-            world.allowlisted(enshwick::PlayerKey::new(7)),
-            Err(WorldError::Missing)
-        );
-        assert!(loader.allowlisted().is_empty());
+        assert!(loader.muted().is_empty());
     }
 
     #[test]
@@ -162,6 +104,7 @@ mod tests {
         let loader = enshwick::test::FakeHost::new()
             .world()
             .host_key(enshwick::PlayerKey::new(9))
+            .world_key("world0")
             .player(player(10, 7, 0))
             .player(player(11, 8, PlayerInfo::CAN_KICK_BAN))
             .install();
@@ -197,6 +140,7 @@ mod tests {
     fn chat_mutes_are_missing_on_a_client_that_hosts_no_game() {
         let loader = enshwick::test::FakeHost::new()
             .side(enshwick::abi::Side::CLIENT)
+            .world_key("world0")
             .world()
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
@@ -217,6 +161,7 @@ mod tests {
             .side(enshwick::abi::Side::CLIENT)
             .hosting(true)
             .host_key(enshwick::PlayerKey::new(9))
+            .world_key("world0")
             .world()
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
@@ -233,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn the_host_is_never_kicked_or_banned_and_a_second_ban_is_no_error() {
+    fn the_host_is_never_kicked_or_banned() {
         let loader = enshwick::test::FakeHost::new()
             .world()
             .host_key(enshwick::PlayerKey::new(7))
@@ -257,15 +202,7 @@ mod tests {
             world.account_action(AccountAction::UnBan, enshwick::PlayerKey::new(7)),
             Ok(())
         );
-        assert_eq!(
-            world.account_action(AccountAction::Ban, enshwick::PlayerKey::new(99)),
-            Ok(())
-        );
-        assert_eq!(
-            world.account_action(AccountAction::Ban, enshwick::PlayerKey::new(99)),
-            Ok(())
-        );
-        assert_eq!(loader.banned(), [enshwick::PlayerKey::new(99)]);
+        assert!(loader.banned().is_empty());
         assert!(loader.removed().is_empty());
     }
 

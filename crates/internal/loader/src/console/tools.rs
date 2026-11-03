@@ -1,5 +1,5 @@
-//! The server administration tools: players, entities, placed pieces, mods
-//! and the game's account actions, on the game thread.
+//! The console's tools: players, entities, placed pieces and mods, on the
+//! game thread.
 
 use std::sync::atomic::Ordering;
 
@@ -9,7 +9,7 @@ use enshwick::abi::{PlayerInfo, Status};
 use crate::host::Loader;
 use crate::texts;
 
-use super::accounts::{self, Act, Refusal, Route};
+use super::accounts;
 use super::answers::{self, Loaded, Online, Seen};
 
 /// A player's name as the client sent it, safe for one line.
@@ -94,72 +94,6 @@ pub(crate) fn mods(loader: &Loader) -> String {
             })
             .collect::<Vec<_>>(),
     )
-}
-
-/// `enshwick kick|ban|unban <player or account>`: asks the game for its
-/// account action on the player or account `args` names.
-pub(crate) fn account(loader: &Loader, act: Act, args: &str) -> String {
-    let online: Vec<accounts::Online> = match crate::world::players(loader) {
-        Ok(players) => players
-            .iter()
-            .map(|p| accounts::Online {
-                name: name(p),
-                key: p.key.get(),
-                admin: is_admin(p),
-            })
-            .collect(),
-        Err(status) => return unread(status),
-    };
-    let decided = accounts::target(args, &online).and_then(|target| accounts::decide(act, &target));
-    let decision = match decided {
-        Ok(decision) => decision,
-        Err(refusal) => return refused(act, &refusal),
-    };
-    let who = &decision.who;
-    let (asked, verb) = match (act, decision.route) {
-        (Act::Kick, _) => ("console.kick.asked", "kick"),
-        (Act::Ban, Route::Handler) => ("console.ban.asked", "ban"),
-        (Act::Ban, Route::BanList) => ("console.ban.listed", "ban"),
-        (Act::Unban, _) => ("console.unban.asked", "unban"),
-    };
-    match super::admin::carry(loader, act, &decision) {
-        Ok(()) => {
-            crate::log!(INFO, "the console asked the game to {verb} {who}");
-            texts::fill(asked, &[("who", who)])
-        }
-        Err(Status::MISSING) => texts::fill("console.account.missing", &[]),
-        Err(Status::REFUSED) if decision.route == Route::Handler => {
-            texts::fill("console.account.host", &[("who", who)])
-        }
-        Err(Status::REFUSED) if decision.route == Route::BanList => {
-            texts::fill("console.ban.unlisted", &[("who", who)])
-        }
-        Err(status) => unread(status),
-    }
-}
-
-/// What the console answers when it asks the game for nothing.
-fn refused(act: Act, refusal: &Refusal) -> String {
-    match refusal {
-        Refusal::Empty => {
-            let usage = match act {
-                Act::Kick => "usage.kick",
-                Act::Ban => "usage.ban",
-                Act::Unban => "usage.unban",
-            };
-            texts::fill("console.usage", &[("usage", usage)])
-        }
-        Refusal::Unknown(word) => texts::fill("console.account.unknown", &[("word", word)]),
-        Refusal::Shared(word, keys) => texts::fill(
-            "console.account.shared",
-            &[("word", word), ("accounts", &accounts::listed(keys))],
-        ),
-        Refusal::Admin(name) => texts::fill("console.account.admin", &[("name", name)]),
-        Refusal::Offline(key) => texts::fill(
-            "console.account.offline",
-            &[("account", &format!("{key:016x}"))],
-        ),
-    }
 }
 
 /// Why the world did not read.

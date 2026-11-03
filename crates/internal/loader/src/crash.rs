@@ -1,8 +1,8 @@
 //! Crash blame: when the process dies of a fault nothing handled, the loader
 //! names the mod whose code faulted, whose callback the loader was running,
-//! or whose code was on the faulting thread's stack, in
-//! `logs/enshwick/crash.log`, and the next start shows it in its log and the
-//! status summary.
+//! or whose code was on the faulting thread's stack, in the loader's log
+//! file and in `logs/enshwick-crash_<date>_<time>.log`, and the next start
+//! shows it in its log and the status summary.
 //!
 //! Only a fault that ends the process is reported: the loader writes when
 //! the process's last-chance filter runs, or when the game's crash handler
@@ -53,6 +53,12 @@ const FRAMES: usize = 48;
 const NAME: usize = 64;
 /// The crash line's room.
 const LINE: usize = 768;
+/// The source the crash files are named after in `logs/`.
+const CRASH_SOURCE: &str = "enshwick-crash";
+/// Crash files kept; older ones are deleted at start.
+const KEPT_CRASHES: usize = 10;
+/// The longest crash file path, in UTF-16 units with its NUL.
+const CRASH_PATH: usize = 1024;
 
 /// A module's address range and whom it belongs to, kept without
 /// allocation for the filter.
@@ -218,7 +224,7 @@ impl Line {
     }
 }
 
-/// The fault in words, as `crash.log` keeps it: time, code, address, whom it
+/// The fault in words, as the crash file keeps it: time, code, address, whom it
 /// is blamed on and where, and what was accessed.
 pub(crate) fn describe(
     line: &mut Line,
@@ -303,8 +309,11 @@ pub(crate) fn describe(
 /// What the filter needs, set up at start.
 struct State {
     ranges: Box<[Range]>,
-    /// `crash.log`, opened for appending.
+    /// The loader's log file of this run, opened for appending.
     log: usize,
+    /// `<logs>\enshwick-crash_` in UTF-16, without a NUL: the crash file's
+    /// path up to its time.
+    crash_file: Box<[u16]>,
     /// `mods/enshwick/last-crash.txt`, rewritten with the last crash.
     last: usize,
 }
@@ -538,12 +547,21 @@ pub(crate) fn range_of(module: HMODULE) -> Option<(usize, usize)> {
 
 /// Opens `path` for the filter, `access` as given; 0 when it cannot.
 fn open(path: &Path, access: u32) -> usize {
-    let wide: Vec<u16> = path
-        .as_os_str()
-        .to_string_lossy()
-        .encode_utf16()
-        .chain(Some(0))
-        .collect();
+    let wide: Vec<u16> = wide(path).into_iter().chain(Some(0)).collect();
+    open_wide(&wide, access)
+}
+
+/// `path` in UTF-16, without a NUL.
+fn wide(path: &Path) -> Vec<u16> {
+    path.as_os_str().to_string_lossy().encode_utf16().collect()
+}
+
+/// Opens the NUL-terminated UTF-16 path `wide`, `access` as given; 0 when
+/// it cannot. Allocates nothing, so the report may call it.
+fn open_wide(wide: &[u16], access: u32) -> usize {
+    if wide.last() != Some(&0) {
+        return 0;
+    }
     // SAFETY: `wide` is a NUL-terminated UTF-16 path alive for the call, and
     // the other arguments are plain values or null; the handle stays open for
     // the process.
@@ -565,14 +583,50 @@ fn open(path: &Path, access: u32) -> usize {
     }
 }
 
+/// Writes `prefix`, the crash's `time` as `YYYY-MM-DD_HH-MM-SS`, `.log` and
+/// a NUL into `out`; the length written, or `None` when it does not fit.
+/// Allocates nothing.
+fn crash_file_name(prefix: &[u16], time: &SYSTEMTIME, out: &mut [u16]) -> Option<usize> {
+    let mut at = 0;
+    let mut put = |unit: u16| -> Option<()> {
+        *out.get_mut(at)? = unit;
+        at += 1;
+        Some(())
+    };
+    for &unit in prefix {
+        put(unit)?;
+    }
+    let fields = [
+        (time.wYear, 4, u16::from(b'-')),
+        (time.wMonth, 2, u16::from(b'-')),
+        (time.wDay, 2, u16::from(b'_')),
+        (time.wHour, 2, u16::from(b'-')),
+        (time.wMinute, 2, u16::from(b'-')),
+        (time.wSecond, 2, 0),
+    ];
+    for (value, digits, after) in fields {
+        for place in (0..digits).rev() {
+            put(u16::from(b'0') + value / 10u16.pow(place) % 10)?;
+        }
+        if after != 0 {
+            put(after)?;
+        }
+    }
+    for &byte in b".log\0" {
+        put(u16::from(byte))?;
+    }
+    Some(at)
+}
+
 /// The last crash of the session before, if it crashed.
 pub(crate) fn last() -> Option<&'static str> {
     LAST.get().map(String::as_str)
 }
 
 /// Starts blaming crashes on `modules`, `(index, id, start, end)`, writing
-/// `crash.log` to `logs_dir` and the last crash to `enshwick/` in
-/// `mods_dir`; reads the last session's crash first.
+/// each crash to the loader's log file, to a crash file of its own in
+/// `logs_dir` and to `enshwick/last-crash.txt` in `mods_dir`; reads the last
+/// session's crash first and deletes the oldest crash files.
 pub(crate) fn install(modules: &[(usize, String, usize, usize)], logs_dir: &Path, mods_dir: &Path) {
     let own = mods_dir.join(crate::settings::LOADER_ID);
     let _made = std::fs::create_dir_all(&own);
@@ -585,13 +639,15 @@ pub(crate) fn install(modules: &[(usize, String, usize, usize)], logs_dir: &Path
         let _first = LAST.set(text);
     }
     let _cleared = std::fs::write(&last_path, "");
+    crate::log::prune(logs_dir, CRASH_SOURCE, KEPT_CRASHES);
     let ranges = modules
         .iter()
         .map(|(owner, id, start, end)| Range::new(*start, *end, ModIndex::new(*owner), id))
         .collect();
     let state = State {
         ranges,
-        log: open(&logs_dir.join("crash.log"), FILE_APPEND_DATA),
+        log: crate::log::loader_file().map_or(0, |path| open(path, FILE_APPEND_DATA)),
+        crash_file: wide(&logs_dir.join(format!("{CRASH_SOURCE}_"))).into_boxed_slice(),
         last: open(&last_path, GENERIC_READ | GENERIC_WRITE),
     };
     if STATE.set(state).is_err() {
@@ -658,6 +714,22 @@ unsafe fn report(pointers: *const EXCEPTION_POINTERS, thread: u32) {
     // and `thread` stopped in the fault or running this.
     unsafe { record(state, pointers, thread, line) };
     write(state.log, line.as_bytes());
+    let mut time = SYSTEMTIME {
+        wYear: 0,
+        wMonth: 0,
+        wDayOfWeek: 0,
+        wDay: 0,
+        wHour: 0,
+        wMinute: 0,
+        wSecond: 0,
+        wMilliseconds: 0,
+    };
+    // SAFETY: `time` is a writable `SYSTEMTIME`.
+    unsafe { GetSystemTime(&raw mut time) };
+    let mut name = [0u16; CRASH_PATH];
+    if let Some(len) = crash_file_name(&state.crash_file, &time, &mut name) {
+        write(open_wide(&name[..len], FILE_APPEND_DATA), line.as_bytes());
+    }
     rewind(state.last);
     write(state.last, line.as_bytes());
 }

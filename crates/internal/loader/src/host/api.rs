@@ -43,13 +43,13 @@ use super::entries::ui::{
     fog_open, fog_read, map_marker_types, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget,
 };
 use super::entries::world::{
-    account_action, actions, allowlist_has, allowlist_set, build_rights, chat, chat_mute_has,
-    chat_mute_set, component, component_write, destroy, emit, entities, entity_template, feature,
-    forget_game_settings, game_event, game_settings, hosting, keep_game_settings, map_frame,
-    map_markers, notify, player, players, rename_filter, run_console, save_world, server_world,
-    set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather, spawn, status,
-    teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control, voxel_read,
-    weather_at, weather_fronts, world_key, world_persists, world_quiet,
+    account_action, actions, build_rights, chat, chat_mute_has, chat_mute_set, component,
+    component_write, destroy, emit, entities, entity_template, feature, forget_game_settings,
+    game_event, game_settings, hosting, keep_game_settings, map_frame, map_markers, notify, player,
+    players, rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
+    set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
+    terrain_materials, time_of_day, time_speed_control, voxel_read, weather_at, weather_fronts,
+    world_key, world_persists, world_quiet,
 };
 
 /// The table handed to every mod.
@@ -222,8 +222,6 @@ pub(crate) static API: HostApi = HostApi {
     world_persists,
     map_markers,
     account_action,
-    allowlist_set,
-    allowlist_has,
     subscribe_tick,
     set_tick_every,
     map_frame,

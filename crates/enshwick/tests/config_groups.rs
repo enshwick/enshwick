@@ -6,7 +6,7 @@ mod tests {
     use enshwick::config::Config;
 
     /// Comfort rules.
-    #[enshwick::config]
+    #[enshwick::config(group)]
     #[derive(Debug, Default, PartialEq)]
     struct Comfort {
         /// Comfort per piece of furniture, times this factor.

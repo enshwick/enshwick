@@ -41,7 +41,7 @@ you make one that lets four times as many wood logs fit in one inventory slot.
 
 1. Copy the folder into the game's `mods/` folder, on the server and in every
    player's game: the join check lets only players with the same pack in.
-2. Start the game. The pack's log, `logs/enshwick/mods/you.material-stacks.log`,
+2. Start the game. The pack's log, `logs/you.material-stacks_<date>_<time>.log`,
    counts what it changed:
 
    ```text

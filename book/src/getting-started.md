@@ -263,9 +263,9 @@ enshwick::declare_mod!(AltarCount);
 
 ## Where the logs are
 
-The loader writes to `logs/enshwick/` in the game's folder: `loader.log` says
-which mods loaded, were skipped or turned off, and why, and `mods/<id>.log`
-holds your mod's lines. [Log files](logging.md#log-files) has the rest.
+The loader writes to `logs/` in the game's folder, one file per source and
+run: `enshwick_<date>_<time>.log` says which mods loaded, were skipped or
+turned off, and why, and `<mod id>_<date>_<time>.log` holds your mod's lines. [Log files](logging.md#log-files) has the rest.
 
 ## What to read next
 

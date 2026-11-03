@@ -27,7 +27,7 @@ of
 is the mod; the loader tells it apart by its export table before loading it.
 Other DLLs in the folder are the mod's own, and the mod's imports resolve
 from its folder. A second DLL with the four exports in the same folder is
-skipped, with both files named in `loader.log`. A DLL built for another ABI
+skipped, with both files named in the loader's log. A DLL built for another ABI
 version, or with only part of the interface, is logged and unloaded.
 
 The folder name and the file name are free; the id in the manifest names the
@@ -38,7 +38,7 @@ loader runs as a mod of its own; its entry's file is `<id>/pack.toml`.
 To turn a mod off, move its folder out of `mods/`; to remove it, delete the
 folder. The loader keeps no list of mods. A DLL directly in `mods/`, a
 `mods/chain/` folder and a `mods/enshwick/mods.toml` are not read; on start,
-`loader.log` names each one it finds.
+the loader's log names each one it finds.
 
 ## The record of a world
 
@@ -47,7 +47,7 @@ At every world load the loader writes `mods.lock` into that world's data,
 SHA-256, the game build, and each running mod's id, version, folder and
 SHA-256, in load order. Copying the folders it names sets up the same server again, and comparing two records
 shows where two servers differ. What changed since the world last loaded
-goes to `loader.log`, such as
+goes to the loader's log, such as
 `since this world last loaded: you.trading-post 0.3.0 -> 0.3.1`.
 
 ## The ABI

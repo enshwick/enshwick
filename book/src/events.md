@@ -45,7 +45,7 @@ The types are in
 | `BuildingPlaced` | `BuildingData` | a player placed a building piece or prop; raised after the step that placed it | game |
 | `BuildingRemoved` | `BuildingData` | a player picked up or tore down a placed piece; the entity no longer exists | game |
 | `SettingsChanged` | none | a settings file of the mod in the running world changed, the console or the Mods screen changed a setting, or the server of another's world sent new values | not fixed: loader or game |
-| `LoaderSettingsChanged` | none | `mod-configs/enshwick.toml` changed | loader |
+| `LoaderSettingsChanged` | none | `enshwick.toml` in the game's folder changed | loader |
 | `JoinRefused` | none | the join check kept this client out of a server | game |
 | `AltarsChanged` | none | a Flame Altar of the server's world was placed, removed, moved, raised a level or had its zone built anew, for a mod that called `load.altars()` ([altars](altars.md)) | game |
 | `SettingsReplaced` | none | a world loaded, so its settings apply, or stopped, so the defaults apply again; on a client, the server of another's world sent its settings, or the client left it | game |

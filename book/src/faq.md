@@ -2,19 +2,21 @@
 
 ## Where are the logs?
 
-Everything is under `logs/enshwick/` in the game's folder (beside
-`enshrouded.exe` or `enshrouded_server.exe`).
+Everything is under `logs/` in the game's folder (beside `enshrouded.exe` or
+`enshrouded_server.exe`), one file per source and run, such as
+`enshwick_2026-11-03_10-00-00.log` for the loader.
 [Log files](logging.md#log-files) lists each file and how long it is kept,
 and [Levels](logging.md#levels) sets how much is written. One more file,
-`start.log`, says why the loader did not start when it stopped early; see
-[Nothing loads at all](#nothing-loads-at-all).
+`start.log`, stays there only when the loader did not start, and says why;
+see [Nothing loads at all](#nothing-loads-at-all).
 
-To ask for help, attach `report.md` to an issue. It holds the versions, your
-system, the status summary, the files in `mods/` and the latest warnings and
-errors, mods' messages included. Paths show the game's folder as `<game>` and
-leave out your user name. Read the report before you share it.
+To ask for help, attach two files to an issue: the loader's file of the run
+that went wrong, `logs/enshwick_<date>_<time>.log`, and after a crash the
+crash file, `logs/enshwick-crash_<date>_<time>.log`. The loader's file holds
+the versions, your system and every line the loader wrote; paths in it show
+your folders, so read it before you share it.
 
-## What is in crash.log?
+## What is in a crash file?
 
 A line for each crash: a hardware fault nothing handled, such as an access
 violation, an illegal or privileged instruction, an integer division by zero
@@ -41,20 +43,22 @@ is blamed on:
 The offset in brackets is the address inside the DLL that holds it, and the
 last part is what the faulting access read, wrote or ran.
 
-`crash.log` is appended to across sessions, unlike the other logs. The next
-start logs the last crash as a warning and shows it at the top of
-`status.log`; the line waits in `mods/enshwick/last-crash.txt` until
-then.
+Each crash writes its line to the loader's file of that run and to a file of
+its own, `logs/enshwick-crash_<date>_<time>.log`; the newest 10 crash files
+are kept. The next start logs the last crash as a warning and shows it at
+the top of the status summary; the line waits in
+`mods/enshwick/last-crash.txt` until then.
 
-## What is in status.log?
+## Where is the status summary?
 
-The latest status summary: the mods, whether each runs, and what they share.
-[Status summary](logging.md#status-summary) lists what it holds and when it
-is written.
+`enshwick status` on a dedicated server's console writes it into the
+loader's log: the mods, whether each runs, and what they share.
+[Status summary](logging.md#status-summary) lists what it holds.
 
 ## Why is my mod off?
 
-Look in `loader.log` for the mod's DLL name or id, and in `mods/<id>.log`. A
+Look in the loader's log for the mod's DLL name or id, and in the mod's own
+file, `logs/<mod id>_<date>_<time>.log`. A
 mod that never initialised was skipped; a mod that initialised and stopped
 was turned off. A turned-off mod's log has a line `off: <reason>` at `error`;
 when the mod itself returned `Err(Off)` from `init`, the line before it, at
@@ -62,29 +66,29 @@ when the mod itself returned `Err(Off)` from `init`, the line before it, at
 
 ### Nothing loads at all
 
-| Message in `loader.log`                                                                         | What it means                                                                         |
+| Message in the loader's log                                                                         | What it means                                                                         |
 | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `unknown game build <guid>/<age>; the game runs vanilla until Enshwick has its build table`     | The game was updated and `build_patterns = false` in `mod-configs/enshwick.toml`      |
+| `unknown game build <guid>/<age>; the game runs vanilla until Enshwick has its build table`     | The game was updated and `build_patterns = false` in `enshwick.toml`                  |
 | `<name> is not where the build table says; nothing loads`                                       | The build looks known but does not match; treat it as unknown                         |
 | `this is not Enshrouded or its dedicated server; nothing loads`                                 | `powrprof.dll` was loaded by another program                                          |
 
-When `loader.log` is missing or empty, read `logs/enshwick/start.log`. The
-stub and the loader write a line there, with the Windows error, when they
-stop before the log opens: the loader DLL is missing or does not load, or
-the game's folder takes no files. When the game's folder takes no files,
-the line goes to `enshwick/start.log` in the Windows temporary folder
-(`%TEMP%`) instead. Each line starts with its date and time (UTC), and the
-file keeps lines from earlier sessions.
+When the loader's log is missing or empty, read `logs/start.log`. The stub
+and the loader write a line there, with the Windows error, when they stop
+before the log opens: the loader DLL is missing or does not load, or the
+game's folder takes no files. When the game's folder takes no files, the line
+goes to `enshwick/start.log` in the Windows temporary folder (`%TEMP%`)
+instead. Each line starts with its date and time (UTC). Once the loader
+starts again, its file takes these lines in and `start.log` goes.
 
 A panic in the loader or a mod writes a line at `error` with the message,
-the place in the code and the thread, to `loader.log` or to the mod's log.
+the place in the code and the thread, to the loader's log or to the mod's log.
 
 On an unknown build every mod's hold applies; see
 [The game stops before the world loads](#the-game-stops-before-the-world-loads).
 
 ### Some features are off after a game update
 
-`loader.log` reads `game build <guid>/<age> has no build table yet: <n>
+The loader's log reads `game build <guid>/<age> has no build table yet: <n>
 entries found by engine routes or their code patterns, <m> missing; ...`, and at `debug` the
 missing entries. The game was updated, and
 the loader runs it on the code patterns of the newest build table it has.
@@ -185,8 +189,8 @@ Put Enshwick's `powrprof.dll` back into the game's folder. Another mod's
 mod's `dinput8.dll`, `winmm.dll` or `dbghelp.dll` stays beside the game and
 runs next to Enshwick.
 
-The status summary, `report.md` and the Mods screen list other mods' proxy
-DLLs beside the game.
+The status summary and the Mods screen list other mods' proxy DLLs beside the
+game.
 
 Under Proton, each proxy needs its name in the overrides, such as
 `WINEDLLOVERRIDES="powrprof,dinput8=n,b" %command%` beside a `dinput8.dll`.
@@ -213,7 +217,7 @@ In another version: 1
 you.trading-post: needs 0.2.0, you have 0.1.0
 ```
 
-`loader.log` then has
+The loader's log then has
 `join refused: the server runs mods this client lacks`. A server that lets a
 client in and kicks it later for its mods sends the same list, which shows
 once the client is back in the menu. Other cases do not keep the player out:

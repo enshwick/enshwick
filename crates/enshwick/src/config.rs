@@ -30,7 +30,9 @@ pub use values::{__check_field, __entry};
 ///
 /// - `file = "name"`, the file `<stem>-mod-settings/<id>/name.toml`,
 ///   `settings.toml` by default; a mod with several settings types names a
-///   file for each, and two types of one mod with one file turn it off;
+///   file for each, and two types of one crate with one file fail the build;
+/// - `group`, for a type that is a `#[config(group)]` field of another and
+///   writes no file of its own;
 /// - `validate = path`, a check of its own: when it refuses, the mod keeps
 ///   the values it had, the defaults as a world loads;
 /// - `text = "key"`, the text key of the whole set, `config` by default.
@@ -51,10 +53,32 @@ pub use values::{__check_field, __entry};
 ///   default;
 /// - `secret`, for a value such as a password: never shown, sent to a
 ///   client, changed in game or logged;
-/// - `#[config(group)]` on a field whose type is a `Config` of its own: its
-///   settings are a table of the file, `[<field>]`, with dotted keys such as
-///   `<field>.<key>`, and the Mods screen shows them together. A group's
-///   fields take their own ranges and texts.
+/// - `#[config(group)]` on a field whose type is declared
+///   `#[enshwick::config(group)]`: its settings are a table of the file,
+///   `[<field>]`, with dotted keys such as `<field>.<key>`, and the Mods
+///   screen shows them together. A group's fields take their own ranges and
+///   texts.
+///
+/// Two settings types of one crate that write one file fail the build, the
+/// error naming the file and pointing at both types:
+///
+/// ```compile_fail,E0428
+/// /// Altars.
+/// #[enshwick::config]
+/// #[derive(Default)]
+/// struct Altars {
+///     /// Altars per player.
+///     altars: u8,
+/// }
+///
+/// /// Zones.
+/// #[enshwick::config]
+/// #[derive(Default)]
+/// struct Zones {
+///     /// Zone size.
+///     size: u8,
+/// }
+/// ```
 ///
 /// The derive alone, without `#[serde(deny_unknown_fields)]`, fails the
 /// build, so a type is declared through the attribute:
@@ -319,6 +343,19 @@ pub fn __file_name(name: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
+
+/// A settings type declared `#[enshwick::config(group)]`, a table of another
+/// settings type's file.
+#[doc(hidden)]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is a `#[config(group)]` field, so declare it `#[enshwick::config(group)]`",
+    label = "declared without `group`"
+)]
+pub trait __Group: Config {}
+
+/// Fails the build unless `T` is declared as a group.
+#[doc(hidden)]
+pub const fn __group<T: __Group>() {}
 
 #[cfg(test)]
 mod tests;

@@ -22,7 +22,6 @@ arc-swap.workspace = true
 bytemuck.workspace = true
 enshwick = { workspace = true, features = ["unstable"] }
 enshwick-gamedata.workspace = true
-memchr.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true
 semver.workspace = true

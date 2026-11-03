@@ -1,15 +1,15 @@
 //! Player actions in the interface: the actions the server offers, drawn
 //! with the game's settings rows and buttons, on the Mods screen and in a
 //! window of their own; a line on the HUD while an action with a hint is at
-//! hand, and a key that opens the window there.
+//! hand, and F7 opens the window there.
 //!
 //! The key is read once a frame while the HUD draws, so never in a menu,
 //! and only while the game's window has the focus. It is one the game's
-//! text chat cannot type into, an F key by default.
+//! text chat cannot type into.
 
 use core::cell::RefCell;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::abi::UiWidget;
 use enshwick::actions::Value;
@@ -26,54 +26,16 @@ use super::{HudItem, Painter, copy};
 const PLAYERS_PER_PAGE: usize = 5;
 /// Mods the list of mods with actions shows.
 const MODS_PER_PAGE: usize = 5;
-/// `VK_F7`, the key that opens the window by default.
-const DEFAULT_KEY: u32 = 0x76;
-
-/// The virtual key that opens the window at a hint; 0 for none.
-static KEY: AtomicU32 = AtomicU32::new(DEFAULT_KEY);
+/// `VK_F7`, the key that opens the window at a hint; fixed until mods
+/// declare their own controls.
+const KEY: u32 = 0x76;
 /// The key's name, for the hint.
-static KEY_NAME: Mutex<String> = Mutex::new(String::new());
+const KEY_NAME: &str = "F7";
+
 /// Whether the key was down last frame.
 static WAS_DOWN: AtomicBool = AtomicBool::new(false);
 /// Asked to open the window, for a hint's mod and action.
 static OPEN: Mutex<Option<(String, String)>> = Mutex::new(None);
-
-/// The virtual key and its name for `name` in the loader's settings: F1 to
-/// F12, a letter or a digit; "" or "off" for none.
-fn parse_key(name: &str) -> Option<(u32, String)> {
-    let upper = name.trim().to_ascii_uppercase();
-    if upper.is_empty() || upper == "OFF" {
-        return Some((0, String::new()));
-    }
-    if let Some(n) = upper.strip_prefix('F').and_then(|n| n.parse::<u32>().ok())
-        && (1..=12).contains(&n)
-    {
-        return Some((0x6f + n, upper));
-    }
-    match upper.as_bytes() {
-        [c] if c.is_ascii_uppercase() || c.is_ascii_digit() => Some((u32::from(*c), upper)),
-        _ => None,
-    }
-}
-
-/// Takes the key from the loader's settings.
-pub(crate) fn configure(name: &str) {
-    let (key, shown) = parse_key(name).unwrap_or_else(|| {
-        crate::log!(WARN, "actions_key {name:?} is no key: F7 opens actions");
-        (DEFAULT_KEY, "F7".to_owned())
-    });
-    KEY.store(key, Ordering::Relaxed);
-    *KEY_NAME.relock() = shown;
-}
-
-fn key_name() -> String {
-    let name = KEY_NAME.relock();
-    if name.is_empty() {
-        "F7".to_owned()
-    } else {
-        name.clone()
-    }
-}
 
 /// Whether the game's window has the focus.
 fn focused() -> bool {
@@ -113,25 +75,19 @@ fn pressed(key: u32) -> bool {
 /// presses the key; runs while the HUD draws.
 pub(super) fn hud(items: &mut Vec<HudItem>) {
     let hints = crate::actions::heard(|h| h.hints.clone());
-    let key = KEY.load(Ordering::Relaxed);
     let Some(first) = hints.first() else {
         WAS_DOWN.store(false, Ordering::Relaxed);
         return;
     };
-    let name = key_name();
     for hint in &hints {
-        let line = if key == 0 {
-            format!("{}: {}", hint.label, hint.subject)
-        } else {
-            texts::fill(
-                "actions.hint",
-                &[
-                    ("key", &name),
-                    ("label", &hint.label),
-                    ("subject", &hint.subject),
-                ],
-            )
-        };
+        let line = texts::fill(
+            "actions.hint",
+            &[
+                ("key", KEY_NAME),
+                ("label", &hint.label),
+                ("subject", &hint.subject),
+            ],
+        );
         items.push(HudItem {
             anchor: UiWidget::BOTTOM_CENTER,
             kind: UiWidget::LABEL,
@@ -140,7 +96,7 @@ pub(super) fn hud(items: &mut Vec<HudItem>) {
             value: 0.0,
         });
     }
-    if key != 0 && pressed(key) {
+    if pressed(KEY) {
         open(first);
     }
 }
@@ -563,16 +519,6 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn keys_are_read_from_their_names() {
-        assert_eq!(parse_key("f7"), Some((0x76, "F7".to_owned())));
-        assert_eq!(parse_key("F12"), Some((0x7b, "F12".to_owned())));
-        assert_eq!(parse_key("k"), Some((u32::from(b'K'), "K".to_owned())));
-        assert_eq!(parse_key("off"), Some((0, String::new())));
-        assert_eq!(parse_key("F13"), None);
-        assert_eq!(parse_key("Esc"), None);
-    }
 
     #[test]
     fn numbers_snap_to_their_steps_and_count_their_stops() {

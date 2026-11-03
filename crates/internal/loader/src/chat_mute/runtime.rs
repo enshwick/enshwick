@@ -7,12 +7,13 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
+use enshwick::abi::Event;
+
 use crate::host::Loader;
 use crate::locks::Relock;
-use crate::settings::LOADER_ID;
 use crate::texts;
 
-use super::{FILE, SetMuteError, changed, protected, tell};
+use super::{FILE, SetMuteError, changed, parse, protected, tell};
 
 /// The mutes' state.
 struct State {
@@ -35,9 +36,9 @@ static STATE: State = State {
     )),
 };
 
-/// The file in the game's `data_dir`.
-fn path(loader: &Loader) -> PathBuf {
-    loader.mods_dir.join(LOADER_ID).join(FILE)
+/// The file of the world the server runs; `None` while none runs.
+fn path(loader: &Loader) -> Option<PathBuf> {
+    crate::saves::world_key(loader).map(|key| crate::world_folders::loader_data(key, FILE))
 }
 
 fn keep(keys: Vec<u64>) {
@@ -66,19 +67,31 @@ pub(crate) fn serving(loader: &Loader) -> bool {
     loader.side == enshwick::abi::Side::SERVER || crate::world::hosting()
 }
 
-/// Reads the file at start; a file that does not read mutes nobody and
-/// says so.
-pub(crate) fn start(loader: &Loader) {
-    let path = path(loader);
+/// Reads the world's file as it loads, and mutes nobody once it shuts
+/// down; a file that does not read mutes nobody and says so.
+pub(crate) fn world_event(loader: &Loader, event: Event) {
+    if event == Event::SHUTDOWN_STARTED {
+        keep(Vec::new());
+        return;
+    }
+    if event != Event::WORLD_LOADED {
+        return;
+    }
+    let Some(path) = path(loader) else {
+        keep(Vec::new());
+        return;
+    };
     let text = match std::fs::read_to_string(&path) {
         Ok(text) => text,
-        Err(e) if e.kind() == ErrorKind::NotFound => return,
         Err(e) => {
-            crate::log!(WARN, "chat mutes: {} does not read: {e}", path.display());
+            if e.kind() != ErrorKind::NotFound {
+                crate::log!(WARN, "chat mutes: {} does not read: {e}", path.display());
+            }
+            keep(Vec::new());
             return;
         }
     };
-    let (keys, bad) = crate::allowlist::parse(&text);
+    let (keys, bad) = parse(&text);
     if !bad.is_empty() {
         crate::log!(
             WARN,
@@ -103,14 +116,14 @@ pub(crate) fn has(_loader: &Loader, key: u64) -> bool {
 /// # Errors
 ///
 /// [`SetMuteError::Protected`] for a mute of an administrator online or the
-/// hosted game's host; [`SetMuteError::Write`] when the file does not read
-/// or is not written.
+/// hosted game's host; [`SetMuteError::NoWorld`] while no world runs;
+/// [`SetMuteError::Write`] when the file does not read or is not written.
 pub(crate) fn set(loader: &Loader, key: u64, muted: bool, who: &str) -> Result<(), SetMuteError> {
     if muted && protected(key, admin_online(loader, key), crate::admission::host()) {
         return Err(SetMuteError::Protected);
     }
     let _one = STATE.writing.relock();
-    let path = path(loader);
+    let path = path(loader).ok_or(SetMuteError::NoWorld)?;
     let text = match std::fs::read_to_string(&path) {
         Ok(text) => text,
         Err(e) if e.kind() == ErrorKind::NotFound => String::new(),
@@ -118,11 +131,11 @@ pub(crate) fn set(loader: &Loader, key: u64, muted: bool, who: &str) -> Result<(
     };
     let Some(text) = changed(&text, key, muted) else {
         // The file says so already, perhaps edited by hand: the list follows it.
-        keep(crate::allowlist::parse(&text).0);
+        keep(parse(&text).0);
         return Ok(());
     };
     enshwick::files::write_atomically(&path, &text)?;
-    keep(crate::allowlist::parse(&text).0);
+    keep(parse(&text).0);
     crate::log!(
         INFO,
         "{who} {} {key:016x} in chat",

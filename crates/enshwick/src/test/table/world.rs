@@ -801,7 +801,7 @@ pub(crate) extern "system" fn account_action(
         match action {
             AccountActionType::UN_BAN => s.banned.retain(|&banned| banned != account),
             _ if admin || s.host.host_key == Some(account) => return Status::REFUSED,
-            AccountActionType::KICK if online.is_none() => return Status::REFUSED,
+            _ if online.is_none() => return Status::REFUSED,
             _ => {
                 if action == AccountActionType::BAN && !s.banned.contains(&account) {
                     s.banned.push(account);
@@ -814,47 +814,6 @@ pub(crate) extern "system" fn account_action(
         }
         Status::OK
     })
-}
-
-pub(crate) extern "system" fn allowlist_set(
-    _me: ModHandle,
-    account: crate::PlayerKey,
-    listed: u8,
-) -> Status {
-    if account == crate::PlayerKey::new(0) || listed > 1 {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        if s.host.side != Side::SERVER {
-            return Status::MISSING;
-        }
-        let at = s.allowlisted.iter().position(|&k| k == account);
-        match (listed == 1, at) {
-            (true, None) => s.allowlisted.push(account),
-            (false, Some(at)) => {
-                s.allowlisted.remove(at);
-            }
-            _ => {}
-        }
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn allowlist_has(
-    _me: ModHandle,
-    account: crate::PlayerKey,
-    listed: *mut u8,
-) -> Status {
-    if account == crate::PlayerKey::new(0) || listed.is_null() {
-        return Status::BAD_ARGS;
-    }
-    let has = with(None, |s| {
-        (s.host.side == Side::SERVER).then(|| s.allowlisted.contains(&account))
-    });
-    match has {
-        Some(has) => put(listed, u8::from(has)),
-        None => Status::MISSING,
-    }
 }
 
 /// Whether the fake runs a server, the dedicated one or one a client hosts.
@@ -871,7 +830,7 @@ pub(crate) extern "system" fn chat_mute_set(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if !serving(s) {
+        if !serving(s) || s.host.world_key.is_none() {
             return Status::MISSING;
         }
         let admin = s

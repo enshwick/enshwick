@@ -92,16 +92,14 @@ pub(super) fn wait_for_window(limit: Duration) -> Duration {
 pub(super) struct Begun {
     /// The `mods` folder.
     pub(super) mods_dir: PathBuf,
-    /// The first report's thread.
-    pub(super) report: Option<std::thread::JoinHandle<()>>,
     /// What was wrong in the loader settings file, a line each.
     pub(super) settings_problems: Vec<String>,
     /// Whether developer tools are on, by the file read once at start.
     pub(super) developer_tools: bool,
 }
 
-/// Creates `mods/`, reads the loader settings, opens the log and starts
-/// writing the first report; `None` when the folders cannot be made.
+/// Creates `mods/`, reads the loader settings and opens the log; `None`
+/// when the folders cannot be made.
 pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     crate::early::log_panics();
     let Some(game_dir) = game_dir() else {
@@ -120,25 +118,21 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
             return None;
         }
     }
-    let settings_file = game_dir
-        .join("mod-configs")
-        .join(format!("{}.toml", crate::settings::LOADER_ID));
-    let listed = crate::allowlist::listed(&mods_dir);
-    let (settings, settings_problems) = crate::settings::Settings::read(&settings_file, listed);
+    let (settings, settings_problems) =
+        crate::settings::Settings::read(&game_dir.join(crate::settings::FILE));
     crate::status::mark_start();
     crate::diag::configure(&settings);
-    let side = identify().map(|(side, _, _)| side);
     let developer_tools = crate::developer_tools::marked(&game_dir);
-    crate::knowledge::guard::configure(settings.knowledge_guard);
-    crate::admission::configure(&settings);
-    crate::allowlist::configure(&settings);
-    crate::ui::configure_actions_key(&settings.actions_key);
-    crate::texts::configure(&settings.language, side == Some(Side::SERVER));
     builds::configure(settings.build_patterns);
-    let motd = settings.motd.clone();
     log::set_levels(settings);
-    log::open(&game_dir.join(log::LOGS).join(crate::settings::LOADER_ID));
-    crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
+    log::open(&game_dir.join(log::LOGS));
+    crate::log!(
+        INFO,
+        "Enshwick {} starting on {}, {} logical processors",
+        env!("CARGO_PKG_VERSION"),
+        system(),
+        std::thread::available_parallelism().map_or(0, std::num::NonZero::get)
+    );
     if developer_tools {
         crate::log!(
             WARN,
@@ -146,7 +140,6 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
             enshwick::mods::DEVELOPER_TOOLS
         );
     }
-    crate::greeting::configure(&motd);
     let applies = if settings_problems.unread {
         "the defaults apply"
     } else {
@@ -177,21 +170,41 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
             "{missing_forwards} powrprof.dll exports are missing on this system"
         );
     }
-    // On a thread of its own: the report waits for the log, which the start,
-    // holding the server's entry, does not.
-    let report_dir = game_dir.clone();
-    let report = std::thread::Builder::new()
-        .name("enshwick-report".into())
-        .spawn(move || crate::report::write(&report_dir, stub_abi, None));
-    if let Err(e) = &report {
-        crate::log!(WARN, "no report at start: {e}");
-    }
     Some(Begun {
         mods_dir,
-        report: report.ok(),
         settings_problems: settings_problems.lines,
         developer_tools,
     })
+}
+
+/// Windows, or Wine with its version when the process runs under Wine.
+fn system() -> String {
+    use windows_sys::Win32::System::LibraryLoader::GetProcAddress;
+    type WineVersion = unsafe extern "C" fn() -> *const core::ffi::c_char;
+    // SAFETY: a NUL-terminated name; ntdll is loaded in every process.
+    let module = unsafe { GetModuleHandleW(windows_sys::core::w!("ntdll.dll")) };
+    if module.is_null() {
+        return "Windows".to_owned();
+    }
+    // SAFETY: `module` is loaded and the name is NUL-terminated.
+    let Some(found) = (unsafe { GetProcAddress(module, c"wine_get_version".as_ptr().cast()) })
+    else {
+        return "Windows".to_owned();
+    };
+    // SAFETY: Wine's ntdll (dlls/ntdll) defines it as
+    // `const char * CDECL wine_get_version(void)`; CDECL is the C calling
+    // convention on x64, which `WineVersion` names.
+    let version =
+        unsafe { core::mem::transmute::<unsafe extern "system" fn() -> isize, WineVersion>(found) };
+    // SAFETY: the function takes no arguments, touches no thread state and
+    // only returns the address of a static string, on any thread.
+    let text = unsafe { version() };
+    if text.is_null() {
+        return "Wine".to_owned();
+    }
+    // SAFETY: a static NUL-terminated string from Wine, valid for the process.
+    let text = unsafe { core::ffi::CStr::from_ptr(text) };
+    format!("Wine {}", text.to_string_lossy())
 }
 
 /// Identifies the running game and its build table; `None`, logged, when the

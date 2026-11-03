@@ -143,7 +143,7 @@ macro_rules! info {
 
 /// Logs a line at `debug` level under the mod's id; formats like `format!`.
 ///
-/// Kept only when `mod-configs/enshwick.toml` asks for `debug`; otherwise the
+/// Kept only when `enshwick.toml` in the game's folder asks for `debug`; otherwise the
 /// arguments are neither evaluated nor formatted.
 ///
 /// # Examples

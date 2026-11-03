@@ -230,7 +230,7 @@ impl Host {
     }
 
     /// The most detailed level the loader keeps for this mod's lines, from
-    /// `mod-configs/enshwick.toml`.
+    /// `enshwick.toml` in the game's folder.
     ///
     /// # Examples
     ///

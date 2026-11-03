@@ -22,48 +22,6 @@ thread_local! {
     static READER: Cell<Option<Language>> = const { Cell::new(None) };
 }
 
-/// The language the loader's own setting `language` names, once
-/// [`configure`] read it.
-static OWN: OnceLock<Language> = OnceLock::new();
-
-/// Takes the loader's setting `language` on a dedicated `server`, which has
-/// no game language of its own: the code of the language texts are in where
-/// no player's game says its own, empty for English. A client's texts follow
-/// its game.
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "the setting is read only in the game")
-)]
-pub(crate) fn configure(code: &str, server: bool) {
-    if !server {
-        return;
-    }
-    match own_language(code) {
-        Ok(Some(language)) => {
-            let _first = OWN.set(language);
-        }
-        Ok(None) => {}
-        Err(code) => crate::log!(
-            WARN,
-            "language = \"{code}\" in the loader's settings is no language the game knows; texts follow the game's"
-        ),
-    }
-}
-
-/// The language a setting's `code` names: `None` for an empty code, the
-/// code back for one no language has.
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "the setting is read only in the game")
-)]
-fn own_language(code: &str) -> Result<Option<Language>, &str> {
-    let code = code.trim();
-    if code.is_empty() {
-        return Ok(None);
-    }
-    Language::from_code(code).map(Some).ok_or(code)
-}
-
 /// Runs `f` with every text it fills in `language`, for an answer to one
 /// player; `None` keeps the language already in force.
 #[cfg_attr(
@@ -113,13 +71,11 @@ pub(crate) fn reader() -> Option<Language> {
 }
 
 /// The language texts are filled in: the reader's inside [`for_reader`],
-/// else the loader's setting, else the game's.
+/// else the game's; a dedicated server has none, so its console answers in
+/// English.
 pub(crate) fn language() -> Language {
     if let Some(reader) = reader() {
         return reader;
-    }
-    if let Some(&own) = OWN.get() {
-        return own;
     }
     #[cfg(windows)]
     return crate::content::language();
@@ -380,13 +336,5 @@ mod tests {
         });
         assert!(panicked.is_err());
         assert_eq!(fill("mods.back", &[]), "Back");
-    }
-
-    #[test]
-    fn the_own_language_setting_reads_a_code_or_nothing() {
-        assert_eq!(own_language(""), Ok(None));
-        assert_eq!(own_language(" UK "), Ok(Some(Language::UK_UA)));
-        assert_eq!(own_language("pt-br"), Ok(Some(Language::PT_BR)));
-        assert!(own_language("klingon").is_err());
     }
 }

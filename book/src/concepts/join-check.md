@@ -125,10 +125,15 @@ waits for the player's game to say which mods of side `both` it runs:
   once it is back in the menu.
 
 Ten seconds after the chat line the server disconnects the player through the
-game's own kick. A matching hello in that time calls the kick off. With
-`require_enshwick = false` in `mod-configs/enshwick.toml`, the server lets
-such players in. On a game build whose table lacks the kick, the player gets
-the chat line and stays, and the log says so.
+game's own kick. A matching hello in that time calls the kick off. On a game
+build whose table lacks the kick, the player gets the chat line and stays,
+and the log says so.
+
+The rule belongs to the world. As a world loads, the loader writes
+`<save>-mod-settings/enshwick/enshwick.toml` beside its save, as it writes a
+mod's settings, with `require_enshwick = true`. With
+`require_enshwick = false` there, the server lets such players into that
+world only; the change applies when the world loads again.
 
 A server without mods of side `both` admits every player. A hosted game never
 checks or kicks its host, and checks guests only after the host's own game has

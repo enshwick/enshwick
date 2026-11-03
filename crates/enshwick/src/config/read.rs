@@ -65,7 +65,7 @@ mod tests {
     use crate::abi::Level;
 
     /// Comfort rules.
-    #[crate::config]
+    #[crate::config(group)]
     #[derive(Debug, PartialEq)]
     struct Comfort {
         /// The factor.

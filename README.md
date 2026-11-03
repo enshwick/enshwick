@@ -85,14 +85,16 @@ from the mod's defaults, and adds the settings a newer mod version brings.
 
 Change settings in the game with a mod's Settings button on the Mods screen,
 in a world: that world's. On a dedicated server, an administrator changes the
-server's from the same page. The server's command file,
-`mods/enshwick/commands.txt`, also takes `enshwick config <mod> <key> <value>`.
-A change applies when the world loads again.
+server's from the same page. The server's console also takes
+`enshwick config <mod> <key> <value>`. A change applies when the world loads
+again. A world's `<save>-mod-settings/enshwick/enshwick.toml` holds the
+loader's own rule for it, `require_enshwick`.
 
 `mod-configs/enshwick.recipes.toml` takes recipes out of the game
 ([Disabling recipes](book/src/content/disabled-recipes.md)). The logs are in
-`logs/enshwick/`: `all.log`, `loader.log` and `mods/<id>.log`.
-`mod-configs/enshwick.toml` sets how much they keep.
+`logs/`, one file per source and run, such as
+`logs/enshwick_2026-11-03_10-00-00.log`; `enshwick.toml` in the game's folder
+sets how much they keep.
 
 ## What is in this repository
 

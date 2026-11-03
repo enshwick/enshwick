@@ -59,7 +59,8 @@ with its name, so a misspelt setting never passes unread.
 A mod with more than one settings type names a file for each with
 `#[enshwick::config(file = "name")]`: lowercase letters, digits, `-` and `_`,
 without `.toml`. A type without `file` writes `settings.toml`. Two types of
-one mod with the same file turn the mod off with a message naming the file.
+one mod with the same file fail its build, the error naming the file and
+pointing at both types.
 
 ```rust
 use enshwick::config::Config;
@@ -130,13 +131,14 @@ file and shown together on the Mods screen, each row's label after the
 group's title. Its fields keep their own ranges and texts; the console and
 the Mods screen name them by dotted keys, such as `comfort.multiplier`, and
 their text keys are `config.comfort.multiplier` by default. The group's own
-title is `config.comfort`.
+title is `config.comfort`. The group's type is declared
+`#[enshwick::config(group)]`: it writes no file of its own.
 
 ```rust
 use enshwick::config::Config;
 
 /// Comfort rules.
-#[enshwick::config]
+#[enshwick::config(group)]
 #[derive(Default)]
 struct Comfort {
     /// Comfort per piece of furniture, times this factor.

@@ -11,23 +11,22 @@ the table's entries by their code patterns, and only the features and mods
 that need a missing one turn off; `build_patterns = false` keeps such a build
 vanilla.
 
-Its log is `logs/enshwick/` (`all.log`, `loader.log`, `mods/<id>.log`). When
-the game faults in a mod's code, or in game code with a mod's code on the stack,
-`crash.log` there names the mod, before the game's own crash handling. Its
-settings, written on first start, are `mod-configs/enshwick.toml`: `log_level`
-keeps lines up to `error`, `warn`, `info` (the default) or `debug`, and
-`log_levels` sets it per mod id, `enshwick` being the loader itself. The loader
-watches `mod-configs/` and tells a mod when its file changes; its own file
-applies at once.
+Its logs are in `logs/`, one file per source and run:
+`logs/enshwick_<date>_<time>.log` for the loader and
+`logs/<mod id>_<date>_<time>.log` for each mod, the newest 10 runs of each
+kept. When the game faults in a mod's code, or in game code with a mod's code
+on the stack, the loader's file and `logs/enshwick-crash_<date>_<time>.log`
+name the mod, before the game's own crash handling. Its settings, written on
+first start with every key commented out, are `enshwick.toml` in the game's
+folder: `log_level` keeps lines up to `error`, `warn`, `info` (the default)
+or `debug`, `log_levels` sets it per mod id, `enshwick` being the loader
+itself, and `diagnostics`, `diagnostics_timing` and `build_patterns` are read
+at start. The log levels apply at once when the file changes.
 
-`logs/enshwick/report.md` is the one file a player attaches to an issue:
-versions, system, status, mod files, the latest warnings and errors.
-`logs/enshwick/status.log` holds the latest status summary: the loader
-features this game build lacks table entries for, the mods and whether they
-run, the mods turned off and why, what mods serve and patch, and
-with `diagnostics = true` the calls of every hooked function
-(`diagnostics_timing = true` times one call in 256 too). It is written every
-`status_minutes` (10 by default) and for `enshwick status` in the
-server's command file, `mods/enshwick/commands.txt`.
+`enshwick status` on the server's console writes the status summary into the
+loader's log: the loader features this game build lacks table entries for,
+the mods and whether they run, the mods turned off and why, what mods serve
+and patch, and with `diagnostics = true` the calls of every hooked function
+(`diagnostics_timing = true` times one call in 256 too).
 
 Licensed under [MIT](../../../LICENSE).

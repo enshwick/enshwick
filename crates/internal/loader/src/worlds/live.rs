@@ -92,13 +92,13 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
     }
 }
 
-/// Makes or brings in line every settings file of `record` in the world
-/// `key`.
-fn prepare(record: &ModRecord, key: &str) {
-    let log = |level, line: &str| crate::log::write(level, &record.id, line);
-    let who = format!("{} {}", record.id, record.version);
-    for file in files(record) {
-        let path = world_file(&record.id, &file.file, key);
+/// Makes or brings in line the settings `files` of `id` at `version` in the
+/// world `key`.
+fn prepare(id: &str, version: &str, files: Vec<SettingsFile>, key: &str) {
+    let log = |level, line: &str| crate::log::write(level, id, line);
+    let who = format!("{id} {version}");
+    for file in files {
+        let path = world_file(id, &file.file, key);
         let existing = match enshwick::files::read_to_string_if_present(&path) {
             Ok(existing) => existing,
             Err(e) => {
@@ -163,6 +163,32 @@ fn prepare(record: &ModRecord, key: &str) {
     }
 }
 
+/// Makes or brings in line the loader's own rules for the world `key`,
+/// reads them and applies them to this world.
+fn load_rules(key: &str) {
+    use enshwick::config::Config as _;
+
+    use crate::settings::{LOADER_ID, WorldRules};
+
+    let file = SettingsFile {
+        file: WorldRules::FILE.to_owned(),
+        schema: WorldRules::schema(),
+        template: WorldRules::template(),
+    };
+    prepare(LOADER_ID, env!("CARGO_PKG_VERSION"), vec![file], key);
+    let path = world_file(LOADER_ID, WorldRules::FILE, key);
+    let (rules, problems) = WorldRules::parse(&read(&path).unwrap_or_default());
+    for problem in problems.lines {
+        crate::log!(
+            WARN,
+            "{}: {problem}; its default applies ({})",
+            path.display(),
+            crate::errors::BAD_SETTINGS
+        );
+    }
+    crate::admission::require(rules.require_enshwick);
+}
+
 /// A world loaded: every mod's settings files are made or brought in line,
 /// and every mod reads them.
 pub(crate) fn load(loader: &Loader) {
@@ -173,8 +199,9 @@ pub(crate) fn load(loader: &Loader) {
         );
         return;
     };
+    load_rules(&key);
     for record in &loader.mods {
-        prepare(record, &key);
+        prepare(&record.id, &record.version, files(record), &key);
     }
     crate::log!(INFO, "world settings: world {key}");
     set_current(Some(key));

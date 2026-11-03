@@ -11,7 +11,7 @@ mod menu;
 mod summary;
 
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -30,17 +30,15 @@ const HISTORY: usize = 64;
 
 /// Counting and timing, fixed by the settings read at start.
 static COUNTING: OnceLock<(bool, bool)> = OnceLock::new();
-static STATUS_MINUTES: AtomicU32 = AtomicU32::new(crate::settings::STATUS_MINUTES);
 static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
 static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
 static ANY_PART_OFF: AtomicBool = AtomicBool::new(false);
 static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
 static PATCHES: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
 
-/// Takes the diagnostics settings: the period at every call, counting and
-/// timing only at the first, since thunks are written once.
+/// Takes the diagnostics settings: counting and timing only at the first
+/// call, since thunks are written once.
 pub fn configure(settings: &Settings) {
-    STATUS_MINUTES.store(settings.status_minutes, Ordering::Relaxed);
     let _first = COUNTING.set((
         settings.diagnostics,
         settings.diagnostics && settings.diagnostics_timing,
@@ -57,12 +55,6 @@ pub fn counting() -> bool {
 #[must_use]
 pub fn timing() -> bool {
     COUNTING.get().is_some_and(|&(_, timed)| timed)
-}
-
-/// Minutes between status summaries; 0 for on demand only.
-#[must_use]
-pub fn status_minutes() -> u32 {
-    STATUS_MINUTES.load(Ordering::Relaxed)
 }
 
 /// Seconds since the Unix epoch.
@@ -344,7 +336,7 @@ mod tests {
             conflicts: vec![
                 "interaction filter: you.trading-post, you.market-stalls, chained".into(),
             ],
-            knowledge_guard: Some("watching; 3 requests it would refuse let through".into()),
+            knowledge_guard: Some("enforcing; 3 refused".into()),
             messages: messages_line(0, 3, 1),
             settings: Vec::new(),
             parts: vec![
@@ -455,7 +447,7 @@ mod tests {
         assert!(text.contains("4 resources served (4 built, 0 failed), 12 texts"));
         assert!(text.contains(
             "
-knowledge guard: watching; 3 requests it would refuse"
+knowledge guard: enforcing; 3 refused"
         ));
         assert!(text.contains(
             "
@@ -516,16 +508,16 @@ conflicts:
     #[test]
     fn a_broken_settings_file_shows_in_the_summary_and_the_menu_line() {
         let mut summary = summary();
-        summary.settings = vec!["enshwick.toml: allowlist: invalid type".into()];
+        summary.settings = vec!["enshwick.toml: log_level: invalid type".into()];
         assert!(
             summary
                 .render()
-                .contains("enshwick.toml: allowlist: invalid type")
+                .contains("enshwick.toml: log_level: invalid type")
         );
         assert!(
             summary
                 .short()
-                .contains("enshwick.toml: allowlist: invalid type")
+                .contains("enshwick.toml: log_level: invalid type")
         );
         let good = menu_line("0.1.5", 2, 0, &[]);
         let broken = menu_line("0.1.5", 2, 0, &[MenuNote::BadSettings]);

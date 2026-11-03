@@ -198,19 +198,6 @@ impl Installed {
         table::with(Vec::new(), |s| s.removed.clone())
     }
 
-    /// The accounts on the fake server's allowlist, in the order listed.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(loader.allowlisted().is_empty());
-    /// ```
-    #[must_use]
-    pub fn allowlisted(&self) -> Vec<crate::PlayerKey> {
-        table::with(Vec::new(), |s| s.allowlisted.clone())
-    }
-
     /// The accounts muted in the fake server's chat, in the order muted.
     ///
     /// # Examples

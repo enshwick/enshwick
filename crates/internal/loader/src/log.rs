@@ -1,13 +1,14 @@
-//! `logs/enshwick/` (`all.log`, `loader.log`, `mods/<id>.log`): one file for the loader and every mod.
+//! `logs/<source>_<YYYY-MM-DD_HH-MM-SS>.log`: one file per source, the
+//! loader (`enshwick`) or a mod id, per run of the process.
 //!
 //! Callers only format a line and send it down a bounded channel; a
 //! background thread owns the files, so a hook never waits on the disk. A
 //! line the full channel cannot take is counted and the count logged once
 //! there is room. The writer also keeps the latest lines in memory for
-//! `enshwick log` on the console. The writer keeps the two runs before as `<name>.1.log`
-//! and `<name>.2.log`, each cut to [`KEPT_BYTES`]. A file that would pass its
-//! cap during a run ([`ALL_CAP`], [`SOURCE_CAP`]) moves aside whole as run 1
-//! the same way, so each log holds at most three times its cap.
+//! `enshwick log` on the console. Each source keeps its newest [`KEPT_RUNS`]
+//! files; a file that would pass [`CAP`] during a run is closed and the
+//! source goes on in a new file stamped with the time it opens, so a server
+//! running for weeks never fills its disk. Deleting any file by hand is safe.
 
 use std::collections::VecDeque;
 use std::fmt::Write as _;
@@ -25,23 +26,28 @@ use enshwick::abi::Level;
 use crate::locks::Relock;
 use crate::settings::{LOADER_ID, Settings};
 
-/// The folder beside the game's executable that holds every log, each
-/// writer's in a folder of its own.
+/// The folder beside the game's executable that holds every log.
 pub const LOGS: &str = "logs";
+/// The file in [`LOGS`] that keeps the lines written before the log opens.
+///
+/// The stub's lines are among them; the log takes them into the loader's
+/// file and removes it, so it stays only when the loader did not start.
+pub const START_FILE: &str = "start.log";
 /// Lines waiting for the writer at most.
 const QUEUE: usize = 4096;
 /// The latest lines kept in memory.
 const RECENT: usize = 1024;
 /// How often [`settle`] looks at the writer.
 const SETTLE_POLL: Duration = Duration::from_millis(2);
-/// The most bytes kept of one earlier run's file: its last ones.
-const KEPT_BYTES: u64 = 8 << 20;
-/// Earlier runs kept beside the current one.
-const KEPT_RUNS: usize = 2;
-/// The most bytes `all.log` holds before it rolls over.
-const ALL_CAP: u64 = 32 << 20;
-/// The most bytes `loader.log` or a mod's file holds before it rolls over.
-const SOURCE_CAP: u64 = 8 << 20;
+/// Files kept per source, the current one among them.
+const KEPT_RUNS: usize = 10;
+/// The most bytes one file holds.
+const CAP: u64 = 8 << 20;
+/// Seconds ahead a file that reached its cap looks for a free stamp to go
+/// on under; past them it grows on.
+const ROLL_SECONDS: u64 = 60;
+/// The loader's file of this run, once the log opens.
+static LOADER_FILE: OnceLock<PathBuf> = OnceLock::new();
 
 /// One line as written, with its level and where its source sits in it, so
 /// the source costs no copy of its own.
@@ -130,41 +136,39 @@ pub fn is_open() -> bool {
     LINES.get().is_some() && !COUNTS.stopped.load(Ordering::Acquire)
 }
 
-/// Starts the writer in `dir`, the previous runs' files moved aside first:
-/// `all.log` gets every line, `loader.log` the loader's, `mods/<id>.log` each
-/// mod's. When it cannot start, [`crate::early`] says why.
+/// The loader's file of this run, once the log opens; a crash writes its
+/// line there too.
+#[must_use]
+pub fn loader_file() -> Option<&'static Path> {
+    LOADER_FILE.get().map(PathBuf::as_path)
+}
+
+/// Starts the writer in `dir`, the game's `logs/`.
+///
+/// Each source's oldest files beyond [`KEPT_RUNS`] are deleted as it opens
+/// its file, and the lines of [`START_FILE`] open the loader's file. When
+/// it cannot start, [`crate::early`] says why.
 pub fn open(dir: &Path) {
-    let mods = dir.join("mods");
-    if let Err(e) = std::fs::create_dir_all(&mods) {
-        crate::early::note(&format!(
-            "no log: {} could not be made: {e}",
-            mods.display()
-        ));
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        crate::early::note(&format!("no log: {} could not be made: {e}", dir.display()));
         return;
     }
     let dir = dir.to_path_buf();
+    let stamp = crate::early::log_stamp(now() / 1000);
+    let _first = LOADER_FILE.set(run_path(&dir, LOADER_ID, &stamp));
     let (send, receive) = sync_channel::<Line>(QUEUE);
     let started = std::thread::Builder::new()
         .name("enshwick-log".into())
         .spawn(move || {
             // On the writer's thread: the game's start never waits on the
             // disk, and lines sent meanwhile wait in the channel.
-            rotate(&dir.join("all.log"));
-            rotate(&dir.join("loader.log"));
-            rotate_dir(&mods);
-            let mut all = match Capped::create(dir.join("all.log"), ALL_CAP) {
-                Ok(all) => all,
-                Err(e) => {
-                    COUNTS.stopped.store(true, Ordering::Release);
-                    crate::early::write(&format!(
-                        "no log: {} could not be written: {e}",
-                        dir.join("all.log").display()
-                    ));
-                    return;
-                }
-            };
             let mut files: rustc_hash::FxHashMap<String, Option<Capped>> =
                 rustc_hash::FxHashMap::default();
+            let mut loader = Capped::open(&dir, LOADER_ID, &stamp);
+            if let Some(file) = &mut loader {
+                take_start_lines(&dir, file);
+            }
+            files.insert(LOADER_ID.to_owned(), loader);
             for line in receive {
                 let dropped = COUNTS.dropped.swap(0, Ordering::Relaxed);
                 if dropped > 0 {
@@ -174,18 +178,14 @@ pub fn open(dir: &Path) {
                         LOADER_ID,
                         &format!("{dropped} log lines were dropped: they came faster than the disk took them"),
                     );
-                    all.write(note.text.as_bytes());
+                    if let Some(Some(file)) = files.get_mut(LOADER_ID) {
+                        file.write(note.text.as_bytes());
+                    }
                     keep(note);
                 }
-                all.write(line.text.as_bytes());
                 let source = line.source();
                 if !files.contains_key(source) {
-                    let path = if source == LOADER_ID {
-                        dir.join("loader.log")
-                    } else {
-                        mods.join(format!("{source}.log"))
-                    };
-                    files.insert(source.to_owned(), Capped::create(path, SOURCE_CAP).ok());
+                    files.insert(source.to_owned(), Capped::open(&dir, source, &stamp));
                 }
                 if let Some(Some(file)) = files.get_mut(source) {
                     file.write(line.text.as_bytes());
@@ -202,34 +202,90 @@ pub fn open(dir: &Path) {
     }
 }
 
-/// A log file of the writer that moves aside whole as its latest earlier run
-/// once it would pass its cap, so a server running for weeks never fills its
-/// disk.
+/// Moves the lines of [`START_FILE`] in `dir` to the top of `file`.
+fn take_start_lines(dir: &Path, file: &mut Capped) {
+    let path = dir.join(START_FILE);
+    if let Ok(lines) = std::fs::read(&path) {
+        file.write(&lines);
+        let _removed = std::fs::remove_file(&path);
+    }
+}
+
+/// `<source>_<stamp>.log` in `dir`.
+fn run_path(dir: &Path, source: &str, stamp: &str) -> PathBuf {
+    dir.join(format!("{source}_{stamp}.log"))
+}
+
+/// The length of a file's stamp, `2026-11-03_10-00-00`.
+const STAMP_LEN: usize = 19;
+
+/// The source a file of the writer belongs to: `you.my-mod` for
+/// `you.my-mod_2026-11-03_10-00-00.log`; `None` for any other file.
+fn source_of(name: &str) -> Option<&str> {
+    let base = name.strip_suffix(".log")?;
+    let (source, stamp) = base.split_at_checked(base.len().checked_sub(STAMP_LEN)?)?;
+    let source = source.strip_suffix('_')?;
+    let shaped = stamp.bytes().enumerate().all(|(i, b)| match i {
+        4 | 7 | 13 | 16 => b == b'-',
+        10 => b == b'_',
+        _ => b.is_ascii_digit(),
+    });
+    (shaped && !source.is_empty()).then_some(source)
+}
+
+/// Deletes the oldest files of `source` in `dir` so that `keep` remain;
+/// the stamps sort by time.
+pub(crate) fn prune(dir: &Path, source: &str, keep: usize) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut runs: Vec<PathBuf> = entries
+        .filter_map(|entry| {
+            let path = entry.ok()?.path();
+            let name = path.file_name()?.to_str()?;
+            (source_of(name) == Some(source)).then(|| path.clone())
+        })
+        .collect();
+    runs.sort();
+    let extra = runs.len().saturating_sub(keep);
+    for path in &runs[..extra] {
+        let _removed = std::fs::remove_file(path);
+    }
+}
+
+/// A source's file of this run, which goes on in a new file once it would
+/// pass [`CAP`].
 struct Capped {
+    dir: PathBuf,
+    source: String,
     path: PathBuf,
     /// `None` while the file could not be opened again; each write tries.
     file: Option<std::fs::File>,
     written: u64,
-    cap: u64,
 }
 
 impl Capped {
-    /// Makes the file at `path` anew, empty.
-    fn create(path: PathBuf, cap: u64) -> std::io::Result<Self> {
-        let file = std::fs::File::create(&path)?;
-        Ok(Self {
+    /// Makes `source`'s file of the run stamped `stamp` in `dir`, deleting
+    /// its oldest files first; `None` when it cannot be made.
+    fn open(dir: &Path, source: &str, stamp: &str) -> Option<Self> {
+        prune(dir, source, KEPT_RUNS - 1);
+        let path = run_path(dir, source, stamp);
+        let file = Self::append(&path)?;
+        let written = file.metadata().map_or(0, |m| m.len());
+        Some(Self {
+            dir: dir.to_path_buf(),
+            source: source.to_owned(),
             path,
             file: Some(file),
-            written: 0,
-            cap,
+            written,
         })
     }
 
-    /// Appends `bytes` and flushes them, rolling the file over first when
-    /// they would take it past its cap.
+    /// Appends `bytes` and flushes them, going on in a new file first when
+    /// they would take this one past its cap.
     fn write(&mut self, bytes: &[u8]) {
         let len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-        if self.written > 0 && self.written.saturating_add(len) > self.cap {
+        if self.written > 0 && self.written.saturating_add(len) > CAP {
             self.roll();
         }
         if self.file.is_none() {
@@ -243,41 +299,33 @@ impl Capped {
         }
     }
 
-    /// Moves the file aside whole as run 1 and starts it again with a line
-    /// saying so. When it cannot move, the file grows on and the next roll
-    /// waits for another cap's worth of lines.
+    /// Ends the file with a line naming the next one and goes on there.
     #[cold]
     fn roll(&mut self) {
-        // Closed before the rename, which Windows needs.
-        self.file = None;
-        self.written = 0;
-        let moved =
-            make_room(&self.path).is_some_and(|first| std::fs::rename(&self.path, first).is_ok());
-        if !moved {
+        let next = (0..ROLL_SECONDS)
+            .map(|wait| crate::early::log_stamp(now() / 1000 + wait))
+            .map(|stamp| run_path(&self.dir, &self.source, &stamp))
+            .find(|path| *path != self.path && !path.exists());
+        let Some(next) = next else {
             return;
-        }
-        self.file = Self::append(&self.path);
-        if !enabled(Level::INFO, LOADER_ID) {
-            return;
-        }
-        let name = self
-            .path
+        };
+        let name = next
             .file_name()
-            .map(|n| n.to_string_lossy().into_owned());
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let note = Line::new(
             now(),
             Level::INFO,
             LOADER_ID,
-            &format!(
-                "{} reached its cap; the lines of this run before this one are in the file one run older",
-                name.unwrap_or_default()
-            ),
+            &format!("this file reached its cap; the run goes on in {name}"),
         );
-        if let Some(file) = &mut self.file
-            && file.write_all(note.text.as_bytes()).is_ok()
-        {
-            self.written = u64::try_from(note.text.len()).unwrap_or(u64::MAX);
+        if let Some(file) = &mut self.file {
+            let _noted = file.write_all(note.text.as_bytes());
         }
+        prune(&self.dir, &self.source, KEPT_RUNS - 1);
+        self.path = next;
+        self.file = Self::append(&self.path);
+        self.written = 0;
     }
 
     /// The file at `path` opened to append to, made when missing.
@@ -288,89 +336,6 @@ impl Capped {
             .open(path)
             .ok()
     }
-}
-
-/// Moves every current `<name>.log` in `dir` aside as `<name>.1.log`, the
-/// one before to `<name>.2.log`, dropping the oldest.
-fn rotate_dir(dir: &Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    let current: Vec<PathBuf> = entries
-        .filter_map(|entry| Some(entry.ok()?.path()))
-        .filter(|path| path.is_file() && run_of(path) == Some(0))
-        .collect();
-    for path in current {
-        rotate(&path);
-    }
-}
-
-/// The run a log file of the writer belongs to: 0 for `<name>.log`, `n` for
-/// `<name>.<n>.log`; `None` for any other file.
-fn run_of(path: &Path) -> Option<usize> {
-    if path.extension()? != "log" {
-        return None;
-    }
-    let stem = path.file_stem()?.to_str()?;
-    match stem.rsplit_once('.') {
-        Some((_, run)) => run.parse().ok().filter(|&run| run > 0),
-        None => Some(0),
-    }
-}
-
-/// `<name>.<run>.log` beside `current`, `<name>.log`.
-fn run_path(current: &Path, run: usize) -> Option<PathBuf> {
-    let stem = current.file_stem()?.to_str()?;
-    Some(current.with_file_name(format!("{stem}.{run}.log")))
-}
-
-/// Moves `current` aside as run 1, run 1 to run 2 and so on up to
-/// [`KEPT_RUNS`], at start; a file over [`KEPT_BYTES`] keeps its last lines
-/// that fit, or all of them when those cannot be written.
-fn rotate(current: &Path) {
-    if !current.is_file() {
-        return;
-    }
-    let Some(first) = make_room(current) else {
-        return;
-    };
-    let size = std::fs::metadata(current).map_or(0, |m| m.len());
-    if size > KEPT_BYTES && keep_tail(current, &first, KEPT_BYTES).is_ok() {
-        let _removed = std::fs::remove_file(current);
-    } else {
-        let _moved = std::fs::rename(current, &first);
-    }
-}
-
-/// Moves run 1 of `current` to run 2 and so on up to [`KEPT_RUNS`], dropping
-/// the oldest; run 1's path, now free.
-fn make_room(current: &Path) -> Option<PathBuf> {
-    let runs = (1..=KEPT_RUNS)
-        .map(|run| run_path(current, run))
-        .collect::<Option<Vec<_>>>()?;
-    let _oldest = runs.last().map(std::fs::remove_file);
-    for pair in runs.windows(2).rev() {
-        let _moved = std::fs::rename(&pair[0], &pair[1]);
-    }
-    runs.into_iter().next()
-}
-
-/// Writes the last whole lines of `from` that fit in `bytes` to `to`.
-fn keep_tail(from: &Path, to: &Path, bytes: u64) -> std::io::Result<()> {
-    use std::io::{Read as _, Seek as _, SeekFrom};
-    let mut file = std::fs::File::open(from)?;
-    let size = file.metadata()?.len();
-    file.seek(SeekFrom::Start(size.saturating_sub(bytes)))?;
-    let mut tail = Vec::new();
-    file.read_to_end(&mut tail)?;
-    let start = if size > bytes {
-        tail.iter()
-            .position(|&b| b == b'\n')
-            .map_or(tail.len(), |at| at + 1)
-    } else {
-        0
-    };
-    std::fs::write(to, &tail[start..])
 }
 
 /// Whether lines go to [`CAPTURED`] instead of the files.
@@ -589,82 +554,109 @@ mod tests {
         assert!(formatted.get());
     }
 
-    #[test]
-    fn earlier_runs_are_kept_twice_and_capped() {
-        let dir = std::env::temp_dir().join(format!("enshwick-log-{}", std::process::id()));
+    fn temp(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("enshwick-{name}-{}", std::process::id()));
         let _fresh = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let read = |name: &str| std::fs::read_to_string(dir.join(name)).ok();
-        for run in ["first", "second", "third"] {
-            std::fs::write(dir.join("all.log"), run).unwrap();
-            std::fs::write(dir.join("notes.txt"), run).unwrap();
-            rotate_dir(&dir);
-        }
-        assert_eq!(read("all.log"), None);
-        assert_eq!(read("all.1.log").as_deref(), Some("third"));
-        assert_eq!(read("all.2.log").as_deref(), Some("second"));
-        assert_eq!(read("all.3.log"), None);
-        assert_eq!(read("notes.txt").as_deref(), Some("third"));
-        assert_eq!(read("notes.1.txt"), None);
-
-        let big = dir.join("big.log");
-        std::fs::write(&big, "aaaa\nbbbb\ncccc\n").unwrap();
-        keep_tail(&big, &dir.join("tail.log"), 7).unwrap();
-        assert_eq!(read("tail.log").as_deref(), Some("cccc\n"));
-        keep_tail(&big, &dir.join("tail.log"), 100).unwrap();
-        assert_eq!(read("tail.log").as_deref(), Some("aaaa\nbbbb\ncccc\n"));
-        let _clean = std::fs::remove_dir_all(&dir);
+        dir
     }
 
-    #[test]
-    fn a_file_past_its_cap_rolls_over_whole_and_loses_no_line() {
-        let dir = std::env::temp_dir().join(format!("enshwick-log-cap-{}", std::process::id()));
-        let _fresh = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("all.log");
-        let mut file = Capped::create(path.clone(), 400).unwrap();
-        for i in 0..40 {
-            file.write(format!("line {i:02} of the run\n").as_bytes());
-        }
-        drop(file);
-        let read = |name: &str| std::fs::read_to_string(dir.join(name)).unwrap();
-        let numbers = |text: &str| -> Vec<u32> {
-            text.lines()
-                .filter_map(|line| line.strip_prefix("line ")?.get(..2)?.parse().ok())
-                .collect()
-        };
-        let (oldest, earlier, current) = (read("all.2.log"), read("all.1.log"), read("all.log"));
-        for text in [&earlier, &current] {
-            assert!(text.len() <= 400, "{text}");
-            assert!(
-                text.lines().next().is_some_and(|note| note.ends_with(
-                    "[enshwick] all.log reached its cap; the lines of this run before this one are in the file one run older"
-                )),
-                "{text}"
-            );
-        }
-        let kept: Vec<u32> = [&oldest, &earlier, &current]
-            .into_iter()
-            .flat_map(|text| numbers(text))
+    fn names(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
-        let last = *kept.last().unwrap();
-        assert_eq!(last, 39);
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn a_file_names_its_source_and_its_run() {
         assert_eq!(
-            kept,
-            (last + 1 - u32::try_from(kept.len()).unwrap()..=last).collect::<Vec<_>>(),
-            "the kept runs hold every line from the oldest kept one on"
+            source_of("you.my-mod_2026-11-03_10-00-00.log"),
+            Some("you.my-mod")
         );
-        assert!(!dir.join("all.3.log").exists());
+        assert_eq!(
+            source_of("enshwick_2026-11-03_10-00-00.log"),
+            Some("enshwick")
+        );
+        assert_eq!(
+            source_of("enshwick-crash_2026-11-03_10-00-00.log"),
+            Some("enshwick-crash")
+        );
+        assert_eq!(source_of("start.log"), None);
+        assert_eq!(source_of("enshwick_2026-11-03.log"), None);
+        assert_eq!(source_of("_2026-11-03_10-00-00.log"), None);
+        assert_eq!(source_of("enshwick_2026-11-03_10-00-00.txt"), None);
+        assert_eq!(source_of("enshwick_2026x11-03_10-00-00.log"), None);
+        assert_eq!(
+            run_path(
+                Path::new("logs"),
+                "enshwick",
+                &crate::early::log_stamp(1_793_286_189)
+            ),
+            Path::new("logs").join("enshwick_2026-10-29_15-03-09.log")
+        );
+    }
+
+    #[test]
+    fn each_source_keeps_its_newest_runs_and_other_files_stay() {
+        let dir = temp("log-prune");
+        for day in 10..25 {
+            for source in ["enshwick", "you.my-mod"] {
+                let name = format!("{source}_2026-11-{day}_10-00-00.log");
+                std::fs::write(dir.join(name), "").unwrap();
+            }
+        }
+        std::fs::write(dir.join("notes.txt"), "").unwrap();
+        drop(Capped::open(&dir, "enshwick", "2026-12-01_00-00-00").unwrap());
+        let kept = names(&dir);
+        let ours: Vec<&String> = kept.iter().filter(|n| n.starts_with("enshwick_")).collect();
+        assert_eq!(ours.len(), KEPT_RUNS);
+        assert_eq!(ours[0], "enshwick_2026-11-16_10-00-00.log");
+        assert_eq!(ours[KEPT_RUNS - 1], "enshwick_2026-12-01_00-00-00.log");
+        assert_eq!(kept.iter().filter(|n| n.starts_with("you.")).count(), 15);
+        assert!(kept.contains(&"notes.txt".to_owned()));
         let _clean = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn only_the_writer_s_logs_have_runs() {
-        assert_eq!(run_of(Path::new("all.log")), Some(0));
-        assert_eq!(run_of(Path::new("all.2.log")), Some(2));
-        assert_eq!(run_of(Path::new("all.0.log")), None);
-        assert_eq!(run_of(Path::new("all.txt")), None);
-        assert_eq!(run_of(Path::new("all.x.log")), None);
+    fn a_file_past_its_cap_goes_on_in_a_new_one_and_loses_no_line() {
+        let dir = temp("log-cap");
+        let mut file = Capped::open(&dir, "you.my-mod", "2020-01-01_10-00-00").unwrap();
+        file.written = CAP - 10;
+        file.write(b"the first line\n");
+        file.write(b"the second line\n");
+        drop(file);
+        let kept = names(&dir);
+        assert_eq!(kept.len(), 2, "{kept:?}");
+        assert_eq!(kept[0], "you.my-mod_2020-01-01_10-00-00.log");
+        let first = std::fs::read_to_string(dir.join(&kept[0])).unwrap();
+        assert!(
+            first
+                .trim_end()
+                .ends_with(&format!("the run goes on in {}", kept[1])),
+            "{first}"
+        );
+        let next = std::fs::read_to_string(dir.join(&kept[1])).unwrap();
+        assert_eq!(next, "the first line\nthe second line\n");
+        let _clean = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_start_lines_open_the_loader_s_file_and_their_file_goes() {
+        let dir = temp("log-start");
+        std::fs::write(dir.join(START_FILE), "stub: early\n").unwrap();
+        let mut file = Capped::open(&dir, LOADER_ID, "2026-11-03_10-00-00").unwrap();
+        take_start_lines(&dir, &mut file);
+        file.write(b"later\n");
+        drop(file);
+        assert!(!dir.join(START_FILE).exists());
+        assert_eq!(
+            std::fs::read_to_string(dir.join("enshwick_2026-11-03_10-00-00.log")).unwrap(),
+            "stub: early\nlater\n"
+        );
+        let _clean = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

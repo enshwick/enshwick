@@ -1,0 +1,10 @@
+error[E0428]: the name `__enshwick_two_settings_types_write_altars_toml` is defined multiple times
+  --> tests/ui/two_settings_types_one_file.rs:12:8
+   |
+ 4 | struct AltarCount {
+   |        ---------- previous definition of the macro `__enshwick_two_settings_types_write_altars_toml` here
+...
+12 | struct AltarZones {
+   |        ^^^^^^^^^^ `__enshwick_two_settings_types_write_altars_toml` redefined here
+   |
+   = note: `__enshwick_two_settings_types_write_altars_toml` must be defined only once in the macro namespace of this module

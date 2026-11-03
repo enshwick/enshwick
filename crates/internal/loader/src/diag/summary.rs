@@ -234,7 +234,7 @@ pub fn part_line(part: &Part<'_>) -> Option<String> {
 }
 
 impl Summary {
-    /// The summary for `status.log`.
+    /// The summary for the loader's log.
     #[must_use]
     pub fn render(&self) -> String {
         let mut out = String::with_capacity(2048);
@@ -304,7 +304,7 @@ services and events:"
             None => {
                 let _w = writeln!(
                     out,
-                    "  calls are not counted; set diagnostics = true in mod-configs/enshwick.toml"
+                    "  calls are not counted; set diagnostics = true in enshwick.toml"
                 );
             }
             Some(hooks) => self.render_hooks(&mut out, hooks),

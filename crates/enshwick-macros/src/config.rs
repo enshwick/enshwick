@@ -105,6 +105,8 @@ pub(super) struct StructConfig {
     pub(super) title: String,
     /// `file = "name"`, `settings` by default.
     pub(super) file: String,
+    /// `group`: a table of another settings type, which writes no file.
+    pub(super) group: bool,
 }
 
 /// Whether `name` may name a settings file: lowercase ASCII letters,
@@ -121,9 +123,13 @@ pub(super) fn struct_config(attrs: &[Attribute]) -> syn::Result<StructConfig> {
     let mut validate = None;
     let mut title = None;
     let mut file = None;
+    let mut group = false;
     for attr in attrs.iter().filter(|a| a.path().is_ident("config")) {
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("file") {
+            if meta.path.is_ident("group") {
+                group = true;
+                Ok(())
+            } else if meta.path.is_ident("file") {
                 if file.is_some() {
                     return Err(meta.error("`file` is given twice"));
                 }
@@ -150,15 +156,22 @@ pub(super) fn struct_config(attrs: &[Attribute]) -> syn::Result<StructConfig> {
                 Ok(())
             } else {
                 Err(meta.error(
-                    "expected `file = \"name\"`, `validate = path` or `text = \"key\"`; every field has its default",
+                    "expected `file = \"name\"`, `group`, `validate = path` or `text = \"key\"`; every field has its default",
                 ))
             }
         })?;
+    }
+    if group && file.is_some() {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "a group is a table of another settings type's file and names no file of its own",
+        ));
     }
     Ok(StructConfig {
         validate,
         title: title.unwrap_or_else(|| String::from("config")),
         file: file.unwrap_or_else(|| String::from("settings")),
+        group,
     })
 }
 
@@ -309,7 +322,13 @@ pub(super) fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         validate,
         title,
         file,
+        group,
     } = struct_config(&input.attrs)?;
+    let claim = if group {
+        quote!(impl ::enshwick::config::__Group for #name {})
+    } else {
+        file_claim(name, &file)
+    };
     let own_check = validate
         .map(|path| quote!(#path(self).map_err(::core::convert::Into::<::enshwick::config::ConfigError>::into)?;));
     let mut entries = Vec::new();
@@ -391,8 +410,38 @@ pub(super) fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
                 ::core::result::Result::Ok(())
             }
         }
+
+        #claim
     }
     .into())
+}
+
+/// A macro named after the settings file `file`, exported at the crate's
+/// root under the span of the type `name`, so a second type of the crate
+/// that writes the same file fails the build pointing at both types. `_`
+/// and `-` are spelt apart, so `a-b` and `a_b` never meet.
+fn file_claim(name: &Ident, file: &str) -> proc_macro2::TokenStream {
+    let spelt: String = file
+        .chars()
+        .map(|c| match c {
+            '_' => "_u".to_owned(),
+            '-' => "_d".to_owned(),
+            c => c.to_string(),
+        })
+        .collect();
+    let claim = Ident::new(
+        &format!("__enshwick_two_settings_types_write_{spelt}_toml"),
+        name.span(),
+    );
+    quote::quote_spanned! {name.span()=>
+        // Off in test builds, whose many small types share one crate.
+        #[cfg(not(test))]
+        #[doc(hidden)]
+        #[macro_export]
+        macro_rules! #claim {
+            () => {};
+        }
+    }
 }
 
 /// The schema's `Field` for a plain field, its default read from the
@@ -475,7 +524,10 @@ pub(super) fn group_tokens(
         .iter()
         .map(|(ident, _, field)| {
             let ty = &field.ty;
-            quote!(<#ty as #config>::validate(&self.#ident)?;)
+            quote! {
+                ::enshwick::config::__group::<#ty>();
+                <#ty as #config>::validate(&self.#ident)?;
+            }
         })
         .collect();
     GroupTokens {

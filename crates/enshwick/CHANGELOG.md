@@ -8,6 +8,36 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** the loader keeps few files of its own. Every log is in
+  `logs/`, one file per source and run, `logs/<source>_<date>_<time>.log`,
+  the newest 10 of each source kept and a new file past 8 MiB; the lines
+  from before the log opens, the stub's too, open the loader's file, and
+  `logs/start.log` stays only when the loader did not start; a crash goes to
+  the loader's file and `logs/enshwick-crash_<date>_<time>.log`. `all.log`,
+  `status.log`, the periodic summaries and `report.md` are gone; the
+  console's `enshwick status` writes the summary into the loader's log. The
+  loader's settings are `enshwick.toml` in the game folder, written with
+  every key commented out, with `log_level`, `log_levels`, `diagnostics`,
+  `diagnostics_timing` and `build_patterns`; `status_minutes`, `actions_key`
+  (F7 is fixed), `language` (the console answers in English), `allowlist`,
+  `motd` and `knowledge_guard` (the guard always enforces) are gone.
+  `require_enshwick` is a world rule in
+  `<stem>-mod-settings/enshwick/enshwick.toml`, read as the world loads. The
+  allowlist with `World::set_allowlisted` and `World::allowlisted`
+  (`HostApi::allowlist_set`, `allowlist_has`), offline bans, the message of
+  the day, the console's `kick`, `ban`, `unban`, `give`, `give-to`, `spawn`,
+  `teleport` and `allowlist` tools and the command file are gone; the
+  console reads its input only. `World::account_action` refuses a kick or a
+  ban of an account not online, and chat mutes belong to the world, in
+  `<stem>-mod-data/enshwick/muted.txt`, `Missing` while no world runs;
+  ABI 11.0 (#921).
+- **Breaking:** the game's names read as full ids where a person reads or
+  writes them: `enshrouded:<debug name>` in recipe files, the console and
+  logs, and `mods::GAME_ID`; a bare debug name in a recipe file is a
+  problem that says how to write it (#921).
+- **Breaking:** two settings types of one crate that write one file fail the
+  build, naming the file and pointing at both types, and a group's type is
+  declared `#[enshwick::config(group)]` (#921).
 - **Breaking:** a mod's side is `server` or `both`: the `client` side, the
   `join` flag (`ManifestFlags::JOIN`, `ModEntry::join`, a pack's `join`) and
   the relations `recommends` and `replaces` (`Relation::{RECOMMENDS,

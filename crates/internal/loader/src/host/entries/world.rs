@@ -821,54 +821,6 @@ pub(crate) extern "system" fn account_action(
     })
 }
 
-/// `HostApi::allowlist_set`: lists `account` on the allowlist or takes it off.
-pub(crate) extern "system" fn allowlist_set(
-    me: ModHandle,
-    account: enshwick::PlayerKey,
-    listed: u8,
-) -> Status {
-    entry("allowlist_set", || {
-        if account == enshwick::PlayerKey::new(0) || listed > 1 {
-            return Status::BAD_ARGS;
-        }
-        let (loader, record) = match calling(me) {
-            Ok((loader, _, record)) if loader.side == Side::SERVER => (loader, record),
-            Ok(_) => return Status::MISSING,
-            Err(status) => return status,
-        };
-        let who = format!("the mod {}", record.id);
-        match crate::allowlist::set(loader, account.get(), listed == 1, None, &who) {
-            Ok(_) => Status::OK,
-            Err(e) => {
-                crate::log!(WARN, "allowlist: {who} changed nothing: {e}");
-                Status::REFUSED
-            }
-        }
-    })
-}
-
-/// `HostApi::allowlist_has`: whether the allowlist lists `account`.
-pub(crate) extern "system" fn allowlist_has(
-    me: ModHandle,
-    account: enshwick::PlayerKey,
-    listed: *mut u8,
-) -> Status {
-    entry("allowlist_has", || {
-        if account == enshwick::PlayerKey::new(0) || listed.is_null() {
-            return Status::BAD_ARGS;
-        }
-        let loader = match caller(me) {
-            Ok(loader) if loader.side == Side::SERVER => loader,
-            Ok(_) => return Status::MISSING,
-            Err(status) => return status,
-        };
-        let has = crate::allowlist::has(loader, account.get());
-        // SAFETY: the caller passes `listed` writable for one byte for the
-        // call, as `HostApi::allowlist_has` states; `put` refuses null.
-        unsafe { put(listed, u8::from(has)) }
-    })
-}
-
 /// `HostApi::chat_mute_set`: mutes `account` in chat or lifts its mute.
 pub(crate) extern "system" fn chat_mute_set(
     me: ModHandle,
@@ -888,6 +840,7 @@ pub(crate) extern "system" fn chat_mute_set(
         match crate::chat_mute::set(loader, account.get(), muted == 1, &who) {
             Ok(()) => Status::OK,
             Err(crate::chat_mute::SetMuteError::Protected) => Status::REFUSED,
+            Err(crate::chat_mute::SetMuteError::NoWorld) => Status::MISSING,
             Err(e) => {
                 crate::log!(WARN, "chat mutes: {who} changed nothing: {e}");
                 Status::REFUSED

@@ -5,10 +5,12 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// The file, in the log's folder beside the game or in the temporary folder
-/// when the game's folder takes no files, that takes the lines; it keeps
-/// earlier runs' lines, each dated, up to [`KEPT_BYTES`].
-pub const FILE: &str = "start.log";
+/// The file that takes the lines, in `logs/` beside the game.
+///
+/// When the game's folder takes no files, it lies in `enshwick/` in the
+/// temporary folder. It keeps earlier runs' lines, each dated, up to
+/// [`KEPT_BYTES`], until the log takes them into the loader's file.
+pub const FILE: &str = crate::log::START_FILE;
 /// Past this size the file starts again empty.
 const KEPT_BYTES: u64 = 64 << 10;
 /// Panics the loader logs; later ones are counted only.
@@ -30,10 +32,9 @@ pub fn note(message: &str) {
 pub fn write(message: &str) {
     let line = line(now(), message);
     to_debugger(&line);
-    let game_logs = std::env::current_exe().ok().and_then(|exe| {
-        exe.parent()
-            .map(|dir| dir.join(crate::log::LOGS).join(crate::settings::LOADER_ID))
-    });
+    let game_logs = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(crate::log::LOGS)));
     let temp = std::env::temp_dir().join(crate::settings::LOADER_ID);
     let _kept = game_logs
         .into_iter()
@@ -56,6 +57,14 @@ pub fn stamp(unix_seconds: u64) -> String {
     let second = unix_seconds % 86_400;
     let (hour, minute, second) = (second / 3600, second / 60 % 60, second % 60);
     format!("{year:04}-{month:02}-{day:02}-{hour:02}-{minute:02}-{second:02}")
+}
+
+/// `2026-10-29_14-03-09`, UTC, for a log file's name.
+#[must_use]
+pub fn log_stamp(unix_seconds: u64) -> String {
+    let mut stamp = stamp(unix_seconds);
+    stamp.replace_range(10..11, "_");
+    stamp
 }
 
 /// The proleptic Gregorian date `days` after 1970-01-01.

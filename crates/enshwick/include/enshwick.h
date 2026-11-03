@@ -13,7 +13,7 @@
 // Any change to the layout other than an append is a new major, with
 // `ABI_MINOR` back at 0; the layout tests of this crate hold the pair to
 // the committed layout.
-#define ENSHWICK_ABI_MAJOR 10
+#define ENSHWICK_ABI_MAJOR 11
 
 // The minor version of this interface: one more for each append to the
 // layout of this `ABI_MAJOR`, a field at the end of a struct that starts
@@ -2987,8 +2987,8 @@ typedef struct EnshwickHostApi {
                                      void *user);
   // Adds `callback` with `user` to the mod's status sources: the loader
   // calls it, on a thread of its own or the game thread, whenever it
-  // writes its status summary (`logs/enshwick/status.log`, `/enshwick
-  // status`) and shows its lines under the mod. Allowed during
+  // writes its status summary (`enshwick status` on the console, into
+  // the loader's log) and shows its lines under the mod. Allowed during
   // `enshwick_mod_init` only.
   EnshwickStatus (*status)(EnshwickModHandle me, EnshwickStatusFn callback, void *user);
   // Runs the console line `line` as the server's console, an
@@ -4093,42 +4093,18 @@ typedef struct EnshwickHostApi {
   // administrators' account actions do: `AccountActionType::KICK`
   // removes a player online, `AccountActionType::BAN` puts the account
   // on the server's ban list and removes its player when online,
-  // `AccountActionType::UN_BAN` takes it off the list. A ban of an
-  // account not online goes straight onto the list, which the dedicated
-  // server writes to `bannedAccounts` of `enshrouded_server.json`.
+  // `AccountActionType::UN_BAN` takes it off the list; the dedicated
+  // server writes the list to `bannedAccounts` of `enshrouded_server.json`.
   // `Status::REFUSED` for a kick or a ban of an administrator online,
   // whom the game never removes, for a kick or a ban of a hosted game's
-  // host, for a kick of an account not online, and for a ban of an account
-  // not online that the game's list does not take; an account on the
-  // list already is no error. `Status::BAD_ARGS` for account 0 or an
+  // host, and for a kick or a ban of an account not online; an account on
+  // the list already is no error. `Status::BAD_ARGS` for account 0 or an
   // action this loader does not know; `Status::MISSING` while no server runs or on a build that
   // lacks the action. On the server's game thread between steps only:
   // `Status::WRONG_THREAD` elsewhere.
   EnshwickStatus (*account_action)(EnshwickModHandle me,
                                    EnshwickAccountActionType action,
                                    EnshwickPlayerKey account);
-  // Puts `account` on the loader's allowlist when `listed` is 1, or takes
-  // it off when 0: the accounts a dedicated server with the loader's
-  // `allowlist` setting on lets join, beside its administrators. The
-  // list is the file `mods/enshwick/allowlist.txt`, written at once
-  // whether the setting is on or not; it applies from the next join.
-  // `Status::OK` also when the list already says so;
-  // `Status::BAD_ARGS` for account 0 or `listed` above 1;
-  // `Status::REFUSED` when the file is not written;
-  // `Status::MISSING` outside a dedicated server. Any thread, also
-  // while another call or the console changes the list: changes take
-  // turns and the file is replaced whole. A panic in the loader returns
-  // `Status::REFUSED`.
-  EnshwickStatus (*allowlist_set)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t listed);
-  // Writes 1 to `listed` when the loader's allowlist lists `account`, 0
-  // when not or when the file never read, whether the `allowlist`
-  // setting is on or not. `listed` is the caller's, writable for one
-  // byte for the call, and written only on `Status::OK`.
-  // `Status::BAD_ARGS` for account 0 or a null `listed`;
-  // `Status::MISSING` outside a dedicated server. Any thread, also
-  // while the list changes. A panic in the loader returns
-  // `Status::REFUSED`.
-  EnshwickStatus (*allowlist_has)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t *listed);
   // Calls `callback` with `user`, `Event::TICKED` and a `TickData`
   // on the server's game thread after a step, once `every_nanos` of wall
   // time have passed since its last call, and on the first step after it
@@ -4205,14 +4181,15 @@ typedef struct EnshwickHostApi {
   // The server drops every line the account's player types before any
   // other player reads it, and tells that player with one of the game's
   // notices at most every 30 seconds; lines mods send and mod messages
-  // pass. The mutes are the file `mods/enshwick/muted.txt`, written
-  // at once and read again at every start. `Status::OK` also when the
+  // pass. The mutes belong to the world: the file
+  // `<stem>-mod-data/enshwick/muted.txt` beside its save, written at once
+  // and read again as the world loads. `Status::OK` also when the
   // list already says so; `Status::BAD_ARGS` for account 0 or `muted`
   // above 1; `Status::REFUSED` for a mute of an administrator online
   // or of a hosted game's host, whose lines pass even when muted before,
   // and when the file is not written;
   // `Status::MISSING` outside a server, the dedicated one or the one a
-  // client hosts. Any thread, also while another call changes the list:
+  // client hosts, and while no world runs. Any thread, also while another call changes the list:
   // changes take turns and the file is replaced whole. A panic in the
   // loader returns `Status::REFUSED`.
   EnshwickStatus (*chat_mute_set)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t muted);
