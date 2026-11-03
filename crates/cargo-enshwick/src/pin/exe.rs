@@ -52,6 +52,11 @@ impl<'a> Exe<'a> {
         })
     }
 
+    /// The executable's image.
+    pub(crate) const fn image(&self) -> &Image<'a> {
+        &self.image
+    }
+
     /// The build fingerprint, when the executable carries one.
     pub(crate) fn fingerprint(&self) -> Option<Fingerprint> {
         self.image.fingerprint()

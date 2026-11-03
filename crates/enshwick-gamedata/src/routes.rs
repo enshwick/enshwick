@@ -39,6 +39,7 @@
 //! is not exactly one, or a shape that matches nowhere or twice leaves its
 //! entry not found, for the table to supply.
 
+mod check;
 mod code;
 mod find;
 pub(crate) mod shape;
@@ -49,6 +50,7 @@ use rustc_hash::FxHashSet;
 
 use crate::reflect::{Image, Reflection};
 use crate::{Resolved, Side, TableError};
+pub use check::{check_holds, make_check};
 use code::Code;
 use shape::Step;
 

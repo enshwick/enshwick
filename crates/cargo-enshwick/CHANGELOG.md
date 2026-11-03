@@ -33,6 +33,8 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `cargo enshwick pin` refreshes the `check` shapes of the engine routes for
+  the side it ports, so a hook needs no table row on the new build (#920).
 - `cargo enshwick pin` takes a symbol the old table's own pattern finds once
   on the new build, and reads its code bytes again there (#914).
 - `cargo enshwick new --enshwick-rev <commit>` builds the new mod on a

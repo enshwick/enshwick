@@ -13,6 +13,7 @@
 
 use anyhow::{Context as _, anyhow, bail};
 mod anchor;
+mod checks;
 mod exe;
 mod patterns;
 mod port;
@@ -27,11 +28,12 @@ use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
+use enshwick_gamedata::Resolved;
 use enshwick_gamedata::reflect::Fingerprint;
 use rustc_hash::FxHashMap;
 
 use self::exe::Exe;
-use self::rows::{Row, guid_hex};
+use self::rows::{Row, Side, guid_hex};
 use self::staged::Staged;
 
 /// What `cargo enshwick pin` is given.
@@ -110,7 +112,9 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
         bail!("both executables are the same build; nothing to write");
     }
     let mut staged = Staged::default();
-    let mut sections = port_tables(args, &old, &new, &mut staged)?;
+    let mut ported = Vec::new();
+    let mut sections = port_tables(args, &old, &new, &mut staged, &mut ported)?;
+    sections.extend(refresh_checks(args, &old, &new, &ported, &mut staged)?);
     sections.extend(port_mods(args, &old, &new, &mut staged)?);
     if sections.is_empty() {
         bail!("no row is for the old build {}", spell(old_fp));
@@ -137,12 +141,14 @@ fn finish(staged: Staged, report: Option<&Path>, text: &str) -> anyhow::Result<(
 }
 
 /// Ports the loader's table for `old`'s build to `new`'s build; with
-/// `--write`, stages the new table file.
+/// `--write`, stages the new table file. Each ported table goes to `tables`
+/// as its side, the old table and the new one.
 fn port_tables(
     args: &Args,
     old: &Exe<'_>,
     new: &Exe<'_>,
     staged: &mut Staged,
+    tables: &mut Vec<(Side, Resolved, Resolved)>,
 ) -> anyhow::Result<Vec<report::Section>> {
     let (Some(old_fp), Some(new_fp)) = (old.fingerprint(), new.fingerprint()) else {
         return Ok(Vec::new());
@@ -194,11 +200,50 @@ fn port_tables(
             text: (!args.write).then(|| (text.clone(), "toml")),
             unpatterned: patterned.problems,
         });
+        let resolved = enshwick_gamedata::Table::parse(&text)
+            .with_context(|| target.display().to_string())?
+            .resolve();
+        tables.push((row.side, source.resolve(), resolved));
         if args.write {
             staged.create(target, text);
         }
     }
     Ok(sections)
+}
+
+/// Refreshes the routes' check shapes over the old and the new build for
+/// each table in `ported`; with `--write`, stages the routes file.
+fn refresh_checks(
+    args: &Args,
+    old: &Exe<'_>,
+    new: &Exe<'_>,
+    ported: &[(Side, Resolved, Resolved)],
+    staged: &mut Staged,
+) -> anyhow::Result<Vec<report::Section>> {
+    if ported.is_empty() {
+        return Ok(Vec::new());
+    }
+    let path = args.repo.join(checks::ROUTES);
+    let before = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
+    let mut text = before.clone();
+    let mut notes = Vec::new();
+    for (side, old_table, new_table) in ported {
+        let builds = [(old.image(), old_table), (new.image(), new_table)];
+        let (refreshed, more) = checks::refresh(&text, *side, &builds)?;
+        text = refreshed;
+        notes.extend(more);
+    }
+    let changed = text != before;
+    if args.write && changed {
+        staged.replace(path, text.clone(), before);
+    }
+    Ok(vec![report::Section {
+        file: checks::ROUTES.to_owned(),
+        title: "check shapes".to_owned(),
+        lines: Vec::new(),
+        text: (!args.write && changed).then_some((text, "toml")),
+        unpatterned: notes,
+    }])
 }
 
 /// Ports the mods' rows for `old`'s build to `new`'s build; with `--write`,
@@ -356,10 +401,10 @@ fn relative(repo: &Path, path: &Path) -> String {
 }
 
 /// The file name of the table for a build, as the loader looks for it.
-fn table_file(side: rows::Side, fingerprint: Fingerprint) -> String {
+fn table_file(side: Side, fingerprint: Fingerprint) -> String {
     let side = match side {
-        rows::Side::Server => "server",
-        rows::Side::Client => "client",
+        Side::Server => "server",
+        Side::Client => "client",
     };
     format!(
         "{side}-{}-{}.toml",
