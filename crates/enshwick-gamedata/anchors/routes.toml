@@ -1440,8 +1440,10 @@ take = "value"
 [[route]]
 id = "damage.shroud"
 system = "fog_resistance_update"
-shape = ["sub [r8+rcx*4],eax"]
-check = ["sub [r8+rcx*4],eax", "mov rdx,rdi", "mov rcx,rbx"]
+# One instruction before the subtraction: the deadly path jumps to the
+# `mov rdx,rdi` after it, which a hook on the subtraction would cover.
+shape = ["add r8,rbx", "sub [r8+rcx*4],eax"]
+check = ["add r8,rbx", "sub [r8+rcx*4],eax", "mov rdx,rdi", "mov rcx,rbx"]
 
 [[route]]
 id = "damage.shroud_death"

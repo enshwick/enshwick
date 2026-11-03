@@ -444,6 +444,9 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- A damage filter sees shroud damage on the dedicated server build
+  26319703: the loader hooks the shroud site one instruction earlier, where
+  no branch of its function lands inside the hook (#922).
 - A changed client no longer passes the chat mute or forges an emote or
   notice line by sending a chat type other than typed text: the server tells
   a player's line by where the game posts it and posts it as typed text,

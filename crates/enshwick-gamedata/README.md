@@ -50,6 +50,14 @@ game update that moves a field changes this crate, not the mods.
   need it turn off.
 - [`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin)
   writes the table for a new build, patterns included.
+- [`reports/`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/reports)
+  holds, under each table's file name, what the loader finds on that build:
+  its Steam build and game version, how many entries it has and how many
+  the engine routes found, the entries it lacks that another build of its
+  side has, and each loader feature that is off or partly off for them.
+  `cargo xtask compat <exe> --data <file>` writes it from the executable,
+  and a test checks it against its table, and against each executable that
+  `ENSH_EXES` lists. It holds names, counts and ids only.
 
 ## Patterns
 

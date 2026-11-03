@@ -74,7 +74,7 @@ use crate::pages;
 use crate::settings::LOADER_ID;
 
 /// The jump written over a target: `jmp rel32`.
-const PATCH: usize = 5;
+pub(crate) const PATCH: usize = 5;
 /// `jmp [rip + 0]` followed by the 64-bit destination.
 const FAR_JUMP: usize = 14;
 /// Bytes read from a target to find the instructions to move.
@@ -446,11 +446,6 @@ fn stack_effects(instructions: &[Instruction], moved: &[(usize, usize)]) -> (Vec
     (stack_moves, instructions.iter().any(call))
 }
 
-/// The first direct branch or call of `function` that lands in
-/// `target + 1..target + stolen`, where it would land in the jump itself. A
-/// branch among the moved instructions moves with them, its target in the
-/// trampoline. Code without a function entry, a leaf such as generated code,
-/// is not checked.
 fn jumped_into(target: usize, stolen: usize, function: Option<Function>) -> Option<usize> {
     let Function { begin, end, .. } = function?;
     let len = end.checked_sub(begin)?;
@@ -462,13 +457,25 @@ fn jumped_into(target: usize, stolen: usize, function: Option<Function>) -> Opti
     // loader holds the game's and the mods' images, which it never unloads.
     // The slice lives for this function only, while no patch writes them.
     let code = unsafe { core::slice::from_raw_parts(begin as *const u8, len) };
-    let moved = target as u64..(target + stolen) as u64;
-    let inside = target as u64 + 1..(target + stolen) as u64;
-    let mut decoder = Decoder::with_ip(64, code, begin as u64, DecoderOptions::NONE);
+    usize::try_from(branch_into(
+        code,
+        begin as u64,
+        target as u64,
+        stolen as u64,
+    )?)
+    .ok()
+}
+
+/// [`jumped_into`] on `code` that starts at `begin`, also for a game
+/// executable read from its file.
+pub(crate) fn branch_into(code: &[u8], begin: u64, target: u64, stolen: u64) -> Option<u64> {
+    let moved = target..target + stolen;
+    let inside = target + 1..target + stolen;
+    let mut decoder = Decoder::with_ip(64, code, begin, DecoderOptions::NONE);
     decoder
         .iter()
         .find(|i| !moved.contains(&i.ip()) && inside.contains(&i.near_branch_target()))
-        .and_then(|instruction| usize::try_from(instruction.ip()).ok())
+        .map(|instruction| instruction.ip())
 }
 
 /// The function whose entry in its image's function table holds `address`;

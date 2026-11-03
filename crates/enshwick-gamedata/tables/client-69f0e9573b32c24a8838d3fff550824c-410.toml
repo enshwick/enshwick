@@ -154,7 +154,7 @@ revision = 1
 "daytime.set_speed" = { rva = 0xe9_9ab0, pattern = "48 89 5C 24 ?? 57 48 83 EC 30 0F 29 74 24 ?? 49 8B D0" }
 "damage.hit" = { rva = 0x3d_6970, pattern = "48 8D 4D ?? E8 ?? ?? ?? ?? 0F 10 45 ?? 48 8B 95 ?? ?? ?? ?? 48 8B 5D ?? 0F 10 4D ??", at = 9 }
 "damage.fall" = { rva = 0x27_433d, pattern = "F3 44 0F 2C CF 4C 03 C3 45 89 0C 88 48 8B CB E8 ?? ?? ?? ??", at = 8 }
-"damage.shroud" = { rva = 0x2d_125b, pattern = "F3 0F 2C C6 4C 03 C3 41 29 04 88 48 8B D7 48 8B CB", at = 7 }
+"damage.shroud" = { rva = 0x2d_1258, pattern = "F3 0F 2C C6 4C 03 C3 41 29 04 88 48 8B D7 48 8B CB", at = 4 }
 "damage.shroud_death" = { rva = 0x2d_11a1, pattern = "44 0F B7 43 ?? 4C 03 C3 41 89 14 88 E9 ?? ?? ?? ?? 48 8D 95 ?? ?? ?? ?? 49 8B CF", at = 8 }
 "damage.drowning" = { rva = 0x23_8c49, pattern = "F3 0F 2C C6 4C 03 C3 41 29 04 88 48 8B CB E8 ?? ?? ?? ?? 48 8B 4D ??", at = 7 }
 "damage.drowning_death" = { rva = 0x23_8e1e, pattern = "48 8B D7 4C 03 C3 45 89 34 88 48 8B CB E8 ?? ?? ?? ?? 41 B8 F8 00 00 00", at = 6 }

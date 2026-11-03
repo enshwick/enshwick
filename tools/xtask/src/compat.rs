@@ -38,6 +38,10 @@ pub(crate) struct Args {
     /// to see what the patterns alone carry.
     #[arg(long)]
     patterns: bool,
+    /// Also writes what the loader finds on the build here, as TOML: the
+    /// report data beside the build tables; only for a build with a table.
+    #[arg(long)]
+    data: Option<PathBuf>,
 }
 
 /// What the hidden `run` step is given: a game folder prepared with
@@ -110,6 +114,10 @@ struct Build {
     code_rva: u64,
     /// The table the loader would use; `None` leaves the game vanilla.
     table: Option<(Resolved, Table)>,
+    /// How many of its entries the engine routes found.
+    routed: usize,
+    /// Every entry a route of this side looks for, found or not.
+    route_ids: Vec<String>,
     /// The attribute slots read from the game's data, or why none were.
     slots: Result<Slots, String>,
 }
@@ -170,6 +178,11 @@ fn build(exe: &Path, patterns: bool) -> Result<Build, String> {
             )
         }),
     };
+    let routes = tables::Routes::embedded().map_err(|e| e.to_string())?;
+    let (count, route_ids) = match &mut table {
+        Some((resolved, _)) => route(&routes, &image, &reflection, side, resolved),
+        None => (0, Vec::new()),
+    };
     let slots = match &mut table {
         Some((resolved, _)) => supply_slots(exe, &reflection, resolved),
         None => Ok(Slots::default()),
@@ -183,8 +196,33 @@ fn build(exe: &Path, patterns: bool) -> Result<Build, String> {
         code,
         code_rva: range.start - base,
         table,
+        routed: count,
+        route_ids,
         slots,
     })
+}
+
+/// Takes into `table` what the engine routes find, as the loader does at
+/// its start: how many entries they found, and every entry they look for.
+fn route(
+    routes: &tables::Routes,
+    image: &Image<'_>,
+    reflection: &Reflection<'_>,
+    side: tables::Side,
+    table: &mut Resolved,
+) -> (usize, Vec<String>) {
+    let found = routes.find(image, reflection, side, table);
+    let ids = found.iter().map(|(id, _)| (*id).to_owned()).collect();
+    let count = found
+        .into_iter()
+        .filter(|&(id, routed)| {
+            matches!(
+                table.route(id, routed),
+                tables::Routing::Agrees | tables::Routing::Supplied
+            )
+        })
+        .count();
+    (count, ids)
 }
 
 /// Gives `table` the attribute slots the game's archive beside `exe`
@@ -348,10 +386,82 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             let _w = writeln!(out, "Attribute slots: {why}.\n");
         }
     }
+    if let Some(path) = &args.data {
+        if !matches!(table.kind(), Kind::Exact) {
+            return Err("no build table is made for this build: pin it first".to_owned());
+        }
+        std::fs::write(path, data(&build, table, source)?)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+    }
     write_features(&mut out, table);
     works &= write_mods(&mut out, args)?;
     emit(args, &out)?;
     Ok(works)
+}
+
+/// The report data of `build`, whose own table is `source`, as TOML: names,
+/// counts and ids only. An entry is missing when another table of the side
+/// or a route of the side has it and this build does not; each loader
+/// feature that names a missing entry is listed with them.
+fn data(build: &Build, table: &Resolved, source: &Table) -> Result<String, String> {
+    if MODULE_IDS.is_empty() {
+        return Err("only a Windows build of this tool knows the loader's features".to_owned());
+    }
+    let all = known_tables()?;
+    let mut known: std::collections::BTreeSet<&str> =
+        build.route_ids.iter().map(String::as_str).collect();
+    for other in all.iter().filter(|t| t.side() == source.side()) {
+        known.extend(other.symbols().iter().map(tables::Symbol::id));
+        known.extend(other.constants().iter().map(tables::Constant::id));
+    }
+    // An `<id>.bytes` check is not an entry, and a route drops it.
+    known.retain(|id| id.rsplit('.').next() != Some("bytes"));
+    let missing: Vec<&str> = known
+        .iter()
+        .copied()
+        .filter(|&id| table.symbol(id).is_none() && table.constant(id).is_none())
+        .collect();
+    let list = |ids: &[&str]| {
+        let quoted: Vec<String> = ids.iter().map(|id| format!("{id:?}")).collect();
+        format!("[{}]", quoted.join(", "))
+    };
+    let mut out = String::from(
+        "# What the loader finds on this game build; `cargo xtask compat <exe> --data <file>`\n# writes it.\n\n",
+    );
+    let _w = writeln!(out, "table = {:?}", source.name());
+    let _w = writeln!(out, "side = {:?}", source.side().as_str());
+    if let Some(steam) = source.steam_build() {
+        let _w = writeln!(out, "steam_build = {steam}");
+    }
+    if let Some(version) = source.game_version() {
+        let _w = writeln!(out, "game_version = {version}");
+    }
+    let _w = writeln!(
+        out,
+        "entries = {}",
+        table.symbols().len() + table.constants().len()
+    );
+    let _w = writeln!(out, "routed = {}", build.routed);
+    let _w = writeln!(out, "missing = {}", list(&missing));
+    for &(name, ids) in MODULE_IDS {
+        let named = ids.iter().filter(|id| known.contains(**id)).count();
+        let lacks: Vec<&str> = ids
+            .iter()
+            .copied()
+            .filter(|id| missing.contains(id))
+            .collect();
+        let state = match lacks.len() {
+            0 => continue,
+            n if n == named => "off",
+            _ => "partly",
+        };
+        let _w = writeln!(
+            out,
+            "\n[[feature]]\nname = {name:?}\nstate = {state:?}\nmissing = {}",
+            list(&lacks)
+        );
+    }
+    Ok(out)
 }
 
 /// The loader features table.
@@ -608,6 +718,72 @@ mod tests {
         let nothing = server.fall_back(&[0; 64], 0x1000, |_| None);
         let fallback = nothing.parts(MODULE_IDS);
         assert!(fallback.iter().all(|f| f.missing.len() == f.named));
+    }
+
+    /// Each embedded table has its report data in `reports/` under the same
+    /// file name, naming the table's build and only the loader's features;
+    /// on each executable the opt-in `ENSH_EXES` path list names, the data
+    /// is what this tool writes now (skipped without it).
+    #[cfg(windows)]
+    #[test]
+    fn every_table_s_report_data_agrees_with_it() {
+        let dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/enshwick-gamedata/reports");
+        let read = |file: &str| {
+            std::fs::read_to_string(dir.join(file))
+                .unwrap()
+                .replace("\r\n", "\n")
+        };
+        let mut files: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        files.sort();
+        let embedded: Vec<&str> = tables::embedded().iter().map(|&(file, _)| file).collect();
+        assert_eq!(files, embedded, "one report per table");
+        let number =
+            |data: &toml::Table, key: &str| data.get(key).and_then(toml::Value::as_integer);
+        for &(file, text) in tables::embedded() {
+            let table = Table::parse(text).unwrap();
+            let data: toml::Table = read(file).parse().unwrap();
+            assert_eq!(data["table"].as_str(), Some(table.name()), "{file}");
+            assert_eq!(data["side"].as_str(), Some(table.side().as_str()), "{file}");
+            assert_eq!(
+                number(&data, "steam_build"),
+                table.steam_build().map(|b| i64::try_from(b.get()).unwrap()),
+                "{file}"
+            );
+            assert_eq!(
+                number(&data, "game_version"),
+                table.game_version().map(|v| i64::from(v.get())),
+                "{file}"
+            );
+            let features = data.get("feature").and_then(toml::Value::as_array);
+            for feature in features.into_iter().flatten() {
+                let name = feature["name"].as_str().unwrap();
+                let (_, ids) = MODULE_IDS.iter().find(|(n, _)| *n == name).unwrap();
+                for id in feature["missing"].as_array().unwrap() {
+                    assert!(ids.contains(&id.as_str().unwrap()), "{file}: {name} {id}");
+                }
+            }
+        }
+        let Some(list) = std::env::var_os("ENSH_EXES") else {
+            return;
+        };
+        for exe in std::env::split_paths(&list) {
+            let build = build(&exe, false).unwrap();
+            let (table, source) = build.table.as_ref().unwrap();
+            let &(file, _) = tables::embedded()
+                .iter()
+                .find(|(_, text)| Table::parse(text).unwrap().name() == source.name())
+                .unwrap();
+            assert_eq!(
+                data(&build, table, source).unwrap(),
+                read(file),
+                "{}",
+                exe.display()
+            );
+        }
     }
 
     #[test]

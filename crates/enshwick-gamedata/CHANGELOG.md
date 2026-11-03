@@ -28,6 +28,9 @@ Each entry names the pull request that made the change.
 - `Body`, `Resolved::body` and `MAX_PATTERN`: a symbol whose whole function
   the loader relies on is checked by the function's length, its moving
   4-byte fields and a hash of the rest (#710).
+- `reports/` holds, for each build table, what the loader finds on its
+  build: Steam build, game version, entry and route counts, the entries it
+  lacks and the loader features they turn off (#922).
 
 ### Changed
 
