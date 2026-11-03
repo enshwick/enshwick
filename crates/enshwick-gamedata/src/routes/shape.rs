@@ -7,12 +7,14 @@
 //! (`r13`); memory through a base register, an optional index register with
 //! its scale and a displacement (`[rcx]`, `[rbp-*]`, `[rbp+?]`, `[rdx+0x78]`,
 //! `[rcx+r10*4+?]`) or RIP-relative (`[rip+*]`); an exact immediate
-//! (`0x1`); `?` for any operand; `*` for any operand whose value the route
+//! (`0x1`); memory with its size first where the registers do not give it
+//! (`dword [rcx+0xb8]`); `?` for any operand; `*` for any operand whose value the route
 //! takes; and `{id}` for the address of another entry, as a branch target or
 //! a RIP-relative operand. A `*` or `?` displacement is not zero and has the
 //! sign written.
 
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
+use rustc_hash::FxHashMap;
 
 /// What a memory operand's displacement must be.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,6 +36,8 @@ enum Op {
         /// The index register and its scale; `Register::None` for none.
         index: (Register, u32),
         disp: Disp,
+        /// The bytes the operand reads or writes, when the step says.
+        size: Option<usize>,
     },
     Immediate(u64),
     Any {
@@ -54,19 +58,58 @@ pub(crate) struct Step {
 #[error("{0}")]
 pub(crate) struct ShapeError(String);
 
+/// The lowercase names of the mnemonics and registers, made once per read
+/// of many steps.
+pub(crate) struct Names {
+    mnemonics: FxHashMap<String, Mnemonic>,
+    registers: FxHashMap<String, Register>,
+}
+
+impl Names {
+    pub(crate) fn new() -> Self {
+        let name = |x: &dyn core::fmt::Debug| format!("{x:?}").to_lowercase();
+        Self {
+            mnemonics: Mnemonic::values().map(|m| (name(&m), m)).collect(),
+            registers: Register::values()
+                .filter(|&r| r != Register::None)
+                .map(|r| (name(&r), r))
+                .collect(),
+        }
+    }
+
+    fn register(&self, text: &str) -> Result<Register, ShapeError> {
+        self.registers
+            .get(&text.to_lowercase())
+            .copied()
+            .ok_or_else(|| ShapeError(format!("{text:?} is no register")))
+    }
+}
+
+/// The size words a memory operand may start with, and their bytes.
+const SIZES: [(&str, usize); 6] = [
+    ("byte ", 1),
+    ("word ", 2),
+    ("dword ", 4),
+    ("qword ", 8),
+    ("xmmword ", 16),
+    ("ymmword ", 32),
+];
+
 impl Step {
     /// Reads one step, such as `lea rdx,[rbp-*]`.
-    pub(crate) fn parse(text: &str) -> Result<Self, ShapeError> {
+    pub(crate) fn parse(text: &str, names: &Names) -> Result<Self, ShapeError> {
         let text = text.trim();
         let (name, ops) = text.split_once(' ').unwrap_or((text, ""));
-        let mnemonic = Mnemonic::values()
-            .find(|m| format!("{m:?}").eq_ignore_ascii_case(name))
+        let mnemonic = names
+            .mnemonics
+            .get(&name.to_lowercase())
+            .copied()
             .ok_or_else(|| ShapeError(format!("{name:?} is no mnemonic")))?;
         let ops = ops
             .split(',')
             .map(str::trim)
             .filter(|op| !op.is_empty())
-            .map(operand)
+            .map(|op| operand(op, names))
             .collect::<Result<_, _>>()?;
         Ok(Self { mnemonic, ops })
     }
@@ -128,8 +171,14 @@ impl Step {
             let kind = ins.op_kind(i);
             match op {
                 Op::Register(want) => kind == OpKind::Register && ins.op_register(i) == *want,
-                Op::Memory { base, index, disp } => {
+                Op::Memory {
+                    base,
+                    index,
+                    disp,
+                    size,
+                } => {
                     kind == OpKind::Memory
+                        && size.is_none_or(|bytes| ins.memory_size().size() == bytes)
                         && ins.memory_base() == *base
                         && ins.memory_index() == index.0
                         && (index.0 == Register::None || ins.memory_index_scale() == index.1)
@@ -189,17 +238,11 @@ fn value(ins: &Instruction, i: u32, kind: OpKind) -> Option<u64> {
     }
 }
 
-fn register(name: &str) -> Result<Register, ShapeError> {
-    Register::values()
-        .find(|r| *r != Register::None && format!("{r:?}").eq_ignore_ascii_case(name))
-        .ok_or_else(|| ShapeError(format!("{name:?} is no register")))
-}
-
 fn hex(text: &str) -> Option<u64> {
     u64::from_str_radix(text.strip_prefix("0x")?, 16).ok()
 }
 
-fn operand(text: &str) -> Result<Op, ShapeError> {
+fn operand(text: &str, names: &Names) -> Result<Op, ShapeError> {
     match text {
         "?" => return Ok(Op::Any { take: false }),
         "*" => return Ok(Op::Any { take: true }),
@@ -211,18 +254,25 @@ fn operand(text: &str) -> Result<Op, ShapeError> {
     if let Some(value) = hex(text) {
         return Ok(Op::Immediate(value));
     }
+    let (size, text) = SIZES
+        .iter()
+        .find_map(|&(word, bytes)| Some((Some(bytes), text.strip_prefix(word)?)))
+        .unwrap_or((None, text));
     let Some(inner) = text.strip_prefix('[').and_then(|t| t.strip_suffix(']')) else {
-        return register(text).map(Op::Register);
+        if size.is_some() {
+            return Err(ShapeError(format!("{text:?}: a size goes with memory")));
+        }
+        return names.register(text).map(Op::Register);
     };
-    memory_operand(inner)
+    memory_operand(inner, size, names)
 }
 
 /// Reads the inside of a memory operand: `base`, then `+index*scale`, then
 /// a signed `*`, `?` or hexadecimal displacement, each but the base optional.
-fn memory_operand(inner: &str) -> Result<Op, ShapeError> {
+fn memory_operand(inner: &str, size: Option<usize>, names: &Names) -> Result<Op, ShapeError> {
     let cut = |text: &str| text.find(['+', '-']).unwrap_or(text.len());
     let at = cut(inner);
-    let base = register(&inner[..at])?;
+    let base = names.register(&inner[..at])?;
     let mut rest = &inner[at..];
     let mut index = (Register::None, 1);
     if let Some(after) = rest.strip_prefix('+')
@@ -234,7 +284,7 @@ fn memory_operand(inner: &str) -> Result<Op, ShapeError> {
             .ok()
             .filter(|s| [1, 2, 4, 8].contains(s))
             .ok_or_else(|| ShapeError(format!("{tail:?}: a scale is 1, 2, 4 or 8")))?;
-        index = (register(name)?, scale);
+        index = (names.register(name)?, scale);
         rest = &after[cut(after)..];
     }
     let disp = match rest.split_at_checked(1) {
@@ -272,7 +322,12 @@ fn memory_operand(inner: &str) -> Result<Op, ShapeError> {
     if base == Register::RIP && index.0 != Register::None {
         return Err(ShapeError("a RIP-relative operand has no index".to_owned()));
     }
-    Ok(Op::Memory { base, index, disp })
+    Ok(Op::Memory {
+        base,
+        index,
+        disp,
+        size,
+    })
 }
 
 /// Where a shape matched: the first instruction's address, the address after
@@ -302,14 +357,4 @@ pub(crate) fn matches<'s>(
                 taken,
             })
     })
-}
-
-/// Whether `instructions` start with `steps`.
-pub(crate) fn starts(steps: &[Step], instructions: &[Instruction]) -> bool {
-    let mut taken = None;
-    steps.len() <= instructions.len()
-        && steps
-            .iter()
-            .zip(instructions)
-            .all(|(step, ins)| step.matches(ins, &|_: &str| None, &mut taken))
 }

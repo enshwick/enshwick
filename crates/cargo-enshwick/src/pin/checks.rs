@@ -1,11 +1,12 @@
 //! The `check` shapes of the engine routes, refreshed for a new build: each
-//! route that finds a symbol without matching its code keeps a check that
+//! route that finds a symbol, but for a start shape of two steps or more
+//! over eight bytes, keeps a check that
 //! still holds at the symbol on every build, or takes one made from their
 //! code, so a hook needs no table row on the new build either.
 
 use anyhow::Context as _;
 use enshwick_gamedata::reflect::Image;
-use enshwick_gamedata::{Resolved, check_holds, make_check};
+use enshwick_gamedata::{Resolved, check_holds, make_check, shape_checks};
 use toml_edit::{Array, DocumentMut, Item, Table, Value};
 
 use super::rows::Side;
@@ -39,7 +40,7 @@ pub(crate) fn refresh(
         let Some(alone) = sides(row, side) else {
             continue;
         };
-        if !finds_unchecked_symbol(row, &id) {
+        if !finds_symbol(row, &id) {
             continue;
         }
         let code: Vec<(&Image<'_>, u64)> = builds
@@ -48,6 +49,21 @@ pub(crate) fn refresh(
             .filter(|&(image, rva)| in_code(image, rva))
             .collect();
         if code.is_empty() {
+            continue;
+        }
+        let shape: Option<Vec<String>> = row.get("shape").and_then(Item::as_array).map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        });
+        let take = row.get("take").and_then(Item::as_str).unwrap_or("start");
+        if take == "start"
+            && shape.is_some_and(|shape| {
+                code.iter()
+                    .all(|&(image, rva)| shape_checks(&shape, image, rva))
+            })
+        {
+            row.remove("check");
             continue;
         }
         let current: Option<Vec<String>> = row.get("check").and_then(Item::as_array).map(|a| {
@@ -104,12 +120,11 @@ fn sides(row: &Table, side: Side) -> Option<bool> {
     names.contains(&name).then_some(names.len() == 1)
 }
 
-/// Whether the row finds an entry's symbol without matching the code there.
-fn finds_unchecked_symbol(row: &Table, id: &str) -> bool {
+/// Whether the row finds an entry's symbol, not a constant or a waypoint.
+fn finds_symbol(row: &Table, id: &str) -> bool {
     let take = row.get("take").and_then(Item::as_str).unwrap_or("start");
     let waypoint = id.starts_with('~') || !id.contains('.');
-    let shape_start = row.contains_key("shape") && take == "start";
-    !waypoint && !shape_start && !CONSTANT_TAKES.contains(&take)
+    !waypoint && !CONSTANT_TAKES.contains(&take)
 }
 
 #[cfg(test)]
@@ -144,7 +159,7 @@ mod tests {
 id = "a.kept"
 sides = ["server"]
 loads = ["k"]
-check = ["mov [rsp+?],rbx", "push rdi"]
+check = ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]
 
 [[route]]
 id = "a.stale"
@@ -200,12 +215,12 @@ loads = ["d"]
         let made = Some(r#" ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,?"]"#.to_owned());
         assert_eq!(
             check(0).as_deref(),
-            Some(r#" ["mov [rsp+?],rbx", "push rdi"]"#)
+            Some(r#" ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]"#)
         );
         assert_eq!(check(1), made);
         assert_eq!(check(2), made);
         assert_eq!(check(3).as_deref(), Some(r#" ["push rbx"]"#));
-        assert_eq!(check(4), None);
+        assert_eq!(check(4), made);
         assert_eq!(check(5), None);
         assert_eq!(check(6), None);
         assert_eq!(notes.len(), 1, "{notes:?}");

@@ -188,7 +188,9 @@ impl Resolved {
     /// entry. A [`Routed::Symbol`] or constant is [`Self::routed`], and a
     /// symbol also stands for its `<id>.bytes` check, which the route's own
     /// match replaces; a [`Routed::Reached`] symbol is not, and keeps its
-    /// checks.
+    /// checks. A symbol the route supplies loses the table's head pattern,
+    /// body and `<id>.bytes`, which were made for code the table did not
+    /// find, so a hook on a supplied [`Routed::Reached`] symbol has no check.
     ///
     /// # Examples
     ///
@@ -245,6 +247,15 @@ impl Resolved {
             }
         };
         self.missing.retain(|have| have != id);
+        let symbol = !matches!(found, Routed::Constant(_));
+        if symbol && routing == Routing::Supplied {
+            // The table's checks of this symbol were made for code it did not
+            // find, so none of them stands for the code at the route's answer.
+            let check = format!("{id}.bytes");
+            self.heads.retain(|(have, ..)| have != id);
+            self.bodies.retain(|(have, _)| have != id);
+            self.constants.retain(|(have, _)| *have != check);
+        }
         if matches!(found, Routed::Reached(_)) {
             return routing;
         }

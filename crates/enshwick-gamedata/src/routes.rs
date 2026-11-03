@@ -26,8 +26,10 @@
 //! limits a route to some sides; it defaults to every side.
 //!
 //! A shape's start checks the code of the symbol it finds
-//! ([`Routed::Symbol`]), and so does `check`, a shape the code at any symbol
-//! the route finds must start with: a symbol that does not finds nothing.
+//! ([`Routed::Symbol`]) when it has two steps or more over eight bytes, and so
+//! does `check`, a shape the code at any symbol the route finds must start
+//! with, a `jmp` step going on at its target: a symbol that does not finds
+//! nothing.
 //! Every other symbol is [`Routed::Reached`], and one in the code must start
 //! a function. A route that finds another symbol than
 //! `known` holds stands for nothing to the routes that name it.
@@ -50,9 +52,9 @@ use rustc_hash::FxHashSet;
 
 use crate::reflect::{Image, Reflection};
 use crate::{Resolved, Side, TableError};
-pub use check::{check_holds, make_check};
+pub use check::{check_holds, make_check, shape_checks};
 use code::Code;
-use shape::Step;
+use shape::{Names, Step};
 
 /// What an engine route found.
 ///
@@ -119,7 +121,9 @@ impl Route {
     /// Whether the route's match checks the code at the symbol it finds:
     /// the start of its shape.
     fn checks_code(&self) -> bool {
-        !self.check.is_empty() || self.take == Take::Start && matches!(self.how, How::Shape { .. })
+        !self.check.is_empty()
+            || self.take == Take::Start
+                && matches!(&self.how, How::Shape { steps, .. } if steps.len() >= 2)
     }
 }
 
@@ -149,7 +153,7 @@ struct RouteRow {
 }
 
 impl RouteRow {
-    fn route(self) -> Result<Route, TableError> {
+    fn route(self, names: &Names) -> Result<Route, TableError> {
         let id = self.id;
         let bad = |why: &str| TableError::Toml(format!("{id}: {why}"));
         let listed = |list: Option<Vec<String>>| list.filter(|l| !l.is_empty());
@@ -173,7 +177,7 @@ impl RouteRow {
                     within,
                     steps: shape
                         .iter()
-                        .map(|step| Step::parse(step).map_err(|e| bad(&e.to_string())))
+                        .map(|step| Step::parse(step, names).map_err(|e| bad(&e.to_string())))
                         .collect::<Result<_, _>>()?,
                 }
             }
@@ -212,7 +216,7 @@ impl RouteRow {
             .check
             .unwrap_or_default()
             .iter()
-            .map(|step| Step::parse(step).map_err(|e| bad(&e.to_string())))
+            .map(|step| Step::parse(step, names).map_err(|e| bad(&e.to_string())))
             .collect::<Result<_, _>>()?;
         if !check.is_empty()
             && (matches!(take, Take::Value | Take::Cell) || check.iter().any(|s| s.takes() > 0))
@@ -275,10 +279,11 @@ impl Routes {
     /// See [`Routes`].
     pub fn parse(text: &str) -> Result<Self, TableError> {
         let file: RoutesFile = toml::from_str(text).map_err(|e| TableError::Toml(e.to_string()))?;
+        let names = Names::new();
         let mut routes: Vec<Route> = file
             .route
             .into_iter()
-            .map(RouteRow::route)
+            .map(|row| row.route(&names))
             .collect::<Result<_, _>>()?;
         routes.sort_by(|a, b| a.id.cmp(&b.id));
         let mut seen = FxHashSet::default();

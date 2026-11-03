@@ -1,37 +1,74 @@
 //! Check shapes: the code a route's symbol must start with, made from the
-//! code at the symbol on several builds and matched as any shape is.
+//! code at the symbol on several builds and matched as any shape is, except
+//! that a `jmp` step goes on at the jump's target, so a thunk's check covers
+//! the code it jumps to.
 
 use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register};
 
-use super::shape::{self, Step};
+use super::shape::{Names, Step};
 use crate::reflect::Image;
 
-/// The bytes a check covers, as a `<id>.bytes` check does.
+/// The bytes a check covers past its last jump, as a `<id>.bytes` check does.
 const COVER: u64 = 8;
 /// The most steps a check has.
-const MAX_STEPS: usize = 8;
+const MAX_STEPS: usize = 12;
+/// The most jumps a check follows.
+const MAX_JUMPS: usize = 2;
 /// The longest x86-64 instruction.
 const LONGEST: u64 = 15;
 
-/// Up to `count` instructions at `rva` in `image`'s code section.
-fn code_at(image: &Image<'_>, rva: u64, count: usize) -> Vec<Instruction> {
-    let Some(text) = image.section(".text").map(|s| image.range(s)) else {
-        return Vec::new();
-    };
-    let va = image.base().saturating_add(rva);
+/// The instruction at `va` in `image`'s code section.
+fn one_at(image: &Image<'_>, va: u64) -> Option<Instruction> {
+    let text = image.range(image.section(".text")?);
     if !text.contains(&va) {
-        return Vec::new();
+        return None;
     }
-    let len = (text.end - va).min(LONGEST * count as u64);
-    let bytes = image.read(va, len).unwrap_or_default();
-    Decoder::with_ip(64, bytes, va, DecoderOptions::NONE)
-        .into_iter()
-        .take(count)
-        .collect()
+    let bytes = image.read(va, (text.end - va).min(LONGEST))?;
+    let ins = Decoder::with_ip(64, bytes, va, DecoderOptions::NONE).decode();
+    (!ins.is_invalid()).then_some(ins)
 }
 
-/// Whether the code at `rva` in `image` starts with the check shape `check`,
-/// as a route's `check` row reads; false for a step that does not parse.
+/// Where a check goes on after `ins`: the target of a direct `jmp`, else
+/// the next instruction.
+fn next_of(ins: &Instruction) -> u64 {
+    if ins.mnemonic() == Mnemonic::Jmp && ins.op0_kind() == OpKind::NearBranch64 {
+        ins.near_branch64()
+    } else {
+        ins.next_ip()
+    }
+}
+
+/// Whether the code at `rva` in `image` runs as `steps` say, a `jmp` step
+/// going on at its target, and the steps check eight bytes past the last
+/// jump or end the function there.
+pub(crate) fn runs(steps: &[Step], image: &Image<'_>, rva: u64) -> bool {
+    let mut va = image.base().saturating_add(rva);
+    let mut taken = None;
+    let mut covered = 0;
+    let mut ended = false;
+    let matched = !steps.is_empty()
+        && steps.iter().all(|step| {
+            let Some(ins) = one_at(image, va) else {
+                return false;
+            };
+            va = next_of(&ins);
+            let jump = va != ins.next_ip();
+            covered = if jump { 0 } else { covered + ins.len() as u64 };
+            ended = matches!(ins.mnemonic(), Mnemonic::Ret | Mnemonic::Int3)
+                || ins.mnemonic() == Mnemonic::Jmp && !jump;
+            step.matches(&ins, &|_: &str| None, &mut taken)
+        });
+    matched && (covered >= COVER || ended)
+}
+
+fn parse(steps: &[String]) -> Option<Vec<Step>> {
+    let names = Names::new();
+    steps.iter().map(|s| Step::parse(s, &names).ok()).collect()
+}
+
+/// Whether the code at `rva` in `image` runs as the check shape `check`
+/// says, as a route's `check` row reads; false for a step that does not
+/// parse.
 ///
 /// # Examples
 ///
@@ -49,23 +86,55 @@ fn code_at(image: &Image<'_>, rva: u64, count: usize) -> Vec<Instruction> {
 /// ```
 #[must_use]
 pub fn check_holds(check: &[String], image: &Image<'_>, rva: u64) -> bool {
-    let Ok(steps) = check
-        .iter()
-        .map(|s| Step::parse(s))
-        .collect::<Result<Vec<_>, _>>()
-    else {
+    parse(check).is_some_and(|steps| runs(&steps, image, rva))
+}
+
+/// Whether a route's start shape checks the code at `rva` as a hook needs:
+/// two steps or more, matching there one after the other, over eight bytes.
+///
+/// # Examples
+///
+/// ```no_run
+/// use enshwick_gamedata::shape_checks;
+/// use enshwick_gamedata::reflect::{Image, Layout};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let bytes = std::fs::read("enshrouded_server.exe")?;
+/// let image = Image::parse(&bytes, Layout::File, None)?;
+/// let checks = shape_checks(&["push rbx".to_owned(), "sub rsp,?".to_owned()], &image, 0x1000);
+/// # let _ = checks;
+/// # Ok(())
+/// # }
+/// ```
+#[must_use]
+pub fn shape_checks(shape: &[String], image: &Image<'_>, rva: u64) -> bool {
+    let Some(steps) = parse(shape) else {
         return false;
     };
-    !steps.is_empty() && shape::starts(&steps, &code_at(image, rva, steps.len()))
+    let start = image.base().saturating_add(rva);
+    let mut va = start;
+    for _ in &steps {
+        let Some(ins) = one_at(image, va) else {
+            return false;
+        };
+        va = ins.next_ip();
+    }
+    steps.len() >= 2 && va - start >= COVER
+}
+
+/// Whether a start shape's match from `start` to `end` checks the code at
+/// `start` as a hook needs: [`shape_checks`] for a match.
+pub(crate) fn match_checks(steps: usize, start: u64, end: u64) -> bool {
+    steps >= 2 && end - start >= COVER
 }
 
 /// Makes the check shape of a symbol from its code on each build, given as
 /// the image and the symbol's RVA.
 ///
 /// The check is the fewest instructions that cover eight bytes on every
-/// build, or end in a `ret` or `jmp`, each step exact where every build
-/// agrees and loose where only the registers do; `None` when no such run is
-/// the same on every build.
+/// build past the last direct `jmp` it follows, or end the function, each
+/// step exact where every build agrees and loose where only the registers
+/// do; `None` when no such run is the same on every build.
 ///
 /// # Examples
 ///
@@ -84,33 +153,48 @@ pub fn check_holds(check: &[String], image: &Image<'_>, rva: u64) -> bool {
 /// ```
 #[must_use]
 pub fn make_check(code: &[(&Image<'_>, u64)]) -> Option<Vec<String>> {
-    let runs: Vec<Vec<Instruction>> = code
-        .iter()
-        .map(|&(image, rva)| code_at(image, rva, MAX_STEPS))
-        .collect();
-    if runs.is_empty() || runs.iter().any(Vec::is_empty) {
+    if code.is_empty() {
         return None;
     }
+    let mut at: Vec<u64> = code
+        .iter()
+        .map(|&(image, rva)| image.base().saturating_add(rva))
+        .collect();
+    let mut covered = vec![0u64; code.len()];
+    let mut jumps = 0;
     let mut steps = Vec::new();
-    for k in 0..MAX_STEPS {
-        let here: Vec<&Instruction> = runs.iter().map(|r| r.get(k)).collect::<Option<_>>()?;
-        if here.iter().any(|i| i.is_invalid()) {
-            return None;
+    while steps.len() < MAX_STEPS {
+        let here: Vec<Instruction> = code
+            .iter()
+            .zip(&at)
+            .map(|(&(image, _), &va)| one_at(image, va))
+            .collect::<Option<_>>()?;
+        let text = [Level::Exact, Level::Loose, Level::Registers]
+            .into_iter()
+            .find_map(|level| {
+                let texts: Vec<String> = here.iter().map(|i| step_text(i, level)).collect();
+                texts
+                    .iter()
+                    .all(|t| *t == texts[0])
+                    .then(|| texts[0].clone())
+            })?;
+        steps.push(text);
+        let jump = here[0].mnemonic() == Mnemonic::Jmp
+            && here.iter().all(|i| i.op0_kind() == OpKind::NearBranch64);
+        let ends = matches!(here[0].mnemonic(), Mnemonic::Ret | Mnemonic::Int3)
+            || here[0].mnemonic() == Mnemonic::Jmp && !jump;
+        for ((va, done), ins) in at.iter_mut().zip(&mut covered).zip(&here) {
+            *va = next_of(ins);
+            *done = if jump { 0 } else { *done + ins.len() as u64 };
         }
-        let texts = [true, false].into_iter().find_map(|exact| {
-            let texts: Vec<String> = here.iter().map(|i| step_text(i, exact)).collect();
-            texts
-                .iter()
-                .all(|t| *t == texts[0])
-                .then(|| texts[0].clone())
-        })?;
-        steps.push(texts);
-        let covered = runs.iter().all(|r| r[k].next_ip() - r[0].ip() >= COVER);
-        let ends = matches!(
-            here[0].mnemonic(),
-            Mnemonic::Ret | Mnemonic::Jmp | Mnemonic::Int3
-        );
-        if covered || ends {
+        if jump {
+            jumps += 1;
+            if jumps > MAX_JUMPS {
+                return None;
+            }
+            continue;
+        }
+        if ends || covered.iter().all(|&c| c >= COVER) {
             let holds = code
                 .iter()
                 .all(|&(image, rva)| check_holds(&steps, image, rva));
@@ -124,11 +208,24 @@ fn name(x: impl core::fmt::Debug) -> String {
     format!("{x:?}").to_lowercase()
 }
 
-/// One instruction as a shape step: displacements and immediates exact
-/// when `exact`, else only their sign.
-fn step_text(ins: &Instruction, exact: bool) -> String {
+/// How much of an instruction a check step keeps, tried in this order.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Level {
+    /// Registers, displacements and immediates.
+    Exact,
+    /// Registers and the sign of each displacement.
+    Loose,
+    /// The sign of each displacement and the memory operand's base, index
+    /// and size; other registers may differ.
+    Registers,
+}
+
+/// One instruction as a check step at `level`.
+fn step_text(ins: &Instruction, level: Level) -> String {
+    let exact = level == Level::Exact;
     let ops: Vec<String> = (0..ins.op_count())
         .map(|i| match ins.op_kind(i) {
+            OpKind::Register if level == Level::Registers => "?".to_owned(),
             OpKind::Register => name(ins.op_register(i)),
             OpKind::Memory if ins.is_ip_rel_memory_operand() => "[rip+?]".to_owned(),
             OpKind::Memory
@@ -150,7 +247,21 @@ fn step_text(ins: &Instruction, exact: bool) -> String {
                     (d, false) if d < 0 => "-?".to_owned(),
                     (_, false) => "+?".to_owned(),
                 };
-                format!("[{}{index}{disp}]", name(ins.memory_base()))
+                // Without a register operand, only the size tells a byte
+                // store from a dword one.
+                let registers = level != Level::Registers
+                    && (0..ins.op_count()).any(|k| ins.op_kind(k) == OpKind::Register);
+                let size = match ins.memory_size().size() {
+                    _ if registers => "",
+                    1 => "byte ",
+                    2 => "word ",
+                    4 => "dword ",
+                    8 => "qword ",
+                    16 => "xmmword ",
+                    32 => "ymmword ",
+                    _ => "",
+                };
+                format!("{size}[{}{index}{disp}]", name(ins.memory_base()))
             }
             OpKind::Immediate8
             | OpKind::Immediate16
@@ -214,10 +325,69 @@ mod tests {
         assert!(!check_holds(&["frobnicate".to_owned()], &new, 0x1000));
     }
 
+    fn image_at(code: &[(usize, &[u8])]) -> Vec<u8> {
+        let mut bytes = image_bytes(&[]);
+        for (at, part) in code {
+            bytes[*at..*at + part.len()].copy_from_slice(part);
+        }
+        bytes
+    }
+
+    #[test]
+    fn a_thunk_s_check_goes_on_at_the_code_it_jumps_to() {
+        // `jmp 0x1100` at 0x1000; `mov [rsp+0x8],rbx; push rdi; sub rsp,0x20` at 0x1100.
+        let bytes = image_at(&[
+            (0x1000, &[0xe9, 0xfb, 0x00, 0x00, 0x00]),
+            (
+                0x1100,
+                &[0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x20],
+            ),
+        ]);
+        let image = Image::parse(&bytes, Layout::File, None).unwrap();
+        let check = make_check(&[(&image, 0x1000), (&image, 0x1000)]).unwrap();
+        assert_eq!(
+            check,
+            ["jmp ?", "mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x20"]
+        );
+        assert!(check_holds(&check, &image, 0x1000));
+        assert!(!check_holds(&["jmp ?".to_owned()], &image, 0x1000));
+    }
+
+    #[test]
+    fn a_store_s_check_names_its_size() {
+        // `mov dword [rcx+0xb8],0x2` and `mov byte [rcx+0xb8],0x2; ret`.
+        let dword = image_bytes(&[0xc7, 0x81, 0xb8, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00]);
+        let byte = image_bytes(&[0xc6, 0x81, 0xb8, 0x00, 0x00, 0x00, 0x02, 0xc3]);
+        let dword = Image::parse(&dword, Layout::File, None).unwrap();
+        let byte = Image::parse(&byte, Layout::File, None).unwrap();
+        let check = make_check(&[(&dword, 0x1000)]).unwrap();
+        assert_eq!(check, ["mov dword [rcx+0xb8],0x2"]);
+        assert!(!check_holds(&check, &byte, 0x1000));
+    }
+
+    #[test]
+    fn builds_that_keep_other_registers_get_a_check_over_the_rest() {
+        // `mov rax,rsp; mov [rax+0x8],rbx; mov [rax+0x10],rsi|rbp; push rbp`.
+        let old = image_bytes(&[
+            0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x08, 0x48, 0x89, 0x70, 0x10, 0x55,
+        ]);
+        let new = image_bytes(&[
+            0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x08, 0x48, 0x89, 0x68, 0x10, 0x55,
+        ]);
+        let old = Image::parse(&old, Layout::File, None).unwrap();
+        let new = Image::parse(&new, Layout::File, None).unwrap();
+        let check = make_check(&[(&old, 0x1000), (&new, 0x1000)]).unwrap();
+        assert_eq!(
+            check,
+            ["mov rax,rsp", "mov [rax+0x8],rbx", "mov qword [rax+?],?"]
+        );
+        assert!(check_holds(&check, &old, 0x1000) && check_holds(&check, &new, 0x1000));
+    }
+
     #[test]
     fn code_that_differs_in_kind_gets_no_check() {
         let old = image_bytes(&[0x53, 0x48, 0x83, 0xec, 0x20, 0x90, 0x90, 0x90, 0x90]);
-        let new = image_bytes(&[0x57, 0x48, 0x83, 0xec, 0x20, 0x90, 0x90, 0x90, 0x90]);
+        let new = image_bytes(&[0x90, 0x48, 0x83, 0xec, 0x20, 0x90, 0x90, 0x90, 0x90]);
         let old = Image::parse(&old, Layout::File, None).unwrap();
         let new = Image::parse(&new, Layout::File, None).unwrap();
         assert_eq!(make_check(&[(&old, 0x1000), (&new, 0x1000)]), None);

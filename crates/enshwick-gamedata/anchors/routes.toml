@@ -493,7 +493,15 @@ id = "bases.entity_query"
 in = "~c6:bases.entity_query"
 shape = ["call *", "test al,al"]
 take = "address"
-check = ["add rdx,?", "jmp ?"]
+check = [
+  "add rdx,?",
+  "jmp ?",
+  "push rsi",
+  "push rdi",
+  "push r12",
+  "push r13",
+  "sub rsp,0x38",
+]
 
 [[route]]
 id = "bases.grouped"
@@ -1035,6 +1043,7 @@ sides = ["client"]
 system = "client_cursor"
 shape = ["cvttss2si rax,xmm2", "mov [rbp+?],rax", "call *"]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov qword [rax+?],?"]
 
 [[route]]
 id = "building.block_box"
@@ -1042,6 +1051,7 @@ sides = ["server"]
 system = "server_cursor_no_prediction"
 shape = ["cvttss2si rax,xmm2", "mov [rbp+?],rax", "call *"]
 take = "address"
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov qword [rax+?],?"]
 
 [[route]]
 id = "building.blueprint_lookup"
@@ -1211,7 +1221,7 @@ sides = ["client"]
 in = "~fn:chat.post_return"
 shape = ["call {chat.post}"]
 take = "end"
-check = ["jmp ?"]
+check = ["jmp ?", "mov rcx,[rsp+0x50]", "test rcx,rcx"]
 
 [[route]]
 id = "chat.post_return"
@@ -1372,6 +1382,7 @@ system = "custom_map_markers_ui"
 id = "damage.admin_kill"
 system = "admin_player"
 shape = ["mov rdi,[rax]"]
+check = ["mov rdi,[rax]", "test rdi,rdi", "je ?"]
 
 [[route]]
 id = "damage.drowning"
@@ -1382,6 +1393,7 @@ shape = ["sub [r8+rcx*4],eax", "mov rcx,rbx", "call ?", "mov rcx,[rbp-?]"]
 id = "damage.drowning_death"
 system = "oxygen_update"
 shape = ["mov [r8+rcx*4],r14d"]
+check = ["mov [r8+rcx*4],r14d", "mov rcx,rbx", "call ?"]
 
 [[route]]
 id = "damage.faction_kill"
@@ -1394,6 +1406,7 @@ check = ["jae ?", "lea rdx,[rbp+0x6f]"]
 id = "damage.fall"
 system = "fall_damage_infliction"
 shape = ["mov [r8+rcx*4],r9d"]
+check = ["mov [r8+rcx*4],r9d", "mov rcx,rbx", "call ?"]
 
 [[route]]
 id = "damage.freezing"
@@ -1404,6 +1417,7 @@ shape = ["sub [r8+rcx*4],eax", "mov rcx,rbx", "call ?", "jmp ?"]
 id = "damage.hit"
 in = "~fn:damage.hit"
 shape = ["movups xmm0,[rbp-?]"]
+check = ["movups xmm0,[rbp-0x10]", "mov rdx,[rbp+?]"]
 
 [[route]]
 id = "damage.hit_source"
@@ -1427,11 +1441,13 @@ take = "value"
 id = "damage.shroud"
 system = "fog_resistance_update"
 shape = ["sub [r8+rcx*4],eax"]
+check = ["sub [r8+rcx*4],eax", "mov rdx,rdi", "mov rcx,rbx"]
 
 [[route]]
 id = "damage.shroud_death"
 system = "fog_resistance_update"
 shape = ["mov [r8+rcx*4],edx"]
+check = ["mov [r8+rcx*4],edx", "jmp ?", "mov rdx,rdi", "mov rcx,rbx", "call ?"]
 
 [[route]]
 id = "daytime.anchor"
@@ -3352,7 +3368,7 @@ id = "npc.update"
 system = "unique_npc_init"
 shape = ["call *", "lea rdx,[rbp+?]"]
 take = "address"
-check = ["jmp ?"]
+check = ["jmp ?", "mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "npc_unlock_state_client"
@@ -3367,11 +3383,13 @@ system = "npc_unlock_state_server"
 id = "pacing.background_workers"
 in = "~fn:pacing.background_workers"
 shape = ["movzx r13d,cl"]
+check = ["movzx r13d,cl", "cmp al,r13l", "movzx ecx,dl"]
 
 [[route]]
 id = "pacing.default_workers"
 in = "~fn:pacing.background_workers"
 shape = ["mov ecx,edi", "cmp al,dil"]
+check = ["mov ecx,edi", "cmp al,dil", "cmovb ecx,eax"]
 
 [[route]]
 id = "pacing.loop_wait"
@@ -3392,6 +3410,7 @@ check = ["mov rdx,[rbp-0x28]", "mov r9d,0x1cff"]
 id = "pacing.server_wait"
 in = "~fn:pacing.server_wait"
 shape = ["mov r8,r12"]
+check = ["mov r8,r12", "lea rdx,[rbp-0x39]", "lea rcx,[rbp+0x77]"]
 
 [[route]]
 id = "pacing.wait_divide"
@@ -3461,16 +3480,19 @@ system = "random_loot_on_interaction"
 id = "recipe.limit_check"
 in = "~fn:recipe.limit_check"
 shape = ["movzx eax,[rdx+?]"]
+check = ["movzx eax,[rdx+0x1000]", "mov ecx,0x200"]
 
 [[route]]
 id = "recipe.limit_next"
 in = "~fn:recipe.limit_check"
 shape = ["add r12,?"]
+check = ["add r12,0xa8", "mov eax,[rbx+0xc]"]
 
 [[route]]
 id = "recipe.limit_stop"
 in = "~fn:recipe.limit_check"
 shape = ["lea r8,[rip+?]"]
+check = ["lea r8,[rip+?]", "xor ecx,ecx"]
 
 [[route]]
 id = "recipe.list_lookup"
@@ -3916,7 +3938,14 @@ id = "skill.fly_mode_gate_return"
 system = "player_control_action_sequence"
 shape = ["call {skill.node_unlocked}"]
 take = "end"
-check = ["test al,al", "je ?", "mov bl,0x1", "jmp ?"]
+check = [
+  "test al,al",
+  "je ?",
+  "mov bl,0x1",
+  "jmp ?",
+  "mov rcx,[rbp+?]",
+  "test rcx,rcx",
+]
 
 [[route]]
 id = "skill.node_unlocked"
@@ -3964,11 +3993,13 @@ take = "value"
 id = "survivors.bed_init_return"
 system = "npc_bed_init"
 shape = ["test eax,eax"]
+check = ["test eax,eax", "je ?"]
 
 [[route]]
 id = "survivors.bed_return"
 system = "npc_bed"
 shape = ["mov edi,eax"]
+check = ["mov edi,eax", "test eax,eax", "je ?"]
 
 [[route]]
 id = "survivors.bed_transform"
@@ -4099,6 +4130,7 @@ take = "value"
 id = "survivors.roaming_return"
 system = "npc_active_input"
 shape = ["mov ebx,eax"]
+check = ["mov ebx,eax", "test eax,eax", "je ?", "mov rbp,[rsp+0x88]"]
 
 [[route]]
 id = "survivors.spawn"
@@ -4228,11 +4260,13 @@ take = "value"
 id = "survivors.unique_return_a"
 system = "unique_npc_spawns"
 shape = ["mov ebx,eax", "test dil,dil"]
+check = ["mov ebx,eax", "test dil,dil", "jne ?", "call ?"]
 
 [[route]]
 id = "survivors.unique_return_b"
 system = "unique_npc_spawns"
 shape = ["mov ebx,eax", "mov rcx,rsi"]
+check = ["mov ebx,eax", "mov rcx,rsi", "test ebx,ebx", "jne ?"]
 
 [[route]]
 id = "survivors.unique_saved_state"
@@ -4303,6 +4337,7 @@ check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rdi"]
 id = "textures.registry_fill"
 sides = ["client"]
 loads = ["out of game ui textures"]
+check = ["push ?", "sub rsp,0x40", "cmp byte [rcx+0x36c0],0x1"]
 
 [[route]]
 id = "textures.registry_listed"
@@ -4317,6 +4352,7 @@ sides = ["client"]
 in = "textures.registry_fill"
 shape = ["sub rsp,?"]
 take = "end"
+check = ["cmp byte [rcx+0x36c0],0x1", "mov ?,?"]
 
 [[route]]
 id = "textures.request"

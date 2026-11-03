@@ -421,21 +421,6 @@ impl<'i, 'a> Code<'i, 'a> {
             .map(|&(_, function)| function)
     }
 
-    /// Up to `count` instructions from `rva` on, inside the code section.
-    pub(crate) fn instructions_at(&self, rva: u32, count: usize) -> Vec<Instruction> {
-        const LONGEST: u64 = 15;
-        let va = self.base + u64::from(rva);
-        if !self.text.contains(&va) {
-            return Vec::new();
-        }
-        let len = (self.text.end - va).min(LONGEST * count as u64);
-        let bytes = self.image.read(va, len).unwrap_or_default();
-        Decoder::with_ip(64, bytes, va, DecoderOptions::NONE)
-            .into_iter()
-            .take(count)
-            .collect()
-    }
-
     /// The instructions of one part, in order, decoded as they are read.
     fn instructions(&self, (begin, end): (u32, u32)) -> impl Iterator<Item = Instruction> + 'a {
         let va = self.base + u64::from(begin);

@@ -4,6 +4,7 @@
 use iced_x86::Instruction;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use super::check;
 use super::code::{self, Code};
 use super::shape::{self, Step};
 use super::{How, Route, Routed, Take};
@@ -88,9 +89,7 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
     fn checked(&self, route: &Route, found: Routed) -> Option<Routed> {
         match found {
             Routed::Symbol(rva) | Routed::Reached(rva) if !route.check.is_empty() => {
-                let at = u32::try_from(rva).ok()?;
-                let code = self.code.instructions_at(at, route.check.len());
-                shape::starts(&route.check, &code).then_some(Routed::Symbol(rva))
+                check::runs(&route.check, self.code.image(), rva).then_some(Routed::Symbol(rva))
             }
             found => Some(found),
         }
@@ -228,7 +227,10 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             v.checked_add_signed(route.plus).map(Routed::Constant)
         };
         match route.take {
-            Take::Start => rva(one.start).map(Routed::Symbol),
+            Take::Start if check::match_checks(steps.len(), one.start, one.end) => {
+                rva(one.start).map(Routed::Symbol)
+            }
+            Take::Start => rva(one.start).map(Routed::Reached),
             Take::End => rva(one.end).map(Routed::Reached),
             Take::Address => taken_address(one.taken?),
             Take::Value => constant(one.taken?),

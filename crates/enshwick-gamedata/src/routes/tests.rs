@@ -127,7 +127,10 @@ fn decoded() -> Vec<Instruction> {
 }
 
 fn steps(text: &[&str]) -> Vec<Step> {
-    text.iter().map(|s| Step::parse(s).unwrap()).collect()
+    let names = shape::Names::new();
+    text.iter()
+        .map(|s| Step::parse(s, &names).unwrap())
+        .collect()
 }
 
 fn first(text: &[&str], entry: &impl Fn(&str) -> Option<u64>) -> Option<shape::Match> {
@@ -326,7 +329,7 @@ called_by = ["~fn:a", "sys_b"]
 [[route]]
 id = "t.checked"
 called_by = ["~fn:a", "sys_b"]
-check = ["mov eax,[rcx+0x78]", "shl eax,0x3"]
+check = ["mov eax,[rcx+0x78]", "shl eax,0x3", "ret"]
 
 [[route]]
 id = "t.unchecked"
@@ -346,6 +349,11 @@ shape = ["mov eax,0x7"]
 id = "t.once"
 in = "sys_b"
 shape = ["mov eax,0x7", "ret"]
+
+[[route]]
+id = "t.long"
+in = "sys_b"
+shape = ["call ?", "mov eax,0x7"]
 
 [[route]]
 id = "t.loop"
@@ -411,17 +419,18 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
             ("t.disp", Some(Routed::Constant(0x79))),
             ("t.inside", None),
             ("t.leaf", Some(Routed::Reached(0x1040))),
+            ("t.long", Some(Routed::Symbol(0x1010))),
             ("t.loop", None),
-            ("t.once", Some(Routed::Symbol(0x101a))),
+            ("t.once", Some(Routed::Reached(0x101a))),
             ("t.shift", Some(Routed::Constant(8))),
             ("t.string", Some(Routed::Reached(0x2180))),
-            ("t.tail", Some(Routed::Symbol(0x1062))),
+            ("t.tail", Some(Routed::Reached(0x1062))),
             ("t.twice", None),
             ("t.unchecked", None),
             ("t.untail", None),
         ]
     );
-    assert!(routes.checks("t.once", Side::Server));
+    assert!(routes.checks("t.long", Side::Server));
     assert!(routes.checks("t.checked", Side::Server));
     assert!(!routes.checks("t.leaf", Side::Server));
 }
@@ -500,18 +509,44 @@ const UNPINNED_UNCHECKED: &[(&str, &[&str])] = &[
 #[test]
 #[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
 fn every_route_finds_what_the_own_table_pins() {
+    for (var, side) in [
+        ("ENSH_SERVER_EXE", Side::Server),
+        ("ENSH_CLIENT_EXE", Side::Client),
+    ] {
+        if let Ok(path) = std::env::var(var) {
+            routes_hold_on(std::path::Path::new(&path), side);
+        }
+    }
+}
+
+/// As [`every_route_finds_what_the_own_table_pins`] on every executable the
+/// opt-in `ENSH_EXES` lists (a path list, such as every kept build), each
+/// a server when its file is `enshrouded_server.exe`; skipped without it.
+#[test]
+#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+fn every_route_holds_on_every_kept_build() {
+    let Some(list) = std::env::var_os("ENSH_EXES") else {
+        return;
+    };
+    for path in std::env::split_paths(&list) {
+        let server = path
+            .file_name()
+            .is_some_and(|name| name.eq_ignore_ascii_case("enshrouded_server.exe"));
+        let side = if server { Side::Server } else { Side::Client };
+        routes_hold_on(&path, side);
+    }
+}
+
+/// Runs every route of `side` with no table behind it on the executable at
+/// `path` and compares each with its own table, as the tests above say.
+fn routes_hold_on(path: &std::path::Path, side: Side) {
+    let var = path.display();
     let tables: Vec<Table> = embedded()
         .iter()
         .map(|(_, text)| Table::parse(text).unwrap())
         .collect();
     let routes = Routes::embedded().unwrap();
-    for (var, side) in [
-        ("ENSH_SERVER_EXE", Side::Server),
-        ("ENSH_CLIENT_EXE", Side::Client),
-    ] {
-        let Ok(path) = std::env::var(var) else {
-            continue;
-        };
+    {
         let bytes = std::fs::read(path).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
         let reflection = Reflection::scan(&image);

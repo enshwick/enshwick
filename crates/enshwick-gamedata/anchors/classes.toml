@@ -745,6 +745,8 @@ entries = [
   "pacing.server_wait.bytes",
   "pacing.wait_divide.bytes",
   "textures.keys.bytes",
+  "textures.registry_fill.bytes",
+  "textures.registry_listed_at.bytes",
   "textures.request.bytes",
   "textures.request_post.bytes",
   "textures.request_ring.bytes",
@@ -813,11 +815,6 @@ entries = [
 ]
 class = "engine"
 reason = "the engine route of its symbol checks the code"
-
-[[class]]
-entries = ["textures.registry_fill.bytes", "textures.registry_listed_at.bytes"]
-class = "pattern"
-reason = "no check shape holds at its symbol on every build, so its first bytes stay the hook's check"
 
 [[class]]
 entries = [

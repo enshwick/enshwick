@@ -11,6 +11,7 @@ use enshwick_gamedata::{Routes, Side, Table};
 fn find(c: &mut Criterion) {
     let mut group = c.benchmark_group("routes");
     group.sample_size(10);
+    group.bench_function("parse", |b| b.iter(Routes::embedded));
     let Ok(routes) = Routes::embedded() else {
         return;
     };
