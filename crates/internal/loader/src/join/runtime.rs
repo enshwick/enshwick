@@ -211,7 +211,7 @@ fn refused(
         .collect();
     if crate::ui::mismatch_screen_on() {
         let off = crate::advertise::mod_list(&off);
-        crate::host::show_difference(super::difference(server_mods, ours_mods, &off, complete));
+        crate::host::show_difference(&super::difference(server_mods, ours_mods, &off, complete));
         crate::host::report_join_missing(&wanted);
         return;
     }

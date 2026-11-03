@@ -4,19 +4,18 @@
 use enshwick::abi::UiWidget;
 
 use super::list::{listing, pages};
-use crate::join::{Difference, Row};
+use crate::join::Row;
 use crate::texts;
 use crate::ui::Painter;
 
 /// Rows a page shows on a build without scroll areas.
 const ROWS_PER_PAGE: usize = 8;
 
-/// Draws what to do, then the rows of `difference` from `first` while they
-/// page.
-pub(super) fn body(paint: &Painter<'_>, difference: &Difference, first: &mut usize) {
-    let what = texts::fill("join.dialog.message", &[]);
+/// Draws what to do, then `rows`, built once when the difference came, from
+/// `first` while they page.
+pub(super) fn body(paint: &Painter<'_>, rows: &[Row], first: &mut usize) {
+    let what = texts::text("join.dialog.message");
     paint.label(what.as_bytes(), UiWidget::STYLE_BODY, true, false);
-    let rows = difference.rows();
     let listing = listing(paint, ROWS_PER_PAGE);
     *first = listing.clamp_first(*first, rows.len());
     let shown = listing.shown(*first, rows.len());

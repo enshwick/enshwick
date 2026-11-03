@@ -7,11 +7,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use enshwick::abi::{Event, Level};
 
 use crate::host::loader;
-use crate::join::Difference;
 use crate::join::missing::{ADVERTISED_BYTES, Missing, Wanted, listed};
+use crate::join::{Difference, Row};
 use crate::kept_text::KeptText;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use crate::wire::Drops;
 
 /// Why a mod is off while the client plays in a world that does not run it.
 const OFF_FOR_WORLD: &str = "off for this world: it does not run this mod";
@@ -26,8 +27,11 @@ struct Joins {
     missing: Mutex<Vec<Missing>>,
     /// Indices of the mods off for the world the client plays in.
     off_for_world: Mutex<Vec<ModIndex>>,
-    /// The difference of the last refusal or kick, until the menu shows it.
-    shown: Mutex<Option<Difference>>,
+    /// The rows of the last refusal's or kick's difference, built once,
+    /// until the menu shows them.
+    shown: Mutex<Option<Vec<Row>>>,
+    /// Lists of mods a server sent before a kick, counted for the log.
+    kicks: Drops,
     /// Set while `shown` holds one, so the menu's frame takes no lock.
     pending: AtomicBool,
 }
@@ -36,6 +40,7 @@ static JOINS: Joins = Joins {
     missing: Mutex::new(Vec::new()),
     off_for_world: Mutex::new(Vec::new()),
     shown: Mutex::new(None),
+    kicks: Drops::new(),
     pending: AtomicBool::new(false),
 };
 
@@ -107,15 +112,16 @@ pub(crate) fn back_on() {
     }
 }
 
-/// On a client a server refused or kicked: keeps `difference` for the
-/// mismatch screen, which the menu shows next.
-pub(crate) fn show_difference(difference: Difference) {
-    *JOINS.shown.relock() = Some(difference);
+/// On a client a server refused or kicked: keeps the rows of `difference`
+/// for the mismatch screen, which the menu shows next; built here once, not
+/// in each frame.
+pub(crate) fn show_difference(difference: &Difference) {
+    *JOINS.shown.relock() = Some(difference.rows());
     JOINS.pending.store(true, Ordering::Release);
 }
 
-/// The difference the menu shows next, taken: `None` when there is none.
-pub(crate) fn take_difference() -> Option<Difference> {
+/// The rows the menu shows next, taken: `None` when there are none.
+pub(crate) fn take_difference() -> Option<Vec<Row>> {
     if !JOINS.pending.swap(false, Ordering::AcqRel) {
         return None;
     }
@@ -141,15 +147,19 @@ pub(crate) fn kicked_for_mods(list: &str, complete: bool) {
     let ours = crate::advertise::mod_list(&join_mods());
     let off = crate::advertise::mod_list(&join_mods_off());
     let difference = crate::join::difference(list, &ours, &off, complete);
-    crate::log!(
-        WARN,
-        "the server does not let this game play: {} of its mods missing, {} in another version; the menu lists them ({})",
-        difference.missing.len(),
-        difference.mismatch.len(),
-        crate::errors::JOIN_MISSING
-    );
+    // A server may send the list with every hello it refuses: the first and
+    // every 100th are logged.
+    if JOINS.kicks.add(1).is_some() {
+        crate::log!(
+            WARN,
+            "the server does not let this game play: {} of its mods missing, {} in another version; the menu lists them ({})",
+            difference.missing.len(),
+            difference.mismatch.len(),
+            crate::errors::JOIN_MISSING
+        );
+    }
     if difference.refuses() {
-        show_difference(difference);
+        show_difference(&difference);
     }
 }
 

@@ -47,6 +47,10 @@ const LINES_PER_REPLY: usize = 16;
 const MAX_WAITING: usize = 256;
 /// The result the game's chat post writes on success.
 const POSTED: u8 = 0;
+/// The chat type of a line a player typed, which the game's own client
+/// sends for typed text (server build 387); the server copies the type a
+/// client sends unchecked.
+const TYPED: u8 = 0;
 
 /// Where a line goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -323,15 +327,23 @@ unsafe extern "system" fn post(
     hash: u64,
     extra: *const [u64; 2],
 ) -> *mut u8 {
-    let judged = CHAT_FUSE.run("the chat line check", || {
-        // SAFETY: `out` and `text` are the game's own arguments at the entry
-        // of `chat.post`, by this function's `# Safety`.
-        unsafe { judge(out, kind, text, hash) }
-    });
-    // A check that panicked turns its fuse off and lets the line through.
-    let posted = match judged.unwrap_or(Verdict::Pass(kind)) {
+    // SAFETY: this is the entry of the loader's link on `chat.post`, on the
+    // game's calling thread, by this function's `# Safety`.
+    let judged = match unsafe { typed_line(out) } {
+        None => Verdict::Pass(kind),
+        // A check that panicked turns its fuse off: the mute is gone for the
+        // process, but a player's line still posts as typed text.
+        Some(loader) => CHAT_FUSE
+            .run("the chat line check", || {
+                // SAFETY: `text` is the game's own argument at the entry of
+                // `chat.post`, by this function's `# Safety`.
+                unsafe { judge(loader, text, hash) }
+            })
+            .unwrap_or(Verdict::Pass(TYPED)),
+    };
+    let posted = match judged {
         Verdict::Drop => {
-            // SAFETY: `judge` drops a line only for a non-null `out`, a result
+            // SAFETY: a line is judged only for a non-null `out`, a result
             // record of at least 8 writable bytes by this function's
             // `# Safety`.
             unsafe { enshwick::raw::write_at(out, 0, 0u64) };
@@ -384,36 +396,40 @@ unsafe fn old_frame(text: *const [usize; 2]) -> bool {
     start == OLD_FRAME
 }
 
-/// The verdict on the line of chat type `kind` the game posts: a line the
-/// player of account `key` sent is told by where the game posts it, the
-/// dispatcher of what clients send, never by its type byte.
+/// The verdict on a line the player of account `key` sent: dropped when
+/// the player is muted or the line an old frame line, else typed text.
+///
+/// # Safety
+///
+/// - `text` is null or the game's span of pointer and byte length, its bytes
+///   readable and unchanged for the call.
+unsafe fn judge(loader: &'static Loader, text: *const [usize; 2], key: u64) -> Verdict {
+    // SAFETY: the caller guarantees `text` null or readable for the call.
+    let old = unsafe { old_frame(text) };
+    let muted = !old && crate::chat_mute::drops(loader, key);
+    verdict(true, TYPED, muted, old)
+}
+
+/// The loader when the game posts a line a player's client sent, told by
+/// where the game posts it, the dispatcher of what clients send, never by
+/// its type byte; `None` for every other line and a null `out`. It holds no
+/// call that can panic, so it decides even while the chat fuse is off.
 ///
 /// # Safety
 ///
 /// - Called at the entry of the loader's link on `chat.post`, on the game's
 ///   calling thread.
-/// - `text` is null or the game's span of pointer and byte length, its bytes
-///   readable and unchanged for the call.
-unsafe fn judge(out: *mut u8, kind: u8, text: *const [usize; 2], key: u64) -> Verdict {
-    let Some((loader, layout)) = LOADED.get() else {
-        return Verdict::Pass(kind);
-    };
+unsafe fn typed_line(out: *mut u8) -> Option<&'static Loader> {
+    let (loader, layout) = LOADED.get()?;
     if out.is_null() {
-        return Verdict::Pass(kind);
+        return None;
     }
     let frame = (loader.caller_frame)();
     // SAFETY: `frame.rsp` is non-zero, checked first, and `caller_frame`
     // took the frame at the entry of this chain on this thread, linked with
     // `HookFlags::CALLER_FRAME`, so it points at the live return address.
     let typed = frame.rsp != 0 && unsafe { frame.return_address() } == layout.post_return;
-    if !typed {
-        return Verdict::Pass(kind);
-    }
-    // SAFETY: `text` is the game's own argument at the entry of `chat.post`,
-    // by this function's `# Safety`.
-    let old = unsafe { old_frame(text) };
-    let muted = !old && crate::chat_mute::drops(loader, key);
-    verdict(typed, kind, muted, old)
+    typed.then_some(*loader)
 }
 
 /// What the loader's link on `chat.post` does with a line.
@@ -437,7 +453,7 @@ fn verdict(typed: bool, kind: u8, muted: bool, old_frame: bool) -> Verdict {
     if muted || old_frame {
         Verdict::Drop
     } else {
-        Verdict::Pass(POSTED)
+        Verdict::Pass(TYPED)
     }
 }
 
@@ -676,7 +692,7 @@ mod tests {
             );
             assert_eq!(
                 verdict(true, kind, false, false),
-                Verdict::Pass(POSTED),
+                Verdict::Pass(TYPED),
                 "kind {kind}"
             );
         }

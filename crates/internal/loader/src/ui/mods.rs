@@ -117,7 +117,7 @@ enum Page {
     /// The mods that differ from those of a server that refused or kicked
     /// this client, from row `first` while they page.
     Mismatch {
-        difference: crate::join::Difference,
+        rows: Vec<crate::join::Row>,
         first: usize,
     },
 }
@@ -344,8 +344,8 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
                 .flatten();
             *slot = Some(Screen {
                 from: opened,
-                page: differs.map_or(Page::List { first: 0 }, |difference| Page::Mismatch {
-                    difference,
+                page: differs.map_or(Page::List { first: 0 }, |rows| Page::Mismatch {
+                    rows,
                     first: 0,
                 }),
                 message: None,
@@ -603,8 +603,8 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             super::actions::body(paint, view);
             Next::Stay
         }
-        Page::Mismatch { difference, first } => {
-            mismatch::body(paint, difference, first);
+        Page::Mismatch { rows, first } => {
+            mismatch::body(paint, rows, first);
             Next::Stay
         }
     }
