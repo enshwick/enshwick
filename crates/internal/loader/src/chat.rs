@@ -150,12 +150,16 @@ struct Delivery {
     /// once a line for one player reached others: no line goes to one player
     /// from then on, since this build's chat does not keep it there.
     one_player_off: AtomicBool,
+    /// Players' lines whose client sent a chat type other than typed text,
+    /// which posted as typed text.
+    forged: Drops,
 }
 
 static DELIVERY: Delivery = Delivery {
     dropped: Drops::new(),
     strayed: Drops::new(),
     one_player_off: AtomicBool::new(false),
+    forged: Drops::new(),
 };
 
 /// The lines for one player dropped and those that reached
@@ -299,8 +303,9 @@ fn next() -> Option<PostFn> {
 }
 
 /// The loader's link on the game's chat post: drops what a muted player
-/// typed and hands every other post on; it gives the queue's drain the rest
-/// of the chain to post through.
+/// sent, posts every other line a player's client sent as typed text, and
+/// hands the server's own lines on unchanged; it gives the queue's drain the
+/// rest of the chain to post through.
 ///
 /// # Safety
 ///
@@ -318,35 +323,34 @@ unsafe extern "system" fn post(
     hash: u64,
     extra: *const [u64; 2],
 ) -> *mut u8 {
-    let old = CHAT_FUSE.run("the old frame check", || {
+    let judged = CHAT_FUSE.run("the chat line check", || {
         // SAFETY: `out` and `text` are the game's own arguments at the entry
         // of `chat.post`, by this function's `# Safety`.
-        unsafe { old_frame(out, kind, text) }
+        unsafe { judge(out, kind, text, hash) }
     });
-    if old == Some(true) {
-        // SAFETY: `old_frame` returned true only for a non-null `out`, a
-        // result record of at least 8 writable bytes by this function's
-        // `# Safety`.
-        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
-        return out;
-    }
-    let muted = CHAT_FUSE.run("the chat mute check", || {
-        // SAFETY: `out` is the game's own argument at the entry of
-        // `chat.post`, by this function's `# Safety`.
-        unsafe { muted_line(out, kind, hash) }
-    });
-    if muted == Some(true) {
-        // SAFETY: `muted_line` returned true only for a non-null `out`, a
-        // result record of at least 8 writable bytes by this function's
-        // `# Safety`.
-        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
-        return out;
+    // A check that panicked turns its fuse off and lets the line through.
+    let posted = match judged.unwrap_or(Verdict::Pass(kind)) {
+        Verdict::Drop => {
+            // SAFETY: `judge` drops a line only for a non-null `out`, a result
+            // record of at least 8 writable bytes by this function's
+            // `# Safety`.
+            unsafe { enshwick::raw::write_at(out, 0, 0u64) };
+            return out;
+        }
+        Verdict::Pass(posted) => posted,
+    };
+    if posted != kind && DELIVERY.forged.add(1).is_some() {
+        // shortcut: logs the first rewrite and every 100th, not once per player; a per-player set when the console needs it.
+        crate::log!(
+            WARN,
+            "chat: the client of {hash:016x} sent a line of chat type {kind}; it posts as typed text"
+        );
     }
     match next() {
         // SAFETY: `next` is the rest of `chat.post`'s chain, wired while this
-        // detour runs, and the arguments are the game's own, passed on
-        // unchanged.
-        Some(next) => unsafe { next(out, store, kind, text, loca1, loca2, handle, hash, extra) },
+        // detour runs, and the arguments are the game's own, the chat type
+        // bounded to typed text for a line a player's client sent.
+        Some(next) => unsafe { next(out, store, posted, text, loca1, loca2, handle, hash, extra) },
         None => out,
     }
 }
@@ -354,27 +358,15 @@ unsafe extern "system" fn post(
 /// The start of the hidden lines an older loader's client sends its server.
 const OLD_FRAME: &[u8] = b"/enshwick-net ";
 
-/// Whether the game posts a line a player's client sent that starts like an
-/// older loader's hidden frame line, which no other player should read.
+/// Whether `text` starts like an older loader's hidden frame line, which no
+/// other player should read.
 ///
 /// # Safety
 ///
-/// - Called at the entry of the loader's link on `chat.post`, on the game's
-///   calling thread.
 /// - `text` is null or the game's span of pointer and byte length, its bytes
 ///   readable and unchanged for the call.
-unsafe fn old_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> bool {
-    let Some((loader, layout)) = LOADED.get() else {
-        return false;
-    };
-    if kind != 0 || out.is_null() || text.is_null() {
-        return false;
-    }
-    let frame = (loader.caller_frame)();
-    // SAFETY: `frame.rsp` is non-zero, checked first, and `caller_frame`
-    // took the frame at the entry of this chain on this thread, linked with
-    // `HookFlags::CALLER_FRAME`, so it points at the live return address.
-    if frame.rsp == 0 || unsafe { frame.return_address() } != layout.post_return {
+unsafe fn old_frame(text: *const [usize; 2]) -> bool {
+    if text.is_null() {
         return false;
     }
     // SAFETY: `text` is non-null, checked by the guard before it, and is the
@@ -392,28 +384,61 @@ unsafe fn old_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> bool {
     start == OLD_FRAME
 }
 
-/// Whether the game posts a line the player of account `key` typed while
-/// muted, which the server then drops before any other player reads it.
+/// The verdict on the line of chat type `kind` the game posts: a line the
+/// player of account `key` sent is told by where the game posts it, the
+/// dispatcher of what clients send, never by its type byte.
 ///
 /// # Safety
 ///
 /// - Called at the entry of the loader's link on `chat.post`, on the game's
 ///   calling thread.
-unsafe fn muted_line(out: *mut u8, kind: u8, key: u64) -> bool {
+/// - `text` is null or the game's span of pointer and byte length, its bytes
+///   readable and unchanged for the call.
+unsafe fn judge(out: *mut u8, kind: u8, text: *const [usize; 2], key: u64) -> Verdict {
     let Some((loader, layout)) = LOADED.get() else {
-        return false;
+        return Verdict::Pass(kind);
     };
-    if kind != 0 || out.is_null() {
-        return false;
+    if out.is_null() {
+        return Verdict::Pass(kind);
     }
     let frame = (loader.caller_frame)();
     // SAFETY: `frame.rsp` is non-zero, checked first, and `caller_frame`
     // took the frame at the entry of this chain on this thread, linked with
     // `HookFlags::CALLER_FRAME`, so it points at the live return address.
-    if frame.rsp == 0 || unsafe { frame.return_address() } != layout.post_return {
-        return false;
+    let typed = frame.rsp != 0 && unsafe { frame.return_address() } == layout.post_return;
+    if !typed {
+        return Verdict::Pass(kind);
     }
-    crate::chat_mute::drops(loader, key)
+    // SAFETY: `text` is the game's own argument at the entry of `chat.post`,
+    // by this function's `# Safety`.
+    let old = unsafe { old_frame(text) };
+    let muted = !old && crate::chat_mute::drops(loader, key);
+    verdict(typed, kind, muted, old)
+}
+
+/// What the loader's link on `chat.post` does with a line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Verdict {
+    /// The line goes no further.
+    Drop,
+    /// The line goes on with this chat type.
+    Pass(u8),
+}
+
+/// The verdict on a line of chat type `kind`: a line a player's client sent
+/// (`typed`) is dropped when its player is `muted` or it starts like an old
+/// frame line, and otherwise goes on as typed text, whatever type byte the
+/// client chose, since the server copies that byte unchecked (server build
+/// 387). A line the server or the loader posts itself keeps its type.
+fn verdict(typed: bool, kind: u8, muted: bool, old_frame: bool) -> Verdict {
+    if !typed {
+        return Verdict::Pass(kind);
+    }
+    if muted || old_frame {
+        Verdict::Drop
+    } else {
+        Verdict::Pass(POSTED)
+    }
 }
 
 /// Drops the lines waiting for a hosted game that stops.
@@ -634,5 +659,33 @@ mod tests {
         assert_eq!(cut("Сейф", 3), "С");
         assert_eq!(cut("safe", 10), "safe");
         assert_eq!(cut("safe", 0), "");
+    }
+
+    #[test]
+    fn a_player_s_line_of_any_chat_type_is_dropped_while_muted_and_posts_as_typed_text() {
+        for kind in [0, 1, 4, 255] {
+            assert_eq!(
+                verdict(true, kind, true, false),
+                Verdict::Drop,
+                "kind {kind}"
+            );
+            assert_eq!(
+                verdict(true, kind, false, true),
+                Verdict::Drop,
+                "kind {kind}"
+            );
+            assert_eq!(
+                verdict(true, kind, false, false),
+                Verdict::Pass(POSTED),
+                "kind {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn lines_the_server_posts_itself_keep_their_chat_type() {
+        for kind in [0, 1, 4, 255] {
+            assert_eq!(verdict(false, kind, true, true), Verdict::Pass(kind));
+        }
     }
 }

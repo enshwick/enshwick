@@ -444,6 +444,10 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- A changed client no longer passes the chat mute or forges an emote or
+  notice line by sending a chat type other than typed text: the server tells
+  a player's line by where the game posts it and posts it as typed text,
+  with a log line naming the account (#919).
 - A dedicated server where no mod subscribes to `WorldLoaded`,
   `ShutdownStarted` or data that needs them now loads each world's settings
   and record and raises `WorldLoaded` again (#916).
