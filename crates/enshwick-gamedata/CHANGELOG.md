@@ -13,12 +13,21 @@ Each entry names the pull request that made the change.
   code through its reflected ECS systems, its debug strings and decoded
   instruction shapes, the same way on every build; `anchors/classes.toml`
   classes every table entry by how it anchors to the game (#918).
+- Engine routes find a function through `calls`, an ECS system record by
+  `system` alone, a shape in any routed function through `in`, and
+  `called_by` over route ids; shapes match index registers, exact
+  displacements and exact immediates; a taken constant takes `shift` and
+  `plus`, and `take = "fixed"` gives the row's `value`. The route finder
+  indexes code outside `.pdata`, and the routes find 749 client and 523
+  server entries without a table row (#920).
 - `Body`, `Resolved::body` and `MAX_PATTERN`: a symbol whose whole function
   the loader relies on is checked by the function's length, its moving
   4-byte fields and a hash of the rest (#710).
 
 ### Changed
 
+- Breaking: a shape that matches twice finds nothing, and `Routes::ids`
+  lists each entry once, sorted by id, without waypoints (#920).
 - Breaking: a body row reads `body = { len, open, hash }` instead of
   `body = true` over a pattern of the whole function, and `Symbol::body`
   returns `Option<&Body>`. A body row needs a pattern that finds it: its own
