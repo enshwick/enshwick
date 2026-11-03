@@ -1,5 +1,10 @@
 # The join check
 
+The join check keeps a player out of a world whose mods of side `both` the
+player's game lacks or runs in another version, and tells the player which.
+
+## Two sides
+
 A mod has one of two sides, its manifest's `side`:
 
 - **`server`**: it runs only where the world runs, on the dedicated server or
