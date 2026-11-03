@@ -105,9 +105,10 @@ impl Settings {
     }
 }
 
-/// The loader's rules for one world, `enshwick.toml` in the loader's folder
-/// of the world's settings, generated like a mod's and read as the world
-/// loads.
+/// Enshwick's rules for this world, read as the world loads.
+///
+/// The file is `enshwick.toml` in the loader's folder of the world's
+/// settings, generated like a mod's.
 #[enshwick::config(file = "enshwick")]
 #[derive(Debug, PartialEq, Eq)]
 pub struct WorldRules {
