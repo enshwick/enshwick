@@ -444,7 +444,7 @@ declare enshwick: {
 		impact_hashed: (hash: number) -> any?,
 		--- The qualified name of every type of the build.
 		type_names: () -> {string},
-		--- The value that stands for nil inside game data: an absent optional or variant, or one to clear in an edit, where a table cannot hold nil. A field the edit leaves out keeps its value.
+		--- The value that stands for an absent optional or variant where nil cannot: an item of a list, which nil would cut short, and a field an edit clears, since a field the edit leaves out keeps its value.
 		none: () -> any,
 		--- The keys of the game's own resources of the type qualified as `type_name`, or of every resource for nil, as `{ guid, type, part }`.
 		resource_keys: (type_name: string?) -> any,

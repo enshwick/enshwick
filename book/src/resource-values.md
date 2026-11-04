@@ -55,6 +55,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 `damageMod2Handed` is 1.5 on dedicated server build 26319703.
 
 An array that grows moves to the end of the resource, its offset rewritten.
+Elements match by position: after you remove one, each later element is written
+over the bytes of the element that held its index before, so fields the type
+does not reflect come from that element.
 An array whose data is packed, such as a voxel grid, reads as its header's
 bytes and writes back unchanged.
 
