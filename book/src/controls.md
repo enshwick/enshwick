@@ -143,6 +143,8 @@ With the `test` feature, the [fake loader](testing.md) reads keys as the
 client does: `keys(&down, &tapped, after)` looks at the keys held now and
 those tapped since the last look, `after` the last look, and fires each
 matching control; `game_action(&player, action)` fires the linked ones as
-the server does. `FakeHost::bind(name, keys)` sets the player's keys,
+the server does. `FakeHost::bind(name, slot, key)` sets one of the player's
+keys, `FakeHost::side(Side::CLIENT)` makes the fake a client, which alone
+sends player actions,
 `controls()` lists the controls with their keys in force, and
 `action_runs()` the actions a control sent the server.

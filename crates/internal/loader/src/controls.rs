@@ -9,17 +9,19 @@
 
 use core::cell::RefCell;
 use core::ffi::c_void;
-use std::sync::OnceLock;
+use std::collections::BTreeMap;
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
-use enshwick::abi::{ControlEvent, ControlFn, ControlSpec, Header, PlayerInfo, Side, Status, Str};
-use enshwick::controls::{GameAction, Key, MAX_NAME, Tracker};
+use enshwick::abi::{ControlEvent, ControlFn, Header, PlayerInfo, Side, Status, Str};
+use enshwick::controls::{GameAction, Key, Tracker, is_valid_name, phases};
 use enshwick_gamedata::catalogue;
 
 use crate::bindings::{self, Override};
 use crate::fuse::Fuse;
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
@@ -41,18 +43,33 @@ pub(crate) struct Declared {
 }
 
 static DECLARED: Registry<Declared> = Registry::new();
-/// The keys in force, by sealed index; set on the client at link and by the
-/// controls page.
-static KEYS: ArcSwapOption<Vec<[u32; 2]>> = ArcSwapOption::const_empty();
-/// Where the client's screen gate reads, once the build has it.
-static GATE: OnceLock<Gate> = OnceLock::new();
-/// The controls that follow game actions, once reflection names them.
-static LINKED: OnceLock<Linked> = OnceLock::new();
+static STATE: State = State {
+    keys: ArcSwapOption::const_empty(),
+    gate: OnceLock::new(),
+    linked: OnceLock::new(),
+    start: OnceLock::new(),
+    kept: Mutex::new(None),
+};
 /// The keys turn off at their first panic, the linked controls at theirs.
 static KEYS_FUSE: Fuse = Fuse::new("mod control keys");
 static LINKED_FUSE: Fuse = Fuse::new("controls that follow game actions");
-/// The clock both sides' trackers count milliseconds on.
-static START: OnceLock<Instant> = OnceLock::new();
+
+/// The controls' state once they are sealed.
+struct State {
+    /// The keys in force, by sealed index; set on the client at link and by
+    /// the controls page.
+    keys: ArcSwapOption<Vec<[u32; 2]>>,
+    /// Where the client's screen gate reads, once the build has it.
+    gate: OnceLock<Gate>,
+    /// The controls that follow game actions, once reflection names them.
+    linked: OnceLock<Linked>,
+    /// The clock both sides' trackers count milliseconds on.
+    start: OnceLock<Instant>,
+    /// The file's entries for controls no running mod declares, which a
+    /// write keeps; `None` while the file does not read, so nothing writes
+    /// over it.
+    kept: Mutex<Option<BTreeMap<String, Override>>>,
+}
 
 /// Where the HUD screen lies from the interface context: the context's
 /// G38 state, the play data in the play state, the screen byte in it, and
@@ -74,7 +91,7 @@ struct Linked {
 }
 
 fn now_ms() -> u64 {
-    let start = START.get_or_init(Instant::now);
+    let start = STATE.start.get_or_init(Instant::now);
     u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
@@ -87,11 +104,7 @@ pub(crate) fn register(
     user: *mut c_void,
 ) -> Status {
     let name = spec.name;
-    let well_named = !name.is_empty()
-        && name.len() <= MAX_NAME
-        && name
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+    let well_named = is_valid_name(name);
     let keys_ok = spec
         .keys
         .iter()
@@ -144,8 +157,17 @@ pub(crate) fn link(loader: &Loader) {
         return;
     }
     let path = game_dir(loader).join(bindings::FILE);
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let read = match std::fs::read_to_string(&path) {
+        Ok(text) => Some(text),
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => Some(String::new()),
+        Err(why) => {
+            crate::log!(WARN, "{}: {why}; the mods' keys apply", bindings::FILE);
+            None
+        }
+    };
+    let text = read.clone().unwrap_or_default();
     let (overrides, problems) = bindings::parse(&text);
+    let readable = read.is_some() && text.parse::<toml::Table>().is_ok();
     for problem in &problems {
         crate::log!(WARN, "{}: {problem}; the mod's key applies", bindings::FILE);
     }
@@ -162,6 +184,12 @@ pub(crate) fn link(loader: &Loader) {
             unknown.join(", ")
         );
     }
+    let kept: BTreeMap<String, Override> = overrides
+        .iter()
+        .filter(|(id, _)| !declared.iter().any(|d| d.id == **id))
+        .map(|(id, set)| (id.clone(), *set))
+        .collect();
+    *STATE.kept.relock() = readable.then_some(kept);
     let keys: Vec<[u32; 2]> = declared
         .iter()
         .map(|d| {
@@ -171,10 +199,10 @@ pub(crate) fn link(loader: &Loader) {
             )
         })
         .collect();
-    KEYS.store(Some(std::sync::Arc::new(keys)));
+    STATE.keys.store(Some(std::sync::Arc::new(keys)));
     match gate(loader) {
         Ok(found) => {
-            let _first = GATE.set(found);
+            let _first = STATE.gate.set(found);
             crate::log!(INFO, "controls: keys of {} controls on", declared.len());
         }
         Err(why) => {
@@ -269,7 +297,7 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
     }
     if !bits.is_empty() {
         crate::log!(INFO, "controls: {} follow game actions", bits.len());
-        let _first = LINKED.set(Linked { digital, bits });
+        let _first = STATE.linked.set(Linked { digital, bits });
     }
 }
 
@@ -300,13 +328,6 @@ fn fire(control: &Declared, kind: u32, player: Option<&PlayerInfo>) {
     );
 }
 
-/// Each phase bit of `kind`, in the order press, hold, release.
-fn phases(kind: u32) -> impl Iterator<Item = u32> {
-    [ControlSpec::PRESS, ControlSpec::HOLD, ControlSpec::RELEASE]
-        .into_iter()
-        .filter(move |bit| kind & bit != 0)
-}
-
 thread_local! {
     /// The client's trackers, one per control, on the interface thread.
     static TRACKERS: RefCell<Vec<Tracker>> = const { RefCell::new(Vec::new()) };
@@ -319,13 +340,13 @@ thread_local! {
 /// Looks at the keys once, in the interface frame of the live interface
 /// context `context`, on the interface thread.
 pub(crate) fn frame(context: usize) {
-    let (Some(gate), Some(declared)) = (GATE.get(), DECLARED.sealed()) else {
+    let (Some(gate), Some(declared)) = (STATE.gate.get(), DECLARED.sealed()) else {
         return;
     };
     if KEYS_FUSE.is_off() {
         return;
     }
-    let Some(keys) = KEYS.load_full() else {
+    let Some(keys) = STATE.keys.load_full() else {
         return;
     };
     let _ran = KEYS_FUSE.run("the mod control keys", || {
@@ -403,7 +424,7 @@ unsafe fn in_game(context: usize, gate: &Gate) -> bool {
 
 /// Whether any declared control follows a game action on this build.
 pub(crate) fn linked() -> bool {
-    LINKED.get().is_some() && !LINKED_FUSE.is_off()
+    STATE.linked.get().is_some() && !LINKED_FUSE.is_off()
 }
 
 /// The server's look at player `entity`'s `PlayerInput`, at `input`, once a
@@ -414,7 +435,7 @@ pub(crate) fn linked() -> bool {
 /// - `input` is the player's live `PlayerInput` component, read during the
 ///   step on the game thread.
 pub(crate) unsafe fn server_input(entity: u32, input: *const u8) {
-    let (Some(linked), Some(declared)) = (LINKED.get(), DECLARED.sealed()) else {
+    let (Some(linked), Some(declared)) = (STATE.linked.get(), DECLARED.sealed()) else {
         return;
     };
     // SAFETY: the caller passes the live `PlayerInput`, whose digital input
@@ -454,6 +475,12 @@ pub(crate) unsafe fn server_input(entity: u32, input: *const u8) {
     });
 }
 
+/// Drops the trackers of players no longer in `players`, the character
+/// entities of the step, on the server's game thread.
+pub(crate) fn players_seen(players: &[u32]) {
+    SERVER.with_borrow_mut(|trackers| trackers.retain(|(entity, _), _| players.contains(entity)));
+}
+
 /// Forgets the players' trackers, as when the server's world goes away.
 pub(crate) fn forget() {
     SERVER.with_borrow_mut(rustc_hash::FxHashMap::clear);
@@ -471,7 +498,7 @@ pub(crate) struct Row {
 
 /// Every declared control with its keys in force, in declaration order.
 pub(crate) fn rows() -> Vec<Row> {
-    let (Some(declared), Some(keys)) = (DECLARED.sealed(), KEYS.load_full()) else {
+    let (Some(declared), Some(keys)) = (DECLARED.sealed(), STATE.keys.load_full()) else {
         return Vec::new();
     };
     declared
@@ -489,22 +516,24 @@ pub(crate) fn rows() -> Vec<Row> {
 
 /// Whether the client reads mod keys on this build.
 pub(crate) fn keys_on() -> bool {
-    GATE.get().is_some() && !KEYS_FUSE.is_off()
+    STATE.gate.get().is_some() && !KEYS_FUSE.is_off()
 }
 
 /// Sets control `index`'s key in `slot` to `bits` (0 unbinds) and writes
-/// the player's file.
+/// the player's file, keeping its entries for controls no running mod
+/// declares.
 ///
 /// # Errors
 ///
-/// The reason the file could not be written; the key holds for this run.
+/// The reason the file could not be written, or that it did not read at
+/// start, so writing would lose it; the key holds for this run.
 pub(crate) fn set_key(
     loader: &Loader,
     index: usize,
     slot: usize,
     bits: u32,
 ) -> Result<(), std::io::Error> {
-    let (Some(declared), Some(keys)) = (DECLARED.sealed(), KEYS.load_full()) else {
+    let (Some(declared), Some(keys)) = (DECLARED.sealed(), STATE.keys.load_full()) else {
         return Ok(());
     };
     let mut keys = keys.as_ref().clone();
@@ -513,7 +542,7 @@ pub(crate) fn set_key(
     {
         *key = bits;
     }
-    let entries: Vec<(String, Override)> = declared
+    let mut entries: Vec<(String, Override)> = declared
         .iter()
         .zip(&keys)
         .map(|(d, k)| {
@@ -521,7 +550,14 @@ pub(crate) fn set_key(
             (d.id.clone(), [changed(0), changed(1)])
         })
         .collect();
-    KEYS.store(Some(std::sync::Arc::new(keys)));
+    STATE.keys.store(Some(std::sync::Arc::new(keys)));
+    let Some(kept) = STATE.kept.relock().clone() else {
+        return Err(std::io::Error::other(format!(
+            "{} did not read when the game started; fix or delete it",
+            bindings::FILE
+        )));
+    };
+    entries.extend(kept);
     let path = game_dir(loader).join(bindings::FILE);
     let fresh = path.with_extension("toml.new");
     std::fs::write(&fresh, bindings::render(&entries))?;

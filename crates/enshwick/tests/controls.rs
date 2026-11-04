@@ -30,7 +30,9 @@ mod tests {
                 ));
             };
             load.control(
-                Control::new("horn", "Sound the horn").key(Key::parse("H")?),
+                Control::new("horn", "Sound the horn")
+                    .key(Key::parse("H")?)
+                    .second(Key::parse("Mouse4")?),
                 move |fired| {
                     note(fired);
                     let _sent = actions.run("honk", &[Value::Toggle(true)]);
@@ -83,7 +85,7 @@ mod tests {
 
     #[test]
     fn a_key_fires_its_control_and_the_control_asks_the_server() {
-        let loader = start(enshwick::test::FakeHost::new());
+        let loader = start(enshwick::test::FakeHost::new().side(enshwick::abi::Side::CLIENT));
         let listed: Vec<String> = loader.controls().into_iter().map(|c| c.0).collect();
         assert_eq!(listed, ["horn", "boost", "enter"]);
         let tick = Duration::from_millis(16);
@@ -135,14 +137,22 @@ mod tests {
     }
 
     #[test]
-    fn the_player_s_binding_replaces_the_mod_s_default() {
-        let loader = start(enshwick::test::FakeHost::new().bind("horn", [Some(key("J")), None]));
-        let horn = loader
-            .controls()
-            .into_iter()
-            .find(|c| c.0 == "horn")
-            .unwrap();
-        assert_eq!(horn.2, [Some(key("J")), None]);
+    fn the_player_s_binding_replaces_the_mod_s_default_slot_by_slot() {
+        let loader = start(
+            enshwick::test::FakeHost::new()
+                .bind("horn", 0, Some(key("J")))
+                .bind("boost", 0, None),
+        );
+        let keys = |name: &str| {
+            loader
+                .controls()
+                .into_iter()
+                .find(|c| c.0 == name)
+                .unwrap()
+                .2
+        };
+        assert_eq!(keys("horn"), [Some(key("J")), Some(key("Mouse4"))]);
+        assert_eq!(keys("boost"), [None, None]);
         let tick = Duration::from_millis(16);
         assert_eq!(loader.keys(&[key("H")], &[], tick), 0);
         assert_eq!(loader.keys(&[key("J")], &[], tick), 1);

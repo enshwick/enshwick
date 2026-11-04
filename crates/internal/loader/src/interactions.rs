@@ -841,7 +841,9 @@ unsafe fn player_inputs(ctx: *mut u64) {
         return;
     }
     let players = PLAYERS.load();
-    for &player in players.as_deref().map_or(&[][..], Vec::as_slice) {
+    let players = players.as_deref().map_or(&[][..], Vec::as_slice);
+    crate::controls::players_seen(players);
+    for &player in players {
         // SAFETY: the caller guarantees the system's live context, at its
         // entry on its thread.
         if let Some(input) = unsafe { components.component(ctx, player, layout.player_input) } {

@@ -64,14 +64,14 @@ pub(crate) extern "system" fn control(
         if s.controls.controls.iter().any(|c| c.name == name) {
             return Status::REFUSED;
         }
-        let bound = s
-            .host
-            .bindings
-            .iter()
-            .find(|(n, _)| *n == name)
-            .map(|(_, keys)| *keys);
+        let mut keys = keys.map(Option::flatten);
+        for (_, slot, key) in s.host.bindings.iter().filter(|(n, _, _)| *n == name) {
+            if let Some(kept) = keys.get_mut(*slot) {
+                *kept = *key;
+            }
+        }
         s.controls.controls.push(FakeControl {
-            keys: bound.unwrap_or(keys.map(Option::flatten)),
+            keys,
             label: text(spec.label),
             name,
             link,
@@ -88,14 +88,18 @@ pub(crate) extern "system" fn control(
 pub(crate) extern "system" fn run_action(_me: ModHandle, action: Str, args: Str) -> Status {
     let (action, args) = (text(action), text(args));
     with(Status::MISSING, |s| {
+        if s.host.side != crate::abi::Side::CLIENT {
+            return Status::MISSING;
+        }
         s.controls.runs.push((action, args));
         Status::OK
     })
 }
 
 impl FakeHost {
-    /// The player's keys for control `name`, as `mod-controls.toml` holds
-    /// them: in place of the mod's defaults, `[None, None]` for unbound.
+    /// The player's key for slot `slot` (0 the key, 1 the second) of control
+    /// `name`, as `mod-controls.toml` holds it: in place of the mod's
+    /// default for that slot only, `None` to unbind it.
     ///
     /// # Examples
     ///
@@ -103,13 +107,13 @@ impl FakeHost {
     /// use enshwick::controls::Key;
     ///
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .bind("horn", [Some(Key::parse("J")?), None])
+    ///     .bind("horn", 0, Some(Key::parse("J")?))
     ///     .install();
     /// # Ok::<(), enshwick::controls::ParseKeyError>(())
     /// ```
     #[must_use]
-    pub fn bind(mut self, name: &str, keys: [Option<Key>; 2]) -> Self {
-        self.bindings.push((name.to_owned(), keys));
+    pub fn bind(mut self, name: &str, slot: usize, key: Option<Key>) -> Self {
+        self.bindings.push((name.to_owned(), slot, key));
         self
     }
 }
@@ -270,7 +274,8 @@ impl Installed {
 
     /// The player actions the mod asked the server to run, with
     /// [`Actions::run`](crate::actions::Actions::run): action and arguments
-    /// in the sheet's encoding, in order.
+    /// in the sheet's encoding, in order. As in the loader, only a client
+    /// sends them: a fake on the server side refuses the run.
     ///
     /// # Examples
     ///

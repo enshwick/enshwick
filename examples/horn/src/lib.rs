@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn g_asks_the_server_to_honk_and_interacting_is_logged_for_the_player() {
-        let loader = start(enshwick::test::FakeHost::new());
+        let loader = start(enshwick::test::FakeHost::new().side(enshwick::abi::Side::CLIENT));
         let g = Key::parse("G").unwrap();
         assert_eq!(loader.keys(&[g], &[], Duration::from_millis(16)), 1);
         assert_eq!(loader.action_runs(), [("honk".to_owned(), String::new())]);

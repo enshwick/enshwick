@@ -312,7 +312,7 @@ pub struct FakeHost {
     types: Option<std::sync::Arc<crate::resources::TypeTable>>,
     /// The player's keys by control name, in place of the mod's defaults.
     #[cfg(feature = "unstable")]
-    bindings: Vec<(String, [Option<crate::controls::Key>; 2])>,
+    bindings: Vec<(String, usize, Option<crate::controls::Key>)>,
     game_version: Option<&'static str>,
     game_texts: FxHashMap<(u32, u32), &'static str>,
     disabled_recipes: FxHashSet<u32>,
