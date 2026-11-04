@@ -312,4 +312,149 @@ mod tests {
         )]);
         assert_eq!(built(&steps_key, &steps_bytes, "demo::Steps"), grown);
     }
+
+    /// An item, the item registry, and a text table held in a content.
+    fn item_types() -> Vec<Type<'static>> {
+        vec![
+            Type::new("demo::uint32", Kind::Uint32, 4, 4),
+            Type::new("demo::Guid", Kind::Guid, 16, 4),
+            Type::new("demo::BlobString", Kind::BlobString, 8, 4),
+            Type::new("demo::Item", Kind::Struct, 20, 4).with_fields(vec![
+                Field::new("id", 0, "demo::uint32"),
+                Field::new("guid", 4, "demo::Guid"),
+            ]),
+            Type::new("demo::BlobArray<demo::Guid>", Kind::BlobArray, 8, 4)
+                .with_inner("demo::Guid"),
+            Type::new("demo::BlobArray<demo::BlobString>", Kind::BlobArray, 8, 4)
+                .with_inner("demo::BlobString"),
+            Type::new("demo::ItemRegistry", Kind::Struct, 16, 4).with_fields(vec![
+                Field::new("itemRefs", 0, "demo::BlobArray<demo::Guid>"),
+                Field::new("dbgNames", 8, "demo::BlobArray<demo::BlobString>"),
+            ]),
+            Type::new(
+                "demo::StaticArray<demo::uint32,4>",
+                Kind::StaticArray,
+                16,
+                4,
+            )
+            .with_inner("demo::uint32")
+            .with_count(4),
+            Type::new("demo::Texts", Kind::Struct, 16, 4).with_fields(vec![Field::new(
+                "data",
+                0,
+                "demo::StaticArray<demo::uint32,4>",
+            )]),
+        ]
+    }
+
+    /// Ported script 3: a new item copies a vanilla one under a declared
+    /// GUID, takes that GUID's hash as its id and joins the item registry,
+    /// and its text joins the text table, served as new content.
+    #[test]
+    fn ported_script_three_clones_an_item_registers_it_and_adds_its_text() {
+        let types = item_types();
+        let registry = Registry::new(types.clone());
+        let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+        let item = Value::Struct(vec![
+            ("id".into(), Value::Uint(chest.fnv1a().into())),
+            ("guid".into(), Value::Guid(chest)),
+        ]);
+        let items = Value::Struct(vec![
+            ("itemRefs".into(), Value::List(vec![Value::Guid(chest)])),
+            (
+                "dbgNames".into(),
+                Value::List(vec![Value::Text("chest".into())]),
+            ),
+        ]);
+        let text_hash = [3u32, 1, 2, 3];
+        let texts = Value::Struct(vec![(
+            "data".into(),
+            Value::List(text_hash.map(|w| Value::Uint(w.into())).to_vec()),
+        )]);
+        let key = |ty: &[u8]| Guid::named("you.ported:fixture").key_by_hash(fnv1a32(ty));
+        let encode = |ty: &str, value: &Value| registry.encode(ty, value, None).unwrap();
+        let (items_key, texts_key) = (key(b"demo::ItemRegistry"), key(b"demo::Texts"));
+        let (items_bytes, texts_bytes) = (
+            encode("demo::ItemRegistry", &items),
+            encode("demo::Texts", &texts),
+        );
+        *CASE.lock().unwrap() = Some(Scripts::new().with(
+            "main.luau",
+            r#"
+            local r = enshwick.resources
+            local guid = r.declare("you.ported:lantern")
+            local item = r.game_value(r.resource_keys("demo::Item")[1])
+            item.id = r.guid_hash(guid)
+            item.guid = guid
+            r.serve_new({ guid = guid, type = "demo::Item" }, item)
+            local items = r.resource_keys("demo::ItemRegistry")[1]
+            r.serve(items, items, function(registry)
+                table.insert(registry.itemRefs, guid)
+                table.insert(registry.dbgNames, "lantern")
+                return registry
+            end)
+            local texts = r.resource_keys("demo::Texts")[1]
+            local old = buffer.tostring(r.game_content(r.game_value(texts).data))
+            local hash = r.serve_content(buffer.fromstring(old .. "\nlantern=Lantern"))
+            r.serve(texts, texts, function(table)
+                table.data = hash
+                return table
+            end)
+            "#,
+        ));
+        let loader = FakeHost::new()
+            .types(types)
+            .resource(
+                chest.key_by_hash(fnv1a32(b"demo::Item")),
+                encode("demo::Item", &item),
+            )
+            .resource(items_key, items_bytes.clone())
+            .resource(texts_key, texts_bytes.clone())
+            .archive(text_hash, b"a=A".to_vec())
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Luau)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let built = |key, base: &[u8], ty| {
+            registry
+                .decode(ty, &loader.build_resource(key, base).unwrap())
+                .unwrap()
+        };
+        let registered = built(&items_key, &items_bytes, "demo::ItemRegistry");
+        let Some(Value::List(refs)) = registered.field("itemRefs") else {
+            panic!("refs")
+        };
+        let Value::Guid(lantern) = refs[1] else {
+            panic!("{refs:?}")
+        };
+        assert_eq!(
+            registered.field("dbgNames"),
+            Some(&Value::List(vec![
+                Value::Text("chest".into()),
+                Value::Text("lantern".into())
+            ]))
+        );
+        let lantern_key = lantern.key_by_hash(fnv1a32(b"demo::Item"));
+        let blank = [0u8; 20];
+        let new = built(&lantern_key, &blank, "demo::Item");
+        assert_eq!(new.field("id"), Some(&Value::Uint(lantern.fnv1a().into())));
+        assert_eq!(new.field("guid"), Some(&Value::Guid(lantern)));
+        let table = built(&texts_key, &texts_bytes, "demo::Texts");
+        let Some(Value::List(words)) = table.field("data") else {
+            panic!("data")
+        };
+        let hash: Vec<u32> = words
+            .iter()
+            .map(|w| match w {
+                Value::Uint(w) => u32::try_from(*w).unwrap(),
+                _ => 0,
+            })
+            .collect();
+        let host = enshwick::host().unwrap();
+        assert_eq!(
+            host.game_content(hash.try_into().unwrap()),
+            Some(b"a=A\nlantern=Lantern".to_vec())
+        );
+    }
 }
