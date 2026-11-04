@@ -17,11 +17,26 @@ const RUNTIME: &str = "crates/enshwick/src/typed/runtime.rs";
 /// The folder of the generated modules.
 const TYPED: &str = "crates/enshwick/src/typed";
 
-fn tables() -> anyhow::Result<Vec<Table>> {
+/// The build tables compiled into this binary.
+///
+/// # Errors
+///
+/// When one does not read.
+pub(crate) fn tables() -> anyhow::Result<Vec<Table>> {
     embedded()
         .iter()
         .map(|(file, text)| Table::parse(text).with_context(|| (*file).to_owned()))
         .collect()
+}
+
+/// The side whose table among `tables` is for the build `fingerprint`.
+pub(crate) fn side_of(
+    tables: &[Table],
+    fingerprint: enshwick_gamedata::Fingerprint,
+) -> Option<Side> {
+    [Side::Server, Side::Client]
+        .into_iter()
+        .find(|side| exact(tables, *side, fingerprint).is_some())
 }
 
 /// The catalogue of the game executable `bytes` hold.
@@ -123,9 +138,16 @@ pub(crate) fn write_snapshot(
 ///
 /// # Errors
 ///
-/// When a file does not read or write, the build has no table, the
-/// snapshot is missing, or with `check`, when a generated file differs.
+/// When `root` is not the enshwick repository, a file does not read or
+/// write, the build has no table, the snapshot is missing, or with `check`,
+/// when a generated file differs.
 pub(crate) fn run(root: &Path, from: Option<&Path>, check: bool) -> anyhow::Result<String> {
+    if !root.join(RUNTIME).is_file() {
+        bail!(
+            "{} is not the enshwick repository: {RUNTIME} is missing; pass --root",
+            root.display()
+        );
+    }
     let tables = tables()?;
     let mut done = Vec::new();
     if let Some(exe) = from {
@@ -134,9 +156,7 @@ pub(crate) fn run(root: &Path, from: Option<&Path>, check: bool) -> anyhow::Resu
         let fingerprint = Image::parse(&bytes, Layout::File, None)?
             .fingerprint()
             .ok_or_else(|| anyhow!("{} names no build", exe.display()))?;
-        let side = [Side::Server, Side::Client]
-            .into_iter()
-            .find(|side| exact(&tables, *side, fingerprint).is_some())
+        let side = side_of(&tables, fingerprint)
             .ok_or_else(|| anyhow!("{}: no build table; pin it first", exe.display()))?;
         let catalogue = catalogue(&bytes).with_context(|| exe.display().to_string())?;
         let path = write_snapshot(root, &catalogue, side, fingerprint)?;
@@ -234,6 +254,16 @@ mod tests {
         assert_ne!(renames(&root).unwrap(), Renames::default());
         std::fs::write(&table, "[[types]]\nfrom = 1\n").unwrap();
         assert!(renames(&root).is_err());
+        drop(std::fs::remove_dir_all(&root));
+    }
+
+    #[test]
+    fn a_folder_without_the_typed_runtime_is_refused_and_left_alone() {
+        let root = repo("foreign");
+        std::fs::remove_dir_all(root.join(TYPED)).unwrap();
+        let error = run(&root, None, false).unwrap_err().to_string();
+        assert!(error.contains("not the enshwick repository"), "{error}");
+        assert!(!root.join(TYPED).exists());
         drop(std::fs::remove_dir_all(&root));
     }
 }

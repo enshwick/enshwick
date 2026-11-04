@@ -1,7 +1,7 @@
 # Types and fields a game build renamed, which `cargo enshwick pin --write`
 # records when a layout matches exactly and a person adds when the report
 # marks a rename unsure. Each type rename gives the loader an alias, so a mod
-# built before it resolves under the new name. No build has renamed one yet.
+# built before it resolves under the new name.
 #
 # [[types]]
 # from = "<old full name>"

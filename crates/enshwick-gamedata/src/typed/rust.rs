@@ -622,10 +622,11 @@ fn write_items(
             }
         }
     }
-    // The root namespace's children are files of their own.
+    // The root namespace's children are files of their own; a child that
+    // holds no types itself still holds the namespaces below it.
     let children: BTreeSet<&String> = modules
         .keys()
-        .filter(|m| !path.is_empty() && m.len() == path.len() + 1 && m.starts_with(path))
+        .filter(|m| !path.is_empty() && m.len() > path.len() && m.starts_with(path))
         .map(|m| &m[path.len()])
         .collect();
     for child in children {

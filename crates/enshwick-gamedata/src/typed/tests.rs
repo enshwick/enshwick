@@ -227,7 +227,7 @@ fn a_renamed_type_resolves_under_its_old_id() {
     );
     assert!(table.contains("\"LootTableResource\" => \"demo::LootTableResource\""));
     assert_eq!(
-        Renames::parse(&renames.to_toml()).unwrap(),
+        Renames::parse(&renames.to_toml().unwrap()).unwrap(),
         renames,
         "the table reads back"
     );
@@ -253,6 +253,85 @@ fn a_recorded_rename_still_reports_a_changed_layout() {
     );
     assert!(changes.contains(&Change::FieldRemoved("item".to_owned())));
     assert!(changes.iter().any(Change::needs_person), "{changes:?}");
+}
+
+#[test]
+fn an_empty_type_matching_an_added_one_is_left_to_a_person() {
+    let old = fixture();
+    let mut new = fixture();
+    let mut tag = new.types.remove("demo::ecs::Component").unwrap();
+    tag.name = "demo::ecs::Wet".to_owned();
+    new.types.insert(tag.name.clone(), tag);
+    let diff = old.diff(&new, &Renames::default());
+    assert_eq!(
+        diff.changes["demo::ecs::Component"],
+        [Change::Unsure {
+            candidates: vec!["demo::ecs::Wet".to_owned()]
+        }]
+    );
+    assert!(Renames::default().with(&diff).types().next().is_none());
+}
+
+#[test]
+fn a_type_grown_by_an_added_field_needs_no_person() {
+    let mut new = fixture();
+    let loot = new.types.get_mut("demo::LootResource").unwrap();
+    let mut extra = loot.fields[3].clone();
+    extra.name = "extra".to_owned();
+    extra.offset = 24;
+    loot.fields.push(extra);
+    loot.size = 28;
+    let diff = fixture().diff(&new, &Renames::default());
+    assert_eq!(
+        diff.changes["demo::LootResource"],
+        [Change::FieldAdded("extra".to_owned())]
+    );
+    assert!(!diff.needs_person());
+}
+
+#[test]
+fn a_changed_base_inner_type_or_role_needs_a_person() {
+    let mut new = fixture();
+    new.types.get_mut("demo::ecs::Fuel").unwrap().base = None;
+    new.types.get_mut("demo::ItemId").unwrap().inner = Some("demo::uint8".to_owned());
+    new.types
+        .get_mut("demo::LootResource")
+        .unwrap()
+        .roles
+        .clear();
+    let diff = fixture().diff(&new, &Renames::default());
+    for name in ["demo::ecs::Fuel", "demo::ItemId", "demo::LootResource"] {
+        assert!(
+            diff.changes
+                .get(name)
+                .is_some_and(|c| c.iter().any(Change::needs_person)),
+            "{name}: {diff}"
+        );
+    }
+}
+
+#[test]
+fn a_namespace_whose_parent_holds_no_types_is_still_written() {
+    let mut catalogue = fixture();
+    let mut deep = catalogue.types["demo::ecs::Fuel"].clone();
+    deep.name = "demo::a::b::c::Thing".to_owned();
+    catalogue.types.insert(deep.name.clone(), deep);
+    let files = catalogue.rust("b").unwrap();
+    let a = &files["typed/a.rs"];
+    assert!(
+        a.contains("pub mod b {") && a.contains("pub mod c {") && a.contains("Thing"),
+        "{a}"
+    );
+}
+
+#[test]
+fn the_rename_table_keeps_its_explanation_and_the_committed_one_is_empty() {
+    let committed = include_str!("../../typed/renames.toml");
+    assert_eq!(Renames::default().to_toml().unwrap(), committed);
+    let renames = Renames::parse("[[types]]\nfrom = \"demo::A\"\nto = \"demo::B\"\n").unwrap();
+    let text = renames.to_toml().unwrap();
+    assert!(text.starts_with(committed), "{text}");
+    assert_eq!(Renames::parse(&text).unwrap(), renames);
 }
 
 #[test]

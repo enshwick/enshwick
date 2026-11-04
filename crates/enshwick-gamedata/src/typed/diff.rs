@@ -32,10 +32,11 @@ pub enum Change {
         /// The added types it could be.
         candidates: Vec<String>,
     },
-    /// The type changed its kind or size: its item's shape check decides on
-    /// each build, and a person looks at it.
+    /// The type changed its kind, base, inner type or roles, or its size
+    /// other than by added fields: its item's shape check decides on each
+    /// build, and a person looks at it.
     Retyped {
-        /// What changed, such as `size 16 -> 24`.
+        /// What changed, such as `kind 18 -> 18, size 16 -> 24`.
         what: String,
     },
     /// A field the new build adds.
@@ -91,6 +92,24 @@ impl Change {
     }
 }
 
+/// The comment at the top of the rename table, kept when `cargo enshwick
+/// pin --write` writes the table again.
+const RENAMES_HEADER: &str = "\
+# Types and fields a game build renamed, which `cargo enshwick pin --write`
+# records when a layout matches exactly and a person adds when the report
+# marks a rename unsure. Each type rename gives the loader an alias, so a mod
+# built before it resolves under the new name.
+#
+# [[types]]
+# from = \"<old full name>\"
+# to = \"<new full name>\"
+#
+# [[fields]]
+# type = \"<full name of the type>\"
+# from = \"<old field name>\"
+# to = \"<new field name>\"
+";
+
 /// The renames a person or `cargo enshwick pin` recorded, one table for all
 /// builds; the loader resolves a renamed type's old id under its new name.
 ///
@@ -100,8 +119,8 @@ impl Change {
 /// use enshwick_gamedata::typed::Renames;
 ///
 /// let renames = Renames::parse("[[types]]\nfrom = \"demo::A\"\nto = \"demo::B\"\n")?;
-/// assert_eq!(renames.to_toml(), "[[types]]\nfrom = \"demo::A\"\nto = \"demo::B\"\n");
-/// # Ok::<(), toml::de::Error>(())
+/// assert_eq!(Renames::parse(&renames.to_toml()?)?, renames);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -142,20 +161,40 @@ impl Renames {
         toml::from_str(text)
     }
 
-    /// The table as TOML, sorted.
+    /// The table as TOML, sorted, below the comment that explains it.
+    ///
+    /// # Errors
+    ///
+    /// When a name does not serialize.
     ///
     /// # Examples
     ///
     /// See [`Renames`].
-    #[must_use]
-    pub fn to_toml(&self) -> String {
+    pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
         let mut sorted = self.clone();
         sorted.types.sort();
         sorted.fields.sort();
-        toml::to_string(&sorted).unwrap_or_default()
+        let table = toml::to_string(&sorted)?;
+        Ok(if table.is_empty() {
+            RENAMES_HEADER.to_owned()
+        } else {
+            format!("{RENAMES_HEADER}\n{table}")
+        })
     }
 
     /// The table with the renames `diff` found added.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::typed::{Catalogue, Renames};
+    ///
+    /// let old = Catalogue::from_snapshot(r#"{"name":"demo::A","kind":18,"size":4,"align":4,"fields":[{"name":"x","offset":0}]}"#)?;
+    /// let new = Catalogue::from_snapshot(r#"{"name":"demo::B","kind":18,"size":4,"align":4,"fields":[{"name":"x","offset":0}]}"#)?;
+    /// let renames = Renames::default().with(&old.diff(&new, &Renames::default()));
+    /// assert!(renames.to_toml()?.ends_with("[[types]]\nfrom = \"demo::A\"\nto = \"demo::B\"\n"));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[must_use]
     pub fn with(mut self, diff: &Diff) -> Self {
         for (name, changes) in &diff.changes {
@@ -203,8 +242,8 @@ impl Renames {
 /// ```
 /// use enshwick_gamedata::typed::{Catalogue, Change, Renames};
 ///
-/// let old = Catalogue::from_snapshot(r#"{"name":"demo::A","kind":18,"size":4,"align":4}"#)?;
-/// let new = Catalogue::from_snapshot(r#"{"name":"demo::B","kind":18,"size":4,"align":4}"#)?;
+/// let old = Catalogue::from_snapshot(r#"{"name":"demo::A","kind":18,"size":4,"align":4,"fields":[{"name":"x","offset":0}]}"#)?;
+/// let new = Catalogue::from_snapshot(r#"{"name":"demo::B","kind":18,"size":4,"align":4,"fields":[{"name":"x","offset":0}]}"#)?;
 /// let diff = old.diff(&new, &Renames::default());
 /// assert_eq!(diff.changes["demo::A"], [Change::Renamed { to: "demo::B".into() }]);
 /// assert!(!diff.needs_person());
@@ -292,7 +331,11 @@ impl Catalogue {
             let entry = changes.entry(old.name.clone()).or_default();
             match candidates.as_slice() {
                 [] => entry.push(Change::Removed),
-                [to] if recorded.is_some() || matched_back(to) => {
+                // A layout without fields or constants, such as a tag
+                // component's, matches any other one: only a person decides.
+                [to] if recorded.is_some()
+                    || (!(old.fields.is_empty() && old.values.is_empty()) && matched_back(to)) =>
+                {
                     renamed_to.insert(*to);
                     entry.push(Change::Renamed {
                         to: (*to).to_owned(),
@@ -329,17 +372,6 @@ impl Catalogue {
 /// The changes of one type both builds have.
 fn changed(old: &Ty, new: &Ty, known: &Renames) -> Vec<Change> {
     let mut out = Vec::new();
-    if old.kind != new.kind || old.size != new.size {
-        out.push(Change::Retyped {
-            what: format!(
-                "kind {} -> {}, size {} -> {}",
-                old.kind.byte(),
-                new.kind.byte(),
-                old.size,
-                new.size
-            ),
-        });
-    }
     let by_name = |fields: &[Field]| -> BTreeMap<String, Field> {
         fields.iter().map(|f| (f.name.clone(), f.clone())).collect()
     };
@@ -421,7 +453,54 @@ fn changed(old: &Ty, new: &Ty, known: &Renames) -> Vec<Change> {
             .filter(|n| !values.contains_key(*n))
             .map(|n| Change::ConstantAdded((*n).to_owned())),
     );
+    let retyped = retyped(old, new, &out);
+    if !retyped.is_empty() {
+        out.insert(
+            0,
+            Change::Retyped {
+                what: retyped.join(", "),
+            },
+        );
+    }
     out
+}
+
+/// What changed in a type's kind, size, base, inner type or roles; a size
+/// grown by added fields alone is not a change of its own.
+fn retyped(old: &Ty, new: &Ty, changes: &[Change]) -> Vec<String> {
+    let grown_by_fields = new.size > old.size
+        && changes.iter().any(|c| matches!(c, Change::FieldAdded(_)))
+        && !changes.iter().any(|c| {
+            matches!(
+                c,
+                Change::FieldRemoved(_) | Change::FieldRenamed { .. } | Change::FieldRetyped { .. }
+            )
+        });
+    let mut what = Vec::new();
+    if old.kind != new.kind || (old.size != new.size && !grown_by_fields) {
+        what.push(format!(
+            "kind {} -> {}, size {} -> {}",
+            old.kind.byte(),
+            new.kind.byte(),
+            old.size,
+            new.size
+        ));
+    }
+    let name = |n: &Option<String>| n.clone().unwrap_or_else(|| "none".to_owned());
+    if old.base != new.base {
+        what.push(format!("base {} -> {}", name(&old.base), name(&new.base)));
+    }
+    if old.inner != new.inner {
+        what.push(format!(
+            "inner {} -> {}",
+            name(&old.inner),
+            name(&new.inner)
+        ));
+    }
+    if old.roles != new.roles {
+        what.push(format!("roles {:?} -> {:?}", old.roles, new.roles));
+    }
+    what
 }
 
 impl fmt::Display for Change {

@@ -120,7 +120,8 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
         bail!("no row is for the old build {}", spell(old_fp));
     }
     // The typed part never costs the table report: a failure is a line of it.
-    let compared = typed(args, &old_bytes, &new_bytes, old_fp, new_fp);
+    let compared = old_side(ported.first().map(|(side, ..)| *side), old_fp)
+        .and_then(|side| typed(args, side, &old_bytes, &new_bytes, old_fp, new_fp));
     let (typed_text, typed_settled) = match &compared {
         Ok(typed) => (typed.report.clone(), typed.settled),
         Err(why) => (format!("Typed API: not compared: {why:#}\n"), false),
@@ -140,17 +141,19 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
             .all(|l| !l.status.needs_human()))
 }
 
-/// The side whose embedded table is for the build `fingerprint`.
-fn side_of(fingerprint: Fingerprint) -> anyhow::Result<enshwick_gamedata::Side> {
-    use enshwick_gamedata::{Side, Table};
-
-    let tables: Vec<Table> = enshwick_gamedata::embedded()
-        .iter()
-        .filter_map(|(_, text)| Table::parse(text).ok())
-        .collect();
-    [Side::Server, Side::Client]
-        .into_iter()
-        .find(|side| enshwick_gamedata::exact(&tables, *side, fingerprint).is_some())
+/// The side of the old build `fingerprint`: the side of the repository's
+/// table rows that ported, else of a table compiled into this binary.
+fn old_side(
+    ported: Option<Side>,
+    fingerprint: Fingerprint,
+) -> anyhow::Result<enshwick_gamedata::Side> {
+    if let Some(side) = ported {
+        return Ok(match side {
+            Side::Server => enshwick_gamedata::Side::Server,
+            Side::Client => enshwick_gamedata::Side::Client,
+        });
+    }
+    crate::generate::side_of(&crate::generate::tables()?, fingerprint)
         .with_context(|| format!("no table is for the old build {}", spell(fingerprint)))
 }
 
@@ -168,12 +171,12 @@ struct Typed {
 /// Compares the covered types of the two builds.
 fn typed(
     args: &Args,
+    side: enshwick_gamedata::Side,
     old: &[u8],
     new: &[u8],
     old_fp: Fingerprint,
     new_fp: Fingerprint,
 ) -> anyhow::Result<Typed> {
-    let side = side_of(old_fp)?;
     let before = crate::generate::catalogue(old).context("the old executable")?;
     let after = crate::generate::catalogue(new).context("the new executable")?;
     let known = crate::generate::renames(&args.repo)?;
@@ -203,7 +206,8 @@ fn write_typed(args: &Args, typed: &Typed, new_fp: Fingerprint) -> anyhow::Resul
     }
     if typed.renames != crate::generate::renames(&args.repo)? {
         let path = snapshots.join(enshwick_gamedata::typed::RENAMES);
-        fs::write(&path, typed.renames.to_toml()).with_context(|| path.display().to_string())?;
+        let text = typed.renames.to_toml().context("the rename table")?;
+        fs::write(&path, text).with_context(|| path.display().to_string())?;
     }
     crate::generate::write_snapshot(&args.repo, &typed.after, typed.side, new_fp)?;
     if typed.side == enshwick_gamedata::Side::Server {
@@ -594,6 +598,16 @@ mod tests {
             new_name("1.0 server", None, fp),
             format!("1.0 server ({}/9)", "ab".repeat(16))
         );
+    }
+
+    #[test]
+    fn the_old_build_s_side_comes_from_the_repository_row_this_binary_may_not_know() {
+        let unknown = Fingerprint::new([0xcd; 16], 1);
+        assert_eq!(
+            old_side(Some(Side::Client), unknown).unwrap(),
+            enshwick_gamedata::Side::Client
+        );
+        assert!(old_side(None, unknown).is_err());
     }
 
     #[test]

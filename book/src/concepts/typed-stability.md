@@ -22,17 +22,18 @@ reads as before, with no change to the mod.
 | renames a type with the same layout    | the type resolves under its new name                                              |
 | renames a field                        | that type turns off alone, as for a removed field; a rebuilt mod gets the new name |
 
-A type turns off when a handle resolves it at `init`: the handle reads a
-zeroed value of the running build's type as its item, and any field the item
-needs and the build lacks fails there. The handle returns the reason, and the
+A type turns off when a handle resolves it at `init`. The handle reads a value
+of the running build's type as its item, with each integer at the largest
+value its width holds. A field the item needs and the build lacks fails there,
+and so does an integer field the build made wider than the item's. The handle returns the reason, and the
 mod decides whether to go on without that type.
 
 ## How a rename is decided
 
 A rename is data, never a guess. When `cargo enshwick pin` meets a new build,
 it compares the two builds' types. A removed type and an added type count as
-one renamed type only when their layouts match exactly and neither has another
-match; the same holds for a field at one offset with one type. Every other
+one renamed type only when their layouts match exactly, hold a field or enum
+constant, and neither has another match; the same holds for a field at one offset with one type. Every other
 case counts as a removal and an addition. Renames go into a table beside the
 build tables, and the loader resolves an old type's name under its new one.
 
@@ -41,8 +42,9 @@ build tables, and the loader resolves an old type's name under its new one.
 `cargo enshwick pin --old <old exe> --new <new exe>` prints what the new build
 changed in the covered types. With `--write` it also keeps a snapshot of the
 new build's types beside its build table and writes the typed API again. The
-report marks what needs a person: a type that changed its kind or size, and a
-rename the table cannot decide. A release of the API crate then carries the
+report marks what needs a person: a type that changed its kind, base, inner
+type or roles, or its size other than by added fields, and a rename the table
+cannot decide. A release of the API crate then carries the
 new items.
 
 Before 1.0 the items follow the newest build and may change between
