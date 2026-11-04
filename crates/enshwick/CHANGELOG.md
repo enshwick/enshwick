@@ -361,6 +361,8 @@ Each entry names the pull request that made the change.
 - Build tables for client 26320373 and dedicated server 26319703, the game
   update of 2026-11-02, so neither carries the previous table by patterns
   (#914).
+- Build tables for client 26430625 and dedicated server 26430253, game
+  version 1287369 of 2026-11-04 (#932).
 - The Mods screen has an Interface demo button while developer tools are
   on in that game, so the demo opens without the console (#897).
 - `World::set_muted` and `World::muted` mute a player in chat and lift the
@@ -546,6 +548,18 @@ Each entry names the pull request that made the change.
 - A damage filter sees shroud damage on the dedicated server build
   26319703: the loader hooks the shroud site one instruction earlier, where
   no branch of its function lands inside the hook (#922).
+- Hosting a world no longer crashes about 5 seconds after the character
+  loads: the own channel asks the session for its packet size before it
+  makes a socket, and a session whose packets hold no message keeps the
+  channel off with one warning (E1005), without a socket or a retry every
+  5 seconds (#932).
+- A crash in game code the loader called, with no mod's code on the stack,
+  reads `blamed on enshwick: its code is on the stack`, not that Enshwick
+  was not involved (#932).
+- Game code changed while a mod loaded, ran `init` or ran `ready` is put
+  down to that mod only when the change jumps into its DLL, directly or
+  through up to three more jumps; any other change reads `by another
+  program`, since another program's thread may write at any time (#932).
 - A changed client no longer passes the chat mute or forges an emote or
   notice line by sending a chat type other than typed text: the server tells
   a player's line by where the game posts it and posts it as typed text,

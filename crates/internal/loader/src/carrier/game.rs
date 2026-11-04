@@ -357,6 +357,9 @@ impl Game {
             limits[1],
             limits[2]
         );
+        // A client hosting a world offline answered 0 on game 1285601 with
+        // the right offsets, and destroying the socket made there faulted
+        // the second time: so the size is asked before any socket.
         let packet = usize::try_from(limits[0]).map_or(0, |packet| packet.min(LARGEST_PACKET));
         let Some(link) = Link::new(packet, epoch) else {
             crate::log!(
