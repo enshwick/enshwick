@@ -49,6 +49,8 @@ jobs:
       # The build provenance attestations of the archives.
       id-token: write
       attestations: write
+    env:
+      HAS_VIRUSTOTAL_KEY: ${{ secrets.VIRUSTOTAL_API_KEY != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -133,3 +135,50 @@ jobs:
             gh release create dev "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
               --title "$title" --notes "$notes" --prerelease --latest=false
           fi
+
+      # VirusTotal unpacks and scans each archive; the engines that flag it
+      # go to the run's summary and a warning, so a false positive reaches
+      # its vendor before a release. A flag or an outage never turns the
+      # build red. The public API takes four requests a minute.
+      - name: VirusTotal
+        if: env.HAS_VIRUSTOTAL_KEY == 'true'
+        continue-on-error: true
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        working-directory: ${{ runner.temp }}/dev
+        run: |
+          api=https://www.virustotal.com/api/v3
+          vt() { curl -fsS --proto '=https' --retry 3 -H "x-apikey: $VT_API_KEY" "$@"; }
+          for archive in *.zip; do
+            id=$(vt -F "file=@$archive" "$api/files" | jq -er .data.id)
+            status=queued
+            # Fifteen minutes at most.
+            for _ in $(seq 45); do
+              sleep 20
+              analysis=$(vt "$api/analyses/$id")
+              status=$(jq -r .data.attributes.status <<< "$analysis")
+              [ "$status" = completed ] && break
+            done
+            link="https://www.virustotal.com/gui/file/$(sha256sum "$archive" | cut -d' ' -f1)"
+            if [ "$status" != completed ]; then
+              echo "::warning title=VirusTotal::$archive is still $status: $link"
+              continue
+            fi
+            stats=$(jq -r '.data.attributes.stats | "\(.malicious) malicious, \(.suspicious) suspicious, \(.undetected) undetected"' <<< "$analysis")
+            flagged=$(jq -r '.data.attributes.results[] | select(.category == "malicious" or .category == "suspicious")
+              | "| \(.engine_name) | \(.category) | \(.result // "") |"' <<< "$analysis")
+            {
+              echo "### VirusTotal: $archive"
+              echo
+              echo "$stats: [report]($link)"
+              if [ -n "$flagged" ]; then
+                echo
+                echo "| Engine | Category | Result |"
+                echo "| --- | --- | --- |"
+                echo "$flagged"
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "$flagged" ]; then
+              echo "::warning title=VirusTotal::$archive: $stats, $link"
+            fi
+          done
