@@ -70,6 +70,9 @@ pub enum Ty {
     Choice(&'static Choice),
     /// A function the script passes in.
     Function(&'static Signature),
+    /// Game data of any shape: nil, a boolean, a number, text, or a table
+    /// of these, keyed by name or listed; a resource value takes this form.
+    Data,
 }
 
 /// A named type with named fields, from [`#[derive(Script)]`](macro@crate::Script).
@@ -520,6 +523,8 @@ pub enum Value {
     Record(Vec<Value>),
     /// [`Ty::Function`].
     Function(Callback),
+    /// A table keyed by name, in [`Ty::Data`]: the fields of a struct.
+    Map(Vec<(String, Value)>),
 }
 
 /// The function behind a [`Callback`].

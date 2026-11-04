@@ -55,6 +55,20 @@ pub(crate) fn to_lua(
             }
             LuaValue::Table(table)
         }
+        (Value::List(items), Ty::Data) => {
+            let table = lua.create_table_with_capacity(items.len(), 0)?;
+            for item in items {
+                table.raw_push(to_lua(lua, scope, item, &Ty::Data)?)?;
+            }
+            LuaValue::Table(table)
+        }
+        (Value::Map(fields), _) => {
+            let table = lua.create_table_with_capacity(0, fields.len())?;
+            for (name, value) in fields {
+                table.raw_set(name, to_lua(lua, scope, value, &Ty::Data)?)?;
+            }
+            LuaValue::Table(table)
+        }
         (value, Ty::Optional(inner_ty)) => to_lua(lua, scope, value, inner_ty)?,
         (Value::Function(callback), Ty::Function(signature)) => {
             let scope = scope.clone();
@@ -141,8 +155,77 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
                 scope.call_function(&function, args, signature)
             })))
         }
+        Ty::Data => data(value, 0),
         _ => Err(Error::new("a type this runtime does not know")),
     }
+}
+
+/// Tables nested deeper than this are taken for one that holds itself.
+const MAX_DATA_DEPTH: usize = 64;
+
+/// The API value of game data: a table with only the keys 1 to n is a list,
+/// any other a table keyed by name.
+fn data(value: LuaValue, depth: usize) -> Result<Value, Error> {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a Luau integer past 2^53 has no exact f64; game data past it crosses as text"
+    )]
+    Ok(match value {
+        LuaValue::Nil => Value::Nil,
+        LuaValue::Boolean(b) => Value::Bool(b),
+        LuaValue::Integer(i) => Value::Number(i as f64),
+        LuaValue::Number(n) => Value::Number(n),
+        LuaValue::String(s) => Value::String(
+            s.to_str()
+                .map_err(|_| Error::new("expected text in UTF-8"))?
+                .to_owned(),
+        ),
+        LuaValue::Table(table) => {
+            if depth >= MAX_DATA_DEPTH {
+                return Err(Error::new("game data nested deeper than 64 tables"));
+            }
+            let len = table.raw_len();
+            let mut keyed = Vec::new();
+            for pair in table.clone().pairs::<LuaValue, LuaValue>() {
+                let (key, item) = pair.map_err(|e| Error::new(e.to_string()))?;
+                match key {
+                    LuaValue::String(name) => keyed.push((
+                        name.to_str()
+                            .map_err(|_| Error::new("expected a field name in UTF-8"))?
+                            .to_owned(),
+                        item,
+                    )),
+                    LuaValue::Integer(i)
+                        if i >= 1 && usize::try_from(i).is_ok_and(|i| i <= len) => {}
+                    other => return Err(expected("a field name or a list index", &other)),
+                }
+            }
+            if keyed.is_empty() {
+                let mut items = Vec::with_capacity(len);
+                for (i, item) in table.sequence_values::<LuaValue>().enumerate() {
+                    let item = item.map_err(|e| Error::new(e.to_string()))?;
+                    items.push(
+                        data(item, depth + 1)
+                            .map_err(|e| Error::new(format!("[{}]: {e}", i + 1)))?,
+                    );
+                }
+                Value::List(items)
+            } else if len > 0 {
+                return Err(Error::new(
+                    "a table of data is either a list or keyed by name",
+                ));
+            } else {
+                let mut fields = Vec::with_capacity(keyed.len());
+                for (name, item) in keyed {
+                    let item =
+                        data(item, depth + 1).map_err(|e| Error::new(format!("{name}: {e}")))?;
+                    fields.push((name, item));
+                }
+                Value::Map(fields)
+            }
+        }
+        other => return Err(expected("game data", &other)),
+    })
 }
 
 /// The API values of the Luau arguments `args` of a call to `what`, one per

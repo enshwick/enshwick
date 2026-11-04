@@ -7,6 +7,8 @@
 //! moves data that no longer fits to the end of the bytes, as
 //! [`Blob`](crate::content::Blob) does.
 
+use std::borrow::Cow;
+
 use super::{Field, Kind, Registry, Type, Value, Variant};
 use crate::content::Guid;
 
@@ -469,6 +471,75 @@ fn not_fit(value: impl core::fmt::Display, ty: &Type<'_>) -> CodecError {
     CodecError::new(format!("{value} does not fit {}", ty.qualified_name()))
 }
 
+/// `value` in the form `ty` takes when it came in a form a script writes:
+/// a constant, GUID or integer as text, flags as a list of names, a variant
+/// as `{ type, value }`, raw bytes as `{ bytes }`.
+fn coerce<'v>(ty: &Type<'_>, value: &'v Value) -> Result<Cow<'v, Value>, CodecError> {
+    let kind = ty.kind();
+    Ok(Cow::Owned(match (kind, value) {
+        (Kind::Enum, Value::Text(name)) => Value::Name(name.clone()),
+        (Kind::Struct, Value::List(items)) if items.is_empty() => Value::Struct(Vec::new()),
+        (Kind::Guid | Kind::ObjectReference, Value::Text(text)) => Value::Guid(
+            Guid::try_parse(text)
+                .ok_or_else(|| CodecError::new(format!("{text} is not a GUID")))?,
+        ),
+        (
+            Kind::Uint8
+            | Kind::Uint16
+            | Kind::Uint32
+            | Kind::Uint64
+            | Kind::Sint8
+            | Kind::Sint16
+            | Kind::Sint32
+            | Kind::Sint64,
+            Value::Text(text),
+        ) => match text.parse::<i64>() {
+            Ok(i) => Value::Int(i),
+            Err(_) => Value::Uint(
+                text.parse()
+                    .map_err(|_| CodecError::new(format!("{text} is not an integer")))?,
+            ),
+        },
+        (
+            Kind::Bitmask8 | Kind::Bitmask16 | Kind::Bitmask32 | Kind::Bitmask64,
+            Value::List(items),
+        ) => Value::Flags(
+            items
+                .iter()
+                .map(|item| match item {
+                    Value::Text(name) | Value::Name(name) => Ok(name.clone()),
+                    _ => Err(CodecError::new("a flag is a name")),
+                })
+                .collect::<Result<_, _>>()?,
+        ),
+        (Kind::BlobVariant, Value::Struct(_)) => {
+            match (value.field("type"), value.field("value")) {
+                (Some(Value::Text(name)), Some(held)) => {
+                    Value::Variant(Box::new(Variant::new(name.clone(), held.clone())))
+                }
+                _ => return Err(CodecError::new("a variant is { type, value }")),
+            }
+        }
+        (_, Value::Struct(fields)) if fields.len() == 1 && fields[0].0 == "bytes" => {
+            let Value::List(items) = &fields[0].1 else {
+                return Err(CodecError::new("bytes are a list of numbers"));
+            };
+            Value::Bytes(
+                items
+                    .iter()
+                    .map(|item| match item {
+                        Value::Int(b) => u8::try_from(*b).ok(),
+                        Value::Uint(b) => u8::try_from(*b).ok(),
+                        _ => None,
+                    })
+                    .collect::<Option<_>>()
+                    .ok_or_else(|| CodecError::new("a byte is a number from 0 to 255"))?,
+            )
+        }
+        _ => return Ok(Cow::Borrowed(value)),
+    }))
+}
+
 impl<'a> Encoder<'_, 'a> {
     fn write(&mut self, at: usize, data: &[u8]) -> Result<(), CodecError> {
         self.bytes
@@ -521,6 +592,8 @@ impl<'a> Encoder<'_, 'a> {
         if self.read(at, size).is_none() {
             return Err(out_of_range(at));
         }
+        let coerced = coerce(ty, value)?;
+        let value = coerced.as_ref();
         match (ty.kind(), value) {
             (_, Value::Bytes(data)) if ty.kind() != Kind::BlobString => {
                 if data.len() != size {

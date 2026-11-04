@@ -575,7 +575,9 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when another mod serves `key`.
+    /// [`Off`] when the loader refuses it, such as after init. Several mods
+    /// may serve one key: their builders run in load order, each on the one
+    /// before's result.
     ///
     /// # Examples
     ///
@@ -600,24 +602,35 @@ impl Load<'_> {
         base: ResourceKey,
         builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
     ) -> Result<(), Off> {
-        let api = self.host().api();
-        let builder: Box<Builder> = Box::new(Box::new(builder));
-        let user = Box::into_raw(builder);
-        let patch: ResourcePatchFn = build;
-        let status = (api.serve_resource)(
-            self.host().handle(),
-            &raw const key,
-            &raw const base,
-            patch,
-            user.cast(),
-        );
-        if !status.is_ok() {
-            // SAFETY: `user` came from this function's `Box::into_raw`, and the loader
-            // refused it, so it keeps no copy and this is the only owner.
-            drop(unsafe { Box::from_raw(user) });
-        }
-        crate::load::ok(status, (), || "serve resource".to_owned())
+        serve(self.host(), key, base, builder)
     }
+}
+
+/// [`Load::serve`] for a runtime that holds the mod's host during its init,
+/// such as a script's.
+pub(crate) fn serve(
+    host: crate::Host,
+    key: ResourceKey,
+    base: ResourceKey,
+    builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
+) -> Result<(), Off> {
+    let api = host.api();
+    let builder: Box<Builder> = Box::new(Box::new(builder));
+    let user = Box::into_raw(builder);
+    let patch: ResourcePatchFn = build;
+    let status = (api.serve_resource)(
+        host.handle(),
+        &raw const key,
+        &raw const base,
+        patch,
+        user.cast(),
+    );
+    if !status.is_ok() {
+        // SAFETY: `user` came from this function's `Box::into_raw`, and the loader
+        // refused it, so it keeps no copy and this is the only owner.
+        drop(unsafe { Box::from_raw(user) });
+    }
+    crate::load::ok(status, (), || "serve resource".to_owned())
 }
 
 impl Load<'_> {

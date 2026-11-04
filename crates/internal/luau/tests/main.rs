@@ -4,4 +4,5 @@
 mod calls;
 mod deps;
 mod inventory;
+mod resources;
 mod scripts;

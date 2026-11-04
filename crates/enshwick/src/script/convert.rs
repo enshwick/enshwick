@@ -14,6 +14,7 @@ fn expected(what: &str, value: &Value) -> Error {
         Value::List(_) => "a list",
         Value::Record(_) => "a table",
         Value::Function(_) => "a function",
+        Value::Map(_) => "a table of data",
     };
     Error::new(format!("expected {what}, got {got}"))
 }
