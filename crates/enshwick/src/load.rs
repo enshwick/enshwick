@@ -380,7 +380,8 @@ impl Load<'_> {
         Ok(std::path::PathBuf::from(path))
     }
 
-    /// The folder `export/<mod id>/` in the game folder, where a mod writes
+    /// The folder `export/<folder>/` in the game folder, named as the mod's
+    /// folder in `mods/`, its id as players install it, where a mod writes
     /// files for tools outside the game, such as a wiki or a map; a mod may
     /// write to any other path too.
     ///
@@ -399,11 +400,13 @@ impl Load<'_> {
     #[script]
     pub fn export_dir(&self) -> Result<std::path::PathBuf, Off> {
         let dir = self.mod_dir()?;
+        let mods = dir.parent();
         match (
             dir.file_name(),
-            dir.parent().and_then(std::path::Path::parent),
+            mods.filter(|mods| mods.file_name().is_some_and(|name| name == "mods"))
+                .and_then(std::path::Path::parent),
         ) {
-            (Some(id), Some(game)) => Ok(game.join("export").join(id)),
+            (Some(folder), Some(game)) => Ok(game.join("export").join(folder)),
             _ => Err(Off::new(format!(
                 "export folder: {} is no folder in mods/",
                 dir.display()

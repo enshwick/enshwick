@@ -932,7 +932,8 @@ pub trait Answer {
     /// What the script's function returns.
     const TY: &'static Ty;
 
-    /// The Rust answer for the script's; an error, which the runtime has
-    /// reported, answers as the API would without the script.
+    /// The Rust answer for the script's; an error, a script error or an
+    /// answer of another type, which the runtime has reported and turned
+    /// the mod off for, answers as the API would without the script.
     fn from_answer(answer: Result<Value, Error>) -> Self;
 }

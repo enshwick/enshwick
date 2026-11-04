@@ -158,14 +158,15 @@ pub struct Transaction {
 
 /// A change as the loader takes it; a voxel write keeps its voxels, and its
 /// header pointing at them is made at the commit, so a change owns no
-/// pointer and a copy of a transaction is a whole one.
+/// pointer and a copy of a transaction is a whole one, sharing its voxels.
 #[derive(Clone, Debug)]
 enum Change {
     Terrain(TerrainEdit),
     Voxels {
         min: [u32; 3],
         size: [u32; 3],
-        voxels: Vec<crate::abi::Voxel>,
+        // Shared, so a script's chained builder copies no voxels.
+        voxels: std::sync::Arc<[crate::abi::Voxel]>,
     },
     Erase(VoxelRegion),
     Block(BlockPlace),

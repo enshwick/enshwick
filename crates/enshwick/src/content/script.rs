@@ -51,11 +51,30 @@ impl FromScript for Id {
                 "{text:?} is no content id, <mod>:<name>"
             )));
         }
-        // shortcut: a script's content id leaks its text for the process, as
-        // a pack's does; ids cross only in start-time calls today, so intern
-        // them once a call after start takes one.
-        let text: &'static str = Box::leak(text.into_boxed_str());
+        let text = ScriptIds::keep(text);
         Self::try_new(text).ok_or_else(|| Error::new(format!("{text:?} is no content id")))
+    }
+}
+
+/// The content id texts scripts passed, each kept once for the process, as
+/// a pack's are: a handler that names an id on every event keeps no more.
+struct ScriptIds(std::collections::HashSet<&'static str, rustc_hash::FxBuildHasher>);
+
+static SCRIPT_IDS: std::sync::Mutex<ScriptIds> = std::sync::Mutex::new(ScriptIds(
+    std::collections::HashSet::with_hasher(rustc_hash::FxBuildHasher),
+));
+
+impl ScriptIds {
+    /// `text` for the process, the copy kept before when there is one.
+    fn keep(text: String) -> &'static str {
+        use crate::Relock as _;
+        let mut ids = SCRIPT_IDS.relock();
+        if let Some(&kept) = ids.0.get(text.as_str()) {
+            return kept;
+        }
+        let kept: &'static str = Box::leak(text.into_boxed_str());
+        ids.0.insert(kept);
+        kept
     }
 }
 
@@ -499,5 +518,17 @@ impl Rule {
             Ok(id) if is_id(text) => rules::Name::Content(id),
             _ => rules::Name::Debug(super::DebugName(text)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_content_id_a_script_names_twice_keeps_one_text() {
+        let first = Id::from_value(Value::String("you.mod:twice".into())).unwrap();
+        let second = Id::from_value(Value::String("you.mod:twice".into())).unwrap();
+        assert!(core::ptr::eq(first.namespace(), second.namespace()));
     }
 }

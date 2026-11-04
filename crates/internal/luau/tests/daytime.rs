@@ -38,6 +38,38 @@ mod tests {
     }
 
     #[test]
+    fn a_method_called_on_an_object_of_another_class_raises_an_error() {
+        let loader = run(
+            FakeHost::new(),
+            r#"
+            local speed = enshwick.daytime.clock_speed()
+            local combat = enshwick.rates.rate({ Experience = "Combat" })
+            local ok, why = pcall(speed.set, combat, 2)
+            enshwick.log.info(`crossed {not ok} {why}`)
+            "#,
+        );
+        assert!(logged(&loader, "crossed true"), "{:?}", loader.logs());
+        assert!(
+            logged(&loader, "called on a RateHandle"),
+            "{:?}",
+            loader.logs()
+        );
+        assert_ne!(loader.clock_speed(), Some(2.0));
+    }
+
+    #[test]
+    fn a_method_read_twice_is_the_same_function() {
+        let loader = run(
+            FakeHost::new(),
+            r"
+            local speed = enshwick.daytime.clock_speed()
+            enshwick.log.info(`same {speed.set == speed.set} {speed.nothing == nil}`)
+            ",
+        );
+        assert!(logged(&loader, "same true true"), "{:?}", loader.logs());
+    }
+
+    #[test]
     fn opening_the_clock_speed_after_the_start_raises_an_error() {
         let loader = run(
             FakeHost::new(),

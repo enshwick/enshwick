@@ -132,11 +132,63 @@ pub struct Comfort {
 /// # Examples
 ///
 /// See [`Load::on_experience`].
-#[derive(Clone, Debug, crate::Script)]
+#[derive(Debug)]
 pub struct Levels {
     cap: u32,
     need_for: Option<unsafe extern "system" fn(*mut c_void, u32) -> u32>,
     token: *mut c_void,
+}
+
+/// The [`Levels`] a script's filter gets: the table read whole during the
+/// pass, since the loader's token lasts only that long.
+#[derive(Clone, Debug)]
+pub(crate) struct ScriptLevels {
+    cap: u32,
+    /// What each level from 1 up needs.
+    needs: Vec<u32>,
+}
+
+impl ScriptLevels {
+    /// Levels read past this are not copied: a real cap is far below it.
+    const MAX_READ: u32 = 1024;
+
+    /// Reads `levels` whole, while its pass lasts.
+    fn read(levels: &Levels) -> Self {
+        Self {
+            cap: levels.cap(),
+            needs: (1..=levels.cap().min(Self::MAX_READ))
+                .map(|level| levels.need(level))
+                .collect(),
+        }
+    }
+}
+
+impl crate::script::Object for ScriptLevels {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "Levels",
+        "The game's level table, during an experience pass.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LEVELS];
+}
+
+#[crate::script(levels)]
+impl ScriptLevels {
+    /// The highest level, as [`Levels::cap`] answers.
+    #[script(name = "cap")]
+    pub(crate) const fn cap_script(&self) -> u32 {
+        self.cap
+    }
+
+    /// What `level` needs, 0 for level 0 or past the cap, as
+    /// [`Levels::need`] answers.
+    #[script(name = "need")]
+    pub(crate) fn need_script(&self, level: u32) -> u32 {
+        level
+            .checked_sub(1)
+            .and_then(|at| self.needs.get(usize::try_from(at).ok()?))
+            .copied()
+            .unwrap_or(0)
+    }
 }
 
 impl Levels {
@@ -271,10 +323,13 @@ impl Load<'_> {
     #[script(name = "on_experience")]
     pub(crate) fn on_experience_script(
         &mut self,
-        filter: impl Fn(Vec<Experience>, Levels) -> Option<Vec<Experience>> + Send + Sync + 'static,
+        filter: impl Fn(Vec<Experience>, ScriptLevels) -> Option<Vec<Experience>>
+        + Send
+        + Sync
+        + 'static,
     ) -> Result<(), Off> {
         self.on_experience(move |all, levels| {
-            if let Some(changed) = filter(all.to_vec(), levels.clone()) {
+            if let Some(changed) = filter(all.to_vec(), ScriptLevels::read(levels)) {
                 for (slot, new) in all.iter_mut().zip(changed) {
                     *slot = new;
                 }

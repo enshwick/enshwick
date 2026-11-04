@@ -180,6 +180,44 @@ mod tests {
         assert_eq!(hooked(&loader), [ROLL]);
     }
 
+    const EXPORT: &str = r"
+        local ok, dir = pcall(enshwick.export_dir)
+        enshwick.log.info(`export {ok} {dir}`)
+    ";
+
+    #[test]
+    fn the_export_folder_sits_beside_mods_named_as_the_mod_s_folder() {
+        let script = EXPORT;
+        let (installed, status) = start_with(
+            FakeHost::new().mod_dir("game/mods/you.export"),
+            script,
+            Scripts::new(),
+            None,
+        );
+        assert_eq!(status, Status::OK, "{:?}", installed.logs());
+        let beside = std::path::Path::new("game")
+            .join("export")
+            .join("you.export");
+        assert!(
+            logged(&installed, &format!("export true {}", beside.display())),
+            "{:?}",
+            installed.logs()
+        );
+    }
+
+    #[test]
+    fn a_mod_folder_outside_mods_has_no_export_folder() {
+        let script = EXPORT;
+        let (elsewhere, status) = start_with(
+            FakeHost::new().mod_dir("dev/you.export"),
+            script,
+            Scripts::new(),
+            None,
+        );
+        assert_eq!(status, Status::OK, "{:?}", elsewhere.logs());
+        assert!(logged(&elsewhere, "export false"), "{:?}", elsewhere.logs());
+    }
+
     #[test]
     fn a_script_sets_a_rate_and_a_factor_past_its_range_raises_an_error() {
         let (loader, status) = start_with(

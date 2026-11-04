@@ -41,7 +41,8 @@ Each entry names the pull request that made the change.
   holds every public function to its Luau mirror or a row of the book's
   table of what differs. `#[derive(Script)]` takes `#[script(name = "...")]`
   for a type whose name another module's type has (#928).
-- `Load::export_dir` names `export/<mod id>/` in the game folder, where a mod
+- `Load::export_dir` names `export/<folder>/` in the game folder, after the
+  mod's folder in `mods/`, where a mod
   writes files for tools outside the game, and a script writes them with
   `enshwick.files.write_atomically`; `Relock::try_relock` takes a lock no one
   holds, also after a panic (#928).

@@ -14,5 +14,6 @@ mod inventory;
 mod mods;
 mod parity;
 mod ported;
+mod progress;
 mod resources;
 mod scripts;

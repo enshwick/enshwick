@@ -250,6 +250,9 @@ fn object_from_lua(value: &LuaValue, class: &'static Class) -> Result<Value, Err
     }
 }
 
+/// The registry key of the method functions [`Object`]'s `__index` made.
+const METHODS: &str = "enshwick.methods";
+
 /// An [`Object`](enshwick::script::Object) as a script holds it: its
 /// class's methods, called as `object:method()`.
 struct Object {
@@ -259,26 +262,60 @@ struct Object {
 
 impl mlua::UserData for Object {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(mlua::MetaMethod::Index, |lua, this, key: String| {
-            let class = this.handle.class();
-            let Some(method) = class.methods().into_iter().find(|m| m.name() == key) else {
-                return Ok(LuaValue::Nil);
-            };
-            let scope = this.scope.clone();
-            let what = format!("{}:{key}", class.name());
-            let function = lua.create_function(
-                move |lua, (object, args): (mlua::AnyUserData, MultiValue)| {
-                    let handle = object.borrow::<Self>()?.handle.clone();
-                    let signature = method.signature();
-                    let values = arguments(lua, &scope, args, signature, &what)?;
-                    let answer = handle
-                        .call(&method, values)
-                        .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
-                    to_lua(lua, &scope, answer, signature.ret())
-                },
-            )?;
-            Ok(LuaValue::Function(function))
-        });
+        methods.add_meta_method(
+            mlua::MetaMethod::Index,
+            |lua, this, key: mlua::LuaString| {
+                let class = this.handle.class();
+                // One function per class and method in a VM, made on first use:
+                // a filter on a hot path indexes methods on every hit.
+                let classes = match lua.named_registry_value::<Option<mlua::Table>>(METHODS)? {
+                    Some(classes) => classes,
+                    None => {
+                        let classes = lua.create_table()?;
+                        lua.set_named_registry_value(METHODS, &classes)?;
+                        classes
+                    }
+                };
+                let cached = match classes.raw_get::<Option<mlua::Table>>(class.name())? {
+                    Some(cached) => cached,
+                    None => {
+                        let cached = lua.create_table()?;
+                        classes.raw_set(class.name(), &cached)?;
+                        cached
+                    }
+                };
+                if let Some(function) = cached.raw_get::<Option<mlua::Function>>(&key)? {
+                    return Ok(LuaValue::Function(function));
+                }
+                let key = key.to_str()?.to_owned();
+                let Some(method) = class.methods().into_iter().find(|m| m.name() == key) else {
+                    return Ok(LuaValue::Nil);
+                };
+                let scope = this.scope.clone();
+                let what = format!("{}:{key}", class.name());
+                let function = lua.create_function(
+                    move |lua, (object, args): (mlua::AnyUserData, MultiValue)| {
+                        let handle = object.borrow::<Self>()?.handle.clone();
+                        // A method indexes its own class's list: `a.m(b)` must not
+                        // run b's method at m's place.
+                        if handle.class().name() != class.name() {
+                            return Err(mlua::Error::runtime(format!(
+                                "{what}: called on a {}",
+                                handle.class().name()
+                            )));
+                        }
+                        let signature = method.signature();
+                        let values = arguments(lua, &scope, args, signature, &what)?;
+                        let answer = handle
+                            .call(&method, values)
+                            .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
+                        to_lua(lua, &scope, answer, signature.ret())
+                    },
+                )?;
+                cached.raw_set(key, &function)?;
+                Ok(LuaValue::Function(function))
+            },
+        );
         methods.add_meta_method(mlua::MetaMethod::ToString, |_, this, ()| {
             Ok(this.handle.class().name())
         });

@@ -83,6 +83,9 @@ Names are the Rust API's: `enshwick.world.notify_all` is
 
 - A handle a Rust mod gets from `Load`, such as `load.weather()`, is its
   module's table: `enshwick.weather.at(position)` is `weather.at(position)`.
+  On a game build without what the handle needs, the table keeps only its
+  start-time functions, and the log says why, so a script checks the
+  function it calls: `if enshwick.weather.at then`.
 - A call a Rust mod makes on `Load` during `init`, such as
   `load.define_affix(...)`, is a function of its module's table that a script
   calls at the top level of `main.luau`: `enshwick.affixes.define_affix(...)`.
@@ -187,7 +190,11 @@ coroutines and the clock (`os.clock`, `os.time`, `os.date`), and nothing
 that starts processes or loads compiled code. It reads only its own folder,
 with `enshwick.mods.read`, and writes files with
 `enshwick.files.write_atomically`, such as exports for a wiki or a map into
-`enshwick.export_dir()`, the folder `export/<mod id>/` in the game folder.
+`enshwick.export_dir()`, the folder `export/<folder>/` in the game folder,
+named as the mod's folder in `mods/`.
+A write may name any path the game may write, as a Rust mod's may, so the
+sandbox keeps a script's mistakes small but is no security boundary: a Luau
+mod needs the same trust as a Rust mod.
 The globals and the `enshwick` tables are read-only. `require` resolves only
 the mod's own scripts.
 

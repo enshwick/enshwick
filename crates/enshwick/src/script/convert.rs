@@ -1,4 +1,3 @@
-use core::fmt::Write as _;
 use std::ops::ControlFlow;
 use std::time::Duration;
 
@@ -172,8 +171,24 @@ impl IntoScript for [i64; 3] {
 
 impl FromScript for [i64; 3] {
     fn from_value(value: Value) -> Result<Self, Error> {
-        let list: Vec<i32> = Vec::from_value(value)?;
-        let list: Vec<i64> = list.into_iter().map(i64::from).collect();
+        // A 32.32 fixed-point coordinate passes 2^31 at half a metre.
+        const LIMIT: f64 = 9_007_199_254_740_992.0;
+        let list: Vec<f64> = Vec::from_value(value)?;
+        let list = list
+            .into_iter()
+            .map(|n| {
+                if n.fract() != 0.0 || !(-LIMIT..=LIMIT).contains(&n) {
+                    return Err(Error::new(format!(
+                        "{n} is not a whole number from -2^53 to 2^53"
+                    )));
+                }
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "checked above: a whole number within 2^53 either side of zero"
+                )]
+                Ok(n as i64)
+            })
+            .collect::<Result<Vec<i64>, Error>>()?;
         list.try_into()
             .map_err(|list: Vec<i64>| Error::new(format!("expected 3 numbers, got {}", list.len())))
     }
@@ -409,38 +424,22 @@ impl FromScript for [f32; 3] {
     }
 }
 
-/// A GUID, such as a template's, as 32 lowercase hex digits.
+/// A GUID in memory order, such as a template's, as the text
+/// [`Guid`](crate::content::Guid) writes, so every GUID a script holds has
+/// one form.
 impl Typed for [u8; 16] {
     const TY: &'static Ty = &Ty::String;
 }
 
 impl IntoScript for [u8; 16] {
     fn into_value(self) -> Value {
-        let mut text = String::with_capacity(32);
-        for byte in self {
-            let _written = write!(text, "{byte:02x}");
-        }
-        Value::String(text)
+        crate::content::Guid(self).into_value()
     }
 }
 
 impl FromScript for [u8; 16] {
-    /// The 32 hex digits [`IntoScript`] writes.
     fn from_value(value: Value) -> Result<Self, Error> {
-        let text = String::from_value(value)?;
-        let mut bytes = [0u8; 16];
-        let ok = text.len() == 32
-            && bytes.iter_mut().enumerate().all(|(i, byte)| {
-                text.get(2 * i..2 * i + 2)
-                    .and_then(|pair| u8::from_str_radix(pair, 16).ok())
-                    .map(|b| *byte = b)
-                    .is_some()
-            });
-        if ok {
-            Ok(bytes)
-        } else {
-            Err(Error::new(format!("{text:?} is not 32 hex digits")))
-        }
+        crate::content::Guid::from_value(value).map(|guid| guid.0)
     }
 }
 
@@ -526,7 +525,8 @@ impl Answer for () {
     fn from_answer(_answer: Result<Value, Error>) -> Self {}
 }
 
-/// The script's text; nil, another type or an error is empty text.
+/// The script's text; nil or an error is empty text. A runtime turns the mod
+/// off for an error or an answer of another type, as for every callback.
 impl Answer for String {
     const TY: &'static Ty = &Ty::Optional(&Ty::String);
 
@@ -538,8 +538,8 @@ impl Answer for String {
     }
 }
 
-/// A filter's answer: `false` refuses; nil, anything else or an error lets
-/// it through, as without the script.
+/// A filter's answer: `false` refuses; nil or an error lets it through, as
+/// without the script, and the runtime turns the mod off for the error.
 impl Answer for bool {
     const TY: &'static Ty = &Ty::Optional(&Ty::Bool);
 
@@ -557,7 +557,7 @@ impl<T: FromScript> Answer for Option<T> {
     }
 }
 
-/// `false` stops; nothing or anything else goes on; an error stops.
+/// `false` stops; nil goes on; an error stops.
 impl Answer for ControlFlow<()> {
     const TY: &'static Ty = &Ty::Optional(&Ty::Bool);
 
@@ -631,6 +631,20 @@ mod tests {
     }
 
     #[test]
+    fn a_fixed_point_position_past_half_a_metre_reads_back() {
+        let far = [100_i64 << 32, -(50_i64 << 32), 1];
+        assert_eq!(<[i64; 3]>::from_value(far.into_value()).ok(), Some(far));
+        for refused in [0.5, 1e16] {
+            let list = Value::List(vec![
+                Value::Number(refused),
+                Value::Number(0.0),
+                Value::Number(0.0),
+            ]);
+            assert!(<[i64; 3]>::from_value(list).is_err(), "{refused}");
+        }
+    }
+
+    #[test]
     fn a_side_reads_back_from_its_name() {
         for (side, name) in [
             (Side::SERVER, "server"),
@@ -646,10 +660,17 @@ mod tests {
     }
 
     #[test]
-    fn a_guid_reads_back_from_its_32_hex_digits_and_nothing_else() {
+    fn a_guid_in_memory_order_reads_as_the_content_guid_text() {
         let bytes: [u8; 16] = core::array::from_fn(|i| u8::try_from(i * 15 + 1).unwrap());
         assert_eq!(<[u8; 16]>::from_value(bytes.into_value()).ok(), Some(bytes));
-        for refused in ["0".repeat(31), "0".repeat(33), "g".repeat(32)] {
+        let text = "6943053a-32c1-4718-ae22-e61427ddf54d";
+        let guid = crate::content::Guid::parse(text);
+        assert!(matches!(guid.0.into_value(), Value::String(ref t) if t == text));
+        assert_eq!(
+            <[u8; 16]>::from_value(Value::String(text.into())).ok(),
+            Some(guid.0)
+        );
+        for refused in ["0".repeat(32), "0".repeat(36), "+f".repeat(18)] {
             assert!(
                 <[u8; 16]>::from_value(Value::String(refused.clone())).is_err(),
                 "{refused}"
