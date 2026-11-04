@@ -174,8 +174,9 @@ impl Constant {
 /// `E`, in bit order.
 ///
 /// A bitmask with a bit no constant names reads as numbers: each flag is
-/// `E`'s `Other` with [`Constant::Number`] of its bit. Written back, the
-/// flags are names when each has one, else the bits of the numbered ones.
+/// `E`'s `Other` with [`Constant::Number`] of its bit. Written back, flags
+/// that are all numbered write their bits, and any others write their
+/// names; a numbered flag among named ones fails the write.
 ///
 /// # Examples
 ///
@@ -209,21 +210,23 @@ impl<E: Reflected> Reflected for Flags<E> {
 
     fn to_value(&self) -> Value {
         let values: Vec<Value> = self.0.iter().map(E::to_value).collect();
-        let names: Option<Vec<String>> = values
-            .iter()
-            .map(|v| match v {
-                Value::Name(name) => Some(name.clone()),
-                _ => None,
-            })
-            .collect();
-        names.map_or_else(
-            || {
-                Value::Uint(values.iter().fold(0, |bits, v| match v {
-                    Value::Uint(bit) if *bit < 64 => bits | (1 << bit),
-                    _ => bits,
-                }))
-            },
-            Value::Flags,
+        if !values.is_empty() && values.iter().all(|v| matches!(v, Value::Uint(_))) {
+            return Value::Uint(values.iter().fold(0, |bits, v| match v {
+                Value::Uint(bit) if *bit < 64 => bits | (1 << bit),
+                _ => bits,
+            }));
+        }
+        // A numbered flag among named ones has no name the codec can write:
+        // it stays as its number's text, which the codec refuses on writing,
+        // rather than silently dropping a flag.
+        Value::Flags(
+            values
+                .iter()
+                .map(|v| match v {
+                    Value::Name(name) => name.clone(),
+                    other => format!("{other:?}"),
+                })
+                .collect(),
         )
     }
 }
@@ -531,22 +534,69 @@ impl<T: Reflected> Reflected for Vec<T> {
     }
 }
 
-/// The running build's type for `T`, its shape checked: the bytes of a
-/// zeroed value of the build's type must read as `T`, so a field the build
-/// renamed, removed or retyped turns off only `T`.
+/// The running build's type for `T`, its shape checked: a [`sample`] of the
+/// build's type must read as `T`, so a field the build renamed, removed or
+/// retyped, at any depth, turns off only `T`.
 fn resolve<T: Named>(load: &Load<'_>) -> Result<&'static Type<'static>, Off> {
     let host = load.host();
-    let hash = crate::ecs::ComponentType::resolve(load, T::ID)?.hash();
+    let hash = crate::ecs::ComponentType::resolve(load, T::ID)
+        .map_err(|e| off::<T>(host, &e.to_string()))?
+        .hash();
     let registry = Registry::game()?;
     let ty = registry
         .hashed(hash)
         .ok_or_else(|| off::<T>(host, "the type registry lacks it"))?;
-    let size = usize::try_from(ty.size()).unwrap_or(usize::MAX);
-    let zero = registry
-        .decode(ty.qualified_name(), &vec![0; size])
-        .map_err(|e| off::<T>(host, &e.to_string()))?;
-    T::from_value(&zero).map_err(|e| off::<T>(host, &e.to_string()))?;
+    let value = sample(registry, ty.qualified_name())
+        .ok_or_else(|| off::<T>(host, "its value does not read"))?;
+    T::from_value(&value).map_err(|e| off::<T>(host, &e.to_string()))?;
     Ok(ty)
+}
+
+/// Arrays and optionals nested deeper than this are left empty in a sample.
+const SAMPLE_DEPTH: usize = 8;
+
+/// A value of the type `name` with every part a value can hold: one
+/// element in each array and every optional present, so reading it checks
+/// the shape of every type it holds; `None` for a type the registry lacks.
+#[doc(hidden)]
+#[must_use]
+pub fn sample(registry: &Registry<'_>, name: &str) -> Option<Value> {
+    sample_at(registry, name, 0)
+}
+
+fn sample_at(registry: &Registry<'_>, name: &str, depth: usize) -> Option<Value> {
+    use crate::resources::Kind;
+
+    let ty = registry.named(name)?;
+    let deeper = depth < SAMPLE_DEPTH;
+    match ty.kind() {
+        Kind::Typedef if deeper => sample_at(registry, ty.inner()?, depth + 1),
+        Kind::Struct => {
+            let mut fields = match ty.base() {
+                Some(base) => fields_of(sample_at(registry, base, depth + 1)?),
+                None => Vec::new(),
+            };
+            for field in ty.fields() {
+                if let Some(of) = field.type_name() {
+                    fields.push((field.name().to_owned(), sample_at(registry, of, depth + 1)?));
+                }
+            }
+            Some(Value::Struct(fields))
+        }
+        Kind::StaticArray | Kind::BlobArray | Kind::DsArray => Some(Value::List(if deeper {
+            vec![sample_at(registry, ty.inner()?, depth + 1)?]
+        } else {
+            Vec::new()
+        })),
+        Kind::BlobOptional | Kind::DsOptional if deeper => {
+            sample_at(registry, ty.inner()?, depth + 1)
+        }
+        Kind::BlobOptional | Kind::DsOptional => Some(Value::Nil),
+        _ => {
+            let size = usize::try_from(ty.size()).ok()?;
+            registry.decode(name, &vec![0; size]).ok()
+        }
+    }
 }
 
 /// Turns `T` off on the running build, naming the build and why.
@@ -766,13 +816,20 @@ impl<T: Event> EventType<T> {
         F: Fn(&T) + Send + Sync + 'static,
     {
         let name = self.name;
+        // One warning per handler: a `static` in this generic function would
+        // be shared by every event type.
+        let warned = core::sync::atomic::AtomicBool::new(false);
         load.on_raw_game_event(self.ty, move |raw| {
             let read = Registry::game()
                 .and_then(|registry| Ok(registry.decode(name, raw.bytes())?))
                 .and_then(|value| Ok(T::from_value(&value)?));
             match read {
                 Ok(event) => handler(&event),
-                Err(why) => crate::warn_once!("typed {}: an event does not read: {why}", T::ID),
+                Err(why) => {
+                    if !warned.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                        crate::warn!("typed {}: an event does not read: {why}", T::ID);
+                    }
+                }
             }
         })
     }
@@ -906,3 +963,6 @@ impl<T: Resource> ResourceType<T> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

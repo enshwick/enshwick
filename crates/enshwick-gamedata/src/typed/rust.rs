@@ -566,7 +566,7 @@ fn root_file(top: &BTreeSet<&String>, build: &str) -> String {
         let _ = writeln!(out, "pub mod {name};");
     }
     out.push_str(
-        "\npub use root::*;\n#[doc(hidden)]\npub use runtime::check;\npub use runtime::{\n    Component, ComponentType, Constant, Event, EventType, Flags, Named, Reflected, Resource,\n    ResourceType, ShapeError,\n};\n",
+        "\npub use root::*;\npub use runtime::{\n    Component, ComponentType, Constant, Event, EventType, Flags, Named, Reflected, Resource,\n    ResourceType, ShapeError,\n};\n#[doc(hidden)]\npub use runtime::{check, sample};\n",
     );
     out
 }

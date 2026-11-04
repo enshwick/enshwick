@@ -40,12 +40,12 @@ pub(crate) mod runtime;
 pub mod ecs;
 
 pub use root::*;
-#[doc(hidden)]
-pub use runtime::check;
 pub use runtime::{
     Component, ComponentType, Constant, Event, EventType, Flags, Named, Reflected, Resource,
     ResourceType, ShapeError,
 };
+#[doc(hidden)]
+pub use runtime::{check, sample};
 
 runtime::named_table! {
     "LootResource" => LootResource,

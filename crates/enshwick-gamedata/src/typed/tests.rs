@@ -271,8 +271,9 @@ fn committed() -> Catalogue {
 }
 
 /// Every covered type of the committed snapshot has a generated item, and
-/// a zeroed value of the build's type reads as it: the shape check each
-/// handle runs at resolve holds for every one.
+/// a sample of the build's type, with every array and optional filled,
+/// reads as it: the shape check each handle runs at resolve holds for every
+/// one, at every depth.
 #[test]
 #[cfg_attr(miri, ignore = "decodes thousands of types")]
 fn every_covered_type_reads_as_its_generated_item() {
@@ -289,11 +290,8 @@ fn every_covered_type_reads_as_its_generated_item() {
     let mut wrong = Vec::new();
     for (id, check) in named {
         let name = engine_name(id).unwrap();
-        let ty = registry.named(name).unwrap();
-        let zero = vec![0; usize::try_from(ty.size()).unwrap()];
-        let read = registry
-            .decode(name, &zero)
-            .map_err(|e| e.to_string())
+        let read = enshwick::typed::sample(&registry, name)
+            .ok_or_else(|| "no sample".to_owned())
             .and_then(|value| check(&value).map_err(|e| e.to_string()));
         if let Err(why) = read {
             wrong.push(format!("{id}: {why}"));
@@ -330,7 +328,8 @@ fn the_committed_typed_api_is_what_its_snapshot_generates() {
         let path = entry.unwrap().path();
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         let key = format!("crates/enshwick/src/typed/{name}");
-        if name != "runtime.rs" && !files.contains_key(&key) {
+        let generated = path.extension().is_some_and(|e| e == "rs") && name != "runtime.rs";
+        if generated && !files.contains_key(&key) {
             differ.push(format!("{key} (stale)"));
         }
     }

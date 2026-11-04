@@ -54,12 +54,12 @@ pub mod skilltree_nodes;
 pub mod wildlife;
 
 pub use root::*;
-#[doc(hidden)]
-pub use runtime::check;
 pub use runtime::{
     Component, ComponentType, Constant, Event, EventType, Flags, Named, Reflected, Resource,
     ResourceType, ShapeError,
 };
+#[doc(hidden)]
+pub use runtime::{check, sample};
 
 runtime::named_table! {
     "AchievementDefinitionResource" => AchievementDefinitionResource,
