@@ -262,14 +262,13 @@ impl Installed {
                 let Some(action) = control.link else {
                     continue;
                 };
-                let at = match control.players.iter().position(|(e, _)| *e == entity) {
-                    Some(at) => at,
-                    None => {
-                        control.players.push((entity, Tracker::default()));
-                        control.players.len() - 1
-                    }
+                if !control.players.iter().any(|(e, _)| *e == entity) {
+                    control.players.push((entity, Tracker::default()));
+                }
+                let Some((_, tracker)) = control.players.iter_mut().find(|(e, _)| *e == entity)
+                else {
+                    continue;
                 };
-                let tracker = &mut control.players[at].1;
                 let kind =
                     tracker.look(held.contains(&action), now, control.hold_ms) & control.fires;
                 calls.extend(phases(kind).map(|kind| control.call(kind)));

@@ -14,7 +14,6 @@
 
 use core::cell::RefCell;
 use core::ffi::c_void;
-use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
@@ -235,7 +234,7 @@ pub(crate) fn link(loader: &Loader) {
 }
 
 /// A control's keys: the player's override slot by slot over the mod's.
-fn in_force(defaults: [u32; 2], set: Override) -> [u32; 2] {
+fn in_force(defaults: [u32; 2], set: bindings::Override) -> [u32; 2] {
     [set[0].unwrap_or(defaults[0]), set[1].unwrap_or(defaults[1])]
 }
 

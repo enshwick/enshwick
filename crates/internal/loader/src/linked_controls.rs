@@ -1,7 +1,9 @@
 //! The server's look at its players' game actions for the controls that
-//! follow them: a tracker per player and control, read during the step on
-//! whatever thread runs the game's system, and the firings that wait for
-//! the step to end, when the world may change.
+//! follow them.
+//!
+//! A tracker per player and control looks during the step, on whatever
+//! thread runs the game's system; what fires waits for the step to end,
+//! when the world may change.
 
 use enshwick::controls::Tracker;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -184,12 +186,12 @@ mod tests {
         let mut players = Players::new();
         players.step(&[follow(0)], &[7], 0, |_| Some(1));
         assert!(players.settle(|_| None::<u32>).is_empty());
-        players.step(&[follow(0)], &[7], 16, |_| Some(1));
-        assert_eq!(kinds(&mut players), [ControlSpec::PRESS], "pressed again");
+        players.step(&[follow(0)], &[7], 16, |_| Some(0));
+        assert!(!players.waiting(), "no release without its press");
         players.step(&[follow(0)], &[7], 32, |_| Some(1));
         assert!(players.settle(|_| None::<u32>).is_empty());
-        players.step(&[follow(0)], &[7], 48, |_| Some(0));
-        assert!(!players.waiting(), "no release without its press");
+        players.step(&[follow(0)], &[7], 48, |_| Some(1));
+        assert_eq!(kinds(&mut players), [ControlSpec::PRESS], "pressed again");
     }
 
     #[test]

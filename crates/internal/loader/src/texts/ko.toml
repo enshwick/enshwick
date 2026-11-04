@@ -23,6 +23,7 @@
 "controls.off" = "이 게임 빌드에서는 모드 키가 꺼져 있습니다."
 "controls.saved" = "저장했습니다."
 "controls.not-saved" = "키는 게임을 닫을 때까지 작동하지만 저장하지 못했습니다: {reason}"
+"controls.unread" = "게임 시작 시 {file}을(를) 읽지 못했습니다. 고치거나 삭제하세요"
 "mods.title" = "모드"
 "mods.back" = "뒤로"
 "mods.off" = "{name} {version} (꺼짐)"

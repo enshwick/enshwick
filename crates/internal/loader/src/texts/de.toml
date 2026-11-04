@@ -23,6 +23,7 @@
 "controls.off" = "Mod-Tasten sind in dieser Spielversion aus."
 "controls.saved" = "Gespeichert."
 "controls.not-saved" = "Die Taste gilt, bis das Spiel schließt, wurde aber nicht gespeichert: {reason}"
+"controls.unread" = "{file} ließ sich beim Spielstart nicht lesen; korrigiere oder lösche die Datei"
 "mods.title" = "Mods"
 "mods.back" = "Zurück"
 "mods.off" = "{name} {version} (aus)"

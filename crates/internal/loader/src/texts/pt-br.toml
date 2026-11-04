@@ -23,6 +23,7 @@
 "controls.off" = "As teclas de mods estão desligadas nesta versão do jogo."
 "controls.saved" = "Salvo."
 "controls.not-saved" = "A tecla funciona até o jogo fechar, mas não foi salva: {reason}"
+"controls.unread" = "{file} não pôde ser lido ao iniciar o jogo; corrija ou apague o arquivo"
 "mods.title" = "Mods"
 "mods.back" = "Voltar"
 "mods.off" = "{name} {version} (desativado)"

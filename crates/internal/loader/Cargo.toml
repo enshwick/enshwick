@@ -99,3 +99,7 @@ harness = false
 [[bench]]
 name = "ticks"
 harness = false
+
+[[bench]]
+name = "linked_controls"
+harness = false

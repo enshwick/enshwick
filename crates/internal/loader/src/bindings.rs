@@ -71,9 +71,11 @@ pub fn parse(text: &str) -> (BTreeMap<String, Override>, Vec<String>) {
 }
 
 /// The file for `entries`, each `<mod id>:<control>` with the keys in force
-/// where they differ from the mod's defaults: scan codes, with the key's US
-/// name beside each. `kept` are the file's entries for controls no running
-/// mod declares, written back as they were, read or not.
+/// where they differ from the mod's defaults.
+///
+/// Each key is a scan code, with the key's US name beside it. `kept` are
+/// the file's entries for controls no running mod declares, written back as
+/// they were, read or not.
 ///
 /// # Examples
 ///

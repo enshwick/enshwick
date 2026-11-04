@@ -23,6 +23,7 @@
 "controls.off" = "I tasti delle mod sono disattivati in questa versione del gioco."
 "controls.saved" = "Salvato."
 "controls.not-saved" = "Il tasto funziona fino alla chiusura del gioco, ma non è stato salvato: {reason}"
+"controls.unread" = "{file} non è stato letto all'avvio del gioco; correggilo o eliminalo"
 "mods.title" = "Mod"
 "mods.back" = "Indietro"
 "mods.off" = "{name} {version} (disattivata)"

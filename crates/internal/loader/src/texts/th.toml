@@ -23,6 +23,7 @@
 "controls.off" = "ปุ่มของม็อดปิดอยู่ในบิลด์เกมนี้"
 "controls.saved" = "บันทึกแล้ว"
 "controls.not-saved" = "ปุ่มใช้ได้จนกว่าจะปิดเกม แต่บันทึกไม่ได้: {reason}"
+"controls.unread" = "อ่าน {file} ไม่ได้ตอนเริ่มเกม แก้ไขหรือลบไฟล์นี้"
 "mods.title" = "ม็อด"
 "mods.back" = "ย้อนกลับ"
 "mods.off" = "{name} {version} (ปิดอยู่)"

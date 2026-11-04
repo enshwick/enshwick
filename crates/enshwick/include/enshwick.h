@@ -752,7 +752,8 @@ typedef struct EnshwickControlSpec {
   // call.
   struct EnshwickStr link;
   // When the control fires: `ControlSpec::PRESS`,
-  // `ControlSpec::RELEASE` and `ControlSpec::HOLD`, any of them.
+  // `ControlSpec::RELEASE` and `ControlSpec::HOLD`, at least one of
+  // them and no other bit.
   uint32_t fires;
   // How long a key stays down before `ControlSpec::HOLD` fires, in
   // milliseconds.
@@ -2934,8 +2935,11 @@ typedef struct EnshwickTypeEntry {
 } EnshwickTypeEntry;
 
 // A mod's control callback: the event and the pointer given with
-// `HostApi::control`. The client calls it on its
-// interface thread, the server on its game thread; it does not re-enter.
+// `HostApi::control`.
+//
+// The client calls it on its interface thread for a key, the server on its
+// game thread for a game action; a client hosting a game does both, so a
+// control with a key and a game action may run on the two threads at once.
 typedef void (*EnshwickControlFn)(const struct EnshwickControlEvent *event, void *user);
 
 // The table of services the loader offers a mod.

@@ -23,6 +23,7 @@
 "controls.off" = "Les touches des mods sont désactivées sur cette version du jeu."
 "controls.saved" = "Enregistré."
 "controls.not-saved" = "La touche fonctionne jusqu'à la fermeture du jeu, mais n'a pas été enregistrée : {reason}"
+"controls.unread" = "{file} n'a pas pu être lu au lancement du jeu ; corrige-le ou supprime-le"
 "mods.title" = "Mods"
 "mods.back" = "Retour"
 "mods.off" = "{name} {version} (désactivé)"

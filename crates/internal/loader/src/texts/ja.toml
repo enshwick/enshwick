@@ -23,6 +23,7 @@
 "controls.off" = "このゲームビルドではMODのキーはオフです。"
 "controls.saved" = "保存しました。"
 "controls.not-saved" = "キーはゲームを閉じるまで有効ですが、保存できませんでした: {reason}"
+"controls.unread" = "ゲーム起動時に{file}を読み込めませんでした。修正するか削除してください"
 "mods.title" = "MOD"
 "mods.back" = "戻る"
 "mods.off" = "{name} {version}（オフ）"

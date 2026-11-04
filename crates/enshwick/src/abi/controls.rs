@@ -116,10 +116,11 @@ pub struct ControlEvent {
 impl_headed!(ControlEvent);
 
 /// A mod's control callback: the event and the pointer given with
-/// [`HostApi::control`](super::HostApi::control). The client calls it on its
-/// interface thread for a key, the server on its game thread for a game
-/// action; a client hosting a game does both, so a control with a key and a
-/// game action may run on the two threads at once.
+/// [`HostApi::control`](super::HostApi::control).
+///
+/// The client calls it on its interface thread for a key, the server on its
+/// game thread for a game action; a client hosting a game does both, so a
+/// control with a key and a game action may run on the two threads at once.
 ///
 /// # Examples
 ///

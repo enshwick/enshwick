@@ -23,6 +23,7 @@
 "controls.off" = "Mod keys are off on this game build."
 "controls.saved" = "Saved."
 "controls.not-saved" = "The key works until the game closes, but it was not saved: {reason}"
+"controls.unread" = "{file} did not read when the game started; fix or delete it"
 "mods.title" = "Mods"
 "mods.back" = "Back" # text tag 0xea2bd5da
 "mods.off" = "{name} {version} (off)"

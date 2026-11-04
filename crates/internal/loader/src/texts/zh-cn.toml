@@ -23,6 +23,7 @@
 "controls.off" = "此游戏版本中模组按键已关闭。"
 "controls.saved" = "已保存。"
 "controls.not-saved" = "按键在游戏关闭前有效，但未能保存：{reason}"
+"controls.unread" = "游戏启动时无法读取 {file}；请修复或删除它"
 "mods.title" = "模组"
 "mods.back" = "返回"
 "mods.off" = "{name} {version}（已关闭）"

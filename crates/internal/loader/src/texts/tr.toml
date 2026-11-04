@@ -23,6 +23,7 @@
 "controls.off" = "Bu oyun sürümünde mod tuşları kapalı."
 "controls.saved" = "Kaydedildi."
 "controls.not-saved" = "Tuş oyun kapanana kadar çalışır ama kaydedilemedi: {reason}"
+"controls.unread" = "{file} oyun başlarken okunamadı; düzelt ya da sil"
 "mods.title" = "Modlar"
 "mods.back" = "Geri"
 "mods.off" = "{name} {version} (kapalı)"

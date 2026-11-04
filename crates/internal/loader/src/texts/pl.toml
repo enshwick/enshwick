@@ -23,6 +23,7 @@
 "controls.off" = "Klawisze modów są wyłączone w tej wersji gry."
 "controls.saved" = "Zapisano."
 "controls.not-saved" = "Klawisz działa do zamknięcia gry, ale nie został zapisany: {reason}"
+"controls.unread" = "Nie udało się odczytać {file} przy starcie gry; popraw go lub usuń"
 "mods.title" = "Mody"
 "mods.back" = "Wstecz"
 "mods.off" = "{name} {version} (wyłączony)"
