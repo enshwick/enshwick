@@ -82,9 +82,26 @@ fn a_mods_code_on_the_stack_takes_the_blame() {
 fn the_loader_and_the_game_are_named_when_no_mod_is_near() {
     let r = ranges();
     assert_eq!(blame(&r, 0x9100, None, &[0x77_0000]), Blame::Loader(2));
-    assert_eq!(blame(&r, 0x77_0000, None, &[0x9100]), Blame::Game);
+    assert_eq!(blame(&r, 0x77_0000, None, &[0x1234]), Blame::Game);
     assert!(
-        text(Blame::Game, 0x77_0000, None).ends_with("in the game: no mod's code on the stack\r\n")
+        text(Blame::Game, 0x77_0000, None)
+            .ends_with("in the game: no mod's or loader's code on the stack\r\n")
+    );
+}
+
+#[test]
+fn a_fault_in_game_code_the_loader_called_is_put_down_to_the_loader() {
+    let r = ranges();
+    let blamed = blame(&r, 0x77_0000, None, &[0x77_1000, 0x9100, 0x1234]);
+    assert_eq!(blamed, Blame::Stack(2, 1));
+    assert_eq!(
+        text(blamed, 0x77_0000, Some((0, 8))),
+        "2026-10-21 09:05:07Z fault 0xc0000005 at 0x770000, blamed on enshwick: its code is on the stack, frame 1; reading 0x8\r\n"
+    );
+    assert_eq!(
+        blame(&r, 0x77_0000, None, &[0x9100, 0x5100]),
+        Blame::Stack(1, 1),
+        "a mod's code on the stack wins over the loader's"
     );
 }
 

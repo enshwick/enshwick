@@ -22,7 +22,7 @@ use super::{LARGEST_PACKET, PACKET_BURST, Peer, Probe};
 /// machine it serves for a machine socket.
 #[repr(C)]
 #[derive(Default)]
-struct Descriptor {
+pub(super) struct Descriptor {
     kind: u8,
     _pad: [u8; 3],
     channel: u32,
@@ -94,6 +94,15 @@ pub(super) enum Taken {
     TooLong,
 }
 
+/// Why [`Game::open_peer`] opened no socket.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Unopened {
+    /// The session's packets hold no message: no socket opens on it.
+    Session,
+    /// Create made no socket this time.
+    Socket,
+}
+
 /// Open's and receive's status for a message.
 const OK: u8 = 0;
 /// The session's packet limit modes: one packet, the u16 limit of long
@@ -154,6 +163,48 @@ unsafe fn function<F: Copy>(address: usize) -> F {
     // above, and `address` the entry of a function of its type by this
     // function's `# Safety`.
     unsafe { core::mem::transmute_copy::<usize, F>(&address) }
+}
+
+#[cfg(test)]
+impl Game {
+    /// A server's calls for the carrier's tests: `create`, `destroy` and
+    /// `limit` as given, the others never reached; every offset 0, so the
+    /// host machine is the session's first word.
+    pub(super) fn for_test(create: CreateFn, destroy: DestroyFn, limit: LimitFn) -> Self {
+        unsafe extern "system" fn open(
+            out: *mut Opened,
+            _: usize,
+            _: usize,
+            _: *const Request,
+        ) -> *mut Opened {
+            out
+        }
+        unsafe extern "system" fn finish(_: usize, _: *mut Handle) {}
+        unsafe extern "system" fn receive(out: *mut Received, _: usize, _: usize) -> *mut Received {
+            out
+        }
+        unsafe extern "system" fn release(_: usize, _: *mut c_void) {}
+        Self {
+            create,
+            destroy,
+            open,
+            commit: finish,
+            abort: finish,
+            receive,
+            release,
+            limit,
+            manager: 0,
+            channel: 0,
+            session_channel: 0,
+            socket_channel: 0,
+            socket_peer: 0,
+            machine_kind: 1,
+            local_kind: None,
+            client_net: None,
+            server_session: 0,
+            host_machine: 0,
+        }
+    }
 }
 
 impl Game {
@@ -285,7 +336,8 @@ impl Game {
 
     /// Opens a socket of `kind` on the own channel, for `machine` on the
     /// server, with its link sized to the session's packets and numbered
-    /// from `epoch`.
+    /// from `epoch`. The packets are sized before the socket is made, so a
+    /// session whose packets hold no message never gets one.
     pub(super) fn open_peer(
         &self,
         session: usize,
@@ -293,23 +345,7 @@ impl Game {
         machine: u32,
         epoch: u32,
         now: Instant,
-    ) -> Option<Peer> {
-        let descriptor = Descriptor {
-            kind,
-            channel: self.channel,
-            machine,
-            ..Descriptor::default()
-        };
-        // SAFETY: `session` is the live session on its game thread, and the
-        // descriptor names a socket kind this build's table gives; create
-        // logs and answers null when it cannot make one.
-        let socket = unsafe { (self.create)(session, &raw const descriptor) };
-        if socket == 0 {
-            return None;
-        }
-        // SAFETY: `socket` is the slot create just took, whose peer field it
-        // wrote at the table's `net.socket_peer` before it answered.
-        let slot: u32 = unsafe { memory::read(socket, self.socket_peer) };
+    ) -> Result<Peer, Unopened> {
         let manager = session.wrapping_add(self.manager);
         // SAFETY: `manager` is the live session's socket manager at the
         // table's `net.session_manager`, which the limit call reads.
@@ -321,16 +357,32 @@ impl Game {
             limits[1],
             limits[2]
         );
-        let packet = usize::try_from(limits[0]).ok()?.min(LARGEST_PACKET);
+        let packet = usize::try_from(limits[0]).map_or(0, |packet| packet.min(LARGEST_PACKET));
         let Some(link) = Link::new(packet, epoch) else {
             crate::log!(
                 WARN,
-                "own channel off: packets of {packet} bytes hold no message"
+                "own channel off for this session: packets of {packet} bytes hold no message ({})",
+                crate::errors::FEATURES_OFF
             );
-            self.close(session, socket);
-            return None;
+            return Err(Unopened::Session);
         };
-        Some(Peer {
+        let descriptor = Descriptor {
+            kind,
+            channel: self.channel,
+            machine,
+            ..Descriptor::default()
+        };
+        // SAFETY: `session` is the live session on its game thread, and the
+        // descriptor names a socket kind this build's table gives; create
+        // logs and answers null when it cannot make one.
+        let socket = unsafe { (self.create)(session, &raw const descriptor) };
+        if socket == 0 {
+            return Err(Unopened::Socket);
+        }
+        // SAFETY: `socket` is the slot create just took, whose peer field it
+        // wrote at the table's `net.socket_peer` before it answered.
+        let slot: u32 = unsafe { memory::read(socket, self.socket_peer) };
+        Ok(Peer {
             machine,
             socket,
             slot,

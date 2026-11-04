@@ -109,12 +109,13 @@ pub(crate) enum Blame {
     /// The loader was running a mod's callback: the mod's range, if known,
     /// the mod's index and the feature.
     Callback(Option<usize>, usize, &'static str),
-    /// A mod's code was on the stack: the range and the frame.
+    /// A mod's code was on the stack, or with none the loader's: the range
+    /// and the frame.
     Stack(usize, usize),
     /// It faulted in the loader, with no mod's callback running or code on
     /// the stack.
     Loader(usize),
-    /// No mod's code anywhere near it.
+    /// Neither a mod's code nor the loader's anywhere near it.
     Game,
 }
 
@@ -150,10 +151,14 @@ pub(crate) fn blame(
     if let Some((index, frame)) = on_stack {
         return Blame::Stack(index, frame);
     }
-    match at_range {
-        Some(index) => Blame::Loader(index),
-        None => Blame::Game,
+    if let Some(index) = at_range {
+        return Blame::Loader(index);
     }
+    frames
+        .iter()
+        .enumerate()
+        .find_map(|(frame, &address)| range_of(address).map(|i| Blame::Stack(i, frame)))
+        .unwrap_or(Blame::Game)
 }
 
 /// A line built without allocation.
@@ -291,7 +296,7 @@ pub(crate) fn describe(
             offset(line, &ranges[index], at);
         }
         Blame::Game => {
-            line.text(b", in the game: no mod's code on the stack");
+            line.text(b", in the game: no mod's or loader's code on the stack");
         }
     }
     if let Some((kind, address)) = access {

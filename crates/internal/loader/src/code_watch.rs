@@ -165,16 +165,24 @@ impl Watch {
             ignored: ignored.to_vec(),
             changes: Vec::new(),
         };
-        watch.note(now, &ranges, "", Stage::BeforeStart);
+        watch.note(now, &ranges, "", Stage::BeforeStart, |_, _| false);
         Some(watch)
     }
 
-    /// Compares the code `now` with the copy and puts each new change down to
-    /// `by` at `stage`; the number of changes noted.
-    pub fn check(&mut self, now: &[u8], by: &str, stage: Stage) -> usize {
+    /// Compares the code `now` with the copy and notes each new change at
+    /// `stage`: put down to `by` when `made` says `by` made the change at that
+    /// offset and length, else to another program, since another program's
+    /// thread may write at any time; the number of changes noted.
+    pub fn check(
+        &mut self,
+        now: &[u8],
+        by: &str,
+        stage: Stage,
+        made: impl Fn(usize, usize) -> bool,
+    ) -> usize {
         let before = self.changes.len();
         let ranges = diff(&self.copy, now);
-        self.note(now, &ranges, by, stage);
+        self.note(now, &ranges, by, stage, made);
         self.changes.len() - before
     }
 
@@ -198,7 +206,14 @@ impl Watch {
         self.changes
     }
 
-    fn note(&mut self, now: &[u8], ranges: &[(usize, usize)], by: &str, stage: Stage) {
+    fn note(
+        &mut self,
+        now: &[u8],
+        ranges: &[(usize, usize)],
+        by: &str,
+        stage: Stage,
+        made: impl Fn(usize, usize) -> bool,
+    ) {
         for &(offset, len) in ranges {
             let parts: Vec<(usize, usize)> = outside(offset, len, &self.ignored)
                 .into_iter()
@@ -218,7 +233,11 @@ impl Watch {
                 self.changes.push(CodeChange {
                     offset,
                     len,
-                    by: by.to_owned(),
+                    by: if made(offset, len) {
+                        by.to_owned()
+                    } else {
+                        String::new()
+                    },
                     stage,
                 });
             }
