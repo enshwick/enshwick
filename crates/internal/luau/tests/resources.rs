@@ -236,4 +236,15 @@ mod tests {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
     }
+
+    #[test]
+    fn a_list_with_a_hole_is_refused_rather_than_cut_short() {
+        let loader = run(r#"
+            local list = { 1, 2, 3 }
+            list[2] = nil
+            local ok, why = pcall(enshwick.resources.encode, "demo::balance::Table", { damage = list })
+            print(`hole {ok} {string.find(tostring(why), "hole") ~= nil}`)
+        "#);
+        assert!(logged(&loader, "hole false true"), "{:?}", loader.logs());
+    }
 }

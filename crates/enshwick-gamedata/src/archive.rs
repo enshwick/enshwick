@@ -23,10 +23,10 @@ pub type ContentHash = [u32; 4];
 
 /// The header's magic, `KFC4`.
 const MAGIC: u32 = 0x3443_464b;
-/// Header fields: each a location, an offset from the field and a count.
-// The version string: an offset from the field and its length (client
+/// The version string: an offset from the field and its length (client
 /// archive 1283531, server archive 1273043).
 const VERSION: usize = 0x10;
+/// Header fields: each a location, an offset from the field and a count.
 const CONTENT_BUCKETS: usize = 0x40;
 const CONTENT_KEYS: usize = 0x48;
 const CONTENT_VALUES: usize = 0x50;
@@ -299,9 +299,19 @@ impl Archive {
     /// the type's qualified name, in the archive's order.
     #[must_use]
     pub fn keys_of(&self, type_hash: u32) -> Vec<ResourceKey> {
-        let mut keys = self.keys();
-        keys.retain(|key| key.type_hash == type_hash);
-        keys
+        let mut keys: Vec<_> = self
+            .resources
+            .iter()
+            .filter(|((_, ty, _), _)| *ty == type_hash)
+            .collect();
+        keys.sort_unstable_by_key(|(key, place)| (place.at, **key));
+        keys.into_iter()
+            .map(|(&(guid, type_hash, part), _)| ResourceKey {
+                guid,
+                type_hash,
+                part,
+            })
+            .collect()
     }
 
     /// The archive's version string, such as

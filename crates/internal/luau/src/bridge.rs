@@ -217,6 +217,12 @@ fn data(value: LuaValue, depth: usize) -> Result<Value, Error> {
                             .map_err(|e| Error::new(format!("[{}]: {e}", i + 1)))?,
                     );
                 }
+                if items.len() != len {
+                    return Err(Error::new(format!(
+                        "a list with a hole: item {} of {len} is nil",
+                        items.len() + 1
+                    )));
+                }
                 Value::List(items)
             } else if len > 0 {
                 return Err(Error::new(

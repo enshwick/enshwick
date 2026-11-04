@@ -644,11 +644,18 @@ impl Resources {
             .hashed(base.type_hash)
             .ok_or_else(|| Off::new("the base's type is not a type of this build"))?
             .qualified_name();
+        let host = self.host;
         crate::content::serve(self.host, key, base, move |bytes| {
-            let value = registry.decode(name, bytes).ok()?;
+            let warn = |error: super::CodecError| {
+                host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
+            };
+            let value = registry.decode(name, bytes).map_err(warn).ok()?;
             match patch(value) {
                 Data::Nil => Some(bytes.to_vec()),
-                edited => registry.encode(name, &edited, Some(bytes)).ok(),
+                edited => registry
+                    .encode(name, &edited, Some(bytes))
+                    .map_err(warn)
+                    .ok(),
             }
         })
     }

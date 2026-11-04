@@ -51,8 +51,10 @@ pub enum Value {
     Struct(Vec<(String, Value)>),
     /// A variant: the qualified name of the type it holds and its value.
     Variant(Box<Variant>),
-    /// Bytes the codec keeps as they are: designer data, a field without a
-    /// reflected type, a string that is not UTF-8.
+    /// Bytes the codec keeps as they are: designer data, an array whose data
+    /// is packed, a string that is not UTF-8. A field without a reflected
+    /// type is left out of a struct: written over a base it keeps its bytes,
+    /// written into new bytes it is zero.
     Bytes(Vec<u8>),
 }
 

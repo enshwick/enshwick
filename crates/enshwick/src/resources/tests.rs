@@ -450,3 +450,50 @@ proptest! {
         }
     }
 }
+
+#[test]
+fn an_unnamed_enum_or_flag_value_given_back_as_a_whole_number_writes() {
+    let registry = registry();
+    let base = registry
+        .encode(
+            "demo::Root",
+            &root("x", vec![], Value::Nil, Value::Nil),
+            None,
+        )
+        .unwrap();
+    let change = Value::Struct(vec![
+        ("side".into(), Value::Int(9)),
+        ("mask".into(), Value::Int(0b100)),
+    ]);
+    let bytes = registry.encode("demo::Root", &change, Some(&base)).unwrap();
+    assert_eq!((bytes[28], bytes[29]), (9, 0b100));
+}
+
+#[test]
+fn header_bytes_holding_an_offset_refuse_to_move() {
+    let registry = registry();
+    let packed = Value::Struct(vec![(
+        "items".into(),
+        Value::Bytes(vec![8, 0, 0, 0, 1, 0, 0, 0]),
+    )]);
+    let error = registry.encode("demo::Root", &packed, None).unwrap_err();
+    assert!(error.to_string().contains("cannot move"), "{error}");
+    let base = registry
+        .encode(
+            "demo::Root",
+            &root("x", vec![item("a", &[1])], Value::Nil, Value::Nil),
+            None,
+        )
+        .unwrap();
+    let decoded = registry.decode("demo::Root", &base).unwrap();
+    let Some(Value::List(items)) = decoded.field("items") else {
+        panic!("items")
+    };
+    let kept = Value::Struct(vec![("items".into(), Value::Bytes(base[72..80].to_vec()))]);
+    assert_eq!(
+        registry.encode("demo::Root", &kept, Some(&base)).unwrap(),
+        base,
+        "in place it stays"
+    );
+    assert_eq!(items.len(), 1);
+}

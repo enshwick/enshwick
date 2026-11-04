@@ -478,6 +478,10 @@ fn coerce<'v>(ty: &Type<'_>, value: &'v Value) -> Result<Cow<'v, Value>, CodecEr
     let kind = ty.kind();
     Ok(Cow::Owned(match (kind, value) {
         (Kind::Enum, Value::Text(name)) => Value::Name(name.clone()),
+        (
+            Kind::Enum | Kind::Bitmask8 | Kind::Bitmask16 | Kind::Bitmask32 | Kind::Bitmask64,
+            Value::Int(raw),
+        ) if *raw >= 0 => Value::Uint(raw.unsigned_abs()),
         (Kind::Struct, Value::List(items)) if items.is_empty() => Value::Struct(Vec::new()),
         (Kind::Guid | Kind::ObjectReference, Value::Text(text)) => Value::Guid(
             Guid::try_parse(text)
@@ -579,6 +583,17 @@ impl<'a> Encoder<'_, 'a> {
         let coerced = coerce(ty, value)?;
         let value = coerced.as_ref();
         match (ty.kind(), value) {
+            (
+                Kind::BlobArray | Kind::BlobString | Kind::BlobOptional | Kind::BlobVariant,
+                Value::Bytes(_),
+            ) if fresh => {
+                // Its offset counts from where it was read; moved, it would
+                // point elsewhere.
+                Err(CodecError::new(format!(
+                    "{} kept as bytes holds an offset from its old place and cannot move",
+                    ty.qualified_name()
+                )))
+            }
             (_, Value::Bytes(data)) if ty.kind() != Kind::BlobString => {
                 if data.len() != size {
                     return Err(CodecError::new(format!(
