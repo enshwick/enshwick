@@ -27,8 +27,9 @@ changes to the same resource chain in load order, as with any served resource.
 A struct you encode may name only the fields it changes.
 
 For a resource of your own, declare its id with `Load::declare` and serve a
-value under that GUID with `Load::serve_new`: it needs no vanilla base, and
-every field the value leaves out is zero.
+value under that GUID with `Load::serve_new`: the value alone makes it, and
+every field the value leaves out is zero. The game must hold a resource of that
+type, which the loader opens as the base the value replaces.
 
 ```rust
 use enshwick::resources::{Registry, Value};
@@ -62,12 +63,16 @@ bytes and writes back unchanged.
 `enshwick.resources` has the same calls: `named`, `hashed`, `impact_named`,
 `impact_hashed`, `type_names`, `resource_keys`, `content_hashes`, `game_content`,
 `serve_content`, `game_value`, `decode`, `encode`, `serve`, `serve_new`,
-`declare` and the GUID and hash helpers. A value is a plain table; a variant
+`declare` and the GUID and hash helpers. A type the build lacks is `nil`. A value is a plain table; a variant
 is `{ type = ..., value = ... }`
 and raw bytes are a `buffer`. An integer past 2^53, which a Luau
 number cannot hold exactly, is its decimal text, and text is taken back for any
-integer. A patch returns the table to serve, naming only what it changes, or
-`nil` to serve the base unchanged.
+integer. A table cannot hold `nil`, so inside a value an absent optional or
+variant is `enshwick.resources.none()`, which keeps its place in a list; give it
+back to clear one. A field a table leaves out keeps its value. A patch returns
+the table to serve, naming only what it changes, or `nil` to serve the base
+unchanged. A patch that fails, or returns a value that does not fit the type,
+is logged, and the base is served unchanged.
 
 ```lua
 for _, key in enshwick.resources.resource_keys("keen::BalancingTable") do

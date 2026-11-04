@@ -4,7 +4,8 @@
 //! A value crosses as a plain table: a struct by field name, an array as a
 //! list, an enum constant or a GUID as text, a bitmask as the list of its
 //! flags' names, a variant as `{ type = <qualified name>, value = ... }`,
-//! raw bytes as a `buffer`. An integer past 2^53, which a script
+//! raw bytes as a `buffer`, an absent optional or variant as
+//! `resources.none()`, since a table drops nil. An integer past 2^53, which a script
 //! number cannot hold exactly, crosses as its decimal text; text is taken
 //! back for any integer.
 

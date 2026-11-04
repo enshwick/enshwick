@@ -19,9 +19,11 @@ Each entry names the pull request that made the change.
   join `fnv1a32`. `HostApi::resource_keys`, `content_hashes`, `types` and
   `game_version`, ABI 11.2 (#925).
 - Luau reaches all of it as `enshwick.resources`, with values as plain
-  tables and bytes as buffers, and `enshwick.mods` names the running mods,
-  the side and the files of the mod's own folder; `icons::encode_png` writes
-  PNG (#925).
+  tables, an absent optional as `resources.none()`, and bytes as buffers;
+  `enshwick.mods` names the running mods, the side, whether the game hosts
+  the server (`hosting`) and the files of the mod's own folder; a patch that
+  fails is logged and serves its base. `icons::encode_png` writes PNG
+  (#925).
 - `altars::set_base_cap` caps the bases of the world that runs below the
   mod's `Load::request_base_limits`, so a mod asks for its most at init and
   sets each world's cap from its settings; each call replaces the mod's own
