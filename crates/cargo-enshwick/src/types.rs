@@ -3,7 +3,6 @@
 //! structs the API does not wrap.
 
 mod luau;
-mod names;
 mod rust;
 
 use std::collections::{BTreeMap, BTreeSet};

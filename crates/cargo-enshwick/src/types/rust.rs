@@ -8,8 +8,8 @@ use std::fmt::Write as _;
 
 use enshwick_gamedata::reflect::Kind;
 
-use super::names::{camel, shout, snake, split, unique};
 use super::{Catalogue, Ty};
+use enshwick_gamedata::typed::names::{camel, shout, snake, split, unique};
 
 /// Typedefs deeper than this are taken for a loop in bad data.
 const MAX_HOPS: usize = 32;

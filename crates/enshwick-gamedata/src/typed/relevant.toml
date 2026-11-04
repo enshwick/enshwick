@@ -1,0 +1,18 @@
+# The reflected types the typed API covers, by role: the rule the API
+# coverage count uses. A type is a component or an event when its chain of
+# bases reaches the root named here, a resource when its name ends in the
+# suffix; a type of any role is left out when its namespace is one of the
+# namespaces (the editor's designer data), its name holds one of the words,
+# or its short name starts with one of the prefixes before a capital.
+
+[roots]
+component = "keen::ecs::Component"
+event = "keen::ecs::Event"
+
+[suffixes]
+resource = "Resource"
+
+[left_out]
+namespaces = ["keen::ds::"]
+words = ["Test", "Debug", "Editor", "Cheat", "Benchmark"]
+prefixes = ["Dev"]

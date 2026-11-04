@@ -8,8 +8,8 @@ use std::fmt::Write as _;
 
 use enshwick_gamedata::reflect::Kind;
 
-use super::names::{camel, is_luau_name, split, unique};
 use super::{Catalogue, Ty};
+use enshwick_gamedata::typed::names::{camel, is_luau_name, split, unique};
 
 /// The Luau definitions of the `chosen` items of `catalogue`, read from
 /// `source`; no type takes a name of the API's definitions, which a Luau mod
