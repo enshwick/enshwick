@@ -633,13 +633,23 @@ pub const fn chord_down(key: Key, key_down: bool, modifiers_down: u32) -> bool {
     key_down && modifiers_down == key.modifiers()
 }
 
-/// Whether `name` can name a control: 1 to 32 characters of `[a-z0-9-]`.
-fn is_valid_name(name: &str) -> bool {
+#[doc(hidden)]
+#[must_use]
+pub fn is_valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= MAX_NAME
         && name
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// Each phase bit of `kind`, in the order its calls go out: press, hold,
+/// release. Shared by the loader and the fake host.
+#[doc(hidden)]
+pub fn phases(kind: u32) -> impl Iterator<Item = u32> {
+    [ControlSpec::PRESS, ControlSpec::HOLD, ControlSpec::RELEASE]
+        .into_iter()
+        .filter(move |bit| kind & bit != 0)
 }
 
 #[cfg(test)]

@@ -37,7 +37,7 @@ pub enum ParseKeyError {
     #[error("no key is named {0}")]
     Unknown(String),
     /// The key belongs to the game or the system: Escape, the Windows keys,
-    /// Alt+F4, or a modifier alone.
+    /// Alt with F4 or Tab, or a modifier alone.
     #[error("{0} cannot be bound")]
     Protected(String),
 }
@@ -59,7 +59,8 @@ const CODE: u32 = 0x3ff;
 const MODIFIERS: [(&str, u32); 3] = [("Shift", 1 << 16), ("Ctrl", 1 << 17), ("Alt", 1 << 18)];
 
 /// Every key a control may take, by its US name, from the scan codes of
-/// the PC keyboard's set 1 (as `MapVirtualKeyW` takes them).
+/// the PC keyboard's set 1 (as `MapVirtualKeyW` takes them). The numpad's
+/// Enter is left out: Windows reports it as the main Enter.
 const NAMES: &[(&str, u32)] = &[
     ("1", 0x02),
     ("2", 0x03),
@@ -140,7 +141,6 @@ const NAMES: &[(&str, u32)] = &[
     ("NumpadPeriod", 0x53),
     ("F11", 0x57),
     ("F12", 0x58),
-    ("NumpadEnter", EXTENDED | 0x1c),
     ("NumpadDivide", EXTENDED | 0x35),
     ("Home", EXTENDED | 0x47),
     ("Up", EXTENDED | 0x48),
@@ -162,8 +162,10 @@ const NAMES: &[(&str, u32)] = &[
 /// Keys that belong to the game or the system, by name: never a binding.
 const PROTECTED: &[&str] = &["Escape", "Win", "LeftWin", "RightWin"];
 
-/// The scan code of F4 and the bit of Alt, for Alt+F4.
-const ALT_F4: u32 = 0x3e | (1 << 18);
+/// The bit of Alt, and the keys that with Alt belong to the system with
+/// any other modifiers: F4 closes the window, Tab switches it.
+const ALT: u32 = 1 << 18;
+const SYSTEM_WITH_ALT: [u32; 2] = [0x3e, 0x0f];
 
 impl Key {
     /// The key named `text`: modifiers and a key joined by `+`, such as
@@ -172,7 +174,8 @@ impl Key {
     /// # Errors
     ///
     /// [`ParseKeyError`] for a name no key has, or a key that cannot be
-    /// bound: Escape, the Windows keys, Alt+F4 or a modifier alone.
+    /// bound: Escape, the Windows keys, Alt with F4 or Tab, or a modifier
+    /// alone.
     ///
     /// # Examples
     ///
@@ -218,7 +221,7 @@ impl Key {
         let modifiers: u32 = MODIFIERS.iter().map(|(_, bit)| bit).sum();
         let known = bits & !(CODE | modifiers) == 0
             && NAMES.iter().any(|(_, code)| *code == bits & CODE)
-            && bits != ALT_F4;
+            && !(bits & ALT != 0 && SYSTEM_WITH_ALT.contains(&(bits & CODE)));
         known.then_some(Self(bits))
     }
 
@@ -341,7 +344,17 @@ mod tests {
             Key::parse("Hyper"),
             Err(ParseKeyError::Unknown(_))
         ));
-        assert_eq!(Key::from_bits(ALT_F4), None);
+        for system in [
+            "Alt+F4",
+            "Ctrl+Alt+F4",
+            "Shift+Alt+F4",
+            "Alt+Tab",
+            "Shift+Alt+Tab",
+        ] {
+            assert!(Key::parse(system).is_err(), "{system}");
+        }
+        assert_eq!(Key::from_bits(0x3e | ALT), None);
+        assert!(Key::parse("Ctrl+Tab").is_ok());
         assert_eq!(Key::from_bits(1 << 20 | 0x12), None);
         assert!(Key::parse("Ctrl+F4").is_ok());
     }
@@ -349,7 +362,6 @@ mod tests {
     #[test]
     fn extended_keys_and_mouse_buttons_carry_their_set_1_codes() {
         for (name, code) in [
-            ("NumpadEnter", 0x11c),
             ("NumpadDivide", 0x135),
             ("Home", 0x147),
             ("Up", 0x148),

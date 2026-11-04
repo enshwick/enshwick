@@ -36,8 +36,10 @@ left of W on every layout, and the controls page shows it with the name the
 player's layout gives it. Names are those of a US keyboard, with Shift, Ctrl
 and Alt joined by `+`, such as `Shift+E`, and the mouse buttons `Mouse1` to
 `Mouse5`. A combination fires only with exactly its modifiers held, so
-`Shift+E` does not fire a control on `E`. Escape, the Windows keys, Alt+F4
-and a modifier alone cannot be bound.
+`Shift+E` does not fire a control on `E`. Escape, the Windows keys, Alt
+with F4 or Tab, and a modifier alone cannot be bound. A numpad digit fires
+while Num Lock is on; the numpad's Enter is not a key of its own, as
+Windows reports it as Enter.
 
 | Builder                       | What it does                                                         |
 | ----------------------------- | -------------------------------------------------------------------- |
@@ -104,7 +106,8 @@ its keys, with a line in the log.
 
 The Mods screen's Controls page lists every mod's controls under the mod's
 name. A click on a key waits for the next key or combination, which becomes
-the binding; Escape cancels and Unbind clears it. The page warns when two
+the binding; Escape cancels and Unbind clears it. The left mouse button
+works the page, so it is bound in the file only. The page warns when two
 controls share a key; the game's own keys are not checked.
 
 The page writes `mod-controls.toml` in the game's folder: only the keys the

@@ -7,8 +7,9 @@ use core::cell::RefCell;
 use enshwick::controls::{Key, chord_down};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyNameTextW, GetKeyboardLayout, MAPVK_VSC_TO_VK_EX, MapVirtualKeyExW,
-    VK_CONTROL, VK_ESCAPE, VK_LBUTTON, VK_MBUTTON, VK_MENU, VK_RBUTTON, VK_SHIFT, VK_XBUTTON1,
-    VK_XBUTTON2,
+    VK_CONTROL, VK_DECIMAL, VK_ESCAPE, VK_LBUTTON, VK_MBUTTON, VK_MENU, VK_NUMPAD0, VK_NUMPAD1,
+    VK_NUMPAD2, VK_NUMPAD3, VK_NUMPAD4, VK_NUMPAD5, VK_NUMPAD6, VK_NUMPAD7, VK_NUMPAD8, VK_NUMPAD9,
+    VK_RBUTTON, VK_SHIFT, VK_XBUTTON1, VK_XBUTTON2,
 };
 
 /// The modifiers' virtual keys, in the order of their bits in a [`Key`].
@@ -50,6 +51,27 @@ pub(crate) fn focused() -> bool {
     process == unsafe { GetCurrentProcessId() }
 }
 
+/// The numpad digit or point of scan code `code`: `MapVirtualKeyExW` gives
+/// these codes the navigation keys' virtual keys (Home, Up, Insert...),
+/// which they send only while Num Lock is off.
+fn numpad(code: u32) -> Option<u16> {
+    let vk = match code {
+        0x47 => VK_NUMPAD7,
+        0x48 => VK_NUMPAD8,
+        0x49 => VK_NUMPAD9,
+        0x4b => VK_NUMPAD4,
+        0x4c => VK_NUMPAD5,
+        0x4d => VK_NUMPAD6,
+        0x4f => VK_NUMPAD1,
+        0x50 => VK_NUMPAD2,
+        0x51 => VK_NUMPAD3,
+        0x52 => VK_NUMPAD0,
+        0x53 => VK_DECIMAL,
+        _ => return None,
+    };
+    Some(vk)
+}
+
 /// The virtual key of the key with scan code `code` (bit 8 extended, bit 9
 /// a mouse button) in the current layout; 0 for none.
 fn virtual_key(code: u32) -> u16 {
@@ -66,6 +88,10 @@ fn virtual_key(code: u32) -> u16 {
         }
         if let Some((_, vk)) = keys.iter().find(|(c, _)| *c == code) {
             return *vk;
+        }
+        if let Some(vk) = numpad(code) {
+            keys.push((code, vk));
+            return vk;
         }
         let scan = if code & 0x100 != 0 {
             0xe000 | (code & 0xff)

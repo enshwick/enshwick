@@ -7,7 +7,7 @@ use core::time::Duration;
 use crate::abi::{
     ControlEvent, ControlFn, ControlSpec, Header, ModHandle, PlayerInfo, Status, Str, read_headed,
 };
-use crate::controls::{GameAction, Key, MAX_NAME, Tracker, chord_down};
+use crate::controls::{GameAction, Key, Tracker, chord_down, is_valid_name, phases};
 
 use super::table::{Registration, text, with};
 use super::{FakeHost, Installed};
@@ -54,12 +54,7 @@ pub(crate) extern "system" fn control(
         None if link.is_empty() => None,
         None => return Status::BAD_ARGS,
     };
-    let well_named = !name.is_empty()
-        && name.len() <= MAX_NAME
-        && name
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
-    if !well_named || keys.iter().any(|k| matches!(k, Some(None))) {
+    if !is_valid_name(&name) || keys.iter().any(|k| matches!(k, Some(None))) {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
@@ -158,13 +153,6 @@ fn deliver(calls: &[Call], server: Option<&PlayerInfo>) -> usize {
     calls.len()
 }
 
-/// The phases of `kind`, one call each, in the order press, hold, release.
-fn split(kind: u32) -> impl Iterator<Item = u32> {
-    [ControlSpec::PRESS, ControlSpec::HOLD, ControlSpec::RELEASE]
-        .into_iter()
-        .filter(move |bit| kind & bit != 0)
-}
-
 #[expect(
     clippy::unused_self,
     reason = "the fake's state is process-wide; `self` proves it is installed"
@@ -207,7 +195,7 @@ impl Installed {
                     .tracker
                     .look(held(down), held(tapped), now, control.hold_ms)
                     & control.fires;
-                calls.extend(split(kind).map(|kind| Call {
+                calls.extend(phases(kind).map(|kind| Call {
                     name: control.name.clone(),
                     kind,
                     callback: control.callback,

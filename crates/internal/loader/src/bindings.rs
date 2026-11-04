@@ -133,6 +133,9 @@ pub fn clashes(keys: &[[u32; 2]]) -> Vec<Vec<usize>> {
         .collect()
 }
 
+/// The left mouse button's code, which a capture passes over.
+const LEFT_MOUSE: u32 = 0x200;
+
 /// What a capture ended with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Captured {
@@ -165,7 +168,8 @@ impl Capture {
     /// One look at the keys: `down` in the order the capture began with,
     /// their `keys`, the modifiers held and whether Escape is down. A key
     /// that went down ends the capture with it; Escape cancels; a
-    /// combination nobody may bind, such as Alt+F4, is passed over.
+    /// combination nobody may bind, such as Alt+F4, is passed over, and so
+    /// is the left mouse button, which works the page itself.
     ///
     /// # Examples
     ///
@@ -200,6 +204,7 @@ impl Capture {
             .zip(&self.was)
             .zip(keys)
             .filter(|((now, was), _)| **now && !**was)
+            .filter(|(_, key)| key.code() != LEFT_MOUSE)
             .find_map(|(_, key)| Key::from_bits(key.code() | modifiers));
         self.was.clear();
         self.was.extend_from_slice(down);
@@ -283,7 +288,12 @@ mod tests {
         );
         let mut plain = Capture::new(&[false, false], false);
         assert_eq!(
-            plain.look(&[false, true], &keys, 0, false),
+            plain.look(&[true, false], &keys, 0, false),
+            None,
+            "a click on the page binds nothing"
+        );
+        assert_eq!(
+            plain.look(&[true, true], &keys, 0, false),
             Some(Captured::Key(key("G")))
         );
     }
