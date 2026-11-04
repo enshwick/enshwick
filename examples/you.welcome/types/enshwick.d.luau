@@ -427,4 +427,25 @@ declare enshwick: {
 		--- Moves every stack of the inventory `from` into `to`, as the game's "take all" does; what does not fit stays in the source. The source's action bar, equipment and locked slots stay; a move in a batch can include them.
 		move_all: (from: number, to: number, done: (arg1: Outcome) -> ()) -> (),
 	},
+	--- The game's types, its resources by type and as values, and resources served from an edit.
+	resources: {
+		--- The type of qualified name `name`, the full name with its namespace, as a table of its names, hashes, layout, fields, constants and attributes; nil when the build lacks it.
+		named: (name: string) -> any,
+		--- The type whose qualified name hashes to `hash`, as `named` gives it.
+		hashed: (hash: number) -> any,
+		--- The type of impact name `name`, such as `demo.Table`, as `named` gives it.
+		impact_named: (name: string) -> any,
+		--- The type whose impact name hashes to `hash`, as `named` gives it.
+		impact_hashed: (hash: number) -> any,
+		--- The qualified name of every type of the build.
+		type_names: () -> {string},
+		--- The keys of the game's own resources of the type qualified as `type_name`, or of every resource for nil, as `{ guid, type, part }`.
+		resource_keys: (type_name: string?) -> any,
+		--- The hashes of the game's own contents, each a list of four numbers.
+		content_hashes: () -> any,
+		--- The value of the game's own resource `key`, read from its archive.
+		game_value: (key: any) -> any,
+		--- Serves the resource `key`, built from the resource `base` the first time the game reads it: `patch` gets the base's value and returns the value to serve, which may name only the fields it changes; nil serves the base unchanged. Allowed while the mod initialises.
+		serve: (key: any, base: any, patch: (arg1: any) -> any) -> (),
+	},
 }

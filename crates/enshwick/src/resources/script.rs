@@ -282,9 +282,9 @@ impl Resources {
 
 #[crate::script(lookups)]
 impl Resources {
-    /// The type of qualified name `name`, such as `demo::Table`, as a table
-    /// of its names, hashes, layout, fields, constants and attributes; nil
-    /// when the build lacks it.
+    /// The type of qualified name `name`, the full name with its namespace, as
+    /// a table of its names, hashes, layout, fields, constants and
+    /// attributes; nil when the build lacks it.
     #[script]
     pub fn named(self, name: &str) -> Data {
         self.registry.named(name).map_or(Data::Nil, describe)
