@@ -91,8 +91,10 @@ impl Phase {
 
 macro_rules! game_actions {
     ($($(#[$doc:meta])* $name:ident = $game:literal),* $(,)?) => {
-        /// A game action a control can follow: the members of the game's
-        /// player input, `PlayerInputType`, by their reflected names (client
+        /// A game action a control can follow, one per member of the game's
+        /// player input.
+        ///
+        /// The members are those of the reflected `PlayerInputType` (client
         /// 520, server 479). The `Tap`, `Hold` and `Release` forms are the
         /// game's own decisions about the same key.
         ///
@@ -429,34 +431,134 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a declaration hands its builder over, as `Actions::add` does"
+    )]
     pub fn control<F>(&mut self, control: Control, on: F) -> Result<(), Off>
     where
         F: Fn(&Fired<'_>) + Send + Sync + 'static,
     {
-        if !is_valid_name(&control.name) {
-            return Err(Off::new(format!(
-                "control {}: names are 1 to 32 of [a-z0-9-]",
-                control.name
-            )));
+        declare(self.host(), &control, on)
+    }
+}
+
+fn declare<F>(host: crate::Host, control: &Control, on: F) -> Result<(), Off>
+where
+    F: Fn(&Fired<'_>) + Send + Sync + 'static,
+{
+    if !is_valid_name(&control.name) {
+        return Err(Off::new(format!(
+            "control {}: names are 1 to 32 of [a-z0-9-]",
+            control.name
+        )));
+    }
+    let spec = ControlSpec {
+        header: crate::abi::Header::of::<ControlSpec>(),
+        name: Str::new(&control.name),
+        label: Str::new(&control.label),
+        key: control.keys[0].map_or(0, Key::bits),
+        second: control.keys[1].map_or(0, Key::bits),
+        link: Str::new(control.link.map_or("", GameAction::name)),
+        fires: control.fires,
+        hold_ms: u32::try_from(control.hold.as_millis()).unwrap_or(u32::MAX),
+    };
+    let handler: Handler = Box::new(on);
+    crate::load::hand_over(
+        handler,
+        |user| (host.api().control)(host.handle(), &raw const spec, fire, user),
+        &format!("control {}", control.name),
+    )
+}
+
+/// The mod's controls as a script declares them: the `controls` namespace.
+/// A script runs no player actions, so a script's control acts on the
+/// side it fires on.
+///
+/// # Examples
+///
+/// ```rust,standalone_crate
+/// let names: Vec<&str> = enshwick::script::NAMESPACES.iter().map(|n| n.name()).collect();
+/// assert!(names.contains(&"controls"));
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct Controls {
+    host: crate::Host,
+}
+
+#[crate::script(declarations)]
+impl Controls {
+    /// Declares the control `name`, shown as `label`, on `key`, a key name
+    /// such as `Shift+E` or empty for none, following the game action
+    /// `link` by its game name, such as `ContextualAction`, or empty. It
+    /// fires on `phases`, of `press`, `release` and `hold`, or on press
+    /// when empty, and holds after `hold_ms`; `on` gets the phase and, on
+    /// the server, the player whose game action fired. Allowed while the
+    /// mod initialises.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a malformed name, key, game action or phase, a name
+    /// declared before, and when the loader refuses the control.
+    #[script]
+    #[expect(
+        clippy::too_many_arguments,
+        clippy::needless_pass_by_value,
+        reason = "a script declares a control in one call, as Lua takes no builders, and hands \
+                  its list over"
+    )]
+    pub fn declare(
+        self,
+        name: &str,
+        label: &str,
+        key: &str,
+        link: &str,
+        phases: Vec<String>,
+        hold_ms: u32,
+        on: impl Fn(String, Option<Player>) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        let mut control = Control::new(name, label).hold_for(Duration::from_millis(hold_ms.into()));
+        if !key.is_empty() {
+            control = control.key(Key::parse(key)?);
         }
-        let link = control.link.map_or("", GameAction::name);
-        let spec = ControlSpec {
-            header: crate::abi::Header::of::<ControlSpec>(),
-            name: Str::new(&control.name),
-            label: Str::new(&control.label),
-            key: control.keys[0].map_or(0, Key::bits),
-            second: control.keys[1].map_or(0, Key::bits),
-            link: Str::new(link),
-            fires: control.fires,
-            hold_ms: u32::try_from(control.hold.as_millis()).unwrap_or(u32::MAX),
-        };
-        let host = self.host();
-        let handler: Handler = Box::new(on);
-        crate::load::hand_over(
-            handler,
-            |user| (host.api().control)(host.handle(), &raw const spec, fire, user),
-            &format!("control {}", control.name),
-        )
+        if !link.is_empty() {
+            let action = GameAction::ALL
+                .iter()
+                .find(|a| a.name() == link)
+                .ok_or_else(|| Off::new(format!("control {name}: no game action {link}")))?;
+            control = control.link(*action);
+        }
+        if !phases.is_empty() {
+            let mut picked = Vec::with_capacity(phases.len());
+            for phase in &phases {
+                picked.push(match phase.as_str() {
+                    "press" => Phase::Press,
+                    "release" => Phase::Release,
+                    "hold" => Phase::Hold,
+                    other => return Err(Off::new(format!("control {name}: no phase {other}"))),
+                });
+            }
+            control = control.fires(&picked);
+        }
+        declare(self.host, &control, move |fired| {
+            let phase = match fired.phase {
+                Phase::Press => "press",
+                Phase::Release => "release",
+                Phase::Hold => "hold",
+            };
+            on(phase.to_owned(), fired.player.clone());
+        })
+    }
+}
+
+impl crate::script::Bound for Controls {
+    const NAME: &'static str = "controls";
+    const DOC: &'static str =
+        "Keys the mod declares for its players, and game actions they follow.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_DECLARATIONS];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        Ok(Self { host: load.host() })
     }
 }
 
@@ -488,14 +590,13 @@ impl Tracker {
                 ControlSpec::PRESS
             }
             (None, false) if tapped => ControlSpec::PRESS | ControlSpec::RELEASE,
-            (None, false) => 0,
             (Some(since), true)
                 if !self.held && now.saturating_sub(since) >= u64::from(hold_ms) =>
             {
                 self.held = true;
                 ControlSpec::HOLD
             }
-            (Some(_), true) => 0,
+            (None, false) | (Some(_), true) => 0,
             (Some(_), false) => {
                 *self = Self::default();
                 ControlSpec::RELEASE

@@ -1,4 +1,4 @@
-abi 11.2
+abi 11.3
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 144 align 8 born 144
@@ -181,6 +181,22 @@ Comfort size 28 align 4 born 28
 ContentRename size 32 align 1
     from at 0 size 16 type [u8; 16]
     to at 16 size 16 type [u8; 16]
+ControlEvent size 128 align 8 born 128
+    header at 0 size 8 type Header
+    name at 8 size 16 type Str
+    kind at 24 size 4 type u32
+    server at 28 size 1 type u8
+    reserved at 29 size 3 type [u8; 3]
+    player at 32 size 96 type PlayerInfo
+ControlSpec size 72 align 8 born 72
+    header at 0 size 8 type Header
+    name at 8 size 16 type Str
+    label at 24 size 16 type Str
+    key at 40 size 4 type u32
+    second at 44 size 4 type u32
+    link at 48 size 16 type Str
+    fires at 64 size 4 type u32
+    hold_ms at 68 size 4 type u32
 CraftCheck size 24 align 4 born 24
     header at 0 size 8 type Header
     crafting_operator_id at 8 size 4 type Entity
@@ -283,7 +299,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1464 align 8
+HostApi size 1480 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -466,6 +482,8 @@ HostApi size 1464 align 8
     content_hashes at 1440 size 8 type extern "system" fn(ModHandle, *mut [u32; 4], u32, *mut u32) -> Status
     types at 1448 size 8 type extern "system" fn(ModHandle, *mut TypeEntry, u32, u32, *mut u32) -> Status
     game_version at 1456 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
+    control at 1464 size 8 type extern "system" fn(ModHandle, *const ControlSpec, unsafe extern "system" fn(*const ControlEvent, *mut c_void), *mut c_void) -> Status
+    run_action at 1472 size 8 type extern "system" fn(ModHandle, Str, Str) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32

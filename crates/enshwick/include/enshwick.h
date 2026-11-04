@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 2
+#define ENSHWICK_ABI_MINOR 3
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -709,6 +709,62 @@ typedef struct EnshwickContentRename {
   // The GUID the content has now, in memory order.
   uint8_t to[16];
 } EnshwickContentRename;
+
+// A control firing, handed to the mod's `ControlFn`.
+typedef struct EnshwickControlEvent {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The control's name in its mod; valid for the call.
+  struct EnshwickStr name;
+  // What happened: `ControlSpec::PRESS`, `ControlSpec::RELEASE` or
+  // `ControlSpec::HOLD`.
+  uint32_t kind;
+  // 1 when the server fires a control that follows a game action, for
+  // `player`; 0 on the client, for its own player.
+  uint8_t server;
+  // Zero.
+  uint8_t reserved[3];
+  // The player whose game action fired the control, when `server` is 1.
+  struct EnshwickPlayerInfo player;
+} EnshwickControlEvent;
+
+// A control a mod declares with `HostApi::control`
+// during `enshwick_mod_init`.
+//
+// A key is a `Key` value: the key's scan code in
+// bits 0 to 9 (bit 8 for an extended key, bit 9 for a mouse button) and the
+// modifiers that must be down with it in bits 16 to 18.
+typedef struct EnshwickControlSpec {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The control's name in its mod, 1 to 32 of `[a-z0-9-]`; the player's
+  // override names it `<mod id>:<name>`. Valid for the call.
+  struct EnshwickStr name;
+  // What the controls page shows for it, in the player's language. Valid
+  // for the call; the loader copies it.
+  struct EnshwickStr label;
+  // The default key, or 0 for none.
+  uint32_t key;
+  // A second default key, or 0 for none.
+  uint32_t second;
+  // The game action the control follows, by the name the game's input
+  // gives it, such as `ContextualAction`; empty for none. Valid for the
+  // call.
+  struct EnshwickStr link;
+  // When the control fires: `ControlSpec::PRESS`,
+  // `ControlSpec::RELEASE` and `ControlSpec::HOLD`, any of them.
+  uint32_t fires;
+  // How long a key stays down before `ControlSpec::HOLD` fires, in
+  // milliseconds.
+  uint32_t hold_ms;
+} EnshwickControlSpec;
+// The control fires once when its key goes down.
+#define EnshwickControlSpec_PRESS 1
+// The control fires once when its key comes up.
+#define EnshwickControlSpec_RELEASE 2
+// The control fires once when its key stayed down for
+// `ControlSpec::hold_ms`.
+#define EnshwickControlSpec_HOLD 4
 
 // A crafting recipe of the game by its recipe id, to grant, refuse or watch
 // the crafting of one recipe.
@@ -2877,6 +2933,11 @@ typedef struct EnshwickTypeEntry {
   const struct EnshwickTypeAttribute *attributes;
 } EnshwickTypeEntry;
 
+// A mod's control callback: the event and the pointer given with
+// `HostApi::control`. The client calls it on its
+// interface thread, the server on its game thread; it does not re-enter.
+typedef void (*EnshwickControlFn)(const struct EnshwickControlEvent *event, void *user);
+
 // The table of services the loader offers a mod.
 //
 // A function appended at its end is a new
@@ -4348,6 +4409,29 @@ typedef struct EnshwickHostApi {
   // `Status::MISSING` when the archive does not read. Any thread. A
   // panic in the loader returns `Status::REFUSED`.
   EnshwickStatus (*game_version)(EnshwickModHandle me, struct EnshwickStr *out);
+  // Declares a control of the calling mod from `spec`, with `callback`
+  // and `user` for its events; allowed during `enshwick_mod_init` only.
+  // The client fires it from its keys while the player is in the world
+  // with no menu, chat or inventory open, and never takes the key from
+  // the game; the server fires one with a `link` when that player's game
+  // action fires. `Status::BAD_ARGS` for a malformed name, key or
+  // unknown `link`, `Status::REFUSED` for a name the mod declared
+  // before, `Status::TOO_LATE` after init. A panic in the loader
+  // returns `Status::REFUSED`.
+  EnshwickStatus (*control)(EnshwickModHandle me,
+                            const struct EnshwickControlSpec *spec,
+                            EnshwickControlFn callback,
+                            void *user);
+  // On a client, asks the server to run the calling mod's player action
+  // `action` with `args` in the sheet's encoding, as the interface does:
+  // the server checks it again, runs the mod's handler and shows the
+  // reply as a notice. `Status::MISSING` on a server or while the
+  // server takes no messages; `Status::BAD_ARGS` for unreadable
+  // strings. Any thread. A panic in the loader returns
+  // `Status::REFUSED`.
+  EnshwickStatus (*run_action)(EnshwickModHandle me,
+                               struct EnshwickStr action,
+                               struct EnshwickStr args);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

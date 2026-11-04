@@ -1,0 +1,297 @@
+//! The fake loader's controls: the mod's declared controls, keys the test
+//! holds down, game actions it fires and the action runs a client sent.
+
+use core::ffi::c_void;
+use core::time::Duration;
+
+use crate::abi::{
+    ControlEvent, ControlFn, ControlSpec, Header, ModHandle, PlayerInfo, Status, Str, read_headed,
+};
+use crate::controls::{GameAction, Key, MAX_NAME, Tracker, chord_down};
+
+use super::table::{Registration, text, with};
+use super::{FakeHost, Installed};
+
+/// A control the mod declared.
+struct FakeControl {
+    name: String,
+    label: String,
+    keys: [Option<Key>; 2],
+    link: Option<GameAction>,
+    fires: u32,
+    hold_ms: u32,
+    callback: ControlFn,
+    user: usize,
+    tracker: Tracker,
+}
+
+/// The mod's controls, the fake clock of its keys and the runs sent.
+#[derive(Default)]
+pub(crate) struct FakeControls {
+    controls: Vec<FakeControl>,
+    /// Milliseconds since the first look at the keys.
+    now: u64,
+    /// The action runs the mod sent the server: action and arguments.
+    runs: Vec<(String, String)>,
+}
+
+pub(crate) extern "system" fn control(
+    _me: ModHandle,
+    spec: *const ControlSpec,
+    callback: ControlFn,
+    user: *mut c_void,
+) -> Status {
+    // SAFETY: the safe layer passes a live `ControlSpec` for the call.
+    let Some(spec) = (unsafe { read_headed(spec, size_of::<ControlSpec>()) }) else {
+        return Status::BAD_ARGS;
+    };
+    let name = text(spec.name);
+    let link = text(spec.link);
+    let key = |bits: u32| (bits != 0).then(|| Key::from_bits(bits));
+    let keys = [key(spec.key), key(spec.second)];
+    let link = match GameAction::ALL.iter().find(|a| a.name() == link) {
+        Some(action) => Some(*action),
+        None if link.is_empty() => None,
+        None => return Status::BAD_ARGS,
+    };
+    let well_named = !name.is_empty()
+        && name.len() <= MAX_NAME
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+    if !well_named || keys.iter().any(|k| matches!(k, Some(None))) {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        if s.controls.controls.iter().any(|c| c.name == name) {
+            return Status::REFUSED;
+        }
+        let bound = s
+            .host
+            .bindings
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, keys)| *keys);
+        s.controls.controls.push(FakeControl {
+            keys: bound.unwrap_or(keys.map(Option::flatten)),
+            label: text(spec.label),
+            name,
+            link,
+            fires: spec.fires,
+            hold_ms: spec.hold_ms,
+            callback,
+            user: user.expose_provenance(),
+            tracker: Tracker::default(),
+        });
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn run_action(_me: ModHandle, action: Str, args: Str) -> Status {
+    let (action, args) = (text(action), text(args));
+    with(Status::MISSING, |s| {
+        s.controls.runs.push((action, args));
+        Status::OK
+    })
+}
+
+impl FakeHost {
+    /// The player's keys for control `name`, as `mod-controls.toml` holds
+    /// them: in place of the mod's defaults, `[None, None]` for unbound.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::controls::Key;
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .bind("horn", [Some(Key::parse("J")?), None])
+    ///     .install();
+    /// # Ok::<(), enshwick::controls::ParseKeyError>(())
+    /// ```
+    #[must_use]
+    pub fn bind(mut self, name: &str, keys: [Option<Key>; 2]) -> Self {
+        self.bindings.push((name.to_owned(), keys));
+        self
+    }
+}
+
+/// One call of a control's callback.
+struct Call {
+    name: String,
+    kind: u32,
+    callback: ControlFn,
+    user: usize,
+}
+
+fn deliver(calls: &[Call], server: Option<&PlayerInfo>) -> usize {
+    let zero = PlayerInfo {
+        header: Header::of::<PlayerInfo>(),
+        slot: 0,
+        entity: crate::Entity(0),
+        key: crate::PlayerKey::new(0),
+        permissions: 0,
+        name_len: 0,
+        name: [0; 64],
+    };
+    for call in calls {
+        let event = ControlEvent {
+            header: Header::of::<ControlEvent>(),
+            name: Str::new(&call.name),
+            kind: call.kind,
+            server: u8::from(server.is_some()),
+            reserved: [0; 3],
+            player: *server.unwrap_or(&zero),
+        };
+        // SAFETY: `event` lives for the call and `user` is the pointer the
+        // mod declared `callback` with.
+        unsafe {
+            (call.callback)(
+                &raw const event,
+                core::ptr::with_exposed_provenance_mut(call.user),
+            );
+        };
+    }
+    calls.len()
+}
+
+/// The phases of `kind`, one call each, in the order press, hold, release.
+fn split(kind: u32) -> impl Iterator<Item = u32> {
+    [ControlSpec::PRESS, ControlSpec::HOLD, ControlSpec::RELEASE]
+        .into_iter()
+        .filter(move |bit| kind & bit != 0)
+}
+
+#[expect(
+    clippy::unused_self,
+    reason = "the fake's state is process-wide; `self` proves it is installed"
+)]
+impl Installed {
+    /// Looks at the keys as the client's key reader does, `after` the last
+    /// look: `down` are the keys held now, each with the modifiers held
+    /// with it, and `tapped` the keys pressed and let go since the last
+    /// look. Each control whose key matches fires what the look decides, on
+    /// the client. Returns how many calls the mod got.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use enshwick::controls::Key;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.keys(&[Key::parse("H")?], &[], Duration::from_millis(16)), 0);
+    /// # Ok::<(), enshwick::controls::ParseKeyError>(())
+    /// ```
+    #[must_use = "the count says whether a control fired"]
+    pub fn keys(&self, down: &[Key], tapped: &[Key], after: Duration) -> usize {
+        let calls = with(Vec::new(), |s| {
+            let fake = &mut s.controls;
+            fake.now = fake
+                .now
+                .saturating_add(u64::try_from(after.as_millis()).unwrap_or(u64::MAX));
+            let now = fake.now;
+            let mut calls = Vec::new();
+            for control in &mut fake.controls {
+                let held = |keys: &[Key]| {
+                    control.keys.iter().flatten().any(|bound| {
+                        keys.iter().any(|k| {
+                            k.code() == bound.code() && chord_down(*bound, true, k.modifiers())
+                        })
+                    })
+                };
+                let kind = control
+                    .tracker
+                    .look(held(down), held(tapped), now, control.hold_ms)
+                    & control.fires;
+                calls.extend(split(kind).map(|kind| Call {
+                    name: control.name.clone(),
+                    kind,
+                    callback: control.callback,
+                    user: control.user,
+                }));
+            }
+            calls
+        });
+        deliver(&calls, None)
+    }
+
+    /// Fires `player`'s game action `action` on the server, as the loader
+    /// does when the player's input sets it: every control linked to it
+    /// gets one [`Phase::Press`](crate::controls::Phase::Press), when it
+    /// fires on press. Returns how many calls the mod got.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, PlayerInfo};
+    /// use enshwick::controls::GameAction;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let player = PlayerInfo {
+    ///     header: Header::of::<PlayerInfo>(),
+    ///     slot: 0,
+    ///     entity: enshwick::Entity(2),
+    ///     key: enshwick::PlayerKey::new(7),
+    ///     permissions: 0,
+    ///     name_len: 0,
+    ///     name: [0; 64],
+    /// };
+    /// assert_eq!(loader.game_action(&player, GameAction::ContextualAction), 0);
+    /// ```
+    #[must_use = "the count says whether a control fired"]
+    pub fn game_action(&self, player: &PlayerInfo, action: GameAction) -> usize {
+        let calls = with(Vec::new(), |s| {
+            s.controls
+                .controls
+                .iter()
+                .filter(|c| c.link == Some(action) && c.fires & ControlSpec::PRESS != 0)
+                .map(|c| Call {
+                    name: c.name.clone(),
+                    kind: ControlSpec::PRESS,
+                    callback: c.callback,
+                    user: c.user,
+                })
+                .collect()
+        });
+        deliver(&calls, Some(player))
+    }
+
+    /// The mod's controls as the controls page lists them: name, label and
+    /// the keys in force.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.controls().is_empty());
+    /// ```
+    #[must_use]
+    pub fn controls(&self) -> Vec<(String, String, [Option<Key>; 2])> {
+        with(Vec::new(), |s| {
+            s.controls
+                .controls
+                .iter()
+                .map(|c| (c.name.clone(), c.label.clone(), c.keys))
+                .collect()
+        })
+    }
+
+    /// The player actions the mod asked the server to run, with
+    /// [`Actions::run`](crate::actions::Actions::run): action and arguments
+    /// in the sheet's encoding, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.action_runs().is_empty());
+    /// ```
+    #[must_use]
+    pub fn action_runs(&self) -> Vec<(String, String)> {
+        with(Vec::new(), |s| s.controls.runs.clone())
+    }
+}

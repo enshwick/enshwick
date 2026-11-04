@@ -29,6 +29,8 @@ mod config_lists;
 mod containers;
 mod content_renames;
 #[cfg(feature = "unstable")]
+mod controls;
+#[cfg(feature = "unstable")]
 mod damage;
 mod daytime;
 pub mod deps;
