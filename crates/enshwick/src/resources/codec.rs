@@ -600,6 +600,9 @@ impl<'a> Encoder<'_, 'a> {
                     ty.qualified_name()
                 )))
             }
+            // In place, the header is the element's own, or was rebased when
+            // its element moved; the bytes read before would undo that.
+            (Kind::BlobArray | Kind::BlobOptional | Kind::BlobVariant, Value::Bytes(_)) => Ok(()),
             (_, Value::Bytes(data)) if ty.kind() != Kind::BlobString => {
                 if data.len() != size {
                     return Err(CodecError::new(format!(

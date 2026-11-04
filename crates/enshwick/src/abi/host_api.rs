@@ -1540,9 +1540,9 @@ pub struct HostApi {
     /// Up to `capacity` keys of the game's own resources of type
     /// `type_hash`, or of every resource for 0, in the order their bytes lie
     /// in the archive, and how many there are; read from the archive's files
-    /// at the first call and kept. A null `out` asks only for the count, and
-    /// a null `count` is not written. [`Status::MISSING`] when the archive
-    /// does not read. Any thread. A panic in the loader returns
+    /// at the first call and kept. A null `out` asks only for the count; a
+    /// null `count` gives [`Status::BAD_ARGS`] after the keys are written.
+    /// [`Status::MISSING`] when the archive does not read. Any thread. A panic in the loader returns
     /// [`Status::REFUSED`].
     pub resource_keys: extern "system" fn(
         me: ModHandle,
@@ -1553,9 +1553,9 @@ pub struct HostApi {
     ) -> Status,
     /// Up to `capacity` hashes of the game's own contents, in the archive's
     /// order, and how many there are; [`HostApi::content_read`] reads each.
-    /// A null `out` asks only for the count, and a null `count` is not
-    /// written. [`Status::MISSING`] when the archive does not read. Any
-    /// thread. A panic in the loader returns [`Status::REFUSED`].
+    /// A null `out` asks only for the count; a null `count` gives
+    /// [`Status::BAD_ARGS`] after the hashes are written.
+    /// [`Status::MISSING`] when the archive does not read. Any thread. A panic in the loader returns [`Status::REFUSED`].
     pub content_hashes: extern "system" fn(
         me: ModHandle,
         out: *mut [u32; 4],
@@ -1567,7 +1567,8 @@ pub struct HostApi {
     /// kept. Entries are `entry_size` bytes apart, the caller's
     /// `size_of::<TypeEntry>()`, at least a [`Header`]
     /// ([`Status::BAD_ARGS`] below it); a null `out` asks only for the
-    /// count, and a null `count` is not written. The strings and arrays an
+    /// count; a null `count` gives [`Status::BAD_ARGS`] after the entries
+    /// are written. The strings and arrays an
     /// entry points at are the loader's, valid and unchanged for the life of
     /// the process. [`Status::MISSING`] when the game holds no reflection
     /// data. Any thread. A panic in the loader returns [`Status::REFUSED`].

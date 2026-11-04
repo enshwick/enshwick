@@ -67,14 +67,15 @@ pub(crate) fn to_lua(
         (Value::Bytes(bytes), _) => LuaValue::Buffer(lua.create_buffer(bytes)?),
         (Value::Map(fields), _) => {
             let table = lua.create_table_with_capacity(0, fields.len())?;
-            for (name, value) in fields {
+            // An absent field reads as nil, so `if value.field then` holds.
+            for (name, value) in fields.into_iter().filter(|(_, v)| !matches!(v, Value::Nil)) {
                 table.raw_set(name, to_lua(lua, scope, value, &Ty::Data)?)?;
             }
             LuaValue::Table(table)
         }
         (Value::Nil, Ty::Optional(_)) => LuaValue::Nil,
         (value, Ty::Optional(inner_ty)) => to_lua(lua, scope, value, inner_ty)?,
-        // A table drops a nil item or field, so nil inside game data is `none`.
+        // A list drops a nil item, so nil inside game data is `none`.
         (Value::Nil, Ty::Data) => LuaValue::NULL,
         (Value::Function(callback), Ty::Function(signature)) => {
             let scope = scope.clone();

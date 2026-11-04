@@ -67,9 +67,9 @@ bytes and writes back unchanged.
 is `{ type = ..., value = ... }`
 and raw bytes are a `buffer`. An integer past 2^53, which a Luau
 number cannot hold exactly, is its decimal text, and text is taken back for any
-integer. A table cannot hold `nil`, so inside a value an absent optional or
-variant is `enshwick.resources.none()`, which keeps its place in a list; give it
-back to clear one. A field a table leaves out keeps its value. A patch returns
+integer. An absent optional or variant is a field the table leaves out, and
+`enshwick.resources.none()` as an item of a list, which `nil` would cut short.
+A field an edit leaves out keeps its value, so give `none()` to clear one. A patch returns
 the table to serve, naming only what it changes, or `nil` to serve the base
 unchanged. A patch that fails, or returns a value that does not fit the type,
 is logged, and the base is served unchanged.

@@ -498,6 +498,35 @@ fn header_bytes_holding_an_offset_refuse_to_move() {
     assert_eq!(items.len(), 1);
 }
 
+#[test]
+fn a_packed_array_inside_a_moved_element_still_points_at_its_data() {
+    let registry = registry();
+    let mut base = registry
+        .encode(
+            "demo::Root",
+            &root("x", vec![item("a", &[1, 2])], Value::Nil, Value::Nil),
+            None,
+        )
+        .unwrap();
+    let int = |bytes: &[u8], at: usize| i32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+    let target = |bytes: &[u8], at: usize| at.checked_add_signed(int(bytes, at) as isize).unwrap();
+    let values = target(&base, 72) + 8;
+    let data = target(&base, values);
+    base[values + 4..values + 8].copy_from_slice(&u32::MAX.to_le_bytes());
+    let mut decoded = registry.decode("demo::Root", &base).unwrap();
+    let Some(Value::List(items)) = decoded.field_mut("items") else {
+        panic!("items")
+    };
+    assert!(matches!(items[0].field("values"), Some(Value::Bytes(_))));
+    items.push(item("b", &[3]));
+    let grown = registry
+        .encode("demo::Root", &decoded, Some(&base))
+        .unwrap();
+    let moved = target(&grown, 72) + 8;
+    assert_ne!(moved, values, "the items moved");
+    assert_eq!(target(&grown, moved), data);
+}
+
 /// Elements with a string, a number and a field the type does not reflect.
 fn element_registry() -> Registry<'static> {
     Registry::new([

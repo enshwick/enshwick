@@ -4,7 +4,7 @@ use core::ffi::c_void;
 
 use crate::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status, Str};
 use crate::test::ServedResource;
-use crate::test::table::{found, put, text, with};
+use crate::test::table::{found, put, put_list, text, with};
 
 pub(crate) extern "system" fn serve_resource(
     _me: ModHandle,
@@ -438,22 +438,6 @@ pub(crate) extern "system" fn game_text(
     }
 }
 
-/// Copies up to `capacity` of `items` to a non-null `out` and writes how
-/// many there are to a non-null `count`.
-fn copy_out<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
-    if !out.is_null() {
-        let copied = items.len().min(capacity as usize);
-        // SAFETY: the safe layer passes `capacity` writable items at a
-        // non-null `out`, apart from the fake's own list, and `copied` is at
-        // most `capacity`.
-        unsafe { out.copy_from_nonoverlapping(items.as_ptr(), copied) };
-    }
-    if count.is_null() {
-        return Status::OK;
-    }
-    put(count, u32::try_from(items.len()).unwrap_or(u32::MAX))
-}
-
 pub(crate) extern "system" fn resource_keys(
     _me: ModHandle,
     type_hash: u32,
@@ -474,7 +458,7 @@ pub(crate) extern "system" fn resource_keys(
             .collect()
     });
     keys.sort_by_key(|key| (key.type_hash, key.guid, key.part));
-    copy_out(&keys, out, capacity, count)
+    put_list(&keys, out, capacity, count)
 }
 
 pub(crate) extern "system" fn content_hashes(
@@ -484,7 +468,7 @@ pub(crate) extern "system" fn content_hashes(
     count: *mut u32,
 ) -> Status {
     let hashes: Vec<[u32; 4]> = with(Vec::new(), |s| s.host.archive.keys().copied().collect());
-    copy_out(&hashes, out, capacity, count)
+    put_list(&hashes, out, capacity, count)
 }
 
 pub(crate) extern "system" fn types(

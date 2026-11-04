@@ -4,8 +4,9 @@
 //! A value crosses as a plain table: a struct by field name, an array as a
 //! list, an enum constant or a GUID as text, a bitmask as the list of its
 //! flags' names, a variant as `{ type = <qualified name>, value = ... }`,
-//! raw bytes as a `buffer`, an absent optional or variant as
-//! `resources.none()`, since a table drops nil. An integer past 2^53, which a script
+//! raw bytes as a `buffer`, an absent optional or variant as an absent field,
+//! or as `resources.none()` in a list, which nil would cut short. An integer
+//! past 2^53, which a script
 //! number cannot hold exactly, crosses as its decimal text; text is taken
 //! back for any integer.
 
@@ -149,22 +150,11 @@ fn text(value: impl Into<String>) -> Data {
     Data::Text(value.into())
 }
 
-/// A struct of `fields` without those that are nil, so a script reads an
-/// absent name as nil rather than as `resources.none()`.
-fn record(fields: Vec<(String, Data)>) -> Data {
-    Data::Struct(
-        fields
-            .into_iter()
-            .filter(|(_, value)| *value != Data::Nil)
-            .collect(),
-    )
-}
-
 fn attributes(list: &[super::Attribute<'_>]) -> Data {
     Data::List(
         list.iter()
             .map(|a| {
-                record(vec![
+                Data::Struct(vec![
                     ("name".into(), text(a.name())),
                     ("value_type".into(), a.value_type().map_or(Data::Nil, text)),
                     ("value".into(), text(a.value())),
@@ -177,7 +167,7 @@ fn attributes(list: &[super::Attribute<'_>]) -> Data {
 /// `ty` as script data, by the names of its accessors.
 fn describe(ty: &Type<'_>) -> Data {
     let optional = |name: Option<&str>| name.map_or(Data::Nil, text);
-    record(vec![
+    Data::Struct(vec![
         ("name".into(), text(ty.name())),
         ("impact_name".into(), text(ty.impact_name())),
         ("qualified_name".into(), text(ty.qualified_name())),
@@ -209,7 +199,7 @@ fn describe(ty: &Type<'_>) -> Data {
                 ty.fields()
                     .iter()
                     .map(|f| {
-                        record(vec![
+                        Data::Struct(vec![
                             ("name".into(), text(f.name())),
                             ("type_name".into(), optional(f.type_name())),
                             ("offset".into(), Data::Uint(f.offset().into())),
@@ -397,9 +387,9 @@ impl Resources {
             .collect())
     }
 
-    /// The value that stands for nil inside game data: an absent optional
-    /// or variant, or one to clear in an edit, where a table cannot hold nil.
-    /// A field the edit leaves out keeps its value.
+    /// The value that stands for an absent optional or variant where nil
+    /// cannot: an item of a list, which nil would cut short, and a field an
+    /// edit clears, since a field the edit leaves out keeps its value.
     #[script]
     #[must_use]
     pub fn none(self) -> Data {

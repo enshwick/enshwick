@@ -227,17 +227,17 @@ mod tests {
             local r = enshwick.resources
             local value = r.game_value(r.resource_keys("demo::Extra")[1])
             print(`bonus {value.bonus} pair {#value.pair} first {value.pair[1] == r.none()} second {value.pair[2]}`)
+            local empty = r.decode("demo::Extra", r.encode("demo::Extra", { pair = { r.none(), r.none() } }))
+            print(`empty bonus {empty.bonus == nil}`)
             for _, key in r.resource_keys("demo::Extra") do
                 r.serve(key, key, function()
                     return { bonus = r.none() }
                 end)
             end
         "#);
-        assert!(
-            logged(&loader, "bonus 1.5 pair 2 first true second 2.5"),
-            "{:?}",
-            loader.logs()
-        );
+        for line in ["bonus 1.5 pair 2 first true second 2.5", "empty bonus true"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
         let mut cleared = extra();
         cleared[..4].fill(0);
         assert_eq!(

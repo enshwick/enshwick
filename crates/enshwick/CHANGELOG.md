@@ -19,7 +19,8 @@ Each entry names the pull request that made the change.
   join `fnv1a32`. `HostApi::resource_keys`, `content_hashes`, `types` and
   `game_version`, ABI 11.2 (#925).
 - Luau reaches all of it as `enshwick.resources`, with values as plain
-  tables, an absent optional as `resources.none()`, and bytes as buffers;
+  tables, an absent optional in a list as `resources.none()`, and bytes as
+  buffers;
   `enshwick.mods` names the running mods, the side, whether the game hosts
   the server (`hosting`) and the files of the mod's own folder; a patch that
   fails is logged and serves its base. `icons::encode_png` writes PNG
