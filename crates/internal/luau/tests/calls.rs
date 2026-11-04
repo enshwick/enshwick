@@ -168,4 +168,51 @@ mod tests {
             loader.logs()
         );
     }
+
+    /// A call the harness's mod, `you.luau`, serves from its script.
+    #[enshwick::call(name = "you.luau:price-of", output = u32)]
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct PriceOf {
+        pub(crate) item: u32,
+        pub(crate) count: u32,
+    }
+
+    const SERVES: &str = r#"
+        enshwick.serve_call({
+            name = "price-of",
+            fields = { { name = "item", read = "u32" }, { name = "count", read = "u32" } },
+            output = "u32",
+        }, function(input)
+            if input.item == 0 then return nil end
+            return input.item * 10 + input.count
+        end)
+    "#;
+
+    #[test]
+    fn a_script_serves_a_call_a_rust_caller_of_the_same_type_reaches() {
+        let loader = crate::harness::run(FakeHost::new(), SERVES);
+        assert_eq!(loader.call(&PriceOf { item: 7, count: 2 }), Ok(72));
+    }
+
+    #[test]
+    fn a_served_call_whose_handler_answers_nil_fails() {
+        let loader = crate::harness::run(FakeHost::new(), SERVES);
+        assert!(loader.call(&PriceOf { item: 0, count: 1 }).is_err());
+    }
+
+    #[test]
+    fn a_call_served_twice_raises_an_error() {
+        let loader = crate::harness::run(
+            FakeHost::new(),
+            &format!(
+                "{SERVES}\nlocal ok, why = pcall(function() {} end)\nenshwick.log.info(`twice {{not ok}} {{why}}`)",
+                SERVES.replace('\n', " ")
+            ),
+        );
+        assert!(
+            crate::harness::logged(&loader, "is served already"),
+            "{:?}",
+            loader.logs()
+        );
+    }
 }

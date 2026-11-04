@@ -180,6 +180,26 @@ mod tests {
         assert_eq!(hooked(&loader), [ROLL]);
     }
 
+    #[test]
+    fn on_settings_hands_the_settings_over_now_and_at_each_world_load() {
+        let (loader, status) = start_with(
+            FakeHost::new(),
+            r"
+            local seen = 0
+            enshwick.on_settings(function(settings)
+                seen += 1
+                enshwick.log.info(`settings {seen} {type(settings)}`)
+            end)
+            ",
+            Scripts::new(),
+            None,
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert!(logged(&loader, "settings 1 table"), "{:?}", loader.logs());
+        let _handled = loader.raise::<SettingsReplaced>(&());
+        assert!(logged(&loader, "settings 2 table"), "{:?}", loader.logs());
+    }
+
     const EXPORT: &str = r"
         local ok, dir = pcall(enshwick.export_dir)
         enshwick.log.info(`export {ok} {dir}`)

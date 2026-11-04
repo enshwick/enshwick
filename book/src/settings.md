@@ -365,3 +365,8 @@ enshwick.on("SettingsChanged", function()
     enshwick.log.info(`greeting now {enshwick.settings().greeting}`)
 end)
 ```
+
+`enshwick.on_settings(handler)` and `enshwick.on_settings_change(handler)`
+follow the settings as `load.on_settings` and `load.on_settings_change` do:
+the handler gets the values now, as each world loads and stops, and for the
+second, on every change in game.

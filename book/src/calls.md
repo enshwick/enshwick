@@ -213,3 +213,22 @@ reaches the server. A call whose input holds a value type or an enum is for
 Rust mods only: `cargo enshwick deps --luau` leaves it out and says why,
 since a script could forge such a field's description and send the server a
 value its type forbids. The answer may be of any type.
+
+`enshwick.serve_call(call, handler)` at the top level of `main.luau` serves a
+call of the mod, as `load.serve_call` does. The script describes the call by
+its local name, its input's fields and its answer, each a number, boolean,
+entity or GUID. The runtime lays them out and hashes them as `#[call]` does,
+so a Rust mod's caller of the same type reaches it:
+
+```luau
+enshwick.serve_call({
+    name = "price-of",
+    fields = { { name = "item", read = "u32" }, { name = "count", read = "u32" } },
+    output = "u32",
+}, function(input)
+    return input.item * 10 + input.count
+end)
+```
+
+A handler that returns nil or raises an error fails that call; the error
+also turns the mod off.

@@ -885,6 +885,10 @@ export type LevelUpEvent = {
 
 --- The game's level table, during an experience pass.
 export type Levels = {
+	--- The highest level, as `Levels.cap` answers.
+	cap: (self: Levels) -> number,
+	--- What `level` needs, 0 for level 0 or past the cap, as `Levels.need` answers.
+	need: (self: Levels, level: number) -> number,
 }
 
 --- A line of what an item gives, from `Affixes.lines`.
@@ -1999,6 +2003,12 @@ declare enshwick: {
 	caller: (call: { name: string }) -> (input: any) -> (any, string?),
 	--- Defines a mod event of this mod for others to hear, at the top level of main.luau, by its local name (`greeted` for `<mod id>:greeted`); `send` hands every subscriber the data.
 	define_event: (event: { name: string }) -> { send: (data: any) -> () },
+	--- Serves a call of this mod for other mods, at the top level of main.luau, by its local name (`price-of` for `<mod id>:price-of`), as a Rust mod serves a `#[call]` type: the input's fields and the answer read numbers, booleans, entities or GUIDs, laid out as Rust lays them out, so a Rust caller of the same type matches. `handler` gets the input and returns the answer; nil fails the call.
+	serve_call: (call: { name: string, major: number?, fields: { { name: string, read: string } }, output: string }, handler: (input: { [string]: any }) -> any) -> (),
+	--- Calls `handler` with the mod's settings now and as each world loads and stops, as a Rust mod's `on_settings` does.
+	on_settings: (handler: (settings: { [string]: any }) -> ()) -> (),
+	--- Calls `handler` as `on_settings` does, and again on every change in game, as a Rust mod's `on_settings_change` does.
+	on_settings_change: (handler: (settings: { [string]: any }) -> ()) -> (),
 	--- The mods `pack.toml` names in `requires` and `after`, by alias: each mod's id, and whether it runs now.
 	deps: { [string]: { id: string, running: () -> boolean } },
 	--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.
@@ -2335,7 +2345,7 @@ declare enshwick: {
 	--- The mod's folder in `mods/`, which holds its installation, such as an installation `Hold`.
 	--- Only while the mod starts, at the top level of main.luau.
 	mod_dir: () -> string,
-	--- The folder `export/<mod id>/` in the game folder, where a mod writes files for tools outside the game, such as a wiki or a map; a mod may write to any other path too.
+	--- The folder `export/<folder>/` in the game folder, named as the mod's folder in `mods/`, its id as players install it, where a mod writes files for tools outside the game, such as a wiki or a map; a mod may write to any other path too.
 	--- Only while the mod starts, at the top level of main.luau.
 	export_dir: () -> string,
 	--- The data a mod keeps for a world, and holds on its saves.
