@@ -323,7 +323,11 @@ impl Installed {
 mod tests {
     use super::*;
 
-    unsafe extern "system" fn nothing(_: *const ControlEvent, _: *mut c_void) {}
+    unsafe extern "system" fn nothing(event: *const ControlEvent, _: *mut c_void) {
+        // SAFETY: the fake never calls this callback; a caller would pass
+        // null or a live event readable for the size its header states.
+        let _read = unsafe { read_headed(event, size_of::<ControlEvent>()) };
+    }
 
     fn declared(key: u32, fires: u32) -> Status {
         let spec = ControlSpec {
