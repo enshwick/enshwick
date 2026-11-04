@@ -9,11 +9,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, anyhow, bail};
 use enshwick_gamedata::reflect::{Image, Layout, Reflection};
-use enshwick_gamedata::typed::Catalogue;
+use enshwick_gamedata::typed::{Catalogue, Renames};
 use enshwick_gamedata::{Side, Table, embedded, exact, file_name, newest};
 
 /// Where the snapshots live, below the repository root.
 pub(crate) const SNAPSHOTS: &str = "crates/enshwick-gamedata/typed";
+/// The rename table, beside the snapshots.
+pub(crate) const RENAMES: &str = "renames.toml";
 /// The API crate's sources, below the repository root.
 const API_SRC: &str = "crates/enshwick/src";
 /// The loader's id table, below the repository root.
@@ -73,6 +75,20 @@ pub(crate) fn snapshot(root: &Path, exe: &Path) -> anyhow::Result<PathBuf> {
     Ok(path)
 }
 
+/// The rename table beside the snapshots; empty when there is none yet.
+///
+/// # Errors
+///
+/// When the table does not read.
+pub(crate) fn renames(root: &Path) -> anyhow::Result<Renames> {
+    let path = root.join(SNAPSHOTS).join(RENAMES);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Renames::parse(&text).with_context(|| path.display().to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Renames::default()),
+        Err(e) => Err(e).with_context(|| path.display().to_string()),
+    }
+}
+
 /// Every generated file of the newest server build's snapshot, by path
 /// below `root`.
 fn generated(root: &Path) -> anyhow::Result<(BTreeMap<PathBuf, String>, String)> {
@@ -88,7 +104,7 @@ fn generated(root: &Path) -> anyhow::Result<(BTreeMap<PathBuf, String>, String)>
         .into_iter()
         .map(|(file, text)| (root.join(API_SRC).join(file), text))
         .collect();
-    files.insert(root.join(IDS), catalogue.ids_file(&build)?);
+    files.insert(root.join(IDS), catalogue.ids_file(&build, &renames(root)?)?);
     Ok((files, build))
 }
 

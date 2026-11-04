@@ -45,7 +45,11 @@ fn the_generated_api_of_a_fixture_build_reads_as_written() {
     for (path, text) in &files {
         insta::assert_snapshot!(path.replace(['/', '.'], "_"), text);
     }
-    insta::assert_snapshot!(catalogue.ids_file("demo build 1").unwrap());
+    insta::assert_snapshot!(
+        catalogue
+            .ids_file("demo build 1", &Renames::default())
+            .unwrap()
+    );
 }
 
 #[test]
@@ -114,6 +118,135 @@ fn two_types_with_one_rust_name_are_refused() {
     );
 }
 
+/// The fixture as a later build changes it: one change of each case.
+fn next_build() -> Catalogue {
+    let mut new = fixture();
+    let rename = |t: &mut Ty, to: &str| t.name = to.to_owned();
+    let mut loot = new.types.remove("demo::LootResource").unwrap();
+    rename(&mut loot, "demo::LootTableResource");
+    new.types.insert(loot.name.clone(), loot);
+    new.types.remove("demo::ItemId");
+    let mut torch = new.types["demo::ecs::Component"].clone();
+    rename(&mut torch, "demo::ecs::Torch");
+    new.types.insert(torch.name.clone(), torch);
+    let fuel = new.types.get_mut("demo::ecs::Fuel").unwrap();
+    fuel.fields[0].name = "fuelAmount".to_owned();
+    let rang = new.types.get_mut("demo::ecs::Rang").unwrap();
+    rang.fields[1].offset = 10;
+    new.types.get_mut("demo::ecs::Event").unwrap().size = 16;
+    let faction = new.types.get_mut("demo::ecs::Faction").unwrap();
+    faction.values[1].1 = 5;
+    faction.values.push(("Neutral".to_owned(), 6));
+    new
+}
+
+#[test]
+fn each_change_between_builds_is_classified_by_its_case() {
+    let diff = fixture().diff(&next_build(), &Renames::default());
+    let of = |name: &str| diff.changes.get(name).cloned().unwrap_or_default();
+    assert_eq!(
+        of("demo::LootResource"),
+        [Change::Renamed {
+            to: "demo::LootTableResource".to_owned()
+        }]
+    );
+    assert!(
+        !diff.changes.contains_key("demo::LootTableResource"),
+        "not added too"
+    );
+    assert_eq!(of("demo::ItemId"), [Change::Removed]);
+    assert_eq!(of("demo::ecs::Torch"), [Change::Added]);
+    assert_eq!(
+        of("demo::ecs::Fuel"),
+        [Change::FieldRenamed {
+            from: "amount".to_owned(),
+            to: "fuelAmount".to_owned()
+        }]
+    );
+    assert_eq!(
+        of("demo::ecs::Rang"),
+        [Change::FieldMoved {
+            field: "allies".to_owned(),
+            from: 9,
+            to: 10
+        }]
+    );
+    assert!(matches!(
+        of("demo::ecs::Event")[..],
+        [Change::Retyped { .. }]
+    ));
+    assert_eq!(
+        of("demo::ecs::Faction"),
+        [
+            Change::ConstantRenumbered {
+                name: "Enemy".to_owned(),
+                from: 1,
+                to: 5
+            },
+            Change::ConstantAdded("Neutral".to_owned()),
+        ]
+    );
+    assert!(diff.needs_person(), "a retyped type");
+    insta::assert_snapshot!(diff.to_string());
+}
+
+#[test]
+fn a_rename_two_layouts_could_take_is_left_to_a_person() {
+    let old = fixture();
+    let mut new = fixture();
+    let loot = new.types.remove("demo::LootResource").unwrap();
+    for name in ["demo::ARes", "demo::BRes"] {
+        let mut copy = loot.clone();
+        copy.name = name.to_owned();
+        new.types.insert(copy.name.clone(), copy);
+    }
+    let diff = old.diff(&new, &Renames::default());
+    assert!(
+        matches!(&diff.changes["demo::LootResource"][..], [Change::Unsure { candidates }] if candidates.len() == 2)
+    );
+    let decided =
+        Renames::parse("[[types]]\nfrom = \"demo::LootResource\"\nto = \"demo::BRes\"\n").unwrap();
+    let diff = old.diff(&new, &decided);
+    assert_eq!(
+        diff.changes["demo::LootResource"],
+        [Change::Renamed {
+            to: "demo::BRes".to_owned()
+        }]
+    );
+    assert_eq!(diff.changes["demo::ARes"], [Change::Added]);
+}
+
+#[test]
+fn a_renamed_type_resolves_under_its_old_id() {
+    let new = next_build();
+    let renames = Renames::default().with(&fixture().diff(&new, &Renames::default()));
+    let table = new.ids_file("b", &renames).unwrap();
+    assert!(
+        table.contains("\"LootResource\" => \"demo::LootTableResource\""),
+        "{table}"
+    );
+    assert!(table.contains("\"LootTableResource\" => \"demo::LootTableResource\""));
+    assert_eq!(
+        Renames::parse(&renames.to_toml()).unwrap(),
+        renames,
+        "the table reads back"
+    );
+}
+
+/// The real change from server build 387 to the committed snapshot's build,
+/// when `ENSH_SERVER_EXE` names build 387; its counts go on the stability
+/// rules' ticket.
+#[test]
+fn the_previous_build_diffs_against_the_committed_one() {
+    let Some(old) = server(387) else {
+        return;
+    };
+    let diff = old.diff(&committed(), &Renames::default());
+    let report = diff.to_string();
+    std::fs::write(std::env::temp_dir().join("typed-387-diff.txt"), &report).unwrap();
+    assert!(!diff.changes.is_empty());
+}
+
 #[test]
 fn every_id_of_the_committed_table_names_one_engine_type() {
     let ids: Vec<&str> = ids::IDS.iter().map(|(id, _)| *id).collect();
@@ -152,7 +285,7 @@ fn every_covered_type_reads_as_its_generated_item() {
         .filter(|t| !t.roles.is_empty() && t.kind != Kind::Typedef)
         .count();
     assert_eq!(named.len(), covered);
-    assert_eq!(named.len(), ids::IDS.len());
+    assert!(named.iter().all(|(id, _)| engine_name(id).is_some()));
     let mut wrong = Vec::new();
     for (id, check) in named {
         let name = engine_name(id).unwrap();

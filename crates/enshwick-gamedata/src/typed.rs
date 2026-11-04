@@ -11,11 +11,13 @@ macro_rules! id_table {
 }
 use id_table;
 
+mod diff;
 mod ids;
 #[doc(hidden)]
 pub mod names;
 mod rust;
 
+pub use diff::{Change, Diff, Renames};
 pub use rust::GenerateError;
 
 use std::collections::{BTreeMap, BTreeSet};

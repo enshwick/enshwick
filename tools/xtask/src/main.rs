@@ -46,9 +46,9 @@ const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git r
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
-/// API's unstable calls and the compat task are linted and tested with the
-/// rest.
-const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,xtask/compat";
+/// API's unstable calls, its generated typed API and the compat task are
+/// linted and tested with the rest.
+const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat";
 /// The API crate alone, without `unstable`: the workspace turns the feature
 /// on for the runtimes, so only a build of its own shows that the stable
 /// surface, its docs and its examples stand without the unstable one.

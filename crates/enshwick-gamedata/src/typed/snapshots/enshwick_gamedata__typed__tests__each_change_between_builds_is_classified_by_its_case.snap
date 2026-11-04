@@ -1,0 +1,13 @@
+---
+source: crates/enshwick-gamedata/src/typed/tests.rs
+expression: diff.to_string()
+---
+types: 1 added, 1 removed, 1 renamed, 1 retyped, 0 unsure; fields: 0 added, 0 removed, 1 renamed, 0 retyped, 1 moved; constants: 1 added, 0 removed, 1 renumbered
+demo::ItemId: removed: its item turns off on the new build
+demo::LootResource: renamed to demo::LootTableResource
+demo::ecs::Event: NEEDS A PERSON: kind 18 -> 18, size 8 -> 16
+demo::ecs::Faction: constant Enemy renumbered from 1 to 5
+demo::ecs::Faction: constant Neutral added
+demo::ecs::Fuel: field amount renamed to fuelAmount
+demo::ecs::Rang: field allies moved from 0x9 to 0xa
+demo::ecs::Torch: added

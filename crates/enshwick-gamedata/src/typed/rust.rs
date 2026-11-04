@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use super::names::{camel, snake, split};
-use super::{Catalogue, Role, Ty};
+use super::{Catalogue, Renames, Role, Ty};
 use crate::reflect::Kind;
 
 /// Typedefs deeper than this are taken for a loop in bad data.
@@ -84,6 +84,30 @@ fn bare(text: &str, root: &str) -> String {
     }
 }
 
+/// The engine's root namespace, which no module repeats.
+fn root_of(catalogue: &Catalogue) -> String {
+    catalogue
+        .types
+        .keys()
+        .filter_map(|name| split(name).0.first().copied())
+        .next()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// Where the item for the full name `full` lives below `typed`.
+fn place_of(full: &str, root: &str) -> Place {
+    let (spaces, last) = split(full);
+    let spaces = match spaces.split_first() {
+        Some((first, rest)) if *first == root => rest,
+        _ => &spaces[..],
+    };
+    Place {
+        module: spaces.iter().map(|n| snake(n)).collect(),
+        name: camel(&bare(last, root)),
+    }
+}
+
 impl Catalogue {
     /// The API crate's `typed` modules for this catalogue, by path below
     /// the crate's `src`, read from the reflection of `build`.
@@ -152,6 +176,19 @@ impl Catalogue {
         ids.sort();
         Ok(ids)
     }
+
+    /// The ids of renamed types as older mods know them, each with the new
+    /// full name: the loader resolves an old id under its new name.
+    fn aliases(&self, renames: &Renames) -> Vec<(String, String)> {
+        let root = root_of(self);
+        let mut aliases: Vec<(String, String)> = renames
+            .types()
+            .filter(|(_, to)| self.types.get(*to).is_some_and(|t| !t.roles.is_empty()))
+            .map(|(from, to)| (id(&place_of(from, &root)), to.to_owned()))
+            .collect();
+        aliases.sort();
+        aliases
+    }
 }
 
 /// Enshwick's id for the item at `place`: its path below `typed`.
@@ -169,13 +206,7 @@ pub(super) fn type_of(catalogue: &Catalogue, name: &str) -> String {
 
 impl<'c> Writer<'c> {
     fn new(catalogue: &'c Catalogue) -> Result<Self, GenerateError> {
-        let root = catalogue
-            .types
-            .keys()
-            .filter_map(|name| split(name).0.first().copied())
-            .next()
-            .unwrap_or_default()
-            .to_owned();
+        let root = root_of(catalogue);
         let mut places = BTreeMap::new();
         let mut taken: BTreeMap<Vec<String>, BTreeMap<String, &str>> = BTreeMap::new();
         let mut clashes = Vec::new();
@@ -183,13 +214,7 @@ impl<'c> Writer<'c> {
             if !is_item(ty.kind) {
                 continue;
             }
-            let (spaces, last) = split(full);
-            let spaces = match spaces.split_first() {
-                Some((first, rest)) if *first == root => rest,
-                _ => &spaces[..],
-            };
-            let module: Vec<String> = spaces.iter().map(|n| snake(n)).collect();
-            let name = camel(&bare(last, &root));
+            let Place { module, name } = place_of(full, &root);
             let reserved = if module.is_empty() {
                 RUNTIME.contains(&name.as_str())
             } else {
@@ -408,8 +433,9 @@ fn enum_item(ty: &Ty, place: &Place, doc: &str) -> String {
 }
 
 impl Catalogue {
-    /// The loader's table of every covered type's id and full name, as the
-    /// source of `typed/ids.rs` in this crate.
+    /// The loader's table of every covered type's id and full name, and of
+    /// the old ids of the types `renames` records, as the source of
+    /// `typed/ids.rs` in this crate.
     ///
     /// # Errors
     ///
@@ -418,20 +444,23 @@ impl Catalogue {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_gamedata::typed::Catalogue;
+    /// use enshwick_gamedata::typed::{Catalogue, Renames};
     ///
-    /// assert!(Catalogue::default().ids_file("test")?.contains("IDS"));
+    /// let table = Catalogue::default().ids_file("test", &Renames::default())?;
+    /// assert!(table.contains("id_table!"));
     /// # Ok::<(), enshwick_gamedata::typed::GenerateError>(())
     /// ```
-    pub fn ids_file(&self, build: &str) -> Result<String, GenerateError> {
+    pub fn ids_file(&self, build: &str, renames: &Renames) -> Result<String, GenerateError> {
         let mut out = String::from(
             "// Long file: generated, a row per type the typed API covers.\n\
              //! Enshwick's id of every type the typed API covers and the engine's\n\
-             //! name for it, sorted by id.\n\n",
+             //! name for it, sorted by id, with the old ids of renamed types.\n\n",
         );
         out.push_str(&header(build));
+        let mut rows: BTreeMap<String, String> = self.aliases(renames).into_iter().collect();
+        rows.extend(self.ids()?);
         out.push_str("\nsuper::id_table! {\n");
-        for (id, name) in self.ids()? {
+        for (id, name) in rows {
             let _ = writeln!(out, "    \"{id}\" => \"{name}\",");
         }
         out.push_str("}\n");
