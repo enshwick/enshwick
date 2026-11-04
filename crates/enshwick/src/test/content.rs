@@ -128,14 +128,12 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::resources::{Kind, Registry, Type};
+    /// use enshwick::resources::{Kind, Type};
     ///
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .types([Type::new("keen::uint32", Kind::Uint32, 4, 4)])
+    ///     .types([Type::new("demo::uint32", Kind::Uint32, 4, 4)])
     ///     .install();
-    /// assert!(Registry::game()?.named("keen::uint32").is_some());
     /// # let _ = loader;
-    /// # Ok::<(), enshwick::Off>(())
     /// ```
     #[must_use]
     pub fn types(

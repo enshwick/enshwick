@@ -383,7 +383,7 @@ pub struct TypeConstant {
 ///
 /// let health = TypeField {
 ///     name: Str::new("health"),
-///     type_name: Str::new("keen::float32"),
+///     type_name: Str::new("demo::float32"),
 ///     offset: 4,
 ///     attribute_count: 0,
 ///     attributes: core::ptr::null(),
@@ -430,7 +430,7 @@ pub struct TypeEntry {
     pub name: Str,
     /// The name the engine's scripts use, such as `ecs.TemplateResource`.
     pub impact_name: Str,
-    /// The full name, such as `keen::ecs::TemplateResource`.
+    /// The full name, such as `demo::ecs::TemplateResource`.
     pub qualified_name: Str,
     /// The qualified name of a struct's base or of the type an array,
     /// optional, typedef or bitmask holds; empty for none.

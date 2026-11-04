@@ -2840,7 +2840,7 @@ typedef struct EnshwickTypeEntry {
   struct EnshwickStr name;
   // The name the engine's scripts use, such as `ecs.TemplateResource`.
   struct EnshwickStr impact_name;
-  // The full name, such as `keen::ecs::TemplateResource`.
+  // The full name, such as `demo::ecs::TemplateResource`.
   struct EnshwickStr qualified_name;
   // The qualified name of a struct's base or of the type an array,
   // optional, typedef or bitmask holds; empty for none.

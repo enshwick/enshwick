@@ -46,8 +46,8 @@ impl<'a> Attribute<'a> {
     /// ```
     /// use enshwick::resources::Attribute;
     ///
-    /// let attribute = Attribute::new("converter", "parse").with_value_type("keen::string");
-    /// assert_eq!(attribute.value_type(), Some("keen::string"));
+    /// let attribute = Attribute::new("converter", "parse").with_value_type("demo::string");
+    /// assert_eq!(attribute.value_type(), Some("demo::string"));
     /// ```
     #[must_use]
     pub const fn with_value_type(mut self, value_type: &'a str) -> Self {
@@ -94,10 +94,10 @@ impl<'a> Attribute<'a> {
 /// ```
 /// use enshwick::resources::Field;
 ///
-/// let health = Field::new("health", 4, "keen::float32");
+/// let health = Field::new("health", 4, "demo::float32");
 /// assert_eq!(health.name(), "health");
 /// assert_eq!(health.offset(), 4);
-/// assert_eq!(health.type_name(), Some("keen::float32"));
+/// assert_eq!(health.type_name(), Some("demo::float32"));
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Field<'a> {
@@ -131,7 +131,7 @@ impl<'a> Field<'a> {
     /// ```
     /// use enshwick::resources::Field;
     ///
-    /// assert_eq!(Field::new("pad", 0, "keen::uint8").untyped().type_name(), None);
+    /// assert_eq!(Field::new("pad", 0, "demo::uint8").untyped().type_name(), None);
     /// ```
     #[must_use]
     pub fn untyped(mut self) -> Self {
@@ -146,7 +146,7 @@ impl<'a> Field<'a> {
     /// ```
     /// use enshwick::resources::{Attribute, Field};
     ///
-    /// let field = Field::new("damage", 0, "keen::float32")
+    /// let field = Field::new("damage", 0, "demo::float32")
     ///     .with_attributes(vec![Attribute::new("tooltip", "Damage")]);
     /// assert_eq!(field.attributes()[0].value(), "Damage");
     /// ```
@@ -259,11 +259,11 @@ impl<'a> Constant<'a> {
 /// ```
 /// use enshwick::resources::{Field, Kind, Type};
 ///
-/// let health = Type::new("keen::ecs::Health", Kind::Struct, 8, 4)
-///     .with_fields(vec![Field::new("value", 0, "keen::float32")]);
+/// let health = Type::new("demo::ecs::Health", Kind::Struct, 8, 4)
+///     .with_fields(vec![Field::new("value", 0, "demo::float32")]);
 /// assert_eq!(health.name(), "Health");
-/// assert_eq!(health.namespace(), "keen::ecs");
-/// assert_eq!(health.qualified_hash(), enshwick::resources::fnv1a32(b"keen::ecs::Health"));
+/// assert_eq!(health.namespace(), "demo::ecs");
+/// assert_eq!(health.qualified_hash(), enshwick::resources::fnv1a32(b"demo::ecs::Health"));
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Type<'a> {
@@ -319,7 +319,7 @@ impl<'a> Type<'a> {
     /// ```
     /// use enshwick::resources::{Kind, Type};
     ///
-    /// let ty = Type::new("keen::ecs::TemplateResource", Kind::Struct, 24, 4)
+    /// let ty = Type::new("demo::ecs::TemplateResource", Kind::Struct, 24, 4)
     ///     .with_names("TemplateResource", "ecs.TemplateResource");
     /// assert_eq!(ty.impact_name(), "ecs.TemplateResource");
     /// ```
@@ -338,8 +338,8 @@ impl<'a> Type<'a> {
     /// ```
     /// use enshwick::resources::{Kind, Type};
     ///
-    /// let ty = Type::new("keen::ItemId", Kind::Typedef, 4, 4).with_inner("keen::uint32");
-    /// assert_eq!(ty.inner(), Some("keen::uint32"));
+    /// let ty = Type::new("demo::ItemId", Kind::Typedef, 4, 4).with_inner("demo::uint32");
+    /// assert_eq!(ty.inner(), Some("demo::uint32"));
     /// assert_eq!(ty.base(), None);
     /// ```
     #[must_use]
@@ -356,7 +356,7 @@ impl<'a> Type<'a> {
     /// ```
     /// use enshwick::resources::{Kind, Type};
     ///
-    /// let ty = Type::new("keen::Thing", Kind::Struct, 8, 4).with_layout(4, 2, 0x1234);
+    /// let ty = Type::new("demo::Thing", Kind::Struct, 8, 4).with_layout(4, 2, 0x1234);
     /// assert_eq!((ty.element_align(), ty.flags(), ty.internal_hash()), (4, 2, 0x1234));
     /// ```
     #[must_use]
@@ -374,8 +374,8 @@ impl<'a> Type<'a> {
     /// ```
     /// use enshwick::resources::{Kind, Type};
     ///
-    /// let ty = Type::new("keen::StaticArray<keen::uint8,4>", Kind::StaticArray, 4, 1)
-    ///     .with_inner("keen::uint8")
+    /// let ty = Type::new("demo::StaticArray<demo::uint8,4>", Kind::StaticArray, 4, 1)
+    ///     .with_inner("demo::uint8")
     ///     .with_count(4);
     /// assert_eq!(ty.element_count(), Some(4));
     /// ```
@@ -404,7 +404,7 @@ impl<'a> Type<'a> {
     /// ```
     /// use enshwick::resources::{Constant, Kind, Type};
     ///
-    /// let ty = Type::new("keen::Side", Kind::Enum, 1, 1)
+    /// let ty = Type::new("demo::Side", Kind::Enum, 1, 1)
     ///     .with_constants(vec![Constant::new("Left", 0), Constant::new("Right", 1)]);
     /// assert_eq!(ty.constants()[1].name(), "Right");
     /// ```
@@ -422,7 +422,7 @@ impl<'a> Type<'a> {
     /// ```
     /// use enshwick::resources::{Attribute, Kind, Type};
     ///
-    /// let ty = Type::new("keen::Table", Kind::Struct, 8, 4)
+    /// let ty = Type::new("demo::Table", Kind::Struct, 8, 4)
     ///     .with_attributes(vec![Attribute::new("converter", "parse")]);
     /// assert_eq!(ty.attributes().len(), 1);
     /// ```
@@ -452,7 +452,7 @@ impl<'a> Type<'a> {
         self.impact_name
     }
 
-    /// The full name, such as `keen::ecs::TemplateResource`, which keys the
+    /// The full name, such as `demo::ecs::TemplateResource`, which keys the
     /// type everywhere.
     ///
     /// # Examples
@@ -463,7 +463,7 @@ impl<'a> Type<'a> {
         self.qualified_name
     }
 
-    /// The namespace, such as `keen::ecs`: the qualified name without its
+    /// The namespace, such as `demo::ecs`: the qualified name without its
     /// short name; empty when the qualified name does not end in it.
     ///
     /// # Examples
@@ -484,7 +484,7 @@ impl<'a> Type<'a> {
     /// ```
     /// use enshwick::resources::{Kind, Type, fnv1a32};
     ///
-    /// let ty = Type::new("keen::Thing", Kind::Struct, 8, 4);
+    /// let ty = Type::new("demo::Thing", Kind::Struct, 8, 4);
     /// assert_eq!(ty.name_hash(), fnv1a32(b"Thing"));
     /// ```
     #[must_use]
@@ -615,8 +615,8 @@ impl<'a> Type<'a> {
     /// ```
     /// use enshwick::resources::{Kind, Type};
     ///
-    /// let died = Type::new("keen::ecs::DiedEvent", Kind::Struct, 8, 4).with_inner("keen::ecs::Event");
-    /// assert_eq!(died.base(), Some("keen::ecs::Event"));
+    /// let died = Type::new("demo::ecs::DiedEvent", Kind::Struct, 8, 4).with_inner("demo::ecs::Event");
+    /// assert_eq!(died.base(), Some("demo::ecs::Event"));
     /// ```
     #[must_use]
     pub fn base(&self) -> Option<&'a str> {

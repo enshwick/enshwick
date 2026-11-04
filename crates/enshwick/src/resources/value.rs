@@ -63,9 +63,9 @@ pub enum Value {
 /// ```
 /// use enshwick::resources::{Value, Variant};
 ///
-/// let shape = Value::Variant(Box::new(Variant::new("keen::ecs::SphereShape", Value::Float(1.0))));
+/// let shape = Value::Variant(Box::new(Variant::new("demo::ecs::SphereShape", Value::Float(1.0))));
 /// let Value::Variant(variant) = &shape else { unreachable!() };
-/// assert_eq!(variant.type_name(), "keen::ecs::SphereShape");
+/// assert_eq!(variant.type_name(), "demo::ecs::SphereShape");
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Variant {
@@ -113,7 +113,7 @@ impl Variant {
     /// ```
     /// use enshwick::resources::{Value, Variant};
     ///
-    /// let mut variant = Variant::new("keen::float32", Value::Float(1.0));
+    /// let mut variant = Variant::new("demo::float32", Value::Float(1.0));
     /// *variant.value_mut() = Value::Float(2.0);
     /// assert_eq!(variant.value(), &Value::Float(2.0));
     /// ```

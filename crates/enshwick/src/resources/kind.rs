@@ -39,7 +39,7 @@ pub enum Kind {
     Sint64,
     /// `keen::float32`.
     Float32,
-    /// An enum, with its constants in [`Type::constants`].
+    /// An enum, with its constants in [`Type::constants`](super::Type::constants).
     Enum,
     /// A set of flags in one byte.
     Bitmask8,
@@ -49,11 +49,11 @@ pub enum Kind {
     Bitmask32,
     /// A set of flags in eight bytes.
     Bitmask64,
-    /// Another name for its [`inner`](Type::inner) type.
+    /// Another name for its [`inner`](super::Type::inner) type.
     Typedef,
-    /// A struct, with its fields and its [`base`](Type::base).
+    /// A struct, with its fields and its [`base`](super::Type::base).
     Struct,
-    /// A fixed number of [`inner`](Type::inner) elements in place.
+    /// A fixed number of [`inner`](super::Type::inner) elements in place.
     StaticArray,
     /// An array of designer data.
     DsArray,
@@ -146,7 +146,7 @@ kind_bytes!(
 
 impl Kind {
     /// How many bytes an integer, float or flag kind takes; `None` for
-    /// every other kind, whose size its [`Type::size`] gives.
+    /// every other kind, whose size its [`Type::size`](super::Type::size) gives.
     ///
     /// # Examples
     ///

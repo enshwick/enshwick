@@ -15,9 +15,9 @@ use super::{Field, Type};
 /// ```
 /// use enshwick::resources::{Kind, Registry, Type, fnv1a32};
 ///
-/// let registry = Registry::new([Type::new("keen::uint32", Kind::Uint32, 4, 4)]);
-/// assert!(registry.named("keen::uint32").is_some());
-/// assert!(registry.hashed(fnv1a32(b"keen::uint32")).is_some());
+/// let registry = Registry::new([Type::new("demo::uint32", Kind::Uint32, 4, 4)]);
+/// assert!(registry.named("demo::uint32").is_some());
+/// assert!(registry.hashed(fnv1a32(b"demo::uint32")).is_some());
 /// assert!(registry.impact_named("uint32").is_some());
 /// assert_eq!(registry.len(), 1);
 /// ```
@@ -51,7 +51,7 @@ impl<'a> Registry<'a> {
         registry
     }
 
-    /// The type of qualified name `name`, such as `keen::BalancingTable`.
+    /// The type of qualified name `name`, such as `demo::BalancingTable`.
     ///
     /// # Examples
     ///
@@ -89,7 +89,7 @@ impl<'a> Registry<'a> {
     /// ```
     /// use enshwick::resources::{Kind, Registry, Type, fnv1a32};
     ///
-    /// let registry = Registry::new([Type::new("keen::uint32", Kind::Uint32, 4, 4)]);
+    /// let registry = Registry::new([Type::new("demo::uint32", Kind::Uint32, 4, 4)]);
     /// assert!(registry.impact_hashed(fnv1a32(b"uint32")).is_some());
     /// ```
     #[must_use]
@@ -104,7 +104,7 @@ impl<'a> Registry<'a> {
     /// ```
     /// use enshwick::resources::{Kind, Registry, Type};
     ///
-    /// let registry = Registry::new([Type::new("keen::uint8", Kind::Uint8, 1, 1)]);
+    /// let registry = Registry::new([Type::new("demo::uint8", Kind::Uint8, 1, 1)]);
     /// assert_eq!(registry.iter().next().map(|ty| ty.name()), Some("uint8"));
     /// ```
     pub fn iter(&self) -> impl Iterator<Item = &Type<'a>> {

@@ -578,11 +578,10 @@ pub(crate) extern "system" fn types(
         else {
             return Status::MISSING;
         };
+        let entries = table.entries();
         // SAFETY: `HostApi::types` has the mod pass `out` null or writable
         // for `capacity` entries of `entry_size` bytes and `count` null or a
         // writable `u32`, untouched by the mod during the call.
-        unsafe {
-            crate::host::entries::mods::list(table.entries(), out, entry_size, capacity, count)
-        }
+        unsafe { crate::host::entries::mods::list(entries, out, entry_size, capacity, count) }
     })
 }

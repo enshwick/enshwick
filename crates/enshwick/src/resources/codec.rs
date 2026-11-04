@@ -27,9 +27,9 @@ const VARIANT_SIZE: usize = 8;
 /// ```
 /// use enshwick::resources::{Kind, Registry, Type, Value};
 ///
-/// let registry = Registry::new([Type::new("keen::uint8", Kind::Uint8, 1, 1)]);
-/// let error = registry.encode("keen::uint8", &Value::Uint(300), None).unwrap_err();
-/// assert_eq!(error.to_string(), "300 does not fit keen::uint8");
+/// let registry = Registry::new([Type::new("demo::uint8", Kind::Uint8, 1, 1)]);
+/// let error = registry.encode("demo::uint8", &Value::Uint(300), None).unwrap_err();
+/// assert_eq!(error.to_string(), "300 does not fit demo::uint8");
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{}{why}", if path.is_empty() { String::new() } else { format!("{path}: ") })]
@@ -67,12 +67,12 @@ impl CodecError {
     /// use enshwick::resources::{Field, Kind, Registry, Type, Value};
     ///
     /// let registry = Registry::new([
-    ///     Type::new("keen::uint8", Kind::Uint8, 1, 1),
-    ///     Type::new("keen::Pair", Kind::Struct, 2, 1)
-    ///         .with_fields(vec![Field::new("a", 0, "keen::uint8"), Field::new("b", 1, "keen::uint8")]),
+    ///     Type::new("demo::uint8", Kind::Uint8, 1, 1),
+    ///     Type::new("demo::Pair", Kind::Struct, 2, 1)
+    ///         .with_fields(vec![Field::new("a", 0, "demo::uint8"), Field::new("b", 1, "demo::uint8")]),
     /// ]);
     /// let value = Value::Struct(vec![("b".into(), Value::Text("x".into()))]);
-    /// let error = registry.encode("keen::Pair", &value, None).unwrap_err();
+    /// let error = registry.encode("demo::Pair", &value, None).unwrap_err();
     /// assert_eq!(error.path(), "b");
     /// ```
     #[must_use]
@@ -198,11 +198,11 @@ impl<'a> Registry<'a> {
     /// use enshwick::resources::{Field, Kind, Registry, Type, Value};
     ///
     /// let registry = Registry::new([
-    ///     Type::new("keen::float32", Kind::Float32, 4, 4),
-    ///     Type::new("keen::Table", Kind::Struct, 4, 4)
-    ///         .with_fields(vec![Field::new("damage", 0, "keen::float32")]),
+    ///     Type::new("demo::float32", Kind::Float32, 4, 4),
+    ///     Type::new("demo::Table", Kind::Struct, 4, 4)
+    ///         .with_fields(vec![Field::new("damage", 0, "demo::float32")]),
     /// ]);
-    /// let table = registry.decode("keen::Table", &2.5f32.to_le_bytes())?;
+    /// let table = registry.decode("demo::Table", &2.5f32.to_le_bytes())?;
     /// assert_eq!(table.field("damage"), Some(&Value::Float(2.5)));
     /// # Ok::<(), enshwick::resources::CodecError>(())
     /// ```
@@ -233,15 +233,15 @@ impl<'a> Registry<'a> {
     /// use enshwick::resources::{Field, Kind, Registry, Type, Value};
     ///
     /// let registry = Registry::new([
-    ///     Type::new("keen::float32", Kind::Float32, 4, 4),
-    ///     Type::new("keen::Table", Kind::Struct, 8, 4).with_fields(vec![
-    ///         Field::new("damage", 0, "keen::float32"),
-    ///         Field::new("speed", 4, "keen::float32"),
+    ///     Type::new("demo::float32", Kind::Float32, 4, 4),
+    ///     Type::new("demo::Table", Kind::Struct, 8, 4).with_fields(vec![
+    ///         Field::new("damage", 0, "demo::float32"),
+    ///         Field::new("speed", 4, "demo::float32"),
     ///     ]),
     /// ]);
     /// let base = [2.5f32.to_le_bytes(), 1.0f32.to_le_bytes()].concat();
     /// let doubled = Value::Struct(vec![("damage".into(), Value::Float(5.0))]);
-    /// let bytes = registry.encode("keen::Table", &doubled, Some(&base))?;
+    /// let bytes = registry.encode("demo::Table", &doubled, Some(&base))?;
     /// assert_eq!(bytes, [5.0f32.to_le_bytes(), 1.0f32.to_le_bytes()].concat());
     /// # Ok::<(), enshwick::resources::CodecError>(())
     /// ```

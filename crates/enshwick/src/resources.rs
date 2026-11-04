@@ -11,14 +11,14 @@
 //! use enshwick::resources::{Field, Kind, Registry, Type, Value};
 //!
 //! let registry = Registry::new([
-//!     Type::new("keen::float32", Kind::Float32, 4, 4),
-//!     Type::new("keen::Table", Kind::Struct, 4, 4)
-//!         .with_fields(vec![Field::new("damage", 0, "keen::float32")]),
+//!     Type::new("demo::float32", Kind::Float32, 4, 4),
+//!     Type::new("demo::Table", Kind::Struct, 4, 4)
+//!         .with_fields(vec![Field::new("damage", 0, "demo::float32")]),
 //! ]);
 //! let base = 2.5f32.to_le_bytes();
-//! let mut table = registry.decode("keen::Table", &base)?;
+//! let mut table = registry.decode("demo::Table", &base)?;
 //! *table.field_mut("damage").ok_or("no damage")? = Value::Float(5.0);
-//! assert_eq!(registry.encode("keen::Table", &table, Some(&base))?, 5.0f32.to_le_bytes());
+//! assert_eq!(registry.encode("demo::Table", &table, Some(&base))?, 5.0f32.to_le_bytes());
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 

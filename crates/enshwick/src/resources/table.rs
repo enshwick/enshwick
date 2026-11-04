@@ -14,7 +14,8 @@ pub struct TypeTable(&'static [TypeEntry]);
 // SAFETY: the entries and every string and array they point at are leaked by
 // `TypeTable::new` and never written again, so any thread may read them.
 unsafe impl Send for TypeTable {}
-// SAFETY: as for `Send`: nothing behind the entries is ever written.
+// SAFETY: `TypeTable::new` leaks the entries and every string and array they
+// point at and never writes them again, so shared reads see fixed bytes.
 unsafe impl Sync for TypeTable {}
 
 impl TypeTable {
@@ -102,114 +103,101 @@ fn entry(ty: &Type<'static>) -> TypeEntry {
     }
 }
 
-/// The `len` items at `items`, an array of an entry; none for null.
-///
-/// # Safety
-///
-/// A non-null `items` is valid for `len` items, unchanged for the life of
-/// the process.
-unsafe fn array<T>(items: *const T, len: u32) -> &'static [T] {
-    if items.is_null() || len == 0 {
-        return &[];
+/// Proof that the strings and arrays read through it are the loader's,
+/// valid and unchanged for the life of the process, as
+/// [`HostApi::types`](crate::abi::HostApi::types) promises of its entries.
+#[derive(Clone, Copy)]
+struct Kept(());
+
+impl Kept {
+    /// # Safety
+    ///
+    /// Every string and array read through the token is valid and unchanged
+    /// for the life of the process.
+    const unsafe fn new() -> Self {
+        Self(())
     }
-    // SAFETY: `items` is not null, and the caller guarantees `len` items there
-    // for the life of the process.
-    unsafe { core::slice::from_raw_parts(items, len as usize) }
-}
 
-/// The text of `text`, empty when it is not UTF-8.
-///
-/// # Safety
-///
-/// `text` views bytes valid and unchanged for the life of the process.
-unsafe fn text(text: Str) -> &'static str {
-    // SAFETY: the caller guarantees the bytes for the life of the process.
-    unsafe { text.as_str() }.unwrap_or("")
-}
+    /// The text of `text`, empty when it is not UTF-8.
+    #[expect(
+        clippy::unused_self,
+        reason = "the token is the proof the read is sound"
+    )]
+    fn text(self, text: Str) -> &'static str {
+        // SAFETY: `Kept::new`'s caller guarantees every string read through
+        // the token valid and unchanged for the life of the process.
+        unsafe { text.as_str() }.unwrap_or("")
+    }
 
-/// # Safety
-///
-/// The attributes at `items` and their strings are valid and unchanged for
-/// the life of the process.
-unsafe fn read_attributes(items: *const TypeAttribute, len: u32) -> Vec<Attribute<'static>> {
-    // SAFETY: the caller guarantees the array and its strings for the process.
-    unsafe { array(items, len) }
-        .iter()
-        .map(|a| {
-            // SAFETY: as for the array: the strings live for the process.
-            let (name, value_type, value) =
-                unsafe { (text(a.name), text(a.value_type), text(a.value)) };
-            let attribute = Attribute::new(name, value);
-            if value_type.is_empty() {
-                attribute
-            } else {
-                attribute.with_value_type(value_type)
-            }
-        })
-        .collect()
-}
+    /// The `len` items at `items`; none for null.
+    #[expect(
+        clippy::unused_self,
+        reason = "the token is the proof the read is sound"
+    )]
+    fn array<T>(self, items: *const T, len: u32) -> &'static [T] {
+        if items.is_null() || len == 0 {
+            return &[];
+        }
+        // SAFETY: `items` is not null, and `Kept::new`'s caller guarantees
+        // every array read through the token valid for its `len` items for
+        // the life of the process.
+        unsafe { core::slice::from_raw_parts(items, len as usize) }
+    }
 
-/// The type an entry describes.
-///
-/// # Safety
-///
-/// Every string and array of `entry` is valid and unchanged for the life of
-/// the process, as [`HostApi::types`](crate::abi::HostApi::types) promises.
-unsafe fn read_entry(entry: &TypeEntry) -> Type<'static> {
-    // SAFETY: the caller guarantees every string of the entry for the process.
-    let (name, impact_name, qualified_name, inner) = unsafe {
-        (
-            text(entry.name),
-            text(entry.impact_name),
-            text(entry.qualified_name),
-            text(entry.inner),
+    fn attributes(self, items: *const TypeAttribute, len: u32) -> Vec<Attribute<'static>> {
+        self.array(items, len)
+            .iter()
+            .map(|a| {
+                let attribute = Attribute::new(self.text(a.name), self.text(a.value));
+                match self.text(a.value_type) {
+                    "" => attribute,
+                    value_type => attribute.with_value_type(value_type),
+                }
+            })
+            .collect()
+    }
+
+    /// The type an entry describes.
+    fn entry(self, entry: &TypeEntry) -> Type<'static> {
+        let kind = Kind::from_byte(entry.kind);
+        let mut ty = Type::new(
+            self.text(entry.qualified_name),
+            kind,
+            entry.size,
+            entry.align,
         )
-    };
-    let kind = Kind::from_byte(entry.kind);
-    let mut ty = Type::new(qualified_name, kind, entry.size, entry.align)
-        .with_names(name, impact_name)
+        .with_names(self.text(entry.name), self.text(entry.impact_name))
         .with_layout(entry.element_align, entry.flags, entry.internal_hash)
-        // SAFETY: the caller guarantees the attributes for the process.
-        .with_attributes(unsafe { read_attributes(entry.attributes, entry.attribute_count) })
+        .with_attributes(self.attributes(entry.attributes, entry.attribute_count))
         .with_count(entry.count);
-    if !inner.is_empty() {
-        ty = ty.with_inner(inner);
-    }
-    // SAFETY: the caller guarantees the fields and their strings for the process.
-    let fields = unsafe { array(entry.fields, entry.field_count) };
-    if kind == Kind::Struct {
-        ty = ty.with_fields(
-            fields
-                .iter()
-                .map(|f| {
-                    // SAFETY: as for the fields: their strings live for the process.
-                    let (name, type_name) = unsafe { (text(f.name), text(f.type_name)) };
-                    let field = Field::new(name, f.offset, type_name);
-                    let field = if type_name.is_empty() {
-                        field.untyped()
-                    } else {
-                        field
-                    };
-                    // SAFETY: as for the fields: their attributes live for the process.
-                    field.with_attributes(unsafe {
-                        read_attributes(f.attributes, f.attribute_count)
+        let inner = self.text(entry.inner);
+        if !inner.is_empty() {
+            ty = ty.with_inner(inner);
+        }
+        if kind == Kind::Struct {
+            ty = ty.with_fields(
+                self.array(entry.fields, entry.field_count)
+                    .iter()
+                    .map(|f| {
+                        let field = match self.text(f.type_name) {
+                            "" => Field::new(self.text(f.name), f.offset, "").untyped(),
+                            type_name => Field::new(self.text(f.name), f.offset, type_name),
+                        };
+                        field.with_attributes(self.attributes(f.attributes, f.attribute_count))
                     })
-                })
-                .collect(),
-        );
+                    .collect(),
+            );
+        }
+        if kind == Kind::Enum {
+            ty = ty.with_constants(
+                self.array(entry.constants, entry.constant_count)
+                    .iter()
+                    .map(|c| Constant::new(self.text(c.name), c.value))
+                    .collect(),
+            );
+        }
+        ty
     }
-    if kind == Kind::Enum {
-        // SAFETY: the caller guarantees the constants and their names for the process.
-        let constants = unsafe { array(entry.constants, entry.constant_count) };
-        ty = ty.with_constants(
-            constants
-                .iter()
-                // SAFETY: as for the constants: their names live for the process.
-                .map(|c| Constant::new(unsafe { text(c.name) }, c.value))
-                .collect(),
-        );
-    }
-    ty
 }
 
 /// The running game's types, kept per mod life after the first call.
@@ -229,7 +217,7 @@ impl Registry<'static> {
     /// use enshwick::resources::Registry;
     ///
     /// if let Ok(registry) = Registry::game() {
-    ///     let table = registry.named("keen::BalancingTable");
+    ///     let table = registry.named("demo::BalancingTable");
     ///     assert!(table.is_none_or(|ty| ty.size() > 0));
     /// }
     /// ```
@@ -241,7 +229,8 @@ impl Registry<'static> {
         let entries = host.type_entries()?;
         // SAFETY: `HostApi::types` promises every string and array of its
         // entries valid and unchanged for the life of the process.
-        let types: Vec<Type<'static>> = entries.iter().map(|e| unsafe { read_entry(e) }).collect();
+        let kept = unsafe { Kept::new() };
+        let types: Vec<Type<'static>> = entries.iter().map(|e| kept.entry(e)).collect();
         Ok(GAME.get_or_init(|| Self::new(types)))
     }
 }
@@ -287,7 +276,7 @@ impl Host {
     /// use enshwick::resources::Registry;
     ///
     /// if let (Some(host), Ok(registry)) = (enshwick::host(), Registry::game()) {
-    ///     if let Some(table) = registry.named("keen::BalancingTable") {
+    ///     if let Some(table) = registry.named("demo::BalancingTable") {
     ///         let keys = host.resource_keys(Some(table)).unwrap_or_default();
     ///         assert!(keys.iter().all(|key| key.type_hash == table.qualified_hash()));
     ///     }
@@ -392,7 +381,7 @@ impl Host {
     /// use enshwick::resources::Registry;
     ///
     /// if let (Some(host), Ok(registry)) = (enshwick::host(), Registry::game()) {
-    ///     if let Some(table) = registry.named("keen::BalancingTable") {
+    ///     if let Some(table) = registry.named("demo::BalancingTable") {
     ///         for key in host.resource_keys(Some(table)).unwrap_or_default() {
     ///             let _value = host.game_value(key);
     ///         }
