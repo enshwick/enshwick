@@ -56,6 +56,7 @@ macro_rules! headed {
             MapFrameInfo,
             MapMarkerInfo,
             MapMarkerTypeInfo,
+            TypeEntry,
             Manifest,
             ModInfo,
             NetMessage,

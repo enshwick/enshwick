@@ -8,6 +8,23 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `resources` reads any game resource as typed values and writes it back:
+  `Registry::game` holds every reflected type of the running build (names,
+  hashes, layout, fields, constants, attributes), `Registry::decode` and
+  `encode` turn a resource's bytes into a `Value` tree and back, keeping the
+  bytes of what did not change, and `Host::resource_keys`, `content_hashes`,
+  `game_content`, `game_value`, `serve_content` and `game_version` list and
+  read the archive. `Load::serve_new` serves a new resource from a value
+  alone. `crc32`, `crc64`, `Guid::NIL` and the content-hash form of a GUID
+  join `fnv1a32`. `HostApi::resource_keys`, `content_hashes`, `types` and
+  `game_version`, ABI 11.2 (#925).
+- Luau reaches all of it as `enshwick.resources`, with values as plain
+  tables, an absent optional in a list as `resources.none()`, and bytes as
+  buffers;
+  `enshwick.mods` names the running mods, the side, whether the game hosts
+  the server (`hosting`) and the files of the mod's own folder; a patch that
+  fails is logged and serves its base. `icons::encode_png` writes PNG
+  (#925).
 - `altars::set_base_cap` caps the bases of the world that runs below the
   mod's `Load::request_base_limits`, so a mod asks for its most at init and
   sets each world's cap from its settings; each call replaces the mod's own
@@ -19,6 +36,10 @@ Each entry names the pull request that made the change.
   `/uk/errors/<code>/` (#927).
 
 ### Changed
+
+- A Luau mod's runtime lives for the mod's life, so a function it hands the
+  API, such as a resource patch, runs after start; `HostApi::serve_resource`
+  says that several mods' patches on one key chain in load order (#925).
 
 - **Breaking:** disabled recipes live only in each world's
   `<stem>-mod-settings/enshwick/recipes.toml`, written from the template as

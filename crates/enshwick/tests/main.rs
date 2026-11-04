@@ -111,6 +111,7 @@ mod recipe_menu;
 mod recipe_rules;
 mod required_names;
 mod resource_types;
+mod resource_values;
 mod schedule;
 mod services;
 mod shapes;

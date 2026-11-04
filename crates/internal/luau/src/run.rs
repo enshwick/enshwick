@@ -484,18 +484,18 @@ fn begin(
     }
     inner.started.store(true, Ordering::Release);
 
-    let usage = Arc::downgrade(&inner);
+    // The status keeps the runtime for the mod's life: a function the
+    // scripts handed the API, such as a resource patch, runs after start.
+    let kept = Arc::clone(&inner);
     load.add_status(move || {
-        usage.upgrade().map_or_else(String::new, |inner| {
-            let usage = inner.usage();
-            format!(
-                "Luau: {} KiB, peak {} KiB, {} calls, {} past their budget",
-                usage.memory >> 10,
-                usage.peak >> 10,
-                usage.calls,
-                usage.overruns
-            )
-        })
+        let usage = kept.usage();
+        format!(
+            "Luau: {} KiB, peak {} KiB, {} calls, {} past their budget",
+            usage.memory >> 10,
+            usage.peak >> 10,
+            usage.calls,
+            usage.overruns
+        )
     })?;
     Ok(Runtime(inner))
 }

@@ -3,6 +3,10 @@
 use crate::Host;
 use crate::abi::{ModInfo, Side, Str};
 
+mod script;
+
+pub use script::Mods;
+
 /// The id the loader lists itself under in [`all`]; no mod may take it.
 ///
 /// # Examples

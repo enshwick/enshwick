@@ -4,7 +4,7 @@ use core::ffi::c_void;
 
 use crate::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status, Str};
 use crate::test::ServedResource;
-use crate::test::table::{found, put, text, with};
+use crate::test::table::{found, put, put_list, text, with};
 
 pub(crate) extern "system" fn serve_resource(
     _me: ModHandle,
@@ -434,6 +434,59 @@ pub(crate) extern "system" fn game_text(
     });
     match found {
         Some(text) => put(out, Str::new(text)),
+        None => Status::MISSING,
+    }
+}
+
+pub(crate) extern "system" fn resource_keys(
+    _me: ModHandle,
+    type_hash: u32,
+    out: *mut ResourceKey,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let mut keys: Vec<ResourceKey> = with(Vec::new(), |s| {
+        s.host
+            .resources
+            .keys()
+            .filter(|(_, ty, _)| type_hash == 0 || *ty == type_hash)
+            .map(|&(guid, type_hash, part)| ResourceKey {
+                guid,
+                type_hash,
+                part,
+            })
+            .collect()
+    });
+    keys.sort_by_key(|key| (key.type_hash, key.guid, key.part));
+    put_list(&keys, out, capacity, count)
+}
+
+pub(crate) extern "system" fn content_hashes(
+    _me: ModHandle,
+    out: *mut [u32; 4],
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let hashes: Vec<[u32; 4]> = with(Vec::new(), |s| s.host.archive.keys().copied().collect());
+    put_list(&hashes, out, capacity, count)
+}
+
+pub(crate) extern "system" fn types(
+    _me: ModHandle,
+    out: *mut crate::abi::TypeEntry,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let Some(table) = with(None, |s| s.host.types.clone()) else {
+        return Status::MISSING;
+    };
+    crate::test::table::mods::list(table.entries(), out, entry_size, capacity, count)
+}
+
+pub(crate) extern "system" fn game_version(_me: ModHandle, out: *mut Str) -> Status {
+    match with(None, |s| s.host.game_version) {
+        Some(version) => put(out, Str::new(version)),
         None => Status::MISSING,
     }
 }

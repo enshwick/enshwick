@@ -3,7 +3,7 @@
 use enshwick::abi as api_frame;
 use enshwick::abi::{ModHandle, Status, Str};
 
-use crate::host::memory::{put, text};
+use crate::host::memory::{put, put_list, text};
 use crate::host::{caller, caller_index, calling, entry};
 
 pub(crate) extern "system" fn serve_resource(
@@ -465,5 +465,116 @@ pub(crate) extern "system" fn icons_ready(me: ModHandle) -> Status {
         Ok(_) if crate::textures::ready() => Status::OK,
         Ok(_) => Status::MISSING,
         Err(status) => status,
+    })
+}
+
+/// Every resource key of the game's archive, in archive order, read once.
+static RESOURCE_KEYS: std::sync::OnceLock<Option<Vec<api_frame::ResourceKey>>> =
+    std::sync::OnceLock::new();
+/// Every content hash of the game's archive, read once.
+static CONTENT_HASHES: std::sync::OnceLock<Option<Vec<[u32; 4]>>> = std::sync::OnceLock::new();
+/// Every reflected type as ABI entries, built once.
+static TYPES: std::sync::OnceLock<Option<enshwick::resources::TypeTable>> =
+    std::sync::OnceLock::new();
+
+pub(crate) extern "system" fn resource_keys(
+    me: ModHandle,
+    type_hash: u32,
+    out: *mut api_frame::ResourceKey,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("resource_keys", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let Some(keys) = RESOURCE_KEYS
+            .get_or_init(|| crate::archive::game().map(crate::archive::Archive::keys))
+            .as_ref()
+        else {
+            return Status::MISSING;
+        };
+        let of_type: Vec<api_frame::ResourceKey>;
+        let keys = if type_hash == 0 {
+            keys.as_slice()
+        } else {
+            of_type = keys
+                .iter()
+                .filter(|key| key.type_hash == type_hash)
+                .copied()
+                .collect();
+            of_type.as_slice()
+        };
+        // SAFETY: `HostApi::resource_keys` has the mod pass `out` null or
+        // writable for `capacity` keys and `count` null or a writable `u32`,
+        // untouched by the mod during the call.
+        unsafe { put_list(keys, out, capacity, count) }
+    })
+}
+
+pub(crate) extern "system" fn content_hashes(
+    me: ModHandle,
+    out: *mut [u32; 4],
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("content_hashes", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let Some(hashes) = CONTENT_HASHES
+            .get_or_init(|| crate::archive::game().map(crate::archive::Archive::contents))
+            .as_ref()
+        else {
+            return Status::MISSING;
+        };
+        // SAFETY: `HostApi::content_hashes` has the mod pass `out` null or
+        // writable for `capacity` hashes and `count` null or a writable `u32`,
+        // untouched by the mod during the call.
+        unsafe { put_list(hashes, out, capacity, count) }
+    })
+}
+
+pub(crate) extern "system" fn types(
+    me: ModHandle,
+    out: *mut api_frame::TypeEntry,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("types", || {
+        let loader = match caller(me) {
+            Ok(loader) => loader,
+            Err(status) => return status,
+        };
+        let Some(table) = TYPES
+            .get_or_init(|| {
+                let registry = loader.reflection.registry();
+                (!registry.is_empty()).then(|| enshwick::resources::TypeTable::new(registry.iter()))
+            })
+            .as_ref()
+        else {
+            return Status::MISSING;
+        };
+        let entries = table.entries();
+        // SAFETY: `HostApi::types` has the mod pass `out` null or writable
+        // for `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
+        unsafe { crate::host::entries::mods::list(entries, out, entry_size, capacity, count) }
+    })
+}
+
+pub(crate) extern "system" fn game_version(me: ModHandle, out: *mut Str) -> Status {
+    entry("game_version", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        match crate::archive::game().and_then(crate::archive::Archive::version) {
+            // SAFETY: `HostApi::game_version` has the mod pass `out` null or
+            // pointing at a writable, aligned `Str` that no other thread
+            // touches during the call; the archive lives for the process.
+            Some(version) => unsafe { put(out, Str::new(version)) },
+            None => Status::MISSING,
+        }
     })
 }

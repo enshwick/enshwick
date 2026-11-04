@@ -322,3 +322,174 @@ impl EntityDataFlags {
     /// The clients that run Enshwick get every value.
     pub const SENT: Self = Self(1);
 }
+
+/// An attribute of a reflected type or field, in a [`TypeEntry`] or
+/// [`TypeField`]: the engine's name for it, the type of its value and the
+/// value as the engine's text.
+///
+/// Frozen: read as an array. Its strings are the loader's, valid and
+/// unchanged for the life of the process.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Str, TypeAttribute};
+///
+/// let tooltip = TypeAttribute { name: Str::new("tooltip"), value_type: Str::EMPTY, value: Str::new("Damage") };
+/// assert_eq!(tooltip.name.len(), 7);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct TypeAttribute {
+    /// The attribute's name.
+    pub name: Str,
+    /// The qualified name of its value's type; empty for a flag.
+    pub value_type: Str,
+    /// The value as the engine's text; empty for a flag.
+    pub value: Str,
+}
+
+/// A named constant of a reflected enum, in a [`TypeEntry`].
+///
+/// Frozen: read as an array. Its name is the loader's, valid and unchanged
+/// for the life of the process.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Str, TypeConstant};
+///
+/// let invalid = TypeConstant { name: Str::new("Invalid"), value: 0 };
+/// assert_eq!(invalid.value, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct TypeConstant {
+    /// The constant's name, without its type.
+    pub name: Str,
+    /// Its value; for the flag enum of a bitmask, the flag's bit index.
+    pub value: u64,
+}
+
+/// A field of a reflected struct, in a [`TypeEntry`].
+///
+/// Frozen: read as an array. Its strings and attributes are the loader's,
+/// valid and unchanged for the life of the process.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Str, TypeField};
+///
+/// let health = TypeField {
+///     name: Str::new("health"),
+///     type_name: Str::new("demo::float32"),
+///     offset: 4,
+///     attribute_count: 0,
+///     attributes: core::ptr::null(),
+/// };
+/// assert_eq!(health.offset, 4);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct TypeField {
+    /// The field's name.
+    pub name: Str,
+    /// The qualified name of its type; empty when the engine does not
+    /// reflect it.
+    pub type_name: Str,
+    /// Its offset from the start of the struct.
+    pub offset: u32,
+    /// How many attributes `attributes` points at.
+    pub attribute_count: u32,
+    /// Its attributes; null when it has none.
+    pub attributes: *const TypeAttribute,
+}
+
+/// A reflected type of the running game, as [`HostApi::types`](super::HostApi::types)
+/// lists them: its names, layout, kind and the arrays of its fields,
+/// constants and attributes.
+///
+/// Every string and array an entry points at is the loader's, valid and
+/// unchanged for the life of the process; a null array has no elements.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, TypeEntry};
+///
+/// let entry = TypeEntry::EMPTY;
+/// assert_eq!(entry.header, Header::of::<TypeEntry>());
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct TypeEntry {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The short name, such as `TemplateResource`.
+    pub name: Str,
+    /// The name the engine's scripts use, such as `ecs.TemplateResource`.
+    pub impact_name: Str,
+    /// The full name, such as `demo::ecs::TemplateResource`.
+    pub qualified_name: Str,
+    /// The qualified name of a struct's base or of the type an array,
+    /// optional, typedef or bitmask holds; empty for none.
+    pub inner: Str,
+    /// The hash the engine keeps beside the qualified name's.
+    pub internal_hash: u32,
+    /// The size in bytes.
+    pub size: u32,
+    /// The alignment in bytes.
+    pub align: u16,
+    /// The alignment as an array element.
+    pub element_align: u16,
+    /// The descriptor's kind byte, as [`Kind::from_byte`](crate::resources::Kind::from_byte)
+    /// reads it.
+    pub kind: u8,
+    /// The descriptor's flags byte.
+    pub flags: u8,
+    /// Zero.
+    pub reserved: [u8; 2],
+    /// The engine's count: of fields, of constants, or a static array's
+    /// length.
+    pub count: u32,
+    /// How many fields `fields` points at.
+    pub field_count: u32,
+    /// How many constants `constants` points at.
+    pub constant_count: u32,
+    /// How many attributes `attributes` points at.
+    pub attribute_count: u32,
+    /// A struct's own fields; null for none.
+    pub fields: *const TypeField,
+    /// An enum's constants; null for none.
+    pub constants: *const TypeConstant,
+    /// The type's attributes; null for none.
+    pub attributes: *const TypeAttribute,
+}
+
+impl_headed!(TypeEntry);
+
+impl TypeEntry {
+    /// An entry with nothing known, its header set.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        name: Str::EMPTY,
+        impact_name: Str::EMPTY,
+        qualified_name: Str::EMPTY,
+        inner: Str::EMPTY,
+        internal_hash: 0,
+        size: 0,
+        align: 0,
+        element_align: 0,
+        kind: 0,
+        flags: 0,
+        reserved: [0; 2],
+        count: 0,
+        field_count: 0,
+        constant_count: 0,
+        attribute_count: 0,
+        fields: core::ptr::null(),
+        constants: core::ptr::null(),
+        attributes: core::ptr::null(),
+    };
+}

@@ -121,6 +121,47 @@ impl FakeHost {
         self
     }
 
+    /// Gives the game's archive the version string `version`, for
+    /// `Host::game_version`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().game_version("1|demo|2026").install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn game_version(mut self, version: &'static str) -> Self {
+        self.game_version = Some(version);
+        self
+    }
+
+    /// Gives the game the reflected `types`, for
+    /// [`Registry::game`](crate::resources::Registry::game); a later call
+    /// replaces them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::resources::{Kind, Type};
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .types([Type::new("demo::uint32", Kind::Uint32, 4, 4)])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn types(
+        mut self,
+        types: impl IntoIterator<Item = crate::resources::Type<'static>>,
+    ) -> Self {
+        let types: Vec<_> = types.into_iter().collect();
+        self.types = Some(std::sync::Arc::new(crate::resources::TypeTable::new(
+            &types,
+        )));
+        self
+    }
+
     /// Lists `named` in the game's item registry by their debug names, laid
     /// out by the host's item layout, so `content::vanilla::item` finds each
     /// item by its name in a mod the host runs. It needs

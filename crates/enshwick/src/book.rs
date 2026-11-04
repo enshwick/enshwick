@@ -28,6 +28,7 @@ chapters! {
     Luau => "luau.md",
     FindingTheGame => "finding-the-game.md",
     GameTypes => "game-types.md",
+    ResourceValues => "resource-values.md",
     Hooks => "hooks.md",
     MidFunctionHooks => "mid-function-hooks.md",
     CodePatches => "code-patches.md",

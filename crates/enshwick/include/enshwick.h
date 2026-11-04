@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 1
+#define ENSHWICK_ABI_MINOR 2
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -2783,6 +2783,100 @@ typedef struct EnshwickMapMarkerTypeInfo {
   uint8_t reserved[3];
 } EnshwickMapMarkerTypeInfo;
 
+// An attribute of a reflected type or field, in a `TypeEntry` or
+// `TypeField`: the engine's name for it, the type of its value and the
+// value as the engine's text.
+//
+// Frozen: read as an array. Its strings are the loader's, valid and
+// unchanged for the life of the process.
+typedef struct EnshwickTypeAttribute {
+  // The attribute's name.
+  struct EnshwickStr name;
+  // The qualified name of its value's type; empty for a flag.
+  struct EnshwickStr value_type;
+  // The value as the engine's text; empty for a flag.
+  struct EnshwickStr value;
+} EnshwickTypeAttribute;
+
+// A field of a reflected struct, in a `TypeEntry`.
+//
+// Frozen: read as an array. Its strings and attributes are the loader's,
+// valid and unchanged for the life of the process.
+typedef struct EnshwickTypeField {
+  // The field's name.
+  struct EnshwickStr name;
+  // The qualified name of its type; empty when the engine does not
+  // reflect it.
+  struct EnshwickStr type_name;
+  // Its offset from the start of the struct.
+  uint32_t offset;
+  // How many attributes `attributes` points at.
+  uint32_t attribute_count;
+  // Its attributes; null when it has none.
+  const struct EnshwickTypeAttribute *attributes;
+} EnshwickTypeField;
+
+// A named constant of a reflected enum, in a `TypeEntry`.
+//
+// Frozen: read as an array. Its name is the loader's, valid and unchanged
+// for the life of the process.
+typedef struct EnshwickTypeConstant {
+  // The constant's name, without its type.
+  struct EnshwickStr name;
+  // Its value; for the flag enum of a bitmask, the flag's bit index.
+  uint64_t value;
+} EnshwickTypeConstant;
+
+// A reflected type of the running game, as `HostApi::types`
+// lists them: its names, layout, kind and the arrays of its fields,
+// constants and attributes.
+//
+// Every string and array an entry points at is the loader's, valid and
+// unchanged for the life of the process; a null array has no elements.
+typedef struct EnshwickTypeEntry {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The short name, such as `TemplateResource`.
+  struct EnshwickStr name;
+  // The name the engine's scripts use, such as `ecs.TemplateResource`.
+  struct EnshwickStr impact_name;
+  // The full name, such as `demo::ecs::TemplateResource`.
+  struct EnshwickStr qualified_name;
+  // The qualified name of a struct's base or of the type an array,
+  // optional, typedef or bitmask holds; empty for none.
+  struct EnshwickStr inner;
+  // The hash the engine keeps beside the qualified name's.
+  uint32_t internal_hash;
+  // The size in bytes.
+  uint32_t size;
+  // The alignment in bytes.
+  uint16_t align;
+  // The alignment as an array element.
+  uint16_t element_align;
+  // The descriptor's kind byte, as `Kind::from_byte`
+  // reads it.
+  uint8_t kind;
+  // The descriptor's flags byte.
+  uint8_t flags;
+  // Zero.
+  uint8_t reserved[2];
+  // The engine's count: of fields, of constants, or a static array's
+  // length.
+  uint32_t count;
+  // How many fields `fields` points at.
+  uint32_t field_count;
+  // How many constants `constants` points at.
+  uint32_t constant_count;
+  // How many attributes `attributes` points at.
+  uint32_t attribute_count;
+  // A struct's own fields; null for none.
+  const struct EnshwickTypeField *fields;
+  // An enum's constants; null for none.
+  const struct EnshwickTypeConstant *constants;
+  // The type's attributes; null for none.
+  const struct EnshwickTypeAttribute *attributes;
+} EnshwickTypeEntry;
+
 // The table of services the loader offers a mod.
 //
 // A function appended at its end is a new
@@ -2886,7 +2980,8 @@ typedef struct EnshwickHostApi {
   // Serves the resource `key` as `patch` makes it from the resource
   // `base`, built the first time the game reads it: a new resource when
   // the keys differ, a changed vanilla one when they are equal. Allowed
-  // during `enshwick_mod_init` only; one mod per key.
+  // during `enshwick_mod_init` only. Several mods may serve one key:
+  // their patches run in load order, each on the one before's result.
   EnshwickStatus (*serve_resource)(EnshwickModHandle me,
                                    const struct EnshwickResourceKey *key,
                                    const struct EnshwickResourceKey *base,
@@ -3452,8 +3547,8 @@ typedef struct EnshwickHostApi {
   // Copies the game's own content `hash` from its archive into `out`, at
   // most `capacity` bytes, and writes its length to `len`;
   // `Status::MISSING` for a hash the archive lacks or keeps
-  // compressed, `Status::BAD_ARGS` when `capacity` is short, with
-  // `len` written. Reads the archive's files, never the game's memory.
+  // compressed, `Status::BAD_ARGS` when `capacity` is short or `out`
+  // null, with `len` written, so a null `out` asks for the length. Reads the archive's files, never the game's memory.
   // Any thread.
   EnshwickStatus (*content_read)(EnshwickModHandle me,
                                  const uint32_t (*hash)[4],
@@ -4210,6 +4305,49 @@ typedef struct EnshwickHostApi {
   // Any time, any thread. A panic in the loader returns
   // `Status::REFUSED`.
   EnshwickStatus (*set_base_cap)(EnshwickModHandle me, uint32_t bases);
+  // Up to `capacity` keys of the game's own resources of type
+  // `type_hash`, or of every resource for 0, in the order their bytes lie
+  // in the archive, and how many there are; read from the archive's files
+  // at the first call and kept. A null `out` asks only for the count; a
+  // null `count` gives `Status::BAD_ARGS` after the keys are written.
+  // `Status::MISSING` when the archive does not read. Any thread. A panic in the loader returns
+  // `Status::REFUSED`.
+  EnshwickStatus (*resource_keys)(EnshwickModHandle me,
+                                  uint32_t type_hash,
+                                  struct EnshwickResourceKey *out,
+                                  uint32_t capacity,
+                                  uint32_t *count);
+  // Up to `capacity` hashes of the game's own contents, in the archive's
+  // order, and how many there are; `HostApi::content_read` reads each.
+  // A null `out` asks only for the count; a null `count` gives
+  // `Status::BAD_ARGS` after the hashes are written.
+  // `Status::MISSING` when the archive does not read. Any thread. A panic in the loader returns `Status::REFUSED`.
+  EnshwickStatus (*content_hashes)(EnshwickModHandle me,
+                                   uint32_t (*out)[4],
+                                   uint32_t capacity,
+                                   uint32_t *count);
+  // Up to `capacity` reflected types of the running game, each a name
+  // carries alone, and how many there are; built at the first call and
+  // kept. Entries are `entry_size` bytes apart, the caller's
+  // `size_of::<TypeEntry>()`, at least a `Header`
+  // (`Status::BAD_ARGS` below it); a null `out` asks only for the
+  // count; a null `count` gives `Status::BAD_ARGS` after the entries
+  // are written. The strings and arrays an
+  // entry points at are the loader's, valid and unchanged for the life of
+  // the process. `Status::MISSING` when the game holds no reflection
+  // data. Any thread. A panic in the loader returns `Status::REFUSED`.
+  EnshwickStatus (*types)(EnshwickModHandle me,
+                          struct EnshwickTypeEntry *out,
+                          uint32_t entry_size,
+                          uint32_t capacity,
+                          uint32_t *count);
+  // Writes the version string of the game's archive to `out`, such as
+  // `1283531|^/game38/branches/release_1.0|2026-10-30T09:15:50.868196Z`:
+  // the build number, the branch and when the build was made. The string
+  // is the loader's, valid and unchanged for the life of the process.
+  // `Status::MISSING` when the archive does not read. Any thread. A
+  // panic in the loader returns `Status::REFUSED`.
+  EnshwickStatus (*game_version)(EnshwickModHandle me, struct EnshwickStr *out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

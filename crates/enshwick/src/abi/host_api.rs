@@ -17,8 +17,8 @@ use crate::abi::{
     ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
     StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
     Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog,
-    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
+    TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn,
+    UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -136,7 +136,8 @@ pub struct HostApi {
     /// Serves the resource `key` as `patch` makes it from the resource
     /// `base`, built the first time the game reads it: a new resource when
     /// the keys differ, a changed vanilla one when they are equal. Allowed
-    /// during `enshwick_mod_init` only; one mod per key.
+    /// during `enshwick_mod_init` only. Several mods may serve one key:
+    /// their patches run in load order, each on the one before's result.
     pub serve_resource: extern "system" fn(
         me: ModHandle,
         key: *const ResourceKey,
@@ -740,8 +741,8 @@ pub struct HostApi {
     /// Copies the game's own content `hash` from its archive into `out`, at
     /// most `capacity` bytes, and writes its length to `len`;
     /// [`Status::MISSING`] for a hash the archive lacks or keeps
-    /// compressed, [`Status::BAD_ARGS`] when `capacity` is short, with
-    /// `len` written. Reads the archive's files, never the game's memory.
+    /// compressed, [`Status::BAD_ARGS`] when `capacity` is short or `out`
+    /// null, with `len` written, so a null `out` asks for the length. Reads the archive's files, never the game's memory.
     /// Any thread.
     pub content_read: extern "system" fn(
         me: ModHandle,
@@ -1536,4 +1537,53 @@ pub struct HostApi {
     /// Any time, any thread. A panic in the loader returns
     /// [`Status::REFUSED`].
     pub set_base_cap: extern "system" fn(me: ModHandle, bases: u32) -> Status,
+    /// Up to `capacity` keys of the game's own resources of type
+    /// `type_hash`, or of every resource for 0, in the order their bytes lie
+    /// in the archive, and how many there are; read from the archive's files
+    /// at the first call and kept. A null `out` asks only for the count; a
+    /// null `count` gives [`Status::BAD_ARGS`] after the keys are written.
+    /// [`Status::MISSING`] when the archive does not read. Any thread. A panic in the loader returns
+    /// [`Status::REFUSED`].
+    pub resource_keys: extern "system" fn(
+        me: ModHandle,
+        type_hash: u32,
+        out: *mut ResourceKey,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Up to `capacity` hashes of the game's own contents, in the archive's
+    /// order, and how many there are; [`HostApi::content_read`] reads each.
+    /// A null `out` asks only for the count; a null `count` gives
+    /// [`Status::BAD_ARGS`] after the hashes are written.
+    /// [`Status::MISSING`] when the archive does not read. Any thread. A panic in the loader returns [`Status::REFUSED`].
+    pub content_hashes: extern "system" fn(
+        me: ModHandle,
+        out: *mut [u32; 4],
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Up to `capacity` reflected types of the running game, each a name
+    /// carries alone, and how many there are; built at the first call and
+    /// kept. Entries are `entry_size` bytes apart, the caller's
+    /// `size_of::<TypeEntry>()`, at least a [`Header`]
+    /// ([`Status::BAD_ARGS`] below it); a null `out` asks only for the
+    /// count; a null `count` gives [`Status::BAD_ARGS`] after the entries
+    /// are written. The strings and arrays an
+    /// entry points at are the loader's, valid and unchanged for the life of
+    /// the process. [`Status::MISSING`] when the game holds no reflection
+    /// data. Any thread. A panic in the loader returns [`Status::REFUSED`].
+    pub types: extern "system" fn(
+        me: ModHandle,
+        out: *mut TypeEntry,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Writes the version string of the game's archive to `out`, such as
+    /// `1283531|^/game38/branches/release_1.0|2026-10-30T09:15:50.868196Z`:
+    /// the build number, the branch and when the build was made. The string
+    /// is the loader's, valid and unchanged for the life of the process.
+    /// [`Status::MISSING`] when the archive does not read. Any thread. A
+    /// panic in the loader returns [`Status::REFUSED`].
+    pub game_version: extern "system" fn(me: ModHandle, out: *mut Str) -> Status,
 }

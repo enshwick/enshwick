@@ -427,4 +427,74 @@ declare enshwick: {
 		--- Moves every stack of the inventory `from` into `to`, as the game's "take all" does; what does not fit stays in the source. The source's action bar, equipment and locked slots stay; a move in a batch can include them.
 		move_all: (from: number, to: number, done: (arg1: Outcome) -> ()) -> (),
 	},
+	--- The game's types, its resources by type and as values, and resources served from an edit.
+	resources: {
+		--- The type of qualified name `name`, the full name with its namespace, as a table of its names, hashes, layout, fields, constants and attributes; nil when the build lacks it.
+		named: (name: string) -> any?,
+		--- The type whose qualified name hashes to `hash`, as `named` gives it.
+		hashed: (hash: number) -> any?,
+		--- The type of impact name `name`, such as `demo.Table`, as `named` gives it.
+		impact_named: (name: string) -> any?,
+		--- The type whose impact name hashes to `hash`, as `named` gives it.
+		impact_hashed: (hash: number) -> any?,
+		--- The qualified name of every type of the build.
+		type_names: () -> {string},
+		--- The value that stands for an absent optional or variant where nil cannot: an item of a list, which nil would cut short, and a field an edit clears, since a field the edit leaves out keeps its value.
+		none: () -> any,
+		--- The keys of the game's own resources of the type qualified as `type_name`, or of every resource for nil, as `{ guid, type, part }`.
+		resource_keys: (type_name: string?) -> any,
+		--- The hashes of the game's own contents, each a list of four numbers.
+		content_hashes: () -> any,
+		--- The bytes of the game's own content `hash`, four numbers as `content_hashes` lists them; nil for a hash the archive lacks.
+		game_content: (hash: any) -> buffer?,
+		--- Serves `bytes` as game content, such as a texture's pixels, and returns the hash a resource names it by, four numbers; the same bytes give the same hash.
+		serve_content: (bytes: buffer) -> any,
+		--- The value of `bytes`, a resource of the type qualified as `type_name`.
+		decode: (type_name: string, bytes: buffer) -> any,
+		--- `value`, of the type qualified as `type_name`, as resource bytes: written over `base` when given, keeping the bytes of what did not change, else into new bytes.
+		encode: (type_name: string, value: any, base: buffer?) -> buffer,
+		--- Declares the mod's content id `id`, `<mod>:<name>`, and returns its GUID's text, for a resource the mod serves. Allowed while the mod initialises.
+		declare: (id: string) -> string,
+		--- Serves `value` as the new resource `key`, of the type its key names, built from the value alone: every field the value leaves out is zero. The game must hold a resource of that type, which the loader opens as the base whose bytes the value replaces. Allowed while the mod initialises.
+		serve_new: (key: any, value: any) -> (),
+		--- The version string of the game's archive: the build number, the branch and when the build was made, split by `|`.
+		game_version: () -> string,
+		--- The pixels of PNG `png` as `{ width, height, pixels }`, the pixels a buffer of RGBA bytes, row by row; nil when it does not read or is larger than 2048 on a side.
+		decode_png: (png: buffer) -> any?,
+		--- RGBA `pixels`, `width` by `height`, as PNG bytes.
+		encode_png: (pixels: buffer, width: number, height: number) -> buffer,
+		--- The RGBA pixels of a texture's content `data`, `width` by `height`, in the game's `format` code (a block-compressed format or RGBA).
+		decode_texture: (format: number, width: number, height: number, data: buffer) -> buffer,
+		--- The nil GUID's text, all zero: no resource.
+		nil_guid: () -> string,
+		--- The GUID a content hash reads as, four numbers as `content_hashes` lists them: its words in memory order.
+		guid_from_content_hash: (hash: any) -> string,
+		--- The content hash a GUID reads as, four numbers.
+		content_hash_of_guid: (guid: string) -> any,
+		--- The number the game gives the resource of GUID `guid`: FNV-1a over its memory bytes, as item and template ids are.
+		guid_hash: (guid: string) -> number,
+		--- FNV-1a over 32 bits of `bytes`, a buffer or text.
+		fnv1a32: (bytes: buffer) -> number,
+		--- CRC-32/ISO-HDLC of `bytes`, a buffer or text.
+		crc32: (bytes: buffer) -> number,
+		--- CRC-64/ECMA-182 of `bytes`, a buffer or text; past 2^53 as its decimal text.
+		crc64: (bytes: buffer) -> any,
+		--- The value of the game's own resource `key`, read from its archive.
+		game_value: (key: any) -> any,
+		--- Serves the resource `key`, built from the resource `base` the first time the game reads it: `patch` gets the base's value and returns the value to serve, which may name only the fields it changes; nil serves the base unchanged. A patch that fails, returns what is not game data or does not fit the type is logged, and the base is served unchanged. Allowed while the mod initialises.
+		serve: (key: any, base: any, patch: (arg1: any) -> any) -> (),
+	},
+	--- The loaded mods, the side the mod runs on, and its own folder, read-only.
+	mods: {
+		--- Whether the mod `id`, such as `you.lockers`, runs in this game.
+		is_running: (id: string) -> boolean,
+		--- Whether this game runs the server now, so the mod's server logic acts: always on the dedicated server; on a client while it hosts a game, single player included, as mods run with server behaviour there.
+		hosting: () -> boolean,
+		--- The game executable the mod runs in: `server` for the dedicated server, `client` for the game, which may also host one (`hosting`).
+		side: () -> string,
+		--- The bytes of the file `path`, relative to the mod's folder.
+		read: (path: string) -> buffer,
+		--- The names of the files and folders in `path`, relative to the mod's folder (`.` for the folder itself), sorted.
+		list: (path: string) -> {string},
+	},
 }

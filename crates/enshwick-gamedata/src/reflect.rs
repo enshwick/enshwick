@@ -21,11 +21,12 @@
 //! ```
 
 mod pe;
+mod reader;
 
-use std::ops::Range;
-
+use reader::Reader;
 use rustc_hash::FxHashMap;
 
+pub use enshwick::resources::Attribute;
 pub use pe::{Fingerprint, Image, ImageError, Layout, Section};
 
 /// A reflected type: its layout as the engine describes it.
@@ -48,17 +49,107 @@ pub use pe::{Fingerprint, Image, ImageError, Layout, Section};
 pub struct TypeInfo<'a> {
     va: u64,
     name: &'a str,
+    short_name: &'a str,
+    impact_name: &'a str,
     size: u32,
     align: u16,
+    element_align: u16,
     kind: Kind,
+    flags: u8,
+    internal_hash: u32,
     base: Option<&'a str>,
     inner: Option<&'a str>,
     count: u32,
     fields: Vec<Field<'a>>,
     enum_values: Vec<EnumValue<'a>>,
+    attributes: Vec<Attribute<'a>>,
 }
 
 impl<'a> TypeInfo<'a> {
+    /// The type as the API's type registry holds it, for
+    /// [`Registry`](enshwick::resources::Registry).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let reflection = Reflection::scan(&image);
+    /// let ty = reflection.type_info("keen::ecs::TemplateResource")?.to_type();
+    /// assert_eq!(ty.impact_name(), "ecs.TemplateResource");
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn to_type(&self) -> enshwick::resources::Type<'a> {
+        use enshwick::resources::{Constant, Type};
+
+        let mut ty = Type::new(self.name, self.kind, self.size, self.align)
+            .with_names(self.short_name, self.impact_name)
+            .with_layout(self.element_align, self.flags, self.internal_hash)
+            .with_attributes(self.attributes.clone());
+        if let Some(inner) = self.base.or(self.inner) {
+            ty = ty.with_inner(inner);
+        }
+        match self.kind {
+            Kind::Struct => ty.with_fields(
+                self.fields
+                    .iter()
+                    .filter_map(|f| {
+                        let offset = u32::try_from(f.offset).ok()?;
+                        let field = match f.type_name {
+                            Some(type_name) => {
+                                enshwick::resources::Field::new(f.name, offset, type_name)
+                            }
+                            None => enshwick::resources::Field::new(f.name, offset, "").untyped(),
+                        };
+                        Some(field.with_attributes(f.attributes.clone()))
+                    })
+                    .collect(),
+            ),
+            Kind::Enum => ty.with_constants(
+                self.enum_values
+                    .iter()
+                    .map(|v| Constant::new(v.name, v.value))
+                    .collect(),
+            ),
+            _ => ty.with_count(self.count),
+        }
+    }
+
+    /// The name without its namespace, such as `TriggerShape`.
+    ///
+    /// # Examples
+    ///
+    /// See [`TypeInfo::to_type`].
+    #[must_use]
+    pub fn short_name(&self) -> &'a str {
+        self.short_name
+    }
+
+    /// The name the engine's scripts use, such as `ecs.TemplateResource`.
+    ///
+    /// # Examples
+    ///
+    /// See [`TypeInfo::to_type`].
+    #[must_use]
+    pub fn impact_name(&self) -> &'a str {
+        self.impact_name
+    }
+
+    /// The attributes the engine attaches to the type.
+    ///
+    /// # Examples
+    ///
+    /// See [`TypeInfo::to_type`].
+    #[must_use]
+    pub fn attributes(&self) -> &[Attribute<'a>] {
+        &self.attributes
+    }
+
     /// Where the descriptor is.
     ///
     /// # Examples
@@ -272,14 +363,26 @@ impl<'a> EnumValue<'a> {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Field<'a> {
     name: &'a str,
     offset: u64,
     type_name: Option<&'a str>,
+    attributes: Vec<Attribute<'a>>,
 }
 
 impl<'a> Field<'a> {
+    /// The attributes the engine attaches to the field, such as its
+    /// `tooltip`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Field`].
+    #[must_use]
+    pub fn attributes(&self) -> &[Attribute<'a>] {
+        &self.attributes
+    }
+
     /// The field's name.
     ///
     /// # Examples
@@ -418,137 +521,43 @@ pub enum LookupError {
 }
 
 const DESCRIPTOR_SHORT_NAME: u64 = 0x40;
+/// The name the engine's scripts use, such as `ecs.TemplateResource`
+/// (server build 26319703).
+const DESCRIPTOR_IMPACT_NAME: u64 = 0x50;
 const DESCRIPTOR_FULL_NAME: u64 = 0x60;
 /// The inner type: a struct's base, an array's element.
 const DESCRIPTOR_INNER: u64 = 0x78;
 const DESCRIPTOR_SIZE_ALIGN: u64 = 0x80;
+/// The alignment as an array element, a u16 after size and alignment.
+const DESCRIPTOR_ELEMENT_ALIGN: u64 = 0x86;
 /// The count of fields, or of constants in an enum.
 const DESCRIPTOR_FIELD_COUNT: u64 = 0x88;
-/// The type's kind byte: [`KIND_STRUCT`], [`KIND_ENUM`] and others.
+/// The type's kind byte, [`Kind::byte`].
 const DESCRIPTOR_KIND: u64 = 0x8c;
-/// The kind byte of a struct; arrays, strings and handles also carry an
-/// inner type, which is not a base.
-const KIND_STRUCT: u8 = 0x12;
-const KIND_ENUM: u8 = 0x0c;
+/// A flags byte right after the kind byte (server build 26319703).
+const DESCRIPTOR_FLAGS: u64 = 0x8d;
+/// The second word of the hash slot: a hash the engine keeps beside the
+/// name's (server build 26319703).
+const DESCRIPTOR_INTERNAL_HASH: u64 = 0x94;
+/// The type's attributes: a pointer and a count of [`ATTRIBUTE_RECORD`]s
+/// (server build 26319703).
+const DESCRIPTOR_ATTRIBUTES: u64 = 0xc0;
+/// An attribute: a pointer to its name record, then its value as a slice.
+/// The name record holds a namespace pointer, the name slice at
+/// [`ATTRIBUTE_NAME`] and the value's type at [`ATTRIBUTE_TYPE`].
+const ATTRIBUTE_RECORD: u64 = 24;
+const ATTRIBUTE_VALUE: u64 = 8;
+const ATTRIBUTE_NAME: u64 = 8;
+const ATTRIBUTE_TYPE: u64 = 0x18;
+const MAX_ATTRIBUTES: u64 = 64;
+#[cfg(test)]
+const KIND_STRUCT: u8 = Kind::Struct.byte();
+#[cfg(test)]
+const KIND_ENUM: u8 = Kind::Enum.byte();
 
-/// What a reflected type is, from its descriptor's kind byte.
-///
-/// The engine numbers the kinds; the names are the engine's kind names in
-/// Rust casing, and the numbers held on client build 426 for every
-/// descriptor. A byte no variant names reads as [`Kind::Other`].
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_gamedata::reflect::Kind;
-///
-/// assert_eq!(Kind::from_byte(0x12), Kind::Struct);
-/// assert_eq!(Kind::from_byte(0x7f), Kind::Other(0x7f));
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum Kind {
-    /// `keen::bool`, one byte.
-    Bool,
-    /// `keen::uint8`.
-    Uint8,
-    /// `keen::sint8`.
-    Sint8,
-    /// `keen::uint16`.
-    Uint16,
-    /// `keen::sint16`.
-    Sint16,
-    /// `keen::uint32`.
-    Uint32,
-    /// `keen::sint32`.
-    Sint32,
-    /// `keen::uint64`.
-    Uint64,
-    /// `keen::sint64`.
-    Sint64,
-    /// `keen::float32`.
-    Float32,
-    /// An enum, with its constants in [`TypeInfo::enum_values`].
-    Enum,
-    /// A set of flags in one byte.
-    Bitmask8,
-    /// A set of flags in two bytes.
-    Bitmask16,
-    /// A set of flags in four bytes.
-    Bitmask32,
-    /// A set of flags in eight bytes.
-    Bitmask64,
-    /// Another name for its [`inner`](TypeInfo::inner) type.
-    Typedef,
-    /// A struct, with its fields and its [`base`](TypeInfo::base).
-    Struct,
-    /// A fixed number of [`inner`](TypeInfo::inner) elements in place.
-    StaticArray,
-    /// An array of designer data.
-    DsArray,
-    /// A string of designer data.
-    DsString,
-    /// An optional value of designer data.
-    DsOptional,
-    /// A variant of designer data.
-    DsVariant,
-    /// An array in a resource: a self-relative offset and a count.
-    BlobArray,
-    /// A string in a resource.
-    BlobString,
-    /// An optional value in a resource.
-    BlobOptional,
-    /// A variant in a resource.
-    BlobVariant,
-    /// A reference to a resource by GUID.
-    ObjectReference,
-    /// `keen::Guid`, 16 bytes.
-    Guid,
-    /// A kind byte no variant names.
-    Other(u8),
-}
-
-impl Kind {
-    /// The kind a descriptor's kind byte names.
-    ///
-    /// # Examples
-    ///
-    /// See [`Kind`].
-    #[must_use]
-    pub const fn from_byte(byte: u8) -> Self {
-        match byte {
-            0x01 => Self::Bool,
-            0x02 => Self::Uint8,
-            0x03 => Self::Sint8,
-            0x04 => Self::Uint16,
-            0x05 => Self::Sint16,
-            0x06 => Self::Uint32,
-            0x07 => Self::Sint32,
-            0x08 => Self::Uint64,
-            0x09 => Self::Sint64,
-            0x0a => Self::Float32,
-            KIND_ENUM => Self::Enum,
-            0x0d => Self::Bitmask8,
-            0x0e => Self::Bitmask16,
-            0x0f => Self::Bitmask32,
-            0x10 => Self::Bitmask64,
-            0x11 => Self::Typedef,
-            KIND_STRUCT => Self::Struct,
-            0x13 => Self::StaticArray,
-            0x14 => Self::DsArray,
-            0x15 => Self::DsString,
-            0x16 => Self::DsOptional,
-            0x17 => Self::DsVariant,
-            0x18 => Self::BlobArray,
-            0x19 => Self::BlobString,
-            0x1a => Self::BlobOptional,
-            0x1b => Self::BlobVariant,
-            0x1c => Self::ObjectReference,
-            0x1d => Self::Guid,
-            other => Self::Other(other),
-        }
-    }
-}
+/// What a reflected type is; the API's own, so values and types read the
+/// same in the loader, tools and mods.
+pub use enshwick::resources::Kind;
 
 /// Bases deeper than this are taken for a loop in bad data.
 const MAX_BASES: usize = 32;
@@ -560,6 +569,8 @@ const DESCRIPTOR_FIELDS: u64 = 0x98;
 const FIELD_RECORD: u64 = 48;
 const FIELD_TYPE: u64 = 16;
 const FIELD_OFFSET: u64 = 24;
+/// A field's attributes, as [`DESCRIPTOR_ATTRIBUTES`] holds a type's.
+const FIELD_ATTRIBUTES: u64 = 0x20;
 /// An enum's constants: records of a name slice, then the value as a u64.
 const DESCRIPTOR_ENUM_VALUES: u64 = 0xa0;
 const ENUM_RECORD: u64 = 0x28;
@@ -784,6 +795,32 @@ impl<'a> Reflection<'a> {
         self.types.keys().copied()
     }
 
+    /// Every type one name names alone, as the API's type registry, which
+    /// reads and writes resource values.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let registry = Reflection::scan(&image).registry();
+    /// assert!(registry.named("keen::BalancingTable").is_some());
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn registry(&self) -> enshwick::resources::Registry<'a> {
+        enshwick::resources::Registry::new(self.types.values().filter_map(|found| {
+            match found.as_slice() {
+                [one] => Some(one.to_type()),
+                _ => None,
+            }
+        }))
+    }
+
     /// How many distinct type names were found.
     ///
     /// # Examples
@@ -847,142 +884,6 @@ fn is_system_name(name: &str) -> bool {
         && name
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
-}
-
-struct Reader<'i, 'a> {
-    image: &'i Image<'a>,
-    rdata: Range<u64>,
-}
-
-impl<'a> Reader<'_, 'a> {
-    /// The string slice at `va`: a pointer into `.rdata` and a length, the
-    /// bytes NUL-terminated right at the length.
-    fn slice(&self, va: u64) -> Option<&'a str> {
-        let ptr = self.image.u64(va)?;
-        let len = self.image.u64(va.checked_add(8)?)?;
-        if len == 0 || len >= MAX_NAME || !self.rdata.contains(&ptr) {
-            return None;
-        }
-        let (nul, text) = self.image.read(ptr, len + 1)?.split_last()?;
-        if *nul != 0 || text.contains(&0) || !text.is_ascii() {
-            return None;
-        }
-        std::str::from_utf8(text).ok()
-    }
-
-    fn descriptor(&self, va: u64) -> Option<TypeInfo<'a>> {
-        let at = |offset: u64| va.checked_add(offset);
-        self.slice(at(DESCRIPTOR_SHORT_NAME)?)?;
-        let name = self.slice(at(DESCRIPTOR_FULL_NAME)?)?;
-        if self.image.u32(at(DESCRIPTOR_HASH)?)? != fnv1a32(name.as_bytes()) {
-            return None;
-        }
-        let size = self.image.u32(at(DESCRIPTOR_SIZE_ALIGN)?)?;
-        let align = self.image.u16(at(DESCRIPTOR_SIZE_ALIGN + 4)?)?;
-        let count = self.image.u32(at(DESCRIPTOR_FIELD_COUNT)?)?;
-        let kind = Kind::from_byte(*self.image.read(at(DESCRIPTOR_KIND)?, 1)?.first()?);
-        let (mut fields, mut enum_values) = (Vec::new(), Vec::new());
-        // A static array's count is its length, and it has no fields.
-        if count > 0 && count <= MAX_FIELDS && kind != Kind::StaticArray {
-            if kind == Kind::Enum {
-                enum_values = self.enum_values(self.image.u64(at(DESCRIPTOR_ENUM_VALUES)?)?, count);
-            } else {
-                fields = self.fields(self.image.u64(at(DESCRIPTOR_FIELDS)?)?, count);
-            }
-        }
-        let inner = at(DESCRIPTOR_INNER)
-            .and_then(|slot| self.image.u64(slot))
-            .and_then(|ptr| self.type_name(ptr));
-        let (base, inner) = if kind == Kind::Struct {
-            (inner, None)
-        } else {
-            (None, inner)
-        };
-        Some(TypeInfo {
-            va,
-            name,
-            size,
-            align,
-            kind,
-            base,
-            inner,
-            count,
-            fields,
-            enum_values,
-        })
-    }
-
-    fn enum_values(&self, table: u64, count: u32) -> Vec<EnumValue<'a>> {
-        (0..u64::from(count))
-            .filter_map(|i| {
-                let record = table.checked_add(i * ENUM_RECORD)?;
-                Some(EnumValue {
-                    name: self.slice(record)?,
-                    value: self.image.u64(record.checked_add(ENUM_VALUE)?)?,
-                })
-            })
-            .collect()
-    }
-
-    /// The full name of the descriptor whose short name slot `ptr` points
-    /// at, as field types and bases point.
-    fn type_name(&self, ptr: u64) -> Option<&'a str> {
-        let descriptor = ptr.checked_sub(DESCRIPTOR_SHORT_NAME)?;
-        self.slice(descriptor.checked_add(DESCRIPTOR_FULL_NAME)?)
-    }
-
-    fn fields(&self, table: u64, count: u32) -> Vec<Field<'a>> {
-        (0..u64::from(count))
-            .map(|i| table.checked_add(i * FIELD_RECORD))
-            .filter_map(|record| {
-                let record = record?;
-                let name = self.slice(record)?;
-                let type_name = record
-                    .checked_add(FIELD_TYPE)
-                    .and_then(|at| self.image.u64(at))
-                    .and_then(|ptr| self.type_name(ptr));
-                Some(Field {
-                    name,
-                    offset: self.image.u64(record.checked_add(FIELD_OFFSET)?)?,
-                    type_name,
-                })
-            })
-            .collect()
-    }
-
-    fn system(&self, va: u64, name: &'a str, text: &Range<u64>) -> Option<System<'a>> {
-        let entry = self.image.u64(va.checked_add(SYSTEM_ENTRY)?)?;
-        if entry != 0 && !text.contains(&entry) {
-            return None;
-        }
-        let [triggers, reads, writes] =
-            SYSTEM_LISTS.map(|at| va.checked_add(at).map_or_else(Vec::new, |at| self.list(at)));
-        if triggers.is_empty() && reads.is_empty() && writes.is_empty() {
-            return None;
-        }
-        Some(System {
-            name,
-            entry,
-            triggers,
-            reads,
-            writes,
-        })
-    }
-
-    fn list(&self, va: u64) -> Vec<&'a str> {
-        let (Some(ptr), Some(count)) = (
-            self.image.u64(va),
-            va.checked_add(8).and_then(|at| self.image.u64(at)),
-        ) else {
-            return Vec::new();
-        };
-        if ptr == 0 || count == 0 || count > MAX_LIST || !self.rdata.contains(&ptr) {
-            return Vec::new();
-        }
-        (0..count)
-            .map_while(|i| self.slice(ptr.checked_add(i * SLICE)?))
-            .collect()
-    }
 }
 
 #[cfg(test)]

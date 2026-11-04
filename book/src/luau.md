@@ -88,6 +88,8 @@ end)
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md); unstable |
 | `enshwick.inventory` | slots and counts of [inventories](inventories.md), and items given, taken and moved, on the server |
+| `enshwick.mods` | `is_running`, `side`, and `read` and `list` of the mod's own folder, read-only |
+| `enshwick.resources` | the game's types and [resources as values](resource-values.md), and a resource served from a function's change |
 | `enshwick.settings()` | the mod's [settings](#settings) in force, as a table |
 | `enshwick.scheduler` | `next_tick`, `after` and `every` run a function on the game thread; an `every` task stops when it returns `false` |
 | `require("./name")` | another script of the same folder, as Luau resolves it |

@@ -23,6 +23,9 @@ pub type ContentHash = [u32; 4];
 
 /// The header's magic, `KFC4`.
 const MAGIC: u32 = 0x3443_464b;
+/// The version string: an offset from the field and its length (client
+/// archive 1283531, server archive 1273043).
+const VERSION: usize = 0x10;
 /// Header fields: each a location, an offset from the field and a count.
 const CONTENT_BUCKETS: usize = 0x40;
 const CONTENT_KEYS: usize = 0x48;
@@ -293,16 +296,96 @@ impl Archive {
     }
 
     /// The keys of the resources of type `type_hash`, the fnv1a32 hash of
-    /// the type's qualified name, for a type the game keeps one resource of.
+    /// the type's qualified name, in the archive's order.
     #[must_use]
     pub fn keys_of(&self, type_hash: u32) -> Vec<ResourceKey> {
-        self.resources
-            .keys()
-            .filter(|(_, ty, _)| *ty == type_hash)
-            .map(|&(guid, type_hash, part)| ResourceKey {
+        let mut keys: Vec<_> = self
+            .resources
+            .iter()
+            .filter(|((_, ty, _), _)| *ty == type_hash)
+            .collect();
+        keys.sort_unstable_by_key(|(key, place)| (place.at, **key));
+        keys.into_iter()
+            .map(|(&(guid, type_hash, part), _)| ResourceKey {
                 guid,
                 type_hash,
                 part,
+            })
+            .collect()
+    }
+
+    /// The archive's version string, such as
+    /// `1283531|^/game38/branches/release_1.0|2026-10-30T09:15:50.868196Z` on
+    /// client archive 1283531: the build number, the branch and when it was
+    /// built. `None` when the header holds no UTF-8 string there.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::archive::Archive;
+    ///
+    /// if let Some(archive) = Archive::open(std::path::Path::new("game"), "enshrouded") {
+    ///     assert!(archive.version().is_some_and(|v| v.contains('|')));
+    /// }
+    /// ```
+    #[must_use]
+    pub fn version(&self) -> Option<&str> {
+        let (at, len) = location(&self.header, VERSION)?;
+        std::str::from_utf8(self.header.get(at..at.checked_add(len)?)?).ok()
+    }
+
+    /// Every resource key the archive holds, in the order their bytes lie,
+    /// so reading them in turn unpacks each chunk once.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::archive::Archive;
+    ///
+    /// if let Some(archive) = Archive::open(std::path::Path::new("game"), "enshrouded") {
+    ///     assert!(!archive.keys().is_empty());
+    /// }
+    /// ```
+    #[must_use]
+    pub fn keys(&self) -> Vec<ResourceKey> {
+        let mut keys: Vec<_> = self.resources.iter().collect();
+        keys.sort_unstable_by_key(|(key, place)| (place.at, **key));
+        keys.into_iter()
+            .map(|(&(guid, type_hash, part), _)| ResourceKey {
+                guid,
+                type_hash,
+                part,
+            })
+            .collect()
+    }
+
+    /// Every content hash the archive holds, in the archive's order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::archive::Archive;
+    ///
+    /// if let Some(archive) = Archive::open(std::path::Path::new("game"), "enshrouded") {
+    ///     let first = archive.contents().into_iter().next();
+    ///     assert!(first.is_none_or(|hash| archive.content(&hash).is_some()));
+    /// }
+    /// ```
+    #[must_use]
+    pub fn contents(&self) -> Vec<ContentHash> {
+        let Some((keys, count)) = location(&self.header, CONTENT_KEYS) else {
+            return Vec::new();
+        };
+        let held = self.header.len().saturating_sub(keys) / 16;
+        (0..count.min(held))
+            .filter_map(|i| {
+                let key = keys + i * 16;
+                Some([
+                    word(&self.header, key)?,
+                    word(&self.header, key + 4)?,
+                    word(&self.header, key + 8)?,
+                    word(&self.header, key + 12)?,
+                ])
             })
             .collect()
     }

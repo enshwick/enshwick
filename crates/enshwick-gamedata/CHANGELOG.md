@@ -8,6 +8,13 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Reflection::registry` and `TypeInfo::to_type` hand the API's type
+  registry every type with its impact name, flags, element alignment,
+  internal hash and the attributes of the type and its fields;
+  `Archive::keys`, `contents` and `version` list the archive, keys in the
+  order their bytes lie. `reflect::Kind` is the API's `resources::Kind`,
+  and `Field` is no longer `Copy` (#925).
+
 - `Routes`, `Routed`, `Routing`, `Resolved::route`, `Resolved::routed` and
   `Reflection::systems`: engine routes find table entries in the game's own
   code through its reflected ECS systems, its debug strings and decoded
