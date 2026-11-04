@@ -12,7 +12,14 @@ Each entry names the pull request that made the change.
   interface's current HUD screen, and the catalogue names the player's
   digital input, its `PlayerInputType` and the HUD screen type with its
   `InGame` value (#930).
-
+- `typed`: the covered types of a build as a `Catalogue` read from its
+  reflection (the API coverage rule as data in `typed/relevant.toml`), kept
+  as a JSON Lines snapshot beside the build tables; `Catalogue::files`
+  writes the API crate's `typed` modules and the loader's id table, and
+  `Catalogue::diff` classifies what a new build changed, taking a rename
+  only on an exact layout match or from `typed/renames.toml`, whose type
+  renames resolve under their old ids. `catalogue::type_name` resolves typed
+  API ids (#931).
 - `Reflection::registry` and `TypeInfo::to_type` hand the API's type
   registry every type with its impact name, flags, element alignment,
   internal hash and the attributes of the type and its fields;
