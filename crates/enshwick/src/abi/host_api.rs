@@ -7,18 +7,18 @@ use crate::abi::{
     AccountActionType, ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo,
     AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo,
     BuildCheckFn, BuildInfo, BuildRights, BuildingZoneCheckFn, CallFn, CallSpec, CallerFrame,
-    ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, ContentRename, CraftCheckFn, DamageFilterFn,
-    DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec,
-    EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec, InteractionFn,
-    InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn,
-    Level, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec,
-    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
-    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
-    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
-    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
-    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn,
-    UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
+    ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, ContentRename, ControlFn, ControlSpec,
+    CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
+    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec,
+    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
+    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo,
+    MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
+    PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind,
+    RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec,
+    SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef,
+    StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
+    TeleportRequest, TerrainEdit, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp,
+    TypeEntry, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -1586,4 +1586,27 @@ pub struct HostApi {
     /// [`Status::MISSING`] when the archive does not read. Any thread. A
     /// panic in the loader returns [`Status::REFUSED`].
     pub game_version: extern "system" fn(me: ModHandle, out: *mut Str) -> Status,
+    /// Declares a control of the calling mod from `spec`, with `callback`
+    /// and `user` for its events; allowed during `enshwick_mod_init` only.
+    /// The client fires it from its keys while the player is in the world
+    /// with no menu, chat or inventory open, and never takes the key from
+    /// the game; the server fires one with a `link` when that player's game
+    /// action fires. [`Status::BAD_ARGS`] for a malformed name, key or
+    /// unknown `link`, [`Status::REFUSED`] for a name the mod declared
+    /// before, [`Status::TOO_LATE`] after init. A panic in the loader
+    /// returns [`Status::REFUSED`].
+    pub control: extern "system" fn(
+        me: ModHandle,
+        spec: *const ControlSpec,
+        callback: ControlFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// On a client, asks the server to run the calling mod's player action
+    /// `action` with `args` in the sheet's encoding, as the interface does:
+    /// the server checks it again, runs the mod's handler and shows the
+    /// reply as a notice. [`Status::MISSING`] on a server or while the
+    /// server takes no messages; [`Status::BAD_ARGS`] for unreadable
+    /// strings. Any thread. A panic in the loader returns
+    /// [`Status::REFUSED`].
+    pub run_action: extern "system" fn(me: ModHandle, action: Str, args: Str) -> Status,
 }

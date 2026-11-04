@@ -114,6 +114,8 @@ enum Page {
     },
     /// The actions the server offers.
     Actions(super::actions::View),
+    /// Every mod's controls and their keys.
+    Controls(controls::View),
     /// The mods that differ from those of a server that refused or kicked
     /// this client, from row `first` while they page.
     Mismatch {
@@ -134,6 +136,7 @@ impl Page {
             } => Kind::ServerSettings,
             Self::ServerSettings { from_mod: true, .. } => Kind::ModServerSettings,
             Self::Actions(_) => Kind::Actions,
+            Self::Controls(_) => Kind::Controls,
         }
     }
 
@@ -401,9 +404,12 @@ fn back(screen: &mut Screen) -> bool {
         Back::List => screen.page = Page::List { first: 0 },
         Back::ServerList => open_server_list(screen),
         Back::Inside => {
-            if let Page::Actions(view) = &mut screen.page
-                && view.back()
-            {
+            let done = match &mut screen.page {
+                Page::Actions(view) => view.back(),
+                Page::Controls(view) => view.back(),
+                _ => true,
+            };
+            if done {
                 screen.page = Page::List { first: 0 };
             }
         }
@@ -437,6 +443,7 @@ fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
             copy(&[texts::fill("mods.server.of", &[("id", id)]).as_bytes()])
         }
         Page::Actions(view) => copy(&[view.title().as_bytes()]),
+        Page::Controls(_) => copy(&[texts::text("controls").as_bytes()]),
         Page::Mismatch { .. } => copy(&[texts::text("join.dialog.title").as_bytes()]),
     }
 }
@@ -539,6 +546,7 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
                 Listed::Actions(id) => {
                     Next::Page(Page::Actions(super::actions::View::new(id, None)), None)
                 }
+                Listed::Controls => Next::Page(Page::Controls(controls::View::default()), None),
                 Listed::Nothing => Next::Stay,
             }
         }
@@ -601,6 +609,10 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             .map_or(Next::Stay, Next::Message),
         Page::Actions(view) => {
             super::actions::body(paint, view);
+            Next::Stay
+        }
+        Page::Controls(view) => {
+            controls::body(loader, paint, view);
             Next::Stay
         }
         Page::Mismatch { rows, first } => {
@@ -671,6 +683,7 @@ fn server_page(id: String, from_mod: bool) -> Next {
     )
 }
 
+mod controls;
 mod list;
 mod mismatch;
 mod server;

@@ -211,6 +211,72 @@ pub(crate) extern "system" fn actions(
     })
 }
 
+pub(crate) extern "system" fn control(
+    me: ModHandle,
+    spec: *const api_frame::ControlSpec,
+    callback: api_frame::ControlFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("control", || {
+        let (_, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if !crate::host::in_init(index.get()) {
+            return Status::TOO_LATE;
+        }
+        // SAFETY: `HostApi::control` has the mod pass `spec` null or
+        // readable for the size its header gives, with no other writer
+        // during the call.
+        let Some(spec) = (unsafe {
+            crate::host::memory::get_headed(
+                spec,
+                <api_frame::ControlSpec as api_frame::Headed>::BORN,
+            )
+        }) else {
+            return Status::BAD_ARGS;
+        };
+        let (Some(name), Some(label), Some(link)) =
+            (text(spec.name), text(spec.label), text(spec.link))
+        else {
+            return Status::BAD_ARGS;
+        };
+        let read = crate::controls::Spec {
+            name,
+            label,
+            link,
+            keys: [spec.key, spec.second],
+            fires: spec.fires,
+            hold_ms: spec.hold_ms,
+        };
+        let status = crate::controls::register(index, &record.id, &read, callback, user);
+        if status.is_ok() {
+            crate::log::write(Level::DEBUG, &record.id, "a control");
+        }
+        status
+    })
+}
+
+pub(crate) extern "system" fn run_action(me: ModHandle, action: Str, args: Str) -> Status {
+    entry("run_action", || {
+        let (loader, _, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if loader.side != Side::CLIENT {
+            return Status::MISSING;
+        }
+        let (Some(action), Some(args)) = (text(action), text(args)) else {
+            return Status::BAD_ARGS;
+        };
+        if crate::actions::run_on_server(&record.id, action, args) {
+            Status::OK
+        } else {
+            Status::MISSING
+        }
+    })
+}
+
 thread_local! {
     /// The answer `run_console` last handed out on this thread.
     static CONSOLE_REPLY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };

@@ -19,6 +19,8 @@ pub(super) enum Listed {
     Settings(usize),
     /// Opened the actions of the mod with this id, or of every mod.
     Actions(Option<String>),
+    /// Opened the controls page.
+    Controls,
 }
 
 /// Paints a mod's heading, why it is off if it is, its description and
@@ -106,6 +108,9 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
     let mut done = Listed::Nothing;
     if actions::any_offered() && paint.button(texts::text("actions").as_bytes(), true) {
         done = Listed::Actions(None);
+    }
+    if super::controls::any() && paint.button(texts::text("controls").as_bytes(), true) {
+        done = Listed::Controls;
     }
     loader_notes(loader, paint);
     let world = crate::worlds::running();

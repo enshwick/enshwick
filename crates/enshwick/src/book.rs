@@ -87,6 +87,7 @@ mod unstable {
         Survivors => "survivors.md",
         Vetoes => "vetoes.md",
         Actions => "actions.md",
+        Controls => "controls.md",
         Chat => "chat.md",
         Messages => "messages.md",
         Interface => "interface.md",

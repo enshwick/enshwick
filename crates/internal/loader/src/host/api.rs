@@ -52,6 +52,7 @@ use super::entries::world::{
     terrain_materials, time_of_day, time_speed_control, voxel_read, weather_at, weather_fronts,
     world_key, world_persists, world_quiet,
 };
+use super::entries::world::{control, run_action};
 
 /// The table handed to every mod.
 pub(crate) static API: HostApi = HostApi {
@@ -237,4 +238,6 @@ pub(crate) static API: HostApi = HostApi {
     content_hashes,
     types,
     game_version,
+    control,
+    run_action,
 };

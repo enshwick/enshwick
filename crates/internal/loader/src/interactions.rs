@@ -6,6 +6,7 @@
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
@@ -186,7 +187,16 @@ pub(crate) fn register(
 }
 
 /// The system that runs players' inventory actions.
-const ACTIONS_SYSTEM: &str = "inventory_actions";
+pub(crate) const ACTIONS_SYSTEM: &str = "inventory_actions";
+/// Whether the link on [`ACTIONS_SYSTEM`] is made, which reads the players'
+/// input for the controls that follow game actions.
+static READS_INPUTS: AtomicBool = AtomicBool::new(false);
+
+/// Whether the players' input is read each step, for the controls that
+/// follow game actions.
+pub(crate) fn reads_inputs() -> bool {
+    READS_INPUTS.load(Ordering::Acquire)
+}
 
 pub(crate) fn link(loader: &'static Loader) {
     let filters = FILTERS.seal();
@@ -250,6 +260,7 @@ pub(crate) fn link(loader: &'static Loader) {
         inventory_actions,
         none,
     );
+    READS_INPUTS.store(actions, Ordering::Release);
     let hold_ready = offers && transfers && sorting && dismantling && actions;
     if !hold_ready {
         crate::log!(
@@ -806,9 +817,6 @@ unsafe extern "system" fn dismantle(
     if refused { 0 } else { method }
 }
 
-/// Before the inventory system runs, marks as done the Quick Stash switch and
-/// the upgrade a filter refuses; the system then skips them as already
-/// handled.
 unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
     if !crate::transactions::holds().quiet() && LOADED.get().is_some() && !ctx.is_null() {
         // SAFETY: `ctx` is non-null by the check before it and is the system's
@@ -816,10 +824,44 @@ unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
         let _done =
             INTERACTIONS_FUSE.run("the inventory actions", || unsafe { refuse_pending(ctx) });
     }
+    if crate::controls::linked() && LOADED.get().is_some() && !ctx.is_null() {
+        // SAFETY: `ctx` is non-null by the check before it and is the system's
+        // own context, at its entry on its thread.
+        unsafe { player_inputs(ctx) };
+    }
     // SAFETY: this detour runs only as the `inventory_actions` system's link,
     // so the slot holds the next function of that signature; the game's
     // context passes unchanged.
     unsafe { ACTIONS_NEXT.get()(ctx) }
+}
+
+/// Hands each player's `PlayerInput` in the server's world to the controls
+/// that follow game actions.
+///
+/// # Safety
+///
+/// - `ctx` is the inventory system's live, non-null context, at its entry
+///   on its thread.
+unsafe fn player_inputs(ctx: *mut u64) {
+    let (Some((loader, layout, components)), Some(engine)) = (LOADED.get(), crate::ecs::resolved())
+    else {
+        return;
+    };
+    // SAFETY: the caller guarantees the system's live context on its thread.
+    if !unsafe { server_world(loader, engine, ctx) } {
+        return;
+    }
+    let players = PLAYERS.load();
+    let players = players.as_deref().map_or(&[][..], Vec::as_slice);
+    let input = |player: enshwick::Entity| {
+        // SAFETY: the caller guarantees the system's live context, at its
+        // entry on its thread.
+        unsafe { components.component(ctx, player.0, layout.player_input) }
+    };
+    // SAFETY: each pointer `input` gives is the player's live `PlayerInput`
+    // component in the server's world, read at the system's entry on its
+    // thread, before the system runs.
+    unsafe { crate::controls::step(bytemuck::cast_slice(players), input) };
 }
 
 /// Marks the pending Quick Stash switches and upgrades a filter refuses as

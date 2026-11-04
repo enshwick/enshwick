@@ -349,6 +349,39 @@ impl Actions {
         });
         Ok(())
     }
+
+    /// On a client, asks the server to run this mod's action `action` with
+    /// `args`, as the player's pick in the interface does: the server checks
+    /// it again, runs the handler and shows the reply as a notice. A
+    /// [control](crate::controls)'s handler uses it for what changes the
+    /// world.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a server, or while the server takes no messages.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Outcome};
+    /// use enshwick::controls::{Control, Key};
+    /// use enshwick::i18n::Texts;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let actions = load.actions(Texts::default())?;
+    ///     actions.add(Action::new("honk", "Honk"), |_| Outcome::done("Honk!"))?;
+    ///     load.control(Control::new("horn", "Horn").key(Key::parse("H")?), move |_| {
+    ///         let _sent = actions.run("honk", &[]);
+    ///     })?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn run(&self, action: &str, args: &[Value]) -> Result<(), Off> {
+        let host = self.registry.host;
+        let args = sheet::encode_args(args);
+        let status = (host.api().run_action)(host.handle(), Str::new(action), Str::new(&args));
+        crate::load::ok(status, (), || format!("action {action}"))
+    }
 }
 
 thread_local! {

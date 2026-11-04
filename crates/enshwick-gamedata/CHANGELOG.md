@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- The client tables of builds 410, 426 and 520 hold `ui.hud_screen`, the
+  interface's current HUD screen, and the catalogue names the player's
+  digital input, its `PlayerInputType` and the HUD screen type with its
+  `InGame` value (#930).
+
 - `Reflection::registry` and `TypeInfo::to_type` hand the API's type
   registry every type with its impact name, flags, element alignment,
   internal hash and the attributes of the type and its fields;

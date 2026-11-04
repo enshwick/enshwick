@@ -34,6 +34,7 @@ use enshwick::abi::{
 pub(crate) use demo::open as open_demo;
 pub(crate) use dialog::show;
 use engine::{Engine, HudWindow, PopupFn, UiText, Window};
+pub(crate) use map::play_data;
 pub(crate) use map::set as set_markers;
 pub(crate) use mods::mismatch_screen_on;
 
@@ -100,6 +101,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::HOST_ANSWER.id(),
     pinned::ui::HOST_ANSWERED.id(),
     pinned::ui::HUD.id(),
+    pinned::ui::HUD_SCREEN.id(),
     pinned::ui::HUD_VISIBLE.id(),
     pinned::ui::LABEL_ALIGN.id(),
     pinned::ui::LABEL_DRAW.id(),
@@ -313,6 +315,22 @@ thread_local! {
     static ARENA: RefCell<Arena> = const { RefCell::new(Arena::new()) };
     static HUD_ITEMS: RefCell<Vec<HudItem>> = const { RefCell::new(Vec::new()) };
     static HUD_WINDOW: RefCell<HudWindow> = const { RefCell::new(HudWindow::new()) };
+    /// Whether the loader or a mod began a window in this frame and in the
+    /// last one.
+    static WINDOWS: Cell<[bool; 2]> = const { Cell::new([false; 2]) };
+}
+
+/// Notes that a window began in this frame, on the interface thread.
+fn window_drawn() {
+    let [_, last] = WINDOWS.get();
+    WINDOWS.set([true, last]);
+}
+
+/// Whether the loader or a mod showed a window or a dialog in the last
+/// frame, which takes the player's keys from mod controls; on the interface
+/// thread.
+pub(crate) fn window_shown() -> bool {
+    WINDOWS.get()[1] || dialog::showing()
 }
 
 fn thread_id() -> u32 {
@@ -484,6 +502,9 @@ unsafe extern "system" fn detour(state: *mut u8) {
     if context == 0 || state.is_null() {
         return;
     }
+    let [now, _] = WINDOWS.get();
+    WINDOWS.set([false, now]);
+    crate::controls::frame(context);
     engine.restore_nav(context, nav);
     // SAFETY: `state` is non-null, checked by the guard before it, and is the
     // popup state the game passed to `ui.popup`; its active byte sits at the

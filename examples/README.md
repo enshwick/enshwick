@@ -9,6 +9,7 @@ and none is released. The book's own examples cover the smaller cases.
 | [trading-post](trading-post/)                         | publishing a service, sending an event, defining a point    |
 | [haggling](haggling/)                                 | extending another mod's rule at its extension point         |
 | [hello-c](hello-c/)                                   | a mod written in C against `enshwick.h`                     |
+| [horn](horn/)                                         | a control on G that runs an action, one that follows interact |
 | [waypoints](waypoints/)                               | a mod of side both whose server sends a mark its client draws |
 | [you.material-stacks](you.material-stacks/)           | a data pack that raises the stack size of materials         |
 | [you.recipe-cost-and-time](you.recipe-cost-and-time/) | a data pack that halves three recipes' cost and time        |
@@ -20,5 +21,6 @@ the trading post, [Extending other mods](../book/src/extending.md) the
 haggling, [Mods in C](../book/src/mods-in-c.md) the C mod,
 [Messages between server and client](../book/src/messages.md) and
 [The interface](../book/src/interface.md) the waypoints,
+[Controls](../book/src/controls.md) the horn,
 [A mod without Rust](../book/src/content/a-mod-without-rust.md) the data
 packs, and [Luau mods](../book/src/luau.md) the Luau mod.

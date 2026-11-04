@@ -204,6 +204,8 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<crate::inventory::Inventories>(),
     Namespace::of::<crate::resources::Resources>(),
     Namespace::of::<crate::mods::Mods>(),
+    #[cfg(feature = "unstable")]
+    Namespace::of::<crate::controls::Controls>(),
 ];
 
 /// The mod's log as a script writes to it: one line per call, under the

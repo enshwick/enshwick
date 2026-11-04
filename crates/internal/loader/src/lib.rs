@@ -25,6 +25,7 @@ pub mod attribute_slots;
 mod base_groups;
 #[cfg(windows)]
 mod bases;
+pub mod bindings;
 #[cfg(windows)]
 mod buffs;
 pub mod builds;
@@ -53,6 +54,8 @@ mod content;
     expect(dead_code, reason = "only the running game takes mods' renames")
 )]
 mod content_renames;
+#[cfg(windows)]
+mod controls;
 #[cfg(windows)]
 mod crash;
 #[cfg(windows)]
@@ -132,6 +135,7 @@ mod kept_text;
 mod knowledge;
 #[cfg(windows)]
 mod label;
+pub mod linked_controls;
 pub mod listing;
 #[cfg_attr(
     not(windows),

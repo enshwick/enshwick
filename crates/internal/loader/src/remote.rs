@@ -50,6 +50,14 @@ pub const EDIT_GAP: Duration = Duration::from_millis(250);
 pub const QUERY_RATE: f64 = 2.0;
 /// See [`QUERY_RATE`].
 pub const QUERY_BURST: f64 = 8.0;
+/// The action runs a second a player who is no administrator sends, after
+/// a burst of [`RUN_BURST`].
+///
+/// A control sends one a key press, so faster than queries, and each costs
+/// the server one handler call and one notice.
+pub const RUN_RATE: f64 = 10.0;
+/// See [`RUN_RATE`].
+pub const RUN_BURST: f64 = 20.0;
 
 /// A message between a client's loader and its server's.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -180,13 +188,17 @@ impl Message {
         }
     }
 
-    /// Whether the server answers it with a reply of its own making, so a
-    /// player who is no administrator sends it at [`QUERY_RATE`] only.
+    /// Whether the server answers it with a reply of its own making or runs
+    /// a mod's handler for it, so a player who is no administrator sends it
+    /// at [`QUERY_RATE`] only, or an action run at [`RUN_RATE`].
     #[must_use]
     pub const fn is_rated(&self) -> bool {
         matches!(
             self,
-            Self::Query { .. } | Self::Edit { .. } | Self::ActionsQuery { .. }
+            Self::Query { .. }
+                | Self::Edit { .. }
+                | Self::ActionsQuery { .. }
+                | Self::ActionRun { .. }
         )
     }
 
@@ -419,6 +431,8 @@ pub enum Gate {
 #[derive(Debug, Default)]
 pub struct Queries {
     rates: rustc_hash::FxHashMap<u64, Peer>,
+    /// Each player's own rate of action runs, apart from the queries'.
+    runs: rustc_hash::FxHashMap<u64, Peer>,
 }
 
 impl Queries {
@@ -438,7 +452,18 @@ impl Queries {
     /// account key `key` at `now`. Only [rated](Message::is_rated) messages
     /// spend the player's rate; an actions query over it gets no answer.
     pub fn gate(&mut self, key: u64, admin: bool, message: &Message, now: Instant) -> Gate {
-        if !message.is_rated() || self.admit(key, admin, now) {
+        let admitted = match message {
+            Message::ActionRun { .. } => {
+                admin
+                    || self
+                        .runs
+                        .entry(key)
+                        .or_insert_with(|| Peer::with_tokens(RUN_BURST))
+                        .admit_at(now, RUN_RATE, RUN_BURST)
+            }
+            _ => !message.is_rated() || self.admit(key, admin, now),
+        };
+        if admitted {
             Gate::Pass
         } else if matches!(message, Message::ActionsQuery { .. }) {
             Gate::Drop
@@ -453,6 +478,7 @@ impl Queries {
     /// Forgets the player with account key `key`, who left.
     pub fn forget(&mut self, key: u64) {
         self.rates.remove(&key);
+        self.runs.remove(&key);
     }
 }
 

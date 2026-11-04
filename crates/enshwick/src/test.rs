@@ -80,6 +80,8 @@
 
 mod calls;
 mod content;
+#[cfg(feature = "unstable")]
+mod controls;
 mod events;
 pub mod facts;
 mod gameplay;
@@ -308,6 +310,9 @@ pub struct FakeHost {
     archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     resources: FxHashMap<([u8; 16], u32, u32), Vec<u8>>,
     types: Option<std::sync::Arc<crate::resources::TypeTable>>,
+    /// The player's keys by control name, in place of the mod's defaults.
+    #[cfg(feature = "unstable")]
+    bindings: Vec<(String, usize, Option<crate::controls::Key>)>,
     game_version: Option<&'static str>,
     game_texts: FxHashMap<(u32, u32), &'static str>,
     disabled_recipes: FxHashSet<u32>,
@@ -398,6 +403,8 @@ impl FakeHost {
             archive: std::collections::BTreeMap::new(),
             resources: FxHashMap::default(),
             types: None,
+            #[cfg(feature = "unstable")]
+            bindings: Vec::new(),
             game_version: None,
             game_texts: FxHashMap::default(),
             disabled_recipes: FxHashSet::default(),

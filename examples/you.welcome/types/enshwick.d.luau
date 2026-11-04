@@ -497,4 +497,9 @@ declare enshwick: {
 		--- The names of the files and folders in `path`, relative to the mod's folder (`.` for the folder itself), sorted.
 		list: (path: string) -> {string},
 	},
+	--- Keys the mod declares for its players, and game actions they follow.
+	controls: {
+		--- Declares the control `name`, shown as `label`, on `key`, a key name such as `Shift+E` or empty for none, following the game action `link` by its game name, such as `ContextualAction`, or empty. It fires on `phases`, of `press`, `release` and `hold`, or on press when empty, and holds after `hold_ms`; `on` gets the phase and, on the server, the player whose game action fired. Allowed while the mod initialises.
+		declare: (name: string, label: string, key: string, link: string, phases: {string}, hold_ms: number, on: (arg1: string, arg2: Player?) -> ()) -> (),
+	},
 }

@@ -37,6 +37,7 @@ impl Engine {
         name: &UiText,
         title: &UiText,
     ) {
+        crate::ui::window_drawn();
         window.saved_nav = self.nav(context);
         let name = [name.ptr.expose_provenance() as u64, name.len];
         // SAFETY: `self.window_begin` is the game's `ui.window_begin`, its

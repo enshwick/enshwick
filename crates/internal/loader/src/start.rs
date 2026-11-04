@@ -85,6 +85,7 @@ fn link_features(loader: &'static Loader) {
     crate::survivors::link(loader);
     crate::textures::link(loader);
     crate::interactions::link(loader);
+    crate::controls::link(loader);
     crate::rate_links::link(loader);
     crate::progress::link(loader);
     crate::bases::link(loader);

@@ -17,6 +17,7 @@ use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
 
 mod build;
 mod content;
+mod controls;
 pub(crate) mod gameplay;
 #[cfg(test)]
 mod headed_tests;
@@ -40,6 +41,7 @@ use content::{
     item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_keys,
     resource_read, serve_resource, set_change, types,
 };
+use controls::{control, run_action};
 use gameplay::{
     account_knowledge, altar_limit_filter, altar_zone_filter, altar_zones_changed, altars,
     altars_open, apply_buff, base_limit, base_zones, buff_types, buffs, build_filter,
@@ -256,6 +258,9 @@ pub(crate) struct State {
     pub(crate) calls: super::calls::FakeCalls,
     /// The fake steps and the mod's periodic tick handlers.
     pub(crate) ticks: super::ticks::FakeTicks,
+    /// The mod's controls and the action runs it sent.
+    #[cfg(feature = "unstable")]
+    pub(crate) controls: super::controls::FakeControls,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) skills: Vec<(crate::abi::SkillNode, SkillCheckFn, usize)>,
@@ -644,6 +649,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         points: super::points::FakePoints::default(),
         calls: super::calls::FakeCalls::default(),
         ticks: super::ticks::FakeTicks::default(),
+        #[cfg(feature = "unstable")]
+        controls: super::controls::FakeControls::default(),
         survivor_status: None,
         interaction_filters: Vec::new(),
         skills: Vec::new(),
@@ -985,4 +992,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     content_hashes,
     types,
     game_version,
+    control,
+    run_action,
 };
