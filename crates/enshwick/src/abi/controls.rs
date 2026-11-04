@@ -49,7 +49,8 @@ pub struct ControlSpec {
     /// call.
     pub link: Str,
     /// When the control fires: [`ControlSpec::PRESS`],
-    /// [`ControlSpec::RELEASE`] and [`ControlSpec::HOLD`], any of them.
+    /// [`ControlSpec::RELEASE`] and [`ControlSpec::HOLD`], at least one of
+    /// them and no other bit.
     pub fires: u32,
     /// How long a key stays down before [`ControlSpec::HOLD`] fires, in
     /// milliseconds.
@@ -116,7 +117,9 @@ impl_headed!(ControlEvent);
 
 /// A mod's control callback: the event and the pointer given with
 /// [`HostApi::control`](super::HostApi::control). The client calls it on its
-/// interface thread, the server on its game thread; it does not re-enter.
+/// interface thread for a key, the server on its game thread for a game
+/// action; a client hosting a game does both, so a control with a key and a
+/// game action may run on the two threads at once.
 ///
 /// # Examples
 ///

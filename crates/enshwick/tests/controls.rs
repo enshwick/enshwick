@@ -49,6 +49,12 @@ mod tests {
                 Control::new("enter", "Enter the car").link(GameAction::ContextualAction),
                 note,
             )?;
+            load.control(
+                Control::new("brake", "Brake")
+                    .link(GameAction::Block)
+                    .fires(&[Phase::Press, Phase::Hold, Phase::Release]),
+                note,
+            )?;
             assert!(
                 load.control(Control::new("horn", "Again"), note).is_err(),
                 "a name is declared once"
@@ -140,6 +146,7 @@ mod tests {
     fn the_player_s_binding_replaces_the_mod_s_default_slot_by_slot() {
         let loader = start(
             enshwick::test::FakeHost::new()
+                .side(enshwick::abi::Side::CLIENT)
                 .bind("horn", 0, Some(key("J")))
                 .bind("boost", 0, None),
         );
@@ -154,7 +161,7 @@ mod tests {
         assert_eq!(keys("horn"), [Some(key("J")), Some(key("Mouse4"))]);
         assert_eq!(keys("boost"), [None, None]);
         let tick = Duration::from_millis(16);
-        assert_eq!(loader.keys(&[key("H")], &[], tick), 0);
-        assert_eq!(loader.keys(&[key("J")], &[], tick), 1);
+        assert_eq!(loader.keys(&[key("H")], tick), 0);
+        assert_eq!(loader.keys(&[key("J")], tick), 1);
     }
 }

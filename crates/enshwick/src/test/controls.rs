@@ -7,7 +7,7 @@ use core::time::Duration;
 use crate::abi::{
     ControlEvent, ControlFn, ControlSpec, Header, ModHandle, PlayerInfo, Status, Str, read_headed,
 };
-use crate::controls::{GameAction, Key, Tracker, chord_down, is_valid_name, phases};
+use crate::controls::{GameAction, Key, Tracker, chord_down, is_valid_name, phases, valid_phases};
 
 use super::table::{Registration, text, with};
 use super::{FakeHost, Installed};
@@ -23,6 +23,8 @@ struct FakeControl {
     callback: ControlFn,
     user: usize,
     tracker: Tracker,
+    /// The game action's tracker for each player entity.
+    players: Vec<(u32, Tracker)>,
 }
 
 /// The mod's controls, the fake clock of its keys and the runs sent.
@@ -54,7 +56,10 @@ pub(crate) extern "system" fn control(
         None if link.is_empty() => None,
         None => return Status::BAD_ARGS,
     };
-    if !is_valid_name(&name) || keys.iter().any(|k| matches!(k, Some(None))) {
+    if !is_valid_name(&name)
+        || keys.iter().any(|k| matches!(k, Some(None)))
+        || !valid_phases(spec.fires)
+    {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
@@ -80,6 +85,7 @@ pub(crate) extern "system" fn control(
             callback,
             user: user.expose_provenance(),
             tracker: Tracker::default(),
+            players: Vec::new(),
         });
         Status::OK
     })
@@ -126,6 +132,25 @@ struct Call {
     user: usize,
 }
 
+impl FakeControl {
+    fn call(&self, kind: u32) -> Call {
+        Call {
+            name: self.name.clone(),
+            kind,
+            callback: self.callback,
+            user: self.user,
+        }
+    }
+}
+
+/// Moves the fake clock `after` on and returns it, in milliseconds.
+fn advance(fake: &mut FakeControls, after: Duration) -> u64 {
+    fake.now = fake
+        .now
+        .saturating_add(u64::try_from(after.as_millis()).unwrap_or(u64::MAX));
+    fake.now
+}
+
 fn deliver(calls: &[Call], server: Option<&PlayerInfo>) -> usize {
     let zero = PlayerInfo {
         header: Header::of::<PlayerInfo>(),
@@ -164,9 +189,9 @@ fn deliver(calls: &[Call], server: Option<&PlayerInfo>) -> usize {
 impl Installed {
     /// Looks at the keys as the client's key reader does, `after` the last
     /// look: `down` are the keys held now, each with the modifiers held
-    /// with it, and `tapped` the keys pressed and let go since the last
-    /// look. Each control whose key matches fires what the look decides, on
-    /// the client. Returns how many calls the mod got.
+    /// with it. Each control whose key matches fires what the look decides.
+    /// As in the loader, only a client reads keys: on a server nothing
+    /// fires. Returns how many calls the mod got.
     ///
     /// # Examples
     ///
@@ -175,50 +200,42 @@ impl Installed {
     /// use enshwick::controls::Key;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.keys(&[Key::parse("H")?], &[], Duration::from_millis(16)), 0);
+    /// assert_eq!(loader.keys(&[Key::parse("H")?], Duration::from_millis(16)), 0);
     /// # Ok::<(), enshwick::controls::ParseKeyError>(())
     /// ```
     #[must_use = "the count says whether a control fired"]
-    pub fn keys(&self, down: &[Key], tapped: &[Key], after: Duration) -> usize {
+    pub fn keys(&self, down: &[Key], after: Duration) -> usize {
         let calls = with(Vec::new(), |s| {
-            let fake = &mut s.controls;
-            fake.now = fake
-                .now
-                .saturating_add(u64::try_from(after.as_millis()).unwrap_or(u64::MAX));
-            let now = fake.now;
+            if s.host.side != crate::abi::Side::CLIENT {
+                return Vec::new();
+            }
+            let now = advance(&mut s.controls, after);
             let mut calls = Vec::new();
-            for control in &mut fake.controls {
-                let held = |keys: &[Key]| {
-                    control.keys.iter().flatten().any(|bound| {
-                        keys.iter().any(|k| {
-                            k.code() == bound.code() && chord_down(*bound, true, k.modifiers())
-                        })
+            for control in &mut s.controls.controls {
+                let held = control.keys.iter().flatten().any(|bound| {
+                    down.iter().any(|k| {
+                        k.code() == bound.code() && chord_down(*bound, true, k.modifiers())
                     })
-                };
-                let kind = control
-                    .tracker
-                    .look(held(down), held(tapped), now, control.hold_ms)
-                    & control.fires;
-                calls.extend(phases(kind).map(|kind| Call {
-                    name: control.name.clone(),
-                    kind,
-                    callback: control.callback,
-                    user: control.user,
-                }));
+                });
+                let kind = control.tracker.look(held, now, control.hold_ms) & control.fires;
+                calls.extend(phases(kind).map(|kind| control.call(kind)));
             }
             calls
         });
         deliver(&calls, None)
     }
 
-    /// Fires `player`'s game action `action` on the server, as the loader
-    /// does when the player's input sets it: every control linked to it
-    /// gets one [`Phase::Press`](crate::controls::Phase::Press), when it
-    /// fires on press. Returns how many calls the mod got.
+    /// Looks at `player`'s game actions on the server as the loader does
+    /// once a step, `after` the last look: `held` are the actions the
+    /// player's input sets now. Each control linked to one of them fires
+    /// what the look decides: [`Phase::Press`](crate::controls::Phase::Press)
+    /// when it comes on, then hold and release. Returns how many calls the
+    /// mod got.
     ///
     /// # Examples
     ///
     /// ```
+    /// use std::time::Duration;
     /// use enshwick::abi::{Header, PlayerInfo};
     /// use enshwick::controls::GameAction;
     ///
@@ -232,22 +249,32 @@ impl Installed {
     ///     name_len: 0,
     ///     name: [0; 64],
     /// };
-    /// assert_eq!(loader.game_action(&player, GameAction::ContextualAction), 0);
+    /// let held = [GameAction::ContextualAction];
+    /// assert_eq!(loader.game_actions(&player, &held, Duration::from_millis(50)), 0);
     /// ```
     #[must_use = "the count says whether a control fired"]
-    pub fn game_action(&self, player: &PlayerInfo, action: GameAction) -> usize {
+    pub fn game_actions(&self, player: &PlayerInfo, held: &[GameAction], after: Duration) -> usize {
+        let entity = player.entity.0;
         let calls = with(Vec::new(), |s| {
-            s.controls
-                .controls
-                .iter()
-                .filter(|c| c.link == Some(action) && c.fires & ControlSpec::PRESS != 0)
-                .map(|c| Call {
-                    name: c.name.clone(),
-                    kind: ControlSpec::PRESS,
-                    callback: c.callback,
-                    user: c.user,
-                })
-                .collect()
+            let now = advance(&mut s.controls, after);
+            let mut calls = Vec::new();
+            for control in &mut s.controls.controls {
+                let Some(action) = control.link else {
+                    continue;
+                };
+                let at = match control.players.iter().position(|(e, _)| *e == entity) {
+                    Some(at) => at,
+                    None => {
+                        control.players.push((entity, Tracker::default()));
+                        control.players.len() - 1
+                    }
+                };
+                let tracker = &mut control.players[at].1;
+                let kind =
+                    tracker.look(held.contains(&action), now, control.hold_ms) & control.fires;
+                calls.extend(phases(kind).map(|kind| control.call(kind)));
+            }
+            calls
         });
         deliver(&calls, Some(player))
     }

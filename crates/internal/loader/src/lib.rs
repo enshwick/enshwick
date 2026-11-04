@@ -135,6 +135,7 @@ mod kept_text;
 mod knowledge;
 #[cfg(windows)]
 mod label;
+pub mod linked_controls;
 pub mod listing;
 #[cfg_attr(
     not(windows),

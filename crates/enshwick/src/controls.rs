@@ -332,7 +332,8 @@ impl Control {
         self
     }
 
-    /// The phases the control fires on, in place of [`Phase::Press`] alone.
+    /// The phases the control fires on, in place of [`Phase::Press`] alone;
+    /// an empty list keeps [`Phase::Press`].
     ///
     /// # Examples
     ///
@@ -343,7 +344,9 @@ impl Control {
     /// ```
     #[must_use]
     pub fn fires(mut self, phases: &[Phase]) -> Self {
-        self.fires = phases.iter().fold(0, |bits, phase| bits | phase.bit());
+        if !phases.is_empty() {
+            self.fires = phases.iter().fold(0, |bits, phase| bits | phase.bit());
+        }
         self
     }
 
@@ -421,7 +424,8 @@ unsafe extern "system" fn fire(event: *const ControlEvent, user: *mut c_void) {
 impl Load<'_> {
     /// Declares `control` with its handler, which runs on the client's
     /// interface thread for a key, and on the server's game thread for a
-    /// [linked](Control::link) game action.
+    /// [linked](Control::link) game action; a client hosting a game may run
+    /// both at once.
     ///
     /// # Errors
     ///
@@ -588,13 +592,12 @@ pub struct Tracker {
 }
 
 impl Tracker {
-    /// One look at the key at `now` milliseconds: whether its chord is down
-    /// now, and whether it went down and up again since the last look, a
-    /// tap shorter than a frame. The phases that fire, as
-    /// [`ControlSpec::PRESS`], [`ControlSpec::RELEASE`] and
-    /// [`ControlSpec::HOLD`] bits, before the control's own mask.
+    /// One look at the key at `now` milliseconds, whether its chord is down
+    /// now: the phases that fire, as [`ControlSpec::PRESS`],
+    /// [`ControlSpec::RELEASE`] and [`ControlSpec::HOLD`] bits, before the
+    /// control's own mask.
     #[must_use]
-    pub fn look(&mut self, down: bool, tapped: bool, now: u64, hold_ms: u32) -> u32 {
+    pub fn look(&mut self, down: bool, now: u64, hold_ms: u32) -> u32 {
         match (self.down_since, down) {
             (None, true) => {
                 *self = Self {
@@ -603,7 +606,6 @@ impl Tracker {
                 };
                 ControlSpec::PRESS
             }
-            (None, false) if tapped => ControlSpec::PRESS | ControlSpec::RELEASE,
             (Some(since), true)
                 if !self.held && now.saturating_sub(since) >= u64::from(hold_ms) =>
             {
@@ -641,6 +643,15 @@ pub fn is_valid_name(name: &str) -> bool {
         && name
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// Whether `fires` names at least one phase and nothing else. Shared by the
+/// loader and the fake host, which refuse a control that would never fire.
+#[doc(hidden)]
+#[must_use]
+pub const fn valid_phases(fires: u32) -> bool {
+    let all = ControlSpec::PRESS | ControlSpec::RELEASE | ControlSpec::HOLD;
+    fires != 0 && fires & !all == 0
 }
 
 /// Each phase bit of `kind`, in the order its calls go out: press, hold,
@@ -687,7 +698,7 @@ mod tests {
         ]
         .into_iter()
         .map(|(down, at)| {
-            let fired = key.look(down, false, at, 500);
+            let fired = key.look(down, at, 500);
             assert_eq!(key.is_down(), down);
             fired
         })
@@ -703,17 +714,6 @@ mod tests {
             ]
         );
         assert!(!key.is_down());
-    }
-
-    #[test]
-    fn a_tap_between_two_looks_still_fires() {
-        let mut key = Tracker::default();
-        assert_eq!(
-            key.look(false, true, 10, 500),
-            ControlSpec::PRESS | ControlSpec::RELEASE
-        );
-        assert_eq!(key.look(false, false, 20, 500), 0);
-        assert_eq!(key.look(true, true, 30, 500), ControlSpec::PRESS);
     }
 
     #[test]
@@ -768,6 +768,20 @@ mod tests {
     fn a_control_fires_on_the_phases_it_names() {
         let both = Control::new("x", "X").fires(&[Phase::Press, Phase::Hold, Phase::Press]);
         assert_eq!(both.fires, ControlSpec::PRESS | ControlSpec::HOLD);
+        let none = Control::new("x", "X").fires(&[Phase::Release]).fires(&[]);
+        assert_eq!(
+            none.fires,
+            ControlSpec::RELEASE,
+            "an empty list keeps the phases"
+        );
+        assert_eq!(
+            Control::new("x", "X").fires(&[]).fires,
+            ControlSpec::PRESS,
+            "as a script's empty list"
+        );
+        assert!(valid_phases(ControlSpec::HOLD | ControlSpec::RELEASE));
+        assert!(!valid_phases(0), "a control that never fires");
+        assert!(!valid_phases(ControlSpec::PRESS | 8));
         assert!(is_valid_name("horn-2"));
         assert!(!is_valid_name("Horn"));
         assert!(!is_valid_name(""));

@@ -77,7 +77,7 @@ mod tests {
     fn g_asks_the_server_to_honk_and_interacting_is_logged_for_the_player() {
         let loader = start(enshwick::test::FakeHost::new().side(enshwick::abi::Side::CLIENT));
         let g = Key::parse("G").unwrap();
-        assert_eq!(loader.keys(&[g], &[], Duration::from_millis(16)), 1);
+        assert_eq!(loader.keys(&[g], Duration::from_millis(16)), 1);
         assert_eq!(loader.action_runs(), [("honk".to_owned(), String::new())]);
         let mut ann = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
@@ -89,7 +89,11 @@ mod tests {
             name: [0; 64],
         };
         ann.name[..3].copy_from_slice(b"Ann");
-        assert_eq!(loader.game_action(&ann, GameAction::ContextualAction), 1);
+        let interact = [GameAction::ContextualAction];
+        assert_eq!(
+            loader.game_actions(&ann, &interact, Duration::from_millis(50)),
+            1
+        );
         assert!(
             loader
                 .logs()
