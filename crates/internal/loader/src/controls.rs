@@ -14,7 +14,7 @@ use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{ControlEvent, ControlFn, ControlSpec, Header, PlayerInfo, Side, Status, Str};
-use enshwick::controls::{GameAction, Key, MAX_NAME, Tracker, chord_down};
+use enshwick::controls::{GameAction, Key, MAX_NAME, Tracker};
 use enshwick_gamedata::catalogue;
 
 use crate::bindings::{self, Override};
@@ -78,29 +78,25 @@ fn now_ms() -> u64 {
     u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
-/// Declares mod `owner`'s control from `spec`, during its init.
+/// Declares mod `owner`'s control `spec`, during its init.
 pub(crate) fn register(
     owner: ModIndex,
     mod_id: &str,
-    spec: &ControlSpec,
+    spec: &Spec<'_>,
     callback: ControlFn,
     user: *mut c_void,
 ) -> Status {
-    let read = |value: Str| crate::host::memory::text(value).map(str::to_owned);
-    let (Some(name), Some(label), Some(link)) =
-        (read(spec.name), read(spec.label), read(spec.link))
-    else {
-        return Status::BAD_ARGS;
-    };
+    let name = spec.name;
     let well_named = !name.is_empty()
         && name.len() <= MAX_NAME
         && name
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
-    let keys_ok = [spec.key, spec.second]
+    let keys_ok = spec
+        .keys
         .iter()
         .all(|&bits| bits == 0 || Key::from_bits(bits).is_some());
-    let link_ok = link.is_empty() || GameAction::ALL.iter().any(|a| a.name() == link);
+    let link_ok = spec.link.is_empty() || GameAction::ALL.iter().any(|a| a.name() == spec.link);
     if !well_named || !keys_ok || !link_ok {
         return Status::BAD_ARGS;
     }
@@ -114,16 +110,26 @@ pub(crate) fn register(
         .add(Declared {
             owner,
             id,
-            name,
-            label,
-            defaults: [spec.key, spec.second],
-            link,
+            name: name.to_owned(),
+            label: spec.label.to_owned(),
+            defaults: spec.keys,
+            link: spec.link.to_owned(),
             fires: spec.fires,
             hold_ms: spec.hold_ms,
             callback,
             user: user.expose_provenance(),
         })
         .map_or(Status::TOO_LATE, |()| Status::OK)
+}
+
+/// A control as its mod declares it, its strings read.
+pub(crate) struct Spec<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) label: &'a str,
+    pub(crate) link: &'a str,
+    pub(crate) keys: [u32; 2],
+    pub(crate) fires: u32,
+    pub(crate) hold_ms: u32,
 }
 
 /// Seals the controls; on the client reads the player's keys and the screen
@@ -229,13 +235,13 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
         if control.link.is_empty() {
             continue;
         }
-        match loader
+        let bit = loader
             .reflection
             .enum_value(input_type, &control.link)
             .ok()
             .and_then(|bit| u8::try_from(bit).ok())
-            .filter(|bit| *bit < 64)
-        {
+            .filter(|bit| *bit < 64);
+        match bit {
             Some(bit) => bits.push((index, bit)),
             None => crate::log!(
                 WARN,
@@ -259,9 +265,7 @@ fn fire(control: &Declared, kind: u32, player: Option<&PlayerInfo>) {
         kind,
         server: u8::from(player.is_some()),
         reserved: [0; 3],
-        player: player
-            .copied()
-            .unwrap_or_else(|| bytemuck::Zeroable::zeroed()),
+        player: player.copied().unwrap_or_else(bytemuck::Zeroable::zeroed),
     };
     // SAFETY: the callback lives in the mod's DLL, which stays loaded, and
     // gets a live event and the pointer its mod declared it with; the safe
@@ -312,7 +316,7 @@ pub(crate) fn frame(context: usize) {
         // on the interface thread, whose chain to the play data the table's
         // `map.context_state` and `map.state_play_data` give (clients 410,
         // 426 and 520).
-        let open = unsafe { in_game(context, gate) } && input::focused();
+        let open = unsafe { in_game(context, gate) } && focused();
         let states = input::read(&keys);
         let now = now_ms();
         TRACKERS.with_borrow_mut(|trackers| {
@@ -326,7 +330,7 @@ pub(crate) fn frame(context: usize) {
                     continue;
                 }
                 let (down, tapped) = if open {
-                    states.chord(bound)
+                    states.chord(*bound)
                 } else {
                     (false, false)
                 };
@@ -435,7 +439,7 @@ pub(crate) unsafe fn server_input(entity: u32, input: *const u8) {
 
 /// Forgets the players' trackers, as when the server's world goes away.
 pub(crate) fn forget() {
-    SERVER.with_borrow_mut(std::collections::HashMap::clear);
+    SERVER.with_borrow_mut(rustc_hash::FxHashMap::clear);
 }
 
 /// A control as the controls page shows it.
@@ -509,4 +513,4 @@ pub(crate) fn set_key(
 
 mod input;
 
-pub(crate) use input::{capture_keys, key_name};
+pub(crate) use input::{capture_keys, focused, key_name};

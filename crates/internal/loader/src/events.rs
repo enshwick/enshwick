@@ -543,6 +543,7 @@ fn end_session() {
     crate::survivors::forget();
     crate::interactions::forget();
     crate::actions::forget();
+    crate::controls::forget();
     crate::bases::forget();
     crate::saves::forget();
     crate::daytime::forget();

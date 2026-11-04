@@ -806,9 +806,6 @@ unsafe extern "system" fn dismantle(
     if refused { 0 } else { method }
 }
 
-/// Before the inventory system runs, marks as done the Quick Stash switch and
-/// the upgrade a filter refuses; the system then skips them as already
-/// handled.
 unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
     if !crate::transactions::holds().quiet() && LOADED.get().is_some() && !ctx.is_null() {
         // SAFETY: `ctx` is non-null by the check before it and is the system's
@@ -816,10 +813,43 @@ unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
         let _done =
             INTERACTIONS_FUSE.run("the inventory actions", || unsafe { refuse_pending(ctx) });
     }
+    if crate::controls::linked() && LOADED.get().is_some() && !ctx.is_null() {
+        // SAFETY: `ctx` is non-null by the check before it and is the system's
+        // own context, at its entry on its thread.
+        unsafe { player_inputs(ctx) };
+    }
     // SAFETY: this detour runs only as the `inventory_actions` system's link,
     // so the slot holds the next function of that signature; the game's
     // context passes unchanged.
     unsafe { ACTIONS_NEXT.get()(ctx) }
+}
+
+/// Hands each player's `PlayerInput` in the server's world to the controls
+/// that follow game actions.
+///
+/// # Safety
+///
+/// - `ctx` is the inventory system's live, non-null context, at its entry
+///   on its thread.
+unsafe fn player_inputs(ctx: *mut u64) {
+    let (Some((loader, layout, components)), Some(engine)) = (LOADED.get(), crate::ecs::resolved())
+    else {
+        return;
+    };
+    // SAFETY: the caller guarantees the system's live context on its thread.
+    if !unsafe { server_world(loader, engine, ctx) } {
+        return;
+    }
+    let players = PLAYERS.load();
+    for &player in players.as_deref().map_or(&[][..], Vec::as_slice) {
+        // SAFETY: the caller guarantees the system's live context, at its
+        // entry on its thread.
+        if let Some(input) = unsafe { components.component(ctx, player, layout.player_input) } {
+            // SAFETY: `input` is the player's live `PlayerInput`, read on
+            // the game thread during the step.
+            unsafe { crate::controls::server_input(player, input) };
+        }
+    }
 }
 
 /// Marks the pending Quick Stash switches and upgrades a filter refuses as

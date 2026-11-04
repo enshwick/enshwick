@@ -3,6 +3,7 @@
 //! the controls page shows; and how the page captures a new key.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use enshwick::controls::Key;
 
@@ -94,13 +95,13 @@ pub fn render(entries: &[(String, Override)]) -> String {
             continue;
         }
         let name = toml::Value::String(control.clone());
-        text.push_str(&format!("\n[{name}]\n"));
+        let _ = write!(text, "\n[{name}]\n");
         for (slot, bits) in SLOTS.iter().zip(slots) {
             let Some(bits) = bits else {
                 continue;
             };
             let shown = Key::from_bits(*bits).map_or_else(|| "none".to_owned(), |k| k.to_string());
-            text.push_str(&format!("{slot} = {bits} # {shown}\n"));
+            let _ = writeln!(text, "{slot} = {bits} # {shown}");
         }
     }
     text

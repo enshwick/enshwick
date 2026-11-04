@@ -30,7 +30,7 @@ thread_local! {
 }
 
 /// Whether the game's window has the focus.
-pub(super) fn focused() -> bool {
+pub(crate) fn focused() -> bool {
     use windows_sys::Win32::System::Threading::GetCurrentProcessId;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GetForegroundWindow, GetWindowThreadProcessId,
@@ -129,7 +129,7 @@ impl States {
     /// Whether a control on `bound` is down now, and whether one of its
     /// keys was tapped since the last frame, each with exactly its
     /// modifiers.
-    pub(super) fn chord(&self, bound: &[u32; 2]) -> (bool, bool) {
+    pub(super) fn chord(&self, bound: [u32; 2]) -> (bool, bool) {
         let mut down = false;
         let mut tapped = false;
         for key in bound.iter().filter_map(|&bits| Key::from_bits(bits)) {

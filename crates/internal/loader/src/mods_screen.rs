@@ -57,6 +57,8 @@ pub enum Kind {
     ModServerSettings,
     /// The actions the server offers.
     Actions,
+    /// The controls page, which may wait for a key.
+    Controls,
 }
 
 /// Where one step back from a page goes.
@@ -79,7 +81,7 @@ pub const fn back(kind: Kind) -> Back {
         Kind::List => Back::Close,
         Kind::Settings | Kind::ServerList | Kind::ModServerSettings => Back::List,
         Kind::ServerSettings => Back::ServerList,
-        Kind::Actions => Back::Inside,
+        Kind::Actions | Kind::Controls => Back::Inside,
     }
 }
 

@@ -485,6 +485,7 @@ unsafe extern "system" fn detour(state: *mut u8) {
     if context == 0 || state.is_null() {
         return;
     }
+    crate::controls::frame(context);
     engine.restore_nav(context, nav);
     // SAFETY: `state` is non-null, checked by the guard before it, and is the
     // popup state the game passed to `ui.popup`; its active byte sits at the
