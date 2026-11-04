@@ -676,6 +676,54 @@ fn last_part(qualified: &str) -> &str {
     qualified.get(start..).unwrap_or(qualified)
 }
 
+/// CRC-32/ISO-HDLC, the CRC of zip and PNG: reflected polynomial
+/// `0xEDB88320`, all ones in and out.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(enshwick::resources::crc32(b"123456789"), 0xcbf4_3926);
+/// ```
+#[must_use]
+pub const fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = u32::MAX;
+    let mut i = 0;
+    while i < bytes.len() {
+        crc ^= bytes[i] as u32;
+        let mut bit = 0;
+        while bit < 8 {
+            crc = (crc >> 1) ^ (0xedb8_8320 & 0u32.wrapping_sub(crc & 1));
+            bit += 1;
+        }
+        i += 1;
+    }
+    !crc
+}
+
+/// CRC-64/ECMA-182: polynomial `0x42F0E1EBA9EA3693`, not reflected, zero in
+/// and out.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(enshwick::resources::crc64(b"123456789"), 0x6c40_df5f_0b49_7347);
+/// ```
+#[must_use]
+pub const fn crc64(bytes: &[u8]) -> u64 {
+    let mut crc = 0u64;
+    let mut i = 0;
+    while i < bytes.len() {
+        crc ^= (bytes[i] as u64) << 56;
+        let mut bit = 0;
+        while bit < 8 {
+            crc = (crc << 1) ^ (0x42f0_e1eb_a9ea_3693 & 0u64.wrapping_sub(crc >> 63));
+            bit += 1;
+        }
+        i += 1;
+    }
+    crc
+}
+
 /// FNV-1a over 32 bits, the hash the engine keys type names, resource types
 /// and GUID-derived ids with.
 ///

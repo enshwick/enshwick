@@ -150,4 +150,24 @@ mod tests {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
     }
+
+    #[test]
+    fn a_script_hashes_bytes_and_turns_content_hashes_into_guids_and_back() {
+        let loader = run(r#"
+            local r = enshwick.resources
+            print(`crc32 {r.crc32("123456789")} crc64 {r.crc64("123456789")} fnv {r.fnv1a32("foobar")}`)
+            local guid = r.guid_from_content_hash({1, 2, 3, 4})
+            local back = r.content_hash_of_guid(guid)
+            print(`back {back[1]} {back[4]} nil {r.nil_guid()}`)
+            print(`hash {r.guid_hash("6943053a-32c1-4718-ae22-e61427ddf54d")}`)
+        "#);
+        let id = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").fnv1a();
+        for line in [
+            "crc32 3421780262 crc64 7800480153909949255 fnv 3214735720".to_owned(),
+            format!("back 1 4 nil {}", Guid::NIL),
+            format!("hash {id}"),
+        ] {
+            assert!(logged(&loader, &line), "{line}: {:?}", loader.logs());
+        }
+    }
 }

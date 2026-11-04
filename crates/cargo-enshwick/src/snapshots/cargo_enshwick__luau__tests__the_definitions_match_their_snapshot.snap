@@ -455,6 +455,20 @@ declare enshwick: {
 		decode: (type_name: string, bytes: buffer) -> any,
 		--- `value`, of the type qualified as `type_name`, as resource bytes: written over `base` when given, keeping the bytes of what did not change, else into new bytes.
 		encode: (type_name: string, value: any, base: buffer?) -> buffer,
+		--- The nil GUID's text, all zero: no resource.
+		nil_guid: () -> string,
+		--- The GUID a content hash reads as, four numbers as `content_hashes` lists them: its words in memory order.
+		guid_from_content_hash: (hash: any) -> string,
+		--- The content hash a GUID reads as, four numbers.
+		content_hash_of_guid: (guid: string) -> any,
+		--- The number the game gives the resource of GUID `guid`: FNV-1a over its memory bytes, as item and template ids are.
+		guid_hash: (guid: string) -> number,
+		--- FNV-1a over 32 bits of `bytes`, a buffer or text.
+		fnv1a32: (bytes: buffer) -> number,
+		--- CRC-32/ISO-HDLC of `bytes`, a buffer or text.
+		crc32: (bytes: buffer) -> number,
+		--- CRC-64/ECMA-182 of `bytes`, a buffer or text; past 2^53 as its decimal text.
+		crc64: (bytes: buffer) -> any,
 		--- The value of the game's own resource `key`, read from its archive.
 		game_value: (key: any) -> any,
 		--- Serves the resource `key`, built from the resource `base` the first time the game reads it: `patch` gets the base's value and returns the value to serve, which may name only the fields it changes; nil serves the base unchanged. Allowed while the mod initialises.

@@ -36,7 +36,7 @@ pub use registry::Registry;
 pub use script::{Bytes, Resources};
 #[doc(hidden)]
 pub use table::TypeTable;
-pub use types::{Attribute, Constant, Field, Type, fnv1a32};
+pub use types::{Attribute, Constant, Field, Type, crc32, crc64, fnv1a32};
 pub use value::{Value, Variant};
 
 #[cfg(test)]

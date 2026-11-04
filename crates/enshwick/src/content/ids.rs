@@ -79,6 +79,48 @@ impl Guid {
         shaped.then(|| Self::parse(text))
     }
 
+    /// The nil GUID, all zero: no resource.
+    pub const NIL: Self = Self([0; 16]);
+
+    /// The GUID a content hash reads as: its four words in memory order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    ///
+    /// let hash = [0x1_5570, 0xfa5b_71ba, 0x1c35_6c97, 0x170c_1f07];
+    /// assert_eq!(Guid::from_content_hash(hash).content_hash(), hash);
+    /// assert_eq!(Guid::from_content_hash([0; 4]), Guid::NIL);
+    /// ```
+    #[must_use]
+    pub const fn from_content_hash(hash: [u32; 4]) -> Self {
+        let mut bytes = [0u8; 16];
+        let mut i = 0;
+        while i < 16 {
+            bytes[i] = hash[i / 4].to_le_bytes()[i % 4];
+            i += 1;
+        }
+        Self(bytes)
+    }
+
+    /// The content hash this GUID reads as: its memory bytes as four words.
+    ///
+    /// # Examples
+    ///
+    /// See [`Guid::from_content_hash`].
+    #[must_use]
+    pub const fn content_hash(self) -> [u32; 4] {
+        let b = self.0;
+        let mut hash = [0u32; 4];
+        let mut i = 0;
+        while i < 4 {
+            hash[i] = u32::from_le_bytes([b[i * 4], b[i * 4 + 1], b[i * 4 + 2], b[i * 4 + 3]]);
+            i += 1;
+        }
+        hash
+    }
+
     /// FNV-1a 32 over the memory bytes, the number the game gives the
     /// resource with this GUID; [`ItemId::from_guid`](crate::ItemId::from_guid)
     /// and its siblings type it.

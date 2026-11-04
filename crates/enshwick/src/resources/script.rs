@@ -453,6 +453,76 @@ impl Resources {
         )?))
     }
 
+    /// The nil GUID's text, all zero: no resource.
+    #[script]
+    #[must_use]
+    pub fn nil_guid(self) -> String {
+        Guid::NIL.to_string()
+    }
+
+    /// The GUID a content hash reads as, four numbers as `content_hashes`
+    /// lists them: its words in memory order.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a hash that is not four numbers.
+    #[script]
+    pub fn guid_from_content_hash(self, hash: &Data) -> Result<String, Off> {
+        Ok(Guid::from_content_hash(hash_of(hash)?).to_string())
+    }
+
+    /// The content hash a GUID reads as, four numbers.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for text that is not a GUID.
+    #[script]
+    pub fn content_hash_of_guid(self, guid: &str) -> Result<Data, Off> {
+        let guid =
+            Guid::try_parse(guid).ok_or_else(|| Off::new(format!("{guid} is not a GUID")))?;
+        Ok(Data::List(
+            guid.content_hash()
+                .into_iter()
+                .map(|w| Data::Uint(w.into()))
+                .collect(),
+        ))
+    }
+
+    /// The number the game gives the resource of GUID `guid`: FNV-1a over
+    /// its memory bytes, as item and template ids are.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for text that is not a GUID.
+    #[script]
+    pub fn guid_hash(self, guid: &str) -> Result<u32, Off> {
+        Ok(Guid::try_parse(guid)
+            .ok_or_else(|| Off::new(format!("{guid} is not a GUID")))?
+            .fnv1a())
+    }
+
+    /// FNV-1a over 32 bits of `bytes`, a buffer or text.
+    #[script]
+    #[must_use]
+    pub fn fnv1a32(self, bytes: &Bytes) -> u32 {
+        super::fnv1a32(&bytes.0)
+    }
+
+    /// CRC-32/ISO-HDLC of `bytes`, a buffer or text.
+    #[script]
+    #[must_use]
+    pub fn crc32(self, bytes: &Bytes) -> u32 {
+        super::crc32(&bytes.0)
+    }
+
+    /// CRC-64/ECMA-182 of `bytes`, a buffer or text; past 2^53 as its
+    /// decimal text.
+    #[script]
+    #[must_use]
+    pub fn crc64(self, bytes: &Bytes) -> Data {
+        Data::Uint(super::crc64(&bytes.0))
+    }
+
     /// The value of the game's own resource `key`, read from its archive.
     ///
     /// # Errors
