@@ -5,8 +5,8 @@
 use enshwick::abi::UiWidget;
 
 use super::list::{listing, pages};
-use crate::bindings::{Capture, Captured, clashes};
-use crate::controls::{self, Row, capture_keys, key_name};
+use crate::bindings::{self, Capture, Captured, clashes};
+use crate::controls::{self, Row, SetKeyError, capture_keys, key_name};
 use crate::host::Loader;
 use crate::texts;
 use crate::ui::Painter;
@@ -174,11 +174,13 @@ fn look(loader: &Loader, view: &mut View) {
 
 /// Sets the key and says whether the file took it.
 fn saved(loader: &Loader, index: usize, slot: usize, bits: u32) -> (String, bool) {
-    match controls::set_key(loader, index, slot, bits) {
-        Ok(()) => (texts::text("controls.saved").to_owned(), true),
-        Err(why) => (
-            texts::fill("controls.not-saved", &[("reason", &why.to_string())]),
-            false,
-        ),
-    }
+    let reason = match controls::set_key(loader, index, slot, bits) {
+        Ok(()) => return (texts::text("controls.saved").to_owned(), true),
+        Err(SetKeyError::Unread) => texts::fill("controls.unread", &[("file", bindings::FILE)]),
+        Err(SetKeyError::Io(why)) => why.to_string(),
+    };
+    (
+        texts::fill("controls.not-saved", &[("reason", &reason)]),
+        false,
+    )
 }

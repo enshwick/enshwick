@@ -89,35 +89,53 @@ mod tests {
         loader
     }
 
+    fn client() -> enshwick::test::Installed {
+        start(enshwick::test::FakeHost::new().side(enshwick::abi::Side::CLIENT))
+    }
+
+    fn ann() -> PlayerInfo {
+        PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot: 0,
+            entity: enshwick::Entity(2),
+            key: enshwick::PlayerKey::new(7),
+            permissions: 0,
+            name_len: 0,
+            name: [0; 64],
+        }
+    }
+
     #[test]
     fn a_key_fires_its_control_and_the_control_asks_the_server() {
-        let loader = start(enshwick::test::FakeHost::new().side(enshwick::abi::Side::CLIENT));
+        let loader = client();
         let listed: Vec<String> = loader.controls().into_iter().map(|c| c.0).collect();
-        assert_eq!(listed, ["horn", "boost", "enter"]);
+        assert_eq!(listed, ["horn", "boost", "enter", "brake"]);
         let tick = Duration::from_millis(16);
-        assert_eq!(loader.keys(&[key("H")], &[], tick), 1);
-        assert_eq!(loader.keys(&[key("H")], &[], tick), 0, "held, not repeated");
-        assert_eq!(loader.keys(&[], &[], tick), 0, "no release asked for");
+        assert_eq!(loader.keys(&[key("H")], tick), 1);
+        assert_eq!(loader.keys(&[key("H")], tick), 0, "held, not repeated");
+        assert_eq!(loader.keys(&[], tick), 0, "no release asked for");
         assert_eq!(taken(), [("horn".to_owned(), Phase::Press, None)]);
         assert_eq!(loader.action_runs(), [("honk".to_owned(), "b1".to_owned())]);
-        assert_eq!(
-            loader.keys(&[], &[key("H")], tick),
-            1,
-            "a tap between looks"
-        );
+    }
+
+    #[test]
+    fn a_server_reads_no_keys() {
+        let loader = start(enshwick::test::FakeHost::new().side(enshwick::abi::Side::SERVER));
+        assert_eq!(loader.keys(&[key("H")], Duration::from_millis(16)), 0);
+        assert!(taken().is_empty());
     }
 
     #[test]
     fn a_chord_holds_once_past_its_threshold_and_needs_exactly_its_modifiers() {
-        let loader = start(enshwick::test::FakeHost::new());
+        let loader = client();
         let tick = Duration::from_millis(100);
-        assert_eq!(loader.keys(&[key("B")], &[], tick), 0, "Shift is missing");
-        assert_eq!(loader.keys(&[key("Ctrl+Shift+B")], &[], tick), 0);
+        assert_eq!(loader.keys(&[key("B")], tick), 0, "Shift is missing");
+        assert_eq!(loader.keys(&[key("Ctrl+Shift+B")], tick), 0);
         let looks: Vec<usize> = [true, true, true, true, true, false]
             .into_iter()
             .map(|down| {
                 let held: &[Key] = if down { &[key("Shift+B")] } else { &[] };
-                loader.keys(held, &[], tick)
+                loader.keys(held, tick)
             })
             .collect();
         assert_eq!(looks, [1, 0, 0, 1, 0, 1]);
@@ -128,18 +146,28 @@ mod tests {
     #[test]
     fn a_linked_control_fires_on_the_server_for_the_player_whose_action_fired() {
         let loader = start(enshwick::test::FakeHost::new());
-        let player = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
-            slot: 0,
-            entity: enshwick::Entity(2),
-            key: enshwick::PlayerKey::new(7),
-            permissions: 0,
-            name_len: 0,
-            name: [0; 64],
-        };
-        assert_eq!(loader.game_action(&player, GameAction::Jump), 0);
-        assert_eq!(loader.game_action(&player, GameAction::ContextualAction), 1);
+        let player = ann();
+        let step = Duration::from_millis(50);
+        assert_eq!(loader.game_actions(&player, &[GameAction::Jump], step), 0);
+        let interact = [GameAction::ContextualAction];
+        assert_eq!(loader.game_actions(&player, &interact, step), 1);
+        assert_eq!(loader.game_actions(&player, &interact, step), 0, "held");
         assert_eq!(taken(), [("enter".to_owned(), Phase::Press, Some(7))]);
+    }
+
+    #[test]
+    fn a_held_game_action_holds_and_releases_its_linked_control() {
+        let loader = start(enshwick::test::FakeHost::new());
+        let player = ann();
+        let block = [GameAction::Block];
+        let step = Duration::from_millis(300);
+        let looks: Vec<usize> = [&block[..], &block, &block, &[]]
+            .into_iter()
+            .map(|held| loader.game_actions(&player, held, step))
+            .collect();
+        assert_eq!(looks, [1, 0, 1, 1]);
+        let phases: Vec<Phase> = taken().into_iter().map(|f| f.1).collect();
+        assert_eq!(phases, [Phase::Press, Phase::Hold, Phase::Release]);
     }
 
     #[test]

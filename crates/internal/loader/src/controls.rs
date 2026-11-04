@@ -5,7 +5,12 @@
 //! Keys are read beside the game's input, never taken from it: a mod key
 //! that is also a game key does both. The game's screen gate is the HUD
 //! screen byte of the interface's play data (`ui.hud_screen`), compared
-//! with the reflected `InGame`; a build without it turns the keys off.
+//! with the reflected screens of [`OPEN_SCREENS`]; a build without
+//! `InGame` turns the keys off.
+//!
+//! The server reads its players' input in the inventory system, on
+//! whatever thread the game runs it, and fires after the step on its game
+//! thread, where a handler may change the world.
 
 use core::cell::RefCell;
 use core::ffi::c_void;
@@ -15,12 +20,13 @@ use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{ControlEvent, ControlFn, Header, PlayerInfo, Side, Status, Str};
-use enshwick::controls::{GameAction, Key, Tracker, is_valid_name, phases};
+use enshwick::controls::{GameAction, Key, Tracker, is_valid_name, phases, valid_phases};
 use enshwick_gamedata::catalogue;
 
-use crate::bindings::{self, Override};
+use crate::bindings;
 use crate::fuse::Fuse;
 use crate::host::Loader;
+use crate::linked_controls::{Follow, Players};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
@@ -49,6 +55,7 @@ static STATE: State = State {
     linked: OnceLock::new(),
     start: OnceLock::new(),
     kept: Mutex::new(None),
+    players: Mutex::new(Players::new()),
 };
 /// The keys turn off at their first panic, the linked controls at theirs.
 static KEYS_FUSE: Fuse = Fuse::new("mod control keys");
@@ -65,29 +72,45 @@ struct State {
     linked: OnceLock<Linked>,
     /// The clock both sides' trackers count milliseconds on.
     start: OnceLock<Instant>,
-    /// The file's entries for controls no running mod declares, which a
-    /// write keeps; `None` while the file does not read, so nothing writes
-    /// over it.
-    kept: Mutex<Option<BTreeMap<String, Override>>>,
+    /// The file's entries for controls no running mod declares, as written,
+    /// which a write keeps; `None` while the file does not read, so nothing
+    /// writes over it.
+    kept: Mutex<Option<toml::Table>>,
+    /// The server's players' trackers and the firings that wait for the
+    /// step's end.
+    players: Mutex<Players>,
 }
+
+/// The HUD screens on which the player is in the world with no window
+/// open: those the game's own HUD test counts as no menu (client 520,
+/// research note u1 facts-hud-map), less the read-only loot chest and the
+/// summoner menu, which are windows.
+const OPEN_SCREENS: [&str; 6] = [
+    "BlueprintMultiTool",
+    "OvergrowthMultiTool",
+    "DecayMultiTool",
+    "ScrewdriverMultiToolBuildingMode",
+    "TakeScreenshot",
+    "NoUi",
+];
 
 /// Where the HUD screen lies from the interface context: the context's
 /// G38 state, the play data in the play state, the screen byte in it, and
-/// the value of `InGame`.
+/// a bit for each screen value with no window open.
 #[derive(Debug)]
 struct Gate {
     context_state: usize,
     state_play_data: usize,
     hud_screen: usize,
-    in_game: u8,
+    open: u64,
 }
 
 /// The controls that follow game actions: where the digital input sits in
-/// `PlayerInput`, and each such control with its input bit.
+/// `PlayerInput`, and each such control.
 #[derive(Debug)]
 struct Linked {
     digital: usize,
-    bits: Vec<(usize, u8)>,
+    follows: Vec<Follow>,
 }
 
 fn now_ms() -> u64 {
@@ -110,7 +133,7 @@ pub(crate) fn register(
         .iter()
         .all(|&bits| bits == 0 || Key::from_bits(bits).is_some());
     let link_ok = spec.link.is_empty() || GameAction::ALL.iter().any(|a| a.name() == spec.link);
-    if !well_named || !keys_ok || !link_ok {
+    if !well_named || !keys_ok || !link_ok || !valid_phases(spec.fires) {
         return Status::BAD_ARGS;
     }
     let id = format!("{mod_id}:{name}");
@@ -167,7 +190,7 @@ pub(crate) fn link(loader: &Loader) {
     };
     let text = read.clone().unwrap_or_default();
     let (overrides, problems) = bindings::parse(&text);
-    let readable = read.is_some() && text.parse::<toml::Table>().is_ok();
+    let table = read.and_then(|text| text.parse::<toml::Table>().ok());
     for problem in &problems {
         crate::log!(WARN, "{}: {problem}; the mod's key applies", bindings::FILE);
     }
@@ -184,12 +207,12 @@ pub(crate) fn link(loader: &Loader) {
             unknown.join(", ")
         );
     }
-    let kept: BTreeMap<String, Override> = overrides
-        .iter()
-        .filter(|(id, _)| !declared.iter().any(|d| d.id == **id))
-        .map(|(id, set)| (id.clone(), *set))
-        .collect();
-    *STATE.kept.relock() = readable.then_some(kept);
+    *STATE.kept.relock() = table.map(|table| {
+        table
+            .into_iter()
+            .filter(|(id, _)| !declared.iter().any(|d| d.id == *id))
+            .collect()
+    });
     let keys: Vec<[u32; 2]> = declared
         .iter()
         .map(|d| {
@@ -226,15 +249,26 @@ fn game_dir(loader: &Loader) -> std::path::PathBuf {
 fn gate(loader: &Loader) -> Result<Gate, ReadGateError> {
     let table = |id: pinned::Constant| loader.offset(id).ok_or(ReadGateError::Table(id.id()));
     let in_game = catalogue::constant(catalogue::ids::HUD_SCREEN_IN_GAME, &loader.reflection)
-        .and_then(|v| u8::try_from(v).ok())
         .ok_or(ReadGateError::Reflection(
             catalogue::ids::HUD_SCREEN_IN_GAME,
         ))?;
+    let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
+    let open = OPEN_SCREENS
+        .iter()
+        .filter_map(|name| loader.reflection.enum_value(screens, name).ok())
+        .chain([in_game])
+        .filter_map(|value| 1u64.checked_shl(u32::try_from(value).ok()?))
+        .fold(0, |open, bit| open | bit);
+    if open == 0 {
+        return Err(ReadGateError::Reflection(
+            catalogue::ids::HUD_SCREEN_IN_GAME,
+        ));
+    }
     Ok(Gate {
         context_state: table(pinned::map::CONTEXT_STATE)?,
         state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
         hud_screen: table(pinned::ui::HUD_SCREEN)?,
-        in_game,
+        open,
     })
 }
 
@@ -259,7 +293,24 @@ impl ReadGateError {
 }
 
 fn link_actions(loader: &Loader, declared: &[Declared]) {
+    const FEATURE: &str = "controls that follow game actions";
     if !declared.iter().any(|d| !d.link.is_empty()) {
+        return;
+    }
+    if !crate::interactions::reads_inputs() {
+        loader.feature_off(
+            FEATURE,
+            crate::interactions::ACTIONS_SYSTEM,
+            "the link to the system that reads the players' input did not link",
+        );
+        return;
+    }
+    if !crate::events::stepped() {
+        loader.feature_off(
+            FEATURE,
+            pinned::server::POST_STEP.id(),
+            "the link after the server's step, where they fire, did not link",
+        );
         return;
     }
     let input_type = catalogue::type_name(catalogue::ids::PLAYER_INPUT_TYPE);
@@ -267,13 +318,13 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
         .and_then(|v| usize::try_from(v).ok());
     let Some(digital) = digital else {
         loader.feature_off(
-            "controls that follow game actions",
+            FEATURE,
             catalogue::ids::PLAYER_INPUT_DIGITAL,
             "the build's reflection lacks it",
         );
         return;
     };
-    let mut bits = Vec::new();
+    let mut follows = Vec::new();
     for (index, control) in declared.iter().enumerate() {
         if control.link.is_empty() {
             continue;
@@ -285,7 +336,12 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
             .and_then(|bit| u8::try_from(bit).ok())
             .filter(|bit| *bit < 64);
         if let Some(bit) = bit {
-            bits.push((index, bit));
+            follows.push(Follow {
+                index,
+                bit,
+                hold_ms: control.hold_ms,
+                fires: control.fires,
+            });
         } else {
             crate::log!(
                 WARN,
@@ -295,9 +351,9 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
             );
         }
     }
-    if !bits.is_empty() {
-        crate::log!(INFO, "controls: {} follow game actions", bits.len());
-        let _first = STATE.linked.set(Linked { digital, bits });
+    if !follows.is_empty() {
+        crate::log!(INFO, "controls: {} follow game actions", follows.len());
+        let _first = STATE.linked.set(Linked { digital, follows });
     }
 }
 
@@ -329,12 +385,9 @@ fn fire(control: &Declared, kind: u32, player: Option<&PlayerInfo>) {
 }
 
 thread_local! {
-    /// The client's trackers, one per control, on the interface thread.
-    static TRACKERS: RefCell<Vec<Tracker>> = const { RefCell::new(Vec::new()) };
-    /// The server's trackers by player entity, then control, on its game
-    /// thread.
-    static SERVER: RefCell<rustc_hash::FxHashMap<(u32, usize), Tracker>> =
-        RefCell::new(rustc_hash::FxHashMap::default());
+    /// The client's trackers, one per control, and whether each control is
+    /// down this frame, on the interface thread.
+    static LOOK: RefCell<(Vec<Tracker>, Vec<bool>)> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
 /// Looks at the keys once, in the interface frame of the live interface
@@ -351,28 +404,18 @@ pub(crate) fn frame(context: usize) {
     };
     let _ran = KEYS_FUSE.run("the mod control keys", || {
         // SAFETY: the one caller passes the frame's live interface context,
-        // on the interface thread, whose chain to the play data the table's
-        // `map.context_state` and `map.state_play_data` give (clients 410,
-        // 426 and 520).
-        let open = unsafe { in_game(context, gate) } && focused();
-        let states = input::read(&keys);
+        // on the interface thread.
+        let open = unsafe { in_game(context, gate) };
+        let window = if open { input::focused_thread() } else { None };
         let now = now_ms();
-        TRACKERS.with_borrow_mut(|trackers| {
-            if trackers.len() != declared.len() {
-                trackers.resize(declared.len(), Tracker::default());
-            }
-            for ((control, tracker), bound) in
-                declared.iter().zip(trackers.iter_mut()).zip(keys.iter())
-            {
+        LOOK.with_borrow_mut(|(trackers, down)| {
+            input::chords(&keys, window, down);
+            trackers.resize(declared.len(), Tracker::default());
+            for ((control, tracker), down) in declared.iter().zip(trackers.iter_mut()).zip(down) {
                 if control_off(control) {
                     continue;
                 }
-                let (down, tapped) = if open {
-                    states.chord(*bound)
-                } else {
-                    (false, false)
-                };
-                let kind = tracker.look(down, tapped, now, control.hold_ms) & control.fires;
+                let kind = tracker.look(*down, now, control.hold_ms) & control.fires;
                 for bit in phases(kind) {
                     fire(control, bit, None);
                 }
@@ -388,7 +431,7 @@ fn control_off(control: &Declared) -> bool {
         .is_none_or(|m| m.off.load(core::sync::atomic::Ordering::Acquire))
 }
 
-/// Whether the interface's current HUD screen is the world with nothing
+/// Whether the interface's current HUD screen is the world with no window
 /// open.
 ///
 /// # Safety
@@ -396,30 +439,19 @@ fn control_off(control: &Declared) -> bool {
 /// - `context` is the live interface context of the frame being drawn, on
 ///   the interface thread.
 unsafe fn in_game(context: usize, gate: &Gate) -> bool {
-    use crate::memory::{read, read_ptr};
-    // SAFETY: the caller passes the live interface context, which holds its
-    // G38 state pointer at `map.context_state`.
-    let state = unsafe { read_ptr::<u8>(context, gate.context_state) };
-    if state.is_null() {
-        return false;
-    }
-    // SAFETY: `state` is the context's non-null G38 state (checked before
-    // it), whose first word is the play state pointer or null (clients 410,
-    // 426 and 520).
-    let play = unsafe { read_ptr::<u8>(state.expose_provenance(), 0) };
-    if play.is_null() {
-        return false;
-    }
-    // SAFETY: `play` is the non-null play state (checked before it), which
-    // holds its play data pointer at `map.state_play_data`.
-    let data = unsafe { read_ptr::<u8>(play.expose_provenance(), gate.state_play_data) };
-    if data.is_null() {
+    // SAFETY: the caller passes the live interface context on the interface
+    // thread; the offsets are the table's `map.context_state` and
+    // `map.state_play_data`.
+    let data = unsafe { crate::ui::play_data(context, gate.context_state, gate.state_play_data) };
+    if data == 0 {
         return false;
     }
     // SAFETY: `data` is the non-null play data (checked before it), whose
     // HUD screen byte sits at `ui.hud_screen`, as `ui.hud_visible` reads it
     // (clients 410, 426 and 520).
-    unsafe { read::<u8>(data.expose_provenance(), gate.hud_screen) == gate.in_game }
+    let screen = unsafe { crate::memory::read::<u8>(data, gate.hud_screen) };
+    1u64.checked_shl(screen.into())
+        .is_some_and(|bit| gate.open & bit != 0)
 }
 
 /// Whether any declared control follows a game action on this build.
@@ -427,63 +459,71 @@ pub(crate) fn linked() -> bool {
     STATE.linked.get().is_some() && !LINKED_FUSE.is_off()
 }
 
-/// The server's look at player `entity`'s `PlayerInput`, at `input`, once a
-/// step on its game thread: each linked control fires on its bit.
+/// The server's look at `players`, the character entities in its world,
+/// once a step during it, on whatever thread runs the inventory system:
+/// each linked control looks at its bit of the player's `PlayerInput`,
+/// which `input` finds, and what fires waits for [`after_step`].
 ///
 /// # Safety
 ///
-/// - `input` is the player's live `PlayerInput` component, read during the
-///   step on the game thread.
-pub(crate) unsafe fn server_input(entity: u32, input: *const u8) {
-    let (Some(linked), Some(declared)) = (STATE.linked.get(), DECLARED.sealed()) else {
+/// - `input` returns `None`, null or the player's live `PlayerInput`
+///   component, which stays readable and unwritten during the call.
+pub(crate) unsafe fn step(players: &[u32], input: impl Fn(u32) -> Option<*const u8>) {
+    let Some(linked) = STATE.linked.get() else {
         return;
     };
-    // SAFETY: the caller passes the live `PlayerInput`, whose digital input
-    // word sits at the reflected `fromClient.digitalInput`.
-    let digital: u64 = unsafe { enshwick::raw::read_at(input, linked.digital) };
+    if LINKED_FUSE.is_off() {
+        return;
+    }
     let now = now_ms();
     let _ran = LINKED_FUSE.run("the controls that follow game actions", || {
-        let fired: Vec<(usize, u32)> = SERVER.with_borrow_mut(|trackers| {
-            linked
-                .bits
-                .iter()
-                .filter_map(|&(index, bit)| {
-                    let control = declared.get(index)?;
-                    let down = digital & (1 << bit) != 0;
-                    let tracker = trackers.entry((entity, index)).or_default();
-                    let kind = tracker.look(down, false, now, control.hold_ms) & control.fires;
-                    (kind != 0 && !control_off(control)).then_some((index, kind))
-                })
-                .collect()
-        });
-        if fired.is_empty() {
+        STATE
+            .players
+            .relock()
+            .step(&linked.follows, players, now, |entity| {
+                let input = input(entity).filter(|input| !input.is_null())?;
+                // SAFETY: the caller's contract: `input` is the player's live
+                // `PlayerInput`, whose digital input word sits at the
+                // reflected `fromClient.digitalInput`.
+                Some(unsafe { enshwick::raw::read_at::<u64>(input, linked.digital) })
+            });
+    });
+}
+
+/// Fires what the steps' looks queued, on the server's game thread after
+/// its step, where a handler may change the world. A firing for a player
+/// not in game is dropped, and its control looks again from the start.
+pub(crate) fn after_step(loader: &Loader) {
+    let (Some(_), Some(declared)) = (STATE.linked.get(), DECLARED.sealed()) else {
+        return;
+    };
+    let ready = {
+        let mut players = STATE.players.relock();
+        if !players.waiting() {
             return;
         }
-        let Some(player) = crate::host::loader()
-            .and_then(|loader| crate::world::players(loader).ok())
-            .and_then(|players| players.into_iter().find(|p| p.entity.0 == entity))
-        else {
-            return;
-        };
-        for (index, kind) in fired {
-            if let Some(control) = declared.get(index) {
-                for bit in phases(kind) {
-                    fire(control, bit, Some(&player));
-                }
+        let found = crate::world::players(loader).unwrap_or_default();
+        players.settle(|entity| found.iter().find(|p| p.entity.0 == entity).copied())
+    };
+    let _ran = LINKED_FUSE.run("the controls that follow game actions", || {
+        for (firing, player) in &ready {
+            let Some(control) = declared.get(firing.index) else {
+                continue;
+            };
+            if control_off(control) {
+                continue;
+            }
+            for bit in phases(firing.kind) {
+                fire(control, bit, Some(player));
             }
         }
     });
 }
 
-/// Drops the trackers of players no longer in `players`, the character
-/// entities of the step, on the server's game thread.
-pub(crate) fn players_seen(players: &[u32]) {
-    SERVER.with_borrow_mut(|trackers| trackers.retain(|(entity, _), _| players.contains(entity)));
-}
-
-/// Forgets the players' trackers, as when the server's world goes away.
+/// Forgets the players' trackers and waiting firings, as when the server's
+/// world goes away.
 pub(crate) fn forget() {
-    SERVER.with_borrow_mut(rustc_hash::FxHashMap::clear);
+    STATE.players.relock().forget();
 }
 
 /// A control as the controls page shows it.
@@ -532,7 +572,7 @@ pub(crate) fn set_key(
     index: usize,
     slot: usize,
     bits: u32,
-) -> Result<(), std::io::Error> {
+) -> Result<(), SetKeyError> {
     let (Some(declared), Some(keys)) = (DECLARED.sealed(), STATE.keys.load_full()) else {
         return Ok(());
     };
@@ -542,7 +582,7 @@ pub(crate) fn set_key(
     {
         *key = bits;
     }
-    let mut entries: Vec<(String, Override)> = declared
+    let entries: Vec<(String, bindings::Override)> = declared
         .iter()
         .zip(&keys)
         .map(|(d, k)| {
@@ -552,16 +592,24 @@ pub(crate) fn set_key(
         .collect();
     STATE.keys.store(Some(std::sync::Arc::new(keys)));
     let Some(kept) = STATE.kept.relock().clone() else {
-        return Err(std::io::Error::other(format!(
-            "{} did not read when the game started; fix or delete it",
-            bindings::FILE
-        )));
+        return Err(SetKeyError::Unread);
     };
-    entries.extend(kept);
     let path = game_dir(loader).join(bindings::FILE);
     let fresh = path.with_extension("toml.new");
-    std::fs::write(&fresh, bindings::render(&entries))?;
-    std::fs::rename(&fresh, &path)
+    std::fs::write(&fresh, bindings::render(&entries, &kept))?;
+    std::fs::rename(&fresh, &path)?;
+    Ok(())
+}
+
+/// Why a key was not saved.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum SetKeyError {
+    /// The file did not read when the game started; writing would lose it.
+    #[error("{} did not read when the game started", bindings::FILE)]
+    Unread,
+    /// Windows refused the write.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 mod input;

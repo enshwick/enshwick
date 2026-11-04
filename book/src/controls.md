@@ -27,9 +27,10 @@ The player presses H in the world, and the handler runs on their client.
 ## When a key fires
 
 The client reads a control's key once a frame while its player is in the
-world: never while the chat, a menu, the inventory or another of the game's
-screens is open, and only while the game's window has the focus. The game
-keeps the key too: a mod key that is also a game key does both.
+world, a building tool in hand and screenshot mode included: never while the
+chat, a menu, the inventory or another of the game's screens is open, and
+only while the game's window has the focus. The game keeps the key too: a
+mod key that is also a game key does both.
 
 A key is a place on the keyboard, not a letter: `Key::parse("Q")` is the key
 left of W on every layout, and the controls page shows it with the name the
@@ -45,13 +46,13 @@ Windows reports it as Enter.
 | ----------------------------- | -------------------------------------------------------------------- |
 | `Control::new(name, label)`   | a control; `name` is 1 to 32 of `[a-z0-9-]`, `label` the page's text |
 | `.key(key)`, `.second(key)`   | the default key and a second one                                     |
-| `.fires(&[Phase, ...])`       | when it fires, in place of `Phase::Press` alone                      |
+| `.fires(&[Phase, ...])`       | when it fires, in place of `Phase::Press` alone; empty keeps it      |
 | `.hold_for(duration)`         | how long a key stays down before `Phase::Hold`; 500 ms by default    |
 | `.link(GameAction)`           | fires on the server when the player's game action fires              |
 
-`Phase::Press` fires once when the key goes down, even for a tap shorter
-than a frame; `Phase::Hold` once when it stayed down for the hold time,
-never from key repeat; `Phase::Release` once when it comes up.
+`Phase::Press` fires once when the key goes down; `Phase::Hold` once when it
+stayed down for the hold time, never from key repeat; `Phase::Release` once
+when it comes up. A key pressed and let go between two frames may be missed.
 
 ## Changing the world
 
@@ -81,7 +82,8 @@ A control linked to a game action reads the game's own decision instead of
 a key: `GameAction::ContextualAction` fires whenever the player interacts,
 on whatever key, button or gamepad they bound to it. It fires on the
 server, for that player, also for a player without Enshwick; the handler
-finds the player in `fired.player`.
+finds the player in `fired.player`. The handler runs on the game thread
+after the server's step, where it may change the world.
 
 ```rust
 use enshwick::controls::{Control, GameAction};
@@ -127,7 +129,9 @@ second = 0 # none
 Keys need Enshwick on the player's client and a game build whose table finds
 the game's current screen; without it the Controls page says the keys are
 off. Linked controls run in the game server: the dedicated server, and a
-client while it hosts a game, single player included.
+client while it hosts a game, single player included. There a control with a
+key and a game action may run its handler on the interface thread and the
+game thread at once.
 
 ## Scripts
 
@@ -140,10 +144,10 @@ acts on the side the control fires on.
 ## Testing
 
 With the `test` feature, the [fake loader](testing.md) reads keys as the
-client does: `keys(&down, &tapped, after)` looks at the keys held now and
-those tapped since the last look, `after` the last look, and fires each
-matching control; `game_action(&player, action)` fires the linked ones as
-the server does. `FakeHost::bind(name, slot, key)` sets one of the player's
+client does: `keys(&down, after)` looks at the keys held now, `after` the
+last look, and fires each matching control, on a client only;
+`game_actions(&player, &held, after)` looks at the game actions the player
+holds as the server does once a step, and fires the linked controls. `FakeHost::bind(name, slot, key)` sets one of the player's
 keys, `FakeHost::side(Side::CLIENT)` makes the fake a client, which alone
 sends player actions,
 `controls()` lists the controls with their keys in force, and
