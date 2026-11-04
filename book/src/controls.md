@@ -3,9 +3,8 @@
 Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
-A mod declares the keys its players press, each a control with a name, a
-label and a default key. Players see every mod's controls on the
-[Mods screen](interface.md#the-mods-screen) and change the keys there.
+A mod declares the keys its players press; players change them on the
+[Mods screen](interface.md#the-mods-screen).
 
 ## A first control
 

@@ -731,7 +731,7 @@ typedef struct EnshwickControlEvent {
 // A control a mod declares with `HostApi::control`
 // during `enshwick_mod_init`.
 //
-// A key is a `Key` value: the key's scan code in
+// A key is a `controls::Key` value, with the `unstable` feature: the key's scan code in
 // bits 0 to 9 (bit 8 for an extended key, bit 9 for a mouse button) and the
 // modifiers that must be down with it in bits 16 to 18.
 typedef struct EnshwickControlSpec {

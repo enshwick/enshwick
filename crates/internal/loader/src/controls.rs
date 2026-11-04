@@ -177,8 +177,8 @@ pub(crate) fn link(loader: &Loader) {
             let _first = GATE.set(found);
             crate::log!(INFO, "controls: keys of {} controls on", declared.len());
         }
-        Err((id, reason)) => {
-            loader.feature_off("mod control keys", id, &reason);
+        Err(why) => {
+            loader.feature_off("mod control keys", why.id(), &why.to_string());
         }
     }
 }
@@ -195,17 +195,12 @@ fn game_dir(loader: &Loader) -> std::path::PathBuf {
         .map_or_else(|| loader.mods_dir.clone(), std::path::Path::to_path_buf)
 }
 
-fn gate(loader: &Loader) -> Result<Gate, (&'static str, String)> {
-    let table = |id: pinned::Constant| {
-        loader
-            .offset(id)
-            .ok_or((id.id(), "this build's table lacks it".to_owned()))
-    };
+fn gate(loader: &Loader) -> Result<Gate, ReadGateError> {
+    let table = |id: pinned::Constant| loader.offset(id).ok_or(ReadGateError::Table(id.id()));
     let in_game = catalogue::constant(catalogue::ids::HUD_SCREEN_IN_GAME, &loader.reflection)
         .and_then(|v| u8::try_from(v).ok())
-        .ok_or((
+        .ok_or(ReadGateError::Reflection(
             catalogue::ids::HUD_SCREEN_IN_GAME,
-            "the build's reflection lacks it".to_owned(),
         ))?;
     Ok(Gate {
         context_state: table(pinned::map::CONTEXT_STATE)?,
@@ -213,6 +208,26 @@ fn gate(loader: &Loader) -> Result<Gate, (&'static str, String)> {
         hud_screen: table(pinned::ui::HUD_SCREEN)?,
         in_game,
     })
+}
+
+/// Why the screen gate does not read on this build.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+enum ReadGateError {
+    /// The build table lacks the entry.
+    #[error("this build's table lacks {0}")]
+    Table(&'static str),
+    /// The build's reflection lacks the fact.
+    #[error("the build's reflection lacks {0}")]
+    Reflection(&'static str),
+}
+
+impl ReadGateError {
+    /// The entry or fact missing.
+    const fn id(self) -> &'static str {
+        match self {
+            Self::Table(id) | Self::Reflection(id) => id,
+        }
+    }
 }
 
 fn link_actions(loader: &Loader, declared: &[Declared]) {
