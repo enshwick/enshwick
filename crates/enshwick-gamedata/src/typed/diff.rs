@@ -289,19 +289,23 @@ impl Catalogue {
                     .count()
                     == 1
             };
-            let change = match candidates.as_slice() {
-                [] => Change::Removed,
+            let entry = changes.entry(old.name.clone()).or_default();
+            match candidates.as_slice() {
+                [] => entry.push(Change::Removed),
                 [to] if recorded.is_some() || matched_back(to) => {
                     renamed_to.insert(*to);
-                    Change::Renamed {
+                    entry.push(Change::Renamed {
                         to: (*to).to_owned(),
+                    });
+                    // A recorded rename may change the layout too.
+                    if let Some(now) = new.types.get(*to) {
+                        entry.extend(changed(old, now, known));
                     }
                 }
-                many => Change::Unsure {
+                many => entry.push(Change::Unsure {
                     candidates: many.iter().map(|c| (*c).to_owned()).collect(),
-                },
-            };
-            changes.entry(old.name.clone()).or_default().push(change);
+                }),
+            }
         }
         for name in added.iter().filter(|n| !renamed_to.contains(*n)) {
             changes

@@ -143,7 +143,7 @@ enum Command {
     /// that executable's reflection first.
     Generate {
         /// The game executable, or the game folder holding it, to snapshot.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "check")]
         from: Option<PathBuf>,
         /// The enshwick repository to write in.
         #[arg(long, default_value = ".")]

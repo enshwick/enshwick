@@ -170,3 +170,70 @@ pub(crate) fn run(root: &Path, from: Option<&Path>, check: bool) -> anyhow::Resu
     ));
     Ok(done.join("\n"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A repository with the gamedata fixture as the newest server build's
+    /// snapshot.
+    fn repo(name: &str) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("typed-generate-{name}-{}", std::process::id()));
+        drop(std::fs::remove_dir_all(&root));
+        let tables = tables().unwrap();
+        let table = newest(&tables, Side::Server).unwrap();
+        let snapshot = root.join(snapshot_path(&table.file_name()));
+        std::fs::create_dir_all(snapshot.parent().unwrap()).unwrap();
+        std::fs::write(
+            &snapshot,
+            include_str!("../../enshwick-gamedata/src/typed/fixture.jsonl"),
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join(TYPED)).unwrap();
+        std::fs::write(root.join(RUNTIME), "// hand-written\n").unwrap();
+        root
+    }
+
+    #[test]
+    fn the_typed_api_is_written_then_checked_and_a_hand_edit_or_stale_module_fails() {
+        let root = repo("check");
+        let wrote = run(&root, None, false).unwrap();
+        assert!(wrote.starts_with("wrote 4 files"), "{wrote}");
+        assert!(
+            run(&root, None, true)
+                .unwrap()
+                .starts_with("the typed API matches")
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join(RUNTIME)).unwrap(),
+            "// hand-written\n"
+        );
+
+        let ecs = root.join(TYPED).join("ecs.rs");
+        std::fs::write(&ecs, "// edited\n").unwrap();
+        let error = run(&root, None, true).unwrap_err().to_string();
+        assert!(error.contains("ecs.rs"), "{error}");
+
+        let stale = root.join(TYPED).join("gone.rs");
+        std::fs::write(&stale, "").unwrap();
+        run(&root, None, false).unwrap();
+        assert!(!stale.exists(), "a stale module is removed");
+        std::fs::write(&stale, "").unwrap();
+        let error = run(&root, None, true).unwrap_err().to_string();
+        assert!(error.contains("gone.rs (stale)"), "{error}");
+        drop(std::fs::remove_dir_all(&root));
+    }
+
+    #[test]
+    fn a_rename_table_reads_and_a_broken_one_is_an_error() {
+        let root = repo("renames");
+        assert_eq!(renames(&root).unwrap(), Renames::default());
+        let table = root.join(SNAPSHOTS).join(RENAMES);
+        std::fs::write(&table, "[[types]]\nfrom = \"demo::A\"\nto = \"demo::B\"\n").unwrap();
+        assert_ne!(renames(&root).unwrap(), Renames::default());
+        std::fs::write(&table, "[[types]]\nfrom = 1\n").unwrap();
+        assert!(renames(&root).is_err());
+        drop(std::fs::remove_dir_all(&root));
+    }
+}

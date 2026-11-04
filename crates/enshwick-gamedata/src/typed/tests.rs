@@ -233,6 +233,60 @@ fn a_renamed_type_resolves_under_its_old_id() {
     );
 }
 
+#[test]
+fn a_recorded_rename_still_reports_a_changed_layout() {
+    let mut new = next_build();
+    let loot = new.types.get_mut("demo::LootTableResource").unwrap();
+    loot.size = 32;
+    loot.fields.pop();
+    let recorded = Renames::parse(
+        "[[types]]\nfrom = \"demo::LootResource\"\nto = \"demo::LootTableResource\"\n",
+    )
+    .unwrap();
+    let diff = fixture().diff(&new, &recorded);
+    let changes = &diff.changes["demo::LootResource"];
+    assert_eq!(
+        changes[0],
+        Change::Renamed {
+            to: "demo::LootTableResource".to_owned()
+        }
+    );
+    assert!(changes.contains(&Change::FieldRemoved("item".to_owned())));
+    assert!(changes.iter().any(Change::needs_person), "{changes:?}");
+}
+
+#[test]
+fn a_type_renamed_twice_resolves_its_first_name_under_the_last() {
+    let mut new = fixture();
+    let mut loot = new.types.remove("demo::LootResource").unwrap();
+    loot.name = "demo::LootCResource".to_owned();
+    new.types.insert(loot.name.clone(), loot);
+    let renames = Renames::parse(
+        "[[types]]\nfrom = \"demo::LootResource\"\nto = \"demo::LootBResource\"\n\n\
+         [[types]]\nfrom = \"demo::LootBResource\"\nto = \"demo::LootCResource\"\n",
+    )
+    .unwrap();
+    let table = new.ids_file("b", &renames).unwrap();
+    assert!(
+        table.contains("\"LootResource\" => \"demo::LootCResource\""),
+        "{table}"
+    );
+    assert!(
+        table.contains("\"LootBResource\" => \"demo::LootCResource\""),
+        "{table}"
+    );
+}
+
+#[test]
+fn a_namespace_named_like_a_runtime_module_is_refused_at_any_depth() {
+    let mut catalogue = fixture();
+    let mut deep = catalogue.types["demo::ecs::Component"].clone();
+    deep.name = "demo::root::sub::Thing".to_owned();
+    catalogue.types.insert(deep.name.clone(), deep);
+    let error = catalogue.rust("b").unwrap_err().to_string();
+    assert!(error.contains("demo::root::sub::Thing"), "{error}");
+}
+
 /// The real change from server build 387 to the committed snapshot's build,
 /// when `ENSH_SERVER_EXE` names build 387; its counts go on the stability
 /// rules' ticket.

@@ -179,9 +179,20 @@ impl Catalogue {
     /// The ids of renamed types as older mods know them, each with the new
     /// full name: the loader resolves an old id under its new name.
     fn aliases(&self, renames: &Renames) -> Vec<(String, String)> {
+        // A type renamed again resolves to its newest name.
+        fn newest<'r>(renames: &'r Renames, mut to: &'r str) -> &'r str {
+            for _ in 0..MAX_HOPS {
+                match renames.types().find(|(from, _)| *from == to) {
+                    Some((_, next)) => to = next,
+                    None => break,
+                }
+            }
+            to
+        }
         let root = root_of(self);
         let mut aliases: Vec<(String, String)> = renames
             .types()
+            .map(|(from, to)| (from, newest(renames, to)))
             .filter(|(_, to)| self.types.get(*to).is_some_and(|t| !t.roles.is_empty()))
             .map(|(from, to)| (id(&place_of(from, &root)), to.to_owned()))
             .collect();
@@ -217,7 +228,7 @@ impl<'c> Writer<'c> {
             let reserved = if module.is_empty() {
                 RUNTIME.contains(&name.as_str())
             } else {
-                module.len() == 1 && MODULES.contains(&module[0].as_str())
+                MODULES.contains(&module[0].as_str())
             };
             let names = taken.entry(module.clone()).or_default();
             if reserved {
