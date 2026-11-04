@@ -12,6 +12,14 @@
 //! server's join values, and the bytes that differ are written over the
 //! resource the game holds. The game keeps reading the first build's
 //! address, so a rebuild must come out the same length.
+//!
+//! Which reads pass the served path, from a live check on dedicated server
+//! build 26319703 (a server copy, a world loaded, no player):
+//!
+//! | Side | Reads |
+//! | --- | --- |
+//! | Server | Every type it was checked for goes through open and resolve: the balancing table, game setting presets, loot tables, skill tree, perks, buff types, item infos, recipes, workshops and templates at start; model hierarchies and joint animations on demand from world load. The server links the served path before its own code reads a resource. |
+//! | Client | Links the served path once its window shows, about 1.6 s after start; a resource it resolves before that stays vanilla for the run. Which types those are is open until an in-game check. |
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
