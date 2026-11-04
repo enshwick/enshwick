@@ -331,6 +331,7 @@ fn a_loader_patch_a_thread_stays_in_is_skipped_and_never_waits() {
 
 #[test]
 #[should_panic(expected = "outside the batch")]
+#[cfg_attr(not(debug_assertions), ignore = "checks a debug assertion")]
 fn a_stuck_patch_id_outside_the_batch_is_a_bug() {
     use crate::code::Verdict;
 

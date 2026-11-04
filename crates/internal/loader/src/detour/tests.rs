@@ -257,7 +257,9 @@ extern "system" fn drive(original: usize, walked: *mut Vec<usize>) {
         core::mem::transmute::<usize, extern "system" fn(*mut Vec<usize>, usize) -> u32>(original)
     };
     let walk_at = (walk as extern "system" fn(*mut Vec<usize>) -> u32 as *const ()).addr();
-    call(walked, walk_at);
+    // Without it, an optimised build tail-jumps to the trampoline and `drive`
+    // keeps no frame and no function entry for the walk to pass through.
+    std::hint::black_box(call(walked, walk_at));
 }
 
 #[test]
