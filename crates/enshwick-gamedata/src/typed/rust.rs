@@ -31,11 +31,18 @@ const RUNTIME: &[&str] = &[
 const MODULES: &[&str] = &["root", "runtime"];
 
 /// Lints the game's names trip in generated code, which a person cannot
-/// rename.
-const ALLOWED: &str = "clippy::doc_markdown, clippy::module_name_repetitions, \
-    clippy::struct_field_names, clippy::struct_excessive_bools, \
-    clippy::large_enum_variant, clippy::enum_variant_names, \
-    clippy::upper_case_acronyms";
+/// rename, and the paths that stay whole where a game type shadows a
+/// prelude name.
+const ALLOWED: &[&str] = &[
+    "clippy::doc_markdown",
+    "clippy::module_name_repetitions",
+    "clippy::struct_field_names",
+    "clippy::struct_excessive_bools",
+    "clippy::large_enum_variant",
+    "clippy::enum_variant_names",
+    "clippy::upper_case_acronyms",
+    "unused_qualifications",
+];
 
 /// Why the generator cannot write a build's items.
 ///
@@ -144,6 +151,12 @@ fn id(place: &Place) -> String {
     parts.join("::")
 }
 
+/// The Rust type the generated root module names the game type `name` by.
+#[cfg(test)]
+pub(super) fn type_of(catalogue: &Catalogue, name: &str) -> String {
+    Writer::new(catalogue).map_or_else(|e| e.to_string(), |w| w.rust_type(name, &[], 0))
+}
+
 impl<'c> Writer<'c> {
     fn new(catalogue: &'c Catalogue) -> Result<Self, GenerateError> {
         let root = catalogue
@@ -227,21 +240,26 @@ impl<'c> Writer<'c> {
             }
             _ if hops > MAX_HOPS => VALUE.to_owned(),
             Kind::StaticArray | Kind::BlobArray | Kind::DsArray => {
-                format!("Vec<{}>", inner(hops + 1))
+                format!("::std::vec::Vec<{}>", inner(hops + 1))
             }
-            Kind::BlobString | Kind::DsString => "String".to_owned(),
+            Kind::BlobString | Kind::DsString => "::std::string::String".to_owned(),
             Kind::BlobOptional | Kind::DsOptional => {
                 let held = ty
                     .inner
                     .as_deref()
                     .and_then(|i| self.catalogue.types.get(i));
                 if held.is_some_and(|h| h.kind == Kind::Struct) {
-                    format!("Option<Box<{}>>", inner(hops + 1))
+                    format!(
+                        "::core::option::Option<::std::boxed::Box<{}>>",
+                        inner(hops + 1)
+                    )
                 } else {
-                    format!("Option<{}>", inner(hops + 1))
+                    format!("::core::option::Option<{}>", inner(hops + 1))
                 }
             }
-            Kind::BlobVariant | Kind::DsVariant => "Option<crate::resources::Variant>".to_owned(),
+            Kind::BlobVariant | Kind::DsVariant => {
+                "::core::option::Option<crate::resources::Variant>".to_owned()
+            }
             Kind::ObjectReference | Kind::Guid => "crate::content::Guid".to_owned(),
             _ => VALUE.to_owned(),
         }
@@ -295,7 +313,14 @@ impl<'c> Writer<'c> {
                     || "crate::resources::Value".to_owned(),
                     |inner| self.rust_type(inner, &place.module, 1),
                 );
-                format!("/// {doc}\npub type {} = {target};\n", place.name)
+                let line = format!("pub type {} = {target};", place.name);
+                // As rustfmt wraps a line past its width of 100.
+                let line = if line.len() > 100 {
+                    format!("pub type {} =\n    {target};", place.name)
+                } else {
+                    line
+                };
+                format!("/// {doc}\n{line}\n")
             }
             _ => self.struct_item(ty, place, &doc),
         };
@@ -348,7 +373,18 @@ fn enum_item(ty: &Ty, place: &Place, doc: &str) -> String {
     );
     let mut taken = BTreeSet::from(["Other".to_owned()]);
     for (name, value) in &ty.values {
-        let variant = super::names::unique(camel(name), &mut taken);
+        let base = camel(name);
+        let variant = (1..)
+            .map(|n| {
+                if n == 1 {
+                    base.clone()
+                } else {
+                    format!("{base}{n}")
+                }
+            })
+            .find(|candidate| !taken.contains(candidate))
+            .unwrap_or_default();
+        taken.insert(variant.clone());
         let _ = write!(
             out,
             "        /// `{name}`, {value}.\n        {variant} = \"{name}\",\n"
@@ -381,11 +417,11 @@ impl Catalogue {
              //! name for it, sorted by id.\n\n",
         );
         out.push_str(&header(build));
-        out.push_str("\npub(super) const IDS: &[(&str, &str)] = &[\n");
+        out.push_str("\nsuper::id_table! {\n");
         for (id, name) in self.ids()? {
-            let _ = writeln!(out, "    (\"{id}\", \"{name}\"),");
+            let _ = writeln!(out, "    \"{id}\" => \"{name}\",");
         }
-        out.push_str("];\n");
+        out.push_str("}\n");
         Ok(out)
     }
 }
@@ -420,9 +456,10 @@ fn header(build: &str) -> String {
 fn root_file(top: &BTreeSet<&String>, build: &str) -> String {
     let mut out = String::from(
         "//! Every component, event and resource the game reflects, as typed Rust\n\
-         //! items generated from the game's own reflection: a module per\n\
-         //! reflected namespace, read and written by field name, so a type whose\n\
-         //! shape a build changes turns off alone.\n\
+         //! items generated from the game's own reflection.\n\
+         //!\n\
+         //! A module per reflected namespace holds its types, read and written\n\
+         //! by field name, so a type whose shape a build changes turns off alone.\n\
          //!\n\
          //! # Examples\n\
          //!\n\
@@ -433,7 +470,7 @@ fn root_file(top: &BTreeSet<&String>, build: &str) -> String {
          //!     let health = ComponentType::<Health>::resolve(load)?;\n\
          //!     let world = load.world()?;\n\
          //!     load.on::<enshwick::events::PlayerJoined>(move |joined| {\n\
-         //!         if let Ok(Some(value)) = health.read(&world, joined.entity) {\n\
+         //!         if let Ok(Some(value)) = health.read(world, joined.entity) {\n\
          //!             enshwick::info!(\"{value:?}\");\n\
          //!         }\n\
          //!     })\n\
@@ -464,10 +501,11 @@ fn module_file(
          //! The game's types of {what}.\n\n"
     );
     out.push_str(&header(build));
-    let _ = writeln!(
-        out,
-        "\n#![allow({ALLOWED}, reason = \"the game's own names\")]"
-    );
+    out.push_str("\n#![allow(\n");
+    for lint in ALLOWED {
+        let _ = writeln!(out, "    {lint},");
+    }
+    out.push_str("    reason = \"the game's own names\"\n)]\n");
     write_items(&mut out, items, modules, path, 0);
     out
 }
@@ -490,9 +528,10 @@ fn write_items(
             }
         }
     }
+    // The root namespace's children are files of their own.
     let children: BTreeSet<&String> = modules
         .keys()
-        .filter(|m| m.len() == path.len() + 1 && m.starts_with(path))
+        .filter(|m| !path.is_empty() && m.len() == path.len() + 1 && m.starts_with(path))
         .map(|m| &m[path.len()])
         .collect();
     for child in children {

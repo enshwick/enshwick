@@ -124,8 +124,7 @@ pub trait Event: Named {}
 /// See [`ResourceType`].
 pub trait Resource: Named {}
 
-#[doc(hidden)]
-pub mod sealed {
+pub(crate) mod sealed {
     /// Keeps [`Named`](super::Named) to the generated types.
     pub trait Sealed {}
 }
@@ -234,8 +233,7 @@ impl<E: Reflected> Reflected for Flags<E> {
 /// # Errors
 ///
 /// [`ShapeError`] when the struct lacks the field or it is not `T`'s shape.
-#[doc(hidden)]
-pub fn field<T: Reflected>(value: &Value, name: &str) -> Result<T, ShapeError> {
+pub(crate) fn field<T: Reflected>(value: &Value, name: &str) -> Result<T, ShapeError> {
     let found = value.field(name).ok_or_else(|| ShapeError {
         path: vec![name.to_owned()],
         expected: "a field this build lacks".to_owned(),
@@ -244,9 +242,8 @@ pub fn field<T: Reflected>(value: &Value, name: &str) -> Result<T, ShapeError> {
 }
 
 /// The fields of the struct `value`, written before a derived type's own.
-#[doc(hidden)]
 #[must_use]
-pub fn fields_of(value: Value) -> Vec<(String, Value)> {
+pub(crate) fn fields_of(value: Value) -> Vec<(String, Value)> {
     match value {
         Value::Struct(fields) => fields,
         _ => Vec::new(),
@@ -276,22 +273,23 @@ macro_rules! reflected_struct {
         impl $crate::typed::Reflected for $name {
             fn from_value(
                 value: &$crate::resources::Value,
-            ) -> Result<Self, $crate::typed::ShapeError> {
-                Ok(Self {
+            ) -> ::core::result::Result<Self, $crate::typed::ShapeError> {
+                // A type without fields reads nothing of it.
+                let _ = value;
+                ::core::result::Result::Ok(Self {
                     $(base: <$base as $crate::typed::Reflected>::from_value(value)?,)?
                     $($field: $crate::typed::runtime::field(value, $game)?,)*
                 })
             }
 
             fn to_value(&self) -> $crate::resources::Value {
-                let fields = core::iter::empty()
-                    $(.chain({
-                        let _: Option<$base> = None;
-                        $crate::typed::runtime::fields_of($crate::typed::Reflected::to_value(&self.base))
-                    }))?
-                    $(.chain([($game.to_owned(), $crate::typed::Reflected::to_value(&self.$field))]))*
-                    .collect();
-                $crate::resources::Value::Struct(fields)
+                let parts: [::std::vec::Vec<(::std::string::String, $crate::resources::Value)>; _] = [
+                    $($crate::typed::runtime::fields_of(
+                        <$base as $crate::typed::Reflected>::to_value(&self.base),
+                    ),)?
+                    ::std::vec![$(($game.to_owned(), $crate::typed::Reflected::to_value(&self.$field)),)*],
+                ];
+                $crate::resources::Value::Struct(parts.into_iter().flatten().collect())
             }
         }
     };
@@ -320,9 +318,9 @@ macro_rules! reflected_enum {
         impl $crate::typed::Reflected for $name {
             fn from_value(
                 value: &$crate::resources::Value,
-            ) -> Result<Self, $crate::typed::ShapeError> {
+            ) -> ::core::result::Result<Self, $crate::typed::ShapeError> {
                 let constant = $crate::typed::Constant::from_value(value)?;
-                Ok(match &constant {
+                ::core::result::Result::Ok(match &constant {
                     $($crate::typed::Constant::Name(name) if name == $game => Self::$variant,)*
                     _ => Self::Other(constant),
                 })
@@ -554,7 +552,7 @@ fn off<T: Named>(host: Host, why: &str) -> Off {
 /// ) -> Result<(), enshwick::Off> {
 ///     let ty = ComponentType::<T>::resolve(load)?;
 ///     let world = load.world()?;
-///     enshwick::info!("{:?}", ty.read(&world, entity)?);
+///     enshwick::info!("{:?}", ty.read(world, entity)?);
 ///     Ok(())
 /// }
 /// ```
@@ -615,7 +613,7 @@ impl<T: Component> ComponentType<T> {
     /// # Examples
     ///
     /// See [`ComponentType`].
-    pub fn read(&self, world: &World, entity: Entity) -> Result<Option<T>, Off> {
+    pub fn read(&self, world: World, entity: Entity) -> Result<Option<T>, Off> {
         let Some(data) = world.component(entity, self.ty) else {
             return Ok(None);
         };
@@ -644,7 +642,7 @@ impl<T: Component> ComponentType<T> {
     ///
     /// fn copy<T: Component>(
     ///     ty: ComponentType<T>,
-    ///     world: &enshwick::world::World,
+    ///     world: enshwick::world::World,
     ///     from: enshwick::Entity,
     ///     to: enshwick::Entity,
     /// ) -> Result<(), enshwick::Off> {
@@ -654,7 +652,7 @@ impl<T: Component> ComponentType<T> {
     ///     }
     /// }
     /// ```
-    pub fn write(&self, world: &World, entity: Entity, value: &T) -> Result<(), Off> {
+    pub fn write(&self, world: World, entity: Entity, value: &T) -> Result<(), Off> {
         let writable = self
             .writable
             .ok_or_else(|| Off::new(format!("typed {}: mods may not write it", T::ID)))?;
@@ -831,8 +829,8 @@ impl<T: Resource + 'static> ResourceType<T> {
     ///
     /// # Errors
     ///
-    /// [`Off`] outside the game, for a key the archive lacks, and when its
-    /// bytes do not read as `T`.
+    /// [`Off`] for a key of another type, outside the game, for a key the
+    /// archive lacks, and when its bytes do not read as `T`.
     ///
     /// # Examples
     ///
@@ -845,6 +843,13 @@ impl<T: Resource + 'static> ResourceType<T> {
     /// }
     /// ```
     pub fn game_value(&self, key: crate::abi::ResourceKey) -> Result<T, Off> {
+        if key.type_hash != self.hash {
+            return Err(Off::new(format!(
+                "typed {}: a key of type {:#010x}",
+                T::ID,
+                key.type_hash
+            )));
+        }
         let host = crate::host().ok_or_else(|| Off::new("typed resources: outside the game"))?;
         Ok(T::from_value(&host.game_value(key)?)?)
     }

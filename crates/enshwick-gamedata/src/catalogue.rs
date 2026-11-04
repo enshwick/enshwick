@@ -294,7 +294,8 @@ const fn same(a: &str, b: &str) -> bool {
 }
 
 /// The engine's name for the type `name` stands for: the reflected name of
-/// a type id, or `name` itself, which a mod may pass at the low level.
+/// a type id or of a typed API id ([`crate::typed::engine_name`]), or
+/// `name` itself, which a mod may pass at the low level.
 ///
 /// # Examples
 ///
@@ -308,7 +309,7 @@ const fn same(a: &str, b: &str) -> bool {
 pub fn type_name(name: &str) -> &str {
     match fact(name) {
         Some(Fact::Type(engine)) => engine,
-        _ => name,
+        _ => crate::typed::engine_name(name).unwrap_or(name),
     }
 }
 

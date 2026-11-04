@@ -51,6 +51,10 @@ schema = ["dep:schemars", "dep:serde_json"]
 ## young APIs and calls that rest on engine facts not yet checked in the
 ## running game. Every item it adds is marked in the docs.
 unstable = []
+## `typed`: every component, event and resource the game reflects as typed
+## items generated from its reflection, a few thousand of them; it builds on
+## `unstable`.
+typed = ["unstable"]
 
 # One binary for every file in `tests/`, each a module of `tests/main.rs`:
 # one link instead of one per file. nextest still runs each test in a

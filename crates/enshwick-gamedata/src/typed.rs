@@ -3,6 +3,14 @@
 //! kept as a snapshot beside the build tables. The generator writes the API
 //! crate's `typed` modules from it, so a new build needs no hand change.
 
+/// The table of typed API ids `typed/ids.rs` holds, sorted by id.
+macro_rules! id_table {
+    ($($id:literal => $name:literal,)*) => {
+        pub(super) const IDS: &[(&str, &str)] = &[$(($id, $name)),*];
+    };
+}
+use id_table;
+
 mod ids;
 #[doc(hidden)]
 pub mod names;
