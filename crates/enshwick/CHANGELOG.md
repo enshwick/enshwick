@@ -14,6 +14,9 @@ Each entry names the pull request that made the change.
   cap, the lowest of every mod holds, below 16 is refused, and
   `altars::base_limit` reads the capped bases. Behind `unstable`;
   `HostApi::set_base_cap`, ABI 11.1 (#923).
+- Every loader error code and every question of "The game won't start" has
+  its text in Ukrainian too, so the documentation site has its error pages at
+  `/uk/errors/<code>/` (#927).
 
 ### Changed
 
