@@ -572,4 +572,56 @@ mod tests {
         )]);
         assert_eq!(built, expected);
     }
+
+    /// A ported script on the real server archive beside `ENSH_SERVER_EXE`
+    /// the balancing table's two-handed damage factor doubles.
+    /// Without the executable the test passes trivially.
+    #[test]
+    fn a_ported_script_doubles_a_real_balancing_value_on_the_server_archive() {
+        use enshwick_gamedata::archive::Archive;
+        use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+
+        let Ok(exe) = std::env::var("ENSH_SERVER_EXE") else {
+            return;
+        };
+        let exe = std::path::Path::new(&exe);
+        let bytes: &'static [u8] = Box::leak(std::fs::read(exe).unwrap().into_boxed_slice());
+        let image: &'static Image<'static> =
+            Box::leak(Box::new(Image::parse(bytes, Layout::File, None).unwrap()));
+        let reflection: &'static Reflection<'static> = Box::leak(Box::new(Reflection::scan(image)));
+        let registry = reflection.registry();
+        let archive = Archive::open(
+            exe.parent().unwrap(),
+            exe.file_stem().unwrap().to_str().unwrap(),
+        )
+        .unwrap();
+        let table = registry.named("keen::BalancingTable").unwrap();
+        let key = archive.keys_of(table.qualified_hash())[0];
+        let base = archive.resource(&key).unwrap();
+        let types: Vec<Type<'static>> = registry.iter().cloned().collect();
+        let loader = run(
+            types,
+            vec![(key, base.clone())],
+            r#"
+            local key = enshwick.resources.resource_keys("keen::BalancingTable")[1]
+            enshwick.resources.serve(key, key, function(table)
+                return { damageMod2Handed = table.damageMod2Handed * 2 }
+            end)
+            "#,
+        );
+        let built = registry
+            .decode(
+                "keen::BalancingTable",
+                &loader.build_resource(&key, &base).unwrap(),
+            )
+            .unwrap();
+        let vanilla = registry.decode("keen::BalancingTable", &base).unwrap();
+        let (Some(Value::Float(new)), Some(Value::Float(old))) = (
+            built.field("damageMod2Handed"),
+            vanilla.field("damageMod2Handed"),
+        ) else {
+            panic!("no damageMod2Handed")
+        };
+        assert!((new - old * 2.0).abs() < 1e-6, "{old} became {new}");
+    }
 }

@@ -65,6 +65,11 @@ mod tests {
                             .ok()
                     })?;
                 }
+                let new = OTHER.key_by_hash(enshwick::resources::fnv1a32(b"keen::balance::Table"));
+                load.serve_new(
+                    new,
+                    &Value::Struct(vec![("damage".into(), Value::Float(4.0))]),
+                )?;
                 Ok::<(), Off>(())
             })();
             let _first = SERVED.set(served.map_err(|off| off.to_string()));
@@ -169,5 +174,18 @@ mod tests {
         assert_eq!(refused, Status::BAD_ARGS);
         let listed = (api.types)(loader.handle(), out.as_mut_ptr(), header, 3, &raw mut count);
         assert_eq!((listed, count, out[0].header.size), (Status::OK, 3, header));
+    }
+
+    #[test]
+    fn a_new_resource_is_served_from_a_value_alone_under_its_key() {
+        let loader = start(host());
+        assert_eq!(SERVED.get(), Some(&Ok(())));
+        let new = OTHER.key_by_hash(enshwick::resources::fnv1a32(b"keen::balance::Table"));
+        let mut expected = 4.0f32.to_le_bytes().to_vec();
+        expected.extend_from_slice(&[0; 4]);
+        assert_eq!(
+            loader.build_resource(&new, &table_bytes(2.5)).unwrap(),
+            expected
+        );
     }
 }

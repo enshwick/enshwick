@@ -22,6 +22,7 @@ mlua.workspace = true
 [dev-dependencies]
 enshwick = { workspace = true, features = ["test"] }
 proptest.workspace = true
+enshwick-gamedata.workspace = true
 
 [lints]
 workspace = true
