@@ -55,11 +55,11 @@
 //! | Interface | [`ui`] |
 #![cfg_attr(
     feature = "unstable",
-    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`item_data`], [`entity_data`], [`actions`], [`console`], [`rates`], [`script`](mod@script) |"
+    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`item_data`], [`entity_data`], [`actions`], [`controls`], [`console`], [`rates`], [`script`](mod@script) |"
 )]
 #![cfg_attr(
     not(feature = "unstable"),
-    doc = "| Unstable, with the `unstable` feature | `world`, `map`, `item_data`, `entity_data`, `actions`, `console`, `rates`, `script` |"
+    doc = "| Unstable, with the `unstable` feature | `world`, `map`, `item_data`, `entity_data`, `actions`, `controls`, `console`, `rates`, `script` |"
 )]
 //! | Tests | `test`, with the `test` feature |
 //!
@@ -138,6 +138,8 @@ pub mod config;
 #[cfg(feature = "unstable")]
 pub mod console;
 pub mod content;
+#[cfg(feature = "unstable")]
+pub mod controls;
 pub mod damage;
 pub mod daytime;
 mod declare;

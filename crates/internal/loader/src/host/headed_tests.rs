@@ -36,6 +36,8 @@ macro_rules! headed {
             CallSpec,
             ChunkData,
             Comfort,
+            ControlEvent,
+            ControlSpec,
             CraftCheck,
             DamageCheck,
             DataChange,
