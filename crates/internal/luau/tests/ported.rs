@@ -351,6 +351,10 @@ mod tests {
     /// GUID, takes that GUID's hash as its id and joins the item registry,
     /// and its text joins the text table, served as new content.
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one ported script: its fixture, its run and the bytes the game reads"
+    )]
     fn ported_script_three_clones_an_item_registers_it_and_adds_its_text() {
         let types = item_types();
         let registry = Registry::new(types.clone());
@@ -456,5 +460,116 @@ mod tests {
             host.game_content(hash.try_into().unwrap()),
             Some(b"a=A\nlantern=Lantern".to_vec())
         );
+    }
+
+    /// A skill tree: nodes with an id, a cost, a position and the ids they
+    /// link to.
+    fn skill_types() -> Vec<Type<'static>> {
+        vec![
+            Type::new("demo::uint32", Kind::Uint32, 4, 4),
+            Type::new("demo::float32", Kind::Float32, 4, 4),
+            Type::new("demo::Position", Kind::Struct, 8, 4).with_fields(vec![
+                Field::new("x", 0, "demo::float32"),
+                Field::new("y", 4, "demo::float32"),
+            ]),
+            Type::new("demo::BlobArray<demo::uint32>", Kind::BlobArray, 8, 4)
+                .with_inner("demo::uint32"),
+            Type::new("demo::SkillNode", Kind::Struct, 24, 4).with_fields(vec![
+                Field::new("id", 0, "demo::uint32"),
+                Field::new("cost", 4, "demo::uint32"),
+                Field::new("position", 8, "demo::Position"),
+                Field::new("links", 16, "demo::BlobArray<demo::uint32>"),
+            ]),
+            Type::new("demo::BlobArray<demo::SkillNode>", Kind::BlobArray, 8, 4)
+                .with_inner("demo::SkillNode"),
+            Type::new("demo::SkillTree", Kind::Struct, 8, 4).with_fields(vec![Field::new(
+                "nodes",
+                0,
+                "demo::BlobArray<demo::SkillNode>",
+            )]),
+        ]
+    }
+
+    fn node(id: u32, cost: u32, x: f32, links: &[u32]) -> Value {
+        Value::Struct(vec![
+            ("id".into(), Value::Uint(id.into())),
+            ("cost".into(), Value::Uint(cost.into())),
+            (
+                "position".into(),
+                Value::Struct(vec![
+                    ("x".into(), Value::Float(x.into())),
+                    ("y".into(), Value::Float(0.0)),
+                ]),
+            ),
+            (
+                "links".into(),
+                Value::List(links.iter().map(|l| Value::Uint((*l).into())).collect()),
+            ),
+        ])
+    }
+
+    /// Ported script 4: a skill costs less, one link moves from one node to
+    /// another, and a node moves on the tree.
+    #[test]
+    fn ported_script_four_reprices_relinks_and_moves_skill_nodes() {
+        let types = skill_types();
+        let registry = Registry::new(types.clone());
+        let tree = Value::Struct(vec![(
+            "nodes".into(),
+            Value::List(vec![
+                node(1, 1, 0.0, &[2, 3]),
+                node(2, 4, 10.0, &[1]),
+                node(3, 1, 20.0, &[1]),
+            ]),
+        )]);
+        let key = Guid::named("you.ported:tree").key_by_hash(fnv1a32(b"demo::SkillTree"));
+        let base = registry.encode("demo::SkillTree", &tree, None).unwrap();
+        let loader = run(
+            types,
+            vec![(key, base.clone())],
+            r#"
+            local function find(tree, id)
+                for _, n in tree.nodes do
+                    if n.id == id then
+                        return n
+                    end
+                end
+                error(`no skill {id}`)
+            end
+            local function unlink(tree, from, to)
+                local links = find(tree, from).links
+                table.remove(links, table.find(links, to))
+            end
+            local key = enshwick.resources.resource_keys("demo::SkillTree")[1]
+            enshwick.resources.serve(key, key, function(tree)
+                find(tree, 2).cost = 3
+                unlink(tree, 1, 2)
+                unlink(tree, 2, 1)
+                table.insert(find(tree, 3).links, 2)
+                find(tree, 2).position = { x = 15.5, y = 2.5 }
+                return tree
+            end)
+            "#,
+        );
+        let built = registry
+            .decode(
+                "demo::SkillTree",
+                &loader.build_resource(&key, &base).unwrap(),
+            )
+            .unwrap();
+        let mut moved = node(2, 3, 15.5, &[]);
+        *moved.field_mut("position").unwrap() = Value::Struct(vec![
+            ("x".into(), Value::Float(15.5)),
+            ("y".into(), Value::Float(2.5)),
+        ]);
+        let expected = Value::Struct(vec![(
+            "nodes".into(),
+            Value::List(vec![
+                node(1, 1, 0.0, &[3]),
+                moved,
+                node(3, 1, 20.0, &[1, 2]),
+            ]),
+        )]);
+        assert_eq!(built, expected);
     }
 }
