@@ -309,7 +309,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         ..crate::settings::Settings::default()
     });
     crate::log::capture();
-    let (found, candidates, others) = libraries(&mods, Run::Dry, &mut |_| {});
+    let (found, candidates, others) = libraries(&mods, Run::Dry, &mut |_, _| {});
     let lines = loader_lines();
     crate::log::end_capture();
 

@@ -46,7 +46,7 @@ pub(super) struct Library {
 pub(super) fn libraries(
     mods_dir: &Path,
     run: Run,
-    loaded: &mut dyn FnMut(&str),
+    loaded: &mut dyn FnMut(&str, Option<(usize, usize)>),
 ) -> (Vec<Library>, Vec<Candidate>, Vec<OtherDll>) {
     if run == Run::Game {
         note_old_layout(mods_dir);
@@ -245,7 +245,7 @@ pub(super) fn unload(library: &Library) {
 /// told apart from the folder's other DLLs, the mod's own, by their export
 /// tables before they load. A second such DLL in a folder is skipped, named
 /// with the first; the loader's own folder holds no mod.
-fn discover(mods_dir: &Path, loaded: &mut dyn FnMut(&str)) -> Vec<Library> {
+fn discover(mods_dir: &Path, loaded: &mut dyn FnMut(&str, Option<(usize, usize)>)) -> Vec<Library> {
     let mut mods = Vec::new();
     for folder in folders(mods_dir) {
         let name = folder
@@ -273,7 +273,7 @@ fn discover(mods_dir: &Path, loaded: &mut dyn FnMut(&str)) -> Vec<Library> {
                 continue;
             }
             let library = load(&path, &name, &file);
-            loaded(&file);
+            loaded(&file, library.as_ref().and_then(|library| library.range));
             first = Some(file);
             mods.extend(library);
         }
