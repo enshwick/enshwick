@@ -120,3 +120,25 @@ fn a_sample_reaches_into_arrays_and_optionals() {
     assert_eq!(error.to_string(), "0.level: a field this build lacks");
     assert!(super::sample(&registry, "demo::Missing").is_none());
 }
+
+#[test]
+fn an_array_header_kept_as_bytes_does_not_read_as_elements() {
+    let header = Value::Bytes(vec![8, 0, 0, 0, 1, 0, 0, 0]);
+    let error = <Vec<u8>>::from_value(&header).unwrap_err();
+    assert!(error.to_string().starts_with("an array"), "{error}");
+}
+
+#[test]
+fn a_field_the_build_widened_fails_the_sample() {
+    let registry = Registry::new([
+        Type::new("demo::uint32", Kind::Uint32, 4, 4),
+        Type::new("demo::Base", Kind::Struct, 4, 4).with_fields(vec![Field::new(
+            "level",
+            0,
+            "demo::uint32",
+        )]),
+    ]);
+    let sample = sample(&registry, "demo::Base").unwrap();
+    let error = Base::from_value(&sample).unwrap_err();
+    assert!(error.to_string().starts_with("level: a u8"), "{error}");
+}

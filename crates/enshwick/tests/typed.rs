@@ -4,6 +4,7 @@
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write as _;
     use std::sync::{Mutex, OnceLock};
 
     use enshwick::abi::{ResourceKey, Status};
@@ -89,6 +90,12 @@ mod tests {
             })?;
             let mapping = ResourceType::<BuildingMaterialMappingResource>::resolve(load)?;
             let key = mapping.key(STONE);
+            let foreign = ResourceKey {
+                type_hash: !key.type_hash,
+                ..key
+            };
+            let refused = mapping.serve(load, foreign, key, |_| {}).unwrap_err();
+            write!(REFUSED.lock().unwrap(), "\n{refused}").unwrap();
             mapping.serve(load, key, key, |stone| stone.local_id += 1)?;
             let _ = RESOLVED.set((load.world()?, faction, mapping));
             Ok(Self)
@@ -151,5 +158,11 @@ mod tests {
         let built = loader.build_resource(&key, &stone).unwrap();
         assert_eq!(built[0], 6, "local id + 1");
         assert_eq!(built[4..], stone[4..], "the GUID kept");
+        assert_eq!(
+            loader.build_resource(&key, &[5]),
+            Ok(vec![5]),
+            "a base that does not read is served unchanged"
+        );
+        assert!(refused.contains("a key of type"), "{refused}");
     }
 }

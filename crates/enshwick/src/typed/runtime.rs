@@ -9,6 +9,9 @@ use crate::resources::{Registry, Type, Value, Variant};
 use crate::world::{World, WritableType};
 use crate::{Entity, Host, Load, Off};
 
+mod sample;
+pub use sample::sample;
+
 /// Why a [`Value`] is not the shape a generated type expects: a field the
 /// build lacks, or a value of another kind.
 ///
@@ -512,7 +515,9 @@ impl<T: Reflected> Reflected for Option<T> {
     }
 }
 
-/// An array; one the codec keeps as bytes reads byte by byte.
+/// An array. One the codec keeps as bytes, such as a packed array whose
+/// elements lie outside the bytes read, does not read: those bytes are its
+/// header, not its elements.
 impl<T: Reflected> Reflected for Vec<T> {
     fn from_value(value: &Value) -> Result<Self, ShapeError> {
         match value {
@@ -520,10 +525,6 @@ impl<T: Reflected> Reflected for Vec<T> {
                 .iter()
                 .enumerate()
                 .map(|(i, item)| T::from_value(item).map_err(|e| e.within(&i.to_string())))
-                .collect(),
-            Value::Bytes(bytes) => bytes
-                .iter()
-                .map(|b| T::from_value(&Value::Uint(u64::from(*b))))
                 .collect(),
             other => Err(ShapeError::new("an array", other)),
         }
@@ -535,8 +536,9 @@ impl<T: Reflected> Reflected for Vec<T> {
 }
 
 /// The running build's type for `T`, its shape checked: a [`sample`] of the
-/// build's type must read as `T`, so a field the build renamed, removed or
-/// retyped, at any depth, turns off only `T`.
+/// build's type must read as `T`, so a field the build renamed, removed, or
+/// retyped to a value `T` cannot hold, such as a wider integer, at any
+/// depth, turns off only `T`.
 fn resolve<T: Named>(load: &Load<'_>) -> Result<&'static Type<'static>, Off> {
     let host = load.host();
     let hash = crate::ecs::ComponentType::resolve(load, T::ID)
@@ -550,53 +552,6 @@ fn resolve<T: Named>(load: &Load<'_>) -> Result<&'static Type<'static>, Off> {
         .ok_or_else(|| off::<T>(host, "its value does not read"))?;
     T::from_value(&value).map_err(|e| off::<T>(host, &e.to_string()))?;
     Ok(ty)
-}
-
-/// Arrays and optionals nested deeper than this are left empty in a sample.
-const SAMPLE_DEPTH: usize = 8;
-
-/// A value of the type `name` with every part a value can hold: one
-/// element in each array and every optional present, so reading it checks
-/// the shape of every type it holds; `None` for a type the registry lacks.
-#[doc(hidden)]
-#[must_use]
-pub fn sample(registry: &Registry<'_>, name: &str) -> Option<Value> {
-    sample_at(registry, name, 0)
-}
-
-fn sample_at(registry: &Registry<'_>, name: &str, depth: usize) -> Option<Value> {
-    use crate::resources::Kind;
-
-    let ty = registry.named(name)?;
-    let deeper = depth < SAMPLE_DEPTH;
-    match ty.kind() {
-        Kind::Typedef if deeper => sample_at(registry, ty.inner()?, depth + 1),
-        Kind::Struct => {
-            let mut fields = match ty.base() {
-                Some(base) => fields_of(sample_at(registry, base, depth + 1)?),
-                None => Vec::new(),
-            };
-            for field in ty.fields() {
-                if let Some(of) = field.type_name() {
-                    fields.push((field.name().to_owned(), sample_at(registry, of, depth + 1)?));
-                }
-            }
-            Some(Value::Struct(fields))
-        }
-        Kind::StaticArray | Kind::BlobArray | Kind::DsArray => Some(Value::List(if deeper {
-            vec![sample_at(registry, ty.inner()?, depth + 1)?]
-        } else {
-            Vec::new()
-        })),
-        Kind::BlobOptional | Kind::DsOptional if deeper => {
-            sample_at(registry, ty.inner()?, depth + 1)
-        }
-        Kind::BlobOptional | Kind::DsOptional => Some(Value::Nil),
-        _ => {
-            let size = usize::try_from(ty.size()).ok()?;
-            registry.decode(name, &vec![0; size]).ok()
-        }
-    }
 }
 
 /// Turns `T` off on the running build, naming the build and why.
@@ -935,11 +890,14 @@ impl<T: Resource> ResourceType<T> {
     /// `T` and changed by `change`, the first time the game reads it; the
     /// bytes of what `T` does not hold stay as `base` has them. Mods that
     /// serve one key change it in load order, each on the one before's
-    /// result, as [`Load::serve`] does.
+    /// result, as [`Load::serve`] does. A base that does not read as `T`,
+    /// or a change that does not fit the type, is logged and the base is
+    /// served unchanged.
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader refuses it, such as after init.
+    /// [`Off`] for a key or base of another type, and when the loader
+    /// refuses it, such as after init.
     ///
     /// # Examples
     ///
@@ -954,12 +912,28 @@ impl<T: Resource> ResourceType<T> {
     where
         F: Fn(&mut T) + Send + Sync + 'static,
     {
+        if let Some(other) = [key, base].iter().find(|k| k.type_hash != self.hash) {
+            return Err(Off::new(format!(
+                "typed {}: a key of type {:#010x}",
+                T::ID,
+                other.type_hash
+            )));
+        }
         let name = self.name;
+        let host = load.host();
         load.serve(key, base, move |bytes| {
-            let registry = Registry::game().ok()?;
-            let mut value = T::from_value(&registry.decode(name, bytes).ok()?).ok()?;
-            change(&mut value);
-            registry.encode(name, &value.to_value(), Some(bytes)).ok()
+            let changed = Registry::game().and_then(|registry| {
+                let mut value = T::from_value(&registry.decode(name, bytes)?)?;
+                change(&mut value);
+                Ok(registry.encode(name, &value.to_value(), Some(bytes))?)
+            });
+            Some(changed.unwrap_or_else(|why| {
+                host.log(
+                    crate::abi::Level::WARN,
+                    &format!("typed {}: served unchanged: {why}", T::ID),
+                );
+                bytes.to_vec()
+            }))
         })
     }
 }

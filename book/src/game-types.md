@@ -68,7 +68,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 A `ResourceType` gives the key of a resource by its GUID, reads the game's own
 value, and serves a changed one. Several mods that serve one key change it in
 load order, each on the one before's result. The bytes of what the item does
-not hold stay as the game has them:
+not hold stay as the game has them. When the resource does not read as the
+item, or the change does not fit the type, the log says why and the game gets
+the resource unchanged:
 
 ```rust
 use enshwick::content::Guid;
