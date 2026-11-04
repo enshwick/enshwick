@@ -18,6 +18,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
+use enshwick::Entity;
 use enshwick::abi::{ControlEvent, ControlFn, Header, PlayerInfo, Side, Status, Str};
 use enshwick::controls::{GameAction, Key, Tracker, is_valid_name, phases, valid_phases};
 use enshwick_gamedata::catalogue;
@@ -81,9 +82,8 @@ struct State {
 }
 
 /// The HUD screens on which the player is in the world with no window
-/// open: those the game's own HUD test counts as no menu (client 520,
-/// research note u1 facts-hud-map), less the read-only loot chest and the
-/// summoner menu, which are windows.
+/// open: those the game's own HUD test counts as no menu (client 520), less
+/// the read-only loot chest and the summoner menu, which are windows.
 const OPEN_SCREENS: [&str; 6] = [
     "BlueprintMultiTool",
     "OvergrowthMultiTool",
@@ -463,11 +463,14 @@ pub(crate) fn linked() -> bool {
 /// each linked control looks at its bit of the player's `PlayerInput`,
 /// which `input` finds, and what fires waits for [`after_step`].
 ///
+/// The step never waits for the lock: while [`after_step`] holds it, the
+/// look waits for the next step, and the trackers lose nothing.
+///
 /// # Safety
 ///
 /// - `input` returns `None`, null or the player's live `PlayerInput`
 ///   component, which stays readable and unwritten during the call.
-pub(crate) unsafe fn step(players: &[u32], input: impl Fn(u32) -> Option<*const u8>) {
+pub(crate) unsafe fn step(players: &[Entity], input: impl Fn(Entity) -> Option<*const u8>) {
     let Some(linked) = STATE.linked.get() else {
         return;
     };
@@ -476,16 +479,16 @@ pub(crate) unsafe fn step(players: &[u32], input: impl Fn(u32) -> Option<*const 
     }
     let now = now_ms();
     let _ran = LINKED_FUSE.run("the controls that follow game actions", || {
-        STATE
-            .players
-            .relock()
-            .step(&linked.follows, players, now, |entity| {
-                let input = input(entity).filter(|input| !input.is_null())?;
-                // SAFETY: the caller's contract: `input` is the player's live
-                // `PlayerInput`, whose digital input word sits at the
-                // reflected `fromClient.digitalInput`.
-                Some(unsafe { enshwick::raw::read_at::<u64>(input, linked.digital) })
-            });
+        let Some(mut tracked) = STATE.players.try_relock() else {
+            return;
+        };
+        tracked.step(&linked.follows, players, now, |entity| {
+            let input = input(entity).filter(|input| !input.is_null())?;
+            // SAFETY: the caller's contract: `input` is the player's live
+            // `PlayerInput`, whose digital input word sits at the
+            // reflected `fromClient.digitalInput`.
+            Some(unsafe { enshwick::raw::read_at::<u64>(input, linked.digital) })
+        });
     });
 }
 
@@ -496,14 +499,14 @@ pub(crate) fn after_step(loader: &Loader) {
     let (Some(_), Some(declared)) = (STATE.linked.get(), DECLARED.sealed()) else {
         return;
     };
-    let ready = {
-        let mut players = STATE.players.relock();
-        if !players.waiting() {
-            return;
-        }
-        let found = crate::world::players(loader).unwrap_or_default();
-        players.settle(|entity| found.iter().find(|p| p.entity.0 == entity).copied())
-    };
+    if !STATE.players.relock().waiting() {
+        return;
+    }
+    let found = crate::world::players(loader).unwrap_or_default();
+    let ready = STATE
+        .players
+        .relock()
+        .settle(|entity| found.iter().find(|p| p.entity == entity).copied());
     let _ran = LINKED_FUSE.run("the controls that follow game actions", || {
         for (firing, player) in &ready {
             let Some(control) = declared.get(firing.index) else {
@@ -594,9 +597,7 @@ pub(crate) fn set_key(
         return Err(SetKeyError::Unread);
     };
     let path = game_dir(loader).join(bindings::FILE);
-    let fresh = path.with_extension("toml.new");
-    std::fs::write(&fresh, bindings::render(&entries, &kept))?;
-    std::fs::rename(&fresh, &path)?;
+    enshwick::files::write_atomically(&path, bindings::render(&entries, &kept))?;
     Ok(())
 }
 

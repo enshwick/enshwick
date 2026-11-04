@@ -853,15 +853,15 @@ unsafe fn player_inputs(ctx: *mut u64) {
     }
     let players = PLAYERS.load();
     let players = players.as_deref().map_or(&[][..], Vec::as_slice);
-    let input = |player| {
+    let input = |player: enshwick::Entity| {
         // SAFETY: the caller guarantees the system's live context, at its
         // entry on its thread.
-        unsafe { components.component(ctx, player, layout.player_input) }
+        unsafe { components.component(ctx, player.0, layout.player_input) }
     };
     // SAFETY: each pointer `input` gives is the player's live `PlayerInput`
     // component in the server's world, read at the system's entry on its
     // thread, before the system runs.
-    unsafe { crate::controls::step(players, input) };
+    unsafe { crate::controls::step(bytemuck::cast_slice(players), input) };
 }
 
 /// Marks the pending Quick Stash switches and upgrades a filter refuses as

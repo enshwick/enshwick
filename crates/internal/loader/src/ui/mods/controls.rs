@@ -2,6 +2,8 @@
 //! keys in the player's layout, a click that waits for the next key, and
 //! the keys two controls share.
 
+use std::time::{Duration, Instant};
+
 use enshwick::abi::UiWidget;
 
 use super::list::{listing, pages};
@@ -22,12 +24,22 @@ pub(in crate::ui) struct View {
     waiting: Option<(usize, usize, Capture)>,
     /// The last outcome, and whether it went through.
     message: Option<(String, bool)>,
+    /// When Escape cancelled a capture: the screen's Back for the same key
+    /// arrives a frame later and must not close the page.
+    cancelled: Option<Instant>,
 }
+
+/// How long after Escape cancelled a capture a Back counts as the same key.
+const SAME_ESCAPE: Duration = Duration::from_millis(500);
 
 impl View {
     /// One step back: a capture ends first; true when the page is done.
     pub(in crate::ui) fn back(&mut self) -> bool {
-        self.waiting.take().is_none()
+        let same_escape = self
+            .cancelled
+            .take()
+            .is_some_and(|at| at.elapsed() < SAME_ESCAPE);
+        self.waiting.take().is_none() && !same_escape
     }
 }
 
@@ -167,7 +179,10 @@ fn look(loader: &Loader, view: &mut View) {
             view.waiting = None;
             view.message = Some(saved(loader, index, slot, key.bits()));
         }
-        Some(Captured::Cancelled) => view.waiting = None,
+        Some(Captured::Cancelled) => {
+            view.waiting = None;
+            view.cancelled = Some(Instant::now());
+        }
         None => {}
     }
 }

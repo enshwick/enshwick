@@ -5,6 +5,7 @@
 //! thread runs the game's system; what fires waits for the step to end,
 //! when the world may change.
 
+use enshwick::Entity;
 use enshwick::controls::Tracker;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
@@ -25,7 +26,7 @@ pub struct Follow {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Firing {
     /// The player's character entity.
-    pub entity: u32,
+    pub entity: Entity,
     /// The control's index among the declared.
     pub index: usize,
     /// The phases that fired.
@@ -35,7 +36,7 @@ pub struct Firing {
 /// Every player's trackers and the firings that wait for the step's end.
 #[derive(Debug)]
 pub struct Players {
-    trackers: FxHashMap<(u32, usize), Tracker>,
+    trackers: FxHashMap<(Entity, usize), Tracker>,
     waiting: Vec<Firing>,
 }
 
@@ -67,15 +68,15 @@ impl Players {
     ///
     /// let follow = Follow { index: 0, bit: 3, hold_ms: 500, fires: ControlSpec::PRESS };
     /// let mut players = Players::new();
-    /// players.step(&[follow], &[7], 0, |_| Some(1 << 3));
+    /// players.step(&[follow], &[enshwick::Entity(7)], 0, |_| Some(1 << 3));
     /// assert!(players.waiting());
     /// ```
     pub fn step(
         &mut self,
         follows: &[Follow],
-        players: &[u32],
+        players: &[Entity],
         now: u64,
-        mut input: impl FnMut(u32) -> Option<u64>,
+        mut input: impl FnMut(Entity) -> Option<u64>,
     ) {
         self.trackers
             .retain(|(entity, _), _| players.contains(entity));
@@ -117,11 +118,11 @@ impl Players {
     ///
     /// let follow = Follow { index: 0, bit: 0, hold_ms: 500, fires: ControlSpec::PRESS };
     /// let mut players = Players::new();
-    /// players.step(&[follow], &[7], 0, |_| Some(1));
+    /// players.step(&[follow], &[enshwick::Entity(7)], 0, |_| Some(1));
     /// let ready = players.settle(|entity| Some(entity));
-    /// assert_eq!(ready[0].1, 7);
+    /// assert_eq!(ready[0].1, enshwick::Entity(7));
     /// ```
-    pub fn settle<P>(&mut self, find: impl Fn(u32) -> Option<P>) -> Vec<(Firing, P)> {
+    pub fn settle<P>(&mut self, find: impl Fn(Entity) -> Option<P>) -> Vec<(Firing, P)> {
         let mut ready = Vec::with_capacity(self.waiting.len());
         for firing in self.waiting.drain(..) {
             match find(firing.entity) {
@@ -148,6 +149,8 @@ mod tests {
     use super::*;
 
     const ALL: u32 = ControlSpec::PRESS | ControlSpec::RELEASE | ControlSpec::HOLD;
+    const ANN: Entity = Entity(7);
+    const BOB: Entity = Entity(8);
 
     fn follow(bit: u8) -> Follow {
         Follow {
@@ -169,12 +172,12 @@ mod tests {
     #[test]
     fn what_fires_during_the_step_waits_for_its_end() {
         let mut players = Players::new();
-        players.step(&[follow(2)], &[7], 0, |_| Some(0b100));
+        players.step(&[follow(2)], &[ANN], 0, |_| Some(0b100));
         assert!(players.waiting(), "nothing fires inside the step");
         assert_eq!(kinds(&mut players), [ControlSpec::PRESS]);
         assert!(!players.waiting());
-        players.step(&[follow(2)], &[7], 600, |_| Some(0b100));
-        players.step(&[follow(2)], &[7], 650, |_| Some(0));
+        players.step(&[follow(2)], &[ANN], 600, |_| Some(0b100));
+        players.step(&[follow(2)], &[ANN], 650, |_| Some(0));
         assert_eq!(
             kinds(&mut players),
             [ControlSpec::HOLD, ControlSpec::RELEASE]
@@ -184,31 +187,31 @@ mod tests {
     #[test]
     fn a_player_not_found_gets_the_press_later_and_never_a_lone_release() {
         let mut players = Players::new();
-        players.step(&[follow(0)], &[7], 0, |_| Some(1));
+        players.step(&[follow(0)], &[ANN], 0, |_| Some(1));
         assert!(players.settle(|_| None::<u32>).is_empty());
-        players.step(&[follow(0)], &[7], 16, |_| Some(0));
+        players.step(&[follow(0)], &[ANN], 16, |_| Some(0));
         assert!(!players.waiting(), "no release without its press");
-        players.step(&[follow(0)], &[7], 32, |_| Some(1));
+        players.step(&[follow(0)], &[ANN], 32, |_| Some(1));
         assert!(players.settle(|_| None::<u32>).is_empty());
-        players.step(&[follow(0)], &[7], 48, |_| Some(1));
+        players.step(&[follow(0)], &[ANN], 48, |_| Some(1));
         assert_eq!(kinds(&mut players), [ControlSpec::PRESS], "pressed again");
     }
 
     #[test]
     fn a_player_who_left_or_a_forgotten_world_starts_up() {
         let mut players = Players::new();
-        players.step(&[follow(0)], &[7, 8], 0, |_| Some(1));
+        players.step(&[follow(0)], &[ANN, BOB], 0, |_| Some(1));
         let _fired = players.settle(Some);
-        players.step(&[follow(0)], &[8], 16, |_| Some(1));
-        players.step(&[follow(0)], &[7, 8], 32, |_| Some(1));
+        players.step(&[follow(0)], &[BOB], 16, |_| Some(1));
+        players.step(&[follow(0)], &[ANN, BOB], 32, |_| Some(1));
         let pressed: Vec<u32> = players
             .settle(Some)
             .into_iter()
             .map(|(f, _)| f.entity)
             .collect();
-        assert_eq!(pressed, [7], "player 7 left and came back");
+        assert_eq!(pressed, [ANN], "Ann left and came back");
         players.forget();
-        players.step(&[follow(0)], &[8], 48, |_| Some(1));
+        players.step(&[follow(0)], &[BOB], 48, |_| Some(1));
         assert_eq!(kinds(&mut players), [ControlSpec::PRESS]);
     }
 
@@ -219,12 +222,12 @@ mod tests {
             fires: ControlSpec::PRESS,
             ..follow(5)
         };
-        players.step(&[press_only], &[7], 0, |_| Some(1 << 4));
+        players.step(&[press_only], &[ANN], 0, |_| Some(1 << 4));
         assert!(!players.waiting());
-        players.step(&[press_only], &[7], 16, |_| Some(1 << 5));
-        players.step(&[press_only], &[7], 32, |_| Some(0));
+        players.step(&[press_only], &[ANN], 16, |_| Some(1 << 5));
+        players.step(&[press_only], &[ANN], 32, |_| Some(0));
         assert_eq!(kinds(&mut players), [ControlSpec::PRESS]);
-        players.step(&[follow(64)], &[7], 48, |_| Some(u64::MAX));
+        players.step(&[follow(64)], &[ANN], 48, |_| Some(u64::MAX));
         assert!(!players.waiting(), "a bit past the word never fires");
     }
 }

@@ -5,10 +5,20 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use enshwick::Entity;
 use enshwick::abi::ControlSpec;
 use enshwick_loader::linked_controls::{Follow, Players};
 
-const PLAYERS: [u32; 8] = [11, 12, 13, 14, 15, 16, 17, 18];
+const PLAYERS: [Entity; 8] = [
+    Entity(11),
+    Entity(12),
+    Entity(13),
+    Entity(14),
+    Entity(15),
+    Entity(16),
+    Entity(17),
+    Entity(18),
+];
 
 fn follows() -> [Follow; 2] {
     let fires = ControlSpec::PRESS | ControlSpec::RELEASE;
@@ -52,7 +62,7 @@ fn linked_controls(c: &mut Criterion) {
             down = !down;
             let one = if down { 1 << 5 } else { 0 };
             pressing.step(black_box(&follows), black_box(&PLAYERS), now, |entity| {
-                Some(if entity == 11 { one } else { 0 })
+                Some(if entity == PLAYERS[0] { one } else { 0 })
             });
             pressing.settle(Some).len()
         });
