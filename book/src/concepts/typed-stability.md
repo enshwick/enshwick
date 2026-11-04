@@ -1,8 +1,8 @@
 # Typed types across game builds
 
 The items of `enshwick::typed` come from one game build's reflection data, and
-a game update can change any type. This page explains what a mod sees in each
-case, and how a new build's items come about.
+a game update can change any type. Most changes need nothing from a mod; the
+rest turn off one type alone.
 
 ## Why most changes need nothing
 

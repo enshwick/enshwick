@@ -1,10 +1,8 @@
 # The game's own types
 
 Every component, event and resource the game reflects has a typed Rust item in
-`enshwick::typed`, generated from the game's own reflection data. A mod reads
-and changes them as Rust values, by the game's field names. For any other
-struct, such as one a [hooked system](ecs.md) hands you, `cargo enshwick types`
-writes the game's types into your own crate.
+`enshwick::typed`, read and changed by the game's field names. For any other
+struct, `cargo enshwick types` writes the game's types into your crate.
 
 ## How do I turn on the typed API?
 
@@ -102,6 +100,10 @@ A Luau mod reads and writes the same types by their game names through
 items are not part of the Luau API yet.
 
 ## Write the game's types into your crate
+
+For a struct the typed API does not cover, such as one a
+[hooked system](ecs.md) hands you, `cargo enshwick types` writes the game's
+types as Rust or Luau from the game's reflection data.
 
 ### The game's names
 
