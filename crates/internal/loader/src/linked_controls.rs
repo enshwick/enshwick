@@ -204,7 +204,7 @@ mod tests {
         let _fired = players.settle(Some);
         players.step(&[follow(0)], &[BOB], 16, |_| Some(1));
         players.step(&[follow(0)], &[ANN, BOB], 32, |_| Some(1));
-        let pressed: Vec<u32> = players
+        let pressed: Vec<Entity> = players
             .settle(Some)
             .into_iter()
             .map(|(f, _)| f.entity)

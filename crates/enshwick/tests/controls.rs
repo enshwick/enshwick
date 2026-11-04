@@ -126,6 +126,14 @@ mod tests {
     }
 
     #[test]
+    fn a_client_in_another_s_world_follows_no_game_action() {
+        let interact = [GameAction::ContextualAction];
+        let step = Duration::from_millis(50);
+        assert_eq!(client().game_actions(&ann(), &interact, step), 0);
+        assert!(taken().is_empty());
+    }
+
+    #[test]
     fn a_chord_holds_once_past_its_threshold_and_needs_exactly_its_modifiers() {
         let loader = client();
         let tick = Duration::from_millis(100);

@@ -28,7 +28,8 @@ The player presses H in the world, and the handler runs on their client.
 
 The client reads a control's key once a frame while its player is in the
 world, a building tool in hand and screenshot mode included: never while the
-chat, a menu, the inventory or another of the game's screens is open, and
+chat, a menu, the inventory, another of the game's screens or a window or
+dialog of Enshwick or a mod is open, and
 only while the game's window has the focus. The game keeps the key too: a
 mod key that is also a game key does both.
 

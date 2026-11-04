@@ -229,8 +229,9 @@ impl Installed {
     /// once a step, `after` the last look: `held` are the actions the
     /// player's input sets now. Each control linked to one of them fires
     /// what the look decides: [`Phase::Press`](crate::controls::Phase::Press)
-    /// when it comes on, then hold and release. Returns how many calls the
-    /// mod got.
+    /// when it comes on, then hold and release. As in the loader, they fire
+    /// in a server's world only: a fake on the client side, a client in
+    /// another's world, fires nothing. Returns how many calls the mod got.
     ///
     /// # Examples
     ///
@@ -256,6 +257,9 @@ impl Installed {
     pub fn game_actions(&self, player: &PlayerInfo, held: &[GameAction], after: Duration) -> usize {
         let entity = player.entity.0;
         let calls = with(Vec::new(), |s| {
+            if s.host.side == crate::abi::Side::CLIENT {
+                return Vec::new();
+            }
             let now = advance(&mut s.controls, after);
             let mut calls = Vec::new();
             for control in &mut s.controls.controls {

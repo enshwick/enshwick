@@ -51,8 +51,10 @@ pub const QUERY_RATE: f64 = 2.0;
 /// See [`QUERY_RATE`].
 pub const QUERY_BURST: f64 = 8.0;
 /// The action runs a second a player who is no administrator sends, after
-/// a burst of [`RUN_BURST`]: a control sends one a key press, so faster than
-/// queries, and each costs the server one handler call and one notice.
+/// a burst of [`RUN_BURST`].
+///
+/// A control sends one a key press, so faster than queries, and each costs
+/// the server one handler call and one notice.
 pub const RUN_RATE: f64 = 10.0;
 /// See [`RUN_RATE`].
 pub const RUN_BURST: f64 = 20.0;
