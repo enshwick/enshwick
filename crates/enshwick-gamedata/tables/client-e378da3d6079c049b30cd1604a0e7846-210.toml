@@ -262,7 +262,7 @@ revision = 1
 "ui.scroll_input" = { rva = 0xa5_1690, pattern = "80 B9 90 01 00 00 00 0F 10 02 0F 11 81 80 01 00 00" }
 "ui.scroll_end" = { rva = 0xa4_0160, pattern = "48 8B C4 55 53 56 57 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC F8 03 00 00" }
 "ui.column" = { rva = 0xa3_c790, pattern = "40 53 48 83 EC 30 48 8B 05 ?? ?? ?? ?? 48 8B D9 0F 29 74 24 20 45 33 C0 33 D2 0F 28 F1 48 8B 48 18 48 89 0B 48 C7 43 08 00 00 00 00 48 C7 43 10 00 00 00 00 E8 ?? ?? ?? ?? 48 8B CB 48 89 43 08 C6 43 14 01 E8 ?? ?? ?? ?? 48 8B 4B 08 48 8D 54 24 40 45 33 C0 F3 0F 11 74 24 44" }
-"ui.no_construct" = 0xac_c640
+"ui.no_construct" = { rva = 0xac_c640, pattern = "48 8B 4D ?? 4C 8D 0D ?? ?? ?? ?? 48 BA DE 5D 70 1D 37 B3 9B 5B", rel = 7 }
 # The text field of the rename dialogs and the chat input. `ui.text_field`
 # is pinned at the chat's call: a sibling constructor shares its entry.
 "ui.text_field" = { rva = 0xb2_32c0, pattern = "4C 8B 80 ?? ?? ?? ?? 49 81 C0 BC 0B 01 00 E8 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 8D ?? ?? ?? ??", rel = 15 }
@@ -281,7 +281,7 @@ revision = 1
 "pacing.loop_wait" = { rva = 0xf5_b3ee, pattern = "44 8B C8 44 0F 4C CA 48 8B 55 ?? 45 33 C0 8B 4D ?? C7 44 24 ?? 01 00 00 00", at = 7 }
 "pacing.message_wait" = { rva = 0xf5_b3bc, pattern = "44 8B C1 44 0F 4C C2 48 8B 55 ?? 41 B9 FF 1C 00 00 8B 4D ??", at = 7 }
 "pacing.server_wait" = { rva = 0xe5_2883, pattern = "41 B9 40 42 0F 00 4C 0F 4F CF 4D 8B C4 48 8D 55 ?? 48 8D 4D ??", at = 10 }
-"pacing.wait_divide" = { rva = 0xf5_b37e, pattern = "F2 0F 11 45 ?? E8 ?? ?? ?? ?? 48 B8 DB 34 B6 D7 82 DE 1B 43 48 F7 EB 48 C1 FA 12", at = 10 }
+"pacing.wait_divide" = { rva = 0xf5_b37e, pattern = "48 B8 DB 34 B6 D7 82 DE 1B 43 48 F7 EB 48 C1 FA 12 48 8B C2 48 C1 E8 3F 48 03 D0 45 38 65 ?? 74 ?? 49 8B 45 ?? 48 85 D2 79 ?? 45 8B C4 EB ?? B9 FF FF FF FF 48 3B D1 44 8B C1 44 0F 4C C2 48 8B 55 D8 41 B9 FF 1C 00 00 8B 4D E0 C7 44 24 20 06 00 00 00 FF D0 EB ?? 48 85 D2 79 ?? 45 8B CC EB ?? B8 FF FF FF FF 48 3B D0 44 8B C8 44 0F 4C CA 48 8B 55 D8", at = 0 }
 "pacing.default_workers" = { rva = 0x8e_a833, pattern = "0F B6 D1 41 0F B6 47 ?? 8B CF 40 3A C7 0F 42 C8 84 DB", at = 8 }
 "pacing.background_workers" = { rva = 0x8e_a850, pattern = "0F 45 C8 41 0F B6 47 ?? 44 0F B6 E9 41 3A C5 0F B6 CA", at = 8 }
 "map.fog_destroy" = { rva = 0x3a_1cc0, pattern = "48 85 D2 74 0F 48 8B 0B E8 ?? ?? ?? ?? 4C 89 A3 ?? ?? ?? ?? 48 8B 8B ?? ?? ?? ?? 48 85 C9", rel = 9 }
@@ -762,7 +762,7 @@ revision = 1
 "terrain.voxel_world" = { value = 0x1770, pattern = "48 83 EC 70 48 8B F9 48 8B DA 48 8B 8A ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 0F 84 ?? ?? ?? ??", at = 13, size = 4 }
 "terrain.editor" = { value = 0x1778, pattern = "48 89 44 24 ?? E8 ?? ?? ?? ?? 48 8B 8F ?? ?? ?? ?? 0F 57 C0 48 89 4D ?? 48 8B C8", at = 13, size = 4 }
 # The voxel editor holds its voxel store here.
-"voxel.store" = 0x1220
+"voxel.store" = { value = 0x1220, pattern = "41 56 48 83 EC 10 48 8B B1 ?? ?? ?? ?? F2 0F 10 02 8B 7A ?? F2 0F 11 04 24", at = 9, size = 4 }
 # The voxel store numbers its levels coarse to fine; this is the finest,
 # half a metre a voxel.
 "voxel.finest_level" = { value = 0x6, pattern = "48 8B 44 24 ?? 48 89 47 ?? 8B CE B8 ?? ?? ?? ?? 2B C6 41 D3 FF 44 89 7B ??", at = 12, size = 4 }
@@ -817,7 +817,7 @@ revision = 1
 "ui.button.bytes" = 0x5518_5889_48c4_8b48
 "ui.toggle.bytes" = 0x5510_5089_48c4_8b48
 # pin: ui.slider_init.bytes flagged: the code bytes at ui.slider_init now read 0x250d_100f_28ec_8348
-"ui.slider_init.bytes" = "0x250d_100f_28ec_8348"
+"ui.slider_init.bytes" = 0x250d_100f_28ec_8348
 "ui.slider.bytes" = 0x4155_4157_5653_5540
 # pin: ui.dropdown_init.bytes flagged: the code bytes at ui.dropdown_init now read 0xd50d_100f_28ec_8348
 "ui.dropdown_init.bytes" = "0xd50d_100f_28ec_8348"
@@ -896,7 +896,7 @@ revision = 1
 # the kept state the world settings ask `ui.persist` for.
 "ui.scroll_extent" = { value = 0x469, via = "ui.scroll_set_focus", pattern = "80 B9 ?? ?? ?? ?? 00 75 07 C6 81 ?? ?? ?? ?? 01 F3 0F 11 89 ?? ?? ?? ?? C3", at = 11, size = 4, plus = 1 }
 "ui.scroll_config_extent" = { value = 0x104, via = "ui.scroll_config", within = 0x180, pattern = "0F 11 8B ?? ?? ?? ?? 0F 11 83 ?? ?? ?? ?? 48 8B 9C 24 ?? ?? ?? ??", at = 10, size = 4, plus = 16 }
-"ui.scroll_state_size" = 0x18
+"ui.scroll_state_size" = { value = 0x18, pattern = "48 BA DE 5D 70 1D 37 B3 9B 5B C7 44 24 ?? 01 00 00 00 41 B8 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B C8", at = 20, size = 4 }
 "ui.label_align" = { value = 0x38, pattern = "49 89 4E ?? 49 89 4E ?? 41 C7 46 ?? 02 02 00 00 41 C7 46 ?? 01 00 00 01 41 0F 11 46 ?? 40 88 7C 24 ??", at = 11, size = 1 }
 "ui.label_shown" = { value = 0x3d, pattern = "41 C7 46 ?? 02 02 00 00 41 C7 46 ?? 01 00 00 01 41 0F 11 46 ?? 40 88 7C 24 ??", at = 11, size = 1, plus = 1 }
 "ui.label_font_size" = { value = 0x7c, pattern = "40 88 7C 24 ?? 41 0F 11 46 ?? 41 89 4E ?? 0F 10 03 49 89 8E ?? ?? ?? ?? 41 89 8E ?? ?? ?? ?? 41 C7 46 ?? 00 00 40 41 49 C7 86 ?? ?? ?? ?? 00 00 80 3F 41 C7 86 ?? ?? ?? ?? FF FF 00 00 49 89 8E ?? ?? ?? ?? 41 C7 86 ?? ?? ?? ?? FF FF FF FF 41 C7 86 ?? ?? ?? ?? 00 00 80 3F 41 C7 86 ?? ?? ?? ?? 00 00 00 FF", at = 34, size = 1 }

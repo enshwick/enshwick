@@ -82,7 +82,7 @@ fn a_mods_code_on_the_stack_takes_the_blame() {
 fn the_loader_and_the_game_are_named_when_no_mod_is_near() {
     let r = ranges();
     assert_eq!(blame(&r, 0x9100, None, &[0x77_0000]), Blame::Loader(2));
-    assert_eq!(blame(&r, 0x77_0000, None, &[0x1234]), Blame::Game);
+    assert_eq!(blame(&r, 0x77_0000, None, &[0x3000]), Blame::Game);
     assert!(
         text(Blame::Game, 0x77_0000, None)
             .ends_with("in the game: no mod's or loader's code on the stack\r\n")
@@ -92,7 +92,7 @@ fn the_loader_and_the_game_are_named_when_no_mod_is_near() {
 #[test]
 fn a_fault_in_game_code_the_loader_called_is_put_down_to_the_loader() {
     let r = ranges();
-    let blamed = blame(&r, 0x77_0000, None, &[0x77_1000, 0x9100, 0x1234]);
+    let blamed = blame(&r, 0x77_0000, None, &[0x77_1000, 0x9100, 0x3000]);
     assert_eq!(blamed, Blame::Stack(2, 1));
     assert_eq!(
         text(blamed, 0x77_0000, Some((0, 8))),

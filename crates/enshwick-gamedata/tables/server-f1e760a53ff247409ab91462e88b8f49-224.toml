@@ -185,7 +185,7 @@ revision = 1
 # them around the instructions a maintainer picks with `--from`.
 "pacing.loop_wait" = { rva = 0x5c_954b, pattern = "44 8B CF 44 0F 4C CA 48 8B 55 ?? 45 33 C0 8B 4D ?? C7 44 24 ?? 01 00 00 00", at = 7 }
 "pacing.server_wait" = { rva = 0x7a_e4b3, pattern = "41 B9 40 42 0F 00 4C 0F 4F CF 4D 8B C4 48 8D 55 ?? 48 8D 4D ??", at = 10 }
-"pacing.wait_divide" = { rva = 0x5c_951a, pattern = "E8 ?? ?? ?? ?? 48 B8 DB 34 B6 D7 82 DE 1B 43 BF FF FF FF FF", at = 5 }
+"pacing.wait_divide" = { rva = 0x5c_951a, pattern = "48 B8 DB 34 B6 D7 82 DE 1B 43 BF FF FF FF FF 48 F7 EB 48 C1 FA 12 48 8B C2 48 C1 E8 3F 48 03 D0 79 ?? 44 8B CE EB ?? 48 3B D7 44 8B CF 44 0F 4C CA 48 8B 55 D8", at = 0 }
 "pacing.default_workers" = { rva = 0x5d_5573, pattern = "0F B6 D1 41 0F B6 47 ?? 8B CF 40 3A C7 0F 42 C8 84 DB", at = 8 }
 "pacing.background_workers" = { rva = 0x5d_5590, pattern = "0F 45 C8 41 0F B6 47 ?? 44 0F B6 E9 41 3A C5 0F B6 CA", at = 8 }
 
@@ -223,7 +223,7 @@ revision = 1
 "net.socket_destroy" = { rva = 0x9f_ec90, pattern = "74 11 49 8B 0E E8 ?? ?? ?? ?? 4A 8B 44 3B ?? 4C 89 2C 06 FF C7", rel = 6, body = { len = 0xf, open = [0xb], hash = "6d576e8a648c1b0e99a14e87b21207e7" } }
 "net.message_open" = { rva = 0xa0_33b0, pattern = "40 55 53 57 41 56 48 8D 6C 24 ?? 48 81 EC C8 00 00 00 49 8B F9" }
 "net.message_commit" = { rva = 0x9f_a4b0, pattern = "48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 20 44 8B 42 ??", body = { len = 0xc8, open = [0x6b, 0x74, 0x7c, 0xc4], hash = "52c7088a07cee2a29c90578610bbfe22" } }
-"net.message_abort" = 0x9f_f3c0
+"net.message_abort" = { rva = 0x9f_f3c0, pattern = "41 03 D1 48 03 C2 48 29 41 38 C3 CC CC 48 8B 12", at = 13, body = { len = 0x12, open = [0xe], hash = "e9a9fc0c56ff5f7c83945a69bdeb5f32" } }
 "net.message_receive" = { rva = 0xa0_3220, pattern = "48 89 5C 24 ?? 57 48 83 EC 40 0F 10 05 ?? ?? ?? ?? 33 FF 48 8B D9", body = { len = 0xab, open = [0xd, 0x57, 0x88], hash = "f1daf82fe503ab831707c1b671f23299" } }
 "net.message_release" = { rva = 0x9f_a450, pattern = "48 8B 12 45 33 C0 F6 42 ?? 10 74 0C 48 81 C1 A8 65 01 00" }
 "net.session_limit" = { rva = 0xa0_1b10, pattern = "40 57 48 83 EC 20 0F B6 C2 48 8B F9 A8 02 74 0C" }
@@ -602,7 +602,7 @@ revision = 1
 "terrain.voxel_world" = { value = 0x1770, pattern = "48 83 EC 70 48 8B F9 48 8B DA 48 8B 8A ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 0F 84 ?? ?? ?? ??", at = 13, size = 4 }
 "terrain.editor" = { value = 0x1778, pattern = "48 89 44 24 ?? E8 ?? ?? ?? ?? 48 8B 8F ?? ?? ?? ?? 0F 57 C0 48 89 4D ?? 48 8B C8", at = 13, size = 4 }
 # The voxel editor holds its voxel store here.
-"voxel.store" = 0x1220
+"voxel.store" = { value = 0x1220, pattern = "41 56 48 83 EC 10 48 8B B1 ?? ?? ?? ?? F2 0F 10 02 8B 7A ?? F2 0F 11 04 24", at = 9, size = 4 }
 # The voxel store numbers its levels coarse to fine; this is the finest,
 # half a metre a voxel.
 "voxel.finest_level" = { value = 0x6, pattern = "48 8B 44 24 ?? 48 89 47 ?? 8B CE B8 ?? ?? ?? ?? 2B C6 41 D3 FF 44 89 7B ??", at = 12, size = 4 }
