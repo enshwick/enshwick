@@ -126,6 +126,7 @@ off_from!(
     crate::net::SendError,
     crate::packs::PackError,
     crate::packs::ReadPackError,
+    crate::resources::CodecError,
     crate::services::LayoutError,
     crate::stats::ModifyError,
     crate::ui::UiError,

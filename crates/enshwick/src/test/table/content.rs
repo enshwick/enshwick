@@ -437,3 +437,65 @@ pub(crate) extern "system" fn game_text(
         None => Status::MISSING,
     }
 }
+
+/// Copies up to `capacity` of `items` to a non-null `out` and writes how
+/// many there are to a non-null `count`.
+fn copy_out<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
+    if !out.is_null() {
+        let copied = items.len().min(capacity as usize);
+        // SAFETY: the safe layer passes `capacity` writable items at a
+        // non-null `out`, apart from the fake's own list, and `copied` is at
+        // most `capacity`.
+        unsafe { out.copy_from_nonoverlapping(items.as_ptr(), copied) };
+    }
+    if count.is_null() {
+        return Status::OK;
+    }
+    put(count, u32::try_from(items.len()).unwrap_or(u32::MAX))
+}
+
+pub(crate) extern "system" fn resource_keys(
+    _me: ModHandle,
+    type_hash: u32,
+    out: *mut ResourceKey,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let mut keys: Vec<ResourceKey> = with(Vec::new(), |s| {
+        s.host
+            .resources
+            .keys()
+            .filter(|(_, ty, _)| type_hash == 0 || *ty == type_hash)
+            .map(|&(guid, type_hash, part)| ResourceKey {
+                guid,
+                type_hash,
+                part,
+            })
+            .collect()
+    });
+    keys.sort_by_key(|key| (key.type_hash, key.guid, key.part));
+    copy_out(&keys, out, capacity, count)
+}
+
+pub(crate) extern "system" fn content_hashes(
+    _me: ModHandle,
+    out: *mut [u32; 4],
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let hashes: Vec<[u32; 4]> = with(Vec::new(), |s| s.host.archive.keys().copied().collect());
+    copy_out(&hashes, out, capacity, count)
+}
+
+pub(crate) extern "system" fn types(
+    _me: ModHandle,
+    out: *mut crate::abi::TypeEntry,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let Some(table) = with(None, |s| s.host.types.clone()) else {
+        return Status::MISSING;
+    };
+    crate::test::table::mods::list(table.entries(), out, entry_size, capacity, count)
+}

@@ -121,6 +121,34 @@ impl FakeHost {
         self
     }
 
+    /// Gives the game the reflected `types`, for
+    /// [`Registry::game`](crate::resources::Registry::game); a later call
+    /// replaces them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::resources::{Kind, Registry, Type};
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .types([Type::new("keen::uint32", Kind::Uint32, 4, 4)])
+    ///     .install();
+    /// assert!(Registry::game()?.named("keen::uint32").is_some());
+    /// # let _ = loader;
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn types(
+        mut self,
+        types: impl IntoIterator<Item = crate::resources::Type<'static>>,
+    ) -> Self {
+        let types: Vec<_> = types.into_iter().collect();
+        self.types = Some(std::sync::Arc::new(crate::resources::TypeTable::new(
+            &types,
+        )));
+        self
+    }
+
     /// Lists `named` in the game's item registry by their debug names, laid
     /// out by the host's item layout, so `content::vanilla::item` finds each
     /// item by its name in a mod the host runs. It needs

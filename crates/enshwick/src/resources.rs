@@ -25,12 +25,15 @@
 mod codec;
 mod kind;
 mod registry;
+mod table;
 mod types;
 mod value;
 
 pub use codec::CodecError;
 pub use kind::Kind;
 pub use registry::Registry;
+#[doc(hidden)]
+pub use table::TypeTable;
 pub use types::{Attribute, Constant, Field, Type, fnv1a32};
 pub use value::{Value, Variant};
 

@@ -1,0 +1,418 @@
+//! The type registry across the ABI: the entries the loader lists, and the
+//! types the safe layer reads back from them.
+
+use super::{Attribute, Constant, Field, Kind, Registry, Type};
+use crate::abi::{Status, Str, TypeAttribute, TypeConstant, TypeEntry, TypeField};
+use crate::{Host, Off};
+
+/// Every type as ABI entries, built once and kept for the process, for the
+/// loader's and the fake host's [`HostApi::types`](crate::abi::HostApi::types).
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct TypeTable(&'static [TypeEntry]);
+
+// SAFETY: the entries and every string and array they point at are leaked by
+// `TypeTable::new` and never written again, so any thread may read them.
+unsafe impl Send for TypeTable {}
+// SAFETY: as for `Send`: nothing behind the entries is ever written.
+unsafe impl Sync for TypeTable {}
+
+impl TypeTable {
+    /// The entries of `types`, kept for the process.
+    #[must_use]
+    pub fn new<'t>(types: impl IntoIterator<Item = &'t Type<'static>>) -> Self {
+        let entries: Vec<TypeEntry> = types.into_iter().map(entry).collect();
+        Self(Box::leak(entries.into_boxed_slice()))
+    }
+
+    /// The entries, valid for the process.
+    #[must_use]
+    pub const fn entries(&self) -> &'static [TypeEntry] {
+        self.0
+    }
+}
+
+/// `items` leaked for the process, as an array pointer and its length; null
+/// for none.
+fn leak<T>(items: Vec<T>) -> (*const T, u32) {
+    if items.is_empty() {
+        return (core::ptr::null(), 0);
+    }
+    let len = u32::try_from(items.len()).unwrap_or(u32::MAX);
+    (Box::leak(items.into_boxed_slice()).as_ptr(), len)
+}
+
+fn attributes(list: &[Attribute<'static>]) -> (*const TypeAttribute, u32) {
+    leak(
+        list.iter()
+            .map(|a| TypeAttribute {
+                name: Str::new(a.name()),
+                value_type: Str::new(a.value_type().unwrap_or("")),
+                value: Str::new(a.value()),
+            })
+            .collect(),
+    )
+}
+
+fn entry(ty: &Type<'static>) -> TypeEntry {
+    let (fields, field_count) = leak(
+        ty.fields()
+            .iter()
+            .map(|f| {
+                let (attributes, attribute_count) = attributes(f.attributes());
+                TypeField {
+                    name: Str::new(f.name()),
+                    type_name: Str::new(f.type_name().unwrap_or("")),
+                    offset: f.offset(),
+                    attribute_count,
+                    attributes,
+                }
+            })
+            .collect(),
+    );
+    let (constants, constant_count) = leak(
+        ty.constants()
+            .iter()
+            .map(|c| TypeConstant {
+                name: Str::new(c.name()),
+                value: c.value(),
+            })
+            .collect(),
+    );
+    let (attributes, attribute_count) = attributes(ty.attributes());
+    TypeEntry {
+        name: Str::new(ty.name()),
+        impact_name: Str::new(ty.impact_name()),
+        qualified_name: Str::new(ty.qualified_name()),
+        inner: Str::new(ty.base().or_else(|| ty.inner()).unwrap_or("")),
+        internal_hash: ty.internal_hash(),
+        size: ty.size(),
+        align: ty.align(),
+        element_align: ty.element_align(),
+        kind: ty.kind().byte(),
+        flags: ty.flags(),
+        count: ty.field_count(),
+        field_count,
+        constant_count,
+        attribute_count,
+        fields,
+        constants,
+        attributes,
+        ..TypeEntry::EMPTY
+    }
+}
+
+/// The `len` items at `items`, an array of an entry; none for null.
+///
+/// # Safety
+///
+/// A non-null `items` is valid for `len` items, unchanged for the life of
+/// the process.
+unsafe fn array<T>(items: *const T, len: u32) -> &'static [T] {
+    if items.is_null() || len == 0 {
+        return &[];
+    }
+    // SAFETY: `items` is not null, and the caller guarantees `len` items there
+    // for the life of the process.
+    unsafe { core::slice::from_raw_parts(items, len as usize) }
+}
+
+/// The text of `text`, empty when it is not UTF-8.
+///
+/// # Safety
+///
+/// `text` views bytes valid and unchanged for the life of the process.
+unsafe fn text(text: Str) -> &'static str {
+    // SAFETY: the caller guarantees the bytes for the life of the process.
+    unsafe { text.as_str() }.unwrap_or("")
+}
+
+/// # Safety
+///
+/// The attributes at `items` and their strings are valid and unchanged for
+/// the life of the process.
+unsafe fn read_attributes(items: *const TypeAttribute, len: u32) -> Vec<Attribute<'static>> {
+    // SAFETY: the caller guarantees the array and its strings for the process.
+    unsafe { array(items, len) }
+        .iter()
+        .map(|a| {
+            // SAFETY: as for the array: the strings live for the process.
+            let (name, value_type, value) =
+                unsafe { (text(a.name), text(a.value_type), text(a.value)) };
+            let attribute = Attribute::new(name, value);
+            if value_type.is_empty() {
+                attribute
+            } else {
+                attribute.with_value_type(value_type)
+            }
+        })
+        .collect()
+}
+
+/// The type an entry describes.
+///
+/// # Safety
+///
+/// Every string and array of `entry` is valid and unchanged for the life of
+/// the process, as [`HostApi::types`](crate::abi::HostApi::types) promises.
+unsafe fn read_entry(entry: &TypeEntry) -> Type<'static> {
+    // SAFETY: the caller guarantees every string of the entry for the process.
+    let (name, impact_name, qualified_name, inner) = unsafe {
+        (
+            text(entry.name),
+            text(entry.impact_name),
+            text(entry.qualified_name),
+            text(entry.inner),
+        )
+    };
+    let kind = Kind::from_byte(entry.kind);
+    let mut ty = Type::new(qualified_name, kind, entry.size, entry.align)
+        .with_names(name, impact_name)
+        .with_layout(entry.element_align, entry.flags, entry.internal_hash)
+        // SAFETY: the caller guarantees the attributes for the process.
+        .with_attributes(unsafe { read_attributes(entry.attributes, entry.attribute_count) })
+        .with_count(entry.count);
+    if !inner.is_empty() {
+        ty = ty.with_inner(inner);
+    }
+    // SAFETY: the caller guarantees the fields and their strings for the process.
+    let fields = unsafe { array(entry.fields, entry.field_count) };
+    if kind == Kind::Struct {
+        ty = ty.with_fields(
+            fields
+                .iter()
+                .map(|f| {
+                    // SAFETY: as for the fields: their strings live for the process.
+                    let (name, type_name) = unsafe { (text(f.name), text(f.type_name)) };
+                    let field = Field::new(name, f.offset, type_name);
+                    let field = if type_name.is_empty() {
+                        field.untyped()
+                    } else {
+                        field
+                    };
+                    // SAFETY: as for the fields: their attributes live for the process.
+                    field.with_attributes(unsafe {
+                        read_attributes(f.attributes, f.attribute_count)
+                    })
+                })
+                .collect(),
+        );
+    }
+    if kind == Kind::Enum {
+        // SAFETY: the caller guarantees the constants and their names for the process.
+        let constants = unsafe { array(entry.constants, entry.constant_count) };
+        ty = ty.with_constants(
+            constants
+                .iter()
+                // SAFETY: as for the constants: their names live for the process.
+                .map(|c| Constant::new(unsafe { text(c.name) }, c.value))
+                .collect(),
+        );
+    }
+    ty
+}
+
+/// The running game's types, kept per mod life after the first call.
+static GAME: crate::fresh::Fresh<Registry<'static>> = crate::fresh::Fresh::new();
+
+impl Registry<'static> {
+    /// The running game's type registry: every reflected type, read from the
+    /// loader at the first call and kept.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] outside the game and when the game holds no reflection data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::resources::Registry;
+    ///
+    /// if let Ok(registry) = Registry::game() {
+    ///     let table = registry.named("keen::BalancingTable");
+    ///     assert!(table.is_none_or(|ty| ty.size() > 0));
+    /// }
+    /// ```
+    pub fn game() -> Result<&'static Self, Off> {
+        if let Some(registry) = GAME.get() {
+            return Ok(registry);
+        }
+        let host = crate::host().ok_or_else(|| Off::new("types: outside the game"))?;
+        let entries = host.type_entries()?;
+        // SAFETY: `HostApi::types` promises every string and array of its
+        // entries valid and unchanged for the life of the process.
+        let types: Vec<Type<'static>> = entries.iter().map(|e| unsafe { read_entry(e) }).collect();
+        Ok(GAME.get_or_init(|| Self::new(types)))
+    }
+}
+
+impl Host {
+    /// Every entry of [`HostApi::types`](crate::abi::HostApi::types).
+    fn type_entries(&self) -> Result<Vec<TypeEntry>, Off> {
+        let api = self.api();
+        let size =
+            u32::try_from(size_of::<TypeEntry>()).map_err(|_| Off::new("types: entry size"))?;
+        let mut count = 0u32;
+        let status = (api.types)(
+            self.handle(),
+            core::ptr::null_mut(),
+            size,
+            0,
+            &raw mut count,
+        );
+        crate::load::ok(status, (), || "types".to_owned())?;
+        let mut entries = vec![TypeEntry::EMPTY; count as usize];
+        let status = (api.types)(
+            self.handle(),
+            entries.as_mut_ptr(),
+            size,
+            count,
+            &raw mut count,
+        );
+        crate::load::ok(status, (), || "types".to_owned())?;
+        entries.truncate(count as usize);
+        Ok(entries)
+    }
+
+    /// The keys of the game's own resources of type `ty`, or of every
+    /// resource for `None`, in the order their bytes lie in the archive.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the game's archive does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::resources::Registry;
+    ///
+    /// if let (Some(host), Ok(registry)) = (enshwick::host(), Registry::game()) {
+    ///     if let Some(table) = registry.named("keen::BalancingTable") {
+    ///         let keys = host.resource_keys(Some(table)).unwrap_or_default();
+    ///         assert!(keys.iter().all(|key| key.type_hash == table.qualified_hash()));
+    ///     }
+    /// }
+    /// ```
+    pub fn resource_keys(
+        &self,
+        ty: Option<&Type<'_>>,
+    ) -> Result<Vec<crate::abi::ResourceKey>, Off> {
+        let api = self.api();
+        let hash = ty.map_or(0, Type::qualified_hash);
+        let mut count = 0u32;
+        let status = (api.resource_keys)(
+            self.handle(),
+            hash,
+            core::ptr::null_mut(),
+            0,
+            &raw mut count,
+        );
+        crate::load::ok(status, (), || "resource keys".to_owned())?;
+        let empty = crate::abi::ResourceKey {
+            guid: [0; 16],
+            type_hash: 0,
+            part: 0,
+        };
+        let mut keys = vec![empty; count as usize];
+        let status = (api.resource_keys)(
+            self.handle(),
+            hash,
+            keys.as_mut_ptr(),
+            count,
+            &raw mut count,
+        );
+        crate::load::ok(status, (), || "resource keys".to_owned())?;
+        keys.truncate(count as usize);
+        Ok(keys)
+    }
+
+    /// The hashes of the game's own contents, in the archive's order;
+    /// [`Host::game_content`] reads each.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the game's archive does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// if let Some(host) = enshwick::host() {
+    ///     let hashes = host.content_hashes().unwrap_or_default();
+    ///     assert!(hashes.first().is_none_or(|hash| host.game_content(*hash).is_some()));
+    /// }
+    /// ```
+    pub fn content_hashes(&self) -> Result<Vec<[u32; 4]>, Off> {
+        let api = self.api();
+        let mut count = 0u32;
+        let status = (api.content_hashes)(self.handle(), core::ptr::null_mut(), 0, &raw mut count);
+        crate::load::ok(status, (), || "content hashes".to_owned())?;
+        let mut hashes = vec![[0u32; 4]; count as usize];
+        let status =
+            (api.content_hashes)(self.handle(), hashes.as_mut_ptr(), count, &raw mut count);
+        crate::load::ok(status, (), || "content hashes".to_owned())?;
+        hashes.truncate(count as usize);
+        Ok(hashes)
+    }
+
+    /// The bytes of the game's own content `hash`, from its archive; `None`
+    /// for a hash the archive lacks.
+    ///
+    /// # Examples
+    ///
+    /// See [`Host::content_hashes`].
+    #[must_use]
+    pub fn game_content(&self, hash: [u32; 4]) -> Option<Vec<u8>> {
+        let api = self.api();
+        let mut buffer = vec![0u8; usize::try_from(hash[0]).ok()?];
+        let mut len = 0u32;
+        let status = (api.content_read)(
+            self.handle(),
+            &raw const hash,
+            buffer.as_mut_ptr(),
+            u32::try_from(buffer.len()).ok()?,
+            &raw mut len,
+        );
+        (status == Status::OK).then(|| {
+            buffer.truncate(len as usize);
+            buffer
+        })
+    }
+
+    /// The value of the game's own resource `key`, read from its archive by
+    /// the type its key names.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] outside the game, for a key the archive lacks, and when the
+    /// resource does not read as its type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::resources::Registry;
+    ///
+    /// if let (Some(host), Ok(registry)) = (enshwick::host(), Registry::game()) {
+    ///     if let Some(table) = registry.named("keen::BalancingTable") {
+    ///         for key in host.resource_keys(Some(table)).unwrap_or_default() {
+    ///             let _value = host.game_value(key);
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub fn game_value(&self, key: crate::abi::ResourceKey) -> Result<super::Value, Off> {
+        let registry = Registry::game()?;
+        let ty = registry.hashed(key.type_hash).ok_or_else(|| {
+            Off::new(format!(
+                "resource type {:#010x} is not a type of this build",
+                key.type_hash
+            ))
+        })?;
+        let bytes = self.game_resource(key).ok_or_else(|| {
+            Off::new(format!(
+                "resource {}: not in the archive",
+                crate::content::Guid(key.guid)
+            ))
+        })?;
+        Ok(registry.decode(ty.qualified_name(), &bytes)?)
+    }
+}

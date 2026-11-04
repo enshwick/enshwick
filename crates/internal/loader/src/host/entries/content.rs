@@ -467,3 +467,122 @@ pub(crate) extern "system" fn icons_ready(me: ModHandle) -> Status {
         Err(status) => status,
     })
 }
+
+/// Copies up to `capacity` of `items` to a non-null `out` and writes how
+/// many there are to a non-null `count`.
+///
+/// # Safety
+///
+/// - A non-null `out` is writable for `capacity` items, aligned, apart from
+///   `items`, and untouched by the mod during the call.
+/// - A non-null `count` points at a writable, aligned `u32` that no other
+///   thread touches during the call.
+unsafe fn copy_out<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
+    if !out.is_null() {
+        let copied = items.len().min(capacity as usize);
+        // SAFETY: the caller guarantees `capacity` writable items at the
+        // non-null `out`, apart from the loader's list; `copied` is at most
+        // `capacity`.
+        unsafe { out.copy_from_nonoverlapping(items.as_ptr(), copied) };
+    }
+    // SAFETY: the caller guarantees a non-null `count` points at a writable,
+    // aligned `u32` that no other thread touches during the call.
+    unsafe { put(count, u32::try_from(items.len()).unwrap_or(u32::MAX)) }
+}
+
+/// Every resource key of the game's archive, in archive order, read once.
+static RESOURCE_KEYS: std::sync::OnceLock<Option<Vec<api_frame::ResourceKey>>> =
+    std::sync::OnceLock::new();
+/// Every content hash of the game's archive, read once.
+static CONTENT_HASHES: std::sync::OnceLock<Option<Vec<[u32; 4]>>> = std::sync::OnceLock::new();
+/// Every reflected type as ABI entries, built once.
+static TYPES: std::sync::OnceLock<Option<enshwick::resources::TypeTable>> =
+    std::sync::OnceLock::new();
+
+pub(crate) extern "system" fn resource_keys(
+    me: ModHandle,
+    type_hash: u32,
+    out: *mut api_frame::ResourceKey,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("resource_keys", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let Some(keys) = RESOURCE_KEYS
+            .get_or_init(|| crate::archive::game().map(crate::archive::Archive::keys))
+            .as_ref()
+        else {
+            return Status::MISSING;
+        };
+        let of_type: Vec<api_frame::ResourceKey>;
+        let keys = if type_hash == 0 {
+            keys.as_slice()
+        } else {
+            of_type = keys
+                .iter()
+                .filter(|key| key.type_hash == type_hash)
+                .copied()
+                .collect();
+            of_type.as_slice()
+        };
+        // SAFETY: `HostApi::resource_keys` has the mod pass `out` null or
+        // writable for `capacity` keys and `count` null or a writable `u32`,
+        // untouched by the mod during the call.
+        unsafe { copy_out(keys, out, capacity, count) }
+    })
+}
+
+pub(crate) extern "system" fn content_hashes(
+    me: ModHandle,
+    out: *mut [u32; 4],
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("content_hashes", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let Some(hashes) = CONTENT_HASHES
+            .get_or_init(|| crate::archive::game().map(crate::archive::Archive::contents))
+            .as_ref()
+        else {
+            return Status::MISSING;
+        };
+        // SAFETY: `HostApi::content_hashes` has the mod pass `out` null or
+        // writable for `capacity` hashes and `count` null or a writable `u32`,
+        // untouched by the mod during the call.
+        unsafe { copy_out(hashes, out, capacity, count) }
+    })
+}
+
+pub(crate) extern "system" fn types(
+    me: ModHandle,
+    out: *mut api_frame::TypeEntry,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("types", || {
+        let loader = match caller(me) {
+            Ok(loader) => loader,
+            Err(status) => return status,
+        };
+        let Some(table) = TYPES
+            .get_or_init(|| {
+                let registry = loader.reflection.registry();
+                (!registry.is_empty()).then(|| enshwick::resources::TypeTable::new(registry.iter()))
+            })
+            .as_ref()
+        else {
+            return Status::MISSING;
+        };
+        // SAFETY: `HostApi::types` has the mod pass `out` null or writable
+        // for `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
+        unsafe {
+            crate::host::entries::mods::list(table.entries(), out, entry_size, capacity, count)
+        }
+    })
+}

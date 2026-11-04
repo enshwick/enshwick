@@ -1,4 +1,4 @@
-abi 11.1
+abi 11.2
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 144 align 8 born 144
@@ -283,7 +283,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1432 align 8
+HostApi size 1456 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -462,6 +462,9 @@ HostApi size 1432 align 8
     chat_mute_set at 1408 size 8 type extern "system" fn(ModHandle, PlayerKey, u8) -> Status
     chat_mute_has at 1416 size 8 type extern "system" fn(ModHandle, PlayerKey, *mut u8) -> Status
     set_base_cap at 1424 size 8 type extern "system" fn(ModHandle, u32) -> Status
+    resource_keys at 1432 size 8 type extern "system" fn(ModHandle, u32, *mut ResourceKey, u32, *mut u32) -> Status
+    content_hashes at 1440 size 8 type extern "system" fn(ModHandle, *mut [u32; 4], u32, *mut u32) -> Status
+    types at 1448 size 8 type extern "system" fn(ModHandle, *mut TypeEntry, u32, u32, *mut u32) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -873,6 +876,39 @@ TransactionOp size 16 align 8
     kind at 0 size 4 type u32
     reserved at 4 size 4 type u32
     data at 8 size 8 type *const c_void
+TypeAttribute size 48 align 8
+    name at 0 size 16 type Str
+    value_type at 16 size 16 type Str
+    value at 32 size 16 type Str
+TypeConstant size 24 align 8
+    name at 0 size 16 type Str
+    value at 16 size 8 type u64
+TypeEntry size 128 align 8 born 128
+    header at 0 size 8 type Header
+    name at 8 size 16 type Str
+    impact_name at 24 size 16 type Str
+    qualified_name at 40 size 16 type Str
+    inner at 56 size 16 type Str
+    internal_hash at 72 size 4 type u32
+    size at 76 size 4 type u32
+    align at 80 size 2 type u16
+    element_align at 82 size 2 type u16
+    kind at 84 size 1 type u8
+    flags at 85 size 1 type u8
+    reserved at 86 size 2 type [u8; 2]
+    count at 88 size 4 type u32
+    field_count at 92 size 4 type u32
+    constant_count at 96 size 4 type u32
+    attribute_count at 100 size 4 type u32
+    fields at 104 size 8 type *const TypeField
+    constants at 112 size 8 type *const TypeConstant
+    attributes at 120 size 8 type *const TypeAttribute
+TypeField size 48 align 8
+    name at 0 size 16 type Str
+    type_name at 16 size 16 type Str
+    offset at 32 size 4 type u32
+    attribute_count at 36 size 4 type u32
+    attributes at 40 size 8 type *const TypeAttribute
 UiDialog size 64 align 8 born 64
     header at 0 size 8 type Header
     title at 8 size 16 type Str

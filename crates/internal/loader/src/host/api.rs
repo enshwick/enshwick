@@ -8,9 +8,10 @@ use super::entries::build::{
 };
 use super::entries::calls::{call, find_call, serve_call};
 use super::entries::content::{
-    add_text, change_data, content_read, content_serve, declare_change, entity_data_open,
-    game_text, icons_ready, item_data_get, item_data_open, item_data_set, rebuild_resource,
-    recipe_disabled, recipe_kind, recipe_rule, resource_read, serve_resource, set_change,
+    add_text, change_data, content_hashes, content_read, content_serve, declare_change,
+    entity_data_open, game_text, icons_ready, item_data_get, item_data_open, item_data_set,
+    rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_keys, resource_read,
+    serve_resource, set_change, types,
 };
 use super::entries::gameplay::{
     account_knowledge, affix_info, affix_open, affix_roll, altar_limit_filter, altar_zone_filter,
@@ -232,4 +233,7 @@ pub(crate) static API: HostApi = HostApi {
     chat_mute_has,
     mod_dir,
     set_base_cap: super::entries::gameplay::set_base_cap,
+    resource_keys,
+    content_hashes,
+    types,
 };
