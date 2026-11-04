@@ -318,3 +318,42 @@ impl Installed {
         with(Vec::new(), |s| s.controls.runs.clone())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    unsafe extern "system" fn nothing(_: *const ControlEvent, _: *mut c_void) {}
+
+    fn declared(key: u32, fires: u32) -> Status {
+        let spec = ControlSpec {
+            header: Header::of::<ControlSpec>(),
+            name: Str::new("horn"),
+            label: Str::new("Horn"),
+            key,
+            second: 0,
+            link: Str::EMPTY,
+            fires,
+            hold_ms: 500,
+        };
+        control(
+            ModHandle(1),
+            &raw const spec,
+            nothing,
+            core::ptr::null_mut(),
+        )
+    }
+
+    #[test]
+    fn the_fake_refuses_a_control_that_never_fires_or_an_unbindable_key() {
+        let h = Key::parse("H").unwrap().bits();
+        assert_eq!(declared(h, 0), Status::BAD_ARGS, "no phase");
+        assert_eq!(declared(h, 8), Status::BAD_ARGS, "an unknown phase");
+        assert_eq!(
+            declared(0x01, ControlSpec::PRESS),
+            Status::BAD_ARGS,
+            "Escape"
+        );
+        assert_ne!(declared(h, ControlSpec::PRESS), Status::BAD_ARGS);
+    }
+}
