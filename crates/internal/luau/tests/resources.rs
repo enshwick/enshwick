@@ -46,6 +46,19 @@ mod tests {
         bytes
     }
 
+    fn extra_key() -> ResourceKey {
+        Guid::parse("5afe5afe-0000-4000-8000-000000000002").key_by_hash(fnv1a32(b"demo::Extra"))
+    }
+
+    /// `demo::Extra` with its bonus 1.5, its pair's first absent and its
+    /// second 2.5; each optional's offset counts from itself.
+    fn extra() -> Vec<u8> {
+        let mut bytes = [12u32, 0, 8].map(u32::to_le_bytes).concat();
+        bytes.extend_from_slice(&1.5f32.to_le_bytes());
+        bytes.extend_from_slice(&2.5f32.to_le_bytes());
+        bytes
+    }
+
     fn run(main: &str) -> Installed {
         *CASE.lock().unwrap() = Some(Scripts::new().with("main.luau", main));
         let loader = FakeHost::new()
@@ -59,8 +72,17 @@ mod tests {
                     Field::new("side", 4, "demo::Side"),
                     Field::new("count", 8, "demo::uint64"),
                 ]),
+                Type::new("demo::Bonus", Kind::BlobOptional, 4, 4).with_inner("demo::float32"),
+                Type::new("demo::Pair", Kind::StaticArray, 8, 4)
+                    .with_inner("demo::Bonus")
+                    .with_count(2),
+                Type::new("demo::Extra", Kind::Struct, 12, 4).with_fields(vec![
+                    Field::new("bonus", 0, "demo::Bonus"),
+                    Field::new("pair", 4, "demo::Pair"),
+                ]),
             ])
             .resource(key(), bytes(2.5, u64::MAX))
+            .resource(extra_key(), extra())
             .archive([4, 1, 2, 3], vec![5, 6, 7, 8])
             .game_version("1283531|^/game38/branches/release_1.0|2026")
             .mod_dir(&folder())
@@ -195,9 +217,66 @@ mod tests {
         assert_eq!(built, expected, "the value alone, its count left zero");
     }
 
+    #[test]
+    fn an_absent_optional_reads_as_none_keeps_its_place_and_clears_on_return() {
+        let loader = run(r#"
+            local r = enshwick.resources
+            local value = r.game_value(r.resource_keys("demo::Extra")[1])
+            print(`bonus {value.bonus} pair {#value.pair} first {value.pair[1] == r.none()} second {value.pair[2]}`)
+            for _, key in r.resource_keys("demo::Extra") do
+                r.serve(key, key, function()
+                    return { bonus = r.none() }
+                end)
+            end
+        "#);
+        assert!(
+            logged(&loader, "bonus 1.5 pair 2 first true second 2.5"),
+            "{:?}",
+            loader.logs()
+        );
+        let mut cleared = extra();
+        cleared[..4].fill(0);
+        assert_eq!(
+            loader.build_resource(&extra_key(), &extra()).unwrap(),
+            cleared
+        );
+    }
+
+    #[test]
+    fn a_patch_whose_value_does_not_fit_is_logged_and_serves_the_base() {
+        let loader = run(r#"
+            local r = enshwick.resources
+            local key = r.resource_keys("demo::balance::Table")[1]
+            r.serve(key, key, function()
+                return { damage = "much" }
+            end)
+            r.serve(r.resource_keys("demo::Extra")[1], r.resource_keys("demo::Extra")[1], function()
+                return { bonus = print }
+            end)
+        "#);
+        let base = bytes(2.5, 7);
+        assert_eq!(loader.build_resource(&key(), &base).unwrap(), base);
+        assert_eq!(
+            loader.build_resource(&extra_key(), &extra()).unwrap(),
+            extra()
+        );
+        assert!(
+            logged(&loader, "serve demo::balance::Table: damage"),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(
+            logged(&loader, "serve demo::Extra: bonus"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
     /// The mod's folder: `data/names.txt` holds `ada`.
     fn folder() -> String {
-        let dir = std::env::temp_dir().join(format!("enshwick-luau-mods-{}", std::process::id()));
+        // Under the target directory, which `cargo clean` empties, not the system's.
+        let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
+            .join(format!("enshwick-luau-mods-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("data")).unwrap();
         std::fs::write(dir.join("data").join("names.txt"), "ada").unwrap();
         dir.to_str().unwrap().to_owned()

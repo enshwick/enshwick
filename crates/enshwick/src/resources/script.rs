@@ -755,4 +755,13 @@ mod tests {
         assert_eq!(back.field("raw"), Some(&Data::Bytes(vec![1, 2])));
         assert!(Data::from_value(Value::Vector([0.0; 3])).is_err());
     }
+
+    #[test]
+    fn negative_zero_from_a_script_stays_a_float_with_its_sign() {
+        let Ok(Data::Float(zero)) = Data::from_value(Value::Number(-0.0)) else {
+            panic!("-0.0 became an integer");
+        };
+        assert!(zero.is_sign_negative());
+        assert_eq!(Data::from_value(Value::Number(0.0)).unwrap(), Data::Int(0));
+    }
 }
