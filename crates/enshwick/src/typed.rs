@@ -5,6 +5,12 @@
 //! A module per reflected namespace holds its types, read and written
 //! by field name, so a type whose shape a build changes turns off alone.
 //!
+//! A game update needs no change for a moved field or a renumbered
+//! constant; a removed or retyped field turns off only its type at
+//! resolve, naming the build; a type renamed with the same layout
+//! resolves under its new name. The book's chapter "Typed types across
+//! game builds" explains each case.
+//!
 //! # Examples
 //!
 //! ```

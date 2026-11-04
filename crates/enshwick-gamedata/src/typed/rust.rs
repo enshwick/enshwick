@@ -538,6 +538,12 @@ fn root_file(top: &BTreeSet<&String>, build: &str) -> String {
          //! A module per reflected namespace holds its types, read and written\n\
          //! by field name, so a type whose shape a build changes turns off alone.\n\
          //!\n\
+         //! A game update needs no change for a moved field or a renumbered\n\
+         //! constant; a removed or retyped field turns off only its type at\n\
+         //! resolve, naming the build; a type renamed with the same layout\n\
+         //! resolves under its new name. The book's chapter \"Typed types across\n\
+         //! game builds\" explains each case.\n\
+         //!\n\
          //! # Examples\n\
          //!\n\
          //! ```\n\

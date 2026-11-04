@@ -96,7 +96,7 @@ pub trait Reflected: Sized {
 ///     T::ID
 /// }
 /// ```
-pub trait Named: Reflected + sealed::Sealed {
+pub trait Named: Reflected + sealed::Sealed + 'static {
     /// Enshwick's id for the type, which the loader maps to the running
     /// build's type.
     const ID: &'static str;
@@ -376,7 +376,7 @@ macro_rules! named {
 pub(crate) use named;
 
 macro_rules! integers {
-    ($($int:ty => $name:literal),* $(,)?) => {$(
+    ($($int:ty => $name:literal, $form:ident),* $(,)?) => {$(
         impl Reflected for $int {
             fn from_value(value: &Value) -> Result<Self, ShapeError> {
                 let fits = match value {
@@ -388,24 +388,18 @@ macro_rules! integers {
             }
 
             fn to_value(&self) -> Value {
-                integer_value(i128::from(*self))
+                Value::$form((*self).into())
             }
         }
     )*};
 }
 
+// Each in the form the codec reads its kind as: unsigned as `Uint`, signed
+// as `Int`.
 integers!(
-    u8 => "a u8", u16 => "a u16", u32 => "a u32", u64 => "a u64",
-    i8 => "an i8", i16 => "an i16", i32 => "an i32", i64 => "an i64",
+    u8 => "a u8", Uint, u16 => "a u16", Uint, u32 => "a u32", Uint, u64 => "a u64", Uint,
+    i8 => "an i8", Int, i16 => "an i16", Int, i32 => "an i32", Int, i64 => "an i64", Int,
 );
-
-/// An integer as the codec reads one: signed only when negative.
-fn integer_value(n: i128) -> Value {
-    u64::try_from(n).map_or_else(
-        |_| Value::Int(i64::try_from(n).unwrap_or(i64::MIN)),
-        Value::Uint,
-    )
-}
 
 impl Reflected for bool {
     fn from_value(value: &Value) -> Result<Self, ShapeError> {
@@ -736,7 +730,7 @@ impl<T> core::fmt::Debug for EventType<T> {
     }
 }
 
-impl<T: Event + 'static> EventType<T> {
+impl<T: Event> EventType<T> {
     /// `T` on the running build, its shape checked.
     ///
     /// # Errors
@@ -821,7 +815,7 @@ impl<T> core::fmt::Debug for ResourceType<T> {
     }
 }
 
-impl<T: Resource + 'static> ResourceType<T> {
+impl<T: Resource> ResourceType<T> {
     /// `T` on the running build, its shape checked.
     ///
     /// # Errors

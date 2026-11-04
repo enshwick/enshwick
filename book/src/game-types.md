@@ -1,16 +1,115 @@
 # The game's own types
 
-For a struct the API does not wrap, such as a component a
-[hooked system](ecs.md) hands you, `cargo enshwick types` writes the game's own
-types as Rust or Luau from the game's reflection data.
+Every component, event and resource the game reflects has a typed Rust item in
+`enshwick::typed`, generated from the game's own reflection data. A mod reads
+and changes them as Rust values, by the game's field names. For any other
+struct, such as one a [hooked system](ecs.md) hands you, `cargo enshwick types`
+writes the game's types into your own crate.
 
-## The game's names
+## How do I turn on the typed API?
+
+The items come with the `typed` feature, which builds on `unstable` (see
+[Stability](stability.md)):
+
+```toml
+[dependencies]
+enshwick = { version = "1", features = ["typed"] }
+```
+
+The feature adds a few thousand items, so it adds some seconds to a build.
+
+## How are the items named?
+
+A module holds each of the game's namespaces, without the engine's root
+namespace: the game's `keen::ecs::Health` is `enshwick::typed::ecs::Health`,
+and `keen::LootSettingsResource` is `enshwick::typed::LootSettingsResource`.
+A field `deadEntityId` is `dead_entity_id`, and an enum constant `MagicalFog`
+is the variant `MagicalFog`. Every enum has a variant `Other` for a constant
+the item does not name, such as one a newer build adds. The API reference lists
+every item with its fields, size and role.
+
+## Read and write a component
+
+Resolve the component type once at `init`. The resolve checks the type's shape
+on the running build, and it fails only for that type. Read an entity's
+component on the game thread; `write` writes it back, marked changed the
+game's way:
+
+```rust
+use enshwick::events::PlayerJoined;
+use enshwick::typed::{ComponentType, ecs::Health};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let health = ComponentType::<Health>::resolve(load)?;
+    let world = load.world()?;
+    load.on::<PlayerJoined>(move |joined| match health.read(world, joined.entity) {
+        Ok(Some(value)) => enshwick::info!("health storage {:?}", value.data_storage),
+        Ok(None) => {}
+        Err(why) => enshwick::warn!("health does not read: {why}"),
+    })
+}
+```
+
+## Handle a game event
+
+An `EventType` calls your handler with each event of its type, read as its
+item:
+
+```rust
+use enshwick::typed::{EventType, ecs::EntityDiedEvent};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    EventType::<EntityDiedEvent>::resolve(load)?.on(load, |died| {
+        enshwick::info!("entity {} died", died.dead_entity_id.id);
+    })
+}
+```
+
+## Change a resource
+
+A `ResourceType` gives the key of a resource by its GUID, reads the game's own
+value, and serves a changed one. Several mods that serve one key change it in
+load order, each on the one before's result. The bytes of what the item does
+not hold stay as the game has them:
+
+```rust
+use enshwick::content::Guid;
+use enshwick::typed::{LootSettingsResource, ResourceType};
+
+// The GUID of the loot settings to change.
+const SETTINGS: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000002");
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let loot = ResourceType::<LootSettingsResource>::resolve(load)?;
+    let key = loot.key(SETTINGS);
+    loot.serve(load, key, key, |settings| {
+        settings.modifier.level_offset_range_max += 1.0;
+    })
+}
+```
+
+## What happens when a game update changes a type?
+
+A type the new build changed turns off alone, with a warning that names the
+build; the rest of the mod runs. A rebuilt mod gets the new build's items.
+[Typed types across game builds](concepts/typed-stability.md) explains each
+case.
+
+## Can a Luau mod use them?
+
+A Luau mod reads and writes the same types by their game names through
+[game resources as values](resource-values.md); the Luau names of the typed
+items are not part of the Luau API yet.
+
+## Write the game's types into your crate
+
+### The game's names
 
 The names are the game's:
 `keen::ecs::Health` becomes `game::keen::ecs::Health`, a field `dataStorage`
 becomes `data_storage`, and an enum constant `MagicalFog` becomes `MAGICAL_FOG`.
 
-## Write the types
+### Write the types
 
 Name the types you need, or a namespace ending in `::`. The types they use come
 with them:
@@ -29,7 +128,7 @@ game type whose name the [API's definitions](luau.md) already take keeps its
 namespace: the game's `keen::ecs::HitEvent` is `Ecs_HitEvent` beside the API's
 `HitEvent`. A [Luau mod](luau.md#start-a-luau-mod) loads both files at once.
 
-## Read a struct from game memory
+### Read a struct from game memory
 
 Every struct is `repr(C)` with each field at the offset the game reflects, and
 reads through [`enshwick::raw`](finding-the-game.md). A `bool` is its byte and
@@ -80,14 +179,14 @@ A field Rust cannot place where the game has it, such as an eight-byte integer
 at an offset of four, comes out as bytes; one the game does not describe stays
 in padding, and the struct's documentation names it.
 
-## Use them from Luau
+### Use them from Luau
 
 `game.d.luau` declares each struct as an exported record type, each enum as a
 union of its constants' names, and keeps the game's field names. Point luau-lsp
 at it beside `enshwick.d.luau`. It holds types only, and no Luau call returns
 game structs.
 
-## Write them again after an update
+### Write them again after an update
 
 Offsets and sizes change between game builds, and the file names the build it
 came from. Run the command again on the new build and rebuild the mod. Until
