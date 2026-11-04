@@ -228,9 +228,12 @@ pub(crate) extern "system" fn control(
         // SAFETY: `HostApi::control` has the mod pass `spec` null or
         // readable for the size its header gives, with no other writer
         // during the call.
-        let Some(spec) =
-            (unsafe { crate::host::memory::get_headed(spec, size_of::<api_frame::ControlSpec>()) })
-        else {
+        let Some(spec) = (unsafe {
+            crate::host::memory::get_headed(
+                spec,
+                <api_frame::ControlSpec as api_frame::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         let (Some(name), Some(label), Some(link)) =

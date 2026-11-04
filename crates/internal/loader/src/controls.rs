@@ -241,14 +241,15 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
             .ok()
             .and_then(|bit| u8::try_from(bit).ok())
             .filter(|bit| *bit < 64);
-        match bit {
-            Some(bit) => bits.push((index, bit)),
-            None => crate::log!(
+        if let Some(bit) = bit {
+            bits.push((index, bit));
+        } else {
+            crate::log!(
                 WARN,
                 "control {}: this build has no game action {}; only its keys fire it",
                 control.id,
                 control.link
-            ),
+            );
         }
     }
     if !bits.is_empty() {

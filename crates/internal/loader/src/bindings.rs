@@ -268,7 +268,7 @@ mod tests {
         let mut capture = Capture::new(&[true, false], true);
         assert_eq!(capture.look(&[true, false], &keys, 0, true), None);
         assert_eq!(capture.look(&[false, false], &keys, 0, false), None);
-        let alt = key("Alt+F4").modifiers();
+        let alt = key("Alt+F5").modifiers();
         assert_eq!(capture.look(&[false, true], &keys, alt, false), None);
         assert_eq!(
             capture.look(&[false, false], &keys, 0, true),
