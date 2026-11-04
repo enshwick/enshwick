@@ -63,6 +63,7 @@ mod tests {
             .resource(key(), bytes(2.5, u64::MAX))
             .archive([4, 1, 2, 3], vec![5, 6, 7, 8])
             .game_version("1283531|^/game38/branches/release_1.0|2026")
+            .mod_dir(&folder())
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Luau)`.
         let status =
@@ -192,5 +193,30 @@ mod tests {
         let mut expected = bytes(4.0, 0);
         expected[4] = 1;
         assert_eq!(built, expected, "the value alone, its count left zero");
+    }
+
+    /// The mod's folder: `data/names.txt` holds `ada`.
+    fn folder() -> String {
+        let dir = std::env::temp_dir().join(format!("enshwick-luau-mods-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("data")).unwrap();
+        std::fs::write(dir.join("data").join("names.txt"), "ada").unwrap();
+        dir.to_str().unwrap().to_owned()
+    }
+
+    #[test]
+    fn a_script_reads_its_own_folder_knows_its_side_and_the_running_mods() {
+        let loader = run(r#"
+            local m = enshwick.mods
+            print(`names {buffer.tostring(m.read("data/names.txt"))} listed {m.list("data")[1]}`)
+            print(`side {m.side()} other {m.is_running("you.other")}`)
+            print(`escape {pcall(m.read, "../secret.txt")}`)
+        "#);
+        for line in [
+            "names ada listed names.txt",
+            "side server other false",
+            "escape false",
+        ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
     }
 }

@@ -480,4 +480,15 @@ declare enshwick: {
 		--- Serves the resource `key`, built from the resource `base` the first time the game reads it: `patch` gets the base's value and returns the value to serve, which may name only the fields it changes; nil serves the base unchanged. Allowed while the mod initialises.
 		serve: (key: any, base: any, patch: (arg1: any) -> any) -> (),
 	},
+	--- The loaded mods, the side the mod runs on, and its own folder, read-only.
+	mods: {
+		--- Whether the mod `id`, such as `you.lockers`, runs in this game.
+		is_running: (id: string) -> boolean,
+		--- Where the mod runs: `server` or `client`.
+		side: () -> string,
+		--- The bytes of the file `path`, relative to the mod's folder.
+		read: (path: string) -> buffer,
+		--- The names of the files and folders in `path`, relative to the mod's folder (`.` for the folder itself), sorted.
+		list: (path: string) -> {string},
+	},
 }
