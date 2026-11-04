@@ -17,7 +17,7 @@
 )]
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `animal::AnimalQueryStatus`, 1 bytes.
+    /// The game's enum `animal::AnimalQueryStatus`, 1 byte.
     AnimalQueryStatus {
         /// `Idle`, 0.
         Idle = "Idle",
@@ -89,7 +89,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `animal::Needs`, 1 bytes.
+    /// The game's enum `animal::Needs`, 1 byte.
     Needs {
         /// `Shelter`, 0.
         Shelter = "Shelter",
@@ -158,7 +158,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `animal::Type`, 1 bytes.
+    /// The game's enum `animal::Type`, 1 byte.
     Type {
         /// `None`, 0.
         None = "None",

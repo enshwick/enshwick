@@ -25,7 +25,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::AbilityConstrain`, 1 bytes.
+    /// The game's struct `enemy01::AbilityConstrain`, 1 byte.
     AbilityConstrain {
         /// `negated`, of `bool`.
         negated: bool = "negated",
@@ -36,7 +36,7 @@ crate::typed::runtime::reflected_struct! {
 pub type AbilityConstrains = ::std::vec::Vec<::core::option::Option<crate::resources::Variant>>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::Action`, 1 bytes.
+    /// The game's struct `enemy01::Action`, 1 byte.
     Action {
     }
 }
@@ -141,7 +141,7 @@ crate::typed::runtime::reflected_struct! {
 pub type AttackCommandArray = ::std::vec::Vec<AttackCommand>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::AttackCommandData`, 1 bytes.
+    /// The game's struct `enemy01::AttackCommandData`, 1 byte.
     AttackCommandData {
         /// `mode`, of `enemy01::AttackCommandMode`.
         mode: AttackCommandMode = "mode",
@@ -149,7 +149,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::AttackCommandMode`, 1 bytes.
+    /// The game's enum `enemy01::AttackCommandMode`, 1 byte.
     AttackCommandMode {
         /// `RunInParallel`, 0.
         RunInParallel = "RunInParallel",
@@ -169,13 +169,13 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::AttackCooldownGroupId`, 1 bytes.
+    /// The game's struct `enemy01::AttackCooldownGroupId`, 1 byte.
     AttackCooldownGroupId {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::AttackData`, 1 bytes.
+    /// The game's struct `enemy01::AttackData`, 1 byte.
     AttackData {
     }
 }
@@ -222,7 +222,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::AttackDesscriptionResource`, 156 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `enemy01::AttackDesscriptionResource`, 156 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     AttackDesscriptionResource {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",
@@ -243,7 +245,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AttackDesscriptionResource = "enemy01::AttackDesscriptionResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::AttackFlag`, 1 bytes.
+    /// The game's enum `enemy01::AttackFlag`, 1 byte.
     AttackFlag {
         /// `StartAnimationDirectly`, 0.
         StartAnimationDirectly = "StartAnimationDirectly",
@@ -280,7 +282,7 @@ crate::typed::runtime::reflected_enum! {
 pub type AttackFlagMask = crate::typed::Flags<AttackFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::AttackMoveSettings`, 1 bytes.
+    /// The game's struct `enemy01::AttackMoveSettings`, 1 byte.
     AttackMoveSettings {
         /// `alwaysLookAtCombatTarget`, of `bool`.
         always_look_at_combat_target: bool = "alwaysLookAtCombatTarget",
@@ -288,7 +290,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::AttackStyle`, 1 bytes.
+    /// The game's enum `enemy01::AttackStyle`, 1 byte.
     AttackStyle {
         /// `Normal`, 0.
         Normal = "Normal",
@@ -315,7 +317,7 @@ crate::typed::runtime::reflected_enum! {
 pub type AttackStyleMask = crate::typed::Flags<AttackStyle>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::AutoTurnDirection`, 1 bytes.
+    /// The game's enum `enemy01::AutoTurnDirection`, 1 byte.
     AutoTurnDirection {
         /// `Left`, 0.
         Left = "Left",
@@ -411,7 +413,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::AwarenessState`, 1 bytes.
+    /// The game's enum `enemy01::AwarenessState`, 1 byte.
     AwarenessState {
         /// `None`, 0.
         None = "None",
@@ -453,7 +455,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::BehaviorDesscriptionResource`, 88 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `enemy01::BehaviorDesscriptionResource`, 88 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     BehaviorDesscriptionResource: BehaviorDesscription {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",
@@ -468,7 +472,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BehaviorDesscriptionResource = "enemy01::BehaviorDesscriptionResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::BehaviorMode`, 1 bytes.
+    /// The game's enum `enemy01::BehaviorMode`, 1 byte.
     BehaviorMode {
         /// `OnUpdate`, 0.
         OnUpdate = "OnUpdate",
@@ -504,7 +508,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::BehaviorSetup`, 1 bytes.
+    /// The game's struct `enemy01::BehaviorSetup`, 1 byte.
     BehaviorSetup {
         /// `executeBehaviorsDuringDeath`, of `bool`.
         execute_behaviors_during_death: bool = "executeBehaviorsDuringDeath",
@@ -512,7 +516,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::BlockRotationDuration`, 1 bytes.
+    /// The game's enum `enemy01::BlockRotationDuration`, 1 byte.
     BlockRotationDuration {
         /// `None`, 0.
         None = "None",
@@ -590,7 +594,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::CirclingDirection`, 1 bytes.
+    /// The game's enum `enemy01::CirclingDirection`, 1 byte.
     CirclingDirection {
         /// `Left`, 0.
         Left = "Left",
@@ -718,7 +722,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::CombatState`, 1 bytes.
+    /// The game's enum `enemy01::CombatState`, 1 byte.
     CombatState {
         /// `None`, 0.
         None = "None",
@@ -767,7 +771,7 @@ crate::typed::runtime::reflected_enum! {
 pub type CombatStateMask = crate::typed::Flags<CombatState>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::CombatTargetChangeMode`, 1 bytes.
+    /// The game's enum `enemy01::CombatTargetChangeMode`, 1 byte.
     CombatTargetChangeMode {
         /// `KeepCurrentCombatTarget`, 0.
         KeepCurrentCombatTarget = "KeepCurrentCombatTarget",
@@ -933,7 +937,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::EnemyClass`, 1 bytes.
+    /// The game's enum `enemy01::EnemyClass`, 1 byte.
     EnemyClass {
         /// `Melee`, 0.
         Melee = "Melee",
@@ -945,7 +949,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::EnemyMarkerType`, 1 bytes.
+    /// The game's enum `enemy01::EnemyMarkerType`, 1 byte.
     EnemyMarkerType {
         /// `PatrolPoint`, 0.
         PatrolPoint = "PatrolPoint",
@@ -961,7 +965,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::EnemyVariable`, 1 bytes.
+    /// The game's struct `enemy01::EnemyVariable`, 1 byte.
     EnemyVariable {
     }
 }
@@ -1140,7 +1144,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::OpenDoorSetup`, 1 bytes.
+    /// The game's struct `enemy01::OpenDoorSetup`, 1 byte.
     OpenDoorSetup {
         /// `canOpenDoors`, of `bool`.
         can_open_doors: bool = "canOpenDoors",
@@ -1338,7 +1342,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `enemy01::State`, 1 bytes.
+    /// The game's enum `enemy01::State`, 1 byte.
     State {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -1421,7 +1425,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::StunBreakSetup`, 1 bytes.
+    /// The game's struct `enemy01::StunBreakSetup`, 1 byte.
     StunBreakSetup {
         /// `enableStunBreak`, of `bool`.
         enable_stun_break: bool = "enableStunBreak",
@@ -1541,7 +1545,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `enemy01::WaterSetup`, 1 bytes.
+    /// The game's struct `enemy01::WaterSetup`, 1 byte.
     WaterSetup {
         /// `useCombatTargetWaterStateAsTarget`, of `bool`.
         use_combat_target_water_state_as_target: bool = "useCombatTargetWaterStateAsTarget",

@@ -36,7 +36,7 @@ crate::typed::runtime::reflected_struct! {
 pub mod runtime {
 
     crate::typed::runtime::reflected_enum! {
-        /// The game's enum `input_mapping::runtime::GameplayAction`, 1 bytes.
+        /// The game's enum `input_mapping::runtime::GameplayAction`, 1 byte.
         GameplayAction {
             /// `MovementLeft`, 0.
             MovementLeft = "MovementLeft",

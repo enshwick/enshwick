@@ -17,7 +17,7 @@
 )]
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `AbstractScatterImage`, 1 bytes.
+    /// The game's struct `AbstractScatterImage`, 1 byte.
     AbstractScatterImage {
     }
 }
@@ -68,7 +68,9 @@ crate::typed::runtime::reflected_struct! {
 pub type AchievementDataReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `AchievementDefinitionResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `AchievementDefinitionResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     AchievementDefinitionResource {
         /// `achievements`, of `BlobArray<Achievement>`.
         achievements: ::std::vec::Vec<Achievement> = "achievements",
@@ -96,7 +98,7 @@ crate::typed::runtime::reflected_struct! {
 pub type AchievementValue = u32;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ActionbarHotkeyBehavior`, 1 bytes.
+    /// The game's enum `ActionbarHotkeyBehavior`, 1 byte.
     ActionbarHotkeyBehavior {
         /// `OnlySelect`, 0.
         OnlySelect = "OnlySelect",
@@ -108,7 +110,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ActionbarSlotSelection`, 1 bytes.
+    /// The game's struct `ActionbarSlotSelection`, 1 byte.
     ActionbarSlotSelection {
         /// `index`, of `InventorySlotIndex`.
         index: InventorySlotIndex = "index",
@@ -116,7 +118,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ActorSequenceCollectionResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ActorSequenceCollectionResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ActorSequenceCollectionResource {
         /// `sequences`, of `BlobArray<ActorSequenceResourceReference>`.
         sequences: ::std::vec::Vec<ActorSequenceResourceReference> = "sequences",
@@ -128,7 +132,7 @@ crate::typed::runtime::named!(ActorSequenceCollectionResource = "ActorSequenceCo
 pub type ActorSequenceResourceReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `AimSnapMode`, 1 bytes.
+    /// The game's enum `AimSnapMode`, 1 byte.
     AimSnapMode {
         /// `Off`, 0.
         Off = "Off",
@@ -150,14 +154,16 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `AmbientCollectionResource`, 1 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `AmbientCollectionResource`, 1 byte.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     AmbientCollectionResource {
     }
 }
 crate::typed::runtime::named!(AmbientCollectionResource = "AmbientCollectionResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `AmbientEffectPlaybackType`, 1 bytes.
+    /// The game's enum `AmbientEffectPlaybackType`, 1 byte.
     AmbientEffectPlaybackType {
         /// `PlayAlways`, 0.
         PlayAlways = "PlayAlways",
@@ -169,7 +175,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `AmbientEnvironment`, 1 bytes.
+    /// The game's enum `AmbientEnvironment`, 1 byte.
     AmbientEnvironment {
         /// `None`, 0.
         None = "None",
@@ -242,7 +248,9 @@ crate::typed::runtime::reflected_enum! {
 pub type AmbientMask = crate::typed::Flags<AmbientTags>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `AmbientSoundEffectEntryResource`, 104 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `AmbientSoundEffectEntryResource`, 104 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     AmbientSoundEffectEntryResource {
         /// `soundContainer`, of `SoundContainerReference`.
         sound_container: SoundContainerReference = "soundContainer",
@@ -269,7 +277,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AmbientSoundEffectEntryResource = "AmbientSoundEffectEntryResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `AmbientSoundEffectResource`, 36 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `AmbientSoundEffectResource`, 36 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     AmbientSoundEffectResource {
         /// `inAllBiomes`, of `bool`.
         in_all_biomes: bool = "inAllBiomes",
@@ -288,7 +298,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AmbientSoundEffectResource = "AmbientSoundEffectResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `AmbientTags`, 1 bytes.
+    /// The game's enum `AmbientTags`, 1 byte.
     AmbientTags {
         /// `ForestProp`, 0.
         ForestProp = "ForestProp",
@@ -310,7 +320,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `AmbientVfxEffectEntryResource`, 88 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `AmbientVfxEffectEntryResource`, 88 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     AmbientVfxEffectEntryResource {
         /// `vfx`, of `VfxReference`.
         vfx: VfxReference = "vfx",
@@ -333,7 +345,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AmbientVfxEffectEntryResource = "AmbientVfxEffectEntryResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `AmbientVfxEffectResource`, 40 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `AmbientVfxEffectResource`, 40 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     AmbientVfxEffectResource {
         /// `effectEntries`, of `BlobArray<AmbientVfxEffectEntryResource>`.
         effect_entries: ::std::vec::Vec<AmbientVfxEffectEntryResource> = "effectEntries",
@@ -352,7 +366,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AmbientVfxEffectResource = "AmbientVfxEffectResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `AmmunitionType`, 1 bytes.
+    /// The game's enum `AmmunitionType`, 1 byte.
     AmmunitionType {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -559,7 +573,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `AnimationSpace`, 1 bytes.
+    /// The game's enum `AnimationSpace`, 1 byte.
     AnimationSpace {
         /// `Local`, 0.
         Local = "Local",
@@ -613,7 +627,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `AtmosphereResource`, 132 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `AtmosphereResource`, 132 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     AtmosphereResource {
         /// `parameters`, of `AtmosphereParameters`.
         parameters: AtmosphereParameters = "parameters",
@@ -650,7 +666,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `AttachAngleRange`, 1 bytes.
+    /// The game's enum `AttachAngleRange`, 1 byte.
     AttachAngleRange {
         /// `Disabled`, 0.
         Disabled = "Disabled",
@@ -662,7 +678,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `AttachDirection`, 1 bytes.
+    /// The game's enum `AttachDirection`, 1 byte.
     AttachDirection {
         /// `Floor`, 0.
         Floor = "Floor",
@@ -674,7 +690,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `AttachmentSlot`, 1 bytes.
+    /// The game's enum `AttachmentSlot`, 1 byte.
     AttachmentSlot {
         /// `Root`, 0.
         Root = "Root",
@@ -757,7 +773,7 @@ crate::typed::runtime::reflected_enum! {
 pub type AttachmentSlotMask = crate::typed::Flags<AttachmentSlot>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `AttackDirectionInput`, 1 bytes.
+    /// The game's enum `AttackDirectionInput`, 1 byte.
     AttackDirectionInput {
         /// `UseCamera`, 0.
         UseCamera = "UseCamera",
@@ -770,7 +786,9 @@ crate::typed::runtime::reflected_enum! {
 pub type AttributeCommand = u32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `AttributeContainerResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `AttributeContainerResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     AttributeContainerResource {
         /// `attributes`, of `BlobArray<BaseAttributeResource>`.
         attributes: ::std::vec::Vec<BaseAttributeResource> = "attributes",
@@ -816,7 +834,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BaseAttributeResource`, 28 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `BaseAttributeResource`, 28 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     BaseAttributeResource {
         /// `type`, of `HashKey32`.
         r#type: HashKey32 = "type",
@@ -834,7 +854,7 @@ crate::typed::runtime::named!(BaseAttributeResource = "BaseAttributeResource": R
 pub type BaseId = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BaseVoxelMaterial`, 1 bytes.
+    /// The game's struct `BaseVoxelMaterial`, 1 byte.
     BaseVoxelMaterial {
     }
 }
@@ -846,7 +866,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `Biome`, 1 bytes.
+    /// The game's enum `Biome`, 1 byte.
     Biome {
         /// `Default`, 0.
         Default = "Default",
@@ -870,7 +890,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BiomeMap`, 1 bytes.
+    /// The game's struct `BiomeMap`, 1 byte.
     BiomeMap {
         /// `baseBiome`, of `Biome`.
         base_biome: Biome = "baseBiome",
@@ -878,7 +898,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BiomeMapResource`, 28 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `BiomeMapResource`, 28 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     BiomeMapResource {
         /// `worldOrigin`, of `int2`.
         world_origin: Int2 = "worldOrigin",
@@ -893,7 +915,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BiomeMapResource = "BiomeMapResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `BlendShapeFlags`, 1 bytes.
+    /// The game's enum `BlendShapeFlags`, 1 byte.
     BlendShapeFlags {
         /// `Female`, 0.
         Female = "Female",
@@ -951,7 +973,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BlendShapeId`, 1 bytes.
+    /// The game's struct `BlendShapeId`, 1 byte.
     BlendShapeId {
     }
 }
@@ -960,7 +982,7 @@ crate::typed::runtime::reflected_struct! {
 pub type BlendShapeMask = crate::typed::Flags<BlendShapeFlags>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `BuffApplyType`, 1 bytes.
+    /// The game's enum `BuffApplyType`, 1 byte.
     BuffApplyType {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -974,7 +996,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `BuffSlotType`, 1 bytes.
+    /// The game's enum `BuffSlotType`, 1 byte.
     BuffSlotType {
         /// `Food`, 0.
         Food = "Food",
@@ -1044,7 +1066,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BuffTypeCollectionResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `BuffTypeCollectionResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     BuffTypeCollectionResource {
         /// `buffMap`, of `BuffTypeMap`.
         buff_map: BuffTypeMap = "buffMap",
@@ -1073,7 +1097,7 @@ crate::typed::runtime::reflected_struct! {
 pub type BuffTypeReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `BuildingCameraMode`, 1 bytes.
+    /// The game's enum `BuildingCameraMode`, 1 byte.
     BuildingCameraMode {
         /// `Orbit`, 0.
         Orbit = "Orbit",
@@ -1085,7 +1109,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `BuildingMappingType`, 1 bytes.
+    /// The game's enum `BuildingMappingType`, 1 byte.
     BuildingMappingType {
         /// `Default`, 0.
         Default = "Default",
@@ -1097,7 +1121,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BuildingMaterialBlendingResource`, 48 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `BuildingMaterialBlendingResource`, 48 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     BuildingMaterialBlendingResource {
         /// `layerCount`, of `uint32`.
         layer_count: u32 = "layerCount",
@@ -1108,7 +1134,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BuildingMaterialBlendingResource = "BuildingMaterialBlendingResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BuildingMaterialId`, 1 bytes.
+    /// The game's struct `BuildingMaterialId`, 1 byte.
     BuildingMaterialId {
         /// `value`, of `BuildingMaterialType`.
         value: BuildingMaterialType = "value",
@@ -1116,7 +1142,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BuildingMaterialMappingResource`, 20 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `BuildingMaterialMappingResource`, 20 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     BuildingMaterialMappingResource {
         /// `localId`, of `uint8`.
         local_id: u8 = "localId",
@@ -1127,13 +1155,15 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BuildingMaterialMappingResource = "BuildingMaterialMappingResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BuildingMaterialPalette`, 1 bytes.
+    /// The game's struct `BuildingMaterialPalette`, 1 byte.
     BuildingMaterialPalette {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BuildingMaterialPaletteResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `BuildingMaterialPaletteResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     BuildingMaterialPaletteResource {
         /// `mappings`, of `BlobArray<BuildingMaterialMappingResource>`.
         mappings: ::std::vec::Vec<BuildingMaterialMappingResource> = "mappings",
@@ -1154,7 +1184,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `BuildingMaterialParametersResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `BuildingMaterialParametersResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     BuildingMaterialParametersResource {
         /// `materials`, of `BlobArray<BuildingMaterialParameters>`.
         materials: ::std::vec::Vec<BuildingMaterialParameters> = "materials",
@@ -1318,7 +1350,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `CameraDistance`, 1 bytes.
+    /// The game's enum `CameraDistance`, 1 byte.
     CameraDistance {
         /// `Near`, 0.
         Near = "Near",
@@ -1340,7 +1372,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `CameraEasingType`, 1 bytes.
+    /// The game's enum `CameraEasingType`, 1 byte.
     CameraEasingType {
         /// `Linear`, 0.
         Linear = "Linear",
@@ -1356,7 +1388,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `CameraFlag`, 1 bytes.
+    /// The game's enum `CameraFlag`, 1 byte.
     CameraFlag {
         /// `Combat`, 0.
         Combat = "Combat",
@@ -1381,7 +1413,7 @@ crate::typed::runtime::reflected_enum! {
 pub type CameraFlags = crate::typed::Flags<CameraFlag>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `CameraId`, 1 bytes.
+    /// The game's enum `CameraId`, 1 byte.
     CameraId {
         /// `EntityCamera`, 0.
         EntityCamera = "EntityCamera",
@@ -1531,7 +1563,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `CameraOverride`, 1 bytes.
+    /// The game's enum `CameraOverride`, 1 byte.
     CameraOverride {
         /// `None`, 0.
         None = "None",
@@ -1567,7 +1599,9 @@ pub type CameraStatesOverrideConfigReference = crate::content::Guid;
 pub type CaptionLocaTag = LocaTagReference;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `CardClusterResource`, 440 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `CardClusterResource`, 440 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     CardClusterResource {
         /// `boundingSphere`, of `Sphere`.
         bounding_sphere: Sphere = "boundingSphere",
@@ -1612,7 +1646,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `CharacterCustomizationResource`, 64 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `CharacterCustomizationResource`, 64 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     CharacterCustomizationResource {
         /// `presets`, of `BlobArray<CustomizationPresetObject>`.
         presets: ::std::vec::Vec<CustomizationPresetObject> = "presets",
@@ -1711,7 +1747,9 @@ pub type CharacterPresetObjectReference = crate::content::Guid;
 pub type CharacterPresetReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `CharacterPresetResource`, 532 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `CharacterPresetResource`, 532 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     CharacterPresetResource {
         /// `references`, of `CharacterPreset`.
         references: CharacterPreset = "references",
@@ -1774,7 +1812,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CharacterPresetResource = "CharacterPresetResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `CharacterScenePostProcessingResource`, 96 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `CharacterScenePostProcessingResource`, 96 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     CharacterScenePostProcessingResource {
         /// `saturation`, of `float`.
         saturation: Float = "saturation",
@@ -1807,7 +1847,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CharacterScenePostProcessingResource = "CharacterScenePostProcessingResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `CharacterUtterance`, 1 bytes.
+    /// The game's enum `CharacterUtterance`, 1 byte.
     CharacterUtterance {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -1867,7 +1907,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ClassType`, 1 bytes.
+    /// The game's enum `ClassType`, 1 byte.
     ClassType {
         /// `Warrior`, 0.
         Warrior = "Warrior",
@@ -1889,7 +1929,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ColliderFeedbackEffectFlag`, 1 bytes.
+    /// The game's enum `ColliderFeedbackEffectFlag`, 1 byte.
     ColliderFeedbackEffectFlag {
         /// `OrientToNormal`, 0.
         OrientToNormal = "OrientToNormal",
@@ -1908,7 +1948,7 @@ crate::typed::runtime::reflected_enum! {
 pub type ColliderFeedbackEffectFlags = crate::typed::Flags<ColliderFeedbackEffectFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `CollisionFeedbackEffectCollection2`, 1 bytes.
+    /// The game's struct `CollisionFeedbackEffectCollection2`, 1 byte.
     CollisionFeedbackEffectCollection2 {
     }
 }
@@ -2017,7 +2057,9 @@ crate::typed::runtime::reflected_struct! {
 pub type CommerceProductReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `CommerceProductResource`, 40 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `CommerceProductResource`, 40 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     CommerceProductResource {
         /// `id`, of `CommerceProductId`.
         id: CommerceProductId = "id",
@@ -2062,7 +2104,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `CompareOperator`, 1 bytes.
+    /// The game's enum `CompareOperator`, 1 byte.
     CompareOperator {
         /// `GreaterThan`, 0.
         GreaterThan = "GreaterThan",
@@ -2129,7 +2171,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ContentPass`, 1 bytes.
+    /// The game's enum `ContentPass`, 1 byte.
     ContentPass {
         /// `ManualPois`, 0.
         ManualPois = "ManualPois",
@@ -2177,13 +2219,13 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `CountingPlayerKnowledgeObject`, 1 bytes.
+    /// The game's struct `CountingPlayerKnowledgeObject`, 1 byte.
     CountingPlayerKnowledgeObject: GameKnowledgeObjectBase {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `CountingWorldKnowledgeObject`, 1 bytes.
+    /// The game's struct `CountingWorldKnowledgeObject`, 1 byte.
     CountingWorldKnowledgeObject: GameKnowledgeObjectBase {
         /// `generateAdditionalPlayerKnowledge`, of `bool`.
         generate_additional_player_knowledge: bool = "generateAdditionalPlayerKnowledge",
@@ -2207,7 +2249,9 @@ pub type CraftingPropId = HashKey32;
 pub type CraftingPropMask = u64;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `CraftingPropResource`, 48 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `CraftingPropResource`, 48 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     CraftingPropResource {
         /// `craftingPropGuid`, of `Guid`.
         crafting_prop_guid: crate::content::Guid = "craftingPropGuid",
@@ -2226,7 +2270,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CraftingPropResource = "CraftingPropResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `CrosshairType`, 1 bytes.
+    /// The game's enum `CrosshairType`, 1 byte.
     CrosshairType {
         /// `None`, 0.
         None = "None",
@@ -2270,7 +2314,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `CursorAxisRotation`, 1 bytes.
+    /// The game's enum `CursorAxisRotation`, 1 byte.
     CursorAxisRotation {
         /// `Disabled`, 0.
         Disabled = "Disabled",
@@ -2415,7 +2459,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `CustomizationColorResource`, 36 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `CustomizationColorResource`, 36 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     CustomizationColorResource {
         /// `colorPresetId`, of `ColorPresetId`.
         color_preset_id: ColorPresetId = "colorPresetId",
@@ -2483,7 +2529,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `DecoObjectPartMode`, 1 bytes.
+    /// The game's enum `DecoObjectPartMode`, 1 byte.
     DecoObjectPartMode {
         /// `MiddleOnly`, 0.
         MiddleOnly = "MiddleOnly",
@@ -2527,7 +2573,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `DecoObjectRuleType`, 1 bytes.
+    /// The game's enum `DecoObjectRuleType`, 1 byte.
     DecoObjectRuleType {
         /// `RoofTop`, 0.
         RoofTop = "RoofTop",
@@ -2603,13 +2649,15 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `DefaultLootLabelCollection`, 1 bytes.
+    /// The game's struct `DefaultLootLabelCollection`, 1 byte.
     DefaultLootLabelCollection {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `DefaultLootLabelCollectionResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `DefaultLootLabelCollectionResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     DefaultLootLabelCollectionResource {
         /// `lootSettings`, of `BlobArray<DefaultLootSettingsResource>`.
         loot_settings: ::std::vec::Vec<DefaultLootSettingsResource> = "lootSettings",
@@ -2618,7 +2666,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DefaultLootLabelCollectionResource = "DefaultLootLabelCollectionResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `DefaultLootSettingsResource`, 104 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `DefaultLootSettingsResource`, 104 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     DefaultLootSettingsResource: LootSettingsResource {
         /// `id`, of `LootContainerId`.
         id: LootContainerId = "id",
@@ -2627,7 +2677,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DefaultLootSettingsResource = "DefaultLootSettingsResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `DelayFlags`, 1 bytes.
+    /// The game's enum `DelayFlags`, 1 byte.
     DelayFlags {
         /// `On`, 0.
         On = "On",
@@ -2645,7 +2695,9 @@ pub type DelayMask = crate::typed::Flags<DelayFlags>;
 pub type DescriptionLocaTag = LocaTagReference;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `DetailScatterResource`, 152 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `DetailScatterResource`, 152 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     DetailScatterResource {
         /// `layersShaderDataBlock`, of `RenderDataBlock`.
         layers_shader_data_block: RenderDataBlock = "layersShaderDataBlock",
@@ -2664,7 +2716,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DetailScatterResource = "DetailScatterResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `DialogAction`, 1 bytes.
+    /// The game's enum `DialogAction`, 1 byte.
     DialogAction {
         /// `None`, 0.
         None = "None",
@@ -2674,7 +2726,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `DialogHintSetup`, 1 bytes.
+    /// The game's enum `DialogHintSetup`, 1 byte.
     DialogHintSetup {
         /// `Default`, 0.
         Default = "Default",
@@ -2690,7 +2742,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `DialogHintType`, 1 bytes.
+    /// The game's enum `DialogHintType`, 1 byte.
     DialogHintType {
         /// `None`, 0.
         None = "None",
@@ -2723,7 +2775,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `DistanceBehavior`, 1 bytes.
+    /// The game's enum `DistanceBehavior`, 1 byte.
     DistanceBehavior {
         /// `None`, 0.
         None = "None",
@@ -2802,7 +2854,9 @@ crate::typed::runtime::reflected_struct! {
 pub type EmoteId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `EmoteResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `EmoteResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     EmoteResource {
         /// `data`, of `BlobArray<Emote>`.
         data: ::std::vec::Vec<Emote> = "data",
@@ -2811,13 +2865,13 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EmoteResource = "EmoteResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `EnemyPhase`, 1 bytes.
+    /// The game's struct `EnemyPhase`, 1 byte.
     EnemyPhase {
     }
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `EnvironmentEffectType`, 1 bytes.
+    /// The game's enum `EnvironmentEffectType`, 1 byte.
     EnvironmentEffectType {
         /// `PlayerDodgerollStart`, 0.
         PlayerDodgerollStart = "PlayerDodgerollStart",
@@ -3001,7 +3055,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `EquipmentSlot`, 1 bytes.
+    /// The game's enum `EquipmentSlot`, 1 byte.
     EquipmentSlot {
         /// `Vanity_Head`, 0.
         VanityHead = "Vanity_Head",
@@ -3061,7 +3115,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `EquipmentSlotType`, 1 bytes.
+    /// The game's enum `EquipmentSlotType`, 1 byte.
     EquipmentSlotType {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -3167,7 +3221,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ExperienceSourceType`, 1 bytes.
+    /// The game's enum `ExperienceSourceType`, 1 byte.
     ExperienceSourceType {
         /// `None`, 0.
         None = "None",
@@ -3218,7 +3272,7 @@ crate::typed::runtime::reflected_struct! {
 pub type FactionMask = crate::typed::Flags<FactionType>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `FactionType`, 1 bytes.
+    /// The game's enum `FactionType`, 1 byte.
     FactionType {
         /// `Environment`, 0.
         Environment = "Environment",
@@ -3256,13 +3310,15 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `FbUiWorldEvent`, 1 bytes.
+    /// The game's struct `FbUiWorldEvent`, 1 byte.
     FbUiWorldEvent {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `FishingEffectResource`, 564 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `FishingEffectResource`, 564 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     FishingEffectResource {
         /// `fishingEffects`, of `StaticArray<FishingResourceEffect,15>`.
         fishing_effects: ::std::vec::Vec<FishingResourceEffect> = "fishingEffects",
@@ -3295,7 +3351,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `FloorMaterialShape`, 1 bytes.
+    /// The game's enum `FloorMaterialShape`, 1 byte.
     FloorMaterialShape {
         /// `None`, 0.
         None = "None",
@@ -3310,7 +3366,7 @@ crate::typed::runtime::reflected_enum! {
 pub type FogRemovalId = HashKey32;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `FogType`, 1 bytes.
+    /// The game's enum `FogType`, 1 byte.
     FogType {
         /// `None`, 0.
         None = "None",
@@ -3341,7 +3397,9 @@ crate::typed::runtime::reflected_struct! {
 pub type FogVoxelMappingReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `FogVoxelMappingResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `FogVoxelMappingResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     FogVoxelMappingResource {
         /// `mapping`, of `BlobArray<FogVoxelMappingInfo>`.
         mapping: ::std::vec::Vec<FogVoxelMappingInfo> = "mapping",
@@ -3350,7 +3408,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FogVoxelMappingResource = "FogVoxelMappingResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `FogVoxelMappingType`, 1 bytes.
+    /// The game's enum `FogVoxelMappingType`, 1 byte.
     FogVoxelMappingType {
         /// `Gameplay`, 0.
         Gameplay = "Gameplay",
@@ -3378,7 +3436,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `FoleyType`, 1 bytes.
+    /// The game's enum `FoleyType`, 1 byte.
     FoleyType {
         /// `Evade`, 0.
         Evade = "Evade",
@@ -3428,13 +3486,13 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GameKnowledgeObjectBase`, 1 bytes.
+    /// The game's struct `GameKnowledgeObjectBase`, 1 byte.
     GameKnowledgeObjectBase {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GameKnowledgeObjectWithAnalytics`, 1 bytes.
+    /// The game's struct `GameKnowledgeObjectWithAnalytics`, 1 byte.
     GameKnowledgeObjectWithAnalytics: GameKnowledgeObjectBase {
         /// `sendToAnalytics`, of `bool`.
         send_to_analytics: bool = "sendToAnalytics",
@@ -3452,7 +3510,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GameKnowledgeQueryResource`, 48 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GameKnowledgeQueryResource`, 48 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GameKnowledgeQueryResource: GameKnowledgeQueryResourceBase {
         /// `hasOptionalPlayerProgression`, of `bool`.
         has_optional_player_progression: bool = "hasOptionalPlayerProgression",
@@ -3507,7 +3567,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GameKnowledgeQueryTriggerResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GameKnowledgeQueryTriggerResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GameKnowledgeQueryTriggerResource {
         /// `worldQueries`, of `BlobArray<GameKnowledgeQueryTrigger>`.
         world_queries: ::std::vec::Vec<GameKnowledgeQueryTrigger> = "worldQueries",
@@ -3562,7 +3624,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GameKnowledgeResource`, 72 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GameKnowledgeResource`, 72 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GameKnowledgeResource {
         /// `worldKnowledge`, of `WorldKnowledgeMap`.
         world_knowledge: WorldKnowledgeMap = "worldKnowledge",
@@ -3599,7 +3663,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GameKnowledgeTriggerContext`, 1 bytes.
+    /// The game's enum `GameKnowledgeTriggerContext`, 1 byte.
     GameKnowledgeTriggerContext {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -3617,7 +3681,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GameRuntimeQueryResource`, 60 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GameRuntimeQueryResource`, 60 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GameRuntimeQueryResource: GameKnowledgeQueryResourceBase {
         /// `itemRef`, of `ItemReference`.
         item_ref: ItemReference = "itemRef",
@@ -3640,7 +3706,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GameRuntimeQueryResource = "GameRuntimeQueryResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GameSettingsPresetsResource`, 296 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GameSettingsPresetsResource`, 296 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GameSettingsPresetsResource {
         /// `minValues`, of `ecs::GameSettings`.
         min_values: crate::typed::ecs::GameSettings = "minValues",
@@ -3653,7 +3721,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GameSettingsPresetsResource = "GameSettingsPresetsResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GemSlotOverride`, 1 bytes.
+    /// The game's struct `GemSlotOverride`, 1 byte.
     GemSlotOverride: UniqueItemAttributeBase {
         /// `isSet`, of `bool`.
         is_set: bool = "isSet",
@@ -3661,7 +3729,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `Gender`, 1 bytes.
+    /// The game's enum `Gender`, 1 byte.
     Gender {
         /// `Female`, 0.
         Female = "Female",
@@ -3687,7 +3755,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GiVoxelBuildingMaterialResource`, 48 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GiVoxelBuildingMaterialResource`, 48 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GiVoxelBuildingMaterialResource {
         /// `dataBlock`, of `RenderDataBlock`.
         data_block: RenderDataBlock = "dataBlock",
@@ -3780,7 +3850,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GpcBlendFactor`, 1 bytes.
+    /// The game's enum `GpcBlendFactor`, 1 byte.
     GpcBlendFactor {
         /// `Zero`, 0.
         Zero = "Zero",
@@ -3808,7 +3878,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GpcBlendOp`, 1 bytes.
+    /// The game's enum `GpcBlendOp`, 1 byte.
     GpcBlendOp {
         /// `None`, 0.
         None = "None",
@@ -3848,7 +3918,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GpcColorWriteMask`, 1 bytes.
+    /// The game's enum `GpcColorWriteMask`, 1 byte.
     GpcColorWriteMask {
         /// `All`, 0.
         All = "All",
@@ -3862,7 +3932,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GpcComparisonFunction`, 1 bytes.
+    /// The game's enum `GpcComparisonFunction`, 1 byte.
     GpcComparisonFunction {
         /// `Never`, 0.
         Never = "Never",
@@ -3884,7 +3954,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GpcComputePipelineResource`, 56 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GpcComputePipelineResource`, 56 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GpcComputePipelineResource {
         /// `name`, of `string`.
         name: String = "name",
@@ -3905,7 +3977,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GpcComputePipelineResource = "GpcComputePipelineResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GpcCullMode`, 1 bytes.
+    /// The game's enum `GpcCullMode`, 1 byte.
     GpcCullMode {
         /// `None`, 0.
         None = "None",
@@ -3925,7 +3997,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GpcDescriptorSetBindingResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GpcDescriptorSetBindingResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GpcDescriptorSetBindingResource {
         /// `debugName`, of `string`.
         debug_name: String = "debugName",
@@ -3946,7 +4020,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GpcDescriptorSetBindingResource = "GpcDescriptorSetBindingResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GpcDescriptorSetLayoutResource`, 28 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GpcDescriptorSetLayoutResource`, 28 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GpcDescriptorSetLayoutResource {
         /// `debugName`, of `string`.
         debug_name: String = "debugName",
@@ -3961,7 +4037,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GpcDescriptorSetLayoutResource = "GpcDescriptorSetLayoutResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GpcEmbeddedResource`, 88 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GpcEmbeddedResource`, 88 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GpcEmbeddedResource: GpcResourceBase {
         /// `debugCode`, of `BlobArray<uint8>`.
         debug_code: ::std::vec::Vec<u8> = "debugCode",
@@ -3972,7 +4050,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GpcEmbeddedResource = "GpcEmbeddedResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GpcFillMode`, 1 bytes.
+    /// The game's enum `GpcFillMode`, 1 byte.
     GpcFillMode {
         /// `Solid`, 0.
         Solid = "Solid",
@@ -3982,7 +4060,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GpcPipelineLayoutResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GpcPipelineLayoutResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GpcPipelineLayoutResource {
         /// `debugName`, of `string`.
         debug_name: String = "debugName",
@@ -4003,7 +4083,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GpcPipelineLayoutResource = "GpcPipelineLayoutResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GpcPrimitiveType`, 1 bytes.
+    /// The game's enum `GpcPrimitiveType`, 1 byte.
     GpcPrimitiveType {
         /// `TriangleList`, 0.
         TriangleList = "TriangleList",
@@ -4017,7 +4097,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GpcRasterPipelineResource`, 136 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GpcRasterPipelineResource`, 136 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GpcRasterPipelineResource {
         /// `name`, of `string`.
         name: String = "name",
@@ -4074,7 +4156,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GpcRasterPipelineResource = "GpcRasterPipelineResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GpcResource`, 136 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GpcResource`, 136 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GpcResource: GpcResourceBase {
         /// `debugCode`, of `ResourceContentReference`.
         debug_code: ResourceContentReference = "debugCode",
@@ -4125,7 +4209,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GpcShaderResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GpcShaderResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GpcShaderResource {
         /// `variants`, of `BlobArray<GpcShaderVariant>`.
         variants: ::std::vec::Vec<GpcShaderVariant> = "variants",
@@ -4148,7 +4234,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GpcStaticSamplerResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GpcStaticSamplerResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GpcStaticSamplerResource {
         /// `minFilter`, of `GraphicsSamplerFilterMode`.
         min_filter: GraphicsSamplerFilterMode = "minFilter",
@@ -4171,7 +4259,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GpcStaticSamplerResource = "GpcStaticSamplerResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GpcVariantFlag`, 1 bytes.
+    /// The game's enum `GpcVariantFlag`, 1 byte.
     GpcVariantFlag {
         /// `Debug`, 0.
         Debug = "Debug",
@@ -4181,7 +4269,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GpcVertexFormatResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GpcVertexFormatResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GpcVertexFormatResource {
         /// `debugName`, of `string`.
         debug_name: String = "debugName",
@@ -4192,7 +4282,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GpcVertexFormatResource = "GpcVertexFormatResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GpcWindingOrder`, 1 bytes.
+    /// The game's enum `GpcWindingOrder`, 1 byte.
     GpcWindingOrder {
         /// `Ccw`, 0.
         Ccw = "Ccw",
@@ -4202,7 +4292,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GranularSample`, 1 bytes.
+    /// The game's struct `GranularSample`, 1 byte.
     GranularSample {
     }
 }
@@ -4211,7 +4301,7 @@ crate::typed::runtime::reflected_struct! {
 pub type GranularSampleReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GraphicsComparisonFunction`, 1 bytes.
+    /// The game's enum `GraphicsComparisonFunction`, 1 byte.
     GraphicsComparisonFunction {
         /// `Never`, 0.
         Never = "Never",
@@ -4233,7 +4323,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GraphicsDescriptorDataType`, 1 bytes.
+    /// The game's enum `GraphicsDescriptorDataType`, 1 byte.
     GraphicsDescriptorDataType {
         /// `Unknown`, 0.
         Unknown = "Unknown",
@@ -4251,7 +4341,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GraphicsDescriptorType`, 1 bytes.
+    /// The game's enum `GraphicsDescriptorType`, 1 byte.
     GraphicsDescriptorType {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -4283,7 +4373,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GraphicsPipelineStage`, 1 bytes.
+    /// The game's enum `GraphicsPipelineStage`, 1 byte.
     GraphicsPipelineStage {
         /// `Vertex`, 0.
         Vertex = "Vertex",
@@ -4318,7 +4408,7 @@ crate::typed::runtime::reflected_enum! {
 pub type GraphicsPipelineStageMask = crate::typed::Flags<GraphicsPipelineStage>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GraphicsSamplerAddressMode`, 1 bytes.
+    /// The game's enum `GraphicsSamplerAddressMode`, 1 byte.
     GraphicsSamplerAddressMode {
         /// `Wrap`, 0.
         Wrap = "Wrap",
@@ -4330,7 +4420,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GraphicsSamplerFilterMode`, 1 bytes.
+    /// The game's enum `GraphicsSamplerFilterMode`, 1 byte.
     GraphicsSamplerFilterMode {
         /// `Nearest`, 0.
         Nearest = "Nearest",
@@ -4340,7 +4430,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GraphicsSamplerReductionMode`, 1 bytes.
+    /// The game's enum `GraphicsSamplerReductionMode`, 1 byte.
     GraphicsSamplerReductionMode {
         /// `Disabled`, 0.
         Disabled = "Disabled",
@@ -4352,7 +4442,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `GraphicsTextureChannel`, 1 bytes.
+    /// The game's enum `GraphicsTextureChannel`, 1 byte.
     GraphicsTextureChannel {
         /// `Identity`, 0.
         Identity = "Identity",
@@ -4410,7 +4500,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `GuidRegistryResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `GuidRegistryResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     GuidRegistryResource {
         /// `guids`, of `BlobArray<Guid>`.
         guids: ::std::vec::Vec<crate::content::Guid> = "guids",
@@ -4425,7 +4517,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `HardnessCategory`, 1 bytes.
+    /// The game's enum `HardnessCategory`, 1 byte.
     HardnessCategory {
         /// `Soft`, 0.
         Soft = "Soft",
@@ -4473,7 +4565,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `HighlightColorIndex`, 1 bytes.
+    /// The game's enum `HighlightColorIndex`, 1 byte.
     HighlightColorIndex {
         /// `NoHighlight`, 0.
         NoHighlight = "NoHighlight",
@@ -4529,7 +4621,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `HudScreenType`, 1 bytes.
+    /// The game's enum `HudScreenType`, 1 byte.
     HudScreenType {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -4655,7 +4747,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `IblResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `IblResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     IblResource {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",
@@ -4690,7 +4784,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ImageColorSpace`, 1 bytes.
+    /// The game's enum `ImageColorSpace`, 1 byte.
     ImageColorSpace {
         /// `Linear`, 0.
         Linear = "Linear",
@@ -4730,7 +4824,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ImageImportFilter`, 1 bytes.
+    /// The game's enum `ImageImportFilter`, 1 byte.
     ImageImportFilter {
         /// `CatmullRom`, 0.
         CatmullRom = "CatmullRom",
@@ -4759,7 +4853,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ImpactDefinition`, 1 bytes.
+    /// The game's struct `ImpactDefinition`, 1 byte.
     ImpactDefinition {
     }
 }
@@ -4768,7 +4862,7 @@ crate::typed::runtime::reflected_struct! {
 pub type ImpactEquipmentMask = crate::typed::Flags<ImpactEquippedItems>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ImpactEquippedItems`, 1 bytes.
+    /// The game's enum `ImpactEquippedItems`, 1 byte.
     ImpactEquippedItems {
         /// `MainHand`, 0.
         MainHand = "MainHand",
@@ -4801,7 +4895,9 @@ crate::typed::runtime::reflected_enum! {
 pub type ImpactProgramReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ImpactRegistryResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ImpactRegistryResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ImpactRegistryResource {
         /// `programs`, of `BlobArray<ImpactProgramReference>`.
         programs: ::std::vec::Vec<ImpactProgramReference> = "programs",
@@ -4871,7 +4967,7 @@ crate::typed::runtime::reflected_struct! {
 pub type IngameTimeSpanReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `InhibitBuildingCheck`, 1 bytes.
+    /// The game's enum `InhibitBuildingCheck`, 1 byte.
     InhibitBuildingCheck {
         /// `None`, 0.
         None = "None",
@@ -4883,7 +4979,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `InputMode`, 1 bytes.
+    /// The game's enum `InputMode`, 1 byte.
     InputMode {
         /// `KeyboardMouse`, 0.
         KeyboardMouse = "KeyboardMouse",
@@ -4893,7 +4989,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `InstrumentSampleCollectionResource`, 112 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `InstrumentSampleCollectionResource`, 112 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     InstrumentSampleCollectionResource {
         /// `samplesLute`, of `ObjectReference<SamplerInstrumentResource>`.
         samples_lute: crate::content::Guid = "samplesLute",
@@ -4914,7 +5012,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InstrumentSampleCollectionResource = "InstrumentSampleCollectionResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `InventoryActionType`, 1 bytes.
+    /// The game's enum `InventoryActionType`, 1 byte.
     InventoryActionType {
         /// `One`, 0.
         One = "One",
@@ -4930,7 +5028,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `InventoryCategory`, 1 bytes.
+    /// The game's enum `InventoryCategory`, 1 byte.
     InventoryCategory {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -4964,7 +5062,7 @@ crate::typed::runtime::reflected_struct! {
 pub type InventorySlotIndex = u8;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `InventoryStockSortingType`, 1 bytes.
+    /// The game's enum `InventoryStockSortingType`, 1 byte.
     InventoryStockSortingType {
         /// `SpatialOccurrence`, 0.
         SpatialOccurrence = "SpatialOccurrence",
@@ -4990,7 +5088,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ItemAttributeBase`, 1 bytes.
+    /// The game's struct `ItemAttributeBase`, 1 byte.
     ItemAttributeBase {
     }
 }
@@ -5006,7 +5104,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ItemCategory`, 1 bytes.
+    /// The game's enum `ItemCategory`, 1 byte.
     ItemCategory {
         /// `Customization`, 0.
         Customization = "Customization",
@@ -5049,7 +5147,7 @@ crate::typed::runtime::reflected_enum! {
 pub type ItemCategoryMask = crate::typed::Flags<ItemCategory>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ItemClassAlignmentType`, 1 bytes.
+    /// The game's enum `ItemClassAlignmentType`, 1 byte.
     ItemClassAlignmentType {
         /// `None`, 0.
         None = "None",
@@ -5083,7 +5181,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ItemCollectionResource`, 20 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ItemCollectionResource`, 20 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ItemCollectionResource {
         /// `slots`, of `BlobArray<ItemCollectionSlotResource>`.
         slots: ::std::vec::Vec<ItemCollectionSlotResource> = "slots",
@@ -5104,7 +5204,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ItemCollectionSlotResource`, 56 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ItemCollectionSlotResource`, 56 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ItemCollectionSlotResource {
         /// `collectionId`, of `ItemCollectionId`.
         collection_id: ItemCollectionId = "collectionId",
@@ -5181,7 +5283,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ItemFlag`, 1 bytes.
+    /// The game's enum `ItemFlag`, 1 byte.
     ItemFlag {
         /// `HasKnowledgeUnlocks`, 0.
         HasKnowledgeUnlocks = "HasKnowledgeUnlocks",
@@ -5445,7 +5547,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ItemKnowledgeFlag`, 1 bytes.
+    /// The game's enum `ItemKnowledgeFlag`, 1 byte.
     ItemKnowledgeFlag {
         /// `Name`, 0.
         Name = "Name",
@@ -5476,7 +5578,9 @@ crate::typed::runtime::reflected_struct! {
 pub type ItemKnowledgeMask = crate::typed::Flags<ItemKnowledgeFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ItemKnowledgeResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ItemKnowledgeResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ItemKnowledgeResource {
         /// `entries`, of `BlobArray<StaticHashMapEntry>`.
         entries: ::std::vec::Vec<StaticHashMapEntry> = "entries",
@@ -5489,7 +5593,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ItemKnowledgeResource = "ItemKnowledgeResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ItemKnowledgeTrigger`, 1 bytes.
+    /// The game's enum `ItemKnowledgeTrigger`, 1 byte.
     ItemKnowledgeTrigger {
         /// `Pickup`, 0.
         Pickup = "Pickup",
@@ -5504,7 +5608,9 @@ crate::typed::runtime::reflected_enum! {
 pub type ItemKnowledgeTriggerMask = crate::typed::Flags<ItemKnowledgeTrigger>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ItemLabelGroupResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ItemLabelGroupResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ItemLabelGroupResource {
         /// `labels`, of `BlobArray<LootTagInfo>`.
         labels: ::std::vec::Vec<LootTagInfo> = "labels",
@@ -5561,7 +5667,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ItemRarity`, 1 bytes.
+    /// The game's enum `ItemRarity`, 1 byte.
     ItemRarity {
         /// `Common`, 0.
         Common = "Common",
@@ -5583,7 +5689,9 @@ pub type ItemRarityMask = crate::typed::Flags<ItemRarity>;
 pub type ItemReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ItemRegistryResource`, 72 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ItemRegistryResource`, 72 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ItemRegistryResource {
         /// `itemRefs`, of `BlobArray<ItemReference>`.
         item_refs: ::std::vec::Vec<ItemReference> = "itemRefs",
@@ -5662,7 +5770,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ItemStateFlag`, 1 bytes.
+    /// The game's enum `ItemStateFlag`, 1 byte.
     ItemStateFlag {
         /// `Broken`, 0.
         Broken = "Broken",
@@ -5797,7 +5905,9 @@ crate::typed::runtime::reflected_struct! {
 pub type JointAnimationReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `JournalCollectionResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `JournalCollectionResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     JournalCollectionResource {
         /// `entryId`, of `JournalEntryId`.
         entry_id: JournalEntryId = "entryId",
@@ -5821,7 +5931,9 @@ crate::typed::runtime::named!(JournalCollectionResource = "JournalCollectionReso
 pub type JournalEntryId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `JournalEntryResource`, 72 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `JournalEntryResource`, 72 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     JournalEntryResource {
         /// `entryId`, of `JournalEntryId`.
         entry_id: JournalEntryId = "entryId",
@@ -5848,7 +5960,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(JournalEntryResource = "JournalEntryResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `JournalItemSetCategoryResource`, 12 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `JournalItemSetCategoryResource`, 12 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     JournalItemSetCategoryResource {
         /// `categoryName`, of `LocaTagId`.
         category_name: LocaTagId = "categoryName",
@@ -5859,7 +5973,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(JournalItemSetCategoryResource = "JournalItemSetCategoryResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `JournalItemSetEntryHintResource`, 40 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `JournalItemSetEntryHintResource`, 40 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     JournalItemSetEntryHintResource {
         /// `hintStateKnowledgeQuery`, of `KnowledgeQueryData`.
         hint_state_knowledge_query: KnowledgeQueryData = "hintStateKnowledgeQuery",
@@ -5881,7 +5997,9 @@ crate::typed::runtime::named!(JournalItemSetEntryHintResource = "JournalItemSetE
 pub type JournalItemSetEntryId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `JournalItemSetEntryResource`, 60 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `JournalItemSetEntryResource`, 60 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     JournalItemSetEntryResource {
         /// `entryId`, of `JournalItemSetEntryId`.
         entry_id: JournalItemSetEntryId = "entryId",
@@ -5909,7 +6027,9 @@ crate::typed::runtime::named!(JournalItemSetEntryResource = "JournalItemSetEntry
 pub type JournalItemSetId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `JournalItemSetResource`, 52 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `JournalItemSetResource`, 52 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     JournalItemSetResource {
         /// `setId`, of `JournalItemSetId`.
         set_id: JournalItemSetId = "setId",
@@ -5930,7 +6050,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(JournalItemSetResource = "JournalItemSetResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `JournalItemSetRewardResource`, 20 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `JournalItemSetRewardResource`, 20 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     JournalItemSetRewardResource {
         /// `rewardKnowledge`, of `KnowledgeId`.
         reward_knowledge: KnowledgeId = "rewardKnowledge",
@@ -5943,7 +6065,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(JournalItemSetRewardResource = "JournalItemSetRewardResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `JournalQuestResource`, 44 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `JournalQuestResource`, 44 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     JournalQuestResource: JournalCollectionResource {
         /// `source`, of `QuestSourceType`.
         source: QuestSourceType = "source",
@@ -5960,7 +6084,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(JournalQuestResource = "JournalQuestResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `JournalRegistryResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `JournalRegistryResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     JournalRegistryResource {
         /// `quests`, of `BlobArray<JournalQuestResource>`.
         quests: ::std::vec::Vec<JournalQuestResource> = "quests",
@@ -5995,7 +6121,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `KnowledgeObjectResource`, 12 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `KnowledgeObjectResource`, 12 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     KnowledgeObjectResource {
         /// `id`, of `KnowledgeId`.
         id: KnowledgeId = "id",
@@ -6034,7 +6162,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `KnowledgeQueryActionType`, 1 bytes.
+    /// The game's enum `KnowledgeQueryActionType`, 1 byte.
     KnowledgeQueryActionType {
         /// `Knowledge`, 0.
         Knowledge = "Knowledge",
@@ -6074,7 +6202,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `KnowledgeQueryDataType`, 1 bytes.
+    /// The game's enum `KnowledgeQueryDataType`, 1 byte.
     KnowledgeQueryDataType {
         /// `Extern`, 0.
         Extern = "Extern",
@@ -6106,7 +6234,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `KnowledgeQueryOperator`, 1 bytes.
+    /// The game's enum `KnowledgeQueryOperator`, 1 byte.
     KnowledgeQueryOperator {
         /// `AND`, 0.
         AND = "AND",
@@ -6118,7 +6246,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `KnowledgeQueryType`, 1 bytes.
+    /// The game's enum `KnowledgeQueryType`, 1 byte.
     KnowledgeQueryType {
         /// `Simple`, 0.
         Simple = "Simple",
@@ -6150,7 +6278,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `KnowledgeRequirementType`, 1 bytes.
+    /// The game's enum `KnowledgeRequirementType`, 1 byte.
     KnowledgeRequirementType {
         /// `World`, 0.
         World = "World",
@@ -6185,7 +6313,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `KnowledgeTriggerType`, 1 bytes.
+    /// The game's enum `KnowledgeTriggerType`, 1 byte.
     KnowledgeTriggerType {
         /// `World`, 0.
         World = "World",
@@ -6201,7 +6329,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `KnowledgeType`, 1 bytes.
+    /// The game's enum `KnowledgeType`, 1 byte.
     KnowledgeType {
         /// `Bool`, 0.
         Bool = "Bool",
@@ -6337,7 +6465,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LocaTagCollectionResource`, 40 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LocaTagCollectionResource`, 40 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LocaTagCollectionResource {
         /// `keenglishData`, of `ResourceContentReference`.
         keenglish_data: ResourceContentReference = "keenglishData",
@@ -6364,7 +6494,9 @@ pub type LocaTagId = HashKey32;
 pub type LocaTagReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LocaTagResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LocaTagResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LocaTagResource {
         /// `id`, of `LocaTagId`.
         id: LocaTagId = "id",
@@ -6379,7 +6511,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LocaTagResource = "LocaTagResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `LogicEntityConfigType`, 1 bytes.
+    /// The game's enum `LogicEntityConfigType`, 1 byte.
     LogicEntityConfigType {
         /// `None`, 0.
         None = "None",
@@ -6391,7 +6523,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LogicEntitySpawnCategoryResource`, 28 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LogicEntitySpawnCategoryResource`, 28 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LogicEntitySpawnCategoryResource {
         /// `categoryId`, of `LogicSpawnCategoryId`.
         category_id: LogicSpawnCategoryId = "categoryId",
@@ -6406,7 +6540,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LogicEntitySpawnCategoryResource = "LogicEntitySpawnCategoryResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `LogicEntitySpawnFlags`, 1 bytes.
+    /// The game's enum `LogicEntitySpawnFlags`, 1 byte.
     LogicEntitySpawnFlags {
         /// `DisableLevelOffset`, 0.
         DisableLevelOffset = "DisableLevelOffset",
@@ -6421,7 +6555,9 @@ crate::typed::runtime::reflected_enum! {
 pub type LogicEntitySpawnMask = crate::typed::Flags<LogicEntitySpawnFlags>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LogicEntitySpawnResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LogicEntitySpawnResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LogicEntitySpawnResource {
         /// `configId`, of `LogicSpawnConfigId`.
         config_id: LogicSpawnConfigId = "configId",
@@ -6472,7 +6608,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LogicEntityTypeResource`, 20 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LogicEntityTypeResource`, 20 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LogicEntityTypeResource {
         /// `typeId`, of `LogicEntityTypeId`.
         type_id: LogicEntityTypeId = "typeId",
@@ -6527,7 +6665,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LogicSystemResource`, 104 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LogicSystemResource`, 104 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LogicSystemResource {
         /// `entityTypes`, of `BlobArray<LogicEntityTypeResource>`.
         entity_types: ::std::vec::Vec<LogicEntityTypeResource> = "entityTypes",
@@ -6568,7 +6708,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LogicTriggerResource`, 12 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LogicTriggerResource`, 12 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LogicTriggerResource {
         /// `configId`, of `LogicTriggerConfigId`.
         config_id: LogicTriggerConfigId = "configId",
@@ -6581,7 +6723,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LogicTriggerResource = "LogicTriggerResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `LookAtPositionBehavior`, 1 bytes.
+    /// The game's enum `LookAtPositionBehavior`, 1 byte.
     LookAtPositionBehavior {
         /// `PrimaryTarget`, 0.
         PrimaryTarget = "PrimaryTarget",
@@ -6604,7 +6746,9 @@ crate::typed::runtime::reflected_struct! {
 pub type LootContainerId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LootContainerResource`, 12 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LootContainerResource`, 12 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LootContainerResource: LootNodeResource {
         /// `lootSettingsIndex`, of `uint32`.
         loot_settings_index: u32 = "lootSettingsIndex",
@@ -6641,7 +6785,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LootDistributionTreeResource`, 144 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LootDistributionTreeResource`, 144 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LootDistributionTreeResource: LootDistributionTreeNode {
         /// `specialItems`, of `BlobArray<SpecialItemInfo>`.
         special_items: ::std::vec::Vec<SpecialItemInfo> = "specialItems",
@@ -6670,7 +6816,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `LootModifierMode`, 1 bytes.
+    /// The game's enum `LootModifierMode`, 1 byte.
     LootModifierMode {
         /// `Set`, 0.
         Set = "Set",
@@ -6694,7 +6840,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LootNodeResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LootNodeResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LootNodeResource {
         /// `nodeId`, of `HashKey32`.
         node_id: HashKey32 = "nodeId",
@@ -6705,7 +6853,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LootNodeResource = "LootNodeResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LootSettingsResource`, 100 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LootSettingsResource`, 100 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LootSettingsResource {
         /// `modifier`, of `LootModifierInfo`.
         modifier: LootModifierInfo = "modifier",
@@ -6780,7 +6930,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `LootableItemsResource`, 80 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `LootableItemsResource`, 80 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     LootableItemsResource {
         /// `globalRarityDropRates`, of `StaticArray<float32,5>`.
         global_rarity_drop_rates: ::std::vec::Vec<f32> = "globalRarityDropRates",
@@ -6814,7 +6966,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `MapMarkerRegistryResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `MapMarkerRegistryResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     MapMarkerRegistryResource {
         /// `mapMarkers`, of `MapMarkerMap`.
         map_markers: MapMarkerMap = "mapMarkers",
@@ -6871,7 +7025,7 @@ pub type MapMarkerTypeId = HashKey32;
 pub type MapMarkerTypeReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `MarkerTypeSorting`, 1 bytes.
+    /// The game's enum `MarkerTypeSorting`, 1 byte.
     MarkerTypeSorting {
         /// `None`, 0.
         None = "None",
@@ -6887,7 +7041,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `Material`, 1 bytes.
+    /// The game's struct `Material`, 1 byte.
     Material {
     }
 }
@@ -6927,7 +7081,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `MaterialFeedbackCollectionResource`, 160 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `MaterialFeedbackCollectionResource`, 160 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     MaterialFeedbackCollectionResource {
         /// `id`, of `Guid`.
         id: crate::content::Guid = "id",
@@ -6979,7 +7135,7 @@ crate::typed::runtime::reflected_struct! {
 pub type MaterialFeedbackEventMask = crate::typed::Flags<MaterialFeedbackEventType>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `MaterialFeedbackEventType`, 1 bytes.
+    /// The game's enum `MaterialFeedbackEventType`, 1 byte.
     MaterialFeedbackEventType {
         /// `OnPlace`, 0.
         OnPlace = "OnPlace",
@@ -7025,7 +7181,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `Midi`, 1 bytes.
+    /// The game's struct `Midi`, 1 byte.
     Midi {
     }
 }
@@ -7047,7 +7203,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `MidiInstrumentSampleType`, 1 bytes.
+    /// The game's enum `MidiInstrumentSampleType`, 1 byte.
     MidiInstrumentSampleType {
         /// `Lute`, 0.
         Lute = "Lute",
@@ -7067,7 +7223,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `MidiInstrumentType`, 1 bytes.
+    /// The game's enum `MidiInstrumentType`, 1 byte.
     MidiInstrumentType {
         /// `None`, 0.
         None = "None",
@@ -7088,7 +7244,9 @@ crate::typed::runtime::reflected_enum! {
 pub type MidiReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `MidiResource`, 28 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `MidiResource`, 28 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     MidiResource {
         /// `timeSignature`, of `MidiTimeSignature`.
         time_signature: MidiTimeSignature = "timeSignature",
@@ -7107,7 +7265,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MidiResource = "MidiResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `MidiSongResource`, 48 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `MidiSongResource`, 48 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     MidiSongResource {
         /// `name`, of `LocaTagReference`.
         name: LocaTagReference = "name",
@@ -7152,7 +7312,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `MidiTrackRole`, 1 bytes.
+    /// The game's enum `MidiTrackRole`, 1 byte.
     MidiTrackRole {
         /// `Lead`, 0.
         Lead = "Lead",
@@ -7204,7 +7364,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ModelBase`, 1 bytes.
+    /// The game's struct `ModelBase`, 1 byte.
     ModelBase {
     }
 }
@@ -7228,7 +7388,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ModelHierarchyResource`, 72 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ModelHierarchyResource`, 72 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ModelHierarchyResource {
         /// `hierarchyId`, of `Guid`.
         hierarchy_id: crate::content::Guid = "hierarchyId",
@@ -7251,7 +7413,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ModelHierarchyResource = "ModelHierarchyResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ModelHintSet`, 1 bytes.
+    /// The game's struct `ModelHintSet`, 1 byte.
     ModelHintSet {
     }
 }
@@ -7287,7 +7449,9 @@ crate::typed::runtime::reflected_struct! {
 pub type NotifierReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `NotifierResource`, 124 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `NotifierResource`, 124 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     NotifierResource {
         /// `defaultVfx`, of `ObjectReference<VfxResource>`.
         default_vfx: crate::content::Guid = "defaultVfx",
@@ -7326,14 +7490,18 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `NpcDialogFarewellResource`, 64 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `NpcDialogFarewellResource`, 64 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     NpcDialogFarewellResource: NpcDialogOptionResourceBase {
     }
 }
 crate::typed::runtime::named!(NpcDialogFarewellResource = "NpcDialogFarewellResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `NpcDialogInitLineResource`, 68 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `NpcDialogInitLineResource`, 68 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     NpcDialogInitLineResource: NpcDialogOptionResourceBase {
         /// `isWakeup`, of `bool`.
         is_wakeup: bool = "isWakeup",
@@ -7358,7 +7526,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `NpcDialogOptionResource`, 68 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `NpcDialogOptionResource`, 68 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     NpcDialogOptionResource: NpcDialogOptionResourceBase {
         /// `optionText`, of `LocaTagId`.
         option_text: LocaTagId = "optionText",
@@ -7393,7 +7563,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `NpcDialogResource`, 84 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `NpcDialogResource`, 84 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     NpcDialogResource {
         /// `headline`, of `LocaTagId`.
         headline: LocaTagId = "headline",
@@ -7422,7 +7594,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NpcDialogResource = "NpcDialogResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `NpcDialogTransitionLineResource`, 64 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `NpcDialogTransitionLineResource`, 64 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     NpcDialogTransitionLineResource: NpcDialogOptionResourceBase {
     }
 }
@@ -7432,13 +7606,13 @@ crate::typed::runtime::named!(NpcDialogTransitionLineResource = "NpcDialogTransi
 pub type NpcId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `NpcInteractionKey`, 1 bytes.
+    /// The game's struct `NpcInteractionKey`, 1 byte.
     NpcInteractionKey {
     }
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `NpcQueryActionType`, 1 bytes.
+    /// The game's enum `NpcQueryActionType`, 1 byte.
     NpcQueryActionType {
         /// `IsSpawned`, 0.
         IsSpawned = "IsSpawned",
@@ -7452,7 +7626,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `NpcResource`, 136 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `NpcResource`, 136 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     NpcResource {
         /// `id`, of `NpcId`.
         id: NpcId = "id",
@@ -7535,7 +7711,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `OptionalCameraModifierSettings`, 1 bytes.
+    /// The game's struct `OptionalCameraModifierSettings`, 1 byte.
     OptionalCameraModifierSettings {
         /// `enabled`, of `bool`.
         enabled: bool = "enabled",
@@ -7593,7 +7769,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `OrbitType`, 1 bytes.
+    /// The game's enum `OrbitType`, 1 byte.
     OrbitType {
         /// `None`, 0.
         None = "None",
@@ -7617,7 +7793,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `OvergrowthId`, 1 bytes.
+    /// The game's struct `OvergrowthId`, 1 byte.
     OvergrowthId {
         /// `value`, of `uint8`.
         value: u8 = "value",
@@ -7817,7 +7993,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `PerkCollectionResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `PerkCollectionResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     PerkCollectionResource {
         /// `perks`, of `BlobArray<PerkReference>`.
         perks: ::std::vec::Vec<PerkReference> = "perks",
@@ -7906,7 +8084,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `PerlinShakeStrengthSource`, 1 bytes.
+    /// The game's enum `PerlinShakeStrengthSource`, 1 byte.
     PerlinShakeStrengthSource {
         /// `None`, 0.
         None = "None",
@@ -7986,7 +8164,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `PitchFollowType`, 1 bytes.
+    /// The game's enum `PitchFollowType`, 1 byte.
     PitchFollowType {
         /// `ResetOnIdleCameraInput`, 0.
         ResetOnIdleCameraInput = "ResetOnIdleCameraInput",
@@ -8000,7 +8178,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `PixelFormat`, 1 bytes.
+    /// The game's enum `PixelFormat`, 1 byte.
     PixelFormat {
         /// `None`, 0.
         None = "None",
@@ -8326,7 +8504,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `PlayerKnowledgeObjectResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `PlayerKnowledgeObjectResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     PlayerKnowledgeObjectResource: KnowledgeObjectResource {
         /// `isAdditionalPlayerKnowledgePerFlag`, of `KnowledgeState`.
         is_additional_player_knowledge_per_flag: KnowledgeState = "isAdditionalPlayerKnowledgePerFlag",
@@ -8339,7 +8519,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerKnowledgeObjectResource = "PlayerKnowledgeObjectResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `PlayerPermissions`, 1 bytes.
+    /// The game's enum `PlayerPermissions`, 1 byte.
     PlayerPermissions {
         /// `CanKickBan`, 0.
         CanKickBan = "CanKickBan",
@@ -8360,7 +8540,7 @@ crate::typed::runtime::reflected_enum! {
 pub type PlayerPermissionsMask = crate::typed::Flags<PlayerPermissions>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `PredefinedKnowledgeTypes`, 1 bytes.
+    /// The game's enum `PredefinedKnowledgeTypes`, 1 byte.
     PredefinedKnowledgeTypes {
         /// `SkillpointsSpent`, 0.
         SkillpointsSpent = "SkillpointsSpent",
@@ -8388,7 +8568,7 @@ pub type PreviewModelArray = ::std::vec::Vec<PreviewModelReference>;
 pub type PreviewModelReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `PrimaryAnimationSet`, 1 bytes.
+    /// The game's enum `PrimaryAnimationSet`, 1 byte.
     PrimaryAnimationSet {
         /// `None`, 0.
         None = "None",
@@ -8412,7 +8592,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `PropDamageSusceptibility`, 1 bytes.
+    /// The game's enum `PropDamageSusceptibility`, 1 byte.
     PropDamageSusceptibility {
         /// `None`, 0.
         None = "None",
@@ -8429,7 +8609,9 @@ crate::typed::runtime::reflected_enum! {
 pub type Ps5ActivityId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `Ps5ActivityResource`, 20 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `Ps5ActivityResource`, 20 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     Ps5ActivityResource {
         /// `id`, of `Ps5ActivityId`.
         id: Ps5ActivityId = "id",
@@ -8445,7 +8627,9 @@ crate::typed::runtime::named!(Ps5ActivityResource = "Ps5ActivityResource": Resou
 pub type Ps5ActivityTaskId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `Ps5ActivityTaskResource`, 28 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `Ps5ActivityTaskResource`, 28 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     Ps5ActivityTaskResource {
         /// `id`, of `Ps5ActivityTaskId`.
         id: Ps5ActivityTaskId = "id",
@@ -8468,7 +8652,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `PsnTrophyGrade`, 1 bytes.
+    /// The game's enum `PsnTrophyGrade`, 1 byte.
     PsnTrophyGrade {
         /// `Bronze`, 0.
         Bronze = "Bronze",
@@ -8496,7 +8680,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `QuestRewardResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `QuestRewardResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     QuestRewardResource {
         /// `itemRef`, of `ItemReference`.
         item_ref: ItemReference = "itemRef",
@@ -8509,7 +8695,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(QuestRewardResource = "QuestRewardResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `QuestSourceType`, 1 bytes.
+    /// The game's enum `QuestSourceType`, 1 byte.
     QuestSourceType {
         /// `None`, 0.
         None = "None",
@@ -8555,7 +8741,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `QuestType`, 1 bytes.
+    /// The game's enum `QuestType`, 1 byte.
     QuestType {
         /// `Auto`, 0.
         Auto = "Auto",
@@ -8643,7 +8829,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RecipeDataGroupResource`, 60 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RecipeDataGroupResource`, 60 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RecipeDataGroupResource {
         /// `groupId`, of `Guid`.
         group_id: crate::content::Guid = "groupId",
@@ -8660,7 +8848,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RecipeDataGroupResource = "RecipeDataGroupResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RecipeDataRecipeResource`, 20 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RecipeDataRecipeResource`, 20 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RecipeDataRecipeResource {
         /// `recipeObjectId`, of `Guid`.
         recipe_object_id: crate::content::Guid = "recipeObjectId",
@@ -8671,7 +8861,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RecipeDataRecipeResource = "RecipeDataRecipeResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RecipeDataResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RecipeDataResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RecipeDataResource {
         /// `workshops`, of `BlobArray<RecipeDataWorkshop>`.
         workshops: ::std::vec::Vec<RecipeDataWorkshop> = "workshops",
@@ -8680,7 +8872,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RecipeDataResource = "RecipeDataResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RecipeDataSetResource`, 40 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RecipeDataSetResource`, 40 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RecipeDataSetResource {
         /// `recipeSetId`, of `Guid`.
         recipe_set_id: crate::content::Guid = "recipeSetId",
@@ -8778,7 +8972,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RecipeInputCategoryDefinition`, 1 bytes.
+    /// The game's struct `RecipeInputCategoryDefinition`, 1 byte.
     RecipeInputCategoryDefinition {
     }
 }
@@ -8797,7 +8991,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RecipeInputCategoryResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RecipeInputCategoryResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RecipeInputCategoryResource {
         /// `categoryRef`, of `ObjectReference<RecipeInputCategoryDefinition>`.
         category_ref: crate::content::Guid = "categoryRef",
@@ -8828,7 +9024,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RecipeInputResource`, 48 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RecipeInputResource`, 48 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RecipeInputResource {
         /// `itemStack`, of `RecipeItemStackResource`.
         item_stack: RecipeItemStackResource = "itemStack",
@@ -8839,7 +9037,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RecipeInputResource = "RecipeInputResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RecipeItemStackResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RecipeItemStackResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RecipeItemStackResource {
         /// `itemRef`, of `ItemReference`.
         item_ref: ItemReference = "itemRef",
@@ -8852,7 +9052,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RecipeItemStackResource = "RecipeItemStackResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `RecipeLevelRequirement`, 1 bytes.
+    /// The game's enum `RecipeLevelRequirement`, 1 byte.
     RecipeLevelRequirement {
         /// `None`, 0.
         None = "None",
@@ -8864,7 +9064,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RecipeRegistryResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RecipeRegistryResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RecipeRegistryResource {
         /// `inputCategories`, of `BlobArray<RecipeInputCategory>`.
         input_categories: ::std::vec::Vec<RecipeInputCategory> = "inputCategories",
@@ -8875,7 +9077,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RecipeRegistryResource = "RecipeRegistryResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ReducedDynamicMotionBehaviour`, 1 bytes.
+    /// The game's enum `ReducedDynamicMotionBehaviour`, 1 byte.
     ReducedDynamicMotionBehaviour {
         /// `None`, 0.
         None = "None",
@@ -8911,7 +9113,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderClothColliderResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderClothColliderResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderClothColliderResource {
         /// `hasSkinning`, of `bool`.
         has_skinning: bool = "hasSkinning",
@@ -8948,7 +9152,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderClothFabricResource`, 68 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderClothFabricResource`, 68 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderClothFabricResource {
         /// `numParticles`, of `uint32`.
         num_particles: u32 = "numParticles",
@@ -9015,7 +9221,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderClothMeshResource`, 164 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderClothMeshResource`, 164 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderClothMeshResource {
         /// `fabric`, of `RenderClothFabricResource`.
         fabric: RenderClothFabricResource = "fabric",
@@ -9090,7 +9298,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `RenderDataBlockPatchPointType`, 1 bytes.
+    /// The game's enum `RenderDataBlockPatchPointType`, 1 byte.
     RenderDataBlockPatchPointType {
         /// `Texture`, 0.
         Texture = "Texture",
@@ -9126,7 +9334,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `RenderEffectId`, 1 bytes.
+    /// The game's enum `RenderEffectId`, 1 byte.
     RenderEffectId {
         /// `Billboard`, 0.
         Billboard = "Billboard",
@@ -9168,7 +9376,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `RenderLightType`, 1 bytes.
+    /// The game's enum `RenderLightType`, 1 byte.
     RenderLightType {
         /// `Point`, 0.
         Point = "Point",
@@ -9176,7 +9384,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `RenderMaterialFlag`, 1 bytes.
+    /// The game's enum `RenderMaterialFlag`, 1 byte.
     RenderMaterialFlag {
         /// `Tessellated`, 0.
         Tessellated = "Tessellated",
@@ -9211,7 +9419,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderMaterialResource`, 40 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderMaterialResource`, 40 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderMaterialResource {
         /// `effectId`, of `RenderEffectId`.
         effect_id: RenderEffectId = "effectId",
@@ -9486,7 +9696,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderModelChunkModelResource`, 64 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderModelChunkModelResource`, 64 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderModelChunkModelResource {
         /// `origin`, of `WorldPosition`.
         origin: WorldPosition = "origin",
@@ -9709,7 +9921,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `RenderSamplerAddressMode`, 1 bytes.
+    /// The game's enum `RenderSamplerAddressMode`, 1 byte.
     RenderSamplerAddressMode {
         /// `Wrap`, 0.
         Wrap = "Wrap",
@@ -9723,7 +9935,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderSettingsGpuPresetResource`, 92 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderSettingsGpuPresetResource`, 92 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderSettingsGpuPresetResource {
         /// `settings`, of `pc::RenderSettings`.
         settings: crate::typed::pc::RenderSettings = "settings",
@@ -9736,7 +9950,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RenderSettingsGpuPresetResource = "RenderSettingsGpuPresetResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderSettingsGpuPresetsResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderSettingsGpuPresetsResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderSettingsGpuPresetsResource {
         /// `gpus`, of `BlobArray<RenderSettingsGpuPresetsResourceGpu>`.
         gpus: ::std::vec::Vec<RenderSettingsGpuPresetsResourceGpu> = "gpus",
@@ -9779,7 +9995,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderSystemResource`, 304 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderSystemResource`, 304 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderSystemResource {
         /// `vfxSystemData`, of `ObjectReference<VfxSystemData>`.
         vfx_system_data: crate::content::Guid = "vfxSystemData",
@@ -9818,7 +10036,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RenderSystemResource = "RenderSystemResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderTextureResource`, 72 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderTextureResource`, 72 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderTextureResource {
         /// `width`, of `uint16`.
         width: u16 = "width",
@@ -9854,7 +10074,7 @@ crate::typed::runtime::named!(RenderTextureResource = "RenderTextureResource": R
 pub type RenderTextureResourceReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `RenderVertexFormat`, 1 bytes.
+    /// The game's enum `RenderVertexFormat`, 1 byte.
     RenderVertexFormat {
         /// `P`, 0.
         P = "P",
@@ -9872,7 +10092,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderWaterResource`, 148 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderWaterResource`, 148 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderWaterResource {
         /// `caustics`, of `ObjectReference<Image>`.
         caustics: crate::content::Guid = "caustics",
@@ -9899,7 +10121,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RenderWaterResource = "RenderWaterResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `RenderWeatherResource`, 28 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `RenderWeatherResource`, 28 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     RenderWeatherResource {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",
@@ -9966,7 +10190,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SamplerInstrumentResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SamplerInstrumentResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SamplerInstrumentResource {
         /// `volume`, of `float`.
         volume: Float = "volume",
@@ -10007,7 +10233,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ScaledImpactValue`, 1 bytes.
+    /// The game's enum `ScaledImpactValue`, 1 byte.
     ScaledImpactValue {
         /// `None`, 0.
         None = "None",
@@ -10035,7 +10261,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ScatterLocation`, 1 bytes.
+    /// The game's enum `ScatterLocation`, 1 byte.
     ScatterLocation {
         /// `Surface`, 0.
         Surface = "Surface",
@@ -10047,7 +10273,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ScatterNodeFlag`, 1 bytes.
+    /// The game's enum `ScatterNodeFlag`, 1 byte.
     ScatterNodeFlag {
         /// `UseNormal`, 0.
         UseNormal = "UseNormal",
@@ -10058,7 +10284,7 @@ crate::typed::runtime::reflected_enum! {
 pub type ScatterNodeFlags = crate::typed::Flags<ScatterNodeFlag>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ScatterNodeImageType`, 1 bytes.
+    /// The game's enum `ScatterNodeImageType`, 1 byte.
     ScatterNodeImageType {
         /// `ScatterNodeMap`, 0.
         ScatterNodeMap = "ScatterNodeMap",
@@ -10070,7 +10296,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ScatterResolution`, 1 bytes.
+    /// The game's enum `ScatterResolution`, 1 byte.
     ScatterResolution {
         /// `One`, 0.
         One = "One",
@@ -10094,7 +10320,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ScatterSet3Resource`, 136 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ScatterSet3Resource`, 136 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ScatterSet3Resource {
         /// `maps`, of `BlobArray<ScatterSetImageData>`.
         maps: ::std::vec::Vec<ScatterSetImageData> = "maps",
@@ -10196,7 +10424,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ScatterSetRule`, 1 bytes.
+    /// The game's enum `ScatterSetRule`, 1 byte.
     ScatterSetRule {
         /// `Nowhere`, 0.
         Nowhere = "Nowhere",
@@ -10266,7 +10494,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SceneAreaFlag`, 1 bytes.
+    /// The game's enum `SceneAreaFlag`, 1 byte.
     SceneAreaFlag {
         /// `BigDungeon`, 0.
         BigDungeon = "BigDungeon",
@@ -10293,7 +10521,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SceneEntityChunkResource`, 140 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SceneEntityChunkResource`, 140 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SceneEntityChunkResource {
         /// `templates`, of `BlobArray<ecs::TemplateReference>`.
         templates: ::std::vec::Vec<crate::typed::ecs::TemplateReference> = "templates",
@@ -10450,7 +10680,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SceneEntitySpawnResource`, 320 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SceneEntitySpawnResource`, 320 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SceneEntitySpawnResource {
         /// `transform`, of `WorldTransform`.
         transform: WorldTransform = "transform",
@@ -10511,7 +10743,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SceneLightResource`, 88 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SceneLightResource`, 88 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SceneLightResource {
         /// `transform`, of `WorldTransform`.
         transform: WorldTransform = "transform",
@@ -10556,7 +10790,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SceneObjectType`, 1 bytes.
+    /// The game's enum `SceneObjectType`, 1 byte.
     SceneObjectType {
         /// `Model`, 0.
         Model = "Model",
@@ -10660,7 +10894,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SceneRandomLootResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SceneRandomLootResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SceneRandomLootResource {
         /// `lootSettings`, of `BlobArray<LootSettingsResource>`.
         loot_settings: ::std::vec::Vec<LootSettingsResource> = "lootSettings",
@@ -10689,7 +10925,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SceneResource`, 208 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SceneResource`, 208 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SceneResource {
         /// `ibl`, of `ObjectReference<IblResource>`.
         ibl: crate::content::Guid = "ibl",
@@ -10732,7 +10970,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SceneResource = "SceneResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SceneScatterChunkResource`, 48 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SceneScatterChunkResource`, 48 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SceneScatterChunkResource {
         /// `templates`, of `BlobArray<SceneScatterEntity>`.
         templates: ::std::vec::Vec<SceneScatterEntity> = "templates",
@@ -10777,7 +11017,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SceneScatterResource`, 92 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SceneScatterResource`, 92 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SceneScatterResource {
         /// `scatterSet`, of `ScatterSet3ResourceReference`.
         scatter_set: ScatterSet3ResourceReference = "scatterSet",
@@ -10835,7 +11077,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SceneWaterEntityResource`, 40 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SceneWaterEntityResource`, 40 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SceneWaterEntityResource {
         /// `waterEntityChunk`, of `ResourceContentReference`.
         water_entity_chunk: ResourceContentReference = "waterEntityChunk",
@@ -10848,7 +11092,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SceneWaterEntityResource = "SceneWaterEntityResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SceneWhiteboxLabelResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SceneWhiteboxLabelResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SceneWhiteboxLabelResource {
         /// `contentLabelCombinations`, of `BlobArray<ContentLabelRange>`.
         content_label_combinations: ::std::vec::Vec<ContentLabelRange> = "contentLabelCombinations",
@@ -10859,7 +11105,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SceneWhiteboxLabelResource = "SceneWhiteboxLabelResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SecondaryAnimationSet`, 1 bytes.
+    /// The game's enum `SecondaryAnimationSet`, 1 byte.
     SecondaryAnimationSet {
         /// `None`, 0.
         None = "None",
@@ -10927,7 +11173,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SequenceResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SequenceResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SequenceResource {
         /// `events`, of `SequenceEvents`.
         events: SequenceEvents = "events",
@@ -10958,7 +11206,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ShufflebagItemType`, 1 bytes.
+    /// The game's enum `ShufflebagItemType`, 1 byte.
     ShufflebagItemType {
         /// `None`, 0.
         None = "None",
@@ -10974,7 +11222,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ShufflebagWeaponCategory`, 1 bytes.
+    /// The game's enum `ShufflebagWeaponCategory`, 1 byte.
     ShufflebagWeaponCategory {
         /// `None`, 0.
         None = "None",
@@ -11016,7 +11264,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `Signal`, 1 bytes.
+    /// The game's struct `Signal`, 1 byte.
     Signal {
     }
 }
@@ -11028,14 +11276,18 @@ pub type SignalId = HashKey32;
 pub type SignalReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SimpleBuildingMaterialResource`, 1 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SimpleBuildingMaterialResource`, 1 byte.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SimpleBuildingMaterialResource {
     }
 }
 crate::typed::runtime::named!(SimpleBuildingMaterialResource = "SimpleBuildingMaterialResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SimpleWorldMaterialResource`, 132 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SimpleWorldMaterialResource`, 132 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SimpleWorldMaterialResource {
         /// `layerInfosDataBlock`, of `RenderDataBlock`.
         layer_infos_data_block: RenderDataBlock = "layerInfosDataBlock",
@@ -11090,7 +11342,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SkillModifierType`, 1 bytes.
+    /// The game's enum `SkillModifierType`, 1 byte.
     SkillModifierType {
         /// `None`, 0.
         None = "None",
@@ -11110,7 +11362,7 @@ pub type SkillNodeId = HashKey32;
 pub type SkillNodeLinkId = HashKey32;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SkillNodeType`, 1 bytes.
+    /// The game's enum `SkillNodeType`, 1 byte.
     SkillNodeType {
         /// `Root`, 0.
         Root = "Root",
@@ -11192,7 +11444,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SkillTreeNodeStatus`, 1 bytes.
+    /// The game's enum `SkillTreeNodeStatus`, 1 byte.
     SkillTreeNodeStatus {
         /// `Concept`, 0.
         Concept = "Concept",
@@ -11206,7 +11458,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SkillTreeResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SkillTreeResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SkillTreeResource {
         /// `nodes`, of `BlobArray<SkillTreeNode>`.
         nodes: ::std::vec::Vec<SkillTreeNode> = "nodes",
@@ -11217,7 +11471,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SkillTreeResource = "SkillTreeResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SkillUnlockLevel`, 1 bytes.
+    /// The game's struct `SkillUnlockLevel`, 1 byte.
     SkillUnlockLevel {
         /// `value`, of `uint8`.
         value: u8 = "value",
@@ -11414,7 +11668,7 @@ crate::typed::runtime::reflected_struct! {
 pub type SongId = HashKey32;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SoundChannelConfiguration`, 1 bytes.
+    /// The game's enum `SoundChannelConfiguration`, 1 byte.
     SoundChannelConfiguration {
         /// `Mono`, 0.
         Mono = "Mono",
@@ -11444,7 +11698,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SoundContainerMode`, 1 bytes.
+    /// The game's enum `SoundContainerMode`, 1 byte.
     SoundContainerMode {
         /// `Random`, 0.
         Random = "Random",
@@ -11455,7 +11709,9 @@ crate::typed::runtime::reflected_enum! {
 pub type SoundContainerReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundContainerResource`, 112 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundContainerResource`, 112 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundContainerResource: SoundContainerShared {
         /// `entries`, of `BlobArray<BlobVariant<SoundContainerResourceEntry>>`.
         entries: ::std::vec::Vec<::core::option::Option<crate::resources::Variant>> = "entries",
@@ -11480,7 +11736,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SoundContainerScene`, 1 bytes.
+    /// The game's enum `SoundContainerScene`, 1 byte.
     SoundContainerScene {
         /// `Sfx`, 0.
         Sfx = "Sfx",
@@ -11552,7 +11808,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SoundContainerStealingMode`, 1 bytes.
+    /// The game's enum `SoundContainerStealingMode`, 1 byte.
     SoundContainerStealingMode {
         /// `Oldest`, 0.
         Oldest = "Oldest",
@@ -11564,7 +11820,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SoundDataFormat`, 1 bytes.
+    /// The game's enum `SoundDataFormat`, 1 byte.
     SoundDataFormat {
         /// `Uncompressed`, 0.
         Uncompressed = "Uncompressed",
@@ -11574,7 +11830,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundResource`, 64 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundResource`, 64 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundResource {
         /// `channelConfiguration`, of `SoundChannelConfiguration`.
         channel_configuration: SoundChannelConfiguration = "channelConfiguration",
@@ -11600,7 +11858,9 @@ crate::typed::runtime::named!(SoundResource = "SoundResource": Resource);
 pub type SoundResourceReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundReverbCollectionResource`, 48 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundReverbCollectionResource`, 48 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundReverbCollectionResource {
         /// `soundReverbPresets`, of `ObjectReference<SoundReverbPresetsResource>`.
         sound_reverb_presets: crate::content::Guid = "soundReverbPresets",
@@ -11613,14 +11873,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SoundReverbCollectionResource = "SoundReverbCollectionResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundReverbEarlyReflectionsResource`, 1 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundReverbEarlyReflectionsResource`, 1 byte.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundReverbEarlyReflectionsResource {
     }
 }
 crate::typed::runtime::named!(SoundReverbEarlyReflectionsResource = "SoundReverbEarlyReflectionsResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundReverbLateReflectionsResource`, 40 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundReverbLateReflectionsResource`, 40 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundReverbLateReflectionsResource {
         /// `defaultPreset`, of `SoundReverbPresetResourceReference`.
         default_preset: SoundReverbPresetResourceReference = "defaultPreset",
@@ -11671,7 +11935,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundReverbPresetResource`, 72 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundReverbPresetResource`, 72 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundReverbPresetResource {
         /// `preset`, of `SoundReverbPreset`.
         preset: SoundReverbPreset = "preset",
@@ -11685,7 +11951,9 @@ crate::typed::runtime::named!(SoundReverbPresetResource = "SoundReverbPresetReso
 pub type SoundReverbPresetResourceReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundReverbPresetTableItemResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundReverbPresetTableItemResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundReverbPresetTableItemResource {
         /// `debugName`, of `string`.
         debug_name: String = "debugName",
@@ -11700,7 +11968,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SoundReverbPresetTableItemResource = "SoundReverbPresetTableItemResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundReverbPresetsResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundReverbPresetsResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundReverbPresetsResource {
         /// `presets`, of `BlobArray<SoundReverbPresetResource>`.
         presets: ::std::vec::Vec<SoundReverbPresetResource> = "presets",
@@ -11709,7 +11979,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SoundReverbPresetsResource = "SoundReverbPresetsResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `SoundVolumeHint`, 1 bytes.
+    /// The game's enum `SoundVolumeHint`, 1 byte.
     SoundVolumeHint {
         /// `GenericSfx`, 0.
         GenericSfx = "GenericSfx",
@@ -11729,7 +11999,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundWaterCollectionResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundWaterCollectionResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundWaterCollectionResource {
         /// `waterfallPresets`, of `ObjectReference<SoundWaterfallParametersResource>`.
         waterfall_presets: crate::content::Guid = "waterfallPresets",
@@ -11740,7 +12012,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SoundWaterCollectionResource = "SoundWaterCollectionResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundWaterFlowScenarioResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundWaterFlowScenarioResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundWaterFlowScenarioResource {
         /// `threshold`, of `float`.
         threshold: Float = "threshold",
@@ -11761,7 +12035,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SoundWaterFlowScenarioResource = "SoundWaterFlowScenarioResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundWaterFlowScenariosResource`, 56 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundWaterFlowScenariosResource`, 56 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundWaterFlowScenariosResource {
         /// `gain`, of `float`.
         gain: Float = "gain",
@@ -11776,7 +12052,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SoundWaterFlowScenariosResource = "SoundWaterFlowScenariosResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundWaterGrainParametersResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundWaterGrainParametersResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundWaterGrainParametersResource {
         /// `lowpassFactor`, of `float`.
         lowpass_factor: Float = "lowpassFactor",
@@ -11795,7 +12073,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SoundWaterGrainParametersResource = "SoundWaterGrainParametersResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundWaterfallParametersResource`, 48 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundWaterfallParametersResource`, 48 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundWaterfallParametersResource {
         /// `masterGain`, of `float`.
         master_gain: Float = "masterGain",
@@ -11810,7 +12090,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SoundWaterfallParametersResource = "SoundWaterfallParametersResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundWaterfallPresetResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundWaterfallPresetResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundWaterfallPresetResource {
         /// `clusterSize`, of `int`.
         cluster_size: Int = "clusterSize",
@@ -11829,7 +12111,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SoundWaterfallPresetResource = "SoundWaterfallPresetResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `SoundWaterfallPresetSetResource`, 32 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `SoundWaterfallPresetSetResource`, 32 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     SoundWaterfallPresetSetResource {
         /// `sample`, of `GranularSampleReference`.
         sample: GranularSampleReference = "sample",
@@ -11994,7 +12278,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `TemperatureVoxelType`, 1 bytes.
+    /// The game's enum `TemperatureVoxelType`, 1 byte.
     TemperatureVoxelType {
         /// `Normal`, 0.
         Normal = "Normal",
@@ -12004,7 +12288,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `TerraformingEfficiencyRegistryResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `TerraformingEfficiencyRegistryResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     TerraformingEfficiencyRegistryResource {
         /// `terrainConfigs`, of `BlobArray<TerrainTerraformingConfig>`.
         terrain_configs: ::std::vec::Vec<TerrainTerraformingConfig> = "terrainConfigs",
@@ -12015,7 +12301,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TerraformingEfficiencyRegistryResource = "TerraformingEfficiencyRegistryResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `TerraformingType`, 1 bytes.
+    /// The game's enum `TerraformingType`, 1 byte.
     TerraformingType {
         /// `Remove`, 0.
         Remove = "Remove",
@@ -12037,7 +12323,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `TerrainMaterialId`, 1 bytes.
+    /// The game's struct `TerrainMaterialId`, 1 byte.
     TerrainMaterialId {
         /// `value`, of `TerrainMaterialType`.
         value: TerrainMaterialType = "value",
@@ -12100,7 +12386,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `TerrainVoxelObjectDefinition`, 1 bytes.
+    /// The game's struct `TerrainVoxelObjectDefinition`, 1 byte.
     TerrainVoxelObjectDefinition {
     }
 }
@@ -12132,7 +12418,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `TextureType`, 1 bytes.
+    /// The game's enum `TextureType`, 1 byte.
     TextureType {
         /// `Texture1D`, 0.
         Texture1D = "Texture1D",
@@ -12207,7 +12493,9 @@ crate::typed::runtime::reflected_struct! {
 pub type TwitchDropId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `TwitchDropResource`, 44 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `TwitchDropResource`, 44 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     TwitchDropResource {
         /// `dropId`, of `TwitchDropId`.
         drop_id: TwitchDropId = "dropId",
@@ -12240,7 +12528,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `UiFontResource`, 1 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `UiFontResource`, 1 byte.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     UiFontResource {
     }
 }
@@ -12267,7 +12557,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `UiImageCompressionType`, 1 bytes.
+    /// The game's enum `UiImageCompressionType`, 1 byte.
     UiImageCompressionType {
         /// `None`, 0.
         None = "None",
@@ -12280,7 +12570,9 @@ crate::typed::runtime::reflected_enum! {
 pub type UiImageReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `UiMapResource`, 1 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `UiMapResource`, 1 byte.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     UiMapResource {
     }
 }
@@ -12309,7 +12601,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `UiWorldEventTriggerResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `UiWorldEventTriggerResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     UiWorldEventTriggerResource {
         /// `query`, of `KnowledgeQueryData`.
         query: KnowledgeQueryData = "query",
@@ -12320,7 +12614,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiWorldEventTriggerResource = "UiWorldEventTriggerResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `UniqueItemAttributeBase`, 1 bytes.
+    /// The game's struct `UniqueItemAttributeBase`, 1 byte.
     UniqueItemAttributeBase {
     }
 }
@@ -12332,7 +12626,7 @@ pub type UniqueSceneId = HashKey32;
 pub type UsageFeedbackMask = crate::typed::Flags<UsageFeedbackTypes>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `UsageFeedbackTypes`, 1 bytes.
+    /// The game's enum `UsageFeedbackTypes`, 1 byte.
     UsageFeedbackTypes {
         /// `Health`, 0.
         Health = "Health",
@@ -12397,7 +12691,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `VertexPositionQuantization`, 1 bytes.
+    /// The game's enum `VertexPositionQuantization`, 1 byte.
     VertexPositionQuantization {
         /// `none`, 0.
         None = "none",
@@ -12421,7 +12715,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `VfxBufferMemberComponentType`, 1 bytes.
+    /// The game's enum `VfxBufferMemberComponentType`, 1 byte.
     VfxBufferMemberComponentType {
         /// `Float`, 0.
         Float = "Float",
@@ -12445,7 +12739,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VfxCurveResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VfxCurveResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VfxCurveResource {
         /// `startTime`, of `float32`.
         start_time: f32 = "startTime",
@@ -12498,7 +12794,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VfxJointCollectionResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VfxJointCollectionResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VfxJointCollectionResource {
         /// `hierarchy`, of `ObjectReference<ModelHierarchyResource>`.
         hierarchy: crate::content::Guid = "hierarchy",
@@ -12577,7 +12875,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VfxMeshResource`, 56 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VfxMeshResource`, 56 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VfxMeshResource {
         /// `indexCount`, of `uint32`.
         index_count: u32 = "indexCount",
@@ -12602,7 +12902,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VfxParticleResource`, 104 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VfxParticleResource`, 104 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VfxParticleResource {
         /// `debugName`, of `string`.
         debug_name: String = "debugName",
@@ -12652,7 +12954,9 @@ crate::typed::runtime::reflected_struct! {
 pub type VfxReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VfxResource`, 216 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VfxResource`, 216 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VfxResource {
         /// `cullingDistanceMin`, of `float32`.
         culling_distance_min: f32 = "cullingDistanceMin",
@@ -12735,7 +13039,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `VfxSpringInitializationState`, 1 bytes.
+    /// The game's enum `VfxSpringInitializationState`, 1 byte.
     VfxSpringInitializationState {
         /// `Straight`, 0.
         Straight = "Straight",
@@ -12747,7 +13051,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VfxSpringResource`, 184 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VfxSpringResource`, 184 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VfxSpringResource {
         /// `lifeTime`, of `Time`.
         life_time: Time = "lifeTime",
@@ -12808,7 +13114,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VfxSpringResource = "VfxSpringResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `VfxSpringTargetBehaviour`, 1 bytes.
+    /// The game's enum `VfxSpringTargetBehaviour`, 1 byte.
     VfxSpringTargetBehaviour {
         /// `Static`, 0.
         Static = "Static",
@@ -12826,7 +13132,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VfxSystemResource`, 16 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VfxSystemResource`, 16 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VfxSystemResource {
         /// `simplexNoise`, of `ObjectReference<RenderTextureResource>`.
         simplex_noise: crate::content::Guid = "simplexNoise",
@@ -12860,7 +13168,7 @@ crate::typed::runtime::reflected_struct! {
 pub type VisualEquipmentMask = crate::typed::Flags<VisualEquippedItems>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `VisualEquippedItems`, 1 bytes.
+    /// The game's enum `VisualEquippedItems`, 1 byte.
     VisualEquippedItems {
         /// `BodyPart_Head`, 0.
         BodyPartHead = "BodyPart_Head",
@@ -12958,7 +13266,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoicePackDirectoryResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoicePackDirectoryResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoicePackDirectoryResource {
         /// `voicePacks`, of `BlobArray<VoicePackResourceReference>`.
         voice_packs: ::std::vec::Vec<VoicePackResourceReference> = "voicePacks",
@@ -12973,7 +13283,9 @@ pub type VoicePackId = HashKey32;
 pub type VoicePackReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoicePackResource`, 288 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoicePackResource`, 288 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoicePackResource {
         /// `sound`, of `StaticArray<SoundContainerReference,18>`.
         sound: ::std::vec::Vec<SoundContainerReference> = "sound",
@@ -13008,7 +13320,9 @@ crate::typed::runtime::reflected_struct! {
 pub type VoiceoverReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoiceoverResource`, 92 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoiceoverResource`, 92 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoiceoverResource {
         /// `languages`, of `StaticArray<ObjectReference<SoundContainerResource>,5>`.
         languages: ::std::vec::Vec<crate::content::Guid> = "languages",
@@ -13052,7 +13366,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `VolumetricFog3MaterialType`, 1 bytes.
+    /// The game's enum `VolumetricFog3MaterialType`, 1 byte.
     VolumetricFog3MaterialType {
         /// `Decorative`, 0.
         Decorative = "Decorative",
@@ -13090,7 +13404,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VolumetricFog3ModelResource`, 104 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VolumetricFog3ModelResource`, 104 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VolumetricFog3ModelResource {
         /// `tileCount`, of `uint32`.
         tile_count: u32 = "tileCount",
@@ -13113,7 +13429,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VolumetricFog3ModelResource = "VolumetricFog3ModelResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VolumetricFog3Resource`, 280 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VolumetricFog3Resource`, 280 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VolumetricFog3Resource {
         /// `detailNoise`, of `RenderTextureResourceReference`.
         detail_noise: RenderTextureResourceReference = "detailNoise",
@@ -13204,7 +13522,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoxelBlueprintItemRegistryResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoxelBlueprintItemRegistryResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoxelBlueprintItemRegistryResource {
         /// `blueprintItems`, of `BlobArray<VoxelBlueprintItem>`.
         blueprint_items: ::std::vec::Vec<VoxelBlueprintItem> = "blueprintItems",
@@ -13230,7 +13550,9 @@ crate::typed::runtime::reflected_struct! {
 pub type VoxelBlueprintMaterialPoolId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoxelBlueprintMaterialPoolRegistryResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoxelBlueprintMaterialPoolRegistryResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoxelBlueprintMaterialPoolRegistryResource {
         /// `materialPools`, of `BlobArray<VoxelBlueprintMaterialPool>`.
         material_pools: ::std::vec::Vec<VoxelBlueprintMaterialPool> = "materialPools",
@@ -13242,7 +13564,7 @@ crate::typed::runtime::named!(VoxelBlueprintMaterialPoolRegistryResource = "Voxe
 pub type VoxelMaterialId = u8;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `VoxelMaterialType`, 1 bytes.
+    /// The game's enum `VoxelMaterialType`, 1 byte.
     VoxelMaterialType {
         /// `Terrain`, 0.
         Terrain = "Terrain",
@@ -13252,7 +13574,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoxelMaterialVfxDataResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoxelMaterialVfxDataResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoxelMaterialVfxDataResource {
         /// `materialType`, of `BlobArray<uint>`.
         material_type: ::std::vec::Vec<Uint> = "materialType",
@@ -13261,7 +13585,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VoxelMaterialVfxDataResource = "VoxelMaterialVfxDataResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoxelModelResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoxelModelResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoxelModelResource {
         /// `size`, of `uint3`.
         size: Uint3 = "size",
@@ -13288,7 +13614,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `VoxelObjectPreviewMode`, 1 bytes.
+    /// The game's enum `VoxelObjectPreviewMode`, 1 byte.
     VoxelObjectPreviewMode {
         /// `OnlyBuildingVoxels`, 0.
         OnlyBuildingVoxels = "OnlyBuildingVoxels",
@@ -13366,7 +13692,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoxelTemperatureResource`, 44 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoxelTemperatureResource`, 44 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoxelTemperatureResource {
         /// `worldOrigin`, of `int3`.
         world_origin: Int3 = "worldOrigin",
@@ -13381,7 +13709,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VoxelTemperatureResource = "VoxelTemperatureResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoxelWorldChunkResource`, 224 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoxelWorldChunkResource`, 224 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoxelWorldChunkResource {
         /// `voxelColumnData`, of `StaticArray<ResourceContentReference,7>`.
         voxel_column_data: ::std::vec::Vec<ResourceContentReference> = "voxelColumnData",
@@ -13430,7 +13760,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoxelWorldFog3Resource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoxelWorldFog3Resource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoxelWorldFog3Resource {
         /// `voxelMapping`, of `FogVoxelMappingReference`.
         voxel_mapping: FogVoxelMappingReference = "voxelMapping",
@@ -13471,7 +13803,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `VoxelWorldResource`, 4360 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `VoxelWorldResource`, 4360 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     VoxelWorldResource {
         /// `type`, of `VoxelWorldResourceType`.
         r#type: VoxelWorldResourceType = "type",
@@ -13494,7 +13828,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VoxelWorldResource = "VoxelWorldResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `VoxelWorldResourceType`, 1 bytes.
+    /// The game's enum `VoxelWorldResourceType`, 1 byte.
     VoxelWorldResourceType {
         /// `Solid`, 0.
         Solid = "Solid",
@@ -13522,7 +13856,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `WaterBehaviourType`, 1 bytes.
+    /// The game's enum `WaterBehaviourType`, 1 byte.
     WaterBehaviourType {
         /// `Waterproof`, 0.
         Waterproof = "Waterproof",
@@ -13536,7 +13870,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WaterChunkResource`, 48 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WaterChunkResource`, 48 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WaterChunkResource {
         /// `waterData`, of `ResourceContentReference`.
         water_data: ResourceContentReference = "waterData",
@@ -13549,7 +13885,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WaterChunkResource = "WaterChunkResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WaterDisplacingResource`, 512 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WaterDisplacingResource`, 512 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WaterDisplacingResource {
         /// `displacingData`, of `StaticArray<ResourceContentReference,16>`.
         displacing_data: ::std::vec::Vec<ResourceContentReference> = "displacingData",
@@ -13558,7 +13896,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WaterDisplacingResource = "WaterDisplacingResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `WaterEntityType`, 1 bytes.
+    /// The game's enum `WaterEntityType`, 1 byte.
     WaterEntityType {
         /// `None`, 0.
         None = "None",
@@ -13588,7 +13926,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WaterSurfaceEffectMaterialResource`, 356 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WaterSurfaceEffectMaterialResource`, 356 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WaterSurfaceEffectMaterialResource {
         /// `heightBelowKnee`, of `float`.
         height_below_knee: Float = "heightBelowKnee",
@@ -13613,7 +13953,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WaterWorldResource`, 276 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WaterWorldResource`, 276 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WaterWorldResource {
         /// `tileCount`, of `uint2`.
         tile_count: Uint2 = "tileCount",
@@ -13656,7 +13998,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WeaponCategoryDirectoryResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WeaponCategoryDirectoryResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WeaponCategoryDirectoryResource {
         /// `weaponCategories`, of `BlobArray<WeaponCategoryResource>`.
         weapon_categories: ::std::vec::Vec<WeaponCategoryResource> = "weaponCategories",
@@ -13671,7 +14015,9 @@ pub type WeaponCategoryId = HashKey32;
 pub type WeaponCategoryReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WeaponCategoryResource`, 88 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WeaponCategoryResource`, 88 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WeaponCategoryResource {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",
@@ -13682,7 +14028,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WeaponCategoryResource = "WeaponCategoryResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `WeaponCategoryType`, 1 bytes.
+    /// The game's enum `WeaponCategoryType`, 1 byte.
     WeaponCategoryType {
         /// `OneHandAxe`, 0.
         OneHandAxe = "OneHandAxe",
@@ -13723,7 +14069,7 @@ crate::typed::runtime::reflected_enum! {
 pub type WeaponCategoryTypeMask = crate::typed::Flags<WeaponCategoryType>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `WeaponGemActionType`, 1 bytes.
+    /// The game's enum `WeaponGemActionType`, 1 byte.
     WeaponGemActionType {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -13762,7 +14108,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `WeatherPhenomenonEffect`, 1 bytes.
+    /// The game's enum `WeatherPhenomenonEffect`, 1 byte.
     WeatherPhenomenonEffect {
         /// `None`, 0.
         None = "None",
@@ -13816,7 +14162,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WeatherSystemLayerMaskResource`, 56 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WeatherSystemLayerMaskResource`, 56 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WeatherSystemLayerMaskResource {
         /// `mask`, of `WeatherSystemMaskResource`.
         mask: WeatherSystemMaskResource = "mask",
@@ -13825,7 +14173,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WeatherSystemLayerMaskResource = "WeatherSystemLayerMaskResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WeatherSystemLayerResource`, 200 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WeatherSystemLayerResource`, 200 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WeatherSystemLayerResource {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",
@@ -13842,7 +14192,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WeatherSystemLayerResource = "WeatherSystemLayerResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WeatherSystemLayerStateConfigurationResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WeatherSystemLayerStateConfigurationResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WeatherSystemLayerStateConfigurationResource {
         /// `type`, of `WeatherSystemLayerStateConfigurationType`.
         r#type: WeatherSystemLayerStateConfigurationType = "type",
@@ -13855,7 +14207,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WeatherSystemLayerStateConfigurationResource = "WeatherSystemLayerStateConfigurationResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `WeatherSystemLayerStateConfigurationType`, 1 bytes.
+    /// The game's enum `WeatherSystemLayerStateConfigurationType`, 1 byte.
     WeatherSystemLayerStateConfigurationType {
         /// `Ignore`, 0.
         Ignore = "Ignore",
@@ -13867,7 +14219,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WeatherSystemMaskResource`, 56 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WeatherSystemMaskResource`, 56 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WeatherSystemMaskResource {
         /// `worldToRelative`, of `float2`.
         world_to_relative: Float2 = "worldToRelative",
@@ -13888,7 +14242,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WeatherSystemMaskResource = "WeatherSystemMaskResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WeatherSystemPhenomenonResource`, 176 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WeatherSystemPhenomenonResource`, 176 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WeatherSystemPhenomenonResource {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",
@@ -13961,7 +14317,9 @@ pub type WeatherSystemPhenomenonResourceFlags =
     crate::typed::Flags<WeatherSystemPhenomenonResourceFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WeatherSystemResource`, 156 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WeatherSystemResource`, 156 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WeatherSystemResource {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",
@@ -13992,7 +14350,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WeatherSystemResource = "WeatherSystemResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WeatherSystemStateConfigurationResource`, 20 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WeatherSystemStateConfigurationResource`, 20 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WeatherSystemStateConfigurationResource {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",
@@ -14033,7 +14393,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WhiteboxTag`, 1 bytes.
+    /// The game's struct `WhiteboxTag`, 1 byte.
     WhiteboxTag {
     }
 }
@@ -14090,7 +14450,9 @@ crate::typed::runtime::reflected_struct! {
 pub type WorkshopId = HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WorkshopRegistryResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WorkshopRegistryResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WorkshopRegistryResource {
         /// `npcs`, of `BlobArray<WorkshopResource>`.
         npcs: ::std::vec::Vec<WorkshopResource> = "npcs",
@@ -14103,7 +14465,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WorkshopRegistryResource = "WorkshopRegistryResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WorkshopResource`, 56 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WorkshopResource`, 56 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WorkshopResource {
         /// `isNpc`, of `bool`.
         is_npc: bool = "isNpc",
@@ -14130,7 +14494,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WorkshopResource = "WorkshopResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `WorldDistributionTypeFlag`, 1 bytes.
+    /// The game's enum `WorldDistributionTypeFlag`, 1 byte.
     WorldDistributionTypeFlag {
         /// `Flubber`, 0.
         Flubber = "Flubber",
@@ -14165,14 +14529,18 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WorldKnowledgeObjectResource`, 12 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WorldKnowledgeObjectResource`, 12 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WorldKnowledgeObjectResource: KnowledgeObjectResource {
     }
 }
 crate::typed::runtime::named!(WorldKnowledgeObjectResource = "WorldKnowledgeObjectResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `WorldMaterialBlending2Resource`, 180 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `WorldMaterialBlending2Resource`, 180 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     WorldMaterialBlending2Resource {
         /// `layerCount`, of `uint32`.
         layer_count: u32 = "layerCount",
@@ -14213,7 +14581,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `WorldTransformFlag`, 1 bytes.
+    /// The game's enum `WorldTransformFlag`, 1 byte.
     WorldTransformFlag {
         /// `Translation`, 0.
         Translation = "Translation",
@@ -14268,7 +14636,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `YawFollowType`, 1 bytes.
+    /// The game's enum `YawFollowType`, 1 byte.
     YawFollowType {
         /// `PlayerOrientation`, 0.
         PlayerOrientation = "PlayerOrientation",
@@ -14276,7 +14644,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `YawLimitReferenceType`, 1 bytes.
+    /// The game's enum `YawLimitReferenceType`, 1 byte.
     YawLimitReferenceType {
         /// `PlayerOrientation`, 0.
         PlayerOrientation = "PlayerOrientation",
@@ -14286,7 +14654,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ZoneVisualizationResource`, 108 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ZoneVisualizationResource`, 108 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ZoneVisualizationResource {
         /// `smoothingRadius`, of `float32`.
         smoothing_radius: f32 = "smoothingRadius",

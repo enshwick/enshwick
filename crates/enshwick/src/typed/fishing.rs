@@ -29,7 +29,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishing::Direction`, 1 bytes.
+    /// The game's enum `fishing::Direction`, 1 byte.
     Direction {
         /// `None`, 0.
         None = "None",
@@ -61,7 +61,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `fishing::FishSpawnEntryResource`, 12 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `fishing::FishSpawnEntryResource`, 12 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     FishSpawnEntryResource {
         /// `weight`, of `float`.
         weight: crate::typed::Float = "weight",
@@ -77,7 +79,9 @@ crate::typed::runtime::named!(FishSpawnEntryResource = "fishing::FishSpawnEntryR
 pub type FishSpawnTableReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `fishing::FishSpawnTableResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `fishing::FishSpawnTableResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     FishSpawnTableResource {
         /// `fishEntries`, of `BlobArray<fishing::FishSpawnEntryResource>`.
         fish_entries: ::std::vec::Vec<FishSpawnEntryResource> = "fishEntries",
@@ -92,13 +96,13 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FishSpawnTableResource = "fishing::FishSpawnTableResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `fishing::FishSpawnTableSetup`, 1 bytes.
+    /// The game's struct `fishing::FishSpawnTableSetup`, 1 byte.
     FishSpawnTableSetup {
     }
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishing::FishSpawnTimeFrame`, 1 bytes.
+    /// The game's enum `fishing::FishSpawnTimeFrame`, 1 byte.
     FishSpawnTimeFrame {
         /// `AllDay`, 0.
         AllDay = "AllDay",
@@ -120,7 +124,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishing::FishingFlag`, 1 bytes.
+    /// The game's enum `fishing::FishingFlag`, 1 byte.
     FishingFlag {
         /// `FloatReelInNotified`, 0.
         FloatReelInNotified = "FloatReelInNotified",
@@ -137,7 +141,7 @@ crate::typed::runtime::reflected_enum! {
 pub type FishingFlagMask = crate::typed::Flags<FishingFlag>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishing::FishingFloatState`, 1 bytes.
+    /// The game's enum `fishing::FishingFloatState`, 1 byte.
     FishingFloatState {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -159,7 +163,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishing::FishingNetworkFlag`, 1 bytes.
+    /// The game's enum `fishing::FishingNetworkFlag`, 1 byte.
     FishingNetworkFlag {
         /// `HookTimePrepared`, 0.
         HookTimePrepared = "HookTimePrepared",
@@ -182,7 +186,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishing::FloatFlag`, 1 bytes.
+    /// The game's enum `fishing::FloatFlag`, 1 byte.
     FloatFlag {
         /// `FloatHitInvalidLocation`, 0.
         FloatHitInvalidLocation = "FloatHitInvalidLocation",
@@ -221,7 +225,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishing::MinigameError`, 1 bytes.
+    /// The game's enum `fishing::MinigameError`, 1 byte.
     MinigameError {
         /// `Ok`, 0.
         Ok = "Ok",
@@ -257,7 +261,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishing::MinigameInputState`, 1 bytes.
+    /// The game's enum `fishing::MinigameInputState`, 1 byte.
     MinigameInputState {
         /// `None`, 0.
         None = "None",
@@ -317,7 +321,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `fishing::ShoeSpawnEntryResource`, 12 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `fishing::ShoeSpawnEntryResource`, 12 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ShoeSpawnEntryResource {
         /// `percentage`, of `float`.
         percentage: crate::typed::Float = "percentage",
@@ -330,7 +336,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ShoeSpawnEntryResource = "fishing::ShoeSpawnEntryResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishing::State`, 1 bytes.
+    /// The game's enum `fishing::State`, 1 byte.
     State {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -446,7 +452,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishing::Transition`, 1 bytes.
+    /// The game's enum `fishing::Transition`, 1 byte.
     Transition {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -470,7 +476,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `fishing::TrashLootEntryResource`, 12 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `fishing::TrashLootEntryResource`, 12 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     TrashLootEntryResource {
         /// `weight`, of `float`.
         weight: crate::typed::Float = "weight",
@@ -483,7 +491,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TrashLootEntryResource = "fishing::TrashLootEntryResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `fishing::TrashLootTableResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `fishing::TrashLootTableResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     TrashLootTableResource {
         /// `entries`, of `BlobArray<fishing::TrashLootEntryResource>`.
         entries: ::std::vec::Vec<TrashLootEntryResource> = "entries",
@@ -495,7 +505,9 @@ crate::typed::runtime::named!(TrashLootTableResource = "fishing::TrashLootTableR
 pub type TrashLootTableResourceReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `fishing::TrashSpawnEntryResource`, 4 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `fishing::TrashSpawnEntryResource`, 4 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     TrashSpawnEntryResource {
         /// `percentage`, of `float`.
         percentage: crate::typed::Float = "percentage",
@@ -504,7 +516,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TrashSpawnEntryResource = "fishing::TrashSpawnEntryResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `fishing::UniqueFishingItemAttributeBase`, 1 bytes.
+    /// The game's struct `fishing::UniqueFishingItemAttributeBase`, 1 byte.
     UniqueFishingItemAttributeBase {
     }
 }

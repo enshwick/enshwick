@@ -31,7 +31,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ranged_weapon::State`, 1 bytes.
+    /// The game's enum `ranged_weapon::State`, 1 byte.
     State {
         /// `Holster`, 0.
         Holster = "Holster",
@@ -87,7 +87,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ranged_weapon::WeaponType`, 1 bytes.
+    /// The game's enum `ranged_weapon::WeaponType`, 1 byte.
     WeaponType {
         /// `Bow`, 0.
         Bow = "Bow",

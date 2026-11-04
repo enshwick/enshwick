@@ -250,6 +250,32 @@ pub(crate) fn fields_of(value: Value) -> Vec<(String, Value)> {
     }
 }
 
+/// Whether `value` reads as `T`, for the table of every generated type.
+///
+/// # Errors
+///
+/// [`ShapeError`] when it does not.
+#[doc(hidden)]
+pub fn check<T: Reflected>(value: &Value) -> Result<(), ShapeError> {
+    T::from_value(value).map(drop)
+}
+
+/// The table of every generated type with a role: its id and a check that a
+/// value reads as it, for tests that hold the generated items against a
+/// build's types.
+macro_rules! named_table {
+    ($($id:literal => $ty:ty,)*) => {
+        /// Every generated type with a role, by id, with a check that a
+        /// value reads as it.
+        #[doc(hidden)]
+        pub const NAMED: &[(
+            &str,
+            fn(&$crate::resources::Value) -> ::core::result::Result<(), $crate::typed::ShapeError>,
+        )] = &[$(($id, $crate::typed::runtime::check::<$ty>)),*];
+    };
+}
+pub(crate) use named_table;
+
 /// A generated struct: its fields by the game's names, read from and
 /// written to a [`Value`]; a derived type holds its base first.
 macro_rules! reflected_struct {

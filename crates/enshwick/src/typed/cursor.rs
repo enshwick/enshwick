@@ -17,7 +17,7 @@
 )]
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `cursor::VoxelGridSnappingDirective`, 1 bytes.
+    /// The game's enum `cursor::VoxelGridSnappingDirective`, 1 byte.
     VoxelGridSnappingDirective {
         /// `ForceVoxelCenterWhenSmallerThanVoxel`, 0.
         ForceVoxelCenterWhenSmallerThanVoxel = "ForceVoxelCenterWhenSmallerThanVoxel",

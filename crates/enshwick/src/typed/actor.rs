@@ -17,7 +17,7 @@
 )]
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `actor::AbilityFlag`, 1 bytes.
+    /// The game's enum `actor::AbilityFlag`, 1 byte.
     AbilityFlag {
         /// `CanTriggerPrimary`, 0.
         CanTriggerPrimary = "CanTriggerPrimary",
@@ -94,7 +94,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `actor::ActionSequenceFlags`, 1 bytes.
+    /// The game's enum `actor::ActionSequenceFlags`, 1 byte.
     ActionSequenceFlags {
         /// `IsActive`, 0.
         IsActive = "IsActive",
@@ -292,7 +292,9 @@ crate::typed::runtime::reflected_struct! {
 pub type ActorSequenceReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `actor::ActorSequenceResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `actor::ActorSequenceResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ActorSequenceResource {
         /// `resourceId`, of `Guid`.
         resource_id: crate::content::Guid = "resourceId",
@@ -313,7 +315,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `actor::ActorSubSequenceResource`, 72 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `actor::ActorSubSequenceResource`, 72 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ActorSubSequenceResource: crate::typed::SequenceResource {
         /// `triggerRequirements`, of `actor::ActorSubSequenceRequirements`.
         trigger_requirements: ActorSubSequenceRequirements = "triggerRequirements",
@@ -358,7 +362,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `actor::InterpolationMode`, 1 bytes.
+    /// The game's enum `actor::InterpolationMode`, 1 byte.
     InterpolationMode {
         /// `LinearAxisRotation`, 0.
         LinearAxisRotation = "LinearAxisRotation",
@@ -388,7 +392,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `actor::JumpType`, 1 bytes.
+    /// The game's enum `actor::JumpType`, 1 byte.
     JumpType {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -484,7 +488,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `actor::RotationLerpType`, 1 bytes.
+    /// The game's enum `actor::RotationLerpType`, 1 byte.
     RotationLerpType {
         /// `Stick`, 0.
         Stick = "Stick",
@@ -506,7 +510,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `actor::SequenceFlags`, 1 bytes.
+    /// The game's enum `actor::SequenceFlags`, 1 byte.
     SequenceFlags {
         /// `DoesRequireStandingUp`, 0.
         DoesRequireStandingUp = "DoesRequireStandingUp",
@@ -548,7 +552,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `actor::StateFlag`, 1 bytes.
+    /// The game's enum `actor::StateFlag`, 1 byte.
     StateFlag {
         /// `Grounded`, 0.
         Grounded = "Grounded",
@@ -683,7 +687,7 @@ crate::typed::runtime::reflected_enum! {
 pub type StateMask = crate::typed::Flags<StateFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `actor::SubSequenceResourceId`, 1 bytes.
+    /// The game's struct `actor::SubSequenceResourceId`, 1 byte.
     SubSequenceResourceId {
         /// `index`, of `uint8`.
         index: u8 = "index",

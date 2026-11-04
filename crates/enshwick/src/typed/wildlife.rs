@@ -61,7 +61,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `wildlife::Feature`, 1 bytes.
+    /// The game's enum `wildlife::Feature`, 1 byte.
     Feature {
         /// `Roaming`, 0.
         Roaming = "Roaming",

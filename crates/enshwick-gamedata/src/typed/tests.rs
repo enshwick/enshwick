@@ -123,6 +123,52 @@ fn every_id_of_the_committed_table_names_one_engine_type() {
     }
 }
 
+/// The snapshot the committed typed API was generated from: the newest
+/// server build's.
+fn committed() -> Catalogue {
+    let tables: Vec<crate::Table> = crate::embedded()
+        .iter()
+        .map(|(_, text)| crate::Table::parse(text).unwrap())
+        .collect();
+    let table = crate::newest(&tables, crate::Side::Server).unwrap();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("typed")
+        .join(std::path::Path::new(&table.file_name()).with_extension("jsonl"));
+    Catalogue::from_snapshot(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+/// Every covered type of the committed snapshot has a generated item, and
+/// a zeroed value of the build's type reads as it: the shape check each
+/// handle runs at resolve holds for every one.
+#[test]
+#[cfg_attr(miri, ignore = "decodes thousands of types")]
+fn every_covered_type_reads_as_its_generated_item() {
+    let catalogue = committed();
+    let registry = catalogue.registry();
+    let named = enshwick::typed::NAMED;
+    let covered = catalogue
+        .types
+        .values()
+        .filter(|t| !t.roles.is_empty() && t.kind != Kind::Typedef)
+        .count();
+    assert_eq!(named.len(), covered);
+    assert_eq!(named.len(), ids::IDS.len());
+    let mut wrong = Vec::new();
+    for (id, check) in named {
+        let name = engine_name(id).unwrap();
+        let ty = registry.named(name).unwrap();
+        let zero = vec![0; usize::try_from(ty.size()).unwrap()];
+        let read = registry
+            .decode(name, &zero)
+            .map_err(|e| e.to_string())
+            .and_then(|value| check(&value).map_err(|e| e.to_string()));
+        if let Err(why) = read {
+            wrong.push(format!("{id}: {why}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
 proptest::proptest! {
     /// Every kind byte maps to a Rust type with balanced brackets.
     #[test]

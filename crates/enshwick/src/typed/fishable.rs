@@ -17,7 +17,7 @@
 )]
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishable::FishFlag`, 1 bytes.
+    /// The game's enum `fishable::FishFlag`, 1 byte.
     FishFlag {
         /// `IsTurning`, 0.
         IsTurning = "IsTurning",
@@ -36,7 +36,7 @@ crate::typed::runtime::reflected_enum! {
 pub type FishFlagMask = crate::typed::Flags<FishFlag>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishable::FishState`, 1 bytes.
+    /// The game's enum `fishable::FishState`, 1 byte.
     FishState {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -106,7 +106,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `fishable::Transition`, 1 bytes.
+    /// The game's enum `fishable::Transition`, 1 byte.
     Transition {
         /// `Invalid`, 0.
         Invalid = "Invalid",

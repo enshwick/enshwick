@@ -41,7 +41,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `impact::AttackCategory`, 1 bytes.
+    /// The game's enum `impact::AttackCategory`, 1 byte.
     AttackCategory {
         /// `Melee`, 0.
         Melee = "Melee",
@@ -75,7 +75,7 @@ crate::typed::runtime::reflected_struct! {
 pub type AttributeIndex = u16;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `impact::ConfigId`, 1 bytes.
+    /// The game's struct `impact::ConfigId`, 1 byte.
     ConfigId {
     }
 }
@@ -254,7 +254,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `impact::ImpcatValueNumberFormat`, 1 bytes.
+    /// The game's enum `impact::ImpcatValueNumberFormat`, 1 byte.
     ImpcatValueNumberFormat {
         /// `Normal`, 0.
         Normal = "Normal",
@@ -272,7 +272,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `impact::MajorDirection`, 1 bytes.
+    /// The game's enum `impact::MajorDirection`, 1 byte.
     MajorDirection {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -295,7 +295,7 @@ crate::typed::runtime::reflected_enum! {
 pub type ProgramId = crate::typed::HashKey32;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `impact::PushBackForce`, 1 bytes.
+    /// The game's enum `impact::PushBackForce`, 1 byte.
     PushBackForce {
         /// `None`, 0.
         None = "None",
@@ -317,7 +317,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `impact::ScaledValueSourceEntity`, 1 bytes.
+    /// The game's enum `impact::ScaledValueSourceEntity`, 1 byte.
     ScaledValueSourceEntity {
         /// `Self`, 0.
         Self_ = "Self",

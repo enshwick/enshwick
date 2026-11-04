@@ -17,7 +17,7 @@
 )]
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `composite_scatter_image::CompositeOperation`, 1 bytes.
+    /// The game's enum `composite_scatter_image::CompositeOperation`, 1 byte.
     CompositeOperation {
         /// `Multiply`, 0.
         Multiply = "Multiply",
@@ -57,7 +57,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `composite_scatter_image::InputOperation`, 1 bytes.
+    /// The game's enum `composite_scatter_image::InputOperation`, 1 byte.
     InputOperation {
         /// `None`, 0.
         None = "None",
@@ -69,7 +69,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `composite_scatter_image::InputType`, 1 bytes.
+    /// The game's enum `composite_scatter_image::InputType`, 1 byte.
     InputType {
         /// `ScatterImage`, 0.
         ScatterImage = "ScatterImage",

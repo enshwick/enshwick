@@ -106,7 +106,13 @@ impl Catalogue {
         }
         let mut files = BTreeMap::new();
         let top: BTreeSet<&String> = modules.keys().filter_map(|m| m.first()).collect();
-        files.insert("typed.rs".to_owned(), root_file(&top, build));
+        let mut root = root_file(&top, build);
+        root.push_str("\nruntime::named_table! {\n");
+        for (id, _) in self.ids()? {
+            let _ = writeln!(root, "    \"{id}\" => {id},");
+        }
+        root.push_str("}\n");
+        files.insert("typed.rs".to_owned(), root);
         let root_items = modules.get(&Vec::new()).map_or(&[][..], Vec::as_slice);
         files.insert(
             "typed/root.rs".to_owned(),
@@ -136,7 +142,11 @@ impl Catalogue {
         let mut ids: Vec<(String, String)> = writer
             .places
             .iter()
-            .filter(|(full, _)| self.types.get(**full).is_some_and(|t| !t.roles.is_empty()))
+            .filter(|(full, _)| {
+                self.types
+                    .get(**full)
+                    .is_some_and(|t| !t.roles.is_empty() && t.kind != Kind::Typedef)
+            })
             .map(|(full, place)| (id(place), (*full).to_owned()))
             .collect();
         ids.sort();
@@ -286,25 +296,26 @@ impl<'c> Writer<'c> {
     /// The item for `ty` at `place`.
     fn item(&self, ty: &Ty, place: &Place) -> String {
         let shown = bare(&ty.name, &self.root);
+        let bytes = if ty.size == 1 { "byte" } else { "bytes" };
         let mut doc = match ty.kind {
-            Kind::Enum => format!("The game's enum `{shown}`, {} bytes.", ty.size),
+            Kind::Enum => format!("The game's enum `{shown}`, {} {bytes}.", ty.size),
             Kind::Typedef => format!(
                 "The game's `{shown}`, another name for `{}`.",
                 bare(ty.inner.as_deref().unwrap_or("?"), &self.root)
             ),
-            _ => format!("The game's struct `{shown}`, {} bytes.", ty.size),
+            _ => format!("The game's struct `{shown}`, {} {bytes}.", ty.size),
         };
-        for role in &ty.roles {
-            let _ = write!(doc, " {}", role_line(*role));
-        }
+        let mut more: Vec<String> = ty.roles.iter().map(|r| role_line(*r).to_owned()).collect();
         for side in ["client_only", "server_only"] {
             if ty.attributes.iter().any(|a| a == side) {
-                let _ = write!(
-                    doc,
-                    " The game holds it on the {} only.",
+                more.push(format!(
+                    "The game holds it on the {} only.",
                     side.trim_end_matches("_only")
-                );
+                ));
             }
+        }
+        if !more.is_empty() {
+            let _ = write!(doc, "\n///\n/// {}", more.join(" "));
         }
         let mut out = match ty.kind {
             Kind::Enum => enum_item(ty, place, &doc),
@@ -338,6 +349,7 @@ impl<'c> Writer<'c> {
     }
 
     fn struct_item(&self, ty: &Ty, place: &Place, doc: &str) -> String {
+        let doc = doc.replace('\n', "\n    ");
         let mut out = format!(
             "crate::typed::runtime::reflected_struct! {{\n    /// {doc}\n    {}",
             place.name
@@ -367,6 +379,7 @@ impl<'c> Writer<'c> {
 }
 
 fn enum_item(ty: &Ty, place: &Place, doc: &str) -> String {
+    let doc = doc.replace('\n', "\n    ");
     let mut out = format!(
         "crate::typed::runtime::reflected_enum! {{\n    /// {doc}\n    {} {{\n",
         place.name
@@ -455,7 +468,8 @@ fn header(build: &str) -> String {
 /// `typed.rs`: the module root, its docs, the runtime and the namespaces.
 fn root_file(top: &BTreeSet<&String>, build: &str) -> String {
     let mut out = String::from(
-        "//! Every component, event and resource the game reflects, as typed Rust\n\
+        "// Long file: generated, a row per covered type in the table at its end.\n\
+         //! Every component, event and resource the game reflects, as typed Rust\n\
          //! items generated from the game's own reflection.\n\
          //!\n\
          //! A module per reflected namespace holds its types, read and written\n\
@@ -483,7 +497,7 @@ fn root_file(top: &BTreeSet<&String>, build: &str) -> String {
         let _ = writeln!(out, "pub mod {name};");
     }
     out.push_str(
-        "\npub use root::*;\npub use runtime::{\n    Component, ComponentType, Constant, Event, EventType, Flags, Named, Reflected, Resource,\n    ResourceType, ShapeError,\n};\n",
+        "\npub use root::*;\n#[doc(hidden)]\npub use runtime::check;\npub use runtime::{\n    Component, ComponentType, Constant, Event, EventType, Flags, Named, Reflected, Resource,\n    ResourceType, ShapeError,\n};\n",
     );
     out
 }

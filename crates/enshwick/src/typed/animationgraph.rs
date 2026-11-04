@@ -20,7 +20,7 @@
 pub type InputIdHash = crate::typed::HashKey32;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `animationgraph::OverlayId`, 1 bytes.
+    /// The game's struct `animationgraph::OverlayId`, 1 byte.
     OverlayId {
     }
 }
@@ -29,7 +29,7 @@ crate::typed::runtime::reflected_struct! {
 pub type OverlayIdReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `animationgraph::RootMotionFlag`, 1 bytes.
+    /// The game's enum `animationgraph::RootMotionFlag`, 1 byte.
     RootMotionFlag {
         /// `Pure`, 0.
         Pure = "Pure",
@@ -48,7 +48,7 @@ crate::typed::runtime::reflected_enum! {
 pub type RootMotionMask = crate::typed::Flags<RootMotionFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `animationgraph::StateId`, 1 bytes.
+    /// The game's struct `animationgraph::StateId`, 1 byte.
     StateId {
     }
 }

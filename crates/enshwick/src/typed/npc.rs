@@ -20,7 +20,7 @@
 pub type HapinessMask = crate::typed::Flags<HappinessRequirement>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `npc::HappinessRequirement`, 1 bytes.
+    /// The game's enum `npc::HappinessRequirement`, 1 byte.
     HappinessRequirement {
         /// `Sheltered`, 0.
         Sheltered = "Sheltered",

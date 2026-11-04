@@ -409,6 +409,41 @@ impl Catalogue {
         }
         Ok(Self { types })
     }
+
+    /// The catalogue as the codec's type registry, as the running game's
+    /// would hold these types.
+    #[cfg(test)]
+    pub(crate) fn registry(&self) -> enshwick::resources::Registry<'_> {
+        use enshwick::resources::{Constant, Field as CodecField, Registry, Type};
+
+        Registry::new(self.types.values().map(|ty| {
+            let mut out = Type::new(&ty.name, ty.kind, ty.size, ty.align);
+            if let Some(inner) = ty.base.as_deref().or(ty.inner.as_deref()) {
+                out = out.with_inner(inner);
+            }
+            match ty.kind {
+                Kind::Struct => out.with_fields(
+                    ty.fields
+                        .iter()
+                        .filter_map(|f| {
+                            let offset = u32::try_from(f.offset).ok()?;
+                            Some(match f.ty.as_deref() {
+                                Some(of) => CodecField::new(&f.name, offset, of),
+                                None => CodecField::new(&f.name, offset, "").untyped(),
+                            })
+                        })
+                        .collect(),
+                ),
+                Kind::Enum => out.with_constants(
+                    ty.values
+                        .iter()
+                        .map(|(name, value)| Constant::new(name, *value))
+                        .collect(),
+                ),
+                _ => out.with_count(ty.count.unwrap_or(0)),
+            }
+        }))
+    }
 }
 
 #[cfg(test)]

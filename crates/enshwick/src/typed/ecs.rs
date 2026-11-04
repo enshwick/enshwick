@@ -17,7 +17,9 @@
 )]
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AbstractCollider`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::AbstractCollider`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     AbstractCollider: Component {
         /// `toggleModifier`, of `ecs::ToggleModifier`.
         toggle_modifier: ToggleModifier = "toggleModifier",
@@ -28,7 +30,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AbstractCollider = "ecs::AbstractCollider": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AcceptOfferedInteractionEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::AcceptOfferedInteractionEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     AcceptOfferedInteractionEvent: GameEvent {
         /// `guestEntityId`, of `ecs::EntityId`.
         guest_entity_id: EntityId = "guestEntityId",
@@ -55,7 +59,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AccountActionEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::AccountActionEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     AccountActionEvent: GameEvent {
         /// `accountId`, of `HashKey64`.
         account_id: crate::typed::HashKey64 = "accountId",
@@ -68,7 +74,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AccountActionEvent = "ecs::AccountActionEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::AccountActionType`, 1 bytes.
+    /// The game's enum `ecs::AccountActionType`, 1 byte.
     AccountActionType {
         /// `Kick`, 0.
         Kick = "Kick",
@@ -118,7 +124,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ActionbarSelectionEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ActionbarSelectionEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     ActionbarSelectionEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -129,7 +137,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ActionbarSelectionEvent = "ecs::ActionbarSelectionEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ActivateFactionCallForHelpEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ActivateFactionCallForHelpEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     ActivateFactionCallForHelpEvent: GameEvent {
         /// `entityId`, of `ecs::EntityId`.
         entity_id: EntityId = "entityId",
@@ -140,7 +150,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ActivateFactionCallForHelpEvent = "ecs::ActivateFactionCallForHelpEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ActivateFactionPacifyEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ActivateFactionPacifyEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     ActivateFactionPacifyEvent: GameEvent {
         /// `entityId`, of `ecs::EntityId`.
         entity_id: EntityId = "entityId",
@@ -151,7 +163,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ActivateFactionPacifyEvent = "ecs::ActivateFactionPacifyEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ActiveNpcState`, 456 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ActiveNpcState`, 456 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ActiveNpcState: Component {
         /// `npcId`, of `NpcId`.
         npc_id: crate::typed::NpcId = "npcId",
@@ -188,7 +202,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ActiveNpcState = "ecs::ActiveNpcState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ActiveNpcStateSaved`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ActiveNpcStateSaved`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ActiveNpcStateSaved: Component {
         /// `spawnPosition`, of `float3`.
         spawn_position: crate::typed::Float3 = "spawnPosition",
@@ -207,7 +223,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ActiveNpcStateSaved = "ecs::ActiveNpcStateSaved": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ActiveNpcTarget`, 68 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ActiveNpcTarget`, 68 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ActiveNpcTarget: Component {
         /// `setup`, of `active_npc::TargetSetup`.
         setup: crate::typed::active_npc::TargetSetup = "setup",
@@ -226,7 +244,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ActiveNpcTarget = "ecs::ActiveNpcTarget": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Actor`, 3832 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Actor`, 3832 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Actor: BaseActor {
         /// `currentServerAction`, of `ecs::ServerActionSequenceData`.
         current_server_action: ServerActionSequenceData = "currentServerAction",
@@ -251,7 +271,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Actor = "ecs::Actor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ActorInput`, 456 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ActorInput`, 456 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ActorInput: Component {
         /// `defaultAnimationStateId`, of `animationgraph::StateIdHash`.
         default_animation_state_id: crate::typed::animationgraph::StateIdHash = "defaultAnimationStateId",
@@ -284,7 +306,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ActorInput = "ecs::ActorInput": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ActorRotation`, 104 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ActorRotation`, 104 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ActorRotation: Component {
         /// `standingRotationSpeed`, of `ecs::RotationSpeedEntry`.
         standing_rotation_speed: RotationSpeedEntry = "standingRotationSpeed",
@@ -317,7 +341,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ActorRotation = "ecs::ActorRotation": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ActorRotationLerpEvent`, 32 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ActorRotationLerpEvent`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     ActorRotationLerpEvent: GameEvent {
         /// `time`, of `Time`.
         time: crate::typed::Time = "time",
@@ -334,7 +360,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ActorRotationLerpEvent = "ecs::ActorRotationLerpEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AddDestructibleOnLoot`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::AddDestructibleOnLoot`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     AddDestructibleOnLoot: Component {
         /// `health`, of `uint32`.
         health: u32 = "health",
@@ -343,7 +371,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AddDestructibleOnLoot = "ecs::AddDestructibleOnLoot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AddThreatTargetEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::AddThreatTargetEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     AddThreatTargetEvent: GameEvent {
         /// `attackerId`, of `ecs::EntityId`.
         attacker_id: EntityId = "attackerId",
@@ -584,14 +614,18 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AffectedByIncreasedPickupSkill`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::AffectedByIncreasedPickupSkill`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     AffectedByIncreasedPickupSkill: Component {
     }
 }
 crate::typed::runtime::named!(AffectedByIncreasedPickupSkill = "ecs::AffectedByIncreasedPickupSkill": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Aggro`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Aggro`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Aggro: Component {
         /// `applyEnemyValue`, of `bool`.
         apply_enemy_value: bool = "applyEnemyValue",
@@ -602,7 +636,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Aggro = "ecs::Aggro": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::AggroPoolAmount`, 1 bytes.
+    /// The game's enum `ecs::AggroPoolAmount`, 1 byte.
     AggroPoolAmount {
         /// `Few`, 0.
         Few = "Few",
@@ -626,7 +660,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::AggroTargetState`, 1 bytes.
+    /// The game's enum `ecs::AggroTargetState`, 1 byte.
     AggroTargetState {
         /// `Unknown`, 0.
         Unknown = "Unknown",
@@ -640,7 +674,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Aging`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Aging`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Aging: Component {
         /// `speed`, of `float32`.
         speed: f32 = "speed",
@@ -649,7 +685,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Aging = "ecs::Aging": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::AlertState`, 1 bytes.
+    /// The game's enum `ecs::AlertState`, 1 byte.
     AlertState {
         /// `Low_Relaxed`, 0.
         LowRelaxed = "Low_Relaxed",
@@ -671,7 +707,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AllItemsRepairedEvent`, 8 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::AllItemsRepairedEvent`, 8 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     AllItemsRepairedEvent: Event {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -682,7 +720,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AllItemsRepairedEvent = "ecs::AllItemsRepairedEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AllyAggroMultiplier`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::AllyAggroMultiplier`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     AllyAggroMultiplier: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,1>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -691,7 +731,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AllyAggroMultiplier = "ecs::AllyAggroMultiplier": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AmbientHelper`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::AmbientHelper`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     AmbientHelper: Component {
         /// `ambientMask`, of `AmbientMask`.
         ambient_mask: crate::typed::AmbientMask = "ambientMask",
@@ -700,7 +742,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AmbientHelper = "ecs::AmbientHelper": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Animal`, 656 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Animal`, 656 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Animal: Component {
         /// `turnSetup`, of `actor::TurnSetup`.
         turn_setup: crate::typed::actor::TurnSetup = "turnSetup",
@@ -757,7 +801,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Animal = "ecs::Animal": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AnimalSaved`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::AnimalSaved`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     AnimalSaved: Component {
         /// `spawnPosition`, of `float3`.
         spawn_position: crate::typed::Float3 = "spawnPosition",
@@ -778,7 +824,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AnimalSaved = "ecs::AnimalSaved": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AnimalTarget`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::AnimalTarget`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     AnimalTarget: Component {
         /// `setup`, of `animal::TargetSetup`.
         setup: crate::typed::animal::TargetSetup = "setup",
@@ -791,7 +839,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AnimalTarget = "ecs::AnimalTarget": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::AnimalTest`, 1 bytes.
+    /// The game's enum `ecs::AnimalTest`, 1 byte.
     AnimalTest {
         /// `GoToBed`, 0.
         GoToBed = "GoToBed",
@@ -812,7 +860,9 @@ crate::typed::runtime::reflected_enum! {
 pub type AnimalTestFlags = crate::typed::Flags<AnimalTest>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AnimatedCamera`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::AnimatedCamera`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     AnimatedCamera: Component {
         /// `cameraSlot`, of `AttachmentSlot`.
         camera_slot: crate::typed::AttachmentSlot = "cameraSlot",
@@ -821,7 +871,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AnimatedCamera = "ecs::AnimatedCamera": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AnimationGraphComponent2`, 44 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::AnimationGraphComponent2`, 44 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     AnimationGraphComponent2: Component {
         /// `animationGraphHandle`, of `ecs::AnimationGraphHandleValue`.
         animation_graph_handle: AnimationGraphHandleValue = "animationGraphHandle",
@@ -846,7 +898,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AnimationGraphResourceComponent2`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::AnimationGraphResourceComponent2`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     AnimationGraphResourceComponent2: Component {
         /// `animationGraph`, of `ObjectReference<anim_graph::tool_graph::AnimationGraph2_0>`.
         animation_graph: crate::content::Guid = "animationGraph",
@@ -863,14 +917,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AnimationGraphResourceComponent2 = "ecs::AnimationGraphResourceComponent2": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AnimationGraphSlotComponent`, 1760 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::AnimationGraphSlotComponent`, 1760 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     AnimationGraphSlotComponent: AnimationGraphSlotComponentBase {
     }
 }
 crate::typed::runtime::named!(AnimationGraphSlotComponent = "ecs::AnimationGraphSlotComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AnimationGraphSlotComponentBase`, 1760 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::AnimationGraphSlotComponentBase`, 1760 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     AnimationGraphSlotComponentBase: Component {
         /// `slotsInitialized`, of `AttachmentSlotMask`.
         slots_initialized: crate::typed::AttachmentSlotMask = "slotsInitialized",
@@ -883,7 +941,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AnimationGraphSlotComponentBase = "ecs::AnimationGraphSlotComponentBase": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AppliedBuffEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::AppliedBuffEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     AppliedBuffEvent: GameEvent {
         /// `targetEntityId`, of `ecs::EntityId`.
         target_entity_id: EntityId = "targetEntityId",
@@ -896,7 +956,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AppliedBuffEvent = "ecs::AppliedBuffEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ApplyPushBackEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::ApplyPushBackEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     ApplyPushBackEvent: GameEvent {
         /// `attackerId`, of `ecs::EntityId`.
         attacker_id: EntityId = "attackerId",
@@ -911,7 +973,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ApplyPushBackEvent = "ecs::ApplyPushBackEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ArachnophobiaModelToggle`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ArachnophobiaModelToggle`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ArachnophobiaModelToggle: Component {
         /// `model`, of `ObjectReference<Model>`.
         model: crate::content::Guid = "model",
@@ -920,7 +984,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ArachnophobiaModelToggle = "ecs::ArachnophobiaModelToggle": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AreaDepositEvent`, 168 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::AreaDepositEvent`, 168 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     AreaDepositEvent: GameEvent {
         /// `depositedByEntityId`, of `ecs::EntityId`.
         deposited_by_entity_id: EntityId = "depositedByEntityId",
@@ -949,7 +1015,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::AreaDepositResult`, 1 bytes.
+    /// The game's enum `ecs::AreaDepositResult`, 1 byte.
     AreaDepositResult {
         /// `Success`, 0.
         Success = "Success",
@@ -963,7 +1029,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AreaLoot`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::AreaLoot`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     AreaLoot: Component {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -972,7 +1040,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AreaLoot = "ecs::AreaLoot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AreaLootOverride`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::AreaLootOverride`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     AreaLootOverride: Component {
         /// `exclude`, of `bool`.
         exclude: bool = "exclude",
@@ -981,7 +1051,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AreaLootOverride = "ecs::AreaLootOverride": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Armor`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Armor`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Armor: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,5>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -1018,7 +1090,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ArmorPoints`, 120 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ArmorPoints`, 120 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ArmorPoints: UInt32Attribute {
         /// `dataStorage`, of `StaticArray<uint32,28>`.
         data_storage: ::std::vec::Vec<u32> = "dataStorage",
@@ -1027,7 +1101,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ArmorPoints = "ecs::ArmorPoints": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AttachToSurface`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::AttachToSurface`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     AttachToSurface: Component {
         /// `detachAction`, of `ecs::DetachAction`.
         detach_action: DetachAction = "detachAction",
@@ -1050,14 +1126,16 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AttachToSurface = "ecs::AttachToSurface": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AttachToSurfaceIsSleeping`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::AttachToSurfaceIsSleeping`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     AttachToSurfaceIsSleeping: Component {
     }
 }
 crate::typed::runtime::named!(AttachToSurfaceIsSleeping = "ecs::AttachToSurfaceIsSleeping": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::AttachmentDirection`, 1 bytes.
+    /// The game's enum `ecs::AttachmentDirection`, 1 byte.
     AttachmentDirection {
         /// `Down`, 0.
         Down = "Down",
@@ -1075,7 +1153,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::AttachmentTarget`, 1 bytes.
+    /// The game's enum `ecs::AttachmentTarget`, 1 byte.
     AttachmentTarget {
         /// `FirstValid`, 0.
         FirstValid = "FirstValid",
@@ -1087,7 +1165,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::AttachmentType`, 1 bytes.
+    /// The game's enum `ecs::AttachmentType`, 1 byte.
     AttachmentType {
         /// `EntityTransform`, 0.
         EntityTransform = "EntityTransform",
@@ -1097,7 +1175,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AttributeComponent`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::AttributeComponent`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     AttributeComponent: Component {
         /// `rootId`, of `HashKey32`.
         root_id: crate::typed::HashKey32 = "rootId",
@@ -1112,7 +1192,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AttributeComponent = "ecs::AttributeComponent": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::AttributeFlags`, 1 bytes.
+    /// The game's enum `ecs::AttributeFlags`, 1 byte.
     AttributeFlags {
         /// `Initialized`, 0.
         Initialized = "Initialized",
@@ -1122,7 +1202,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AttributeRegeneration`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::AttributeRegeneration`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     AttributeRegeneration: Component {
         /// `lastNegativeChange`, of `Time`.
         last_negative_change: crate::typed::Time = "lastNegativeChange",
@@ -1135,7 +1217,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AttributeRegeneration = "ecs::AttributeRegeneration": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AudioComponent`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::AudioComponent`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     AudioComponent: FxComponent {
         /// `slot`, of `AttachmentSlot`.
         slot: crate::typed::AttachmentSlot = "slot",
@@ -1154,7 +1238,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AudioComponent = "ecs::AudioComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AudioComponentVolatile`, 72 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::AudioComponentVolatile`, 72 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     AudioComponentVolatile: AudioComponent {
         /// `lastSoundContainer`, of `SoundContainerReference`.
         last_sound_container: crate::typed::SoundContainerReference = "lastSoundContainer",
@@ -1163,7 +1249,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(AudioComponentVolatile = "ecs::AudioComponentVolatile": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::AudioResourceComponent`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::AudioResourceComponent`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     AudioResourceComponent: Component {
         /// `soundContainer`, of `SoundContainerReference`.
         sound_container: crate::typed::SoundContainerReference = "soundContainer",
@@ -1182,7 +1270,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BabyAnimal`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::BabyAnimal`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     BabyAnimal: Component {
         /// `growTime`, of `Time`.
         grow_time: crate::typed::Time = "growTime",
@@ -1197,7 +1287,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BabyAnimal = "ecs::BabyAnimal": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BaseActor`, 3104 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BaseActor`, 3104 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BaseActor: Component {
         /// `currentAction`, of `actor::ActionSequence`.
         current_action: crate::typed::actor::ActionSequence = "currentAction",
@@ -1212,7 +1304,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BaseActor = "ecs::BaseActor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BaseAnimationGraphInput`, 568 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BaseAnimationGraphInput`, 568 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BaseAnimationGraphInput: Component {
         /// `initialAnimationStateIdReference`, of `animationgraph::StateIdReference`.
         initial_animation_state_id_reference: crate::typed::animationgraph::StateIdReference = "initialAnimationStateIdReference",
@@ -1261,7 +1355,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BaseEnemyProjectile`, 156 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BaseEnemyProjectile`, 156 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BaseEnemyProjectile: Component {
         /// `mode`, of `ecs::ProjectileMode`.
         mode: ProjectileMode = "mode",
@@ -1304,7 +1400,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BaseEnemyProjectile = "ecs::BaseEnemyProjectile": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BaseHitEvent`, 160 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::BaseHitEvent`, 160 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     BaseHitEvent: GameEvent {
         /// `targetTransform`, of `WorldTransform`.
         target_transform: crate::typed::WorldTransform = "targetTransform",
@@ -1343,7 +1441,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BaseHitEvent = "ecs::BaseHitEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BaseIdComponent`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::BaseIdComponent`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     BaseIdComponent: Component {
         /// `baseId`, of `BaseId`.
         base_id: crate::typed::BaseId = "baseId",
@@ -1366,7 +1466,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BaseServerConsumedPlayerInput`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BaseServerConsumedPlayerInput`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BaseServerConsumedPlayerInput: Component {
         /// `inputConsumer`, of `ecs::ServerInputConsumer`.
         input_consumer: ServerInputConsumer = "inputConsumer",
@@ -1375,14 +1477,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BaseServerConsumedPlayerInput = "ecs::BaseServerConsumedPlayerInput": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BaseShared`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::BaseShared`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     BaseShared: Component {
     }
 }
 crate::typed::runtime::named!(BaseShared = "ecs::BaseShared": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BasicSpawnerComponent`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BasicSpawnerComponent`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BasicSpawnerComponent: Component {
         /// `entityTemplate`, of `ecs::TemplateReference`.
         entity_template: TemplateReference = "entityTemplate",
@@ -1391,7 +1497,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BasicSpawnerComponent = "ecs::BasicSpawnerComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BipedFeetIKComponent`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BipedFeetIKComponent`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BipedFeetIKComponent: Component {
         /// `bipedAnimationNodeId`, of `HashKey32`.
         biped_animation_node_id: crate::typed::HashKey32 = "bipedAnimationNodeId",
@@ -1400,7 +1508,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BipedFeetIKComponent = "ecs::BipedFeetIKComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Block`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Block`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Block: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,1>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -1409,7 +1519,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Block = "ecs::Block": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BlockWater`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BlockWater`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BlockWater: Component {
         /// `voxelPosition`, of `uint3`.
         voxel_position: crate::typed::Uint3 = "voxelPosition",
@@ -1434,7 +1546,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BlockWater = "ecs::BlockWater": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BodyHeat`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::BodyHeat`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     BodyHeat: UInt32Attribute {
         /// `dataStorage`, of `StaticArray<uint32,8>`.
         data_storage: ::std::vec::Vec<u32> = "dataStorage",
@@ -1443,7 +1557,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BodyHeat = "ecs::BodyHeat": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BodyHeatDepletion`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::BodyHeatDepletion`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     BodyHeatDepletion: Component {
         /// `accumulatedValue`, of `float32`.
         accumulated_value: f32 = "accumulatedValue",
@@ -1452,7 +1568,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BodyHeatDepletion = "ecs::BodyHeatDepletion": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BodyHeatMaxMod`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::BodyHeatMaxMod`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     BodyHeatMaxMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -1461,21 +1579,27 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BodyHeatMaxMod = "ecs::BodyHeatMaxMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BodyHeatRecharge`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::BodyHeatRecharge`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     BodyHeatRecharge: AttributeRegeneration {
     }
 }
 crate::typed::runtime::named!(BodyHeatRecharge = "ecs::BodyHeatRecharge": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BoolAttribute`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BoolAttribute`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BoolAttribute: AttributeComponent {
     }
 }
 crate::typed::runtime::named!(BoolAttribute = "ecs::BoolAttribute": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Boomerang`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Boomerang`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Boomerang: Component {
         /// `returnToSpawnerDelay`, of `Time`.
         return_to_spawner_delay: crate::typed::Time = "returnToSpawnerDelay",
@@ -1486,14 +1610,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Boomerang = "ecs::Boomerang": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Boss`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Boss`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Boss: Component {
     }
 }
 crate::typed::runtime::named!(Boss = "ecs::Boss": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BossDisplay`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BossDisplay`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BossDisplay: Component {
         /// `rangeQueryId`, of `ecs::RangeQueryId`.
         range_query_id: RangeQueryId = "rangeQueryId",
@@ -1510,7 +1638,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BossDisplay = "ecs::BossDisplay": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BossHealthBar`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::BossHealthBar`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     BossHealthBar: Component {
         /// `displayName`, of `LocaTagReference`.
         display_name: crate::typed::LocaTagReference = "displayName",
@@ -1521,7 +1651,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BossHealthBar = "ecs::BossHealthBar": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BossMusicTag`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::BossMusicTag`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     BossMusicTag: Component {
         /// `bossMusic`, of `SoundContainerReference`.
         boss_music: crate::typed::SoundContainerReference = "bossMusic",
@@ -1530,7 +1662,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BossMusicTag = "ecs::BossMusicTag": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BuffComponent`, 60 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::BuffComponent`, 60 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     BuffComponent: Component {
         /// `buffTypeId`, of `BuffTypeId`.
         buff_type_id: crate::typed::BuffTypeId = "buffTypeId",
@@ -1543,7 +1677,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BuffComponent = "ecs::BuffComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BuffContainer`, 472 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BuffContainer`, 472 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BuffContainer: Component {
         /// `foodBuffs`, of `StaticArray<ecs::BuffInstance,4>`.
         food_buffs: ::std::vec::Vec<BuffInstance> = "foodBuffs",
@@ -1576,7 +1712,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BuffNetworkData`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::BuffNetworkData`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     BuffNetworkData: Component {
         /// `lifeTime`, of `Time`.
         life_time: crate::typed::Time = "lifeTime",
@@ -1599,7 +1737,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BuildingPickUpEvent`, 72 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::BuildingPickUpEvent`, 72 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     BuildingPickUpEvent: GameEvent {
         /// `position`, of `float3`.
         position: crate::typed::Float3 = "position",
@@ -1620,7 +1760,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BuildingPickUpEvent = "ecs::BuildingPickUpEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BuildingPlaceEvent`, 72 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::BuildingPlaceEvent`, 72 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     BuildingPlaceEvent: GameEvent {
         /// `position`, of `float3`.
         position: crate::typed::Float3 = "position",
@@ -1657,7 +1799,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::BuildingTearDownEvent`, 72 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::BuildingTearDownEvent`, 72 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     BuildingTearDownEvent: GameEvent {
         /// `position`, of `float3`.
         position: crate::typed::Float3 = "position",
@@ -1676,14 +1820,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(BuildingTearDownEvent = "ecs::BuildingTearDownEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CSPDummy`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CSPDummy`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CSPDummy: Component {
     }
 }
 crate::typed::runtime::named!(CSPDummy = "ecs::CSPDummy": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CallFactionsForHelp`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CallFactionsForHelp`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CallFactionsForHelp: Component {
         /// `callForHelpRange`, of `float32`.
         call_for_help_range: f32 = "callForHelpRange",
@@ -1696,7 +1844,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CallFactionsForHelp = "ecs::CallFactionsForHelp": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CallForHelpEvent`, 48 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CallForHelpEvent`, 48 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     CallForHelpEvent: GameEvent {
         /// `noticingEntityId`, of `ecs::EntityId`.
         noticing_entity_id: EntityId = "noticingEntityId",
@@ -1715,7 +1865,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CallForHelpEvent = "ecs::CallForHelpEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CameraShake`, 32 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::CameraShake`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     CameraShake: GameEvent {
         /// `trauma`, of `float32`.
         trauma: f32 = "trauma",
@@ -1728,7 +1880,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CameraShake = "ecs::CameraShake": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CameraShakeImpulse`, 40 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::CameraShakeImpulse`, 40 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     CameraShakeImpulse: GameEvent {
         /// `impulse`, of `float3`.
         impulse: crate::typed::Float3 = "impulse",
@@ -1751,7 +1905,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CastColliderShape`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CastColliderShape`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CastColliderShape: Component {
     }
 }
@@ -1788,7 +1944,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ChangeCustomizationEvent`, 56 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ChangeCustomizationEvent`, 56 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     ChangeCustomizationEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -1819,7 +1977,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ChangeCustomizationEvent = "ecs::ChangeCustomizationEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ChangeEquipment`, 1 bytes.
+    /// The game's enum `ecs::ChangeEquipment`, 1 byte.
     ChangeEquipment {
         /// `Equip`, 0.
         Equip = "Equip",
@@ -1843,7 +2001,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ChangeEquipmentEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ChangeEquipmentEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     ChangeEquipmentEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -1858,7 +2018,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ChangeEquipmentEvent = "ecs::ChangeEquipmentEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ChangeInventoryStockSortingTypeEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ChangeInventoryStockSortingTypeEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     ChangeInventoryStockSortingTypeEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -1901,7 +2063,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CharacterSetup`, 44 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CharacterSetup`, 44 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CharacterSetup: Component {
         /// `gender`, of `Gender`.
         gender: crate::typed::Gender = "gender",
@@ -1930,7 +2094,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CharacterSetup = "ecs::CharacterSetup": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CheckAnimalBedIsReachable`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CheckAnimalBedIsReachable`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CheckAnimalBedIsReachable: Component {
         /// `query`, of `animal::PathQueryInfo`.
         query: crate::typed::animal::PathQueryInfo = "query",
@@ -1939,7 +2105,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CheckAnimalBedIsReachable = "ecs::CheckAnimalBedIsReachable": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CheckLineAboveSensor`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CheckLineAboveSensor`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CheckLineAboveSensor: Component {
         /// `lineCheckHeightAbove`, of `float32`.
         line_check_height_above: f32 = "lineCheckHeightAbove",
@@ -1948,7 +2116,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CheckLineAboveSensor = "ecs::CheckLineAboveSensor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CheckPlayerInRange`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CheckPlayerInRange`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CheckPlayerInRange: Component {
         /// `distanceInMeter`, of `uint8`.
         distance_in_meter: u8 = "distanceInMeter",
@@ -1969,7 +2139,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClearPathToTarget`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ClearPathToTarget`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ClearPathToTarget: Component {
         /// `yOffset`, of `float32`.
         y_offset: f32 = "yOffset",
@@ -1982,7 +2154,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClearPathToTarget = "ecs::ClearPathToTarget": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientActiveNpcState`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientActiveNpcState`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientActiveNpcState: Component {
         /// `spawnPosition`, of `float3`.
         spawn_position: crate::typed::Float3 = "spawnPosition",
@@ -1997,7 +2171,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientActiveNpcState = "ecs::ClientActiveNpcState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientActor`, 3128 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientActor`, 3128 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientActor: BaseActor {
         /// `lastReceivedSequenceRuntimeId`, of `actor::SequenceRuntimeId`.
         last_received_sequence_runtime_id: crate::typed::actor::SequenceRuntimeId = "lastReceivedSequenceRuntimeId",
@@ -2006,7 +2182,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientActor = "ecs::ClientActor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientAnimationGraphInput`, 592 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientAnimationGraphInput`, 592 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientAnimationGraphInput: BaseAnimationGraphInput {
         /// `clientOnlyOverlayInputs`, of `AnimationGraphClientOnlyOverlayInputs`.
         client_only_overlay_inputs: crate::typed::AnimationGraphClientOnlyOverlayInputs = "clientOnlyOverlayInputs",
@@ -2015,7 +2193,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientAnimationGraphInput = "ecs::ClientAnimationGraphInput": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientAnimationGraphInputLerp`, 1080 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientAnimationGraphInputLerp`, 1080 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientAnimationGraphInputLerp: Component {
         /// `inputs`, of `StaticArray<AnimationGraphInputs,2>`.
         inputs: ::std::vec::Vec<crate::typed::AnimationGraphInputs> = "inputs",
@@ -2030,7 +2210,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientAnimationGraphInputLerp = "ecs::ClientAnimationGraphInputLerp": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientAttachCursorOnHover`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientAttachCursorOnHover`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientAttachCursorOnHover: Component {
         /// `attachmentOffset`, of `ecs::Offset`.
         attachment_offset: Offset = "attachmentOffset",
@@ -2039,7 +2221,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientAttachCursorOnHover = "ecs::ClientAttachCursorOnHover": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientBaseIdComponent`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientBaseIdComponent`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientBaseIdComponent: Component {
         /// `endOfTimeout`, of `Time`.
         end_of_timeout: crate::typed::Time = "endOfTimeout",
@@ -2090,7 +2274,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientCameraControl`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientCameraControl`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientCameraControl: Component {
         /// `activeCameraId`, of `CameraId`.
         active_camera_id: crate::typed::CameraId = "activeCameraId",
@@ -2109,14 +2295,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientCameraControl = "ecs::ClientCameraControl": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientCollider`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientCollider`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientCollider: AbstractCollider {
     }
 }
 crate::typed::runtime::named!(ClientCollider = "ecs::ClientCollider": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientCraftingInteraction`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientCraftingInteraction`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientCraftingInteraction: Component {
         /// `craftingPropsInRange`, of `CraftingPropMask`.
         crafting_props_in_range: crate::typed::CraftingPropMask = "craftingPropsInRange",
@@ -2129,7 +2319,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientCraftingInteraction = "ecs::ClientCraftingInteraction": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientCursor`, 4328 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientCursor`, 4328 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientCursor: Component {
         /// `queries`, of `ecs::CursorQueries`.
         queries: CursorQueries = "queries",
@@ -2220,7 +2412,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientCycleInventoryStock`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientCycleInventoryStock`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientCycleInventoryStock: Component {
         /// `inventoryStockType`, of `uint8`.
         inventory_stock_type: u8 = "inventoryStockType",
@@ -2235,7 +2429,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientCycleInventoryStock = "ecs::ClientCycleInventoryStock": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientDismantleOverride`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientDismantleOverride`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientDismantleOverride: Component {
         /// `overrideHoverDelay`, of `bool`.
         override_hover_delay: bool = "overrideHoverDelay",
@@ -2246,7 +2442,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientDismantleOverride = "ecs::ClientDismantleOverride": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientDissolve`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientDissolve`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientDissolve: Component {
         /// `renderModelUpdateCounter`, of `uint32`.
         render_model_update_counter: u32 = "renderModelUpdateCounter",
@@ -2261,7 +2459,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientDissolve = "ecs::ClientDissolve": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientEnergyRotator`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientEnergyRotator`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientEnergyRotator: Component {
         /// `maxRotationSpeed`, of `float`.
         max_rotation_speed: crate::typed::Float = "maxRotationSpeed",
@@ -2272,7 +2472,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientEnergyRotator = "ecs::ClientEnergyRotator": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientEntityAnimation`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientEntityAnimation`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientEntityAnimation: Component {
         /// `animation`, of `JointAnimationReference`.
         animation: crate::typed::JointAnimationReference = "animation",
@@ -2285,14 +2487,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientEntityAnimation = "ecs::ClientEntityAnimation": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientEntitySpaceAnimationGraphSlotComponent`, 1732 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientEntitySpaceAnimationGraphSlotComponent`, 1732 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientEntitySpaceAnimationGraphSlotComponent: EntitySpaceAnimationGraphSlotComponentBase {
     }
 }
 crate::typed::runtime::named!(ClientEntitySpaceAnimationGraphSlotComponent = "ecs::ClientEntitySpaceAnimationGraphSlotComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientExtinguish`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientExtinguish`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientExtinguish: Component {
         /// `lastNotifyTime`, of `Time`.
         last_notify_time: crate::typed::Time = "lastNotifyTime",
@@ -2307,7 +2513,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientExtinguish = "ecs::ClientExtinguish": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientFishing`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientFishing`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientFishing: Component {
         /// `lastState`, of `fishing::State`.
         last_state: crate::typed::fishing::State = "lastState",
@@ -2320,7 +2528,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientFishing = "ecs::ClientFishing": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientFishingFish`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientFishingFish`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientFishingFish: Component {
         /// `lastState`, of `fishable::FishState`.
         last_state: crate::typed::fishable::FishState = "lastState",
@@ -2337,7 +2547,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientFishingFish = "ecs::ClientFishingFish": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientFishingFloat`, 112 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientFishingFloat`, 112 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientFishingFloat: Component {
         /// `lastState`, of `fishing::FishingFloatState`.
         last_state: crate::typed::fishing::FishingFloatState = "lastState",
@@ -2366,7 +2578,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientFishingFloat = "ecs::ClientFishingFloat": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientFuelChangeFx`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientFuelChangeFx`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientFuelChangeFx: Component {
         /// `previousFuel`, of `uint16`.
         previous_fuel: u16 = "previousFuel",
@@ -2379,7 +2593,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientFuelChangeFx = "ecs::ClientFuelChangeFx": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientHookShot`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientHookShot`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientHookShot: Component {
         /// `triggerTime`, of `Time`.
         trigger_time: crate::typed::Time = "triggerTime",
@@ -2394,7 +2610,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientHookShot = "ecs::ClientHookShot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientInteractionCamera`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientInteractionCamera`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientInteractionCamera: Component {
         /// `cameraId`, of `CameraId`.
         camera_id: crate::typed::CameraId = "cameraId",
@@ -2403,7 +2621,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientInteractionCamera = "ecs::ClientInteractionCamera": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientInteractionLock`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientInteractionLock`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientInteractionLock: Component {
         /// `itemUsed`, of `bool`.
         item_used: bool = "itemUsed",
@@ -2412,7 +2632,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientInteractionLock = "ecs::ClientInteractionLock": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientInteractionOffer`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientInteractionOffer`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientInteractionOffer: Component {
         /// `verbId`, of `LocaTagId`.
         verb_id: crate::typed::LocaTagId = "verbId",
@@ -2425,7 +2647,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientInteractionOffer = "ecs::ClientInteractionOffer": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientInteractionQuery`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientInteractionQuery`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientInteractionQuery: Component {
         /// `nearestOfferedInteractionOfferId`, of `uint32`.
         nearest_offered_interaction_offer_id: u32 = "nearestOfferedInteractionOfferId",
@@ -2436,7 +2660,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientInteractionQuery = "ecs::ClientInteractionQuery": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientLineOfSightState`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientLineOfSightState`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientLineOfSightState: Component {
         /// `lineOfSightState`, of `ecs::LineOfSightState`.
         line_of_sight_state: LineOfSightState = "lineOfSightState",
@@ -2445,7 +2671,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientLineOfSightState = "ecs::ClientLineOfSightState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientLocomotion`, 112 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientLocomotion`, 112 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientLocomotion: Component {
         /// `runSpeed`, of `float32`.
         run_speed: f32 = "runSpeed",
@@ -2510,7 +2738,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientLocomotion = "ecs::ClientLocomotion": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientNoBuildZone`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientNoBuildZone`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientNoBuildZone: Component {
         /// `range`, of `float`.
         range: crate::typed::Float = "range",
@@ -2523,7 +2753,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientNoBuildZone = "ecs::ClientNoBuildZone": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientNpcBed`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientNpcBed`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientNpcBed: Component {
         /// `associatedNpc`, of `NpcId`.
         associated_npc: crate::typed::NpcId = "associatedNpc",
@@ -2568,7 +2800,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ClientPlayerFlags`, 1 bytes.
+    /// The game's enum `ecs::ClientPlayerFlags`, 1 byte.
     ClientPlayerFlags {
         /// `IsInMultiToolBuildingMenu`, 0.
         IsInMultiToolBuildingMenu = "IsInMultiToolBuildingMenu",
@@ -2592,7 +2824,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientPlayerFocus`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientPlayerFocus`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientPlayerFocus: Component {
         /// `transform`, of `WorldTransform`.
         transform: crate::typed::WorldTransform = "transform",
@@ -2601,7 +2835,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientPlayerFocus = "ecs::ClientPlayerFocus": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientPlayerInput`, 1536 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientPlayerInput`, 1536 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientPlayerInput: Component {
         /// `data`, of `ecs::ClientPlayerInputData`.
         data: ClientPlayerInputData = "data",
@@ -2734,7 +2970,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientPlayerStaminaHints`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientPlayerStaminaHints`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientPlayerStaminaHints: Component {
         /// `firstSprintUtteranceDelay`, of `Time`.
         first_sprint_utterance_delay: crate::typed::Time = "firstSprintUtteranceDelay",
@@ -2747,7 +2985,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientPlayerStaminaHints = "ecs::ClientPlayerStaminaHints": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientPlayerState`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientPlayerState`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientPlayerState: Component {
         /// `areaLootVfxHandle`, of `ecs::LoopedFxHandle`.
         area_loot_vfx_handle: LoopedFxHandle = "areaLootVfxHandle",
@@ -2759,7 +2999,9 @@ crate::typed::runtime::named!(ClientPlayerState = "ecs::ClientPlayerState": Comp
 pub type ClientPlayerStateMask = crate::typed::Flags<ClientPlayerFlags>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientRangedWeapon`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientRangedWeapon`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientRangedWeapon: Component {
         /// `previousState`, of `ranged_weapon::State`.
         previous_state: crate::typed::ranged_weapon::State = "previousState",
@@ -2770,7 +3012,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientRangedWeapon = "ecs::ClientRangedWeapon": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientRotationalEnergySource`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ClientRotationalEnergySource`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ClientRotationalEnergySource: Component {
         /// `direction`, of `ecs::RotationDirection`.
         direction: RotationDirection = "direction",
@@ -2781,7 +3025,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientRotationalEnergySource = "ecs::ClientRotationalEnergySource": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientSubmerge`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientSubmerge`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientSubmerge: Component {
         /// `submergeDepth`, of `float`.
         submerge_depth: crate::typed::Float = "submergeDepth",
@@ -2798,7 +3044,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientSubmerge = "ecs::ClientSubmerge": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientToggle`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientToggle`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientToggle: Component {
         /// `reason`, of `ecs::ClientToggleReasons`.
         reason: ClientToggleReasons = "reason",
@@ -2809,7 +3057,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientToggle = "ecs::ClientToggle": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientToggleFromActorState`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientToggleFromActorState`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientToggleFromActorState: Component {
         /// `entityReferenceType`, of `ecs::EntityReferenceType`.
         entity_reference_type: EntityReferenceType = "entityReferenceType",
@@ -2822,7 +3072,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientToggleFromActorState = "ecs::ClientToggleFromActorState": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ClientToggleReasons`, 1 bytes.
+    /// The game's enum `ecs::ClientToggleReasons`, 1 byte.
     ClientToggleReasons {
         /// `FullScreenUi`, 0.
         FullScreenUi = "FullScreenUi",
@@ -2834,21 +3084,27 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientToggleState`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientToggleState`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientToggleState: ToggleState {
     }
 }
 crate::typed::runtime::named!(ClientToggleState = "ecs::ClientToggleState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientTransformationHistory`, 3856 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientTransformationHistory`, 3856 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientTransformationHistory: TransformationHistory {
     }
 }
 crate::typed::runtime::named!(ClientTransformationHistory = "ecs::ClientTransformationHistory": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientUpgrade`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientUpgrade`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientUpgrade: Component {
         /// `levels`, of `BlobArray<ecs::UpgradeData>`.
         levels: ::std::vec::Vec<UpgradeData> = "levels",
@@ -2857,7 +3113,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientUpgrade = "ecs::ClientUpgrade": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ClientWaterFx`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ClientWaterFx`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ClientWaterFx: Component {
         /// `lastYPosition`, of `float`.
         last_y_position: crate::typed::Float = "lastYPosition",
@@ -2874,7 +3132,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ClientWaterFx = "ecs::ClientWaterFx": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ClientWaterFxFlag`, 1 bytes.
+    /// The game's enum `ecs::ClientWaterFxFlag`, 1 byte.
     ClientWaterFxFlag {
         /// `LandedInWater`, 0.
         LandedInWater = "LandedInWater",
@@ -2888,7 +3146,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Climb`, 152 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Climb`, 152 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Climb: Component {
         /// `climbType`, of `ecs::ClimbType`.
         climb_type: ClimbType = "climbType",
@@ -2925,7 +3185,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ClimbCollisionResultFlags`, 1 bytes.
+    /// The game's enum `ecs::ClimbCollisionResultFlags`, 1 byte.
     ClimbCollisionResultFlags {
         /// `CollisionBlocked`, 0.
         CollisionBlocked = "CollisionBlocked",
@@ -2940,7 +3200,7 @@ crate::typed::runtime::reflected_enum! {
 pub type ClimbCollisionResultMask = crate::typed::Flags<ClimbCollisionResultFlags>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ClimbState`, 1 bytes.
+    /// The game's enum `ecs::ClimbState`, 1 byte.
     ClimbState {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -2954,7 +3214,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ClimbType`, 1 bytes.
+    /// The game's enum `ecs::ClimbType`, 1 byte.
     ClimbType {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -2966,7 +3226,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Collider`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Collider`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Collider: AbstractCollider {
         /// `isPathBlocker`, of `bool`.
         is_path_blocker: bool = "isPathBlocker",
@@ -3083,7 +3345,7 @@ crate::typed::runtime::reflected_struct! {
 pub type ColliderMask = crate::typed::Flags<ColliderFlags>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ColliderMode`, 1 bytes.
+    /// The game's enum `ecs::ColliderMode`, 1 byte.
     ColliderMode {
         /// `Default`, 0.
         Default = "Default",
@@ -3139,7 +3401,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ColliderPhysicsMode`, 1 bytes.
+    /// The game's enum `ecs::ColliderPhysicsMode`, 1 byte.
     ColliderPhysicsMode {
         /// `Static`, 0.
         Static = "Static",
@@ -3169,7 +3431,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ColliderResolveFlag`, 1 bytes.
+    /// The game's enum `ecs::ColliderResolveFlag`, 1 byte.
     ColliderResolveFlag {
         /// `Continuous`, 0.
         Continuous = "Continuous",
@@ -3182,7 +3444,9 @@ crate::typed::runtime::reflected_enum! {
 pub type ColliderResolveMask = crate::typed::Flags<ColliderResolveFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ColliderResourceComponent`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ColliderResourceComponent`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ColliderResourceComponent: Component {
         /// `colliders`, of `BlobArray<ecs::ColliderResourceData>`.
         colliders: ::std::vec::Vec<ColliderResourceData> = "colliders",
@@ -3209,7 +3473,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::CollisionCheckFlag`, 1 bytes.
+    /// The game's enum `ecs::CollisionCheckFlag`, 1 byte.
     CollisionCheckFlag {
         /// `PreferHullIntersection`, 0.
         PreferHullIntersection = "PreferHullIntersection",
@@ -3234,7 +3498,9 @@ crate::typed::runtime::reflected_enum! {
 pub type CollisionCheckFlags = crate::typed::Flags<CollisionCheckFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CollisionEvent`, 64 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::CollisionEvent`, 64 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     CollisionEvent: Event {
         /// `entityA`, of `ecs::EntityId`.
         entity_a: EntityId = "entityA",
@@ -3265,7 +3531,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CollisionEvent = "ecs::CollisionEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CollisionFeedbackMaterialComponent`, 44 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CollisionFeedbackMaterialComponent`, 44 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CollisionFeedbackMaterialComponent: Component {
         /// `material`, of `CollisionFeedbackMaterialReference`.
         material: crate::typed::CollisionFeedbackMaterialReference = "material",
@@ -3282,7 +3550,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CollisionFeedbackMaterialComponent = "ecs::CollisionFeedbackMaterialComponent": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::CollisionType`, 1 bytes.
+    /// The game's enum `ecs::CollisionType`, 1 byte.
     CollisionType {
         /// `Hit`, 0.
         Hit = "Hit",
@@ -3314,7 +3582,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ColorPaletteItem`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ColorPaletteItem`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ColorPaletteItem: Component {
         /// `paletteItemId`, of `ItemId`.
         palette_item_id: crate::typed::ItemId = "paletteItemId",
@@ -3323,7 +3593,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ColorPaletteItem = "ecs::ColorPaletteItem": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CombatFlags`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CombatFlags`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CombatFlags: Component {
         /// `immune`, of `bool`.
         immune: bool = "immune",
@@ -3354,7 +3626,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CombatFlags = "ecs::CombatFlags": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CombatLifetimeCameraOverride`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::CombatLifetimeCameraOverride`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     CombatLifetimeCameraOverride: Component {
         /// `cameraOverrideConfig`, of `CameraStatesOverrideConfigReference`.
         camera_override_config: crate::typed::CameraStatesOverrideConfigReference = "cameraOverrideConfig",
@@ -3365,7 +3639,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CombatLifetimeCameraOverride = "ecs::CombatLifetimeCameraOverride": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CombatStance`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CombatStance`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CombatStance: Component {
         /// `combatStanceDuration`, of `Time`.
         combat_stance_duration: crate::typed::Time = "combatStanceDuration",
@@ -3376,7 +3652,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CombatStance = "ecs::CombatStance": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CombatTargetActor`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CombatTargetActor`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CombatTargetActor: Component {
         /// `activeAbilityMask`, of `actor::AbilityMask`.
         active_ability_mask: crate::typed::actor::AbilityMask = "activeAbilityMask",
@@ -3389,7 +3667,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CombatTargetActor = "ecs::CombatTargetActor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Comfort`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Comfort`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Comfort: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,1>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -3398,7 +3678,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Comfort = "ecs::Comfort": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ComfortCategory`, 1 bytes.
+    /// The game's enum `ecs::ComfortCategory`, 1 byte.
     ComfortCategory {
         /// `Hearth`, 0.
         Hearth = "Hearth",
@@ -3438,7 +3718,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ComfortProvider`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ComfortProvider`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ComfortProvider: Component {
         /// `comfort`, of `sint32`.
         comfort: i32 = "comfort",
@@ -3453,7 +3735,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ComfortProvider = "ecs::ComfortProvider": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ComfortQuery`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ComfortQuery`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ComfortQuery: Component {
         /// `queryId`, of `ecs::RangeQueryId`.
         query_id: RangeQueryId = "queryId",
@@ -3468,7 +3752,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ComfortQuery = "ecs::ComfortQuery": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CommerceInventory`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CommerceInventory`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CommerceInventory: Component {
         /// `commerceProduct`, of `CommerceProductReference`.
         commerce_product: crate::typed::CommerceProductReference = "commerceProduct",
@@ -3479,20 +3765,24 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CommerceInventory = "ecs::CommerceInventory": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CommerceInventoryDone`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CommerceInventoryDone`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CommerceInventoryDone: Component {
     }
 }
 crate::typed::runtime::named!(CommerceInventoryDone = "ecs::CommerceInventoryDone": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Component`, 1 bytes.
+    /// The game's struct `ecs::Component`, 1 byte.
     Component {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ConditionalDespawn`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ConditionalDespawn`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ConditionalDespawn: Component {
         /// `conditionalDespawnMinRange`, of `float32`.
         conditional_despawn_min_range: f32 = "conditionalDespawnMinRange",
@@ -3507,7 +3797,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ConditionalDespawn = "ecs::ConditionalDespawn": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Constitution`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Constitution`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Constitution: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,3>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -3516,7 +3808,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Constitution = "ecs::Constitution": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ConsumeItemEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ConsumeItemEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     ConsumeItemEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -3527,7 +3821,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ConsumeItemEvent = "ecs::ConsumeItemEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ControlCombatTarget`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ControlCombatTarget`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ControlCombatTarget: Component {
         /// `targetId`, of `ecs::EntityId`.
         target_id: EntityId = "targetId",
@@ -3538,7 +3834,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ControlCombatTarget = "ecs::ControlCombatTarget": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CookingData`, 64 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CookingData`, 64 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CookingData: Component {
         /// `cookingHearthEntityId`, of `ecs::EntityId`.
         cooking_hearth_entity_id: EntityId = "cookingHearthEntityId",
@@ -3571,7 +3869,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CookingData = "ecs::CookingData": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CookingEvent`, 64 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::CookingEvent`, 64 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     CookingEvent: GameEvent {
         /// `attachmentOffset`, of `ecs::Offset`.
         attachment_offset: Offset = "attachmentOffset",
@@ -3588,7 +3888,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CookingEvent = "ecs::CookingEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::CookingFlags`, 1 bytes.
+    /// The game's enum `ecs::CookingFlags`, 1 byte.
     CookingFlags {
         /// `ReceivedSpawnCookEvent`, 0.
         ReceivedSpawnCookEvent = "ReceivedSpawnCookEvent",
@@ -3605,7 +3905,9 @@ crate::typed::runtime::reflected_enum! {
 pub type CookingMask = crate::typed::Flags<CookingFlags>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CookingNotifier`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CookingNotifier`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CookingNotifier: Component {
         /// `onFoodStateChange`, of `NotifierReference`.
         on_food_state_change: crate::typed::NotifierReference = "onFoodStateChange",
@@ -3616,7 +3918,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CookingNotifier = "ecs::CookingNotifier": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::CookingState`, 1 bytes.
+    /// The game's enum `ecs::CookingState`, 1 byte.
     CookingState {
         /// `CookingRequirementsNotMet`, 0.
         CookingRequirementsNotMet = "CookingRequirementsNotMet",
@@ -3638,14 +3940,18 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CopyInventoryEmptyStateFromParent`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CopyInventoryEmptyStateFromParent`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CopyInventoryEmptyStateFromParent: Component {
     }
 }
 crate::typed::runtime::named!(CopyInventoryEmptyStateFromParent = "ecs::CopyInventoryEmptyStateFromParent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CopyParentActorStates`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CopyParentActorStates`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CopyParentActorStates: Component {
         /// `copyStates`, of `actor::StateMask`.
         copy_states: crate::typed::actor::StateMask = "copyStates",
@@ -3654,14 +3960,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CopyParentActorStates = "ecs::CopyParentActorStates": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CopyParentAnimationGraphState`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CopyParentAnimationGraphState`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CopyParentAnimationGraphState: Component {
     }
 }
 crate::typed::runtime::named!(CopyParentAnimationGraphState = "ecs::CopyParentAnimationGraphState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CopyParentDamageSusceptibility`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CopyParentDamageSusceptibility`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CopyParentDamageSusceptibility: Component {
         /// `keepSkillShotAttribute`, of `bool`.
         keep_skill_shot_attribute: bool = "keepSkillShotAttribute",
@@ -3670,14 +3980,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CopyParentDamageSusceptibility = "ecs::CopyParentDamageSusceptibility": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CopyParentLevel`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CopyParentLevel`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CopyParentLevel: Component {
     }
 }
 crate::typed::runtime::named!(CopyParentLevel = "ecs::CopyParentLevel": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CraftRecipeEvent`, 56 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CraftRecipeEvent`, 56 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     CraftRecipeEvent: GameEvent {
         /// `craftingOperatorId`, of `ecs::EntityId`.
         crafting_operator_id: EntityId = "craftingOperatorId",
@@ -3694,7 +4008,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CraftRecipeEvent = "ecs::CraftRecipeEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CraftRecipeSuccessEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CraftRecipeSuccessEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     CraftRecipeSuccessEvent: GameEvent {
         /// `workshopId`, of `WorkshopId`.
         workshop_id: crate::typed::WorkshopId = "workshopId",
@@ -3705,7 +4021,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CraftRecipeSuccessEvent = "ecs::CraftRecipeSuccessEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Crafting`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Crafting`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Crafting: Component {
         /// `workshop`, of `ObjectReference<WorkshopDefinition>`.
         workshop: crate::content::Guid = "workshop",
@@ -3716,7 +4034,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Crafting = "ecs::Crafting": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::CraftingActionType`, 1 bytes.
+    /// The game's enum `ecs::CraftingActionType`, 1 byte.
     CraftingActionType {
         /// `CraftRecipe`, 0.
         CraftRecipe = "CraftRecipe",
@@ -3734,7 +4052,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CraftingInteraction`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CraftingInteraction`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CraftingInteraction: Component {
         /// `craftingPropsInRange`, of `CraftingPropMask`.
         crafting_props_in_range: crate::typed::CraftingPropMask = "craftingPropsInRange",
@@ -3773,7 +4093,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::CreateItemActionType`, 1 bytes.
+    /// The game's enum `ecs::CreateItemActionType`, 1 byte.
     CreateItemActionType {
         /// `Npc`, 0.
         Npc = "Npc",
@@ -3783,7 +4103,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CreateItemLoot`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CreateItemLoot`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CreateItemLoot: Component {
         /// `lootCreationState`, of `ecs::CreateItemLootState`.
         loot_creation_state: CreateItemLootState = "lootCreationState",
@@ -3792,7 +4114,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CreateItemLoot = "ecs::CreateItemLoot": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::CreateItemLootState`, 1 bytes.
+    /// The game's enum `ecs::CreateItemLootState`, 1 byte.
     CreateItemLootState {
         /// `Start`, 0.
         Start = "Start",
@@ -3806,7 +4128,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CritChance`, 44 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CritChance`, 44 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CritChance: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,9>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -3815,7 +4139,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CritChance = "ecs::CritChance": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CritDamageMod`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::CritDamageMod`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     CritDamageMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,5>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -3824,7 +4150,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CritDamageMod = "ecs::CritDamageMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CspHackInventoryStockSelection`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CspHackInventoryStockSelection`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CspHackInventoryStockSelection: Component {
         /// `versions`, of `StaticArray<VersionedDataVersion,7>`.
         versions: ::std::vec::Vec<crate::typed::VersionedDataVersion> = "versions",
@@ -3833,7 +4161,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CspHackInventoryStockSelection = "ecs::CspHackInventoryStockSelection": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::CspItemIsBroken`, 1 bytes.
+    /// The game's enum `ecs::CspItemIsBroken`, 1 byte.
     CspItemIsBroken {
         /// `ActionbarSlot0`, 0.
         ActionbarSlot0 = "ActionbarSlot0",
@@ -3878,7 +4206,9 @@ crate::typed::runtime::reflected_enum! {
 pub type CspItemIsBrokenMask = crate::typed::Flags<CspItemIsBroken>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CurrentTransform`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CurrentTransform`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CurrentTransform: Component {
         /// `transform`, of `WorldTransform`.
         transform: crate::typed::WorldTransform = "transform",
@@ -3887,7 +4217,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CurrentTransform = "ecs::CurrentTransform": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::CurseModifier`, 1 bytes.
+    /// The game's enum `ecs::CurseModifier`, 1 byte.
     CurseModifier {
         /// `Easy`, 0.
         Easy = "Easy",
@@ -3909,7 +4239,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::CursorFlag`, 1 bytes.
+    /// The game's enum `ecs::CursorFlag`, 1 byte.
     CursorFlag {
         /// `InvalidCursorTransform`, 0.
         InvalidCursorTransform = "InvalidCursorTransform",
@@ -3980,7 +4310,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::CustomPlayerString`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::CustomPlayerString`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     CustomPlayerString: Component {
         /// `stringId`, of `CustomStringId`.
         string_id: crate::typed::CustomStringId = "stringId",
@@ -3989,7 +4321,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(CustomPlayerString = "ecs::CustomPlayerString": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DamageMod`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DamageMod`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DamageMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -3998,7 +4332,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DamageMod = "ecs::DamageMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DamageModAgainst`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DamageModAgainst`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DamageModAgainst: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,12>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -4007,7 +4343,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DamageModAgainst = "ecs::DamageModAgainst": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DamageModBackstab`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DamageModBackstab`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DamageModBackstab: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -4016,7 +4354,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DamageModBackstab = "ecs::DamageModBackstab": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DamageModMerciless`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DamageModMerciless`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DamageModMerciless: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -4025,7 +4365,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DamageModMerciless = "ecs::DamageModMerciless": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DamageModSkillShot`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DamageModSkillShot`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DamageModSkillShot: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -4034,7 +4376,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DamageModSkillShot = "ecs::DamageModSkillShot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DamageModSneak`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DamageModSneak`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DamageModSneak: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -4043,7 +4387,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DamageModSneak = "ecs::DamageModSneak": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DamageSusceptibility`, 84 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DamageSusceptibility`, 84 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DamageSusceptibility: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,19>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -4052,7 +4398,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DamageSusceptibility = "ecs::DamageSusceptibility": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DangerSensor`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DangerSensor`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DangerSensor: Component {
         /// `checkRadius`, of `float32`.
         check_radius: f32 = "checkRadius",
@@ -4061,7 +4409,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DangerSensor = "ecs::DangerSensor": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DangerType`, 1 bytes.
+    /// The game's enum `ecs::DangerType`, 1 byte.
     DangerType {
         /// `Damage`, 0.
         Damage = "Damage",
@@ -4074,7 +4422,9 @@ crate::typed::runtime::reflected_enum! {
 pub type DangerTypeMask = crate::typed::Flags<DangerType>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DangerousArea`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DangerousArea`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DangerousArea: Component {
         /// `range`, of `float32`.
         range: f32 = "range",
@@ -4085,7 +4435,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DangerousArea = "ecs::DangerousArea": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DaytimeType`, 1 bytes.
+    /// The game's enum `ecs::DaytimeType`, 1 byte.
     DaytimeType {
         /// `Daytime`, 0.
         Daytime = "Daytime",
@@ -4095,7 +4445,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DeclinedInteraction`, 12 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::DeclinedInteraction`, 12 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     DeclinedInteraction: Event {
         /// `guestEntityId`, of `ecs::EntityId`.
         guest_entity_id: EntityId = "guestEntityId",
@@ -4108,7 +4460,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DeclinedInteraction = "ecs::DeclinedInteraction": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DefaultInventory`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DefaultInventory`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DefaultInventory: Component {
         /// `defaultInventory`, of `ecs::DefaultInventoryReference`.
         default_inventory: DefaultInventoryReference = "defaultInventory",
@@ -4121,7 +4475,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DefaultInventory = "ecs::DefaultInventory": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DefaultInventoryGroupResource`, 36 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ecs::DefaultInventoryGroupResource`, 36 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     DefaultInventoryGroupResource {
         /// `isSelector`, of `bool`.
         is_selector: bool = "isSelector",
@@ -4139,7 +4495,9 @@ crate::typed::runtime::named!(DefaultInventoryGroupResource = "ecs::DefaultInven
 pub type DefaultInventoryReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DefaultInventoryResource`, 36 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ecs::DefaultInventoryResource`, 36 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     DefaultInventoryResource {
         /// `rootGroup`, of `ecs::DefaultInventoryGroupResource`.
         root_group: DefaultInventoryGroupResource = "rootGroup",
@@ -4148,13 +4506,13 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DefaultInventoryResource = "ecs::DefaultInventoryResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DefaultInventorySetup`, 1 bytes.
+    /// The game's struct `ecs::DefaultInventorySetup`, 1 byte.
     DefaultInventorySetup {
     }
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DelayMode`, 1 bytes.
+    /// The game's enum `ecs::DelayMode`, 1 byte.
     DelayMode {
         /// `Both`, 0.
         Both = "Both",
@@ -4190,7 +4548,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DespawnAfterSequence`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DespawnAfterSequence`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DespawnAfterSequence: Component {
         /// `sequenceId`, of `actor::SequenceRuntimeId`.
         sequence_id: crate::typed::actor::SequenceRuntimeId = "sequenceId",
@@ -4199,7 +4559,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DespawnAfterSequence = "ecs::DespawnAfterSequence": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DespawnLink`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::DespawnLink`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     DespawnLink: Component {
         /// `parentEntityId`, of `ecs::EntityId`.
         parent_entity_id: EntityId = "parentEntityId",
@@ -4210,7 +4572,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DespawnLink = "ecs::DespawnLink": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DestroyEntityOnLoot`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DestroyEntityOnLoot`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DestroyEntityOnLoot: Component {
         /// `destroyEntityId`, of `ecs::EntityId`.
         destroy_entity_id: EntityId = "destroyEntityId",
@@ -4219,7 +4583,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DestroyEntityOnLoot = "ecs::DestroyEntityOnLoot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DestroyEntityOnParentRespawn`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DestroyEntityOnParentRespawn`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DestroyEntityOnParentRespawn: Component {
         /// `checkParent`, of `bool`.
         check_parent: bool = "checkParent",
@@ -4228,7 +4594,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DestroyEntityOnParentRespawn = "ecs::DestroyEntityOnParentRespawn": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DestroyOnLoot`, 104 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DestroyOnLoot`, 104 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DestroyOnLoot: Component {
         /// `despawnTime`, of `Time`.
         despawn_time: crate::typed::Time = "despawnTime",
@@ -4249,14 +4617,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DestroyOnLoot = "ecs::DestroyOnLoot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DestroyOnLootActivated`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DestroyOnLootActivated`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DestroyOnLootActivated: Component {
     }
 }
 crate::typed::runtime::named!(DestroyOnLootActivated = "ecs::DestroyOnLootActivated": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DestroyOnState`, 3 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DestroyOnState`, 3 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DestroyOnState: Component {
         /// `wasInOppositeState`, of `bool`.
         was_in_opposite_state: bool = "wasInOppositeState",
@@ -4269,7 +4641,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DestroyOnState = "ecs::DestroyOnState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DestroyedWithoutSurfaceEvent`, 72 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::DestroyedWithoutSurfaceEvent`, 72 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     DestroyedWithoutSurfaceEvent: GameEvent {
         /// `transform`, of `WorldTransform`.
         transform: crate::typed::WorldTransform = "transform",
@@ -4282,7 +4656,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DestroyedWithoutSurfaceEvent = "ecs::DestroyedWithoutSurfaceEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Destructible`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Destructible`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Destructible: Component {
         /// `maxHealth`, of `uint16`.
         max_health: u16 = "maxHealth",
@@ -4291,7 +4667,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Destructible = "ecs::Destructible": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DetachAction`, 1 bytes.
+    /// The game's enum `ecs::DetachAction`, 1 byte.
     DetachAction {
         /// `None`, 0.
         None = "None",
@@ -4303,7 +4679,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Dexterity`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Dexterity`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Dexterity: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,3>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -4312,7 +4690,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Dexterity = "ecs::Dexterity": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DialogOptionType`, 1 bytes.
+    /// The game's enum `ecs::DialogOptionType`, 1 byte.
     DialogOptionType {
         /// `Start`, 0.
         Start = "Start",
@@ -4322,7 +4700,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DirectionalInputMode`, 1 bytes.
+    /// The game's enum `ecs::DirectionalInputMode`, 1 byte.
     DirectionalInputMode {
         /// `YawSpeedPitchSpeed`, 0.
         YawSpeedPitchSpeed = "YawSpeedPitchSpeed",
@@ -4332,7 +4710,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DirectionalInteraction`, 160 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DirectionalInteraction`, 160 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DirectionalInteraction: Component {
         /// `state`, of `ecs::DirectionalState`.
         state: DirectionalState = "state",
@@ -4361,7 +4741,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DirectionalState`, 1 bytes.
+    /// The game's enum `ecs::DirectionalState`, 1 byte.
     DirectionalState {
         /// `Idle`, 0.
         Idle = "Idle",
@@ -4373,28 +4753,34 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DisableColliderModeChanges`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DisableColliderModeChanges`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DisableColliderModeChanges: Component {
     }
 }
 crate::typed::runtime::named!(DisableColliderModeChanges = "ecs::DisableColliderModeChanges": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DisableDestructible`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DisableDestructible`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DisableDestructible: Component {
     }
 }
 crate::typed::runtime::named!(DisableDestructible = "ecs::DisableDestructible": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DisableRandomLootOnDestroy`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DisableRandomLootOnDestroy`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DisableRandomLootOnDestroy: Component {
     }
 }
 crate::typed::runtime::named!(DisableRandomLootOnDestroy = "ecs::DisableRandomLootOnDestroy": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DismantleHoverDelay`, 1 bytes.
+    /// The game's enum `ecs::DismantleHoverDelay`, 1 byte.
     DismantleHoverDelay {
         /// `NoPromptDelay`, 0.
         NoPromptDelay = "NoPromptDelay",
@@ -4406,7 +4792,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DismantleMethod`, 1 bytes.
+    /// The game's enum `ecs::DismantleMethod`, 1 byte.
     DismantleMethod {
         /// `None`, 0.
         None = "None",
@@ -4418,7 +4804,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DismantleOverride`, 6 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DismantleOverride`, 6 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DismantleOverride: Component {
         /// `overrideMethod`, of `bool`.
         override_method: bool = "overrideMethod",
@@ -4437,7 +4825,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DismantleOverride = "ecs::DismantleOverride": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DismantleVolumeClass`, 1 bytes.
+    /// The game's enum `ecs::DismantleVolumeClass`, 1 byte.
     DismantleVolumeClass {
         /// `Tiny`, 0.
         Tiny = "Tiny",
@@ -4451,7 +4839,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Dissolve`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Dissolve`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Dissolve: Component {
         /// `rotationOriginOffset`, of `float3`.
         rotation_origin_offset: crate::typed::Float3 = "rotationOriginOffset",
@@ -4474,14 +4864,16 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Dissolve = "ecs::Dissolve": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DoNotSave`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DoNotSave`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DoNotSave: Component {
     }
 }
 crate::typed::runtime::named!(DoNotSave = "ecs::DoNotSave": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::DoubleInputBindings`, 1 bytes.
+    /// The game's enum `ecs::DoubleInputBindings`, 1 byte.
     DoubleInputBindings {
         /// `SprintAndSneak`, 0.
         SprintAndSneak = "SprintAndSneak",
@@ -4500,7 +4892,9 @@ crate::typed::runtime::reflected_enum! {
 pub type DoubleInputBindingsMask = crate::typed::Flags<DoubleInputBindings>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DungeonTriggerTypeComponent`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::DungeonTriggerTypeComponent`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     DungeonTriggerTypeComponent: Component {
         /// `triggerSetup`, of `ObjectReference<DungeonTriggerSetup>`.
         trigger_setup: crate::content::Guid = "triggerSetup",
@@ -4509,7 +4903,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DungeonTriggerTypeComponent = "ecs::DungeonTriggerTypeComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Durability`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Durability`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Durability: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,2>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -4518,7 +4914,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Durability = "ecs::Durability": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DurabilityBurndown`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::DurabilityBurndown`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     DurabilityBurndown: Component {
         /// `lastUpdate`, of `Time`.
         last_update: crate::typed::Time = "lastUpdate",
@@ -4527,7 +4925,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DurabilityBurndown = "ecs::DurabilityBurndown": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::DurabilityPercentageInit`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::DurabilityPercentageInit`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     DurabilityPercentageInit: Component {
         /// `value`, of `float`.
         value: crate::typed::Float = "value",
@@ -4536,7 +4936,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(DurabilityPercentageInit = "ecs::DurabilityPercentageInit": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::EasingType`, 1 bytes.
+    /// The game's enum `ecs::EasingType`, 1 byte.
     EasingType {
         /// `Linear`, 0.
         Linear = "Linear",
@@ -4552,7 +4952,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Endurance`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Endurance`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Endurance: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,3>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -4561,7 +4963,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Endurance = "ecs::Endurance": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Enemy01BehaviorState`, 2520 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Enemy01BehaviorState`, 2520 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Enemy01BehaviorState: Component {
         /// `combatSetup`, of `enemy01::CombatSetup`.
         combat_setup: crate::typed::enemy01::CombatSetup = "combatSetup",
@@ -4668,7 +5072,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Enemy01BehaviorState = "ecs::Enemy01BehaviorState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyAiming`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyAiming`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemyAiming: Component {
         /// `hitChance`, of `float32`.
         hit_chance: f32 = "hitChance",
@@ -4679,13 +5085,17 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyAiming = "ecs::EnemyAiming": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyArsenal`, 1 bytes. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyArsenal`, 1 byte.
+    ///
+    /// The game holds it on the server only.
     EnemyArsenal {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyArsenalReference`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyArsenalReference`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemyArsenalReference: Component {
         /// `arsenal`, of `ObjectReference<ecs::EnemyArsenal>`.
         arsenal: crate::content::Guid = "arsenal",
@@ -4694,7 +5104,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyArsenalReference = "ecs::EnemyArsenalReference": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyAttackAttachment`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyAttackAttachment`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemyAttackAttachment: Component {
         /// `initialSequence`, of `actor::ActorSequenceReference`.
         initial_sequence: crate::typed::actor::ActorSequenceReference = "initialSequence",
@@ -4703,7 +5115,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyAttackAttachment = "ecs::EnemyAttackAttachment": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyAttackStartedEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyAttackStartedEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     EnemyAttackStartedEvent: GameEvent {
         /// `attackerId`, of `ecs::EntityId`.
         attacker_id: EntityId = "attackerId",
@@ -4714,7 +5128,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyAttackStartedEvent = "ecs::EnemyAttackStartedEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::EnemyDebugAction`, 1 bytes.
+    /// The game's enum `ecs::EnemyDebugAction`, 1 byte.
     EnemyDebugAction {
         /// `ResetTamed`, 0.
         ResetTamed = "ResetTamed",
@@ -4732,7 +5146,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::EnemyEventType`, 1 bytes.
+    /// The game's enum `ecs::EnemyEventType`, 1 byte.
     EnemyEventType {
         /// `CallForHelp`, 0.
         CallForHelp = "CallForHelp",
@@ -4748,7 +5162,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::EnemyFeature`, 1 bytes.
+    /// The game's enum `ecs::EnemyFeature`, 1 byte.
     EnemyFeature {
         /// `UseTaunt`, 0.
         UseTaunt = "UseTaunt",
@@ -4821,7 +5235,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyIsHelpingEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyIsHelpingEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     EnemyIsHelpingEvent: GameEvent {
         /// `helpingEntityId`, of `ecs::EntityId`.
         helping_entity_id: EntityId = "helpingEntityId",
@@ -4842,7 +5258,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyMarker`, 88 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyMarker`, 88 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemyMarker: Component {
         /// `markerType`, of `enemy01::EnemyMarkerType`.
         marker_type: crate::typed::enemy01::EnemyMarkerType = "markerType",
@@ -4875,7 +5293,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyMarker = "ecs::EnemyMarker": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyMarkerCheck`, 184 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyMarkerCheck`, 184 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemyMarkerCheck: Component {
         /// `checkDistance`, of `float32`.
         check_distance: f32 = "checkDistance",
@@ -4904,7 +5324,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyMarkerSettings`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyMarkerSettings`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemyMarkerSettings: SpawnComponent {
         /// `tag`, of `ObjectReference<ecs::EnemyMarkerTag>`.
         tag: crate::content::Guid = "tag",
@@ -4913,13 +5335,13 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyMarkerSettings = "ecs::EnemyMarkerSettings": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyMarkerTag`, 1 bytes.
+    /// The game's struct `ecs::EnemyMarkerTag`, 1 byte.
     EnemyMarkerTag {
     }
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::EnemyNotifierType`, 1 bytes.
+    /// The game's enum `ecs::EnemyNotifierType`, 1 byte.
     EnemyNotifierType {
         /// `InitialCommitment`, 0.
         InitialCommitment = "InitialCommitment",
@@ -4933,7 +5355,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyPhases`, 192 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyPhases`, 192 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemyPhases: Component {
         /// `phases`, of `StaticArray<ObjectReference<EnemyPhase>,12>`.
         phases: ::std::vec::Vec<crate::content::Guid> = "phases",
@@ -4942,7 +5366,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyPhases = "ecs::EnemyPhases": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyProjectile`, 220 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::EnemyProjectile`, 220 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     EnemyProjectile: BaseEnemyProjectile {
         /// `horizontalHitAngles`, of `StaticArray<ecs::HitAngleEntry,8>`.
         horizontal_hit_angles: ::std::vec::Vec<HitAngleEntry> = "horizontalHitAngles",
@@ -4951,7 +5377,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyProjectile = "ecs::EnemyProjectile": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyProjectileBehavior`, 164 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyProjectileBehavior`, 164 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemyProjectileBehavior: BaseEnemyProjectile {
         /// `horizontalHitAngles`, of `BlobArray<Angle>`.
         horizontal_hit_angles: ::std::vec::Vec<crate::typed::Angle> = "horizontalHitAngles",
@@ -4960,7 +5388,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyProjectileBehavior = "ecs::EnemyProjectileBehavior": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyScaling`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyScaling`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemyScaling: Component {
         /// `updateInterval`, of `Time`.
         update_interval: crate::typed::Time = "updateInterval",
@@ -4973,7 +5403,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyScaling = "ecs::EnemyScaling": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemySensor`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemySensor`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemySensor: Component {
         /// `checkRadius`, of `float32`.
         check_radius: f32 = "checkRadius",
@@ -4984,7 +5416,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemySensor = "ecs::EnemySensor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemySettings`, 68 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemySettings`, 68 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemySettings: Component {
         /// `idleAnimation`, of `animationgraph::StateIdReference`.
         idle_animation: crate::typed::animationgraph::StateIdReference = "idleAnimation",
@@ -5007,7 +5441,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemySettings = "ecs::EnemySettings": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemySfxEvent`, 88 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::EnemySfxEvent`, 88 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     EnemySfxEvent: GameEvent {
         /// `type`, of `ecs::EnemyNotifierType`.
         r#type: EnemyNotifierType = "type",
@@ -5022,7 +5458,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemySfxEvent = "ecs::EnemySfxEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemySignalBehavior`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemySignalBehavior`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemySignalBehavior: Component {
         /// `signalReceiverEntityId`, of `ecs::EntityId`.
         signal_receiver_entity_id: EntityId = "signalReceiverEntityId",
@@ -5037,7 +5475,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemySignalBehavior = "ecs::EnemySignalBehavior": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::EnemySignalBehaviorFlag`, 1 bytes.
+    /// The game's enum `ecs::EnemySignalBehaviorFlag`, 1 byte.
     EnemySignalBehaviorFlag {
         /// `IsSignalActive`, 0.
         IsSignalActive = "IsSignalActive",
@@ -5062,14 +5500,18 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemySpawnerClient`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::EnemySpawnerClient`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     EnemySpawnerClient: Component {
     }
 }
 crate::typed::runtime::named!(EnemySpawnerClient = "ecs::EnemySpawnerClient": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnemyTargetSelectionBonus`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnemyTargetSelectionBonus`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnemyTargetSelectionBonus: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,1>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -5078,7 +5520,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnemyTargetSelectionBonus = "ecs::EnemyTargetSelectionBonus": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::EnemyTest`, 1 bytes.
+    /// The game's enum `ecs::EnemyTest`, 1 byte.
     EnemyTest {
         /// `StayOnGround`, 0.
         StayOnGround = "StayOnGround",
@@ -5109,7 +5551,9 @@ crate::typed::runtime::reflected_enum! {
 pub type EnemyTestFlags = crate::typed::Flags<EnemyTest>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnergyProvider`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::EnergyProvider`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     EnergyProvider: Component {
         /// `energyPerSecond`, of `uint32`.
         energy_per_second: u32 = "energyPerSecond",
@@ -5118,7 +5562,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnergyProvider = "ecs::EnergyProvider": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnergyQuery`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::EnergyQuery`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     EnergyQuery: Component {
         /// `entityId`, of `ecs::EntityId`.
         entity_id: EntityId = "entityId",
@@ -5131,7 +5577,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnergyQuery = "ecs::EnergyQuery": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnergyWaterwheel`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnergyWaterwheel`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnergyWaterwheel: Component {
         /// `targetOutput`, of `float`.
         target_output: crate::typed::Float = "targetOutput",
@@ -5142,14 +5590,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnergyWaterwheel = "ecs::EnergyWaterwheel": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnergyWindmill`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnergyWindmill`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EnergyWindmill: Component {
     }
 }
 crate::typed::runtime::named!(EnergyWindmill = "ecs::EnergyWindmill": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnterFlyingStateEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EnterFlyingStateEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     EnterFlyingStateEvent: GameEvent {
         /// `targetId`, of `ecs::EntityId`.
         target_id: EntityId = "targetId",
@@ -5158,7 +5610,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnterFlyingStateEvent = "ecs::EnterFlyingStateEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EntityAnimation`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EntityAnimation`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EntityAnimation: Component {
         /// `animation`, of `JointAnimationReference`.
         animation: crate::typed::JointAnimationReference = "animation",
@@ -5173,7 +5627,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EntityAnimation = "ecs::EntityAnimation": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EntityAnimationRuntime`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EntityAnimationRuntime`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EntityAnimationRuntime: Component {
         /// `lastSamplePos`, of `float`.
         last_sample_pos: crate::typed::Float = "lastSamplePos",
@@ -5182,7 +5638,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EntityAnimationRuntime = "ecs::EntityAnimationRuntime": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EntityAnimationSceneAnimation`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::EntityAnimationSceneAnimation`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     EntityAnimationSceneAnimation: SpawnComponent {
         /// `animation`, of `JointAnimationReference`.
         animation: crate::typed::JointAnimationReference = "animation",
@@ -5191,7 +5649,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EntityAnimationSceneAnimation = "ecs::EntityAnimationSceneAnimation": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EntityAnimationTimeSync`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::EntityAnimationTimeSync`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     EntityAnimationTimeSync: Component {
         /// `eventTime`, of `Time`.
         event_time: crate::typed::Time = "eventTime",
@@ -5204,7 +5664,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EntityAnimationTimeSync = "ecs::EntityAnimationTimeSync": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EntityAttachment`, 44 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::EntityAttachment`, 44 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     EntityAttachment: Component {
         /// `attachedToEntityId`, of `ecs::EntityId`.
         attached_to_entity_id: EntityId = "attachedToEntityId",
@@ -5215,7 +5677,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EntityAttachment = "ecs::EntityAttachment": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EntityDiedEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::EntityDiedEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     EntityDiedEvent: GameEvent {
         /// `deadEntityId`, of `ecs::EntityId`.
         dead_entity_id: EntityId = "deadEntityId",
@@ -5240,7 +5704,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EntityProxyModelSetResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ecs::EntityProxyModelSetResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     EntityProxyModelSetResource {
         /// `models`, of `BlobArray<ObjectReference<RenderModel>>`.
         models: ::std::vec::Vec<crate::content::Guid> = "models",
@@ -5249,7 +5715,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EntityProxyModelSetResource = "ecs::EntityProxyModelSetResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::EntityReferenceType`, 1 bytes.
+    /// The game's enum `ecs::EntityReferenceType`, 1 byte.
     EntityReferenceType {
         /// `Self`, 0.
         Self_ = "Self",
@@ -5261,7 +5727,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EntitySpaceAnimationGraphSlotComponentBase`, 1732 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::EntitySpaceAnimationGraphSlotComponentBase`, 1732 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     EntitySpaceAnimationGraphSlotComponentBase: Component {
         /// `slotsInitialized`, of `bool`.
         slots_initialized: bool = "slotsInitialized",
@@ -5272,7 +5740,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EntitySpaceAnimationGraphSlotComponentBase = "ecs::EntitySpaceAnimationGraphSlotComponentBase": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::EntitySpawnValue`, 1 bytes.
+    /// The game's enum `ecs::EntitySpawnValue`, 1 byte.
     EntitySpawnValue {
         /// `TriggerRange`, 0.
         TriggerRange = "TriggerRange",
@@ -5311,13 +5779,15 @@ crate::typed::runtime::reflected_enum! {
 pub type EntitySpawnValueMask = crate::typed::Flags<EntitySpawnValue>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EntityTag`, 1 bytes.
+    /// The game's struct `ecs::EntityTag`, 1 byte.
     EntityTag {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EntityTagContainer`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::EntityTagContainer`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     EntityTagContainer: Component {
         /// `tags`, of `BlobArray<ecs::EntityTagReferenceEntry>`.
         tags: ::std::vec::Vec<EntityTagReferenceEntry> = "tags",
@@ -5337,7 +5807,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EnvironmentSensor`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::EnvironmentSensor`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     EnvironmentSensor: Component {
         /// `fogType`, of `FogType`.
         fog_type: crate::typed::FogType = "fogType",
@@ -5348,7 +5820,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EnvironmentSensor = "ecs::EnvironmentSensor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Equipment`, 1380 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Equipment`, 1380 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Equipment: Component {
         /// `visualMask`, of `VisualEquipmentMask`.
         visual_mask: crate::typed::VisualEquipmentMask = "visualMask",
@@ -5365,7 +5839,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Equipment = "ecs::Equipment": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EquipmentAnimationSets`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::EquipmentAnimationSets`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     EquipmentAnimationSets: Component {
         /// `primaryAnimationSet`, of `PrimaryAnimationSet`.
         primary_animation_set: crate::typed::PrimaryAnimationSet = "primaryAnimationSet",
@@ -5376,7 +5852,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(EquipmentAnimationSets = "ecs::EquipmentAnimationSets": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::EquipmentCheck`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::EquipmentCheck`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     EquipmentCheck: Component {
     }
 }
@@ -5429,13 +5907,15 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Event`, 1 bytes.
+    /// The game's struct `ecs::Event`, 1 byte.
     Event {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ExecutionTarget`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ExecutionTarget`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ExecutionTarget: Component {
         /// `executionRange`, of `float32`.
         execution_range: f32 = "executionRange",
@@ -5458,7 +5938,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ExecutionTarget = "ecs::ExecutionTarget": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Experience`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Experience`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Experience: UInt32Attribute {
         /// `dataStorage`, of `StaticArray<uint32,3>`.
         data_storage: ::std::vec::Vec<u32> = "dataStorage",
@@ -5467,7 +5949,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Experience = "ecs::Experience": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ExperienceSource`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ExperienceSource`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ExperienceSource: Component {
         /// `lastHitPlayerId`, of `ecs::EntityId`.
         last_hit_player_id: EntityId = "lastHitPlayerId",
@@ -5478,7 +5962,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ExperienceSource = "ecs::ExperienceSource": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Extinguish`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Extinguish`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Extinguish: Component {
         /// `extinguishSfx`, of `SoundContainerReference`.
         extinguish_sfx: crate::typed::SoundContainerReference = "extinguishSfx",
@@ -5489,7 +5975,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Extinguish = "ecs::Extinguish": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Faction`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Faction`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Faction: Component {
         /// `faction`, of `FactionType`.
         faction: crate::typed::FactionType = "faction",
@@ -5498,7 +5986,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Faction = "ecs::Faction": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FactoryStation`, 104 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::FactoryStation`, 104 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     FactoryStation: Component {
         /// `state`, of `ecs::FactoryStationState`.
         state: FactoryStationState = "state",
@@ -5525,7 +6015,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FactoryStation = "ecs::FactoryStation": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FactoryStationClient`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::FactoryStationClient`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     FactoryStationClient: Component {
         /// `soundLoopRunning`, of `SoundContainerReference`.
         sound_loop_running: crate::typed::SoundContainerReference = "soundLoopRunning",
@@ -5536,7 +6028,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FactoryStationClient = "ecs::FactoryStationClient": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::FactoryStationRequirement`, 1 bytes.
+    /// The game's enum `ecs::FactoryStationRequirement`, 1 byte.
     FactoryStationRequirement {
         /// `Recipe`, 0.
         Recipe = "Recipe",
@@ -5557,7 +6049,7 @@ crate::typed::runtime::reflected_enum! {
 pub type FactoryStationRequirementMask = crate::typed::Flags<FactoryStationRequirement>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::FactoryStationState`, 1 bytes.
+    /// The game's enum `ecs::FactoryStationState`, 1 byte.
     FactoryStationState {
         /// `NoRecipe`, 0.
         NoRecipe = "NoRecipe",
@@ -5575,7 +6067,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Fade`, 64 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Fade`, 64 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Fade: Component {
         /// `fadeInSettings`, of `ecs::FadeStateSettings`.
         fade_in_settings: FadeStateSettings = "fadeInSettings",
@@ -5600,7 +6094,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FakePlayerSpawner`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FakePlayerSpawner`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FakePlayerSpawner: Component {
         /// `entityTemplate`, of `ecs::TemplateReference`.
         entity_template: TemplateReference = "entityTemplate",
@@ -5609,7 +6105,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FakePlayerSpawner = "ecs::FakePlayerSpawner": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FallDamage`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FallDamage`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FallDamage: Component {
         /// `fallDamageStartDistance`, of `float32`.
         fall_damage_start_distance: f32 = "fallDamageStartDistance",
@@ -5622,7 +6120,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FallDamage = "ecs::FallDamage": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::FeedbackType`, 1 bytes.
+    /// The game's enum `ecs::FeedbackType`, 1 byte.
     FeedbackType {
         /// `Success`, 0.
         Success = "Success",
@@ -5634,14 +6132,18 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FinishedActionbarInit`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FinishedActionbarInit`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FinishedActionbarInit: Component {
     }
 }
 crate::typed::runtime::named!(FinishedActionbarInit = "ecs::FinishedActionbarInit": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Fishable`, 64 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Fishable`, 64 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Fishable: Component {
         /// `isFish`, of `bool`.
         is_fish: bool = "isFish",
@@ -5674,7 +6176,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Fishable = "ecs::Fishable": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Fishing`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Fishing`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Fishing: Component {
         /// `defaultSpawnTable`, of `fishing::FishSpawnTableReference`.
         default_spawn_table: crate::typed::fishing::FishSpawnTableReference = "defaultSpawnTable",
@@ -5685,7 +6189,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Fishing = "ecs::Fishing": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FishingEndurance`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FishingEndurance`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FishingEndurance: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -5694,14 +6200,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FishingEndurance = "ecs::FishingEndurance": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FishingRodRender`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::FishingRodRender`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     FishingRodRender: Component {
     }
 }
 crate::typed::runtime::named!(FishingRodRender = "ecs::FishingRodRender": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FishingSpot`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::FishingSpot`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     FishingSpot: Component {
         /// `spawnTable`, of `fishing::FishSpawnTableReference`.
         spawn_table: crate::typed::fishing::FishSpawnTableReference = "spawnTable",
@@ -5712,7 +6222,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FishingSpot = "ecs::FishingSpot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FishingStrength`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FishingStrength`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FishingStrength: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -5733,7 +6245,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::FlameAltarActionType`, 1 bytes.
+    /// The game's enum `ecs::FlameAltarActionType`, 1 byte.
     FlameAltarActionType {
         /// `Abandon`, 0.
         Abandon = "Abandon",
@@ -5747,7 +6259,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FlameAltarEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::FlameAltarEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     FlameAltarEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -5774,7 +6288,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FleeSensor`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FleeSensor`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FleeSensor: EntityTagContainer {
         /// `viewConeHalfAngle`, of `float32`.
         view_cone_half_angle: f32 = "viewConeHalfAngle",
@@ -5785,14 +6301,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FleeSensor = "ecs::FleeSensor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FloatAttribute`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::FloatAttribute`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     FloatAttribute: AttributeComponent {
     }
 }
 crate::typed::runtime::named!(FloatAttribute = "ecs::FloatAttribute": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FloorMaterial`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::FloorMaterial`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     FloorMaterial: Component {
         /// `material`, of `ObjectReference<BaseVoxelMaterial>`.
         material: crate::content::Guid = "material",
@@ -5807,7 +6327,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FloorMaterial = "ecs::FloorMaterial": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Flying`, 176 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Flying`, 176 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Flying: Component {
         /// `maxAcceleration`, of `float32`.
         max_acceleration: f32 = "maxAcceleration",
@@ -5842,7 +6364,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Flying = "ecs::Flying": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FlyingEnemy`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FlyingEnemy`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FlyingEnemy: Component {
         /// `minRoamingHeight`, of `float32`.
         min_roaming_height: f32 = "minRoamingHeight",
@@ -5871,7 +6395,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FlyingEnemy = "ecs::FlyingEnemy": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FogOfWarDiscovery`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::FogOfWarDiscovery`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     FogOfWarDiscovery: Component {
         /// `discoveryRange`, of `float32`.
         discovery_range: f32 = "discoveryRange",
@@ -5880,7 +6406,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FogOfWarDiscovery = "ecs::FogOfWarDiscovery": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FogRemovalIdComponent`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::FogRemovalIdComponent`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     FogRemovalIdComponent: SpawnComponent {
         /// `fogRemovalId`, of `FogRemovalId`.
         fog_removal_id: crate::typed::FogRemovalId = "fogRemovalId",
@@ -5889,7 +6417,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FogRemovalIdComponent = "ecs::FogRemovalIdComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FogResistance`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FogResistance`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FogResistance: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,6>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -5898,7 +6428,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FogResistance = "ecs::FogResistance": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FogResistanceState`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FogResistanceState`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FogResistanceState: Component {
         /// `accumulatedValue`, of `float32`.
         accumulated_value: f32 = "accumulatedValue",
@@ -5907,7 +6439,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FogResistanceState = "ecs::FogResistanceState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FogVoxelModel`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::FogVoxelModel`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     FogVoxelModel: Component {
         /// `fogInstanceHandle`, of `uint32`.
         fog_instance_handle: u32 = "fogInstanceHandle",
@@ -5916,7 +6450,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FogVoxelModel = "ecs::FogVoxelModel": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FogVoxelModelResourceComponent`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::FogVoxelModelResourceComponent`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     FogVoxelModelResourceComponent: Component {
         /// `model`, of `ObjectReference<VolumetricFog3Model>`.
         model: crate::content::Guid = "model",
@@ -5929,7 +6465,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FogVoxelModelResourceComponent = "ecs::FogVoxelModelResourceComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FoleyEnvEvent`, 32 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::FoleyEnvEvent`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     FoleyEnvEvent: GameEvent {
         /// `eventGuid`, of `Guid`.
         event_guid: crate::content::Guid = "eventGuid",
@@ -5942,14 +6480,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FoleyEnvEvent = "ecs::FoleyEnvEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FoodBait`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FoodBait`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FoodBait: Component {
     }
 }
 crate::typed::runtime::named!(FoodBait = "ecs::FoodBait": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FootDown`, 64 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FootDown`, 64 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     FootDown: GameEvent {
         /// `environmentEffectType`, of `EnvironmentEffectType`.
         environment_effect_type: crate::typed::EnvironmentEffectType = "environmentEffectType",
@@ -5964,14 +6506,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FootDown = "ecs::FootDown": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ForceSave`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ForceSave`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ForceSave: Component {
     }
 }
 crate::typed::runtime::named!(ForceSave = "ecs::ForceSave": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FreezingResistance`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FreezingResistance`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FreezingResistance: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,3>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -5980,7 +6526,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FreezingResistance = "ecs::FreezingResistance": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Friction`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Friction`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Friction: Component {
         /// `isSliding`, of `bool`.
         is_sliding: bool = "isSliding",
@@ -5991,7 +6539,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Friction = "ecs::Friction": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FriendSensor`, 36 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FriendSensor`, 36 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FriendSensor: Component {
         /// `checkRadius`, of `float32`.
         check_radius: f32 = "checkRadius",
@@ -6002,7 +6552,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FriendSensor = "ecs::FriendSensor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Fuel`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Fuel`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Fuel: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,2>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -6011,14 +6563,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Fuel = "ecs::Fuel": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FuelCraftingStock`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::FuelCraftingStock`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     FuelCraftingStock: Component {
     }
 }
 crate::typed::runtime::named!(FuelCraftingStock = "ecs::FuelCraftingStock": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FuelPercentageInit`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::FuelPercentageInit`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     FuelPercentageInit: Component {
         /// `initialFuelPercentage`, of `float`.
         initial_fuel_percentage: crate::typed::Float = "initialFuelPercentage",
@@ -6037,7 +6593,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FuelSetup`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::FuelSetup`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     FuelSetup: Component {
         /// `automaticRefill`, of `ecs::FuelRefillSetup`.
         automatic_refill: FuelRefillSetup = "automaticRefill",
@@ -6052,7 +6610,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FuelSetup = "ecs::FuelSetup": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::FxComponent`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::FxComponent`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     FxComponent: Component {
         /// `fxHandle`, of `ecs::LoopedFxHandle`.
         fx_handle: LoopedFxHandle = "fxHandle",
@@ -6063,7 +6623,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(FxComponent = "ecs::FxComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::GameEvent`, 8 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::GameEvent`, 8 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     GameEvent: Event {
         /// `timeStamp`, of `Time`.
         time_stamp: crate::typed::Time = "timeStamp",
@@ -6082,7 +6644,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::GameObjectType`, 1 bytes.
+    /// The game's enum `ecs::GameObjectType`, 1 byte.
     GameObjectType {
         /// `Entity`, 0.
         Entity = "Entity",
@@ -6174,7 +6736,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::GameSettingsChangedEvent`, 152 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::GameSettingsChangedEvent`, 152 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     GameSettingsChangedEvent: GameEvent {
         /// `newSettings`, of `ecs::GameSettings`.
         new_settings: GameSettings = "newSettings",
@@ -6183,7 +6747,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GameSettingsChangedEvent = "ecs::GameSettingsChangedEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::GameSettingsPreset`, 1 bytes.
+    /// The game's enum `ecs::GameSettingsPreset`, 1 byte.
     GameSettingsPreset {
         /// `Default`, 0.
         Default = "Default",
@@ -6209,7 +6773,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::GatherResourceType`, 1 bytes.
+    /// The game's enum `ecs::GatherResourceType`, 1 byte.
     GatherResourceType {
         /// `Wood`, 0.
         Wood = "Wood",
@@ -6229,7 +6793,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::GemCraftingEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::GemCraftingEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     GemCraftingEvent: GameEvent {
         /// `shroudForgeEntityId`, of `ecs::EntityId`.
         shroud_forge_entity_id: EntityId = "shroudForgeEntityId",
@@ -6240,7 +6806,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GemCraftingEvent = "ecs::GemCraftingEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::GenericDifficulty`, 1 bytes.
+    /// The game's enum `ecs::GenericDifficulty`, 1 byte.
     GenericDifficulty {
         /// `VeryEasy`, 0.
         VeryEasy = "VeryEasy",
@@ -6256,7 +6822,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::GenericEnemyEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::GenericEnemyEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     GenericEnemyEvent: GameEvent {
         /// `enemyEntityId`, of `ecs::EntityId`.
         enemy_entity_id: EntityId = "enemyEntityId",
@@ -6267,7 +6835,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GenericEnemyEvent = "ecs::GenericEnemyEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::GenericFeetIKComponent`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::GenericFeetIKComponent`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     GenericFeetIKComponent: Component {
         /// `genericAnimationNodeId`, of `HashKey32`.
         generic_animation_node_id: crate::typed::HashKey32 = "genericAnimationNodeId",
@@ -6278,21 +6848,27 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(GenericFeetIKComponent = "ecs::GenericFeetIKComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::GliderUpstreamZone`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::GliderUpstreamZone`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     GliderUpstreamZone: Component {
     }
 }
 crate::typed::runtime::named!(GliderUpstreamZone = "ecs::GliderUpstreamZone": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::GrassEffector`, 52 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::GrassEffector`, 52 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     GrassEffector: VfxComponent {
     }
 }
 crate::typed::runtime::named!(GrassEffector = "ecs::GrassEffector": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Gravity`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Gravity`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Gravity: Component {
         /// `direction`, of `float3`.
         direction: crate::typed::Float3 = "direction",
@@ -6305,7 +6881,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Gravity = "ecs::Gravity": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Growth`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Growth`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Growth: Component {
         /// `minDuration`, of `Time`.
         min_duration: crate::typed::Time = "minDuration",
@@ -6322,7 +6900,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Growth = "ecs::Growth": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::GrowthHint`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::GrowthHint`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     GrowthHint: Component {
     }
 }
@@ -6339,7 +6919,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HandleEquipmentSlotChangedEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::HandleEquipmentSlotChangedEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     HandleEquipmentSlotChangedEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -6350,14 +6932,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HandleEquipmentSlotChangedEvent = "ecs::HandleEquipmentSlotChangedEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HardLockTarget`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::HardLockTarget`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     HardLockTarget: Component {
     }
 }
 crate::typed::runtime::named!(HardLockTarget = "ecs::HardLockTarget": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HasProxy`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::HasProxy`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     HasProxy: Component {
     }
 }
@@ -6408,7 +6994,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::HeadLookAtSource`, 1 bytes.
+    /// The game's enum `ecs::HeadLookAtSource`, 1 byte.
     HeadLookAtSource {
         /// `None`, 0.
         None = "None",
@@ -6430,7 +7016,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HealingMod`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HealingMod`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HealingMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -6439,7 +7027,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HealingMod = "ecs::HealingMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Health`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Health`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Health: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,8>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -6448,7 +7038,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Health = "ecs::Health": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HealthBar`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HealthBar`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HealthBar: Component {
         /// `lastChange`, of `Time`.
         last_change: crate::typed::Time = "lastChange",
@@ -6457,7 +7049,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HealthBar = "ecs::HealthBar": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HealthBasedScale`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::HealthBasedScale`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     HealthBasedScale: Component {
         /// `minSize`, of `float32`.
         min_size: f32 = "minSize",
@@ -6468,14 +7062,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HealthBasedScale = "ecs::HealthBasedScale": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HealthRecharge`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HealthRecharge`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HealthRecharge: AttributeRegeneration {
     }
 }
 crate::typed::runtime::named!(HealthRecharge = "ecs::HealthRecharge": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HealthRechargeMod`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HealthRechargeMod`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HealthRechargeMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,1>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -6484,7 +7082,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HealthRechargeMod = "ecs::HealthRechargeMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HermiteInterpolation`, 736 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::HermiteInterpolation`, 736 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     HermiteInterpolation: Component {
         /// `spawnTick`, of `uint32`.
         spawn_tick: u32 = "spawnTick",
@@ -6511,7 +7111,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Hide`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Hide`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Hide: Component {
         /// `isHidden`, of `bool`.
         is_hidden: bool = "isHidden",
@@ -6522,7 +7124,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Hide = "ecs::Hide": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HighlightColor`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::HighlightColor`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     HighlightColor: Component {
         /// `colorIndex`, of `HighlightColorIndex`.
         color_index: crate::typed::HighlightColorIndex = "colorIndex",
@@ -6541,7 +7145,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HitCandidate`, 336 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HitCandidate`, 336 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     HitCandidate: HitEvent {
         /// `sourceVelocity`, of `float3`.
         source_velocity: crate::typed::Float3 = "sourceVelocity",
@@ -6562,7 +7168,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HitCandidate = "ecs::HitCandidate": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::HitCandidateType`, 1 bytes.
+    /// The game's enum `ecs::HitCandidateType`, 1 byte.
     HitCandidateType {
         /// `Entity`, 0.
         Entity = "Entity",
@@ -6574,7 +7180,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HitEvent`, 248 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::HitEvent`, 248 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     HitEvent: BaseHitEvent {
         /// `rootTargetId`, of `ecs::EntityId`.
         root_target_id: EntityId = "rootTargetId",
@@ -6682,7 +7290,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HitHistory`, 3048 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HitHistory`, 3048 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HitHistory: Component {
         /// `history`, of `StaticArray<ecs::HitEvent,10>`.
         history: ::std::vec::Vec<HitEvent> = "history",
@@ -6697,7 +7307,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HitHistory = "ecs::HitHistory": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HitReactionBehavior`, 352 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::HitReactionBehavior`, 352 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     HitReactionBehavior: Component {
         /// `hitReactionBlockLightAttack`, of `HitReactionConfig`.
         hit_reaction_block_light_attack: crate::typed::HitReactionConfig = "hitReactionBlockLightAttack",
@@ -6729,7 +7341,9 @@ crate::typed::runtime::named!(HitReactionBehavior = "ecs::HitReactionBehavior": 
 pub type HitReactionTypeMask = crate::typed::Flags<crate::typed::impact::HitReactionType>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HitStopComponent`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::HitStopComponent`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     HitStopComponent: Component {
         /// `startTime`, of `Time`.
         start_time: crate::typed::Time = "startTime",
@@ -6746,7 +7360,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HitStopComponent = "ecs::HitStopComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HomeToTarget`, 80 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HomeToTarget`, 80 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HomeToTarget: Component {
         /// `targetLocalOffset`, of `float3`.
         target_local_offset: crate::typed::Float3 = "targetLocalOffset",
@@ -6785,7 +7401,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HomeToTarget = "ecs::HomeToTarget": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HookEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::HookEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     HookEvent: GameEvent {
         /// `sourceEntityId`, of `ecs::EntityId`.
         source_entity_id: EntityId = "sourceEntityId",
@@ -6798,7 +7416,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HookEvent = "ecs::HookEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HookPullImpulse`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HookPullImpulse`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HookPullImpulse: Component {
         /// `impulseData`, of `ecs::ImpulseData`.
         impulse_data: ImpulseData = "impulseData",
@@ -6809,7 +7429,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HookPullImpulse = "ecs::HookPullImpulse": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HookShot`, 192 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HookShot`, 192 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HookShot: Component {
         /// `triggerAnchorEntityId`, of `ecs::EntityId`.
         trigger_anchor_entity_id: EntityId = "triggerAnchorEntityId",
@@ -6858,7 +7480,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HookShot = "ecs::HookShot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HookShotAnchor`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HookShotAnchor`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HookShotAnchor: Component {
         /// `hookShotType`, of `ecs::HookShotType`.
         hook_shot_type: HookShotType = "hookShotType",
@@ -6873,7 +7497,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HookShotAnchor = "ecs::HookShotAnchor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HookShotAnchorSubEntity`, 60 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HookShotAnchorSubEntity`, 60 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HookShotAnchorSubEntity: Component {
         /// `anchorEntityTemplate`, of `ecs::TemplateReference`.
         anchor_entity_template: TemplateReference = "anchorEntityTemplate",
@@ -6914,7 +7540,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::HookShotState`, 1 bytes.
+    /// The game's enum `ecs::HookShotState`, 1 byte.
     HookShotState {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -6928,7 +7554,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::HookShotTargeting`, 160 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::HookShotTargeting`, 160 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     HookShotTargeting: Component {
         /// `bestInteractionOffer`, of `ecs::HookShotInteractionOffer`.
         best_interaction_offer: HookShotInteractionOffer = "bestInteractionOffer",
@@ -6939,7 +7567,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(HookShotTargeting = "ecs::HookShotTargeting": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::HookShotType`, 1 bytes.
+    /// The game's enum `ecs::HookShotType`, 1 byte.
     HookShotType {
         /// `None`, 0.
         None = "None",
@@ -6959,14 +7587,18 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::IAmAMinion`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::IAmAMinion`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     IAmAMinion: Component {
     }
 }
 crate::typed::runtime::named!(IAmAMinion = "ecs::IAmAMinion": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Impact`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Impact`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Impact: Component {
         /// `program`, of `ImpactProgramReference`.
         program: crate::typed::ImpactProgramReference = "program",
@@ -6979,7 +7611,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Impact = "ecs::Impact": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ImpactConfiguration`, 72 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ImpactConfiguration`, 72 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ImpactConfiguration: Component {
         /// `configValues`, of `impact::Configurations`.
         config_values: crate::typed::impact::Configurations = "configValues",
@@ -6992,7 +7626,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ImpactConfiguration = "ecs::ImpactConfiguration": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ImpactDirection`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ImpactDirection`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ImpactDirection: Component {
         /// `direction`, of `impact::MajorDirection`.
         direction: crate::typed::impact::MajorDirection = "direction",
@@ -7001,14 +7637,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ImpactDirection = "ecs::ImpactDirection": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ImpactHalted`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ImpactHalted`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ImpactHalted: Component {
     }
 }
 crate::typed::runtime::named!(ImpactHalted = "ecs::ImpactHalted": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ImpactHierarchy`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ImpactHierarchy`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ImpactHierarchy: Component {
         /// `parentImpactId`, of `ecs::EntityId`.
         parent_impact_id: EntityId = "parentImpactId",
@@ -7023,14 +7663,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ImpactHierarchy = "ecs::ImpactHierarchy": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ImpactInitialized`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ImpactInitialized`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ImpactInitialized: Component {
     }
 }
 crate::typed::runtime::named!(ImpactInitialized = "ecs::ImpactInitialized": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ImpactItemConfig`, 44 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ImpactItemConfig`, 44 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ImpactItemConfig: Component {
         /// `usedItem`, of `ItemInstanceInfo`.
         used_item: crate::typed::ItemInstanceInfo = "usedItem",
@@ -7043,7 +7687,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ImpactItemConfig = "ecs::ImpactItemConfig": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Impulse`, 176 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Impulse`, 176 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Impulse: Component {
         /// `impulse`, of `float3`.
         impulse: crate::typed::Float3 = "impulse",
@@ -7070,7 +7716,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ImpulseType`, 1 bytes.
+    /// The game's enum `ecs::ImpulseType`, 1 byte.
     ImpulseType {
         /// `S_Curve`, 0.
         SCurve = "S_Curve",
@@ -7080,14 +7726,18 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::IncreaseParentEnemySpawnCount`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::IncreaseParentEnemySpawnCount`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     IncreaseParentEnemySpawnCount: Component {
     }
 }
 crate::typed::runtime::named!(IncreaseParentEnemySpawnCount = "ecs::IncreaseParentEnemySpawnCount": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InertialFrame`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::InertialFrame`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     InertialFrame: Component {
         /// `lastDeltaPosition`, of `float3`.
         last_delta_position: crate::typed::Float3 = "lastDeltaPosition",
@@ -7098,7 +7748,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InertialFrame = "ecs::InertialFrame": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InspectItemEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::InspectItemEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     InspectItemEvent: GameEvent {
         /// `inventorySlotId`, of `InventorySlotId`.
         inventory_slot_id: crate::typed::InventorySlotId = "inventorySlotId",
@@ -7109,7 +7761,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InspectItemEvent = "ecs::InspectItemEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Intelligence`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Intelligence`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Intelligence: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,3>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -7130,7 +7784,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionAcceptedEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::InteractionAcceptedEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     InteractionAcceptedEvent: GameEvent {
         /// `guestEntityId`, of `ecs::EntityId`.
         guest_entity_id: EntityId = "guestEntityId",
@@ -7143,7 +7799,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InteractionAcceptedEvent = "ecs::InteractionAcceptedEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionAttachment`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::InteractionAttachment`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     InteractionAttachment: Component {
         /// `guestOffset`, of `ecs::Offset`.
         guest_offset: Offset = "guestOffset",
@@ -7154,7 +7812,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InteractionAttachment = "ecs::InteractionAttachment": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionAttachmentGuest`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::InteractionAttachmentGuest`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     InteractionAttachmentGuest: Component {
         /// `lastHostEntityId`, of `ecs::EntityId`.
         last_host_entity_id: EntityId = "lastHostEntityId",
@@ -7199,7 +7859,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionKnowledgeLock`, 144 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::InteractionKnowledgeLock`, 144 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     InteractionKnowledgeLock: Component {
         /// `modifier`, of `ecs::ToggleModifier`.
         modifier: ToggleModifier = "modifier",
@@ -7214,7 +7876,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InteractionKnowledgeLock = "ecs::InteractionKnowledgeLock": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionLock`, 256 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::InteractionLock`, 256 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     InteractionLock: Component {
         /// `requiredItemRef`, of `ItemReference`.
         required_item_ref: crate::typed::ItemReference = "requiredItemRef",
@@ -7251,7 +7915,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InteractionLock = "ecs::InteractionLock": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::InteractionLockFlag`, 1 bytes.
+    /// The game's enum `ecs::InteractionLockFlag`, 1 byte.
     InteractionLockFlag {
         /// `Consume`, 0.
         Consume = "Consume",
@@ -7264,7 +7928,9 @@ crate::typed::runtime::reflected_enum! {
 pub type InteractionLockMask = crate::typed::Flags<InteractionLockFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionLootRefill`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::InteractionLootRefill`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     InteractionLootRefill: Component {
         /// `waitTime`, of `Time`.
         wait_time: crate::typed::Time = "waitTime",
@@ -7279,7 +7945,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InteractionLootRefill = "ecs::InteractionLootRefill": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionOffer`, 36 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::InteractionOffer`, 36 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     InteractionOffer: Component {
         /// `defaultAction`, of `actor::ActorSequenceReference`.
         default_action: crate::typed::actor::ActorSequenceReference = "defaultAction",
@@ -7294,7 +7962,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InteractionOffer = "ecs::InteractionOffer": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionOfferRuntime`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::InteractionOfferRuntime`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     InteractionOfferRuntime: Component {
         /// `lastAcceptTime`, of `Time`.
         last_accept_time: crate::typed::Time = "lastAcceptTime",
@@ -7325,7 +7995,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InteractionOfferRuntime = "ecs::InteractionOfferRuntime": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionPause`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::InteractionPause`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     InteractionPause: Component {
         /// `timeout`, of `Time`.
         timeout: crate::typed::Time = "timeout",
@@ -7334,7 +8006,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InteractionPause = "ecs::InteractionPause": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionQuery`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::InteractionQuery`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     InteractionQuery: Component {
         /// `queryId`, of `ecs::RangeQueryId`.
         query_id: RangeQueryId = "queryId",
@@ -7347,7 +8021,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InteractionQuery = "ecs::InteractionQuery": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InteractionToggle`, 64 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::InteractionToggle`, 64 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     InteractionToggle: Component {
         /// `offToOnVerb`, of `LocaTagReference`.
         off_to_on_verb: crate::typed::LocaTagReference = "offToOnVerb",
@@ -7384,7 +8060,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Inventory`, 96 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Inventory`, 96 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Inventory: Component {
         /// `slots`, of `StaticArray<ItemStack,8>`.
         slots: ::std::vec::Vec<crate::typed::ItemStack> = "slots",
@@ -7393,7 +8071,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Inventory = "ecs::Inventory": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InventoryCraftingStock`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::InventoryCraftingStock`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     InventoryCraftingStock: Component {
         /// `canReceiveAreaDeposit`, of `bool`.
         can_receive_area_deposit: bool = "canReceiveAreaDeposit",
@@ -7402,7 +8082,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InventoryCraftingStock = "ecs::InventoryCraftingStock": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InventoryEmptyState`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::InventoryEmptyState`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     InventoryEmptyState: Component {
         /// `toggleVFX`, of `bool`.
         toggle_vfx: bool = "toggleVFX",
@@ -7413,7 +8095,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InventoryEmptyState = "ecs::InventoryEmptyState": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::InventoryFlags`, 1 bytes.
+    /// The game's enum `ecs::InventoryFlags`, 1 byte.
     InventoryFlags {
         /// `IsPlayer`, 0.
         IsPlayer = "IsPlayer",
@@ -7427,7 +8109,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InventoryFull`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::InventoryFull`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     InventoryFull: GameEvent {
         /// `pickedUpById`, of `ecs::EntityId`.
         picked_up_by_id: EntityId = "pickedUpById",
@@ -7440,7 +8124,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InventoryFull = "ecs::InventoryFull": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InventorySetup`, 84 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::InventorySetup`, 84 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     InventorySetup: Component {
         /// `linksEntities`, of `StaticArray<ecs::EntityId,16>`.
         links_entities: ::std::vec::Vec<EntityId> = "linksEntities",
@@ -7459,7 +8145,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(InventorySetup = "ecs::InventorySetup": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InventorySetupInit`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::InventorySetupInit`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     InventorySetupInit: Component {
     }
 }
@@ -7469,7 +8157,9 @@ crate::typed::runtime::named!(InventorySetupInit = "ecs::InventorySetupInit": Co
 pub type InventorySetupMask = crate::typed::Flags<InventoryFlags>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::InventorySetupOverwrite`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::InventorySetupOverwrite`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     InventorySetupOverwrite: Component {
         /// `genericSlotCount`, of `uint8`.
         generic_slot_count: u8 = "genericSlotCount",
@@ -7510,7 +8200,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::IsInWaterCheck`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::IsInWaterCheck`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     IsInWaterCheck: Component {
         /// `waterSubmersionHeight`, of `float32`.
         water_submersion_height: f32 = "waterSubmersionHeight",
@@ -7519,7 +8211,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(IsInWaterCheck = "ecs::IsInWaterCheck": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::IsLocalPlayerInRange`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::IsLocalPlayerInRange`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     IsLocalPlayerInRange: Component {
         /// `rangeMargin`, of `float32`.
         range_margin: f32 = "rangeMargin",
@@ -7530,7 +8224,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(IsLocalPlayerInRange = "ecs::IsLocalPlayerInRange": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::IsPlayerInRange`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::IsPlayerInRange`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     IsPlayerInRange: Component {
         /// `checkAgainstPlayerCollider`, of `bool`.
         check_against_player_collider: bool = "checkAgainstPlayerCollider",
@@ -7549,7 +8245,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(IsPlayerInRange = "ecs::IsPlayerInRange": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::IsPlayerInSight`, 96 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::IsPlayerInSight`, 96 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     IsPlayerInSight: Component {
         /// `isInSight`, of `bool`.
         is_in_sight: bool = "isInSight",
@@ -7564,7 +8262,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(IsPlayerInSight = "ecs::IsPlayerInSight": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::IsTame`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::IsTame`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     IsTame: Component {
     }
 }
@@ -7585,7 +8285,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ItemActionType`, 1 bytes.
+    /// The game's enum `ecs::ItemActionType`, 1 byte.
     ItemActionType {
         /// `Inspect`, 0.
         Inspect = "Inspect",
@@ -7603,7 +8303,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ItemCollectionComponent`, 112 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ItemCollectionComponent`, 112 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ItemCollectionComponent: Component {
         /// `uiMenuName`, of `LocaTagReference`.
         ui_menu_name: crate::typed::LocaTagReference = "uiMenuName",
@@ -7628,7 +8330,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ItemCollectionComponent = "ecs::ItemCollectionComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ItemEquippedLifetime`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ItemEquippedLifetime`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ItemEquippedLifetime: Component {
     }
 }
@@ -7653,7 +8357,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ItemKnowledgeGained`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ItemKnowledgeGained`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     ItemKnowledgeGained: GameEvent {
         /// `itemId`, of `ItemId`.
         item_id: crate::typed::ItemId = "itemId",
@@ -7666,7 +8372,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ItemKnowledgeGained = "ecs::ItemKnowledgeGained": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ItemPerkChanged`, 4 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ItemPerkChanged`, 4 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     ItemPerkChanged: Event {
         /// `itemEntityId`, of `ecs::EntityId`.
         item_entity_id: EntityId = "itemEntityId",
@@ -7687,7 +8395,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ItemStackInfoResource`, 40 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ecs::ItemStackInfoResource`, 40 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     ItemStackInfoResource {
         /// `itemRef`, of `ItemReference`.
         item_ref: crate::typed::ItemReference = "itemRef",
@@ -7708,7 +8418,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ItemStackInfoResource = "ecs::ItemStackInfoResource": Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ItemState`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ItemState`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ItemState: Component {
         /// `containedInSlotId`, of `InventorySlotId`.
         contained_in_slot_id: crate::typed::InventorySlotId = "containedInSlotId",
@@ -7749,7 +8461,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::JumpParameters`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::JumpParameters`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     JumpParameters: SpawnComponent {
         /// `jumpDistance`, of `float32`.
         jump_distance: f32 = "jumpDistance",
@@ -7762,7 +8476,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(JumpParameters = "ecs::JumpParameters": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::KillFaction`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::KillFaction`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     KillFaction: GameEvent {
         /// `factionMask`, of `FactionMask`.
         faction_mask: crate::typed::FactionMask = "factionMask",
@@ -7773,7 +8489,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(KillFaction = "ecs::KillFaction": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::KnowledgeAnalyticsEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::KnowledgeAnalyticsEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     KnowledgeAnalyticsEvent: GameEvent {
         /// `knowledgeId`, of `KnowledgeId`.
         knowledge_id: crate::typed::KnowledgeId = "knowledgeId",
@@ -7782,7 +8500,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(KnowledgeAnalyticsEvent = "ecs::KnowledgeAnalyticsEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::KnowledgeEventType`, 1 bytes.
+    /// The game's enum `ecs::KnowledgeEventType`, 1 byte.
     KnowledgeEventType {
         /// `None`, 0.
         None = "None",
@@ -7804,7 +8522,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::KnowledgeGained`, 40 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::KnowledgeGained`, 40 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     KnowledgeGained: GameEvent {
         /// `targetType`, of `ecs::KnowledgeEventType`.
         target_type: KnowledgeEventType = "targetType",
@@ -7825,7 +8545,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(KnowledgeGained = "ecs::KnowledgeGained": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::KnowledgeGrantsExperienceEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::KnowledgeGrantsExperienceEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     KnowledgeGrantsExperienceEvent: GameEvent {
         /// `experienceGainId`, of `HashKey32`.
         experience_gain_id: crate::typed::HashKey32 = "experienceGainId",
@@ -7836,7 +8558,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(KnowledgeGrantsExperienceEvent = "ecs::KnowledgeGrantsExperienceEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::KnowledgeQuery`, 124 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::KnowledgeQuery`, 124 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     KnowledgeQuery: SpawnComponent {
         /// `query`, of `KnowledgeQueryData`.
         query: crate::typed::KnowledgeQueryData = "query",
@@ -7847,7 +8571,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(KnowledgeQuery = "ecs::KnowledgeQuery": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::KnowledgeTrigger`, 128 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::KnowledgeTrigger`, 128 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     KnowledgeTrigger: SpawnComponent {
         /// `knowledgeUnlockOperations`, of `StaticArray<KnowledgeTriggerOperation,8>`.
         knowledge_unlock_operations: ::std::vec::Vec<crate::typed::KnowledgeTriggerOperation> = "knowledgeUnlockOperations",
@@ -7856,7 +8582,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(KnowledgeTrigger = "ecs::KnowledgeTrigger": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::KnowledgeTriggerOnKill`, 104 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::KnowledgeTriggerOnKill`, 104 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     KnowledgeTriggerOnKill: Component {
         /// `useSceneKnowledgeTrigger`, of `bool`.
         use_scene_knowledge_trigger: bool = "useSceneKnowledgeTrigger",
@@ -7871,21 +8599,27 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(KnowledgeTriggerOnKill = "ecs::KnowledgeTriggerOnKill": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::KnowledgeTriggerRange`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::KnowledgeTriggerRange`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     KnowledgeTriggerRange: Component {
     }
 }
 crate::typed::runtime::named!(KnowledgeTriggerRange = "ecs::KnowledgeTriggerRange": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::KnowledgeTriggerToggle`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::KnowledgeTriggerToggle`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     KnowledgeTriggerToggle: Component {
     }
 }
 crate::typed::runtime::named!(KnowledgeTriggerToggle = "ecs::KnowledgeTriggerToggle": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::KnowledgeUiWorldEvent`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::KnowledgeUiWorldEvent`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     KnowledgeUiWorldEvent: Component {
         /// `triggerEvent`, of `ObjectReference<FbUiWorldEvent>`.
         trigger_event: crate::content::Guid = "triggerEvent",
@@ -7894,7 +8628,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(KnowledgeUiWorldEvent = "ecs::KnowledgeUiWorldEvent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Ladder`, 36 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Ladder`, 36 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Ladder: Component {
         /// `topOffset`, of `float3`.
         top_offset: crate::typed::Float3 = "topOffset",
@@ -7907,7 +8643,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Ladder = "ecs::Ladder": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LastEnemyValue`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LastEnemyValue`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LastEnemyValue: Component {
         /// `lastEnemyValue`, of `float32`.
         last_enemy_value: f32 = "lastEnemyValue",
@@ -7916,7 +8654,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LastEnemyValue = "ecs::LastEnemyValue": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LastFootDownInfo`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::LastFootDownInfo`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     LastFootDownInfo: Component {
         /// `footDownEventTime`, of `Time`.
         foot_down_event_time: crate::typed::Time = "footDownEventTime",
@@ -7927,7 +8667,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LastFootDownInfo = "ecs::LastFootDownInfo": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LastTransform`, 72 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LastTransform`, 72 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LastTransform: Component {
         /// `transform`, of `WorldTransform`.
         transform: crate::typed::WorldTransform = "transform",
@@ -7938,7 +8680,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LastTransform = "ecs::LastTransform": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LerpRenderTransform`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::LerpRenderTransform`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     LerpRenderTransform: Component {
         /// `isInitialized`, of `bool`.
         is_initialized: bool = "isInitialized",
@@ -7961,7 +8705,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LerpRenderTransform = "ecs::LerpRenderTransform": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LerpTransform`, 272 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LerpTransform`, 272 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LerpTransform: Component {
         /// `targetTransforms`, of `StaticArray<WorldTransform,3>`.
         target_transforms: ::std::vec::Vec<crate::typed::WorldTransform> = "targetTransforms",
@@ -7992,7 +8738,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::LerpTransformTarget`, 1 bytes.
+    /// The game's enum `ecs::LerpTransformTarget`, 1 byte.
     LerpTransformTarget {
         /// `ClimbingTransformStart`, 0.
         ClimbingTransformStart = "ClimbingTransformStart",
@@ -8004,7 +8750,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Level`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Level`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Level: UInt32Attribute {
         /// `dataStorage`, of `StaticArray<uint32,2>`.
         data_storage: ::std::vec::Vec<u32> = "dataStorage",
@@ -8013,7 +8761,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Level = "ecs::Level": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LevelUpEvent`, 56 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::LevelUpEvent`, 56 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     LevelUpEvent: GameEvent {
         /// `position`, of `WorldPosition`.
         position: crate::typed::WorldPosition = "position",
@@ -8028,7 +8778,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LevelUpEvent = "ecs::LevelUpEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LifeCondition`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LifeCondition`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LifeCondition: Component {
         /// `keepAliveMask`, of `actor::StateMask`.
         keep_alive_mask: crate::typed::actor::StateMask = "keepAliveMask",
@@ -8041,7 +8793,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LifeCondition = "ecs::LifeCondition": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LifeTime`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LifeTime`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LifeTime: Component {
         /// `lifeTime`, of `Time`.
         life_time: crate::typed::Time = "lifeTime",
@@ -8058,7 +8812,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LifeTime = "ecs::LifeTime": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LimitedEntitySpawn`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LimitedEntitySpawn`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LimitedEntitySpawn: Component {
         /// `spawnedEntities`, of `StaticArray<ecs::EntityId,12>`.
         spawned_entities: ::std::vec::Vec<EntityId> = "spawnedEntities",
@@ -8067,7 +8823,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LimitedEntitySpawn = "ecs::LimitedEntitySpawn": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::LineOfSightState`, 1 bytes.
+    /// The game's enum `ecs::LineOfSightState`, 1 byte.
     LineOfSightState {
         /// `None`, 0.
         None = "None",
@@ -8081,7 +8837,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LinkClientToggleStateToParentToggleState`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::LinkClientToggleStateToParentToggleState`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     LinkClientToggleStateToParentToggleState: Component {
         /// `targetState`, of `bool`.
         target_state: bool = "targetState",
@@ -8090,7 +8848,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LinkClientToggleStateToParentToggleState = "ecs::LinkClientToggleStateToParentToggleState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LinkToggleStateToEnemyPhase`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LinkToggleStateToEnemyPhase`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LinkToggleStateToEnemyPhase: Component {
         /// `phase`, of `ObjectReference<EnemyPhase>`.
         phase: crate::content::Guid = "phase",
@@ -8101,7 +8861,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LinkToggleStateToEnemyPhase = "ecs::LinkToggleStateToEnemyPhase": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LinkToggleStateToEnemyStates`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LinkToggleStateToEnemyStates`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LinkToggleStateToEnemyStates: Component {
         /// `states`, of `enemy01::StateMask`.
         states: crate::typed::enemy01::StateMask = "states",
@@ -8112,7 +8874,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LinkToggleStateToEnemyStates = "ecs::LinkToggleStateToEnemyStates": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LinkToggleStateToParentEnemyPhase`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LinkToggleStateToParentEnemyPhase`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LinkToggleStateToParentEnemyPhase: Component {
         /// `phase`, of `ObjectReference<EnemyPhase>`.
         phase: crate::content::Guid = "phase",
@@ -8123,7 +8887,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LinkToggleStateToParentEnemyPhase = "ecs::LinkToggleStateToParentEnemyPhase": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LinkToggleStateToParentEnemyStates`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LinkToggleStateToParentEnemyStates`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LinkToggleStateToParentEnemyStates: Component {
         /// `states`, of `enemy01::StateMask`.
         states: crate::typed::enemy01::StateMask = "states",
@@ -8134,7 +8900,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LinkToggleStateToParentEnemyStates = "ecs::LinkToggleStateToParentEnemyStates": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LinkToggleStateToParentSignalState`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LinkToggleStateToParentSignalState`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LinkToggleStateToParentSignalState: Component {
         /// `signal`, of `SignalReference`.
         signal: crate::typed::SignalReference = "signal",
@@ -8145,7 +8913,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LinkToggleStateToParentSignalState = "ecs::LinkToggleStateToParentSignalState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LinkToggleStateToParentToggleState`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LinkToggleStateToParentToggleState`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LinkToggleStateToParentToggleState: Component {
         /// `targetState`, of `bool`.
         target_state: bool = "targetState",
@@ -8154,7 +8924,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LinkToggleStateToParentToggleState = "ecs::LinkToggleStateToParentToggleState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LinkToggleStateToSignalState`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LinkToggleStateToSignalState`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LinkToggleStateToSignalState: Component {
         /// `signal`, of `SignalReference`.
         signal: crate::typed::SignalReference = "signal",
@@ -8165,7 +8937,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LinkToggleStateToSignalState = "ecs::LinkToggleStateToSignalState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LocaTagComponent`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::LocaTagComponent`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     LocaTagComponent: Component {
         /// `locaTag`, of `LocaTagReference`.
         loca_tag: crate::typed::LocaTagReference = "locaTag",
@@ -8177,7 +8951,9 @@ crate::typed::runtime::named!(LocaTagComponent = "ecs::LocaTagComponent": Compon
 pub type LocalPlayerMask = u8;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LocalSignalReceiver`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LocalSignalReceiver`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     LocalSignalReceiver: Component {
         /// `signal`, of `SignalReference`.
         signal: crate::typed::SignalReference = "signal",
@@ -8188,7 +8964,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LocalSignalReceiver = "ecs::LocalSignalReceiver": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Location`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Location`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Location: Component {
         /// `isInLocation`, of `ecs::LocalPlayerMask`.
         is_in_location: LocalPlayerMask = "isInLocation",
@@ -8197,7 +8975,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Location = "ecs::Location": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::LockStateModifierFlag`, 1 bytes.
+    /// The game's enum `ecs::LockStateModifierFlag`, 1 byte.
     LockStateModifierFlag {
         /// `LockOnState`, 0.
         LockOnState = "LockOnState",
@@ -8207,7 +8985,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::LockedTargetFlags`, 1 bytes.
+    /// The game's enum `ecs::LockedTargetFlags`, 1 byte.
     LockedTargetFlags {
         /// `Static`, 0.
         Static = "Static",
@@ -8225,7 +9003,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Locomotion`, 632 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Locomotion`, 632 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Locomotion: Component {
         /// `springAccelerationConfig`, of `ecs::LocomotionSpringAccelerationConfig`.
         spring_acceleration_config: LocomotionSpringAccelerationConfig = "springAccelerationConfig",
@@ -8280,7 +9060,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::LocomotionGait`, 1 bytes.
+    /// The game's enum `ecs::LocomotionGait`, 1 byte.
     LocomotionGait {
         /// `None`, 0.
         None = "None",
@@ -8310,7 +9090,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::LocomotionSpeedSelector`, 1 bytes.
+    /// The game's enum `ecs::LocomotionSpeedSelector`, 1 byte.
     LocomotionSpeedSelector {
         /// `Zero`, 0.
         Zero = "Zero",
@@ -8388,7 +9168,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::LocomotionState`, 1 bytes.
+    /// The game's enum `ecs::LocomotionState`, 1 byte.
     LocomotionState {
         /// `Walking`, 0.
         Walking = "Walking",
@@ -8512,7 +9292,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LogicEntityPlacedEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::LogicEntityPlacedEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     LogicEntityPlacedEvent: GameEvent {
         /// `placedByPlayerId`, of `ecs::EntityId`.
         placed_by_player_id: EntityId = "placedByPlayerId",
@@ -8523,7 +9305,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LogicEntityPlacedEvent = "ecs::LogicEntityPlacedEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LogicGraphComponent`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::LogicGraphComponent`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     LogicGraphComponent: Component {
         /// `graphId`, of `LogicGraphId`.
         graph_id: crate::typed::LogicGraphId = "graphId",
@@ -8532,7 +9316,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LogicGraphComponent = "ecs::LogicGraphComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LogicGraphNodeComponent`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::LogicGraphNodeComponent`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     LogicGraphNodeComponent: Component {
         /// `type`, of `ObjectReference<LogicEntityTypeDefinition>`.
         r#type: crate::content::Guid = "type",
@@ -8543,7 +9329,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LogicGraphNodeComponent = "ecs::LogicGraphNodeComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LogicGraphNodeComponentClient`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::LogicGraphNodeComponentClient`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     LogicGraphNodeComponentClient: Component {
         /// `isInCloseToPlayerList`, of `bool`.
         is_in_close_to_player_list: bool = "isInCloseToPlayerList",
@@ -8552,7 +9340,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LogicGraphNodeComponentClient = "ecs::LogicGraphNodeComponentClient": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LogicGraphNodeConnected`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::LogicGraphNodeConnected`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     LogicGraphNodeConnected: Component {
         /// `writerGraphId`, of `LogicGraphId`.
         writer_graph_id: crate::typed::LogicGraphId = "writerGraphId",
@@ -8567,7 +9357,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LogicGraphNodeConnected = "ecs::LogicGraphNodeConnected": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LogicGraphStateComponent`, 64 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::LogicGraphStateComponent`, 64 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     LogicGraphStateComponent: Component {
         /// `errorVfx`, of `VfxReference`.
         error_vfx: crate::typed::VfxReference = "errorVfx",
@@ -8582,7 +9374,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LogicGraphStateComponent = "ecs::LogicGraphStateComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LogicGraphTrigger`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::LogicGraphTrigger`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     LogicGraphTrigger: Component {
         /// `queryId`, of `ecs::RangeQueryId`.
         query_id: RangeQueryId = "queryId",
@@ -8595,7 +9389,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LogicGraphTrigger = "ecs::LogicGraphTrigger": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LogicTriggerShape`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::LogicTriggerShape`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     LogicTriggerShape: TriggerShape {
     }
 }
@@ -8612,7 +9408,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LoginEvent`, 4 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LoginEvent`, 4 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     LoginEvent: Event {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -8629,7 +9427,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LoopedMovementFx`, 76 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::LoopedMovementFx`, 76 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     LoopedMovementFx: Component {
         /// `enableFor`, of `ecs::LoopedMovementFxType`.
         enable_for: LoopedMovementFxType = "enableFor",
@@ -8648,7 +9448,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LoopedMovementFx = "ecs::LoopedMovementFx": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::LoopedMovementFxType`, 1 bytes.
+    /// The game's enum `ecs::LoopedMovementFxType`, 1 byte.
     LoopedMovementFxType {
         /// `Platform`, 0.
         Platform = "Platform",
@@ -8658,7 +9458,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Loot`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Loot`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Loot: Component {
         /// `itemId`, of `ItemId`.
         item_id: crate::typed::ItemId = "itemId",
@@ -8669,7 +9471,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Loot = "ecs::Loot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LootInteractionEvent`, 128 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::LootInteractionEvent`, 128 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     LootInteractionEvent: GameEvent {
         /// `guestId`, of `ecs::EntityId`.
         guest_id: EntityId = "guestId",
@@ -8700,7 +9504,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LoreReading`, 80 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::LoreReading`, 80 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     LoreReading: Component {
         /// `description`, of `LocaTagReference`.
         description: crate::typed::LocaTagReference = "description",
@@ -8717,7 +9523,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LoreReading = "ecs::LoreReading": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LoreVoiceover`, 40 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::LoreVoiceover`, 40 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     LoreVoiceover: GameEvent {
         /// `voiceover`, of `VoiceoverResourceReference`.
         voiceover: crate::typed::VoiceoverResourceReference = "voiceover",
@@ -8748,7 +9556,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::LoreVoiceoverState`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::LoreVoiceoverState`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     LoreVoiceoverState: Component {
         /// `voiceover`, of `VoiceoverResourceReference`.
         voiceover: crate::typed::VoiceoverResourceReference = "voiceover",
@@ -8765,7 +9575,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(LoreVoiceoverState = "ecs::LoreVoiceoverState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MagicDamageMod`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MagicDamageMod`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MagicDamageMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,8>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -8774,14 +9586,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MagicDamageMod = "ecs::MagicDamageMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MagicalBarrier`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MagicalBarrier`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MagicalBarrier: Component {
     }
 }
 crate::typed::runtime::named!(MagicalBarrier = "ecs::MagicalBarrier": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MagicalBarrierConnection`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::MagicalBarrierConnection`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     MagicalBarrierConnection: Component {
         /// `signalId`, of `SignalId`.
         signal_id: crate::typed::SignalId = "signalId",
@@ -8796,14 +9612,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MagicalBarrierConnection = "ecs::MagicalBarrierConnection": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MagicalBarrierConnectionInit`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MagicalBarrierConnectionInit`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MagicalBarrierConnectionInit: SpawnComponent {
     }
 }
 crate::typed::runtime::named!(MagicalBarrierConnectionInit = "ecs::MagicalBarrierConnectionInit": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Mana`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Mana`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Mana: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,8>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -8812,7 +9632,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Mana = "ecs::Mana": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ManaCostMod`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ManaCostMod`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ManaCostMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,1>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -8821,7 +9643,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ManaCostMod = "ecs::ManaCostMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ManaRechargeMod`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ManaRechargeMod`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ManaRechargeMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,1>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -8830,14 +9654,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ManaRechargeMod = "ecs::ManaRechargeMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ManaRegeneration`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ManaRegeneration`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ManaRegeneration: AttributeRegeneration {
     }
 }
 crate::typed::runtime::named!(ManaRegeneration = "ecs::ManaRegeneration": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MapMarker`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::MapMarker`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     MapMarker: Component {
         /// `markerId`, of `LocaTagReference`.
         marker_id: crate::typed::LocaTagReference = "markerId",
@@ -8852,7 +9680,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MapMarker = "ecs::MapMarker": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MapMarkerToggleState`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::MapMarkerToggleState`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     MapMarkerToggleState: Component {
         /// `visibilityMap`, of `ecs::MapMarkerVisibilityStateMask`.
         visibility_map: MapMarkerVisibilityStateMask = "visibilityMap",
@@ -8861,7 +9691,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MapMarkerToggleState = "ecs::MapMarkerToggleState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MapMarkerUnlockRequirements`, 400 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::MapMarkerUnlockRequirements`, 400 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     MapMarkerUnlockRequirements: SpawnComponent {
         /// `hintState`, of `GameKnowledgeRequirement`.
         hint_state: crate::typed::GameKnowledgeRequirement = "hintState",
@@ -8882,7 +9714,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MapMarkerUnlockRequirements = "ecs::MapMarkerUnlockRequirements": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MapMarkerVisibilityState`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::MapMarkerVisibilityState`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     MapMarkerVisibilityState: Component {
         /// `visibility`, of `ecs::MapMarkerVisibilityType`.
         visibility: MapMarkerVisibilityType = "visibility",
@@ -8898,7 +9732,7 @@ crate::typed::runtime::named!(MapMarkerVisibilityState = "ecs::MapMarkerVisibili
 pub type MapMarkerVisibilityStateMask = crate::typed::Flags<MapMarkerVisibilityType>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::MapMarkerVisibilityType`, 1 bytes.
+    /// The game's enum `ecs::MapMarkerVisibilityType`, 1 byte.
     MapMarkerVisibilityType {
         /// `Hidden`, 0.
         Hidden = "Hidden",
@@ -8940,7 +9774,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MaxSkeletonSpellCount`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MaxSkeletonSpellCount`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MaxSkeletonSpellCount: UInt32Attribute {
         /// `dataStorage`, of `StaticArray<uint32,1>`.
         data_storage: ::std::vec::Vec<u32> = "dataStorage",
@@ -8949,7 +9785,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MaxSkeletonSpellCount = "ecs::MaxSkeletonSpellCount": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MaxTotemCount`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MaxTotemCount`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MaxTotemCount: UInt32Attribute {
         /// `dataStorage`, of `StaticArray<uint32,1>`.
         data_storage: ::std::vec::Vec<u32> = "dataStorage",
@@ -8958,7 +9796,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MaxTotemCount = "ecs::MaxTotemCount": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MeleeDamageMod`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MeleeDamageMod`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MeleeDamageMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,8>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -8977,7 +9817,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MiningNode`, 96 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MiningNode`, 96 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MiningNode: Component {
         /// `resourceType`, of `ecs::GatherResourceType`.
         resource_type: GatherResourceType = "resourceType",
@@ -8998,7 +9840,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MiningNode = "ecs::MiningNode": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MiningNodeKnowledge`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MiningNodeKnowledge`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MiningNodeKnowledge: Component {
         /// `useSpawnTriggerKnowledge`, of `bool`.
         use_spawn_trigger_knowledge: bool = "useSpawnTriggerKnowledge",
@@ -9011,7 +9855,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MiningNodeKnowledge = "ecs::MiningNodeKnowledge": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ModelComponent`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ModelComponent`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ModelComponent: Component {
         /// `modelHandle`, of `uint32`.
         model_handle: u32 = "modelHandle",
@@ -9020,7 +9866,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ModelComponent = "ecs::ModelComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ModelDynamic`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ModelDynamic`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ModelDynamic: Component {
         /// `lastModel`, of `ObjectReference<Model>`.
         last_model: crate::content::Guid = "lastModel",
@@ -9031,7 +9879,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ModelDynamic = "ecs::ModelDynamic": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ModelRenderHint`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ModelRenderHint`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     ModelRenderHint: Component {
         /// `toggleModifier`, of `ecs::ToggleModifier`.
         toggle_modifier: ToggleModifier = "toggleModifier",
@@ -9040,7 +9890,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ModelRenderHint = "ecs::ModelRenderHint": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ModelResource`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. A resource: read and serve it through [`crate::typed::ResourceType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ModelResource`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. A resource: read and serve it through [`crate::typed::ResourceType`]. The game holds it on the client only.
     ModelResource: Component {
         /// `model`, of `ObjectReference<Model>`.
         model: crate::content::Guid = "model",
@@ -9049,7 +9901,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ModelResource = "ecs::ModelResource": Component, Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MoveColliderWithRay`, 88 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MoveColliderWithRay`, 88 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MoveColliderWithRay: Component {
         /// `checkDirection`, of `ecs::RayDirection`.
         check_direction: RayDirection = "checkDirection",
@@ -9068,7 +9922,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MoveColliderWithRay = "ecs::MoveColliderWithRay": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Movement`, 80 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Movement`, 80 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Movement: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,18>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -9077,7 +9933,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Movement = "ecs::Movement": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MovementCollider`, 84 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::MovementCollider`, 84 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     MovementCollider: Component {
         /// `yOffset`, of `float32`.
         y_offset: f32 = "yOffset",
@@ -9098,7 +9956,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MovementCollider = "ecs::MovementCollider": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MovementColliderConfig`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::MovementColliderConfig`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     MovementColliderConfig: Component {
         /// `width`, of `float32`.
         width: f32 = "width",
@@ -9159,7 +10019,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::MovementMode`, 1 bytes.
+    /// The game's enum `ecs::MovementMode`, 1 byte.
     MovementMode {
         /// `Normal`, 0.
         Normal = "Normal",
@@ -9175,7 +10035,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MovementSensor`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MovementSensor`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MovementSensor: Component {
         /// `queryId`, of `ecs::RangeQueryId`.
         query_id: RangeQueryId = "queryId",
@@ -9184,7 +10046,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MovementSensor = "ecs::MovementSensor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MovementVector`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MovementVector`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MovementVector: Component {
         /// `velocity`, of `float3`.
         velocity: crate::typed::Float3 = "velocity",
@@ -9195,14 +10059,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MovementVector = "ecs::MovementVector": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MovingPlatform`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MovingPlatform`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MovingPlatform: Component {
     }
 }
 crate::typed::runtime::named!(MovingPlatform = "ecs::MovingPlatform": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MultiSignalReceiver`, 424 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::MultiSignalReceiver`, 424 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     MultiSignalReceiver: SpawnComponent {
         /// `evaluate`, of `bool`.
         evaluate: bool = "evaluate",
@@ -9229,7 +10097,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(MultiSignalReceiver = "ecs::MultiSignalReceiver": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::MultiSignalReceiverCounter`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::MultiSignalReceiverCounter`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     MultiSignalReceiverCounter: Component {
         /// `activeCount`, of `uint8`.
         active_count: u8 = "activeCount",
@@ -9250,7 +10120,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkActor`, 208 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkActor`, 208 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkActor: Component {
         /// `sequenceRuntimeId`, of `actor::SequenceRuntimeId`.
         sequence_runtime_id: crate::typed::actor::SequenceRuntimeId = "sequenceRuntimeId",
@@ -9277,7 +10149,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkActor = "ecs::NetworkActor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkAggro`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkAggro`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkAggro: Component {
         /// `targets`, of `StaticArray<ecs::AggroTargetNetworkData,6>`.
         targets: ::std::vec::Vec<AggroTargetNetworkData> = "targets",
@@ -9286,7 +10160,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkAggro = "ecs::NetworkAggro": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkAnimal`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkAnimal`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkAnimal: Component {
         /// `needs`, of `animal::NeedsMask`.
         needs: crate::typed::animal::NeedsMask = "needs",
@@ -9295,14 +10171,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkAnimal = "ecs::NetworkAnimal": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkAnimationGraphInput`, 568 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkAnimationGraphInput`, 568 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkAnimationGraphInput: BaseAnimationGraphInput {
     }
 }
 crate::typed::runtime::named!(NetworkAnimationGraphInput = "ecs::NetworkAnimationGraphInput": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkCameraControl`, 3 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkCameraControl`, 3 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkCameraControl: Component {
         /// `isCameraIdLocked`, of `bool`.
         is_camera_id_locked: bool = "isCameraIdLocked",
@@ -9315,7 +10195,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkCameraControl = "ecs::NetworkCameraControl": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkComfort`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkComfort`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkComfort: Component {
         /// `hearthEntityId`, of `ecs::EntityId`.
         hearth_entity_id: EntityId = "hearthEntityId",
@@ -9326,14 +10208,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkComfort = "ecs::NetworkComfort": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkConsumedPlayerInput`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkConsumedPlayerInput`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkConsumedPlayerInput: BaseServerConsumedPlayerInput {
     }
 }
 crate::typed::runtime::named!(NetworkConsumedPlayerInput = "ecs::NetworkConsumedPlayerInput": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkCookingData`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkCookingData`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkCookingData: Component {
         /// `cookingHearthEntityId`, of `ecs::EntityId`.
         cooking_hearth_entity_id: EntityId = "cookingHearthEntityId",
@@ -9344,7 +10230,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkCookingData = "ecs::NetworkCookingData": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkCursor`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkCursor`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkCursor: Component {
         /// `currentBuildingItemId`, of `ItemId`.
         current_building_item_id: crate::typed::ItemId = "currentBuildingItemId",
@@ -9369,7 +10257,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkCursor = "ecs::NetworkCursor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkDurability`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkDurability`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkDurability: Component {
         /// `durability`, of `uint16`.
         durability: u16 = "durability",
@@ -9380,7 +10270,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkDurability = "ecs::NetworkDurability": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkEnemy`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkEnemy`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkEnemy: Component {
         /// `state`, of `enemy01::State`.
         state: crate::typed::enemy01::State = "state",
@@ -9393,7 +10285,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkEnemy = "ecs::NetworkEnemy": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkFishing`, 96 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkFishing`, 96 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkFishing: Component {
         /// `state`, of `fishing::State`.
         state: crate::typed::fishing::State = "state",
@@ -9444,7 +10338,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkFishing = "ecs::NetworkFishing": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkFishingFish`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkFishingFish`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkFishingFish: Component {
         /// `state`, of `fishable::FishState`.
         state: crate::typed::fishable::FishState = "state",
@@ -9461,7 +10357,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkFishingFish = "ecs::NetworkFishingFish": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkFishingFloat`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkFishingFloat`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkFishingFloat: Component {
         /// `hookedFish`, of `ecs::EntityId`.
         hooked_fish: EntityId = "hookedFish",
@@ -9474,7 +10372,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkFishingFloat = "ecs::NetworkFishingFloat": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkFuel`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkFuel`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkFuel: Component {
         /// `fuel`, of `uint16`.
         fuel: u16 = "fuel",
@@ -9485,7 +10385,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkFuel = "ecs::NetworkFuel": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkGrowth`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkGrowth`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkGrowth: Component {
         /// `voxelMaterialId`, of `VoxelMaterialId`.
         voxel_material_id: crate::typed::VoxelMaterialId = "voxelMaterialId",
@@ -9496,7 +10398,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkGrowth = "ecs::NetworkGrowth": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkHealth`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkHealth`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkHealth: Component {
         /// `health`, of `uint32`.
         health: u32 = "health",
@@ -9507,7 +10411,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkHealth = "ecs::NetworkHealth": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkLevel`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkLevel`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkLevel: Component {
         /// `level`, of `uint16`.
         level: u16 = "level",
@@ -9516,7 +10422,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkLevel = "ecs::NetworkLevel": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkLocomotion`, 272 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkLocomotion`, 272 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkLocomotion: Component {
         /// `headLookAtSettings`, of `ecs::HeadLookAtSettings`.
         head_look_at_settings: HeadLookAtSettings = "headLookAtSettings",
@@ -9567,7 +10475,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkLocomotion = "ecs::NetworkLocomotion": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkMovementVelocity`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkMovementVelocity`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkMovementVelocity: Component {
         /// `speed`, of `float32`.
         speed: f32 = "speed",
@@ -9578,7 +10488,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkMovementVelocity = "ecs::NetworkMovementVelocity": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkPlayerAttributes`, 256 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkPlayerAttributes`, 256 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkPlayerAttributes: Component {
         /// `armorAttributes`, of `ecs::ArmorAttributes`.
         armor_attributes: ArmorAttributes = "armorAttributes",
@@ -9775,7 +10687,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkPlayerAttributes = "ecs::NetworkPlayerAttributes": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkRangedWeapon`, 112 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkRangedWeapon`, 112 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkRangedWeapon: Component {
         /// `currentState`, of `ranged_weapon::State`.
         current_state: crate::typed::ranged_weapon::State = "currentState",
@@ -9816,7 +10730,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkSelectedTargets`, 264 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkSelectedTargets`, 264 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkSelectedTargets: Component {
         /// `targetIds`, of `StaticArray<ecs::GameObjectId,16>`.
         target_ids: ::std::vec::Vec<GameObjectId> = "targetIds",
@@ -9829,7 +10745,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkSelectedTargets = "ecs::NetworkSelectedTargets": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkServerProgress`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkServerProgress`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkServerProgress: Component {
         /// `level`, of `uint16`.
         level: u16 = "level",
@@ -9848,7 +10766,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkServerProgress = "ecs::NetworkServerProgress": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkStamina`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkStamina`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkStamina: Component {
         /// `stamina`, of `uint16`.
         stamina: u16 = "stamina",
@@ -9859,7 +10779,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkStamina = "ecs::NetworkStamina": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkSubmerge`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkSubmerge`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkSubmerge: Component {
         /// `submergeDepth`, of `float`.
         submerge_depth: crate::typed::Float = "submergeDepth",
@@ -9868,14 +10790,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkSubmerge = "ecs::NetworkSubmerge": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkToggleState`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkToggleState`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkToggleState: ToggleState {
     }
 }
 crate::typed::runtime::named!(NetworkToggleState = "ecs::NetworkToggleState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NetworkWildlife`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NetworkWildlife`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NetworkWildlife: Component {
         /// `alertState`, of `ecs::AlertState`.
         alert_state: AlertState = "alertState",
@@ -9890,14 +10816,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NetworkWildlife = "ecs::NetworkWildlife": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NewCharacterSetup`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::NewCharacterSetup`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     NewCharacterSetup: Component {
     }
 }
 crate::typed::runtime::named!(NewCharacterSetup = "ecs::NewCharacterSetup": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NoBuildZone`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NoBuildZone`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NoBuildZone: Component {
         /// `isStrict`, of `bool`.
         is_strict: bool = "isStrict",
@@ -9906,14 +10836,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NoBuildZone = "ecs::NoBuildZone": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NoParentDamageSusceptibility`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::NoParentDamageSusceptibility`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     NoParentDamageSusceptibility: Component {
     }
 }
 crate::typed::runtime::named!(NoParentDamageSusceptibility = "ecs::NoParentDamageSusceptibility": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NoiseEvent`, 168 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::NoiseEvent`, 168 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     NoiseEvent: GameEvent {
         /// `senderId`, of `ecs::EntityId`.
         sender_id: EntityId = "senderId",
@@ -9932,7 +10866,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NoiseEvent = "ecs::NoiseEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::NoiseEventFlag`, 1 bytes.
+    /// The game's enum `ecs::NoiseEventFlag`, 1 byte.
     NoiseEventFlag {
         /// `IsSneaking`, 0.
         IsSneaking = "IsSneaking",
@@ -9943,7 +10877,9 @@ crate::typed::runtime::reflected_enum! {
 pub type NoiseEventFlagMask = crate::typed::Flags<NoiseEventFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NonModalHint`, 168 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::NonModalHint`, 168 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     NonModalHint: Component {
         /// `hasCloseRangeActivation`, of `bool`.
         has_close_range_activation: bool = "hasCloseRangeActivation",
@@ -9964,7 +10900,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NonModalHint = "ecs::NonModalHint": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NotifierComponent`, 92 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NotifierComponent`, 92 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NotifierComponent: Component {
         /// `notifierOffset`, of `ecs::Offset`.
         notifier_offset: Offset = "notifierOffset",
@@ -9981,7 +10919,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NotifierComponent = "ecs::NotifierComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NotifyEnvFxEvent`, 88 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::NotifyEnvFxEvent`, 88 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     NotifyEnvFxEvent: GameEvent {
         /// `eventGuid`, of `Guid`.
         event_guid: crate::content::Guid = "eventGuid",
@@ -10004,7 +10944,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NotifyEnvFxEvent = "ecs::NotifyEnvFxEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NotifyEvent`, 224 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::NotifyEvent`, 224 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     NotifyEvent: GameEvent {
         /// `offset`, of `ecs::Offset`.
         offset: Offset = "offset",
@@ -10035,7 +10977,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NotifyEvent = "ecs::NotifyEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::NotifyEventType`, 1 bytes.
+    /// The game's enum `ecs::NotifyEventType`, 1 byte.
     NotifyEventType {
         /// `Normal`, 0.
         Normal = "Normal",
@@ -10047,7 +10989,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcActionSequences`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::NpcActionSequences`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     NpcActionSequences: Component {
         /// `defaultInteractionSequence`, of `actor::ActorSequenceReference`.
         default_interaction_sequence: crate::typed::actor::ActorSequenceReference = "defaultInteractionSequence",
@@ -10060,7 +11004,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NpcActionSequences = "ecs::NpcActionSequences": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcBed`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::NpcBed`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     NpcBed: Component {
         /// `associatedNpc`, of `NpcId`.
         associated_npc: crate::typed::NpcId = "associatedNpc",
@@ -10069,7 +11015,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NpcBed = "ecs::NpcBed": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcCommandEvent`, 72 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::NpcCommandEvent`, 72 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     NpcCommandEvent: GameEvent {
         /// `type`, of `ecs::NpcCommandType`.
         r#type: NpcCommandType = "type",
@@ -10082,7 +11030,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NpcCommandEvent = "ecs::NpcCommandEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::NpcCommandType`, 1 bytes.
+    /// The game's enum `ecs::NpcCommandType`, 1 byte.
     NpcCommandType {
         /// `Reset`, 0.
         Reset = "Reset",
@@ -10092,7 +11040,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcCommon`, 1688 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::NpcCommon`, 1688 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     NpcCommon: Component {
         /// `interactionStates`, of `ecs::NpcInteractionStates`.
         interaction_states: NpcInteractionStates = "interactionStates",
@@ -10163,7 +11113,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NpcCommon = "ecs::NpcCommon": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcDialog`, 120 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NpcDialog`, 120 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NpcDialog: Component {
         /// `isFlame`, of `bool`.
         is_flame: bool = "isFlame",
@@ -10178,7 +11130,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NpcDialog = "ecs::NpcDialog": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcDialogClientSync`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::NpcDialogClientSync`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     NpcDialogClientSync: Component {
         /// `selectedOptionId`, of `LocaTagId`.
         selected_option_id: crate::typed::LocaTagId = "selectedOptionId",
@@ -10189,7 +11143,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NpcDialogClientSync = "ecs::NpcDialogClientSync": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcDialogPartner`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NpcDialogPartner`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NpcDialogPartner: Component {
         /// `isInGreetingRange`, of `bool`.
         is_in_greeting_range: bool = "isInGreetingRange",
@@ -10218,7 +11174,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcInputEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::NpcInputEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     NpcInputEvent: GameEvent {
         /// `npcId`, of `NpcId`.
         npc_id: crate::typed::NpcId = "npcId",
@@ -10265,7 +11223,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::NpcInteractionState`, 1 bytes.
+    /// The game's enum `ecs::NpcInteractionState`, 1 byte.
     NpcInteractionState {
         /// `IsTurning`, 0.
         IsTurning = "IsTurning",
@@ -10304,7 +11262,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::NpcInteractionTargetState`, 1 bytes.
+    /// The game's enum `ecs::NpcInteractionTargetState`, 1 byte.
     NpcInteractionTargetState {
         /// `HasOffset`, 0.
         HasOffset = "HasOffset",
@@ -10325,7 +11283,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcSetup`, 248 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::NpcSetup`, 248 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     NpcSetup: Component {
         /// `name`, of `LocaTagReference`.
         name: crate::typed::LocaTagReference = "name",
@@ -10348,7 +11308,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(NpcSetup = "ecs::NpcSetup": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcSocializing`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::NpcSocializing`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     NpcSocializing: Component {
         /// `interactionLifetime`, of `Time`.
         interaction_lifetime: crate::typed::Time = "interactionLifetime",
@@ -10371,7 +11333,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::NpcState`, 128 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::NpcState`, 128 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     NpcState: Component {
         /// `defaultGreetingSequence`, of `actor::ActorSequenceReference`.
         default_greeting_sequence: crate::typed::actor::ActorSequenceReference = "defaultGreetingSequence",
@@ -10402,7 +11366,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::NpcTest`, 1 bytes.
+    /// The game's enum `ecs::NpcTest`, 1 byte.
     NpcTest {
         /// `GoToBedEasy`, 0.
         GoToBedEasy = "GoToBedEasy",
@@ -10439,7 +11403,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OnCreate`, 96 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::OnCreate`, 96 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     OnCreate: NotifierComponent {
         /// `slot`, of `AttachmentSlot`.
         slot: crate::typed::AttachmentSlot = "slot",
@@ -10450,7 +11416,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(OnCreate = "ecs::OnCreate": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OnDestroy`, 96 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::OnDestroy`, 96 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     OnDestroy: NotifierComponent {
         /// `noiseRange`, of `float32`.
         noise_range: f32 = "noiseRange",
@@ -10459,7 +11427,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(OnDestroy = "ecs::OnDestroy": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OnDestroyNotifyEvent`, 96 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::OnDestroyNotifyEvent`, 96 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     OnDestroyNotifyEvent: GameEvent {
         /// `transform`, of `WorldTransform`.
         transform: crate::typed::WorldTransform = "transform",
@@ -10472,28 +11442,36 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(OnDestroyNotifyEvent = "ecs::OnDestroyNotifyEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OnFailure`, 92 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::OnFailure`, 92 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     OnFailure: NotifierComponent {
     }
 }
 crate::typed::runtime::named!(OnFailure = "ecs::OnFailure": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OnNeutral`, 92 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::OnNeutral`, 92 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     OnNeutral: NotifierComponent {
     }
 }
 crate::typed::runtime::named!(OnNeutral = "ecs::OnNeutral": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OnSuccess`, 92 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::OnSuccess`, 92 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     OnSuccess: NotifierComponent {
     }
 }
 crate::typed::runtime::named!(OnSuccess = "ecs::OnSuccess": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OpenHudScreenEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::OpenHudScreenEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     OpenHudScreenEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -10516,7 +11494,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Orb`, 84 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Orb`, 84 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Orb: Component {
         /// `pickupNotifier`, of `NotifierReference`.
         pickup_notifier: crate::typed::NotifierReference = "pickupNotifier",
@@ -10535,7 +11515,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Orb = "ecs::Orb": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OverrideLevel`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::OverrideLevel`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     OverrideLevel: Component {
         /// `newLevel`, of `uint32`.
         new_level: u32 = "newLevel",
@@ -10544,7 +11526,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(OverrideLevel = "ecs::OverrideLevel": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OwnerRelationship`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::OwnerRelationship`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     OwnerRelationship: Component {
         /// `ownerEntityId`, of `ecs::EntityId`.
         owner_entity_id: EntityId = "ownerEntityId",
@@ -10553,7 +11537,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(OwnerRelationship = "ecs::OwnerRelationship": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Oxygen`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Oxygen`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Oxygen: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,6>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -10562,7 +11548,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Oxygen = "ecs::Oxygen": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OxygenMaxMod`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::OxygenMaxMod`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     OxygenMaxMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -10571,7 +11559,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(OxygenMaxMod = "ecs::OxygenMaxMod": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::OxygenMode`, 1 bytes.
+    /// The game's enum `ecs::OxygenMode`, 1 byte.
     OxygenMode {
         /// `CantBreatheUnderWater`, 0.
         CantBreatheUnderWater = "CantBreatheUnderWater",
@@ -10581,7 +11569,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::OxygenState`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::OxygenState`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     OxygenState: Component {
         /// `reductionFactor`, of `float`.
         reduction_factor: crate::typed::Float = "reductionFactor",
@@ -10594,7 +11584,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(OxygenState = "ecs::OxygenState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PacifiedState`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PacifiedState`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PacifiedState: Component {
         /// `canBePacified`, of `bool`.
         can_be_pacified: bool = "canBePacified",
@@ -10611,7 +11603,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PacifiedState = "ecs::PacifiedState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Pacify`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Pacify`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Pacify: Component {
         /// `queryId`, of `ecs::RangeQueryId`.
         query_id: RangeQueryId = "queryId",
@@ -10622,14 +11616,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Pacify = "ecs::Pacify": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ParentTargets`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ParentTargets`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ParentTargets: Component {
     }
 }
 crate::typed::runtime::named!(ParentTargets = "ecs::ParentTargets": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ParriableProjectile`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ParriableProjectile`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ParriableProjectile: Component {
         /// `parriedProjectileTemplate`, of `ecs::TemplateReference`.
         parried_projectile_template: TemplateReference = "parriedProjectileTemplate",
@@ -10642,7 +11640,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ParriableProjectile = "ecs::ParriableProjectile": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ParriedProjectile`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ParriedProjectile`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ParriedProjectile: Component {
         /// `originalFaction`, of `FactionType`.
         original_faction: crate::typed::FactionType = "originalFaction",
@@ -10663,7 +11663,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ParryEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ParryEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     ParryEvent: GameEvent {
         /// `attackerEntityId`, of `ecs::EntityId`.
         attacker_entity_id: EntityId = "attackerEntityId",
@@ -10676,7 +11678,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ParryEvent = "ecs::ParryEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ParryProficiency`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ParryProficiency`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ParryProficiency: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -10697,7 +11701,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PathFinder`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PathFinder`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PathFinder: Component {
         /// `horizontalStartSearchRadius`, of `ecs::PathGridDistance`.
         horizontal_start_search_radius: PathGridDistance = "horizontalStartSearchRadius",
@@ -10718,7 +11724,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PathGridInteraction`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PathGridInteraction`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PathGridInteraction: Component {
         /// `interactionObjectType`, of `ecs::PathGridInteractionObjectType`.
         interaction_object_type: PathGridInteractionObjectType = "interactionObjectType",
@@ -10727,7 +11735,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PathGridInteraction = "ecs::PathGridInteraction": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::PathGridInteractionObjectType`, 1 bytes.
+    /// The game's enum `ecs::PathGridInteractionObjectType`, 1 byte.
     PathGridInteractionObjectType {
         /// `Door`, 0.
         Door = "Door",
@@ -10737,7 +11745,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::PathMoveType`, 1 bytes.
+    /// The game's enum `ecs::PathMoveType`, 1 byte.
     PathMoveType {
         /// `Move`, 0.
         Move = "Move",
@@ -10816,7 +11824,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::PathNodeType`, 1 bytes.
+    /// The game's enum `ecs::PathNodeType`, 1 byte.
     PathNodeType {
         /// `None`, 0.
         None = "None",
@@ -10873,7 +11881,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::PathQueryScoreType`, 1 bytes.
+    /// The game's enum `ecs::PathQueryScoreType`, 1 byte.
     PathQueryScoreType {
         /// `Default`, 0.
         Default = "Default",
@@ -10895,7 +11903,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PathWalker`, 92 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PathWalker`, 92 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PathWalker: Component {
         /// `jumpSequence`, of `actor::ActorSequenceReference`.
         jump_sequence: crate::typed::actor::ActorSequenceReference = "jumpSequence",
@@ -10956,7 +11966,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PerkContainer`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PerkContainer`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PerkContainer: Component {
         /// `perkIds`, of `StaticArray<PerkId,5>`.
         perk_ids: ::std::vec::Vec<crate::typed::PerkId> = "perkIds",
@@ -10967,7 +11979,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PerkContainer = "ecs::PerkContainer": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PerkContainerNew`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PerkContainerNew`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PerkContainerNew: Component {
         /// `availablePerks`, of `uint8`.
         available_perks: u8 = "availablePerks",
@@ -10978,7 +11992,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PerkContainerNew = "ecs::PerkContainerNew": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PhysicsUpdate`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PhysicsUpdate`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PhysicsUpdate: Component {
         /// `buoyancy`, of `float`.
         buoyancy: crate::typed::Float = "buoyancy",
@@ -10991,7 +12007,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PhysicsUpdate = "ecs::PhysicsUpdate": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PickingTarget`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PickingTarget`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PickingTarget: Component {
         /// `rayQueryId`, of `ecs::QueryId`.
         ray_query_id: QueryId = "rayQueryId",
@@ -11002,7 +12020,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PickingTarget = "ecs::PickingTarget": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PickupEvent`, 48 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::PickupEvent`, 48 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     PickupEvent: GameEvent {
         /// `position`, of `float3`.
         position: crate::typed::Float3 = "position",
@@ -11023,7 +12043,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PickupEvent = "ecs::PickupEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PickupItem`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PickupItem`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PickupItem: Component {
         /// `itemId`, of `ItemId`.
         item_id: crate::typed::ItemId = "itemId",
@@ -11040,14 +12062,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PickupItem = "ecs::PickupItem": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PickupItemModelSetup`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PickupItemModelSetup`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PickupItemModelSetup: Component {
     }
 }
 crate::typed::runtime::named!(PickupItemModelSetup = "ecs::PickupItemModelSetup": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PickupItemZone`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PickupItemZone`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PickupItemZone: Component {
         /// `lastAttempt`, of `Time`.
         last_attempt: crate::typed::Time = "lastAttempt",
@@ -11056,7 +12082,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PickupItemZone = "ecs::PickupItemZone": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PickupLootSlot`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PickupLootSlot`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PickupLootSlot: Component {
         /// `genericPickupItem`, of `ecs::TemplateReference`.
         generic_pickup_item: TemplateReference = "genericPickupItem",
@@ -11077,21 +12105,27 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PickupLootSlot = "ecs::PickupLootSlot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PideRebalanced`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PideRebalanced`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PideRebalanced: Component {
     }
 }
 crate::typed::runtime::named!(PideRebalanced = "ecs::PideRebalanced": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerBuildingSpark`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PlayerBuildingSpark`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PlayerBuildingSpark: Component {
     }
 }
 crate::typed::runtime::named!(PlayerBuildingSpark = "ecs::PlayerBuildingSpark": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerBuildingSparkSfx`, 64 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::PlayerBuildingSparkSfx`, 64 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     PlayerBuildingSparkSfx: Component {
         /// `idleSfx`, of `SoundContainerReference`.
         idle_sfx: crate::typed::SoundContainerReference = "idleSfx",
@@ -11112,7 +12146,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerBuildingSparkSfx = "ecs::PlayerBuildingSparkSfx": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerCombatTarget`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PlayerCombatTarget`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PlayerCombatTarget: Component {
         /// `targetImportance`, of `ecs::TargetImportance`.
         target_importance: TargetImportance = "targetImportance",
@@ -11172,7 +12208,7 @@ crate::typed::runtime::reflected_struct! {
 pub type PlayerDigitalInput = crate::typed::Flags<PlayerInputType>;
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::PlayerFlags`, 1 bytes.
+    /// The game's enum `ecs::PlayerFlags`, 1 byte.
     PlayerFlags {
         /// `IsSpawned`, 0.
         IsSpawned = "IsSpawned",
@@ -11228,7 +12264,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerFocus`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PlayerFocus`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PlayerFocus: Component {
         /// `position`, of `WorldPosition`.
         position: crate::typed::WorldPosition = "position",
@@ -11247,7 +12285,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerFxSpawner`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PlayerFxSpawner`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PlayerFxSpawner: Component {
         /// `hookShotTargetFx`, of `ecs::PlayerFx`.
         hook_shot_target_fx: PlayerFx = "hookShotTargetFx",
@@ -11270,14 +12310,18 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerInRange`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PlayerInRange`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PlayerInRange: Component {
     }
 }
 crate::typed::runtime::named!(PlayerInRange = "ecs::PlayerInRange": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerInput`, 1472 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PlayerInput`, 1472 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PlayerInput: Component {
         /// `serverTime`, of `Time`.
         server_time: crate::typed::Time = "serverTime",
@@ -11300,7 +12344,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerInput = "ecs::PlayerInput": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::PlayerInputType`, 1 bytes.
+    /// The game's enum `ecs::PlayerInputType`, 1 byte.
     PlayerInputType {
         /// `MainhandAction`, 0.
         MainhandAction = "MainhandAction",
@@ -11420,7 +12464,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerLocomotion`, 72 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PlayerLocomotion`, 72 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PlayerLocomotion: Component {
         /// `averageNormal`, of `float3`.
         average_normal: crate::typed::Float3 = "averageNormal",
@@ -11447,7 +12493,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerLocomotion = "ecs::PlayerLocomotion": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerLowHealth`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PlayerLowHealth`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PlayerLowHealth: Component {
         /// `blendOutDuration`, of `Time`.
         blend_out_duration: crate::typed::Time = "blendOutDuration",
@@ -11458,7 +12506,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerLowHealth = "ecs::PlayerLowHealth": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerPinnedRecipes`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::PlayerPinnedRecipes`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     PlayerPinnedRecipes: Component {
         /// `pinnedRecipe`, of `RecipeId`.
         pinned_recipe: crate::typed::RecipeId = "pinnedRecipe",
@@ -11471,7 +12521,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerPinnedRecipes = "ecs::PlayerPinnedRecipes": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerQuestProgressionMode`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PlayerQuestProgressionMode`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PlayerQuestProgressionMode: Component {
         /// `isInPersonalProgressionMode`, of `bool`.
         is_in_personal_progression_mode: bool = "isInPersonalProgressionMode",
@@ -11482,7 +12534,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerQuestProgressionMode = "ecs::PlayerQuestProgressionMode": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerRelevantEnemies`, 648 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PlayerRelevantEnemies`, 648 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PlayerRelevantEnemies: Component {
         /// `relevantEnemies`, of `StaticArray<ecs::PlayerRelevantTarget,8>`.
         relevant_enemies: ::std::vec::Vec<PlayerRelevantTarget> = "relevantEnemies",
@@ -11517,7 +12571,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::PlayerSettingFlags`, 1 bytes.
+    /// The game's enum `ecs::PlayerSettingFlags`, 1 byte.
     PlayerSettingFlags {
         /// `KeepTargetLockWhenSprinting`, 0.
         KeepTargetLockWhenSprinting = "KeepTargetLockWhenSprinting",
@@ -11554,7 +12608,9 @@ crate::typed::runtime::reflected_enum! {
 pub type PlayerSettingMask = crate::typed::Flags<PlayerSettingFlags>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerSkillsUi`, 136 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PlayerSkillsUi`, 136 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PlayerSkillsUi: Component {
         /// `skillUnlockMasks`, of `ecs::UnlockedSkillsMask`.
         skill_unlock_masks: UnlockedSkillsMask = "skillUnlockMasks",
@@ -11567,7 +12623,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerSkillsUi = "ecs::PlayerSkillsUi": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerSpawnInfoChangeEvent`, 48 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::PlayerSpawnInfoChangeEvent`, 48 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     PlayerSpawnInfoChangeEvent: GameEvent {
         /// `playerCharacterId`, of `CharacterId`.
         player_character_id: crate::typed::CharacterId = "playerCharacterId",
@@ -11580,7 +12638,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerSpawnInfoChangeEvent = "ecs::PlayerSpawnInfoChangeEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerSpawnPoint`, 204 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PlayerSpawnPoint`, 204 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PlayerSpawnPoint: Component {
         /// `target`, of `ecs::PlayerSpawnType`.
         target: PlayerSpawnType = "target",
@@ -11591,7 +12651,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerSpawnPoint = "ecs::PlayerSpawnPoint": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::PlayerSpawnType`, 1 bytes.
+    /// The game's enum `ecs::PlayerSpawnType`, 1 byte.
     PlayerSpawnType {
         /// `StartLocation`, 0.
         StartLocation = "StartLocation",
@@ -11605,7 +12665,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerState`, 96 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PlayerState`, 96 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PlayerState: Component {
         /// `previousActorState`, of `actor::StateMask`.
         previous_actor_state: crate::typed::actor::StateMask = "previousActorState",
@@ -11646,7 +12708,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerState = "ecs::PlayerState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerStateIndicatorComponent`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::PlayerStateIndicatorComponent`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     PlayerStateIndicatorComponent: Component {
         /// `soundContainerLowHealth`, of `SoundContainerReference`.
         sound_container_low_health: crate::typed::SoundContainerReference = "soundContainerLowHealth",
@@ -11664,7 +12728,9 @@ crate::typed::runtime::named!(PlayerStateIndicatorComponent = "ecs::PlayerStateI
 pub type PlayerStateMask = crate::typed::Flags<PlayerFlags>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerTracking`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PlayerTracking`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PlayerTracking: Component {
         /// `levelUpDuration`, of `Time`.
         level_up_duration: crate::typed::Time = "levelUpDuration",
@@ -11675,7 +12741,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerTracking = "ecs::PlayerTracking": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerUtteranceEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::PlayerUtteranceEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     PlayerUtteranceEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -11688,7 +12756,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PlayerUtteranceEvent = "ecs::PlayerUtteranceEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PlayerWaypoint`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::PlayerWaypoint`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     PlayerWaypoint: Component {
         /// `enabled`, of `bool`.
         enabled: bool = "enabled",
@@ -11713,7 +12783,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ProhibitedHit`, 56 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::ProhibitedHit`, 56 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     ProhibitedHit: GameEvent {
         /// `materialA`, of `MaterialFeedbackId`.
         material_a: crate::typed::MaterialFeedbackId = "materialA",
@@ -11734,14 +12806,16 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ProhibitedHit = "ecs::ProhibitedHit": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Projectile`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Projectile`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Projectile: Component {
     }
 }
 crate::typed::runtime::named!(Projectile = "ecs::Projectile": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ProjectileMode`, 1 bytes.
+    /// The game's enum `ecs::ProjectileMode`, 1 byte.
     ProjectileMode {
         /// `Direct`, 0.
         Direct = "Direct",
@@ -11755,7 +12829,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ProjectileTargetHeight`, 1 bytes.
+    /// The game's enum `ecs::ProjectileTargetHeight`, 1 byte.
     ProjectileTargetHeight {
         /// `Root`, 0.
         Root = "Root",
@@ -11769,7 +12843,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PuzzleCompletedEvent`, 80 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::PuzzleCompletedEvent`, 80 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     PuzzleCompletedEvent: GameEvent {
         /// `clusterPlayerEntityIds`, of `StaticArray<ecs::EntityId,16>`.
         cluster_player_entity_ids: ::std::vec::Vec<EntityId> = "clusterPlayerEntityIds",
@@ -11782,7 +12858,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PuzzleCompletedEvent = "ecs::PuzzleCompletedEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::PuzzleCompletedEventType`, 1 bytes.
+    /// The game's enum `ecs::PuzzleCompletedEventType`, 1 byte.
     PuzzleCompletedEventType {
         /// `Default`, 0.
         Default = "Default",
@@ -11796,7 +12872,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::PuzzleCompletionNotifier`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::PuzzleCompletionNotifier`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     PuzzleCompletionNotifier: Component {
         /// `initialState`, of `bool`.
         initial_state: bool = "initialState",
@@ -11811,7 +12889,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(PuzzleCompletionNotifier = "ecs::PuzzleCompletionNotifier": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::PuzzleCompletionState`, 1 bytes.
+    /// The game's enum `ecs::PuzzleCompletionState`, 1 byte.
     PuzzleCompletionState {
         /// `WaitForInitialValue`, 0.
         WaitForInitialValue = "WaitForInitialValue",
@@ -11843,7 +12921,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomLoot`, 36 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RandomLoot`, 36 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RandomLoot: Component {
         /// `disableRandomLoot`, of `bool`.
         disable_random_loot: bool = "disableRandomLoot",
@@ -11856,7 +12936,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RandomLoot = "ecs::RandomLoot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomLootContainer`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RandomLootContainer`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RandomLootContainer: Component {
         /// `spawnedLootVersion`, of `uint32`.
         spawned_loot_version: u32 = "spawnedLootVersion",
@@ -11869,7 +12951,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RandomLootContainer = "ecs::RandomLootContainer": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomLootEntitySpawner`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RandomLootEntitySpawner`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RandomLootEntitySpawner: Component {
         /// `lootEntity`, of `ecs::TemplateReference`.
         loot_entity: TemplateReference = "lootEntity",
@@ -11880,14 +12964,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RandomLootEntitySpawner = "ecs::RandomLootEntitySpawner": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomLootInventory`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RandomLootInventory`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RandomLootInventory: Component {
     }
 }
 crate::typed::runtime::named!(RandomLootInventory = "ecs::RandomLootInventory": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomLootLock`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RandomLootLock`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RandomLootLock: Component {
         /// `isEmpty`, of `bool`.
         is_empty: bool = "isEmpty",
@@ -11896,7 +12984,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RandomLootLock = "ecs::RandomLootLock": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomLootOnDestroy`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RandomLootOnDestroy`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RandomLootOnDestroy: Component {
         /// `triggered`, of `bool`.
         triggered: bool = "triggered",
@@ -11905,7 +12995,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RandomLootOnDestroy = "ecs::RandomLootOnDestroy": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomLootPlayerScale`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RandomLootPlayerScale`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RandomLootPlayerScale: Component {
         /// `playerCount`, of `uint8`.
         player_count: u8 = "playerCount",
@@ -11914,7 +13006,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RandomLootPlayerScale = "ecs::RandomLootPlayerScale": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomLootProbability`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RandomLootProbability`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RandomLootProbability: Component {
         /// `spawnProbability`, of `float32`.
         spawn_probability: f32 = "spawnProbability",
@@ -11923,7 +13017,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RandomLootProbability = "ecs::RandomLootProbability": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomLootSlotCount`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RandomLootSlotCount`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RandomLootSlotCount: Component {
         /// `slotsMin`, of `uint8`.
         slots_min: u8 = "slotsMin",
@@ -11944,7 +13040,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomOrientation`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RandomOrientation`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RandomOrientation: Component {
         /// `randomOrientationOffset`, of `actor::RandomOrientationOffset`.
         random_orientation_offset: crate::typed::actor::RandomOrientationOffset = "randomOrientationOffset",
@@ -11969,7 +13067,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomSpawner`, 168 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RandomSpawner`, 168 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RandomSpawner: Component {
         /// `spawnEntries`, of `BlobArray<ecs::RuntimeSpawnerEntry>`.
         spawn_entries: ::std::vec::Vec<RuntimeSpawnerEntry> = "spawnEntries",
@@ -12056,7 +13156,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RandomSpawner = "ecs::RandomSpawner": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::RandomSpawnerAmount`, 1 bytes.
+    /// The game's enum `ecs::RandomSpawnerAmount`, 1 byte.
     RandomSpawnerAmount {
         /// `Few`, 0.
         Few = "Few",
@@ -12086,7 +13186,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomSpawnerCommands`, 648 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RandomSpawnerCommands`, 648 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RandomSpawnerCommands: Component {
         /// `spawnCommands`, of `StaticArray<ecs::RandomSpawnerCommand,12>`.
         spawn_commands: ::std::vec::Vec<RandomSpawnerCommand> = "spawnCommands",
@@ -12119,7 +13221,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::RandomSpawnerSetting`, 1 bytes.
+    /// The game's enum `ecs::RandomSpawnerSetting`, 1 byte.
     RandomSpawnerSetting {
         /// `AllowUpScaling`, 0.
         AllowUpScaling = "AllowUpScaling",
@@ -12134,7 +13236,9 @@ crate::typed::runtime::reflected_enum! {
 pub type RandomSpawnerSettingMask = crate::typed::Flags<RandomSpawnerSetting>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RandomSpawnerSettings`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RandomSpawnerSettings`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RandomSpawnerSettings: Component {
         /// `allowUpScaling`, of `bool`.
         allow_up_scaling: bool = "allowUpScaling",
@@ -12157,7 +13261,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RangedCombat`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RangedCombat`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RangedCombat: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,5>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -12166,7 +13272,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RangedCombat = "ecs::RangedCombat": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RangedDamageMod`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RangedDamageMod`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RangedDamageMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,8>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -12175,7 +13283,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RangedDamageMod = "ecs::RangedDamageMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RangedWeapon`, 200 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RangedWeapon`, 200 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RangedWeapon: Component {
         /// `stateMachine`, of `ranged_weapon::StateMachine`.
         state_machine: crate::typed::ranged_weapon::StateMachine = "stateMachine",
@@ -12220,14 +13330,16 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RangedWeapon = "ecs::RangedWeapon": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RangedWeaponRender`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RangedWeaponRender`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RangedWeaponRender: Component {
     }
 }
 crate::typed::runtime::named!(RangedWeaponRender = "ecs::RangedWeaponRender": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::RayCastSpawnMode`, 1 bytes.
+    /// The game's enum `ecs::RayCastSpawnMode`, 1 byte.
     RayCastSpawnMode {
         /// `Random`, 0.
         Random = "Random",
@@ -12237,7 +13349,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::RayCastSpawnOrientation`, 1 bytes.
+    /// The game's enum `ecs::RayCastSpawnOrientation`, 1 byte.
     RayCastSpawnOrientation {
         /// `SpawnerOrientation`, 0.
         SpawnerOrientation = "SpawnerOrientation",
@@ -12247,7 +13359,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RayCastSpawner`, 80 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RayCastSpawner`, 80 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RayCastSpawner: Component {
         /// `rayOffset`, of `ecs::Offset`.
         ray_offset: Offset = "rayOffset",
@@ -12302,7 +13416,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::RayDirection`, 1 bytes.
+    /// The game's enum `ecs::RayDirection`, 1 byte.
     RayDirection {
         /// `CurrentTransformAxisZ`, 0.
         CurrentTransformAxisZ = "CurrentTransformAxisZ",
@@ -12314,7 +13428,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::RayOffsetSpace`, 1 bytes.
+    /// The game's enum `ecs::RayOffsetSpace`, 1 byte.
     RayOffsetSpace {
         /// `EntitySpace`, 0.
         EntitySpace = "EntitySpace",
@@ -12326,7 +13440,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::RayPosition`, 1 bytes.
+    /// The game's enum `ecs::RayPosition`, 1 byte.
     RayPosition {
         /// `CurrentTransformPosition`, 0.
         CurrentTransformPosition = "CurrentTransformPosition",
@@ -12360,7 +13474,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RegisterControlledCombatTargetEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RegisterControlledCombatTargetEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     RegisterControlledCombatTargetEvent: GameEvent {
         /// `attackerId`, of `ecs::EntityId`.
         attacker_id: EntityId = "attackerId",
@@ -12371,21 +13487,27 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RegisterControlledCombatTargetEvent = "ecs::RegisterControlledCombatTargetEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RemoveFog`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RemoveFog`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RemoveFog: Component {
     }
 }
 crate::typed::runtime::named!(RemoveFog = "ecs::RemoveFog": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RemoveInteractionOnEmptyInventory`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::RemoveInteractionOnEmptyInventory`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     RemoveInteractionOnEmptyInventory: Component {
     }
 }
 crate::typed::runtime::named!(RemoveInteractionOnEmptyInventory = "ecs::RemoveInteractionOnEmptyInventory": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RenderEquipment`, 788 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::RenderEquipment`, 788 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     RenderEquipment: Component {
         /// `modelHandles`, of `StaticArray<uint32,24>`.
         model_handles: ::std::vec::Vec<u32> = "modelHandles",
@@ -12416,7 +13538,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RenderTeleportCount`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::RenderTeleportCount`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     RenderTeleportCount: Component {
         /// `counter`, of `uint8`.
         counter: u8 = "counter",
@@ -12427,7 +13551,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RenderTeleportCount = "ecs::RenderTeleportCount": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RenderTransform`, 176 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::RenderTransform`, 176 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     RenderTransform: Component {
         /// `transform`, of `WorldTransform`.
         transform: crate::typed::WorldTransform = "transform",
@@ -12452,7 +13578,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RequiredCraftingProp`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RequiredCraftingProp`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RequiredCraftingProp: Component {
         /// `type`, of `ObjectReference<CraftingPropDefinition>`.
         r#type: crate::content::Guid = "type",
@@ -12463,7 +13591,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RequiredCraftingProp = "ecs::RequiredCraftingProp": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ResourceCandidate`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::ResourceCandidate`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     ResourceCandidate: GameEvent {
         /// `targetEntityId`, of `ecs::EntityId`.
         target_entity_id: EntityId = "targetEntityId",
@@ -12486,7 +13616,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ResourceChangeEvent`, 40 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::ResourceChangeEvent`, 40 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     ResourceChangeEvent: GameEvent {
         /// `targetEntityId`, of `ecs::EntityId`.
         target_entity_id: EntityId = "targetEntityId",
@@ -12515,7 +13647,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ResourceNodePickupDrops`, 60 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ResourceNodePickupDrops`, 60 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ResourceNodePickupDrops: Component {
         /// `pickupItemReference`, of `ecs::TemplateReference`.
         pickup_item_reference: TemplateReference = "pickupItemReference",
@@ -12544,7 +13678,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ResourceNodePickupDrops = "ecs::ResourceNodePickupDrops": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Rested`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Rested`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Rested: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,3>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -12553,7 +13689,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Rested = "ecs::Rested": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Resting`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Resting`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Resting: Component {
         /// `waitTime0`, of `Time`.
         wait_time0: crate::typed::Time = "waitTime0",
@@ -12570,7 +13708,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Resting = "ecs::Resting": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RestoreEnemyHealthEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::RestoreEnemyHealthEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     RestoreEnemyHealthEvent: GameEvent {
         /// `enemyId`, of `ecs::EntityId`.
         enemy_id: EntityId = "enemyId",
@@ -12581,7 +13721,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RestoreEnemyHealthEvent = "ecs::RestoreEnemyHealthEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Revive`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Revive`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Revive: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,6>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -12590,7 +13732,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Revive = "ecs::Revive": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ReviveState`, 1 bytes.
+    /// The game's enum `ecs::ReviveState`, 1 byte.
     ReviveState {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -12602,7 +13744,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RevivedPlayerEvent`, 8 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::RevivedPlayerEvent`, 8 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     RevivedPlayerEvent: Event {
         /// `targetEntityId`, of `ecs::EntityId`.
         target_entity_id: EntityId = "targetEntityId",
@@ -12613,7 +13757,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RevivedPlayerEvent = "ecs::RevivedPlayerEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::RotationDirection`, 1 bytes.
+    /// The game's enum `ecs::RotationDirection`, 1 byte.
     RotationDirection {
         /// `CW`, 0.
         CW = "CW",
@@ -12633,7 +13777,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RotationalEnergyConsumer`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RotationalEnergyConsumer`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RotationalEnergyConsumer: Component {
         /// `requiredEnergy`, of `float`.
         required_energy: crate::typed::Float = "requiredEnergy",
@@ -12644,7 +13790,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RotationalEnergyConsumer = "ecs::RotationalEnergyConsumer": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RotationalEnergySource`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RotationalEnergySource`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RotationalEnergySource: Component {
         /// `defaultDirection`, of `ecs::RotationDirection`.
         default_direction: RotationDirection = "defaultDirection",
@@ -12655,7 +13803,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(RotationalEnergySource = "ecs::RotationalEnergySource": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::RuntimeMapMarkerUnlockRequirements`, 36 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::RuntimeMapMarkerUnlockRequirements`, 36 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     RuntimeMapMarkerUnlockRequirements: SpawnComponent {
         /// `hintStateQuery`, of `KnowledgeQueryData`.
         hint_state_query: crate::typed::KnowledgeQueryData = "hintStateQuery",
@@ -12684,14 +13834,18 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SInt32Attribute`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SInt32Attribute`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SInt32Attribute: AttributeComponent {
     }
 }
 crate::typed::runtime::named!(SInt32Attribute = "ecs::SInt32Attribute": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SafePlayerPosition`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SafePlayerPosition`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SafePlayerPosition: Component {
         /// `minSafeDuration`, of `Time`.
         min_safe_duration: crate::typed::Time = "minSafeDuration",
@@ -12702,7 +13856,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SafePlayerPosition = "ecs::SafePlayerPosition": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ScaleComponent`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ScaleComponent`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ScaleComponent: Component {
         /// `uniformScale`, of `float32`.
         uniform_scale: f32 = "uniformScale",
@@ -12711,7 +13867,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ScaleComponent = "ecs::ScaleComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SceneKnowledgeTrigger`, 132 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SceneKnowledgeTrigger`, 132 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SceneKnowledgeTrigger: SpawnComponent {
         /// `knowledgeUnlockOperations`, of `StaticArray<KnowledgeTriggerOperation,8>`.
         knowledge_unlock_operations: ::std::vec::Vec<crate::typed::KnowledgeTriggerOperation> = "knowledgeUnlockOperations",
@@ -12722,7 +13880,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SceneKnowledgeTrigger = "ecs::SceneKnowledgeTrigger": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SceneLootNodeId`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SceneLootNodeId`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SceneLootNodeId: SpawnComponent {
         /// `id`, of `LootContainerId`.
         id: crate::typed::LootContainerId = "id",
@@ -12743,7 +13903,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SelectDialogOptionEvent`, 32 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::SelectDialogOptionEvent`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     SelectDialogOptionEvent: GameEvent {
         /// `interactingEntityId`, of `ecs::EntityId`.
         interacting_entity_id: EntityId = "interactingEntityId",
@@ -12756,7 +13918,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SelectDialogOptionEvent = "ecs::SelectDialogOptionEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SelectInventoryStockItemEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::SelectInventoryStockItemEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     SelectInventoryStockItemEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -12779,7 +13943,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SelectedTargets`, 2184 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SelectedTargets`, 2184 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SelectedTargets: Component {
         /// `targets`, of `StaticArray<ecs::TargetInfo,16>`.
         targets: ::std::vec::Vec<TargetInfo> = "targets",
@@ -12800,7 +13966,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SendEnemySignalSettings`, 1 bytes.
+    /// The game's struct `ecs::SendEnemySignalSettings`, 1 byte.
     SendEnemySignalSettings {
         /// `onCommitmentGain`, of `bool`.
         on_commitment_gain: bool = "onCommitmentGain",
@@ -12808,21 +13974,27 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SendSignalOnDestroy`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SendSignalOnDestroy`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SendSignalOnDestroy: Component {
     }
 }
 crate::typed::runtime::named!(SendSignalOnDestroy = "ecs::SendSignalOnDestroy": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SendToggleStateToParentToggleState`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SendToggleStateToParentToggleState`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SendToggleStateToParentToggleState: Component {
     }
 }
 crate::typed::runtime::named!(SendToggleStateToParentToggleState = "ecs::SendToggleStateToParentToggleState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SequenceEventCollider`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SequenceEventCollider`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SequenceEventCollider: Component {
         /// `sequenceId`, of `actor::SequenceResourceId`.
         sequence_id: crate::typed::actor::SequenceResourceId = "sequenceId",
@@ -12835,7 +14007,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SequenceEventCollider = "ecs::SequenceEventCollider": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SequenceEventImpactConfig`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SequenceEventImpactConfig`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SequenceEventImpactConfig: Component {
         /// `sequenceId`, of `actor::SequenceResourceId`.
         sequence_id: crate::typed::actor::SequenceResourceId = "sequenceId",
@@ -12920,7 +14094,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerAnimationGraphComponent2`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerAnimationGraphComponent2`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerAnimationGraphComponent2: Component {
         /// `animationGraphHandle`, of `ecs::AnimationGraphHandleValue`.
         animation_graph_handle: AnimationGraphHandleValue = "animationGraphHandle",
@@ -12931,7 +14107,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerAnimationGraphComponent2 = "ecs::ServerAnimationGraphComponent2": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerAnimationGraphInput`, 1104 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerAnimationGraphInput`, 1104 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerAnimationGraphInput: BaseAnimationGraphInput {
         /// `previousAnimationInputs`, of `AnimationGraphInputs`.
         previous_animation_inputs: crate::typed::AnimationGraphInputs = "previousAnimationInputs",
@@ -12940,14 +14118,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerAnimationGraphInput = "ecs::ServerAnimationGraphInput": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerAnimationGraphSlotComponent`, 1760 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerAnimationGraphSlotComponent`, 1760 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerAnimationGraphSlotComponent: AnimationGraphSlotComponentBase {
     }
 }
 crate::typed::runtime::named!(ServerAnimationGraphSlotComponent = "ecs::ServerAnimationGraphSlotComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerCameraControl`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ServerCameraControl`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ServerCameraControl: Component {
         /// `isCameraIdLocked`, of `bool`.
         is_camera_id_locked: bool = "isCameraIdLocked",
@@ -12964,7 +14146,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerCameraControl = "ecs::ServerCameraControl": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerConsumedPlayerInput`, 224 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerConsumedPlayerInput`, 224 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerConsumedPlayerInput: BaseServerConsumedPlayerInput {
         /// `consumedCursorSelectObjectAction`, of `VersionedData`.
         consumed_cursor_select_object_action: crate::typed::VersionedData = "consumedCursorSelectObjectAction",
@@ -13071,7 +14255,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerConsumedPlayerInput = "ecs::ServerConsumedPlayerInput": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerCursor`, 112 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerCursor`, 112 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerCursor: Component {
         /// `queries`, of `ecs::CursorQueries`.
         queries: CursorQueries = "queries",
@@ -13102,7 +14288,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerCursor = "ecs::ServerCursor": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ServerCursorFlag`, 1 bytes.
+    /// The game's enum `ecs::ServerCursorFlag`, 1 byte.
     ServerCursorFlag {
         /// `IsBlueprintSelected`, 0.
         IsBlueprintSelected = "IsBlueprintSelected",
@@ -13121,14 +14307,18 @@ crate::typed::runtime::reflected_enum! {
 pub type ServerCursorFlags = crate::typed::Flags<ServerCursorFlag>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerEntitySpaceAnimationGraphSlotComponent`, 1732 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerEntitySpaceAnimationGraphSlotComponent`, 1732 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerEntitySpaceAnimationGraphSlotComponent: EntitySpaceAnimationGraphSlotComponentBase {
     }
 }
 crate::typed::runtime::named!(ServerEntitySpaceAnimationGraphSlotComponent = "ecs::ServerEntitySpaceAnimationGraphSlotComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerFishing`, 248 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerFishing`, 248 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerFishing: Component {
         /// `stateMachine`, of `fishing::StateMachine`.
         state_machine: crate::typed::fishing::StateMachine = "stateMachine",
@@ -13149,7 +14339,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerFishing = "ecs::ServerFishing": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerFishingFish`, 128 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerFishingFish`, 128 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerFishingFish: Component {
         /// `fsm`, of `fishable::StateMachine`.
         fsm: crate::typed::fishable::StateMachine = "fsm",
@@ -13186,7 +14378,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerFishingFish = "ecs::ServerFishingFish": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerFishingFloat`, 88 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerFishingFloat`, 88 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerFishingFloat: Component {
         /// `interpolationOrigin`, of `WorldPosition`.
         interpolation_origin: crate::typed::WorldPosition = "interpolationOrigin",
@@ -13225,7 +14419,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerPlayerGroupMembers`, 256 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerPlayerGroupMembers`, 256 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerPlayerGroupMembers: Component {
         /// `groupMembers`, of `StaticArray<ecs::PlayerGroupMember,16>`.
         group_members: ::std::vec::Vec<PlayerGroupMember> = "groupMembers",
@@ -13234,14 +14430,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerPlayerGroupMembers = "ecs::ServerPlayerGroupMembers": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerProgress`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerProgress`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerProgress: Component {
     }
 }
 crate::typed::runtime::named!(ServerProgress = "ecs::ServerProgress": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerSelectDialogOptionEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerSelectDialogOptionEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     ServerSelectDialogOptionEvent: GameEvent {
         /// `npcEntity`, of `ecs::EntityId`.
         npc_entity: EntityId = "npcEntity",
@@ -13256,7 +14456,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerSelectDialogOptionEvent = "ecs::ServerSelectDialogOptionEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerSlotAttachment`, 112 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerSlotAttachment`, 112 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerSlotAttachment: SlotAttachmentBase {
         /// `attachmentTransform`, of `WorldTransform`.
         attachment_transform: crate::typed::WorldTransform = "attachmentTransform",
@@ -13267,7 +14469,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerSlotAttachment = "ecs::ServerSlotAttachment": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerSubmerge`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerSubmerge`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerSubmerge: Component {
         /// `submergeDepth`, of `float`.
         submerge_depth: crate::typed::Float = "submergeDepth",
@@ -13286,7 +14490,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerSubmerge = "ecs::ServerSubmerge": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerTarget`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerTarget`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerTarget: Component {
         /// `hardLockTarget`, of `bool`.
         hard_lock_target: bool = "hardLockTarget",
@@ -13307,7 +14513,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerTarget = "ecs::ServerTarget": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerToggleState`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerToggleState`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerToggleState: ToggleState {
         /// `isExtinguished`, of `bool`.
         is_extinguished: bool = "isExtinguished",
@@ -13316,14 +14524,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerToggleState = "ecs::ServerToggleState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerTransformationHistory`, 3856 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ServerTransformationHistory`, 3856 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ServerTransformationHistory: TransformationHistory {
     }
 }
 crate::typed::runtime::named!(ServerTransformationHistory = "ecs::ServerTransformationHistory": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ServerUpgradeAnimation`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ServerUpgradeAnimation`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ServerUpgradeAnimation: Component {
         /// `spawnTime`, of `Time`.
         spawn_time: crate::typed::Time = "spawnTime",
@@ -13332,7 +14544,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ServerUpgradeAnimation = "ecs::ServerUpgradeAnimation": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SetEnemyVariableEvent`, 32 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::SetEnemyVariableEvent`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     SetEnemyVariableEvent: GameEvent {
         /// `enemyId`, of `ecs::EntityId`.
         enemy_id: EntityId = "enemyId",
@@ -13355,7 +14569,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SetPersonalQuestProgressionEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::SetPersonalQuestProgressionEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     SetPersonalQuestProgressionEvent: GameEvent {
         /// `enable`, of `bool`.
         enable: bool = "enable",
@@ -13364,7 +14580,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SetPersonalQuestProgressionEvent = "ecs::SetPersonalQuestProgressionEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SetToggleStateEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SetToggleStateEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     SetToggleStateEvent: GameEvent {
         /// `senderId`, of `ecs::EntityId`.
         sender_id: EntityId = "senderId",
@@ -13377,7 +14595,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SetToggleStateEvent = "ecs::SetToggleStateEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Shelter`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Shelter`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Shelter: Component {
         /// `checkRange`, of `float32`.
         check_range: f32 = "checkRange",
@@ -13396,7 +14616,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Shelter = "ecs::Shelter": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ShroudForge`, 68 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ShroudForge`, 68 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ShroudForge: Component {
         /// `name`, of `LocaTagReference`.
         name: crate::typed::LocaTagReference = "name",
@@ -13417,7 +14639,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ShroudForge = "ecs::ShroudForge": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SignalReceiver`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SignalReceiver`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SignalReceiver: SpawnComponent {
         /// `signalId`, of `SignalId`.
         signal_id: crate::typed::SignalId = "signalId",
@@ -13430,7 +14654,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SignalReceiver = "ecs::SignalReceiver": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SignalTransmitter`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SignalTransmitter`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SignalTransmitter: SpawnComponent {
         /// `signal`, of `SignalReference`.
         signal: crate::typed::SignalReference = "signal",
@@ -13461,7 +14687,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SimpleToggleActor`, 72 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SimpleToggleActor`, 72 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SimpleToggleActor: Component {
         /// `on`, of `ecs::SimpleActorInput`.
         on: SimpleActorInput = "on",
@@ -13472,7 +14700,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SimpleToggleActor = "ecs::SimpleToggleActor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SimpleTrapActor`, 192 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SimpleTrapActor`, 192 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SimpleTrapActor: Component {
         /// `onTriggerEnter`, of `ecs::SimpleActorInput`.
         on_trigger_enter: SimpleActorInput = "onTriggerEnter",
@@ -13497,7 +14727,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SimpleTrapActor = "ecs::SimpleTrapActor": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SkillIdComponent`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SkillIdComponent`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SkillIdComponent: Component {
         /// `skillId`, of `SkillNodeId`.
         skill_id: crate::typed::SkillNodeId = "skillId",
@@ -13512,7 +14744,9 @@ pub type SkillLevelArray = ::std::vec::Vec<crate::typed::SkillUnlockLevel>;
 pub type SkillUnlockMask = u64;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SlopeAlignment`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SlopeAlignment`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SlopeAlignment: Component {
         /// `isEnabled`, of `bool`.
         is_enabled: bool = "isEnabled",
@@ -13529,7 +14763,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SlopeAlignment = "ecs::SlopeAlignment": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SlopeConfig`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SlopeConfig`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SlopeConfig: Component {
         /// `slopeDefinition`, of `SlopeDefinition`.
         slope_definition: crate::typed::SlopeDefinition = "slopeDefinition",
@@ -13540,14 +14776,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SlopeConfig = "ecs::SlopeConfig": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SlotAttachment`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::SlotAttachment`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     SlotAttachment: SlotAttachmentBase {
     }
 }
 crate::typed::runtime::named!(SlotAttachment = "ecs::SlotAttachment": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SlotAttachmentBase`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SlotAttachmentBase`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SlotAttachmentBase: Component {
         /// `offset`, of `ecs::Offset`.
         offset: Offset = "offset",
@@ -13564,7 +14804,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SlotAttachmentBase = "ecs::SlotAttachmentBase": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SlotSelection`, 216 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SlotSelection`, 216 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SlotSelection: Component {
         /// `equipment`, of `ecs::EquipmentSlotData`.
         equipment: EquipmentSlotData = "equipment",
@@ -13605,7 +14847,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SnappingBoxLocal`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SnappingBoxLocal`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SnappingBoxLocal: Component {
         /// `localBox`, of `ecs::AlignedBox`.
         local_box: AlignedBox = "localBox",
@@ -13614,7 +14858,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SnappingBoxLocal = "ecs::SnappingBoxLocal": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SnappingBoxReference`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SnappingBoxReference`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SnappingBoxReference: Component {
         /// `snappingBoxId`, of `ecs::SnappingBoxId`.
         snapping_box_id: SnappingBoxId = "snappingBoxId",
@@ -13623,7 +14869,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SnappingBoxReference = "ecs::SnappingBoxReference": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SnowDisplacementComponent`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::SnowDisplacementComponent`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     SnowDisplacementComponent: Component {
         /// `bodyHandle`, of `uint32`.
         body_handle: u32 = "bodyHandle",
@@ -13640,7 +14888,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SnowDisplacementComponent = "ecs::SnowDisplacementComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SongSelection`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SongSelection`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SongSelection: Component {
         /// `selectedSongId`, of `SongId`.
         selected_song_id: crate::typed::SongId = "selectedSongId",
@@ -13649,7 +14899,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SongSelection = "ecs::SongSelection": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SongState`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SongState`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SongState: Component {
         /// `joinTime`, of `Time`.
         join_time: crate::typed::Time = "joinTime",
@@ -13674,7 +14926,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SortInventoryEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::SortInventoryEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     SortInventoryEvent: GameEvent {
         /// `targetInventoryId`, of `ecs::EntityId`.
         target_inventory_id: EntityId = "targetInventoryId",
@@ -13683,14 +14937,16 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SortInventoryEvent = "ecs::SortInventoryEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SpawnComponent`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SpawnComponent`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SpawnComponent: Component {
     }
 }
 crate::typed::runtime::named!(SpawnComponent = "ecs::SpawnComponent": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::SpawnCondition`, 1 bytes.
+    /// The game's enum `ecs::SpawnCondition`, 1 byte.
     SpawnCondition {
         /// `IsDay`, 0.
         IsDay = "IsDay",
@@ -13703,7 +14959,9 @@ crate::typed::runtime::reflected_enum! {
 pub type SpawnConditionFlags = crate::typed::Flags<SpawnCondition>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SpawnEntityOnDestroy`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SpawnEntityOnDestroy`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SpawnEntityOnDestroy: Component {
         /// `spawnEntity`, of `ecs::TemplateReference`.
         spawn_entity: TemplateReference = "spawnEntity",
@@ -13716,7 +14974,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SpawnEntityOnDestroy = "ecs::SpawnEntityOnDestroy": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SpawnFuelOnDestroy`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SpawnFuelOnDestroy`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SpawnFuelOnDestroy: Component {
         /// `triggered`, of `bool`.
         triggered: bool = "triggered",
@@ -13741,13 +15001,15 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SpawnGroupId`, 1 bytes.
+    /// The game's struct `ecs::SpawnGroupId`, 1 byte.
     SpawnGroupId {
     }
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SpawnLimit`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SpawnLimit`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SpawnLimit: Component {
         /// `spawnLimitPool`, of `ecs::SpawnLimitPool`.
         spawn_limit_pool: SpawnLimitPool = "spawnLimitPool",
@@ -13756,7 +15018,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SpawnLimit = "ecs::SpawnLimit": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::SpawnLimitPool`, 1 bytes.
+    /// The game's enum `ecs::SpawnLimitPool`, 1 byte.
     SpawnLimitPool {
         /// `Totem`, 0.
         Totem = "Totem",
@@ -13778,7 +15040,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::SpawnMode`, 1 bytes.
+    /// The game's enum `ecs::SpawnMode`, 1 byte.
     SpawnMode {
         /// `Random`, 0.
         Random = "Random",
@@ -13788,7 +15050,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::SpawnOrientationMode`, 1 bytes.
+    /// The game's enum `ecs::SpawnOrientationMode`, 1 byte.
     SpawnOrientationMode {
         /// `LookAtTarget`, 0.
         LookAtTarget = "LookAtTarget",
@@ -13818,7 +15080,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::SpawnTarget`, 1 bytes.
+    /// The game's enum `ecs::SpawnTarget`, 1 byte.
     SpawnTarget {
         /// `SpawnerCenter`, 0.
         SpawnerCenter = "SpawnerCenter",
@@ -13828,7 +15090,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SpawnTime`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SpawnTime`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SpawnTime: Component {
         /// `spawnTime`, of `Time`.
         spawn_time: crate::typed::Time = "spawnTime",
@@ -13837,7 +15101,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SpawnTime = "ecs::SpawnTime": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SpawnedByLogicSystem`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SpawnedByLogicSystem`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SpawnedByLogicSystem: Component {
         /// `configId`, of `LogicSpawnConfigId`.
         config_id: crate::typed::LogicSpawnConfigId = "configId",
@@ -13848,7 +15114,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SpawnedByLogicSystem = "ecs::SpawnedByLogicSystem": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SpecialAbility`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SpecialAbility`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SpecialAbility: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,2>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -13857,7 +15125,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SpecialAbility = "ecs::SpecialAbility": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SpecialAbilityChargeFx`, 60 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SpecialAbilityChargeFx`, 60 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SpecialAbilityChargeFx: Component {
         /// `notifier`, of `ObjectReference<Notifier>`.
         notifier: crate::content::Guid = "notifier",
@@ -13872,7 +15142,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SpecialAbilityChargeFx = "ecs::SpecialAbilityChargeFx": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::SpecialInteraction`, 1 bytes.
+    /// The game's enum `ecs::SpecialInteraction`, 1 byte.
     SpecialInteraction {
         /// `Invalid`, 0.
         Invalid = "Invalid",
@@ -13890,7 +15160,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SpellChargeSfx`, 36 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::SpellChargeSfx`, 36 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     SpellChargeSfx: Component {
         /// `buildUpChargeSfx`, of `SoundContainerReference`.
         build_up_charge_sfx: crate::typed::SoundContainerReference = "buildUpChargeSfx",
@@ -13903,7 +15175,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SpellChargeSfx = "ecs::SpellChargeSfx": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Spirit`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Spirit`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Spirit: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,3>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -13912,7 +15186,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Spirit = "ecs::Spirit": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::StairHandlingMode`, 1 bytes.
+    /// The game's enum `ecs::StairHandlingMode`, 1 byte.
     StairHandlingMode {
         /// `Default`, 0.
         Default = "Default",
@@ -13922,7 +15196,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Stamina`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Stamina`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Stamina: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,8>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -13931,7 +15207,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Stamina = "ecs::Stamina": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaminaDamageMod`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StaminaDamageMod`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StaminaDamageMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -13940,7 +15218,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StaminaDamageMod = "ecs::StaminaDamageMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaminaDepletion`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StaminaDepletion`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StaminaDepletion: Component {
         /// `accumulatedValue`, of `float32`.
         accumulated_value: f32 = "accumulatedValue",
@@ -13949,7 +15229,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StaminaDepletion = "ecs::StaminaDepletion": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaminaDepletionMod`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StaminaDepletionMod`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StaminaDepletionMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,5>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -13958,14 +15240,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StaminaDepletionMod = "ecs::StaminaDepletionMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaminaRecharge`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StaminaRecharge`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StaminaRecharge: AttributeRegeneration {
     }
 }
 crate::typed::runtime::named!(StaminaRecharge = "ecs::StaminaRecharge": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaminaRechargeMod`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StaminaRechargeMod`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StaminaRechargeMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,1>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -13974,7 +15260,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StaminaRechargeMod = "ecs::StaminaRechargeMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StartFlyingEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StartFlyingEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     StartFlyingEvent: GameEvent {
         /// `targetId`, of `ecs::EntityId`.
         target_id: EntityId = "targetId",
@@ -13983,7 +15271,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StartFlyingEvent = "ecs::StartFlyingEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StartGuardingEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::StartGuardingEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     StartGuardingEvent: GameEvent {
         /// `guardingEntityId`, of `ecs::EntityId`.
         guarding_entity_id: EntityId = "guardingEntityId",
@@ -13994,7 +15284,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StartGuardingEvent = "ecs::StartGuardingEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StartPlaySongEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StartPlaySongEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     StartPlaySongEvent: GameEvent {
         /// `playerId`, of `ecs::EntityId`.
         player_id: EntityId = "playerId",
@@ -14005,21 +15297,27 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StartPlaySongEvent = "ecs::StartPlaySongEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaticClientCollider`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::StaticClientCollider`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     StaticClientCollider: AbstractCollider {
     }
 }
 crate::typed::runtime::named!(StaticClientCollider = "ecs::StaticClientCollider": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaticCollider`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StaticCollider`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StaticCollider: AbstractCollider {
     }
 }
 crate::typed::runtime::named!(StaticCollider = "ecs::StaticCollider": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaticGravityModifier`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StaticGravityModifier`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StaticGravityModifier: Component {
         /// `modifier`, of `float32`.
         modifier: f32 = "modifier",
@@ -14028,21 +15326,27 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StaticGravityModifier = "ecs::StaticGravityModifier": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaticTransform`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::StaticTransform`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     StaticTransform: Component {
     }
 }
 crate::typed::runtime::named!(StaticTransform = "ecs::StaticTransform": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaticTransformDynamic`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StaticTransformDynamic`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StaticTransformDynamic: Component {
     }
 }
 crate::typed::runtime::named!(StaticTransformDynamic = "ecs::StaticTransformDynamic": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StaticUsedItem`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::StaticUsedItem`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     StaticUsedItem: Component {
         /// `itemReference`, of `ItemReference`.
         item_reference: crate::typed::ItemReference = "itemReference",
@@ -14051,7 +15355,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StaticUsedItem = "ecs::StaticUsedItem": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SteeringAgent`, 80 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SteeringAgent`, 80 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SteeringAgent: Component {
         /// `queryId`, of `ecs::RangeQueryId`.
         query_id: RangeQueryId = "queryId",
@@ -14086,7 +15392,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SteeringAgent = "ecs::SteeringAgent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SteeringBehavior`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::SteeringBehavior`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     SteeringBehavior: Component {
         /// `steeringForce`, of `float3`.
         steering_force: crate::typed::Float3 = "steeringForce",
@@ -14095,7 +15403,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SteeringBehavior = "ecs::SteeringBehavior": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SteeringBehavior_LookAhead`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SteeringBehavior_LookAhead`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SteeringBehaviorLookAhead: SteeringBehavior {
         /// `lastQueryTime`, of `Time`.
         last_query_time: crate::typed::Time = "lastQueryTime",
@@ -14108,7 +15418,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SteeringBehaviorLookAhead = "ecs::SteeringBehaviorLookAhead": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SteeringBehavior_Separation`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SteeringBehavior_Separation`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SteeringBehaviorSeparation: SteeringBehavior {
         /// `enabled`, of `bool`.
         enabled: bool = "enabled",
@@ -14119,7 +15431,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SteeringBehaviorSeparation = "ecs::SteeringBehaviorSeparation": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SteeringLocomotion`, 80 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SteeringLocomotion`, 80 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SteeringLocomotion: Component {
         /// `setRotationFlag`, of `bool`.
         set_rotation_flag: bool = "setRotationFlag",
@@ -14148,7 +15462,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StopFlyingEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StopFlyingEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     StopFlyingEvent: GameEvent {
         /// `targetId`, of `ecs::EntityId`.
         target_id: EntityId = "targetId",
@@ -14157,7 +15473,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StopFlyingEvent = "ecs::StopFlyingEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StopGuardingEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::StopGuardingEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     StopGuardingEvent: GameEvent {
         /// `guardingEntityId`, of `ecs::EntityId`.
         guarding_entity_id: EntityId = "guardingEntityId",
@@ -14168,7 +15486,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StopGuardingEvent = "ecs::StopGuardingEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StoreAssociatedNpcIds`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StoreAssociatedNpcIds`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StoreAssociatedNpcIds: Component {
         /// `initialized`, of `bool`.
         initialized: bool = "initialized",
@@ -14179,7 +15499,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StoreAssociatedNpcIds = "ecs::StoreAssociatedNpcIds": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StoreAttributes`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StoreAttributes`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StoreAttributes: Component {
         /// `health`, of `float32`.
         health: f32 = "health",
@@ -14198,7 +15520,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StoreAttributes = "ecs::StoreAttributes": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::StoredSceneId`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::StoredSceneId`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     StoredSceneId: SpawnComponent {
         /// `uniqueId`, of `UniqueSceneId`.
         unique_id: crate::typed::UniqueSceneId = "uniqueId",
@@ -14207,7 +15531,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(StoredSceneId = "ecs::StoredSceneId": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Strength`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Strength`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Strength: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,3>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -14216,7 +15542,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Strength = "ecs::Strength": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SubEntities`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SubEntities`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SubEntities: Component {
         /// `subEntities`, of `BlobArray<ecs::SubEntitySpawnInfo>`.
         sub_entities: ::std::vec::Vec<SubEntitySpawnInfo> = "subEntities",
@@ -14227,14 +15555,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SubEntities = "ecs::SubEntities": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SubEntitiesStop`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SubEntitiesStop`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SubEntitiesStop: Component {
     }
 }
 crate::typed::runtime::named!(SubEntitiesStop = "ecs::SubEntitiesStop": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SubEntityAttachmentMask`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SubEntityAttachmentMask`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     SubEntityAttachmentMask: SpawnComponent {
         /// `mask`, of `AttachmentSlotMask`.
         mask: crate::typed::AttachmentSlotMask = "mask",
@@ -14297,7 +15629,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SwapEquipmentSetEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::SwapEquipmentSetEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     SwapEquipmentSetEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -14310,7 +15644,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SwapEquipmentSetEvent = "ecs::SwapEquipmentSetEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::SwapEquipmentTarget`, 1 bytes.
+    /// The game's enum `ecs::SwapEquipmentTarget`, 1 byte.
     SwapEquipmentTarget {
         /// `ActiveEquipment`, 0.
         ActiveEquipment = "ActiveEquipment",
@@ -14320,7 +15654,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SyncedAttackEvent`, 32 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SyncedAttackEvent`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     SyncedAttackEvent: GameEvent {
         /// `attackerEntityId`, of `ecs::EntityId`.
         attacker_entity_id: EntityId = "attackerEntityId",
@@ -14335,7 +15671,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SyncedAttackEvent = "ecs::SyncedAttackEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::SyncedAttackType`, 1 bytes.
+    /// The game's enum `ecs::SyncedAttackType`, 1 byte.
     SyncedAttackType {
         /// `Execute`, 0.
         Execute = "Execute",
@@ -14345,7 +15681,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::SyncedSequenceEvent`, 32 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
+    /// The game's struct `ecs::SyncedSequenceEvent`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the server only.
     SyncedSequenceEvent: GameEvent {
         /// `entityId`, of `ecs::EntityId`.
         entity_id: EntityId = "entityId",
@@ -14358,7 +15696,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(SyncedSequenceEvent = "ecs::SyncedSequenceEvent": Event);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::TamingStartleRepercussion`, 1 bytes.
+    /// The game's enum `ecs::TamingStartleRepercussion`, 1 byte.
     TamingStartleRepercussion {
         /// `KeepProgress`, 0.
         KeepProgress = "KeepProgress",
@@ -14370,7 +15708,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TargetEntity`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::TargetEntity`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     TargetEntity: Component {
         /// `targetId`, of `ecs::EntityId`.
         target_id: EntityId = "targetId",
@@ -14379,7 +15719,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TargetEntity = "ecs::TargetEntity": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::TargetImportance`, 1 bytes.
+    /// The game's enum `ecs::TargetImportance`, 1 byte.
     TargetImportance {
         /// `None`, 0.
         None = "None",
@@ -14421,7 +15761,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TargetPosition`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::TargetPosition`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     TargetPosition: Component {
         /// `targetPosition`, of `float3`.
         target_position: crate::typed::Float3 = "targetPosition",
@@ -14430,7 +15772,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TargetPosition = "ecs::TargetPosition": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::TargetSearchState`, 1 bytes.
+    /// The game's enum `ecs::TargetSearchState`, 1 byte.
     TargetSearchState {
         /// `TargetReached`, 0.
         TargetReached = "TargetReached",
@@ -14445,7 +15787,9 @@ crate::typed::runtime::reflected_enum! {
 pub type TargetSearchStates = crate::typed::Flags<TargetSearchState>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TargetSelector`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::TargetSelector`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     TargetSelector: Component {
         /// `enemiesQueryId`, of `ecs::RangeQueryId`.
         enemies_query_id: RangeQueryId = "enemiesQueryId",
@@ -14460,7 +15804,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TargetSelector = "ecs::TargetSelector": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::TargetType`, 1 bytes.
+    /// The game's enum `ecs::TargetType`, 1 byte.
     TargetType {
         /// `Combat`, 0.
         Combat = "Combat",
@@ -14500,7 +15844,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TargetingTransform`, 44 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::TargetingTransform`, 44 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     TargetingTransform: Component {
         /// `attachmentSlot`, of `AttachmentSlot`.
         attachment_slot: crate::typed::AttachmentSlot = "attachmentSlot",
@@ -14511,7 +15857,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TargetingTransform = "ecs::TargetingTransform": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Teleport`, 80 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Teleport`, 80 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Teleport: Component {
         /// `targetTransform`, of `WorldTransform`.
         target_transform: crate::typed::WorldTransform = "targetTransform",
@@ -14540,7 +15888,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TeleportCount`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::TeleportCount`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     TeleportCount: Component {
         /// `counter`, of `uint8`.
         counter: u8 = "counter",
@@ -14551,7 +15901,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TeleportCount = "ecs::TeleportCount": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TeleportPlayerEvent`, 32 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::TeleportPlayerEvent`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     TeleportPlayerEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -14566,7 +15918,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TeleportPlayerEvent = "ecs::TeleportPlayerEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TeleportZone`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::TeleportZone`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     TeleportZone: Component {
         /// `zoneTag`, of `ecs::EntityTagReference`.
         zone_tag: EntityTagReference = "zoneTag",
@@ -14575,7 +15929,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TeleportZone = "ecs::TeleportZone": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TeleportZoneConnection`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::TeleportZoneConnection`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     TeleportZoneConnection: Component {
         /// `teleporterId`, of `LocaTagId`.
         teleporter_id: crate::typed::LocaTagId = "teleporterId",
@@ -14586,7 +15942,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TeleportZoneConnection = "ecs::TeleportZoneConnection": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::TeleporterType`, 1 bytes.
+    /// The game's enum `ecs::TeleporterType`, 1 byte.
     TeleporterType {
         /// `None`, 0.
         None = "None",
@@ -14618,7 +15974,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TemplateCollectionResource`, 8 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ecs::TemplateCollectionResource`, 8 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     TemplateCollectionResource {
         /// `templates`, of `BlobArray<ecs::TemplateResourceReference>`.
         templates: ::std::vec::Vec<TemplateResourceReference> = "templates",
@@ -14627,7 +15985,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TemplateCollectionResource = "ecs::TemplateCollectionResource": Resource);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::TemplateFamily`, 1 bytes.
+    /// The game's enum `ecs::TemplateFamily`, 1 byte.
     TemplateFamily {
         /// `None`, 0.
         None = "None",
@@ -14664,7 +16022,9 @@ crate::typed::runtime::reflected_enum! {
 pub type TemplateReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TemplateResource`, 24 bytes. A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// The game's struct `ecs::TemplateResource`, 24 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`].
     TemplateResource {
         /// `name`, of `string`.
         name: crate::typed::String = "name",
@@ -14688,7 +16048,9 @@ crate::typed::runtime::named!(TemplateResource = "ecs::TemplateResource": Resour
 pub type TemplateResourceReference = crate::content::Guid;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TemporaryMining`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::TemporaryMining`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     TemporaryMining: Component {
         /// `voxelPosition`, of `int3`.
         voxel_position: crate::typed::Int3 = "voxelPosition",
@@ -14699,7 +16061,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TemporaryMining = "ecs::TemporaryMining": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Terraforming`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Terraforming`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Terraforming: Component {
         /// `snappingQueryId`, of `ecs::RangeQueryId`.
         snapping_query_id: RangeQueryId = "snappingQueryId",
@@ -14710,7 +16074,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Terraforming = "ecs::Terraforming": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TerraformingHitEvent`, 168 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::TerraformingHitEvent`, 168 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     TerraformingHitEvent: BaseHitEvent {
         /// `range`, of `float32`.
         range: f32 = "range",
@@ -14719,7 +16085,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TerraformingHitEvent = "ecs::TerraformingHitEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TerraformingLootMemory`, 2056 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::TerraformingLootMemory`, 2056 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     TerraformingLootMemory: Component {
         /// `terrainMemory`, of `StaticArray<ecs::TerrainLootMemory,128>`.
         terrain_memory: ::std::vec::Vec<TerrainLootMemory> = "terrainMemory",
@@ -14744,7 +16112,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Threat`, 72 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Threat`, 72 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Threat: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,16>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -14753,7 +16123,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Threat = "ecs::Threat": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ThreatBonus`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ThreatBonus`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ThreatBonus: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,3>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -14762,7 +16134,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ThreatBonus = "ecs::ThreatBonus": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TintItemEvent`, 32 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::TintItemEvent`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     TintItemEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -14775,7 +16149,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TintItemEvent = "ecs::TintItemEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleAnimation`, 32 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ToggleAnimation`, 32 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ToggleAnimation: Component {
         /// `animationStateOn`, of `animationgraph::StateIdReference`.
         animation_state_on: crate::typed::animationgraph::StateIdReference = "animationStateOn",
@@ -14786,7 +16162,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToggleAnimation = "ecs::ToggleAnimation": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleDelay`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ToggleDelay`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ToggleDelay: Component {
         /// `delay`, of `Time`.
         delay: crate::typed::Time = "delay",
@@ -14797,7 +16175,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToggleDelay = "ecs::ToggleDelay": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleFavoriteInventoryStockItemEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::ToggleFavoriteInventoryStockItemEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     ToggleFavoriteInventoryStockItemEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -14808,14 +16188,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToggleFavoriteInventoryStockItemEvent = "ecs::ToggleFavoriteInventoryStockItemEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleFog`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ToggleFog`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ToggleFog: Component {
     }
 }
 crate::typed::runtime::named!(ToggleFog = "ecs::ToggleFog": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleImmunity`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ToggleImmunity`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ToggleImmunity: Component {
         /// `toggleModifier`, of `ecs::ToggleModifier`.
         toggle_modifier: ToggleModifier = "toggleModifier",
@@ -14824,7 +16208,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToggleImmunity = "ecs::ToggleImmunity": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleInShape`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ToggleInShape`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ToggleInShape: Component {
         /// `ignoreState`, of `ecs::ToggleMask`.
         ignore_state: ToggleMask = "ignoreState",
@@ -14833,7 +16219,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToggleInShape = "ecs::ToggleInShape": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleInteractionEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::ToggleInteractionEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     ToggleInteractionEvent: GameEvent {
         /// `guestId`, of `ecs::EntityId`.
         guest_id: EntityId = "guestId",
@@ -14864,7 +16252,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ToggleModifierFlags`, 1 bytes.
+    /// The game's enum `ecs::ToggleModifierFlags`, 1 byte.
     ToggleModifierFlags {
         /// `IgnoreToggle`, 0.
         IgnoreToggle = "IgnoreToggle",
@@ -14878,7 +16266,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ToggleModifierMode`, 1 bytes.
+    /// The game's enum `ecs::ToggleModifierMode`, 1 byte.
     ToggleModifierMode {
         /// `PassThrough`, 0.
         PassThrough = "PassThrough",
@@ -14892,7 +16280,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleNotifier`, 168 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ToggleNotifier`, 168 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ToggleNotifier: Component {
         /// `lastEvent`, of `Time`.
         last_event: crate::typed::Time = "lastEvent",
@@ -14923,7 +16313,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToggleNotifier = "ecs::ToggleNotifier": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleOnHit`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ToggleOnHit`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ToggleOnHit: Component {
         /// `canToggleOn`, of `bool`.
         can_toggle_on: bool = "canToggleOn",
@@ -14934,7 +16326,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToggleOnHit = "ecs::ToggleOnHit": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleState`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::ToggleState`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     ToggleState: SpawnComponent {
         /// `state`, of `bool`.
         state: bool = "state",
@@ -14945,7 +16339,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToggleState = "ecs::ToggleState": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleSubEntities`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ToggleSubEntities`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ToggleSubEntities: Component {
         /// `toggleModifier`, of `ecs::ToggleModifier`.
         toggle_modifier: ToggleModifier = "toggleModifier",
@@ -14954,7 +16350,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToggleSubEntities = "ecs::ToggleSubEntities": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToggleTimer`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ToggleTimer`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ToggleTimer: Component {
         /// `timer`, of `Time`.
         timer: crate::typed::Time = "timer",
@@ -14969,7 +16367,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToggleTimer = "ecs::ToggleTimer": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::ToggleType`, 1 bytes.
+    /// The game's enum `ecs::ToggleType`, 1 byte.
     ToggleType {
         /// `On`, 0.
         On = "On",
@@ -14979,7 +16377,7 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::TombstoneMode`, 1 bytes.
+    /// The game's enum `ecs::TombstoneMode`, 1 byte.
     TombstoneMode {
         /// `AddBackpackMaterials`, 0.
         AddBackpackMaterials = "AddBackpackMaterials",
@@ -14991,7 +16389,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::ToolDamageMod`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::ToolDamageMod`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     ToolDamageMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,4>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -15000,7 +16400,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(ToolDamageMod = "ecs::ToolDamageMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TransferItemToInventoryEvent`, 40 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::TransferItemToInventoryEvent`, 40 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     TransferItemToInventoryEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15064,7 +16466,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TransformToLoot`, 176 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::TransformToLoot`, 176 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     TransformToLoot: Component {
         /// `vfxOnSpawnOffset`, of `ecs::Offset`.
         vfx_on_spawn_offset: Offset = "vfxOnSpawnOffset",
@@ -15093,7 +16497,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TransformToLoot = "ecs::TransformToLoot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TransformationHistory`, 3856 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::TransformationHistory`, 3856 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     TransformationHistory: Component {
         /// `history`, of `StaticArray<ecs::TransformHistoryEntry,60>`.
         history: ::std::vec::Vec<TransformHistoryEntry> = "history",
@@ -15108,7 +16514,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TransformationHistory = "ecs::TransformationHistory": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TransformedToLootEvent`, 80 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::TransformedToLootEvent`, 80 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     TransformedToLootEvent: GameEvent {
         /// `entityId`, of `ecs::EntityId`.
         entity_id: EntityId = "entityId",
@@ -15121,7 +16529,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TransformedToLootEvent = "ecs::TransformedToLootEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Transparency`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Transparency`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Transparency: Component {
         /// `transparency`, of `float32`.
         transparency: f32 = "transparency",
@@ -15130,7 +16540,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Transparency = "ecs::Transparency": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TrashItemEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::TrashItemEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     TrashItemEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15141,7 +16553,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TrashItemEvent = "ecs::TrashItemEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TriggerBoxMultiSpawner`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::TriggerBoxMultiSpawner`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     TriggerBoxMultiSpawner: BasicSpawnerComponent {
         /// `linkDestroyToEventSender`, of `bool`.
         link_destroy_to_event_sender: bool = "linkDestroyToEventSender",
@@ -15158,7 +16572,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TriggerBoxMultiSpawner = "ecs::TriggerBoxMultiSpawner": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TriggerCollectionCompletionKnowledge`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::TriggerCollectionCompletionKnowledge`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     TriggerCollectionCompletionKnowledge: Component {
         /// `completionKnowledgeUnlockOperation`, of `KnowledgeUnlockOperation`.
         completion_knowledge_unlock_operation: crate::typed::KnowledgeUnlockOperation = "completionKnowledgeUnlockOperation",
@@ -15177,7 +16593,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TriggerFeedback`, 2 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::TriggerFeedback`, 2 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     TriggerFeedback: Component {
         /// `hasTriggered`, of `bool`.
         has_triggered: bool = "hasTriggered",
@@ -15198,7 +16616,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TriggerKnowledgeUiEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::TriggerKnowledgeUiEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     TriggerKnowledgeUiEvent: GameEvent {
         /// `unlockOperation`, of `KnowledgeUnlockOperation`.
         unlock_operation: crate::typed::KnowledgeUnlockOperation = "unlockOperation",
@@ -15207,7 +16627,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TriggerKnowledgeUiEvent = "ecs::TriggerKnowledgeUiEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TriggerNoise`, 24 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::TriggerNoise`, 24 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     TriggerNoise: Component {
         /// `range`, of `float32`.
         range: f32 = "range",
@@ -15230,7 +16652,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TriggerShape`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::TriggerShape`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     TriggerShape: Component {
         /// `shape`, of `ecs::TriggerShapeType`.
         shape: TriggerShapeType = "shape",
@@ -15247,7 +16671,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TriggerShape = "ecs::TriggerShape": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::TriggerShapeType`, 1 bytes.
+    /// The game's enum `ecs::TriggerShapeType`, 1 byte.
     TriggerShapeType {
         /// `Range`, 0.
         Range = "Range",
@@ -15265,7 +16689,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TriggerSpawner`, 56 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::TriggerSpawner`, 56 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     TriggerSpawner: BasicSpawnerComponent {
         /// `spawnedEntityId`, of `ecs::EntityId`.
         spawned_entity_id: EntityId = "spawnedEntityId",
@@ -15282,7 +16708,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TriggerSpawner = "ecs::TriggerSpawner": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::TriggerWalkingNoise`, 88 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::TriggerWalkingNoise`, 88 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     TriggerWalkingNoise: Component {
         /// `sneak`, of `ecs::TriggerNoiseEntry`.
         sneak: TriggerNoiseEntry = "sneak",
@@ -15311,14 +16739,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(TriggerWalkingNoise = "ecs::TriggerWalkingNoise": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UInt32Attribute`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::UInt32Attribute`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     UInt32Attribute: AttributeComponent {
     }
 }
 crate::typed::runtime::named!(UInt32Attribute = "ecs::UInt32Attribute": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiAutomaticTransferEvent`, 64 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiAutomaticTransferEvent`, 64 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiAutomaticTransferEvent: GameEvent {
         /// `craftingOperatorId`, of `ecs::EntityId`.
         crafting_operator_id: EntityId = "craftingOperatorId",
@@ -15339,7 +16771,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiAutomaticTransferEvent = "ecs::UiAutomaticTransferEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiBuildingEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::UiBuildingEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     UiBuildingEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15356,7 +16790,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiBuildingEvent = "ecs::UiBuildingEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiCraftRecipeEvent`, 56 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiCraftRecipeEvent`, 56 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiCraftRecipeEvent: GameEvent {
         /// `craftingOperatorId`, of `ecs::EntityId`.
         crafting_operator_id: EntityId = "craftingOperatorId",
@@ -15373,7 +16809,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiCraftRecipeEvent = "ecs::UiCraftRecipeEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiCraftingStationStopProductionEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiCraftingStationStopProductionEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiCraftingStationStopProductionEvent: GameEvent {
         /// `craftingOperatorId`, of `ecs::EntityId`.
         crafting_operator_id: EntityId = "craftingOperatorId",
@@ -15384,7 +16822,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiCraftingStationStopProductionEvent = "ecs::UiCraftingStationStopProductionEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiCreateBuildingItemEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiCreateBuildingItemEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiCreateBuildingItemEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15397,7 +16837,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiCreateBuildingItemEvent = "ecs::UiCreateBuildingItemEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiCreateItemEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiCreateItemEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiCreateItemEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15410,7 +16852,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiCreateItemEvent = "ecs::UiCreateItemEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiCurrentLocationEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiCurrentLocationEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiCurrentLocationEvent: GameEvent {
         /// `location`, of `LocaTagId`.
         location: crate::typed::LocaTagId = "location",
@@ -15423,7 +16867,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiCurrentLocationEvent = "ecs::UiCurrentLocationEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiInteractable`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::UiInteractable`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     UiInteractable: Component {
         /// `handle`, of `uint32`.
         handle: u32 = "handle",
@@ -15436,7 +16882,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiInteractable = "ecs::UiInteractable": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiInventoryStockCycleEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::UiInventoryStockCycleEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     UiInventoryStockCycleEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15447,7 +16895,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiInventoryStockCycleEvent = "ecs::UiInventoryStockCycleEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiItemTriggerFailedEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::UiItemTriggerFailedEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     UiItemTriggerFailedEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15460,7 +16910,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiItemTriggerFailedEvent = "ecs::UiItemTriggerFailedEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiLogicGraphSubscriptionEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiLogicGraphSubscriptionEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiLogicGraphSubscriptionEvent: GameEvent {
         /// `graphId`, of `LogicGraphId`.
         graph_id: crate::typed::LogicGraphId = "graphId",
@@ -15469,7 +16921,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiLogicGraphSubscriptionEvent = "ecs::UiLogicGraphSubscriptionEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiNegativeFeedbackEvent`, 32 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::UiNegativeFeedbackEvent`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     UiNegativeFeedbackEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15480,7 +16934,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiNegativeFeedbackEvent = "ecs::UiNegativeFeedbackEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiOffsets`, 80 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::UiOffsets`, 80 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     UiOffsets: Component {
         /// `healthBarOffset`, of `ecs::Offset`.
         health_bar_offset: Offset = "healthBarOffset",
@@ -15491,7 +16947,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiOffsets = "ecs::UiOffsets": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiPinRecipeEvent`, 48 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiPinRecipeEvent`, 48 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiPinRecipeEvent: GameEvent {
         /// `recipeId`, of `RecipeId`.
         recipe_id: crate::typed::RecipeId = "recipeId",
@@ -15504,7 +16962,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiPinRecipeEvent = "ecs::UiPinRecipeEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiPingEvent`, 40 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::UiPingEvent`, 40 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     UiPingEvent: GameEvent {
         /// `senderEntityId`, of `ecs::EntityId`.
         sender_entity_id: EntityId = "senderEntityId",
@@ -15515,7 +16975,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiPingEvent = "ecs::UiPingEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiPingInputEvent`, 40 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiPingInputEvent`, 40 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiPingInputEvent: UiPingEvent {
     }
 }
@@ -15562,7 +17024,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiResourcesFullEvent`, 32 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::UiResourcesFullEvent`, 32 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     UiResourcesFullEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15577,7 +17041,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiResourcesFullEvent = "ecs::UiResourcesFullEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiSelectCraftingStationRecipeEvent`, 56 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiSelectCraftingStationRecipeEvent`, 56 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiSelectCraftingStationRecipeEvent: GameEvent {
         /// `craftingOperatorId`, of `ecs::EntityId`.
         crafting_operator_id: EntityId = "craftingOperatorId",
@@ -15592,7 +17058,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiSelectCraftingStationRecipeEvent = "ecs::UiSelectCraftingStationRecipeEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiSetCraftingStationUseAllIngredientOptions`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiSetCraftingStationUseAllIngredientOptions`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiSetCraftingStationUseAllIngredientOptions: GameEvent {
         /// `craftingOperatorId`, of `ecs::EntityId`.
         crafting_operator_id: EntityId = "craftingOperatorId",
@@ -15605,7 +17073,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiSetCraftingStationUseAllIngredientOptions = "ecs::UiSetCraftingStationUseAllIngredientOptions": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiSetInventoryAreaDepositPermissionOptions`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiSetInventoryAreaDepositPermissionOptions`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiSetInventoryAreaDepositPermissionOptions: GameEvent {
         /// `areaDepositInventoryId`, of `ecs::EntityId`.
         area_deposit_inventory_id: EntityId = "areaDepositInventoryId",
@@ -15616,7 +17086,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiSetInventoryAreaDepositPermissionOptions = "ecs::UiSetInventoryAreaDepositPermissionOptions": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiTransferWaterEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiTransferWaterEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiTransferWaterEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15631,7 +17103,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiTransferWaterEvent = "ecs::UiTransferWaterEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiUsageFeedbackEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::UiUsageFeedbackEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     UiUsageFeedbackEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15644,7 +17118,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiUsageFeedbackEvent = "ecs::UiUsageFeedbackEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiWaypointEvent`, 48 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UiWaypointEvent`, 48 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UiWaypointEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15657,7 +17133,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiWaypointEvent = "ecs::UiWaypointEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UiWorldEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::UiWorldEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     UiWorldEvent: GameEvent {
         /// `worldEventId`, of `HashKey32`.
         world_event_id: crate::typed::HashKey32 = "worldEventId",
@@ -15666,7 +17144,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UiWorldEvent = "ecs::UiWorldEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UnitGroup`, 112 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::UnitGroup`, 112 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     UnitGroup: Component {
         /// `members`, of `StaticArray<ecs::EntityId,24>`.
         members: ::std::vec::Vec<EntityId> = "members",
@@ -15679,7 +17159,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UnitGroup = "ecs::UnitGroup": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UnitGroupMember`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::UnitGroupMember`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     UnitGroupMember: Component {
         /// `groupId`, of `ecs::EntityId`.
         group_id: EntityId = "groupId",
@@ -15692,7 +17174,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UnitGroupMember = "ecs::UnitGroupMember": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::UnitMode`, 1 bytes.
+    /// The game's enum `ecs::UnitMode`, 1 byte.
     UnitMode {
         /// `Wildlife`, 0.
         Wildlife = "Wildlife",
@@ -15702,7 +17184,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UnitTransformer`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::UnitTransformer`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     UnitTransformer: Component {
         /// `mode`, of `ecs::UnitMode`.
         mode: UnitMode = "mode",
@@ -15711,7 +17195,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UnitTransformer = "ecs::UnitTransformer": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UnlearnSkillEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UnlearnSkillEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UnlearnSkillEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15722,7 +17208,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UnlearnSkillEvent = "ecs::UnlearnSkillEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UnlockPerkEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UnlockPerkEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UnlockPerkEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15747,7 +17235,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UnlockSkillEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UnlockSkillEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UnlockSkillEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15758,7 +17248,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UnlockSkillEvent = "ecs::UnlockSkillEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UnlockedSkillNodes`, 2316 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::UnlockedSkillNodes`, 2316 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     UnlockedSkillNodes: Component {
         /// `initialized`, of `bool`.
         initialized: bool = "initialized",
@@ -15780,14 +17272,18 @@ crate::typed::runtime::named!(UnlockedSkillNodes = "ecs::UnlockedSkillNodes": Co
 pub type UnlockedSkillsMask = ::std::vec::Vec<SkillUnlockMask>;
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UpgradableBuildingRange`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::UpgradableBuildingRange`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     UpgradableBuildingRange: Component {
     }
 }
 crate::typed::runtime::named!(UpgradableBuildingRange = "ecs::UpgradableBuildingRange": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Upgrade`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Upgrade`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Upgrade: Component {
         /// `levels`, of `BlobArray<ecs::UpgradeData>`.
         levels: ::std::vec::Vec<UpgradeData> = "levels",
@@ -15796,7 +17292,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Upgrade = "ecs::Upgrade": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UpgradeAnimation`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UpgradeAnimation`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     UpgradeAnimation: Component {
         /// `tension`, of `float32`.
         tension: f32 = "tension",
@@ -15829,7 +17327,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UpgradeStorage`, 64 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::UpgradeStorage`, 64 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     UpgradeStorage: Component {
         /// `increaseSizeConfig`, of `ecs::UpgradeStorageConfig`.
         increase_size_config: UpgradeStorageConfig = "increaseSizeConfig",
@@ -15866,7 +17366,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UpgradeStorageEvent`, 72 bytes. A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
+    /// The game's struct `ecs::UpgradeStorageEvent`, 72 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`]. The game holds it on the client only.
     UpgradeStorageEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",
@@ -15883,7 +17385,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UpgradeStorageEvent = "ecs::UpgradeStorageEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::UsedItem`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::UsedItem`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     UsedItem: Component {
         /// `itemId`, of `ItemId`.
         item_id: crate::typed::ItemId = "itemId",
@@ -15892,7 +17396,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(UsedItem = "ecs::UsedItem": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Velocity`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::Velocity`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     Velocity: Component {
         /// `velocity`, of `float3`.
         velocity: crate::typed::Float3 = "velocity",
@@ -15901,14 +17407,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Velocity = "ecs::Velocity": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxAnimationIdParameter`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::VfxAnimationIdParameter`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     VfxAnimationIdParameter: Component {
     }
 }
 crate::typed::runtime::named!(VfxAnimationIdParameter = "ecs::VfxAnimationIdParameter": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxComponent`, 52 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::VfxComponent`, 52 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     VfxComponent: FxComponent {
         /// `attachmentOffset`, of `ecs::Offset`.
         attachment_offset: Offset = "attachmentOffset",
@@ -15923,7 +17433,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VfxComponent = "ecs::VfxComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxComponentResource`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. A resource: read and serve it through [`crate::typed::ResourceType`]. The game holds it on the client only.
+    /// The game's struct `ecs::VfxComponentResource`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. A resource: read and serve it through [`crate::typed::ResourceType`]. The game holds it on the client only.
     VfxComponentResource: Component {
         /// `vfx`, of `VfxReference`.
         vfx: crate::typed::VfxReference = "vfx",
@@ -15932,7 +17444,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VfxComponentResource = "ecs::VfxComponentResource": Component, Resource);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxComponentVolatile`, 68 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::VfxComponentVolatile`, 68 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     VfxComponentVolatile: VfxComponent {
         /// `lastVfx`, of `VfxReference`.
         last_vfx: crate::typed::VfxReference = "lastVfx",
@@ -15941,14 +17455,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VfxComponentVolatile = "ecs::VfxComponentVolatile": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxLogicScrewdriverComponent`, 52 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::VfxLogicScrewdriverComponent`, 52 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     VfxLogicScrewdriverComponent: VfxComponent {
     }
 }
 crate::typed::runtime::named!(VfxLogicScrewdriverComponent = "ecs::VfxLogicScrewdriverComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxOnResourceDrop`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::VfxOnResourceDrop`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     VfxOnResourceDrop: Component {
         /// `notifier`, of `NotifierReference`.
         notifier: crate::typed::NotifierReference = "notifier",
@@ -15961,7 +17479,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VfxOnResourceDrop = "ecs::VfxOnResourceDrop": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxParametersOverwriteComponent`, 68 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::VfxParametersOverwriteComponent`, 68 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     VfxParametersOverwriteComponent: Component {
         /// `useVfxDefaultParameters`, of `bool`.
         use_vfx_default_parameters: bool = "useVfxDefaultParameters",
@@ -15972,7 +17492,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VfxParametersOverwriteComponent = "ecs::VfxParametersOverwriteComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxParametersTemplateComponent`, 88 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::VfxParametersTemplateComponent`, 88 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     VfxParametersTemplateComponent: Component {
         /// `parameters`, of `VfxUserEffectParameterDataBlock`.
         parameters: crate::typed::VfxUserEffectParameterDataBlock = "parameters",
@@ -15983,7 +17505,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VfxParametersTemplateComponent = "ecs::VfxParametersTemplateComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxResourceDynamic`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::VfxResourceDynamic`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     VfxResourceDynamic: Component {
         /// `vfx`, of `VfxReference`.
         vfx: crate::typed::VfxReference = "vfx",
@@ -15992,7 +17516,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VfxResourceDynamic = "ecs::VfxResourceDynamic": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxTargetParameter`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::VfxTargetParameter`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     VfxTargetParameter: Component {
         /// `targetSlot`, of `AttachmentSlot`.
         target_slot: crate::typed::AttachmentSlot = "targetSlot",
@@ -16007,7 +17533,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VfxTargetParameter = "ecs::VfxTargetParameter": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VfxTargetedComponent`, 72 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::VfxTargetedComponent`, 72 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     VfxTargetedComponent: VfxComponent {
         /// `targetType`, of `ecs::TargetType`.
         target_type: TargetType = "targetType",
@@ -16020,7 +17548,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VfxTargetedComponent = "ecs::VfxTargetedComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VisceralAttackExecutedEvent`, 16 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::VisceralAttackExecutedEvent`, 16 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     VisceralAttackExecutedEvent: GameEvent {
         /// `attackerId`, of `ecs::EntityId`.
         attacker_id: EntityId = "attackerId",
@@ -16031,14 +17561,18 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VisceralAttackExecutedEvent = "ecs::VisceralAttackExecutedEvent": Event);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VisualEquipment`, 1 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::VisualEquipment`, 1 byte.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     VisualEquipment: Component {
     }
 }
 crate::typed::runtime::named!(VisualEquipment = "ecs::VisualEquipment": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VoxelModel`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::VoxelModel`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     VoxelModel: Component {
         /// `renderModelHandle`, of `uint32`.
         render_model_handle: u32 = "renderModelHandle",
@@ -16049,7 +17583,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VoxelModel = "ecs::VoxelModel": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VoxelModelResourceComponent`, 20 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::VoxelModelResourceComponent`, 20 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     VoxelModelResourceComponent: Component {
         /// `model`, of `ObjectReference<VoxelModelResource>`.
         model: crate::content::Guid = "model",
@@ -16060,7 +17596,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VoxelModelResourceComponent = "ecs::VoxelModelResourceComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::VoxelModelVolatile`, 36 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::VoxelModelVolatile`, 36 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     VoxelModelVolatile: VoxelModel {
         /// `pendingRenderModelHandle`, of `uint32`.
         pending_render_model_handle: u32 = "pendingRenderModelHandle",
@@ -16077,7 +17615,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(VoxelModelVolatile = "ecs::VoxelModelVolatile": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WaterDispenser`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::WaterDispenser`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     WaterDispenser: Component {
         /// `dispenserType`, of `ecs::WaterDispenserType`.
         dispenser_type: WaterDispenserType = "dispenserType",
@@ -16088,7 +17628,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WaterDispenser = "ecs::WaterDispenser": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::WaterDispenserType`, 1 bytes.
+    /// The game's enum `ecs::WaterDispenserType`, 1 byte.
     WaterDispenserType {
         /// `Visual`, 0.
         Visual = "Visual",
@@ -16100,7 +17640,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WaterDrain`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::WaterDrain`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     WaterDrain: Component {
         /// `drainVolume`, of `uint32`.
         drain_volume: u32 = "drainVolume",
@@ -16109,7 +17651,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WaterDrain = "ecs::WaterDrain": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WaterEffector`, 60 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::WaterEffector`, 60 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     WaterEffector: VfxComponent {
         /// `height`, of `float32`.
         height: f32 = "height",
@@ -16148,7 +17692,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WeaponCategoryDamageMod`, 48 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::WeaponCategoryDamageMod`, 48 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     WeaponCategoryDamageMod: FloatAttribute {
         /// `dataStorage`, of `StaticArray<float32,10>`.
         data_storage: ::std::vec::Vec<f32> = "dataStorage",
@@ -16157,7 +17703,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WeaponCategoryDamageMod = "ecs::WeaponCategoryDamageMod": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WeaponGemSlot`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::WeaponGemSlot`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     WeaponGemSlot: Component {
         /// `weaponGem`, of `ItemStack`.
         weapon_gem: crate::typed::ItemStack = "weaponGem",
@@ -16166,7 +17714,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WeaponGemSlot = "ecs::WeaponGemSlot": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WeaponReference`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::WeaponReference`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     WeaponReference: Component {
         /// `weaponEntityId`, of `ecs::EntityId`.
         weapon_entity_id: EntityId = "weaponEntityId",
@@ -16177,7 +17727,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WeaponReference = "ecs::WeaponReference": Component);
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `ecs::WeatherFrequency`, 1 bytes.
+    /// The game's enum `ecs::WeatherFrequency`, 1 byte.
     WeatherFrequency {
         /// `Disabled`, 0.
         Disabled = "Disabled",
@@ -16191,7 +17741,9 @@ crate::typed::runtime::reflected_enum! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WetDurationReduction`, 12 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::WetDurationReduction`, 12 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     WetDurationReduction: SInt32Attribute {
         /// `dataStorage`, of `StaticArray<sint32,1>`.
         data_storage: ::std::vec::Vec<i32> = "dataStorage",
@@ -16200,7 +17752,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WetDurationReduction = "ecs::WetDurationReduction": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WhiteboxRandomSpawner`, 8 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::WhiteboxRandomSpawner`, 8 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     WhiteboxRandomSpawner: Component {
         /// `entries`, of `BlobArray<WhiteboxSpawnerEntry>`.
         entries: ::std::vec::Vec<crate::typed::WhiteboxSpawnerEntry> = "entries",
@@ -16209,7 +17763,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WhiteboxRandomSpawner = "ecs::WhiteboxRandomSpawner": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WhiteboxRandomSpawnerLabels`, 4 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::WhiteboxRandomSpawnerLabels`, 4 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     WhiteboxRandomSpawnerLabels: SpawnComponent {
         /// `labelHandle`, of `ContentLabelCombinationHandle`.
         label_handle: crate::typed::ContentLabelCombinationHandle = "labelHandle",
@@ -16218,7 +17774,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WhiteboxRandomSpawnerLabels = "ecs::WhiteboxRandomSpawnerLabels": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WiggleComponent`, 40 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::WiggleComponent`, 40 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     WiggleComponent: Component {
         /// `startTime`, of `Time`.
         start_time: crate::typed::Time = "startTime",
@@ -16235,7 +17793,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WiggleComponent = "ecs::WiggleComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::Wildlife`, 736 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`].
+    /// The game's struct `ecs::Wildlife`, 736 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`].
     Wildlife: Component {
         /// `spawnSequence`, of `actor::ActorSequenceReference`.
         spawn_sequence: crate::typed::actor::ActorSequenceReference = "spawnSequence",
@@ -16302,7 +17862,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(Wildlife = "ecs::Wildlife": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WildlifeTransformer`, 16 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// The game's struct `ecs::WildlifeTransformer`, 16 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
     WildlifeTransformer: Component {
         /// `timeWithoutHit`, of `Time`.
         time_without_hit: crate::typed::Time = "timeWithoutHit",
@@ -16321,7 +17883,9 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::WindMotorComponent`, 28 bytes. An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
+    /// The game's struct `ecs::WindMotorComponent`, 28 bytes.
+    ///
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the client only.
     WindMotorComponent: Component {
         /// `motorHandle`, of `uint32`.
         motor_handle: u32 = "motorHandle",
@@ -16338,7 +17902,9 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::named!(WindMotorComponent = "ecs::WindMotorComponent": Component);
 
 crate::typed::runtime::reflected_struct! {
-    /// The game's struct `ecs::XPGainedEvent`, 24 bytes. A game event: handle it through [`crate::typed::EventType`].
+    /// The game's struct `ecs::XPGainedEvent`, 24 bytes.
+    ///
+    /// A game event: handle it through [`crate::typed::EventType`].
     XPGainedEvent: GameEvent {
         /// `playerEntityId`, of `ecs::EntityId`.
         player_entity_id: EntityId = "playerEntityId",

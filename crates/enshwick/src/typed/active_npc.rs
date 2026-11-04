@@ -67,7 +67,7 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_enum! {
-    /// The game's enum `active_npc::NpcType`, 1 bytes.
+    /// The game's enum `active_npc::NpcType`, 1 byte.
     NpcType {
         /// `None`, 0.
         None = "None",
