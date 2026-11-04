@@ -443,6 +443,14 @@ declare enshwick: {
 		resource_keys: (type_name: string?) -> any,
 		--- The hashes of the game's own contents, each a list of four numbers.
 		content_hashes: () -> any,
+		--- The bytes of the game's own content `hash`, four numbers as `content_hashes` lists them; nil for a hash the archive lacks.
+		game_content: (hash: any) -> buffer?,
+		--- Serves `bytes` as game content, such as a texture's pixels, and returns the hash a resource names it by, four numbers; the same bytes give the same hash.
+		serve_content: (bytes: buffer) -> any,
+		--- The value of `bytes`, a resource of the type qualified as `type_name`.
+		decode: (type_name: string, bytes: buffer) -> any,
+		--- `value`, of the type qualified as `type_name`, as resource bytes: written over `base` when given, keeping the bytes of what did not change, else into new bytes.
+		encode: (type_name: string, value: any, base: buffer?) -> buffer,
 		--- The value of the game's own resource `key`, read from its archive.
 		game_value: (key: any) -> any,
 		--- Serves the resource `key`, built from the resource `base` the first time the game reads it: `patch` gets the base's value and returns the value to serve, which may name only the fields it changes; nil serves the base unchanged. Allowed while the mod initialises.

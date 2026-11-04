@@ -56,9 +56,9 @@ bytes and writes back unchanged.
 ## From Luau
 
 `enshwick.resources` has the same calls: `named`, `hashed`, `impact_named`,
-`impact_hashed`, `type_names`, `resource_keys`, `content_hashes`, `game_value`
-and `serve`. A value is a plain table; a variant is `{ type = ..., value = ... }`
-and raw bytes are `{ bytes = { ... } }`. An integer past 2^53, which a Luau
+`impact_hashed`, `type_names`, `resource_keys`, `content_hashes`, `game_content`,
+`serve_content`, `game_value`, `decode`, `encode` and `serve`. A value is a plain table; a variant is `{ type = ..., value = ... }`
+and raw bytes are a `buffer`. An integer past 2^53, which a Luau
 number cannot hold exactly, is its decimal text, and text is taken back for any
 integer. A patch returns the table to serve, naming only what it changes, or
 `nil` to serve the base unchanged.

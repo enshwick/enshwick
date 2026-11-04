@@ -367,6 +367,31 @@ impl Host {
         })
     }
 
+    /// Serves `bytes` as game content, such as a texture's pixels, kept for
+    /// the life of the process, and returns the hash a resource names it by;
+    /// the same bytes give the same hash.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] outside the game and when the loader refuses the content.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// if let Some(host) = enshwick::host() {
+    ///     let hash = host.serve_content(&[0, 0, 0, 255])?;
+    ///     assert_eq!(hash[0], 4, "a hash starts with its size");
+    /// }
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    pub fn serve_content(&self, bytes: &[u8]) -> Result<[u32; 4], Off> {
+        let api = self.api();
+        let len = u32::try_from(bytes.len()).map_err(|_| Off::new("content past 4 GiB"))?;
+        let mut out = [0u32; 4];
+        let status = (api.content_serve)(self.handle(), bytes.as_ptr(), len, &raw mut out);
+        crate::load::ok(status, out, || "serve content".to_owned())
+    }
+
     /// The value of the game's own resource `key`, read from its archive by
     /// the type its key names.
     ///

@@ -473,7 +473,7 @@ fn not_fit(value: impl core::fmt::Display, ty: &Type<'_>) -> CodecError {
 
 /// `value` in the form `ty` takes when it came in a form a script writes:
 /// a constant, GUID or integer as text, flags as a list of names, a variant
-/// as `{ type, value }`, raw bytes as `{ bytes }`.
+/// as `{ type, value }`.
 fn coerce<'v>(ty: &Type<'_>, value: &'v Value) -> Result<Cow<'v, Value>, CodecError> {
     let kind = ty.kind();
     Ok(Cow::Owned(match (kind, value) {
@@ -519,22 +519,6 @@ fn coerce<'v>(ty: &Type<'_>, value: &'v Value) -> Result<Cow<'v, Value>, CodecEr
                 }
                 _ => return Err(CodecError::new("a variant is { type, value }")),
             }
-        }
-        (_, Value::Struct(fields)) if fields.len() == 1 && fields[0].0 == "bytes" => {
-            let Value::List(items) = &fields[0].1 else {
-                return Err(CodecError::new("bytes are a list of numbers"));
-            };
-            Value::Bytes(
-                items
-                    .iter()
-                    .map(|item| match item {
-                        Value::Int(b) => u8::try_from(*b).ok(),
-                        Value::Uint(b) => u8::try_from(*b).ok(),
-                        _ => None,
-                    })
-                    .collect::<Option<_>>()
-                    .ok_or_else(|| CodecError::new("a byte is a number from 0 to 255"))?,
-            )
         }
         _ => return Ok(Cow::Borrowed(value)),
     }))

@@ -15,6 +15,7 @@ fn kind(value: &LuaValue) -> &'static str {
         LuaValue::Vector(_) => "a vector",
         LuaValue::Table(_) => "a table",
         LuaValue::Function(_) => "a function",
+        LuaValue::Buffer(_) => "a buffer",
         _ => "another kind of value",
     }
 }
@@ -62,6 +63,7 @@ pub(crate) fn to_lua(
             }
             LuaValue::Table(table)
         }
+        (Value::Bytes(bytes), _) => LuaValue::Buffer(lua.create_buffer(bytes)?),
         (Value::Map(fields), _) => {
             let table = lua.create_table_with_capacity(0, fields.len())?;
             for (name, value) in fields {
@@ -155,6 +157,11 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
                 scope.call_function(&function, args, signature)
             })))
         }
+        Ty::Bytes => match value {
+            LuaValue::Buffer(buffer) => Ok(Value::Bytes(buffer.to_vec())),
+            LuaValue::String(text) => Ok(Value::Bytes(text.as_bytes().to_vec())),
+            other => Err(expected("a buffer", &other)),
+        },
         Ty::Data => data(value, 0),
         _ => Err(Error::new("a type this runtime does not know")),
     }
@@ -173,6 +180,7 @@ fn data(value: LuaValue, depth: usize) -> Result<Value, Error> {
     Ok(match value {
         LuaValue::Nil => Value::Nil,
         LuaValue::Boolean(b) => Value::Bool(b),
+        LuaValue::Buffer(buffer) => Value::Bytes(buffer.to_vec()),
         LuaValue::Integer(i) => Value::Number(i as f64),
         LuaValue::Number(n) => Value::Number(n),
         LuaValue::String(s) => Value::String(

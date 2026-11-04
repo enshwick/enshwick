@@ -33,7 +33,7 @@ mod value;
 pub use codec::CodecError;
 pub use kind::Kind;
 pub use registry::Registry;
-pub use script::Resources;
+pub use script::{Bytes, Resources};
 #[doc(hidden)]
 pub use table::TypeTable;
 pub use types::{Attribute, Constant, Field, Type, fnv1a32};

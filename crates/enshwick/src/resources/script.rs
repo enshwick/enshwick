@@ -4,7 +4,7 @@
 //! A value crosses as a plain table: a struct by field name, an array as a
 //! list, an enum constant or a GUID as text, a bitmask as the list of its
 //! flags' names, a variant as `{ type = <qualified name>, value = ... }`,
-//! raw bytes as `{ bytes = { ... } }`. An integer past 2^53, which a script
+//! raw bytes as a `buffer`. An integer past 2^53, which a script
 //! number cannot hold exactly, crosses as its decimal text; text is taken
 //! back for any integer.
 
@@ -58,15 +58,39 @@ impl IntoScript for Data {
                 ),
                 ("value".to_owned(), variant.value().clone().into_value()),
             ]),
-            Self::Bytes(bytes) => Value::Map(vec![(
-                "bytes".to_owned(),
-                Value::List(
-                    bytes
-                        .into_iter()
-                        .map(|b| Value::Number(f64::from(b)))
-                        .collect(),
-                ),
-            )]),
+            Self::Bytes(bytes) => Value::Bytes(bytes),
+        }
+    }
+}
+
+/// Raw bytes a script passes and gets as a Luau `buffer`: a content's bytes,
+/// a resource's bytes before or after the codec.
+///
+/// # Examples
+///
+/// ```
+/// let bytes = enshwick::resources::Bytes(vec![1, 2, 3]);
+/// assert_eq!(bytes.0.len(), 3);
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Bytes(pub Vec<u8>);
+
+impl Typed for Bytes {
+    const TY: &'static Ty = &Ty::Bytes;
+}
+
+impl IntoScript for Bytes {
+    fn into_value(self) -> Value {
+        Value::Bytes(self.0)
+    }
+}
+
+impl FromScript for Bytes {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        match value {
+            Value::Bytes(bytes) => Ok(Self(bytes)),
+            Value::String(text) => Ok(Self(text.into_bytes())),
+            _ => Err(Error::new("expected a buffer")),
         }
     }
 }
@@ -83,6 +107,7 @@ impl FromScript for Data {
             Value::Number(n) if n.fract() == 0.0 && n.abs() < 9.2e18 => Self::Int(n as i64),
             Value::Number(n) => Self::Float(n),
             Value::String(text) => Self::Text(text),
+            Value::Bytes(bytes) => Self::Bytes(bytes),
             Value::List(items) => Self::List(
                 items
                     .into_iter()
@@ -196,6 +221,24 @@ fn describe(ty: &Type<'_>) -> Data {
         ),
         ("attributes".into(), attributes(ty.attributes())),
     ])
+}
+
+/// The content hash `data` names: a list of four numbers.
+fn hash_of(data: &Data) -> Result<[u32; 4], Off> {
+    let malformed = || Off::new("a content hash is four numbers");
+    let Data::List(words) = data else {
+        return Err(malformed());
+    };
+    let words: Vec<u32> = words
+        .iter()
+        .map(|word| match word {
+            Data::Int(w) => u32::try_from(*w).ok(),
+            Data::Uint(w) => u32::try_from(*w).ok(),
+            _ => None,
+        })
+        .collect::<Option<_>>()
+        .ok_or_else(malformed)?;
+    words.try_into().map_err(|_| malformed())
 }
 
 /// The script resources API: the running game's types, its resources by
@@ -359,6 +402,57 @@ impl Resources {
         ))
     }
 
+    /// The bytes of the game's own content `hash`, four numbers as
+    /// `content_hashes` lists them; nil for a hash the archive lacks.
+    #[script]
+    #[must_use]
+    pub fn game_content(self, hash: &Data) -> Option<Bytes> {
+        self.host.game_content(hash_of(hash).ok()?).map(Bytes)
+    }
+
+    /// Serves `bytes` as game content, such as a texture's pixels, and
+    /// returns the hash a resource names it by, four numbers; the same bytes
+    /// give the same hash.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader refuses the content.
+    #[script]
+    pub fn serve_content(self, bytes: &Bytes) -> Result<Data, Off> {
+        let hash = self.host.serve_content(&bytes.0)?;
+        Ok(Data::List(
+            hash.into_iter().map(|w| Data::Uint(w.into())).collect(),
+        ))
+    }
+
+    /// The value of `bytes`, a resource of the type qualified as
+    /// `type_name`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the bytes do not read as that type.
+    #[script]
+    pub fn decode(self, type_name: &str, bytes: &Bytes) -> Result<Data, Off> {
+        Ok(self.registry.decode(type_name, &bytes.0)?)
+    }
+
+    /// `value`, of the type qualified as `type_name`, as resource bytes:
+    /// written over `base` when given, keeping the bytes of what did not
+    /// change, else into new bytes.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the value does not fit the type.
+    #[script]
+    pub fn encode(self, type_name: &str, value: &Data, base: Option<Bytes>) -> Result<Bytes, Off> {
+        let base = base.map(|base| base.0);
+        Ok(Bytes(self.registry.encode(
+            type_name,
+            value,
+            base.as_deref(),
+        )?))
+    }
+
     /// The value of the game's own resource `key`, read from its archive.
     ///
     /// # Errors
@@ -452,10 +546,7 @@ mod tests {
             shape.field("type"),
             Some(&Data::Text("demo::Sphere".into()))
         );
-        assert_eq!(
-            back.field("raw").and_then(|raw| raw.field("bytes")),
-            Some(&Data::List(vec![Data::Int(1), Data::Int(2)]))
-        );
+        assert_eq!(back.field("raw"), Some(&Data::Bytes(vec![1, 2])));
         assert!(Data::from_value(Value::Vector([0.0; 3])).is_err());
     }
 }

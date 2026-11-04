@@ -59,6 +59,7 @@ fn render(ty: &Ty) -> String {
         Ty::Choice(choice) => choice.name().to_owned(),
         Ty::Function(signature) => function(signature),
         Ty::Data => "any".to_owned(),
+        Ty::Bytes => "buffer".to_owned(),
         _ => "nil".to_owned(),
     }
 }

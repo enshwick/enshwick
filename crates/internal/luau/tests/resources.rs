@@ -61,6 +61,7 @@ mod tests {
                 ]),
             ])
             .resource(key(), bytes(2.5, u64::MAX))
+            .archive([4, 1, 2, 3], vec![5, 6, 7, 8])
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Luau)`.
         let status =
@@ -126,5 +127,27 @@ mod tests {
         "#);
         let base = bytes(2.5, 7);
         assert_eq!(loader.build_resource(&key(), &base).unwrap(), base);
+    }
+
+    #[test]
+    fn a_script_reads_content_bytes_and_codes_a_resource_through_a_buffer() {
+        let loader = run(r#"
+            local data = enshwick.resources.game_content(enshwick.resources.content_hashes()[1])
+            print(`content {buffer.len(data)} first {buffer.readu8(data, 0)}`)
+            local key = enshwick.resources.resource_keys("demo::balance::Table")[1]
+            local bytes = enshwick.resources.encode("demo::balance::Table", enshwick.resources.game_value(key))
+            local again = enshwick.resources.decode("demo::balance::Table", bytes)
+            print(`round {again.damage} {buffer.len(bytes)}`)
+            print(`served {enshwick.resources.serve_content(buffer.fromstring("abcd"))[1]}`)
+            print(`missing {enshwick.resources.game_content({4, 9, 9, 9}) == nil}`)
+        "#);
+        for line in [
+            "content 4 first 5",
+            "round 2.5 16",
+            "served 4",
+            "missing true",
+        ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
     }
 }
