@@ -1,9 +1,8 @@
 # Game resources as values
 
-`enshwick::resources` reads any resource of the game's archive as a tree of
-typed values and serves your change to the game when it reads the resource.
-It works by the game's own reflected type names, so it reaches every resource
-type, not only the ones the API wraps.
+`enshwick::resources` reads any resource of the game's archive as typed values
+and serves your change when the game reads it. It goes by the game's reflected
+type names, so it reaches every resource type.
 
 ## Find a type
 
