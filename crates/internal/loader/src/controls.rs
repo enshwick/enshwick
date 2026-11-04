@@ -175,7 +175,7 @@ pub(crate) fn link(loader: &Loader) {
     match gate(loader) {
         Ok(found) => {
             let _first = GATE.set(found);
-            crate::log!(INFO, "controls: {} declared", declared.len());
+            crate::log!(INFO, "controls: keys of {} controls on", declared.len());
         }
         Err((id, reason)) => {
             loader.feature_off("mod control keys", id, &reason);
@@ -253,6 +253,7 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
         }
     }
     if !bits.is_empty() {
+        crate::log!(INFO, "controls: {} follow game actions", bits.len());
         let _first = LINKED.set(Linked { digital, bits });
     }
 }
