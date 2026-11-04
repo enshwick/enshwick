@@ -6,6 +6,7 @@ side = "client"
 guid = "e378da3d6079c049b30cd1604a0e7846"
 age = 210
 steam_build = 26430625
+game_version = 1287369
 revision = 1
 
 # Systems whose reflected entry must equal the pinned address: the

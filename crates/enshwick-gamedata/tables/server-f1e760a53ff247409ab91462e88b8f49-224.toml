@@ -6,6 +6,7 @@ side = "server"
 guid = "f1e760a53ff247409ab91462e88b8f49"
 age = 224
 steam_build = 26430253
+game_version = 1287369
 revision = 1
 
 # Systems whose reflected entry must equal the pinned address: the
