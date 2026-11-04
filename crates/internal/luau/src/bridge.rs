@@ -268,22 +268,23 @@ impl mlua::UserData for Object {
                 let class = this.handle.class();
                 // One function per class and method in a VM, made on first use:
                 // a filter on a hot path indexes methods on every hit.
-                let classes = match lua.named_registry_value::<Option<mlua::Table>>(METHODS)? {
-                    Some(classes) => classes,
-                    None => {
-                        let classes = lua.create_table()?;
-                        lua.set_named_registry_value(METHODS, &classes)?;
-                        classes
-                    }
+                let classes = if let Some(classes) =
+                    lua.named_registry_value::<Option<mlua::Table>>(METHODS)?
+                {
+                    classes
+                } else {
+                    let classes = lua.create_table()?;
+                    lua.set_named_registry_value(METHODS, &classes)?;
+                    classes
                 };
-                let cached = match classes.raw_get::<Option<mlua::Table>>(class.name())? {
-                    Some(cached) => cached,
-                    None => {
+                let cached =
+                    if let Some(cached) = classes.raw_get::<Option<mlua::Table>>(class.name())? {
+                        cached
+                    } else {
                         let cached = lua.create_table()?;
                         classes.raw_set(class.name(), &cached)?;
                         cached
-                    }
-                };
+                    };
                 if let Some(function) = cached.raw_get::<Option<mlua::Function>>(&key)? {
                     return Ok(LuaValue::Function(function));
                 }

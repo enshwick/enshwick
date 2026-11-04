@@ -534,7 +534,7 @@ fn requested<'scope, 'env>(
     let ask = format!("enshwick.{}.{}", namespace.name(), getter.name());
     let slot: Arc<OnceLock<script::Opened>> = Arc::default();
     for declared in namespace.functions() {
-        let (slot, bridge, ask) = (slot.clone(), bridge.clone(), ask.clone());
+        let (slot, bridge, ask) = (Arc::clone(&slot), bridge.clone(), ask.clone());
         let what = format!("enshwick.{}.{}", namespace.name(), declared.name());
         let signature = declared.signature();
         table.raw_set(

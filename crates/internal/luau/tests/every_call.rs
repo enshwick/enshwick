@@ -112,7 +112,7 @@ mod tests {
                 classes_in(f.signature().ret(), &mut classes);
             }
             // A getter goes first, so the namespace's functions run opened.
-            for f in namespace.request_function() {
+            if let Some(f) = namespace.request_function() {
                 calls.insert(0, (format!("{path}.{}", f.name()), f.signature()));
                 classes_in(f.signature().ret(), &mut classes);
             }

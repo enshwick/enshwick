@@ -158,8 +158,11 @@ impl Namespace {
     /// # Examples
     ///
     /// ```rust,standalone_crate
-    /// let altars = enshwick::script::NAMESPACES.iter().find(|n| n.request_function().is_some());
-    /// assert!(altars.is_some_and(|n| n.request_function().is_some_and(|f| f.name() == "altars")));
+    /// let getters: Vec<&str> = enshwick::script::NAMESPACES
+    ///     .iter()
+    ///     .filter_map(|n| Some(n.request_function()?.name()))
+    ///     .collect();
+    /// assert!(getters.contains(&"altars"));
     /// ```
     #[must_use]
     pub fn request_function(&self) -> Option<Declared> {

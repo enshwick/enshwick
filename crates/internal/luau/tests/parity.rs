@@ -364,7 +364,7 @@ mod tests {
                 names.insert(format!("{prefix}{}", function.name()));
                 signatures.push(function.signature());
             }
-            for function in namespace.request_function() {
+            if let Some(function) = namespace.request_function() {
                 names.insert(format!("{prefix}{}", function.name()));
                 signatures.push(function.signature());
             }

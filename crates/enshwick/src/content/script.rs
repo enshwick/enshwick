@@ -58,10 +58,10 @@ impl FromScript for Id {
 
 /// The content id texts scripts passed, each kept once for the process, as
 /// a pack's are: a handler that names an id on every event keeps no more.
-struct ScriptIds(std::collections::HashSet<&'static str, rustc_hash::FxBuildHasher>);
+struct ScriptIds(rustc_hash::FxHashSet<&'static str>);
 
 static SCRIPT_IDS: std::sync::Mutex<ScriptIds> = std::sync::Mutex::new(ScriptIds(
-    std::collections::HashSet::with_hasher(rustc_hash::FxBuildHasher),
+    rustc_hash::FxHashSet::with_hasher(rustc_hash::FxBuildHasher),
 ));
 
 impl ScriptIds {
