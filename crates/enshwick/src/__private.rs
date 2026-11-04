@@ -2,7 +2,13 @@ pub use const_format::concatcp;
 pub use serde;
 
 pub use crate::hook::Frame;
-pub use crate::script::convert::{argument, record_fields};
+pub use crate::script::convert::{argument, argument_or_default, record_fields};
+
+/// A copy of `this`, for a `#[script]` method that takes `self` by value.
+#[must_use]
+pub fn owned<T: Clone>(this: &T) -> T {
+    this.clone()
+}
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};

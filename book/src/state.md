@@ -52,6 +52,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.on("WorldLoaded", function()
+    local dir = enshwick.world.data_dir()
+    if dir then
+        enshwick.log.info(`this world's data is in {dir}`)
+    end
+end)
+```
+
 Write files from a thread of your own or a loader thread, not from a hook or a
 game event handler: the game thread waits on the disk otherwise.
 

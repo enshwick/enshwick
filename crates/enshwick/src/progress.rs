@@ -33,7 +33,7 @@ use crate::{Load, Off};
 /// assert_eq!(row.need - row.progress, 90);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, crate::Script)]
 pub struct Experience {
     /// The character.
     pub entity: Entity,
@@ -65,7 +65,7 @@ const _: () = {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Skill {
     /// Airborne Architect, which opens the building fly mode.
@@ -88,7 +88,7 @@ impl Skill {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum SkillGate {
     /// The building fly mode gate, on both sides.
@@ -102,7 +102,7 @@ pub enum SkillGate {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct SkillCheck {
     /// Who asks.
@@ -117,7 +117,7 @@ pub struct SkillCheck {
 /// # Examples
 ///
 /// See [`Load::on_comfort`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct Comfort {
     /// The comfort category.
     pub category: u32,
@@ -137,6 +137,58 @@ pub struct Levels {
     cap: u32,
     need_for: Option<unsafe extern "system" fn(*mut c_void, u32) -> u32>,
     token: *mut c_void,
+}
+
+/// The [`Levels`] a script's filter gets: the table read whole during the
+/// pass, since the loader's token lasts only that long.
+#[derive(Clone, Debug)]
+pub(crate) struct ScriptLevels {
+    cap: u32,
+    /// What each level from 1 up needs.
+    needs: Vec<u32>,
+}
+
+impl ScriptLevels {
+    /// Levels read past this are not copied: a real cap is far below it.
+    const MAX_READ: u32 = 1024;
+
+    /// Reads `levels` whole, while its pass lasts.
+    fn read(levels: &Levels) -> Self {
+        Self {
+            cap: levels.cap(),
+            needs: (1..=levels.cap().min(Self::MAX_READ))
+                .map(|level| levels.need(level))
+                .collect(),
+        }
+    }
+}
+
+impl crate::script::Object for ScriptLevels {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "Levels",
+        "The game's level table, during an experience pass.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LEVELS];
+}
+
+#[crate::script(levels)]
+impl ScriptLevels {
+    /// The highest level, as [`Levels::cap`] answers.
+    #[script(name = "cap")]
+    pub(crate) const fn cap_script(&self) -> u32 {
+        self.cap
+    }
+
+    /// What `level` needs, 0 for level 0 or past the cap, as
+    /// [`Levels::need`] answers.
+    #[script(name = "need")]
+    pub(crate) fn need_script(&self, level: u32) -> u32 {
+        level
+            .checked_sub(1)
+            .and_then(|at| self.needs.get(usize::try_from(at).ok()?))
+            .copied()
+            .unwrap_or(0)
+    }
 }
 
 impl Levels {
@@ -244,6 +296,49 @@ where
     );
 }
 
+#[crate::script(progress_hooks)]
+impl Load<'_> {
+    /// Runs `filter` on each comfort a provider registers, as
+    /// `Load::on_comfort` does: the comfort it answers registers; nil keeps
+    /// the comfort as it was.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_comfort`].
+    #[script(name = "on_comfort")]
+    pub(crate) fn on_comfort_script(
+        &mut self,
+        filter: impl Fn(Comfort) -> Option<i32> + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        self.on_comfort(move |comfort| filter(*comfort).unwrap_or(comfort.value))
+    }
+
+    /// Runs `filter` on each tick's experience with the level table, as
+    /// `Load::on_experience` does: it returns the changed list, or nil to
+    /// keep it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_experience`].
+    #[script(name = "on_experience")]
+    pub(crate) fn on_experience_script(
+        &mut self,
+        filter: impl Fn(Vec<Experience>, ScriptLevels) -> Option<Vec<Experience>>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Result<(), Off> {
+        self.on_experience(move |all, levels| {
+            if let Some(changed) = filter(all.to_vec(), ScriptLevels::read(levels)) {
+                for (slot, new) in all.iter_mut().zip(changed) {
+                    *slot = new;
+                }
+            }
+        })
+    }
+}
+
+#[crate::script(progress)]
 impl Load<'_> {
     /// Answers the game's checks of `skill`: `Some(true)` unlocks it for
     /// that check, `Some(false)` locks it, `None` keeps the game's answer. It
@@ -257,6 +352,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn on_skill<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
     where
         F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static,

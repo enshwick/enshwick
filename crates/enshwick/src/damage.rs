@@ -42,7 +42,7 @@ use crate::{Load, Off};
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum DamageTypeNew {
     /// Blades.
@@ -120,7 +120,7 @@ impl DamageTypeNew {
 ///
 /// See the [module](self).
 #[cfg(feature = "unstable")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum DamageCause {
     /// A hit from a weapon, a spell, a creature or an explosion, by type.
@@ -446,6 +446,121 @@ impl Load<'_> {
             |user| (host.api().damage_filter)(host.handle(), run_damage::<F>, user),
             "damage filter",
         )
+    }
+}
+
+/// The damage a script's filter sees and changes: a copy of the check,
+/// written back once the filter returns, with [`Damage`]'s methods.
+#[cfg(feature = "unstable")]
+#[derive(Clone, Debug)]
+pub(crate) struct ScriptDamage(std::sync::Arc<std::sync::Mutex<DamageCheck>>);
+
+#[cfg(feature = "unstable")]
+impl ScriptDamage {
+    /// Runs `with` on the copy as a [`Damage`].
+    fn with<R>(&self, with: impl FnOnce(&mut Damage<'_>) -> R) -> R {
+        use crate::Relock as _;
+        let mut check = self.0.relock();
+        with(&mut Damage { check: &mut check })
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl crate::script::Object for ScriptDamage {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "Damage",
+        "Damage about to reach an entity's health, for a filter to see and change.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_DAMAGE];
+}
+
+#[cfg(feature = "unstable")]
+#[crate::script(damage)]
+impl ScriptDamage {
+    /// What deals it, as [`Damage::cause`] says.
+    #[script(name = "cause")]
+    pub(crate) fn cause_script(&self) -> DamageCause {
+        self.with(|d| d.cause())
+    }
+
+    /// The entity that takes it, as [`Damage::target`] says.
+    #[script(name = "target")]
+    pub(crate) fn target_script(&self) -> Entity {
+        self.with(|d| d.target())
+    }
+
+    /// What dealt a hit, as [`Damage::source`] says.
+    #[script(name = "source")]
+    pub(crate) fn source_script(&self) -> Option<Entity> {
+        self.with(|d| d.source())
+    }
+
+    /// Who dealt a hit, as [`Damage::attacker`] says.
+    #[script(name = "attacker")]
+    pub(crate) fn attacker_script(&self) -> Option<Entity> {
+        self.with(|d| d.attacker())
+    }
+
+    /// A hit's damage of type `ty`, as [`Damage::amount`] reads it.
+    #[script(name = "amount")]
+    pub(crate) fn amount_script(&self, ty: DamageTypeNew) -> f32 {
+        self.with(|d| d.amount(ty))
+    }
+
+    /// Sets a hit's damage of type `ty`, as [`Damage::set`] does.
+    #[script(name = "set")]
+    pub(crate) fn set_script(&self, ty: DamageTypeNew, amount: f32) {
+        self.with(|d| d.set(ty, amount));
+    }
+
+    /// The damage the health takes, as [`Damage::total`] sums it.
+    #[script(name = "total")]
+    pub(crate) fn total_script(&self) -> f32 {
+        self.with(|d| d.total())
+    }
+
+    /// Scales the damage by `factor`, as [`Damage::scale`] does.
+    #[script(name = "scale")]
+    pub(crate) fn scale_script(&self, factor: f32) {
+        self.with(|d| d.scale(factor));
+    }
+
+    /// Scales a hit's damage of type `ty`, as [`Damage::scale_type`] does.
+    #[script(name = "scale_type")]
+    pub(crate) fn scale_type_script(&self, ty: DamageTypeNew, factor: f32) {
+        self.with(|d| d.scale_type(ty, factor));
+    }
+
+    /// Takes all damage away, as [`Damage::cancel`] does.
+    #[script(name = "cancel")]
+    pub(crate) fn cancel_script(&self) {
+        self.with(|d| {
+            d.cancel();
+        });
+    }
+}
+
+#[cfg(feature = "unstable")]
+#[crate::script(damage_filter)]
+impl Load<'_> {
+    /// Runs `filter` on damage about to reach an entity's health, as
+    /// [`Load::on_damage`] does: it gets the damage as an object whose
+    /// methods change it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_damage`].
+    #[script(name = "on_damage")]
+    pub(crate) fn on_damage_script(
+        &mut self,
+        filter: impl Fn(ScriptDamage) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        use crate::Relock as _;
+        self.on_damage(move |damage| {
+            let copy = ScriptDamage(std::sync::Arc::new(std::sync::Mutex::new(*damage.check)));
+            filter(copy.clone());
+            *damage.check = *copy.0.relock();
+        })
     }
 }
 

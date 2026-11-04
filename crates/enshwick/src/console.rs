@@ -76,3 +76,38 @@ pub fn run(line: &str) -> Result<String, RunError> {
         other => Err(RunError::Refused(other.0)),
     }
 }
+
+/// The free functions of [`console`](self) as a script's namespace
+/// `console`.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct ConsoleFns;
+
+#[crate::script(console_fns)]
+#[expect(
+    clippy::unused_self,
+    reason = "a script call takes its namespace, though a free function reads nothing of it"
+)]
+impl ConsoleFns {
+    /// Runs the console line `line` and returns its answer, as [`run`]
+    /// does.
+    ///
+    /// # Errors
+    ///
+    /// As [`run`].
+    #[script]
+    pub fn run(self, line: &str) -> Result<String, RunError> {
+        run(line)
+    }
+}
+
+impl crate::script::Bound for ConsoleFns {
+    const NAME: &'static str = "console";
+    const DOC: &'static str =
+        "The server's console: lines a tool runs as an administrator with no character.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_CONSOLE_FNS];
+
+    fn resolve(_load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
+        Ok(Self)
+    }
+}

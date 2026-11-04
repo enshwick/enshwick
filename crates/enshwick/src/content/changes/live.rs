@@ -12,7 +12,7 @@ use super::{Field, Items, Value, ValueError};
 /// # Examples
 ///
 /// See [`ChangeHandle`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Target {
     /// One vanilla entry, such as an item's GUID.
@@ -110,6 +110,7 @@ pub struct ChangeHandle {
     field: Field,
 }
 
+#[crate::script(handle)]
 impl ChangeHandle {
     /// The field this handle changes.
     ///
@@ -123,6 +124,7 @@ impl ChangeHandle {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub const fn field(&self) -> Field {
         self.field
     }
@@ -139,6 +141,7 @@ impl ChangeHandle {
     /// # Examples
     ///
     /// See [`ChangeHandle`].
+    #[script]
     pub fn set(&self, value: Value) -> Result<(), SetChangeError> {
         self.field.check(value)?;
         let (op, raw) = match value {
@@ -164,6 +167,7 @@ impl ChangeHandle {
     ///     handle.reset()
     /// }
     /// ```
+    #[script]
     pub fn reset(&self) -> Result<(), SetChangeError> {
         self.send(ChangeOp::RESET, 0.0)
     }
@@ -177,6 +181,7 @@ impl ChangeHandle {
     }
 }
 
+#[crate::script(content_live)]
 impl Load<'_> {
     /// Declares during `init` a change of `field` of `target`, from
     /// `source`, whose value the mod sets later through the handle. The
@@ -195,6 +200,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`ChangeHandle`].
+    #[script]
     pub fn declare_change(
         &mut self,
         target: Target,

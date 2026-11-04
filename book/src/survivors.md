@@ -41,6 +41,17 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.survivors.on_survivor_lookup(function(lookup)
+    -- A staff always spawns a new entity instead of moving the old one.
+    local purpose = lookup:purpose()
+    if type(purpose) == "table" and purpose.Spawn then
+        return "Nobody"
+    end
+    return "Vanilla"
+end)
+```
+
 One mod answers at a time; a second is refused. The lookup runs on the
 server's worker threads, in the dedicated server or a hosting client, and for
 `Cursor` on a client alone too: keep it quick, never block, and read

@@ -53,15 +53,17 @@ use crate::{Host, Load, Off};
 ///
 /// See [`Effects::teleport`].
 #[cfg(feature = "unstable")]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct Teleport {
     /// Let the game look for a free spot near the target to stand on, as it
     /// does for respawns.
+    #[script(default)]
     pub search_best_spawn_position: bool,
     /// The orientation to arrive in, a quaternion `x, y, z, w`; `None`
     /// keeps the entity's own. The name is enshwick's: the game takes a
     /// whole arrival transform.
+    #[script(default)]
     pub facing: Option<[f32; 4]>,
 }
 
@@ -120,16 +122,19 @@ impl Teleport {
 /// let brief = Spawn::new().level(10).despawn_after(Duration::from_secs(60));
 /// assert_eq!(brief.level, Some(10));
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct Spawn {
     /// The level the game scales the entity to, as for enemies; `None` for
     /// the template's own.
+    #[script(default)]
     pub level: Option<u32>,
     /// Game time after which the game removes the entity; `None` keeps it.
     /// The name is enshwick's, not the game's.
+    #[script(default)]
     pub despawn_after: Option<core::time::Duration>,
     /// The orientation, a quaternion `x, y, z, w`; `None` for none turned.
+    #[script(default)]
     pub orientation: Option<[f32; 4]>,
 }
 
@@ -241,7 +246,7 @@ struct Ping {
 /// let order = NpcCommandType::GoToPosition([10.0, 50.0, -3.0]);
 /// assert_ne!(order, NpcCommandType::Reset);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub enum NpcCommandType {
     /// Walk to a point, in metres.
@@ -266,6 +271,18 @@ pub struct Effects {
     ping: Option<Ping>,
 }
 
+impl crate::script::Bound for Effects {
+    const NAME: &'static str = "effects";
+    const DOC: &'static str = "Effects a mod has on the server's world: survivor orders, toggles, threat, pings, teleports and spawns.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_EVENTS, Self::SCRIPT_SPAWNS];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        Ok(load.effects())
+    }
+}
+
+#[crate::script(events)]
 impl Effects {
     pub(crate) fn resolve(load: &Load<'_>) -> Self {
         let host = load.host();
@@ -343,6 +360,7 @@ impl Effects {
     ///     }
     /// }
     /// ```
+    #[script]
     pub fn npc_command(&self, npc: u32, order: NpcCommandType) -> Result<(), WorldError> {
         let event = self.npc.ok_or(WorldError::Missing)?;
         let mut bytes = blank(event.ty)?;
@@ -374,6 +392,7 @@ impl Effects {
     ///     let _sent = effects.set_toggle(lever, signal, true);
     /// }
     /// ```
+    #[script]
     pub fn set_toggle(&self, sender: Entity, signal: u32, on: bool) -> Result<(), WorldError> {
         let event = self.toggle.ok_or(WorldError::Missing)?;
         let mut bytes = blank(event.ty)?;
@@ -399,6 +418,7 @@ impl Effects {
     ///     let _noticed = effects.add_threat(enemy, player, 100.0);
     /// }
     /// ```
+    #[script]
     pub fn add_threat(
         &self,
         attacker: Entity,
@@ -429,6 +449,7 @@ impl Effects {
     ///     let _pinged = effects.ping(player, at);
     /// }
     /// ```
+    #[script]
     #[cfg(feature = "unstable")]
     pub fn ping(&self, sender: Entity, position: [f64; 3]) -> Result<(), WorldError> {
         let event = self.ping.ok_or(WorldError::Missing)?;
@@ -491,6 +512,7 @@ impl Effects {
     ///     effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().search_best_spawn_position())
     /// }
     /// ```
+    #[script]
     #[cfg(feature = "unstable")]
     pub fn teleport(
         &self,
@@ -519,6 +541,7 @@ impl Effects {
     }
 }
 
+#[crate::script(spawns)]
 impl Effects {
     /// Asks the server to spawn an entity of `template`, its GUID as
     /// `World::template` gives it, at
@@ -541,6 +564,7 @@ impl Effects {
     ///     effects.spawn(template, [x + 2.0, y, z], Spawn::new())
     /// }
     /// ```
+    #[script]
     pub fn spawn(
         &self,
         template: [u8; 16],

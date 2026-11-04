@@ -182,7 +182,7 @@ impl ItemInfo {
 /// let worn = enshwick::inventory::Bar { current: 40, max: 160 };
 /// assert!(worn.current < worn.max);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct Bar {
     /// What is left.
     pub current: u16,
@@ -203,7 +203,7 @@ pub struct Bar {
 /// assert!((three_of_five.fraction() - 0.6).abs() < 1e-4);
 /// assert_eq!(Fill::of(7, 5), Fill::FULL);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 pub struct Fill(pub u16);
 
 impl Fill {
@@ -250,7 +250,7 @@ impl Fill {
 /// let slot = Slot { at: SlotRef::new(Entity(41), 0), category: InventoryCategory::GENERIC, item: enshwick::ItemId::new(0x5e01), count: 1, pide: Some(Entity(900)) };
 /// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) }));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 pub struct ItemInstance {
     /// The item's own entity.
     pub pide: Entity,

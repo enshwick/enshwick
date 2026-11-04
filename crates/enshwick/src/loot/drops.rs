@@ -86,7 +86,7 @@ impl Kinds {
 /// assert_eq!(labels.get(), 9);
 /// assert_eq!(labels.to_string(), "9");
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 pub struct LootContainerId(u32);
 
 crate::abi::id_conversions!(LootContainerId(u32));
@@ -96,7 +96,7 @@ crate::abi::id_conversions!(LootContainerId(u32));
 /// # Examples
 ///
 /// See [`Source`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct Roll {
     /// What the container is.
     pub kind: Kinds,
@@ -126,17 +126,22 @@ pub struct Roll {
 /// assert!(Source::kinds(Kinds::CORPSES).with_labels(&[LootContainerId::new(9)]).matches(&boss));
 /// assert!(!Source::kinds(Kinds::CONTAINERS).with_nodes(&[LootContainerId::new(3)]).matches(&boss));
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
+#[script(name = "LootSource")]
 pub struct Source {
     /// The kinds of container.
     pub kinds: Kinds,
     /// Only bosses' corpses.
+    #[script(default)]
     pub bosses_only: bool,
     /// Only chests that need a key or a lockpick.
+    #[script(default)]
     pub locked_only: bool,
     /// Only these loot label ids ([`Roll::labels`]); empty for any.
+    #[script(default)]
     pub labels: Vec<LootContainerId>,
     /// Only these world nodes ([`Roll::node`]); empty for any.
+    #[script(default)]
     pub nodes: Vec<LootContainerId>,
 }
 
@@ -234,7 +239,7 @@ impl Source {
 /// let one_of = Drop::one_of(&[ItemId::from_guid(STAFF.guid()), ItemId::new(7)], 0.1, Source::bosses());
 /// assert_eq!(one_of.items.len(), 2);
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, crate::Script)]
 pub struct Drop {
     /// The items' game ids, [`ItemId::from_guid`](crate::ItemId::from_guid) of their
     /// GUIDs; a drop that hits gives one of them, each as likely.
@@ -262,7 +267,7 @@ pub struct Drop {
 /// let charges = MeterRoll { min: 1, max: 5, of: 5 };
 /// assert!(charges.min <= charges.max && charges.max <= charges.of);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct MeterRoll {
     /// The fewest.
     pub min: u16,
@@ -808,6 +813,7 @@ pub(crate) fn watch_rolls(load: &mut Load<'_>) -> Result<Arc<Mutex<Vec<Roll>>>, 
     Ok(queue)
 }
 
+#[crate::script(loot_drops)]
 impl Load<'_> {
     /// Adds a mod item to random loot on the server, the dedicated one or a
     /// client's while it hosts: each roll of a container `drop.from` matches
@@ -836,6 +842,7 @@ impl Load<'_> {
     ///     load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.001, Source::kinds(Kinds::CORPSES)).count(1, 3))
     /// }
     /// ```
+    #[script]
     pub fn add_loot(&mut self, drop: Drop) -> Result<(), Off> {
         self.add_loot_in(0, drop)
     }

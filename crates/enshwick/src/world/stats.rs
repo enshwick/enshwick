@@ -29,7 +29,7 @@ const SKILL_LEVEL_SHIFT: u8 = 5;
 /// let health = Meter { current: 150, max: 200 };
 /// assert_eq!(health.fraction(), 0.75);
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 pub struct Meter {
     /// The value now.
     pub current: i32,
@@ -61,7 +61,7 @@ impl Meter {
 /// # Examples
 ///
 /// See [`World::vitals`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub struct Vitals {
     /// Health; every entity with vitals has it.
@@ -92,7 +92,8 @@ pub(crate) enum Pool {
 /// # Examples
 ///
 /// See [`World::skills`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[script(name = "UnlockedSkill")]
 #[non_exhaustive]
 pub struct Skill {
     /// The node in the game's skill tree.
@@ -108,7 +109,7 @@ pub struct Skill {
 /// # Examples
 ///
 /// See [`World::progress`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub struct Progress {
     /// The level.

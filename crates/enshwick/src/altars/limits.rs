@@ -2,6 +2,7 @@
 
 use crate::{Load, Off};
 
+#[crate::script(altar_limits)]
 impl Load<'_> {
     /// Lets the game group every listed altar zone into its bases, up to 32
     /// altars a Flame level in 16 bases, refusing an altar that would start a
@@ -24,6 +25,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
+    #[script]
     pub fn raise_base_limit(&mut self) -> Result<bool, Off> {
         let host = self.host();
         armed((host.api().raise_base_limit)(host.handle()))
@@ -56,6 +58,7 @@ impl Load<'_> {
     /// }
     /// ```
     #[cfg(feature = "unstable")]
+    #[script]
     pub fn request_base_limits(&mut self, zones: u32, bases: u32) -> Result<bool, Off> {
         let host = self.host();
         armed((host.api().request_base_limits)(

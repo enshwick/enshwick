@@ -47,6 +47,25 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+A Luau mod opens a channel with `enshwick.net.channel` while it starts, and
+its messages are Luau values; here each player who joins gets their
+position:
+
+```luau
+local waypoints = enshwick.net.channel("waypoints", 1, function(from, message)
+    if from == "Server" and message.Set then
+        enshwick.log.info(`the server set a waypoint at {message.Set}`)
+    end
+end)
+
+enshwick.on("PlayerJoined", function(joined)
+    local at = enshwick.world.position(joined.entity)
+    if at then
+        waypoints:send({ Player = joined.key }, { Set = at })
+    end
+end)
+```
+
 [`examples/waypoints`](https://github.com/enshwick/enshwick/tree/main/examples/waypoints)
 is this mod whole, with its client half, which draws the mark on the HUD,
 and a fake host test for each half.

@@ -48,6 +48,7 @@ use core::marker::PhantomData;
 
 use crate::abi::{EntityDataFlags, Status, Str};
 pub use crate::item_data::{MAX_VALUE, SetError};
+use crate::resources::Value as Data;
 use crate::{Entity, ItemId};
 use crate::{Host, Load, Off};
 
@@ -56,7 +57,7 @@ use crate::{Host, Load, Off};
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Replication {
     /// The server alone.
@@ -228,5 +229,60 @@ impl Load<'_> {
             },
             || format!("entity data {id:?}"),
         )
+    }
+}
+
+impl crate::script::Object for EntityData<Data> {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "EntityData",
+        "A kind of entity data with a game data value per entity, from `entity_data`.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_VALUES];
+}
+
+#[crate::script(values)]
+impl EntityData<Data> {
+    /// The entity's value, as [`EntityData::get`] reads it.
+    #[script(name = "get")]
+    pub(crate) fn get_script(&self, entity: Entity) -> Option<Data> {
+        self.get(entity)
+    }
+
+    /// Sets the entity's value, as [`EntityData::set`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`EntityData::set`].
+    #[script(name = "set")]
+    pub(crate) fn set_script(&self, entity: Entity, value: &Data) -> Result<(), SetError> {
+        self.set(entity, value)
+    }
+
+    /// Removes the entity's value, as [`EntityData::remove`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`EntityData::set`].
+    #[script(name = "remove")]
+    pub(crate) fn remove_script(&self, entity: Entity) -> Result<(), SetError> {
+        self.remove(entity)
+    }
+}
+
+#[crate::script(entity_data)]
+impl Load<'_> {
+    /// Opens the entity data kind `id` of game data values, as
+    /// [`Load::entity_data`] opens one of a Rust type.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::entity_data`].
+    #[script(name = "entity_data")]
+    pub(crate) fn entity_data_script(
+        &mut self,
+        id: &str,
+        replication: Replication,
+    ) -> Result<EntityData<Data>, Off> {
+        self.entity_data(id, replication)
     }
 }

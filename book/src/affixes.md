@@ -47,6 +47,39 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local health = enshwick.stats.open_stat("enshwick:health_max")
+local fire = enshwick.stats.open_stat("enshwick:resistance_fire")
+enshwick.affixes.define_affix("you.affixes:sturdy", {
+    ranges = { { stat = health, op = "Add", min = 10, max = 30, step = 1 } },
+    weight = 100,
+    rarity = "Common",
+    categories = { "Equipment" },
+})
+enshwick.affixes.define_affix("you.affixes:fireproof", {
+    ranges = { { stat = fire, op = "Add", min = 0.05, max = 0.2, step = 0.01 } },
+    weight = 20,
+    rarity = "Rare",
+    categories = { "Equipment" },
+    group = "element",
+})
+-- Half the armour bosses drop rolls one or two affixes.
+enshwick.affixes.add_loot_affixes({
+    from = { kinds = { "CORPSES" }, bosses_only = true },
+    chance = 0.5,
+    rules = { min = 1, max = 2, max_rarity = "Legendary" },
+})
+-- A fifth of what players craft rolls one.
+enshwick.affixes.add_craft_affixes({
+    chance = 0.2,
+    rules = { min = 1, max = 1, max_rarity = "Legendary" },
+})
+```
+
+In Luau, an `AffixDef` is a table with every field but `group`, and a
+range's `step` may be left out. `enshwick.affixes.roll` rolls one item;
+the pure roll from a pool is `enshwick.affixes.roll_pool`.
+
 ## Defining affixes
 
 `load.define_affix(id!("sturdy"), &def)` defines `<mod>:sturdy` during

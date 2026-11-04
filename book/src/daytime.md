@@ -78,6 +78,17 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local speed = enshwick.daytime.clock_speed()
+-- Short nights: the night runs three times as fast, the day as usual.
+enshwick.on("NightStarted", function()
+    speed:set(3)
+end)
+enshwick.on("DayStarted", function()
+    speed:set(1)
+end)
+```
+
 `clock_speed()` belongs in `init`: the loader follows the game's speed for
 the mods that asked from the start.
 

@@ -33,6 +33,23 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+## From Luau
+
+A Luau mod reaches the same calls through `enshwick.weather`; here a task
+ends a blizzard by clearing the skies for 15 minutes:
+
+```luau
+enshwick.schedule.every(60, function()
+    for _, front in enshwick.weather.fronts() do
+        if front.kind == "Blizzard" then
+            enshwick.weather.set("Clear", 15 * 60)
+            break
+        end
+    end
+    return true
+end)
+```
+
 ## How the game makes weather
 
 The weather comes in fronts: the world has a few weather layers, and each

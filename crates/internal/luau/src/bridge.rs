@@ -1,6 +1,6 @@
 //! Values between Luau and the API, shaped by the script [`Ty`] of each.
 
-use enshwick::script::{Callback, Error, Signature, Ty, Value};
+use enshwick::script::{Callback, Class, Error, Handle, Signature, Ty, Union, Value};
 use mlua::{Lua, MultiValue, Value as LuaValue};
 
 use crate::run::Scope;
@@ -16,6 +16,7 @@ fn kind(value: &LuaValue) -> &'static str {
         LuaValue::Table(_) => "a table",
         LuaValue::Function(_) => "a function",
         LuaValue::Buffer(_) => "a buffer",
+        LuaValue::UserData(_) => "an object",
         none if *none == LuaValue::NULL => "resources.none()",
         _ => "another kind of value",
     }
@@ -33,6 +34,9 @@ pub(crate) fn to_lua(
     ty: &'static Ty,
 ) -> mlua::Result<LuaValue> {
     Ok(match (value, ty) {
+        (Value::Nil, Ty::Optional(_)) => LuaValue::Nil,
+        // Before the map arms, so an optional union's value keeps its type.
+        (value, Ty::Optional(inner_ty)) => to_lua(lua, scope, value, inner_ty)?,
         (Value::Bool(b), _) => LuaValue::Boolean(b),
         (Value::Number(n), _) => LuaValue::Number(n),
         (Value::String(s), _) => LuaValue::String(lua.create_string(s)?),
@@ -65,6 +69,21 @@ pub(crate) fn to_lua(
             LuaValue::Table(table)
         }
         (Value::Bytes(bytes), _) => LuaValue::Buffer(lua.create_buffer(bytes)?),
+        (Value::Object(handle), _) => LuaValue::UserData(lua.create_userdata(Object {
+            handle,
+            scope: scope.clone(),
+        })?),
+        (Value::Map(fields), Ty::Union(union)) => {
+            let table = lua.create_table_with_capacity(0, 1)?;
+            for (name, value) in fields {
+                let ty = union
+                    .variant(&name)
+                    .and_then(enshwick::script::Variant::ty)
+                    .unwrap_or(&Ty::Data);
+                table.raw_set(name, to_lua(lua, scope, value, ty)?)?;
+            }
+            LuaValue::Table(table)
+        }
         (Value::Map(fields), _) => {
             let table = lua.create_table_with_capacity(0, fields.len())?;
             // An absent field reads as nil, so `if value.field then` holds.
@@ -73,8 +92,6 @@ pub(crate) fn to_lua(
             }
             LuaValue::Table(table)
         }
-        (Value::Nil, Ty::Optional(_)) => LuaValue::Nil,
-        (value, Ty::Optional(inner_ty)) => to_lua(lua, scope, value, inner_ty)?,
         // A list drops a nil item, so nil inside game data is `none`.
         (Value::Nil, Ty::Data) => LuaValue::NULL,
         (Value::Function(callback), Ty::Function(signature)) => {
@@ -147,6 +164,9 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
                     let value: LuaValue = table
                         .raw_get(field.name())
                         .map_err(|e| Error::new(e.to_string()))?;
+                    if field.has_default() && value.is_nil() {
+                        return Ok(Value::Nil);
+                    }
                     from_lua(scope, value, field.ty())
                         .map_err(|e| Error::new(format!("{}: {e}", field.name())))
                 })
@@ -158,9 +178,11 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
                 return Err(expected("a function", &value));
             };
             let scope = scope.clone();
-            Ok(Value::Function(Callback::new(move |args| {
-                scope.call_function(&function, args, signature)
-            })))
+            let faulted = scope.clone();
+            Ok(Value::Function(
+                Callback::new(move |args| scope.call_function(&function, args, signature))
+                    .with_fault(move |error| faulted.fault(error)),
+            ))
         }
         Ty::Bytes => match value {
             LuaValue::Buffer(buffer) => Ok(Value::Bytes(buffer.to_vec())),
@@ -168,7 +190,136 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
             other => Err(expected("a buffer", &other)),
         },
         Ty::Data => data(value, 0),
+        Ty::Union(union) => union_from_lua(scope, value, union),
+        Ty::Object(class) => object_from_lua(&value, class),
         _ => Err(Error::new("a type this runtime does not know")),
+    }
+}
+
+/// The API value of `value`, a variant of `union`: its name, or a table of
+/// one variant and its value.
+fn union_from_lua(scope: &Scope, value: LuaValue, union: &Union) -> Result<Value, Error> {
+    match value {
+        LuaValue::String(name) => {
+            let name = name
+                .to_str()
+                .map_err(|_| Error::new("expected text in UTF-8"))?;
+            match union.variant(&name) {
+                Some(variant) if variant.ty().is_none() => Ok(Value::String(name.to_owned())),
+                _ => Err(Error::new(format!(
+                    "{name:?} is no {} without a value",
+                    union.name()
+                ))),
+            }
+        }
+        LuaValue::Table(table) => {
+            let mut pairs = table.pairs::<String, LuaValue>();
+            let (Some(pair), None) = (pairs.next(), pairs.next()) else {
+                return Err(Error::new(format!(
+                    "expected a {}: a table of one variant and its value",
+                    union.name()
+                )));
+            };
+            let (name, inner) = pair.map_err(|e| Error::new(e.to_string()))?;
+            let Some(ty) = union.variant(&name).and_then(enshwick::script::Variant::ty) else {
+                return Err(Error::new(format!(
+                    "{name:?} is no {} with a value",
+                    union.name()
+                )));
+            };
+            let inner =
+                from_lua(scope, inner, ty).map_err(|e| Error::new(format!("{name}: {e}")))?;
+            Ok(Value::Map(vec![(name, inner)]))
+        }
+        other => Err(expected(union.name(), &other)),
+    }
+}
+
+/// The API value of `value`, an object of `class`.
+fn object_from_lua(value: &LuaValue, class: &'static Class) -> Result<Value, Error> {
+    let LuaValue::UserData(object) = value else {
+        return Err(expected(class.name(), value));
+    };
+    match object.borrow::<Object>() {
+        // A class is a `const`, whose address differs between uses; the
+        // name picks it, and `FromScript` checks the Rust type.
+        Ok(object) if object.handle.class().name() == class.name() => {
+            Ok(Value::Object(object.handle.clone()))
+        }
+        _ => Err(expected(class.name(), value)),
+    }
+}
+
+/// The registry key of the method functions [`Object`]'s `__index` made.
+const METHODS: &str = "enshwick.methods";
+
+/// An [`Object`](enshwick::script::Object) as a script holds it: its
+/// class's methods, called as `object:method()`.
+struct Object {
+    handle: Handle,
+    scope: Scope,
+}
+
+impl mlua::UserData for Object {
+    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method(
+            mlua::MetaMethod::Index,
+            |lua, this, key: mlua::LuaString| {
+                let class = this.handle.class();
+                // One function per class and method in a VM, made on first use:
+                // a filter on a hot path indexes methods on every hit.
+                let classes = if let Some(classes) =
+                    lua.named_registry_value::<Option<mlua::Table>>(METHODS)?
+                {
+                    classes
+                } else {
+                    let classes = lua.create_table()?;
+                    lua.set_named_registry_value(METHODS, &classes)?;
+                    classes
+                };
+                let cached =
+                    if let Some(cached) = classes.raw_get::<Option<mlua::Table>>(class.name())? {
+                        cached
+                    } else {
+                        let cached = lua.create_table()?;
+                        classes.raw_set(class.name(), &cached)?;
+                        cached
+                    };
+                if let Some(function) = cached.raw_get::<Option<mlua::Function>>(&key)? {
+                    return Ok(LuaValue::Function(function));
+                }
+                let key = key.to_str()?.to_owned();
+                let Some(method) = class.methods().into_iter().find(|m| m.name() == key) else {
+                    return Ok(LuaValue::Nil);
+                };
+                let scope = this.scope.clone();
+                let what = format!("{}:{key}", class.name());
+                let function = lua.create_function(
+                    move |lua, (object, args): (mlua::AnyUserData, MultiValue)| {
+                        let handle = object.borrow::<Self>()?.handle.clone();
+                        // A method indexes its own class's list: `a.m(b)` must not
+                        // run b's method at m's place.
+                        if handle.class().name() != class.name() {
+                            return Err(mlua::Error::runtime(format!(
+                                "{what}: called on a {}",
+                                handle.class().name()
+                            )));
+                        }
+                        let signature = method.signature();
+                        let values = arguments(lua, &scope, args, signature, &what)?;
+                        let answer = handle
+                            .call(&method, values)
+                            .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
+                        to_lua(lua, &scope, answer, signature.ret())
+                    },
+                )?;
+                cached.raw_set(key, &function)?;
+                Ok(LuaValue::Function(function))
+            },
+        );
+        methods.add_meta_method(mlua::MetaMethod::ToString, |_, this, ()| {
+            Ok(this.handle.class().name())
+        });
     }
 }
 
@@ -310,4 +461,44 @@ pub(crate) fn toml_to_lua(lua: &Lua, value: &toml::Value) -> mlua::Result<LuaVal
             LuaValue::Table(table)
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use enshwick::script::{IntoScript as _, Typed};
+
+    use super::*;
+
+    #[derive(Clone, Debug, enshwick::Script)]
+    struct Count {
+        /// How many.
+        pub n: u32,
+    }
+
+    #[derive(Clone, Debug, enshwick::Script)]
+    enum Status {
+        /// Done, with a count.
+        Done(Count),
+        /// Not yet.
+        Waiting,
+    }
+
+    #[test]
+    fn an_optional_union_s_variant_keeps_its_record() {
+        let lua = Lua::new();
+        let value = Some(Status::Done(Count { n: 3 })).into_value();
+        let ty = <Option<Status> as Typed>::TY;
+        let LuaValue::Table(table) = to_lua(&lua, &Scope::detached(), value, ty).unwrap() else {
+            panic!("no table");
+        };
+        let done: mlua::Table = table.get("Done").unwrap();
+        assert_eq!(done.get::<u32>("n").unwrap(), 3);
+        let waiting = to_lua(
+            &lua,
+            &Scope::detached(),
+            Some(Status::Waiting).into_value(),
+            ty,
+        );
+        assert_eq!(waiting.unwrap().to_string().unwrap(), "Waiting");
+    }
 }

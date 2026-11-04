@@ -23,7 +23,7 @@ use crate::content::Guid;
 /// }
 /// assert_eq!(table.field("damage"), Some(&Value::Float(5.0)));
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub enum Value {
     /// An absent optional or variant.
@@ -69,7 +69,7 @@ pub enum Value {
 /// let Value::Variant(variant) = &shape else { unreachable!() };
 /// assert_eq!(variant.type_name(), "demo::ecs::SphereShape");
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Variant {
     type_name: String,
     value: Value,

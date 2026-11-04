@@ -25,6 +25,21 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+## From Luau
+
+A Luau mod reaches the same calls through `enshwick.terrain`; here the
+ground around each player who joins is flattened:
+
+```luau
+enshwick.on("PlayerJoined", function(player)
+    local here = enshwick.world.position(player.entity)
+    local fill = enshwick.terrain.materials()[1]
+    if here and fill then
+        enshwick.terrain.flatten(here, 6, fill.terrain_material, "Round")
+    end
+end)
+```
+
 ## Ground and materials
 
 The ground is made of voxels half a metre a side, each of a material: air,

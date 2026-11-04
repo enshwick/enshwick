@@ -34,6 +34,20 @@ Each entry names the pull request that made the change.
   game resource and serve a changed one in load order. The book's chapter on
   the game's own types shows each, and a concepts chapter explains what each
   kind of game update does (#931).
+- Luau reaches the Rust API: each public module is a table of `enshwick`
+  with the Rust names, a call a Rust mod makes on `Load` at init runs while
+  `main.luau` starts, a Rust handle is a Luau object with its methods, and a
+  hook or filter takes a function that returns the changed value. Altars,
+  stats and the fog of war open only when a script asks at start, as a Rust
+  mod does in `init`. A test
+  holds every public function to its Luau mirror or a row of the book's
+  table of what differs. `#[derive(Script)]` takes `#[script(name = "...")]`
+  for a type whose name another module's type has (#928).
+- `Load::export_dir` names `export/<folder>/` in the game folder, after the
+  mod's folder in `mods/`, where a mod
+  writes files for tools outside the game, and a script writes them with
+  `enshwick.files.write_atomically`; `Relock::try_relock` takes a lock no one
+  holds, also after a panic (#928).
 - `resources` reads any game resource as typed values and writes it back:
   `Registry::game` holds every reflected type of the running build (names,
   hashes, layout, fields, constants, attributes), `Registry::decode` and

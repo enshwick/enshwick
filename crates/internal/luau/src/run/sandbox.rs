@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use enshwick::Load;
 use enshwick::packs::SCRIPT_MAIN as MAIN;
 use mlua::chunk::ChunkMode;
 use mlua::{Lua, LuaOptions, StdLib, VmState};
@@ -80,7 +81,11 @@ pub(super) fn describe(error: &mlua::Error) -> String {
 impl Inner {
     /// A new VM with the API and `scripts`, after its `main.luau` ran;
     /// the error names the file, the line and the message.
-    pub(super) fn run_main(&self, scripts: Scripts) -> Result<Arc<Vm>, StartError> {
+    pub(super) fn run_main(
+        &self,
+        load: &mut Load<'_>,
+        scripts: Scripts,
+    ) -> Result<Arc<Vm>, StartError> {
         let main = scripts.get(MAIN).cloned().ok_or(StartError::Missing)?;
         let lua = sandbox(self.limits, &self.overruns).map_err(StartError::Sandbox)?;
         let vm = Arc::new(Vm {
@@ -89,19 +94,26 @@ impl Inner {
             handlers: Mutex::new(Vec::new()),
             points: Mutex::new(Vec::new()),
             events: Mutex::new(Vec::new()),
+            served: Mutex::new(Vec::new()),
             refuse: OnceLock::new(),
         });
         let api = self.globals(&vm, scripts).map_err(StartError::Api)?;
-        vm.lua.sandbox(true).map_err(StartError::Sandbox)?;
-        let started = self.enter(&vm.lua, self.limits.start, || {
-            vm.lua
-                .load(&main[..])
-                .set_name(format!("@{MAIN}"))
-                .set_mode(ChunkMode::Text)
-                .exec()
+        let load = Mutex::new(load);
+        // The start's functions on `load` live as long as this scope.
+        let started = vm.lua.scope(|scope| {
+            self.init_functions(&vm, &api, scope, &load)?;
+            vm.lua.sandbox(true)?;
+            let started = self.enter(&vm.lua, self.limits.start, || {
+                vm.lua
+                    .load(&main[..])
+                    .set_name(format!("@{MAIN}"))
+                    .set_mode(ChunkMode::Text)
+                    .exec()
+            });
+            vm.starting.store(false, Ordering::Release);
+            Ok(started)
         });
-        vm.starting.store(false, Ordering::Release);
-        match started {
+        match started.map_err(StartError::Api)? {
             Ok(Ok(())) => {
                 api.set_readonly(true);
                 Ok(vm)
@@ -184,7 +196,7 @@ impl Inner {
     /// Turns the mod off for `reason`, once, and drops its VM; the loader's
     /// fault logs the reason.
     #[cold]
-    fn fail(&self, reason: &str) {
+    pub(crate) fn fail(&self, reason: &str) {
         if !self.off.swap(true, Ordering::AcqRel) {
             self.vm.store(None);
             self.host.fault(reason);

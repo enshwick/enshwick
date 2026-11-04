@@ -220,7 +220,7 @@ type and the answer's are numbers, `bool`, `enshwick::Entity`,
 the doc comments of the point and its fields go into the schema too, each up
 to its first heading, so an `# Examples` section, whose code compiles only in
 the owner, stays out of other mods' definitions. The input and the answer have
-no padding, since a [Luau mod](luau.md#extending-another-mod) reads them as
+no padding, since a [Luau mod](#from-luau) reads them as
 bytes: the build fails on a gap, and its bytes become fields of their own, as
 for a [call](calls.md).
 
@@ -330,3 +330,39 @@ and
 [`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/tree/main/survivors-per-altar)
 in [`points.rs`](https://github.com/enshwick/mods/blob/main/survivors-per-altar/src/points.rs).
 Their tests link each point through the fake host.
+
+## From Luau
+
+A [Luau mod](luau.md) links into another mod's point as a Rust mod does; it
+owns no points of its own. `cargo enshwick deps <alias> --from <owner's DLL> --luau`
+writes a module for each point, call and event of the dependency that
+`pack.toml` names `<alias>` in `[requires]` or `[after]`, as
+`deps/<alias>/<name>.luau` with the owner's local name. A point's module holds
+the types it reaches, its named values, and each field's place with the
+layout hash the owner's build wrote. The loader links only when every hash
+matches the owner's, the input the module reads is no larger than the
+owner's and the answer has the owner's size. A script changes an answer only
+of a number, `boolean`, GUID or id type (`Entity`, `ItemId`, `RecipeId`,
+`KnowledgeId`, `SkillNode`, `PlayerKey`, `BuffTypeId`, `NpcId`), whose hash
+the runtime checks against the type the module names; on another answer type
+it may observe the point. The handler gets the input and the answer so far,
+and returns a new answer, `nil` to keep it, or `enshwick.refuse` on a
+refusable point. An `Order` as a third argument places the link, as
+`Order` does in Rust:
+
+```luau
+local price = require("./deps/trading_post/price")
+
+enshwick.extend(price, function(input: price.Price, answer: number)
+    if input.deal == price.Deal.SELL then
+        return answer * 2
+    end
+    return nil
+end, { after = { "you.haggling" } })
+```
+
+The handler runs on the thread that asks the point, under the same budget
+as an event handler. An error or an answer of the wrong type turns the mod
+off, and the answer stays as it was. An owner version with another layout
+leaves the link idle, with the reason in the log, until the module is
+written again.

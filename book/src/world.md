@@ -28,6 +28,18 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.on("PlayerJoined", function(joined)
+    local player = enshwick.world.player(joined.entity)
+    if player then
+        enshwick.log.info(`{player.name} joined, permissions {player.permissions}`)
+    end
+end)
+```
+
+In Luau, `enshwick.world` is the `World`: its functions take the same
+arguments, and a value such as a `Player` is a table of its fields.
+
 `load.world()` turns the mod off on a game build without the component types the reads need.
 
 ## Where reads work

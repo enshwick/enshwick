@@ -10,7 +10,7 @@ use super::{Player, World, WorldError};
 /// # Examples
 ///
 /// See [`BuildRefusal`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum PlayerPermissions {
     /// Edits inside a base: a Flame Altar's building zone.
@@ -30,7 +30,7 @@ pub enum PlayerPermissions {
 /// let refusal = BuildRefusal::NoPermission(PlayerPermissions::CanEditBase);
 /// assert_eq!(refusal.to_string(), "the player lacks CanEditBase");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::Script)]
 #[non_exhaustive]
 pub enum BuildRefusal {
     /// The player lacks the permission: `CanEditWorld` for any edit,
@@ -51,6 +51,7 @@ pub enum BuildRefusal {
     Unchecked(#[from] WorldError),
 }
 
+#[crate::script(build)]
 impl World {
     /// Whether the server lets `player` edit the box between the corners
     /// `a` and `b` in metres; a mod that edits the world for a player asks
@@ -85,6 +86,7 @@ impl World {
     ///     }
     /// }
     /// ```
+    #[script]
     pub fn can_build(self, player: &Player, a: [f64; 3], b: [f64; 3]) -> Result<(), BuildRefusal> {
         if !a.iter().chain(&b).all(|v| v.is_finite()) {
             return Err(BuildRefusal::Unchecked(WorldError::Refused));
@@ -125,6 +127,7 @@ impl World {
     ///     world.persists([x - 1.0, y, z - 1.0], [x + 1.0, y + 2.0, z + 1.0])
     /// }
     /// ```
+    #[script]
     pub fn persists(self, a: [f64; 3], b: [f64; 3]) -> Result<bool, WorldError> {
         if !a.iter().chain(&b).all(|v| v.is_finite()) {
             return Err(WorldError::Refused);

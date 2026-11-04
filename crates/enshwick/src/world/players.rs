@@ -78,6 +78,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn set_label(self, entity: Entity, text: &str) -> bool {
         (self.0.host.api().set_label)(self.0.host.handle(), entity, Str::new(text)).is_ok()
     }

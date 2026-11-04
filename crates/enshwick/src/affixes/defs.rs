@@ -12,7 +12,7 @@ use crate::stats::{Op, Stat};
 /// assert!(ItemRarity::Common < ItemRarity::Legendary);
 /// assert_eq!(ItemRarity::from_raw(2), Some(ItemRarity::Rare));
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 #[non_exhaustive]
 pub enum ItemRarity {
     /// Common.
@@ -69,7 +69,7 @@ impl ItemRarity {
 ///     Range::new(stat, Op::Add, 0.05, 0.15).step(0.01)
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct Range {
     /// The stat.
     pub stat: Stat,
@@ -80,6 +80,7 @@ pub struct Range {
     /// The greatest value.
     pub max: f32,
     /// The value rolls in steps of this from `min`; 0 for any value.
+    #[script(default)]
     pub step: f32,
 }
 
@@ -128,7 +129,7 @@ impl Range {
 /// # Examples
 ///
 /// See the [module](crate::affixes).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct AffixDef {
     /// The modifiers and their ranges.
@@ -140,6 +141,7 @@ pub struct AffixDef {
     /// The item categories it rolls on.
     pub categories: ItemCategoryMask,
     /// Affixes of one group never roll together on an item.
+    #[script(default)]
     pub group: Option<String>,
 }
 
@@ -371,7 +373,7 @@ pub(crate) enum DefineAffixError {
 /// let affix = AffixId::new(3);
 /// assert_eq!(affix.get(), 3);
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 pub struct AffixId(u32);
 
 crate::abi::id_conversions!(AffixId(u32));
@@ -397,6 +399,7 @@ crate::abi::id_conversions!(AffixId(u32));
     Ord,
     serde::Serialize,
     serde::Deserialize,
+    crate::Script,
 )]
 pub struct AffixKey(pub u32);
 

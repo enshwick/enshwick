@@ -8,6 +8,10 @@ use std::sync::atomic::Ordering;
 use crate::Off;
 use crate::locks::Relock;
 
+mod script;
+#[doc(hidden)]
+pub use script::{DataStore, StateFns};
+
 /// Why a [`WorldStore`] or [`Hold`] could not read or write its file at run
 /// time.
 ///
@@ -203,6 +207,7 @@ pub struct Hold {
     path: PathBuf,
 }
 
+#[crate::script(hold)]
 impl Hold {
     /// The hold kept in `dir`: the mod's folder from
     /// [`Load::mod_dir`](crate::Load::mod_dir) for every world, or its data
@@ -229,6 +234,7 @@ impl Hold {
     /// # Examples
     ///
     /// See [`Hold`].
+    #[script]
     pub fn set(&self, reason: &str) -> Result<(), StoreError> {
         self.write(first_line(reason))
     }
@@ -276,6 +282,7 @@ impl Hold {
     /// # Examples
     ///
     /// See [`Hold`].
+    #[script]
     pub fn clear(&self) -> Result<(), StoreError> {
         let backup = crate::files::backup_path(&self.path);
         for path in [&self.path, &backup] {
@@ -298,6 +305,7 @@ impl Hold {
     /// assert_eq!(hold.reason(), None);
     /// ```
     #[must_use]
+    #[script]
     pub fn reason(&self) -> Option<String> {
         std::fs::read_to_string(&self.path)
             .ok()
@@ -309,6 +317,7 @@ impl Hold {
     /// hold is not set or was set with one line.
     #[doc(hidden)]
     #[must_use]
+    #[script]
     pub fn text(&self) -> Option<String> {
         let held = std::fs::read_to_string(&self.path).ok()?;
         let text = held.trim_start().lines().nth(1)?;

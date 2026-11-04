@@ -109,7 +109,7 @@ pub struct Scheduler {
 }
 
 impl crate::script::Bound for Scheduler {
-    const NAME: &'static str = "scheduler";
+    const NAME: &'static str = "schedule";
     const DOC: &'static str =
         "Work for the server's game thread: on the next pass, after a delay, or repeatedly.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_TASKS];

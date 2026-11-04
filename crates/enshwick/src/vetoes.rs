@@ -35,7 +35,7 @@ use crate::{Load, Off};
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct Placement {
     /// The building player's character.
@@ -91,6 +91,7 @@ where
     ))
 }
 
+#[crate::script(vetoes)]
 impl Load<'_> {
     /// Runs `filter` on each player's craft request in the server's world,
     /// before the crafting system reads it; returning `false` refuses it,
@@ -105,6 +106,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn on_craft<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&CraftRecipeEvent) -> bool + Send + Sync + 'static,
@@ -132,6 +134,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn on_build<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&Placement) -> bool + Send + Sync + 'static,

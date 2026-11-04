@@ -128,6 +128,25 @@ mod tests {
     }
 
     #[test]
+    fn a_copied_voxel_write_still_reaches_the_loader_with_its_voxels() {
+        let (loader, world) = started();
+        let wall = VoxelBox::new(VoxelPos::new(200, 80, 200), [2, 1, 1], vec![stone(); 2]).unwrap();
+        let first = world.transaction().write_voxels(&wall);
+        let second = first.clone();
+        first.commit().unwrap();
+        second.commit().unwrap();
+
+        let held = loader.transactions();
+        assert_eq!(held.len(), 2);
+        for transaction in &held {
+            match transaction.changes.as_slice() {
+                [FakeChange::Voxels { voxels, .. }] => assert_eq!(voxels.len(), 2),
+                other => panic!("{other:?}"),
+            }
+        }
+    }
+
+    #[test]
     fn a_block_needs_a_known_shape_and_a_building_material() {
         let (loader, world) = started();
         let at = WorldTransform::at([100.0, 40.0, 100.0]);

@@ -81,7 +81,7 @@ Both return a
 | `meter(pide)` | An item entity's [meter](content/items.md#meters), a `Bar`; `None` for an item without one. |
 
 `Inventories::slots` and `Inventories::count` read the same as `read()` does,
-without the `Reader`; a [Luau mod](luau.md#inventories) reads through them.
+without the `Reader`; a [Luau mod](#from-luau) reads through them.
 
 A [`Slot`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
 holds `at` (its `SlotRef`), `category` (equipment, currency, ordinary
@@ -292,3 +292,29 @@ records a mod's requests: `inventory_requests()` lists them and
 [`enshwick-area-loot`](https://github.com/enshwick/mods/blob/main/area-loot/src/take.rs)
 uses reads, `MoveAll` batches with `actor`, `allow_partial` and `notify`,
 and chained callbacks; see [Loot containers](content/loot.md#a-worked-example).
+
+## From Luau
+
+`enshwick.inventory` reads and changes inventories on the server, as
+`Inventories` does in Rust. `slots` and `count` read at once; `give`,
+`take`, `destroy_slot`, `move_slot` and `move_all` run in the game's next
+inventory step and hand the outcome to a function:
+
+```luau
+local GIFT = 3073 -- an item id from the game's data
+
+enshwick.on("PlayerJoined", function(player)
+    local held = enshwick.inventory.count(player.entity, GIFT)
+    enshwick.inventory.give(player.entity, GIFT, 10, function(outcome)
+        if outcome.done ~= "Committed" then
+            enshwick.log.warn(`no gift for {player.entity}: {outcome.done}`)
+        end
+    end)
+    enshwick.log.info(`{player.entity} held {held} before the gift`)
+end)
+```
+
+`outcome.done` is `Committed`, `RolledBack`, `Unavailable`, `TimedOut` or
+`Refused`, and each entry of `outcome.ops` has the operation's `error` by
+name and the count it fell short by. A slot is a `string` key, as `slots`
+returns it in `at`.

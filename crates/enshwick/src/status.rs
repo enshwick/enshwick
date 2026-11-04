@@ -39,6 +39,7 @@ where
     });
 }
 
+#[crate::script(status)]
 impl Load<'_> {
     /// Adds `source` to the loader's status summary: whenever the summary is
     /// written, the loader calls it and shows each line it returns under the
@@ -60,6 +61,7 @@ impl Load<'_> {
     ///     load.add_status(|| format!("{} zones merged", MERGED.load(Ordering::Relaxed)))
     /// }
     /// ```
+    #[script]
     pub fn add_status<F>(&mut self, source: F) -> Result<(), Off>
     where
         F: Fn() -> String + Send + Sync + 'static,

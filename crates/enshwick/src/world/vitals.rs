@@ -2,6 +2,7 @@ use crate::Entity;
 
 use super::{Meter, Progress, Skill, Vitals, World, WorldError, stats};
 
+#[crate::script(vitals)]
 impl World {
     /// `entity`'s health, stamina and mana; `None` when it has no health,
     /// off the game thread, or on a build without stat reads.
@@ -21,6 +22,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn vitals(self, entity: Entity) -> Option<Vitals> {
         self.0.stats?.vitals(self, entity)
     }
@@ -52,6 +54,7 @@ impl World {
     ///     })
     /// }
     /// ```
+    #[script]
     pub fn set_health(self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
         self.write_stat(entity, stats::Pool::Health, |_| value)
     }
@@ -76,6 +79,7 @@ impl World {
     ///     })
     /// }
     /// ```
+    #[script]
     pub fn heal(self, entity: Entity, amount: i32) -> Result<Meter, WorldError> {
         self.write_stat(entity, stats::Pool::Health, |current| {
             current.saturating_add(amount)
@@ -98,6 +102,7 @@ impl World {
     ///     let _refreshed = world.set_stamina(player.entity, max);
     /// }
     /// ```
+    #[script]
     pub fn set_stamina(self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
         self.write_stat(entity, stats::Pool::Stamina, |_| value)
     }
@@ -116,6 +121,7 @@ impl World {
     ///     let _drained = world.set_mana(player.entity, 0);
     /// }
     /// ```
+    #[script]
     pub fn set_mana(self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
         self.write_stat(entity, stats::Pool::Mana, |_| value)
     }
@@ -133,6 +139,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn item_meter(self, pide: Entity) -> Option<Meter> {
         self.0.stats?.meter(self, pide)
     }
@@ -176,6 +183,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn shroud_time(self, entity: Entity) -> Option<Meter> {
         self.0.stats?.shroud(self, entity)
     }
@@ -218,6 +226,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn in_shroud(self, entity: Entity) -> Option<bool> {
         self.0.stats?.in_shroud(self, entity)
     }
@@ -234,6 +243,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn skills(self, entity: Entity) -> Option<Vec<Skill>> {
         self.0.stats?;
         stats::Stats::skills(self, entity)
@@ -262,6 +272,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn progress(self, entity: Entity) -> Option<Progress> {
         self.0.stats?.progress(self, entity)
     }

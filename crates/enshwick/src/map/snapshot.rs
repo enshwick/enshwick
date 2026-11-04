@@ -33,7 +33,7 @@ pub const MAP_SNAPSHOT_FORMAT: u16 = 2;
 /// assert_eq!(MapSnapshot::from_bytes(&bytes)?, snapshot);
 /// # Ok::<(), enshwick::map::SnapshotError>(())
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, crate::Script)]
 pub struct MapSnapshot {
     /// The players in the game, by player slot.
     pub players: Vec<MapPlayer>,
@@ -50,7 +50,7 @@ pub struct MapSnapshot {
 /// # Examples
 ///
 /// See [`MapSnapshot`].
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, crate::Script)]
 pub struct MapPlayer {
     /// The same for the same account in every session, as
     /// [`Player::key`](crate::world::Player::key); a public map may leave
@@ -80,7 +80,7 @@ pub struct MapPlayer {
 /// };
 /// assert!(altar.zone[0][0] < altar.zone[1][0]);
 /// ```
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, crate::Script)]
 pub struct MapAltar {
     /// Where it stands, in metres.
     pub position: [f64; 3],
@@ -105,7 +105,7 @@ pub struct MapAltar {
 /// let ruin = MapPoint { position: [512.0, 60.0, 2048.0], marker_type: Some(0x1234_5678), label: None };
 /// assert!(ruin.label.is_none());
 /// ```
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, crate::Script)]
 pub struct MapPoint {
     /// Where it is, in metres.
     pub position: [f64; 3],

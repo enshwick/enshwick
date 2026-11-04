@@ -4,7 +4,7 @@
 
 use core::fmt::Write as _;
 
-use enshwick::points::{DescribedField, DescribedPoint, Mode};
+use enshwick::points::{DescribedField, DescribedPoint, Mode, Order};
 use mlua::{Lua, Table, Value as LuaValue};
 
 /// How one value is read from and written to the owner's bytes.
@@ -96,6 +96,8 @@ pub(crate) struct PointDesc {
     pub(crate) point: DescribedPoint,
     pub(crate) input: Vec<(String, usize, Read)>,
     pub(crate) output: Read,
+    /// Where the script's link stands in the point's chain.
+    pub(crate) order: Order,
 }
 
 fn bad(why: impl core::fmt::Display) -> mlua::Error {
@@ -225,6 +227,7 @@ impl PointDesc {
             point,
             input: fields,
             output: output_read,
+            order: Order::new(),
         })
     }
 }

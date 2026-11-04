@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `#[enshwick::script]` describes init calls on `Load`, objects, contexts and
+  adapters a script calls by the Rust name, and `#[derive(Script)]` takes
+  `#[script(name = "...")]` on a type and `#[script(default)]` on a field
+  (#928).
 - **Breaking:** `#[enshwick::config]` takes `file = "name"` and always reads
   missing keys from `Default`; the stage attributes (`startup`, `runtime`,
   `client`, `sync`, `restart`) and the `default` argument are refused with

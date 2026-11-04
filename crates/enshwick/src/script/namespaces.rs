@@ -2,10 +2,14 @@
 
 use std::sync::Arc;
 
-use super::{Bound, Error, Function, Signature, Value};
+use super::{Bound, Error, Function, InitFunction, IntoScript as _, Object, Signature, Ty, Value};
 
 /// A part of the API as one namespace of a script, its type erased: what it
 /// declares, and how a runtime opens it for a mod.
+///
+/// Parts that share a name are one namespace in a script, such as a
+/// module's handle and its [`Load`](crate::Load) methods; the empty name is
+/// the `enshwick` table itself.
 ///
 /// # Examples
 ///
@@ -19,6 +23,24 @@ pub struct Namespace {
     doc: &'static str,
     describe: fn() -> Vec<Declared>,
     open: fn(&mut crate::Load<'_>) -> Result<Opened, crate::Off>,
+    init: &'static [&'static [InitFunction]],
+    request: Option<Request>,
+}
+
+/// The start-time call that opens a namespace a script asks for, as a Rust
+/// mod asks [`Load`](crate::Load) for the handle in `init`.
+#[derive(Debug)]
+struct Request {
+    name: &'static str,
+    signature: &'static Signature,
+    open: fn(&mut crate::Load<'_>) -> Result<(Opened, Value), crate::Off>,
+}
+
+/// The signature of `T`'s getter: no parameters, the handle as an object.
+struct Getter<T>(core::marker::PhantomData<T>);
+
+impl<T: Object> Getter<T> {
+    const SIGNATURE: &'static Signature = &Signature::new(&[], &Ty::Object(T::CLASS));
 }
 
 /// A function of a [`Namespace`] as definitions declare it.
@@ -109,7 +131,93 @@ impl Namespace {
             doc: T::DOC,
             describe: describe::<T>,
             open: open::<T>,
+            init: &[],
+            request: None,
         }
+    }
+
+    /// [`Namespace::of`] for a handle whose opening switches a loader
+    /// feature on: a script opens it with `getter` at start, as a Rust mod
+    /// calls the `Load` method of that name in `init`, so a mod that never
+    /// asks pays nothing.
+    const fn on_request<T: Bound + Object>(getter: &'static str) -> Self {
+        Self {
+            request: Some(Request {
+                name: getter,
+                signature: Getter::<T>::SIGNATURE,
+                open: request::<T>,
+            }),
+            ..Self::of::<T>()
+        }
+    }
+
+    /// The start-time function that opens this namespace, for a namespace a
+    /// script asks for; `None` for one [`Namespace::open`] opens for every
+    /// mod.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,standalone_crate
+    /// let getters: Vec<&str> = enshwick::script::NAMESPACES
+    ///     .iter()
+    ///     .filter_map(|n| Some(n.request_function()?.name()))
+    ///     .collect();
+    /// assert!(getters.contains(&"altars"));
+    /// ```
+    #[must_use]
+    pub fn request_function(&self) -> Option<Declared> {
+        self.request.as_ref().map(|request| Declared {
+            index: 0,
+            name: request.name,
+            doc: self.doc,
+            signature: request.signature,
+        })
+    }
+
+    /// Opens a namespace a script asks for with
+    /// [`Namespace::request_function`]: the namespace and its handle as an
+    /// object; `None` for a namespace [`Namespace::open`] opens.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`](crate::Off) when the game build lacks what it needs, or
+    /// after `init`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Namespace::request_function`].
+    pub fn request(
+        &self,
+        load: &mut crate::Load<'_>,
+    ) -> Option<Result<(Opened, Value), crate::Off>> {
+        self.request.as_ref().map(|request| (request.open)(load))
+    }
+
+    /// The [`Load`](crate::Load) methods of `init` as the namespace `name`,
+    /// callable while the mod starts.
+    const fn starting(
+        name: &'static str,
+        doc: &'static str,
+        init: &'static [&'static [InitFunction]],
+    ) -> Self {
+        Self {
+            name,
+            doc,
+            describe: Vec::new,
+            open: |_| Ok(Opened(Arc::new(|_, _| Err(Error::new("no such function"))))),
+            init,
+            request: None,
+        }
+    }
+
+    /// Its functions a script calls only while the mod starts, as a Rust
+    /// mod calls them in `init`.
+    ///
+    /// # Examples
+    ///
+    /// See [`InitFunction`].
+    pub fn init_functions(&self) -> impl Iterator<Item = &'static InitFunction> {
+        self.init.iter().flat_map(|part| part.iter())
     }
 
     /// The namespace's name in a script.
@@ -170,7 +278,14 @@ impl Namespace {
 }
 
 fn describe<T: Bound>() -> Vec<Declared> {
-    T::functions()
+    declare(T::functions())
+}
+
+/// `functions` as a script declares them, each with its place in the list.
+pub(super) fn declare<T: 'static>(
+    functions: impl Iterator<Item = &'static Function<T>>,
+) -> Vec<Declared> {
+    functions
         .enumerate()
         .map(|(index, f)| Declared {
             index,
@@ -181,14 +296,30 @@ fn describe<T: Bound>() -> Vec<Declared> {
         .collect()
 }
 
+impl Declared {
+    /// Its place in its list, which [`Opened::call`] and
+    /// [`Handle::call`](super::Handle::call) index.
+    pub(super) const fn index(&self) -> usize {
+        self.index
+    }
+}
+
 fn open<T: Bound>(load: &mut crate::Load<'_>) -> Result<Opened, crate::Off> {
+    T::resolve(load).map(opened)
+}
+
+fn request<T: Bound + Object>(load: &mut crate::Load<'_>) -> Result<(Opened, Value), crate::Off> {
     let this = T::resolve(load)?;
-    Ok(Opened(Arc::new(move |index, args| {
+    Ok((opened(this), this.into_value()))
+}
+
+fn opened<T: Bound>(this: T) -> Opened {
+    Opened(Arc::new(move |index, args| {
         T::functions()
             .nth(index)
             .ok_or_else(|| Error::new(format!("{} has no such function", T::NAME)))?
             .call(&this, args)
-    })))
+    }))
 }
 
 /// Every namespace a script reaches, in the order a runtime opens them.
@@ -200,12 +331,133 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<Log>(),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::world::World>(),
+    #[cfg(feature = "unstable")]
+    Namespace::starting(
+        "world",
+        "",
+        &[
+            crate::Load::SCRIPT_WORLD_RENAME,
+            crate::Load::SCRIPT_WRITABLE_TYPE,
+        ],
+    ),
     Namespace::of::<crate::schedule::Scheduler>(),
     Namespace::of::<crate::inventory::Inventories>(),
     Namespace::of::<crate::resources::Resources>(),
     Namespace::of::<crate::mods::Mods>(),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::controls::Controls>(),
+    #[cfg(feature = "unstable")]
+    Namespace::of::<crate::console::ConsoleFns>(),
+    Namespace::of::<crate::net::NetFns>(),
+    Namespace::starting("net", "", &[crate::Load::SCRIPT_NET]),
+    Namespace::starting("pacing", "", &[crate::Load::SCRIPT_PACING]),
+    Namespace::of::<crate::ecs::EcsFns>(),
+    #[cfg(feature = "unstable")]
+    Namespace::starting("damage", "", &[crate::Load::SCRIPT_DAMAGE_FILTER]),
+    Namespace::of::<crate::effects::Effects>(),
+    Namespace::of::<crate::survivors::SurvivorFns>(),
+    Namespace::starting(
+        "survivors",
+        "",
+        &[
+            crate::Load::SCRIPT_SURVIVORS,
+            crate::Load::SCRIPT_SURVIVOR_HOOKS,
+        ],
+    ),
+    #[cfg(feature = "unstable")]
+    Namespace::starting("item_data", "", &[crate::Load::SCRIPT_ITEM_DATA]),
+    #[cfg(feature = "unstable")]
+    Namespace::starting("entity_data", "", &[crate::Load::SCRIPT_ENTITY_DATA]),
+    Namespace::starting(
+        "",
+        "",
+        &[
+            crate::Load::SCRIPT_STATE,
+            crate::Load::SCRIPT_TICKS,
+            crate::Load::SCRIPT_DIRS,
+        ],
+    ),
+    Namespace::of::<crate::state::StateFns>(),
+    Namespace::of::<crate::files::FilesFns>(),
+    Namespace::starting("vetoes", "", &[crate::Load::SCRIPT_VETOES]),
+    Namespace::starting(
+        "progress",
+        "",
+        &[
+            crate::Load::SCRIPT_PROGRESS,
+            crate::Load::SCRIPT_PROGRESS_HOOKS,
+        ],
+    ),
+    Namespace::starting("status", "", &[crate::Load::SCRIPT_STATUS]),
+    Namespace::of::<crate::buffs::Buffs>(),
+    Namespace::of::<crate::knowledge::Knowledge>(),
+    Namespace::starting("knowledge", "", &[crate::Load::SCRIPT_KNOWLEDGE]),
+    Namespace::of::<crate::game_settings::GameSettings>(),
+    Namespace::of::<crate::rates::RateFns>(),
+    #[cfg(feature = "unstable")]
+    Namespace::starting("rates", "", &[crate::Load::SCRIPT_RATES]),
+    Namespace::of::<crate::affixes::Affixes>(),
+    Namespace::of::<crate::affixes::AffixFns>(),
+    Namespace::starting(
+        "affixes",
+        "",
+        &[
+            crate::Load::SCRIPT_AFFIX_DEFS,
+            #[cfg(feature = "unstable")]
+            crate::Load::SCRIPT_AFFIX_ROLLS,
+        ],
+    ),
+    Namespace::of::<crate::i18n::I18nFns>(),
+    Namespace::starting("i18n", "", &[crate::Load::SCRIPT_I18N]),
+    Namespace::of::<crate::weather::Weather>(),
+    #[cfg(feature = "unstable")]
+    Namespace::of::<crate::map::Map>(),
+    #[cfg(feature = "unstable")]
+    Namespace::on_request::<crate::map::FogOfWar>("fog_of_war"),
+    Namespace::of::<crate::daytime::Clock>(),
+    Namespace::starting("daytime", "", &[crate::Load::SCRIPT_DAYTIME]),
+    Namespace::on_request::<crate::altars::Altars>("altars"),
+    Namespace::starting(
+        "altars",
+        "",
+        &[
+            crate::Load::SCRIPT_ALTARS,
+            crate::Load::SCRIPT_ALTAR_LIMIT,
+            crate::Load::SCRIPT_ALTAR_LIMITS,
+        ],
+    ),
+    Namespace::of::<crate::loot::LootFns>(),
+    Namespace::starting(
+        "loot",
+        "",
+        &[
+            crate::Load::SCRIPT_LOOT_DROPS,
+            crate::Load::SCRIPT_LOOT_PASS,
+        ],
+    ),
+    Namespace::on_request::<crate::stats::Stats>("stats"),
+    Namespace::starting("stats", "", &[crate::Load::SCRIPT_STATS]),
+    Namespace::of::<crate::voxels::Voxels>(),
+    Namespace::of::<crate::terrain::Terrain>(),
+    Namespace::of::<crate::content::Content>(),
+    Namespace::starting(
+        "content",
+        "",
+        &[
+            crate::Load::SCRIPT_CONTENT_IDS,
+            crate::Load::SCRIPT_CONTENT_ITEMS,
+            crate::Load::SCRIPT_CONTENT_RECIPES,
+            #[cfg(feature = "unstable")]
+            crate::Load::SCRIPT_CONTENT_RECIPE_WITH,
+            crate::Load::SCRIPT_CONTENT_WORKSHOPS,
+            crate::Load::SCRIPT_CONTENT_ICONS,
+            crate::Load::SCRIPT_CONTENT_RENAMES,
+            crate::Load::SCRIPT_CONTENT_CHANGE,
+            crate::Load::SCRIPT_CONTENT_CHANGE_ITEMS,
+            crate::Load::SCRIPT_CONTENT_CHANGE_RECIPES,
+            crate::Load::SCRIPT_CONTENT_LIVE,
+        ],
+    ),
 ];
 
 /// The mod's log as a script writes to it: one line per call, under the
@@ -235,6 +487,14 @@ impl Log {
     #[script]
     pub fn error(&self, text: &str) {
         self.0.log(crate::abi::Level::ERROR, text);
+    }
+
+    /// The most detailed level the mod's log keeps, as
+    /// [`Host::log_level`](crate::Host::log_level) answers it.
+    #[script]
+    #[must_use]
+    pub fn level(&self) -> crate::abi::Level {
+        self.0.log_level()
     }
 }
 

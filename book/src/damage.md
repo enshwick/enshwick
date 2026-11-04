@@ -25,6 +25,17 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.damage.on_damage(function(damage)
+    local cause = damage:cause()
+    if cause == "FallDamage" then
+        damage:cancel()
+    elseif cause == "Impact" then
+        damage:scale_type("Poison", 0.5)
+    end
+end)
+```
+
 ## Causes
 
 | `cause()` | What deals it | What the filter changes |

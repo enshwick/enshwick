@@ -84,6 +84,15 @@ impl TryFrom<Parts> for Capture {
 #[error("a capture's voxels start at {0:?}, not at its corner")]
 struct CaptureCornerError(VoxelPos);
 
+impl crate::script::Object for Capture {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "Capture",
+        "A box of the world copied with the props inside it, to place again elsewhere.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_COPY];
+}
+
+#[crate::script(copy)]
 impl Capture {
     /// Where the region's lowest corner lay in the world, or lies after
     /// [`Capture::translated`].
@@ -92,6 +101,7 @@ impl Capture {
     ///
     /// See [`Capture::translated`].
     #[must_use]
+    #[script]
     pub const fn origin(&self) -> VoxelPos {
         self.origin
     }
@@ -102,6 +112,7 @@ impl Capture {
     ///
     /// See [`Capture`].
     #[must_use]
+    #[script]
     pub const fn size(&self) -> [u32; 3] {
         self.voxels.size()
     }
@@ -117,6 +128,7 @@ impl Capture {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub const fn voxels(&self) -> &VoxelBox {
         &self.voxels
     }
@@ -127,6 +139,7 @@ impl Capture {
     ///
     /// See [`Capture`].
     #[must_use]
+    #[script]
     pub fn props(&self) -> &[CapturedProp] {
         &self.props
     }
@@ -149,6 +162,7 @@ impl Capture {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn rotated(&self, quarter_turns: i32) -> Self {
         let turns = quarter_turns.rem_euclid(4);
         let mut voxels = self.voxels.clone();
@@ -199,6 +213,7 @@ impl Capture {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn translated(&self, by: [i64; 3]) -> Option<Self> {
         let [x, y, z] = [0, 1, 2].map(|axis| {
             let moved = i64::from(self.origin.to_array()[axis]).checked_add(by[axis])?;
@@ -251,6 +266,7 @@ fn canonical(orientation: [f32; 4]) -> [f32; 4] {
     }
 }
 
+#[crate::script(capture)]
 impl World {
     /// The voxels and props of the region between voxels `a` and `b`, both
     /// included, as plain data counted from the region's lowest corner.
@@ -277,6 +293,7 @@ impl World {
     /// # Examples
     ///
     /// See [`Capture`].
+    #[script]
     pub fn capture(self, a: VoxelPos, b: VoxelPos) -> Result<Capture, WorldError> {
         let (a, b) = (a.to_array(), b.to_array());
         let low = [0, 1, 2].map(|axis| a[axis].min(b[axis]));

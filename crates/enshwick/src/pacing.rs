@@ -46,7 +46,7 @@ pub const SERVER_SLOW_WAIT_NS: u64 = 100_000;
 /// # Examples
 ///
 /// See [`Load::on_loop_wait`], whose handler gets one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct LoopWait {
     /// What the game is about to wait, in milliseconds: the time left,
@@ -64,7 +64,7 @@ pub struct LoopWait {
 /// let none = enshwick::pacing::LoopWaits::default();
 /// assert!(!none.handles && !none.messages);
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct LoopWaits {
     /// The wait on handles, on the server and the client.
@@ -114,7 +114,7 @@ where
 /// let game_sized = enshwick::pacing::TaskWorkers::default();
 /// assert_eq!((game_sized.default, game_sized.background), (0, 0));
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct TaskWorkers {
     /// The default group, which also sizes the ECS task queue.
@@ -141,7 +141,27 @@ impl TaskWorkers {
     }
 }
 
+#[crate::script(pacing)]
 impl Load<'_> {
+    /// Runs `handler` where the server's game loop has picked its wait, as
+    /// [`Load::on_server_wait`] does: it returns the wait in nanoseconds,
+    /// or nil to keep it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_server_wait`].
+    #[script(name = "on_server_wait")]
+    pub(crate) fn on_server_wait_script(
+        &mut self,
+        handler: impl Fn(u64) -> Option<u64> + Send + Sync + 'static,
+    ) -> Result<bool, Off> {
+        self.on_server_wait(move |wait_ns| {
+            if let Some(changed) = handler(*wait_ns) {
+                *wait_ns = changed;
+            }
+        })
+    }
+
     /// Runs `handler` before every wait of the engine's event loop on its
     /// handles, on the thread that waits: the app's main loop, the server's
     /// game loop and its session, and on the client its message wait too. A
@@ -165,6 +185,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
+    #[script]
     pub fn on_loop_wait<F>(&mut self, handler: F) -> Result<LoopWaits, Off>
     where
         F: Fn(LoopWait) + Send + Sync + 'static,
@@ -250,6 +271,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
+    #[script]
     pub fn cap_task_workers(&mut self, caps: TaskWorkers) -> Result<bool, Off> {
         if caps == TaskWorkers::default() {
             return Ok(false);

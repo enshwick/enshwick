@@ -63,7 +63,7 @@ use crate::{Load, Off};
 /// assert_eq!(MapMarkerTypeId::from_guid(reference).get(), 0xc807_9fa5);
 /// assert_eq!(MapMarkerTypeId::new(7).get(), 7);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 pub struct MapMarkerTypeId(u32);
 
 impl MapMarkerTypeId {
@@ -113,7 +113,7 @@ impl MapMarkerTypeId {
 ///     markers
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct MapMarker {
     /// Where it is, in metres.
     pub position: [f64; 3],
@@ -131,7 +131,7 @@ pub struct MapMarker {
 /// # Examples
 ///
 /// See [`MapMarkerType`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum MarkerTypeSorting {
     /// In no group.
@@ -177,7 +177,7 @@ impl MarkerTypeSorting {
 ///     types
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 #[expect(
     clippy::struct_excessive_bools,
@@ -234,7 +234,7 @@ impl MapMarkerType {
 /// let cells = frame.size.map(|metres| metres / frame.metres_per_cell);
 /// assert_eq!(cells, [1280.0, 1280.0]);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
 pub struct MapFrame {
     /// The map's corner of lowest x and z, in metres, x then z.
     pub origin: [f64; 2],
@@ -278,6 +278,18 @@ impl MapFrame {
 /// See the [module](self).
 #[derive(Clone, Copy, Debug)]
 pub struct Map(&'static Resolved);
+
+impl crate::script::Bound for Map {
+    const NAME: &'static str = "map";
+    const DOC: &'static str =
+        "The world's map on the server: its markers, its frame, waypoints and snapshots.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_MARKERS, Self::SCRIPT_SNAPSHOT];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.map()
+    }
+}
 
 /// The map's component types and field offsets, resolved once per mod life.
 #[derive(Debug)]
@@ -327,6 +339,7 @@ impl Waypoint {
     }
 }
 
+#[crate::script(markers)]
 impl Map {
     pub(crate) fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         if let Some(resolved) = RESOLVED.get() {
@@ -370,6 +383,7 @@ impl Map {
     /// # Examples
     ///
     /// See [`MapMarker`].
+    #[script]
     pub fn markers(self) -> Result<Vec<MapMarker>, WorldError> {
         self.scan(|_| true)
     }
@@ -392,6 +406,7 @@ impl Map {
     ///         .map_or(0, |markers| markers.len())
     /// }
     /// ```
+    #[script]
     pub fn markers_in(self, a: [f64; 3], b: [f64; 3]) -> Result<Vec<MapMarker>, WorldError> {
         let (low, high) = crate::world::span(a, b).ok_or(WorldError::Refused)?;
         self.scan(|at| (0..3).all(|axis| (low[axis]..=high[axis]).contains(&at[axis])))
@@ -452,6 +467,7 @@ impl Map {
     ///     Some(frame.size.map(|metres| metres / frame.metres_per_cell))
     /// }
     /// ```
+    #[script]
     pub fn frame(self) -> Result<MapFrame, WorldError> {
         let host = self.0.host;
         let mut info = MapFrameInfo::EMPTY;
@@ -472,6 +488,7 @@ impl Map {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn waypoint(self, player: Entity) -> Result<Option<[f64; 3]>, WorldError> {
         let waypoint = self.0.waypoint.as_ref().ok_or(WorldError::Missing)?;
         let host = self.0.host;
@@ -498,6 +515,7 @@ impl Map {
     }
 }
 
+#[crate::script(snapshot)]
 impl Map {
     /// What the map shows now as a [`MapSnapshot`]: every player with
     /// position and waypoint, the Flame Altars of `altars` with their
@@ -529,6 +547,7 @@ impl Map {
     ///     Ok(())
     /// }
     /// ```
+    #[script]
     pub fn snapshot(self, altars: Option<Altars>) -> Result<MapSnapshot, WorldError> {
         let world = self.0.world;
         let frame = match self.frame() {

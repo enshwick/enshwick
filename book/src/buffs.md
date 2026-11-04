@@ -39,6 +39,22 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+## From Luau
+
+A Luau mod reaches the same calls through `enshwick.buffs`; here each player
+who joins gets a buff for five minutes, its id from the game's data:
+
+```luau
+local BLESSING = 3105
+
+enshwick.on("PlayerJoined", function(player)
+    enshwick.buffs.apply(player.entity, BLESSING, { duration = 5 * 60 })
+    for _, buff in enshwick.buffs.of(player.entity) do
+        enshwick.log.info(`{player.entity} has buff {buff.type_id}`)
+    end
+end)
+```
+
 ## Types
 
 A buff type is named by its `BuffTypeId`: the FNV-1a 32 hash of the type's GUID,

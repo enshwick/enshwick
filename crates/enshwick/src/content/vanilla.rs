@@ -259,7 +259,7 @@ struct FillTables {
 /// # Examples
 ///
 /// See [`Vanilla::loot_table`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct LootTable {
     /// The table's GUID, a `DefaultInventoryResource`.
     pub table: Guid,

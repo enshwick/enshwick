@@ -126,6 +126,12 @@ enshwick.on("PlayerJoined", function(player)
 		enshwick.world.tell(joined, `Welcome, {joined.name}`)
 	end
 end)
+
+-- Content is added while the mod starts, here a copy of the vanilla storage box:
+-- enshwick.content.add_item({
+-- 	id = "{id}:box",
+-- 	like = enshwick.content.item("Prop_Storage_24_T1_Box"),
+-- })
 "#;
 
 const LUAURC: &str = r#"{

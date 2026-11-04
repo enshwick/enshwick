@@ -40,7 +40,7 @@ pub mod stations {
 /// let workbench = stations::WORKBENCH;
 /// assert_ne!(workbench.item, workbench.template);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct Station {
     /// The station item.
     pub item: Guid,
@@ -59,7 +59,7 @@ pub struct Station {
 /// let workbench = WorkshopId::new(Guid::parse("965d3192-0287-49a2-ad51-a716139571a6"));
 /// assert_eq!(workbench.id(), 1_302_892_403);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct WorkshopId(Guid);
 
 impl WorkshopId {
@@ -119,7 +119,7 @@ impl WorkshopId {
 /// assert_eq!(bench.name(), BENCH.part("name"));
 /// assert!(!bench.named && bench.recipe_cost.is_none());
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 pub struct NewWorkshop {
     /// The vanilla station cloned: what the new one looks like and does.
     pub like: Station,
@@ -558,6 +558,7 @@ fn item_of(new: &NewWorkshop) -> Option<NewItem> {
     })
 }
 
+#[crate::script(content_workshops)]
 impl Load<'_> {
     /// Adds a crafting station with a workshop of its own, on the server and
     /// the client alike: the vanilla station's template and item cloned, the
@@ -595,6 +596,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
+    #[script]
     pub fn add_workshop(&mut self, new: NewWorkshop) -> Result<WorkshopId, Off> {
         new.check()?;
         let (template, recipe) = (new.template(), new.recipe());

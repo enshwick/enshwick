@@ -23,6 +23,7 @@
 //! ```
 
 mod limits;
+mod script;
 
 use core::ffi::c_void;
 
@@ -45,7 +46,7 @@ use crate::{Host, Load, Off};
 /// assert!(!zone.contains([80, 0, 0]));
 /// assert_eq!(zone.footprint_area(), 6400);
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 pub struct CellBox {
     /// The inclusive lower corner.
     pub min: [i64; 3],
@@ -199,7 +200,7 @@ pub fn cell_of_metres(metres: [f64; 3]) -> [i64; 3] {
 /// };
 /// assert!(altar.zone.contains([0, 0, 0]));
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, crate::Script)]
 pub struct Altar {
     /// The altar's entity.
     pub entity: Entity,
@@ -257,7 +258,7 @@ impl Altar {
 /// assert_eq!(bases[0].altars, vec![Entity(1), Entity(2)]);
 /// assert!(bases[0].contains([15, 5, 5]));
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
 pub struct Base {
     /// Its altars, by entity, smallest first.
     pub altars: Vec<Entity>,
@@ -341,6 +342,7 @@ pub struct Altars {
     host: Host,
 }
 
+#[crate::script(list)]
 impl Altars {
     /// Every altar of the server's world as it is now; empty while no world
     /// runs or when the loader refuses. Any thread.
@@ -353,6 +355,7 @@ impl Altars {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn list(&self) -> Vec<Altar> {
         let api = self.host.api();
         let entry_size = u32::try_from(size_of::<AltarInfo>()).unwrap_or(u32::MAX);
@@ -394,6 +397,7 @@ impl Altars {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn bases(&self) -> Vec<Base> {
         bases_of(&self.list())
     }
@@ -406,7 +410,8 @@ impl Altars {
 /// # Examples
 ///
 /// See [`Load::on_altar_zone`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[script(context)]
 #[non_exhaustive]
 pub struct AltarZone {
     /// The altar.
@@ -432,6 +437,7 @@ pub struct ZoneSizes {
     host: Host,
 }
 
+#[crate::script(sizes)]
 impl ZoneSizes {
     /// The altars.
     ///
@@ -439,6 +445,7 @@ impl ZoneSizes {
     ///
     /// See [`Load::on_altar_zone`].
     #[must_use]
+    #[script]
     pub const fn altars(&self) -> Altars {
         Altars { host: self.host }
     }
@@ -454,6 +461,7 @@ impl ZoneSizes {
     /// # Examples
     ///
     /// See [`Load::on_altar_zone`].
+    #[script]
     pub fn changed(&self) -> Result<(), ResizeError> {
         match (self.host.api().altar_zones_changed)(self.host.handle()) {
             crate::abi::Status::OK => Ok(()),
@@ -527,7 +535,8 @@ pub const MAX_ZONES: usize = 256;
 /// # Examples
 ///
 /// See [`Load::on_altar_limit`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[script(context)]
 #[non_exhaustive]
 pub struct AltarLimit {
     /// The Flame level.
@@ -544,7 +553,7 @@ pub struct AltarLimit {
 /// # Examples
 ///
 /// See [`base_limit`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct BaseLimit {
     /// Altar zones the game puts into bases.
@@ -706,6 +715,7 @@ where
     ))
 }
 
+#[crate::script(altars)]
 impl Load<'_> {
     /// Asks the loader to follow the Flame Altars, for [`Altars::list`] and
     /// [`AltarsChanged`](crate::events::AltarsChanged).
@@ -744,6 +754,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
+    #[script]
     pub fn on_altar_zone<F>(&mut self, filter: F) -> Result<ZoneSizes, Off>
     where
         F: Fn(&mut AltarZone) + Send + Sync + 'static,
@@ -799,6 +810,21 @@ impl Load<'_> {
             "building zone checks",
         )
     }
+
+    /// Runs `filter` when the game refuses a placement for its zones, as
+    /// [`Load::on_building_zone_check`] does; `true` accepts it after all,
+    /// and nil or an error keeps the game's refusal.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_building_zone_check`].
+    #[script(name = "on_building_zone_check")]
+    pub(crate) fn on_building_zone_check_script<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&BuildingZoneCheck<'_>) -> Option<bool> + Send + Sync + 'static,
+    {
+        self.on_building_zone_check(move |check| filter(check).unwrap_or(false))
+    }
 }
 
 /// How many altar zones and bases the game's last grouping found, from
@@ -807,7 +833,7 @@ impl Load<'_> {
 /// # Examples
 ///
 /// See [`grouping`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct Grouping {
     /// Altar zones in the world.
     pub zones: u32,
@@ -864,6 +890,7 @@ where
     }
 }
 
+#[crate::script(altar_limit)]
 impl Load<'_> {
     /// Runs `filter` when the game asks how many altars a Flame level
     /// allows, on both sides. Filters of several mods run in load order, each
@@ -882,6 +909,7 @@ impl Load<'_> {
     ///     load.on_altar_limit(|limit| limit.allowed = limit.allowed.saturating_add(2))
     /// }
     /// ```
+    #[script]
     pub fn on_altar_limit<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&mut AltarLimit) + Send + Sync + 'static,

@@ -242,7 +242,7 @@ impl RecipeView<'_> {
 /// # Examples
 ///
 /// See `Load::derive_recipes`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct Derived {
     /// The vanilla output count times this.
     pub output: u32,

@@ -2,6 +2,7 @@ use crate::Entity;
 
 use super::{ComponentType, ContainerKinds, Placed, World, WorldError};
 
+#[crate::script(entities)]
 impl World {
     /// Every entity with a component of type `ty` and a place in the world,
     /// such as every bed or every chest; with [`World::transform_type`],
@@ -18,6 +19,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn entities(self, ty: ComponentType) -> Vec<Placed> {
         self.placed_with(ty.hash())
             .unwrap_or_default()
@@ -39,6 +41,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn near(self, point: [f64; 3], radius: f64, ty: ComponentType) -> Vec<Placed> {
         let mut found: Vec<(f64, Placed)> = self
             .entities(ty)
@@ -56,6 +59,7 @@ impl World {
     ///
     /// See [`World::near`].
     #[must_use]
+    #[script]
     pub const fn transform_type(self) -> ComponentType {
         self.0.transform
     }
@@ -83,6 +87,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn containers(self, kinds: ContainerKinds) -> Vec<Placed> {
         self.0
             .containers
@@ -109,6 +114,7 @@ impl World {
     ///     }
     /// }
     /// ```
+    #[script]
     pub fn destroy(self, entity: Entity) -> Result<(), WorldError> {
         WorldError::check(
             (self.0.host.api().destroy)(self.0.host.handle(), entity),

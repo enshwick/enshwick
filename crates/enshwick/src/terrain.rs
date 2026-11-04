@@ -49,7 +49,7 @@ pub const MAX_RADIUS: f32 = 16.0;
 ///     terrain.materials().iter().find(|m| m.terrain_item == dirt_item).map(|m| m.terrain_material)
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct TerrainTerraformingConfig {
     /// Its voxel id, 1 to 127.
@@ -71,7 +71,7 @@ pub struct TerrainTerraformingConfig {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Shape {
     /// A disc or a sphere.
@@ -109,6 +109,26 @@ fn metres(position: [f64; 3]) -> [f32; 3] {
     position.map(|axis| axis as f32)
 }
 
+impl crate::script::Bound for Terrain {
+    const NAME: &'static str = "terrain";
+    const DOC: &'static str =
+        "The world's terrain: add, dig and flatten ground, and its materials.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_EDITS];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, crate::Off> {
+        Ok(load.terrain())
+    }
+}
+
+impl crate::script::Object for Terrain {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "Terrain",
+        "The world's terrain, or a dry run of its edits that changes nothing.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_EDITS];
+}
+
+#[crate::script(edits)]
 impl Terrain {
     /// The terrain materials of the running game; empty off the game thread
     /// or before the game has loaded them.
@@ -117,6 +137,7 @@ impl Terrain {
     ///
     /// See [`TerrainTerraformingConfig`].
     #[must_use]
+    #[script]
     pub fn materials(&self) -> Vec<TerrainTerraformingConfig> {
         let blank = TerrainMaterialInfo {
             header: Header::of::<TerrainMaterialInfo>(),
@@ -177,6 +198,7 @@ impl Terrain {
     ///     let _added = terrain.add(at, 6.0, 3.0, dirt, Shape::Round);
     /// }
     /// ```
+    #[script]
     pub fn add(
         &self,
         position: [f64; 3],
@@ -208,6 +230,7 @@ impl Terrain {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn dig(
         &self,
         position: [f64; 3],
@@ -235,6 +258,7 @@ impl Terrain {
     ///     terrain.flatten(at, 5.0, stone, Shape::Square).unwrap_or(false)
     /// }
     /// ```
+    #[script]
     pub fn flatten(
         &self,
         position: [f64; 3],
@@ -259,6 +283,7 @@ impl Terrain {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub const fn dry(self) -> Self {
         Self {
             host: self.host,

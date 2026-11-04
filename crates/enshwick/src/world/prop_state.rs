@@ -9,7 +9,7 @@ use crate::abi::TransactionInfo;
 /// # Examples
 ///
 /// See [`PropState`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum HeldState {
     /// Items in its `Inventory`, its linked inventories included: a chest's
@@ -131,6 +131,33 @@ impl PropState {
             .into_iter()
             .filter(move |&(_, bit)| self.0 & bit != 0)
             .map(|(kind, _)| kind)
+    }
+}
+
+impl crate::script::Typed for PropState {
+    const TY: &'static crate::script::Ty =
+        &crate::script::Ty::List(<HeldState as crate::script::Typed>::TY);
+}
+
+impl crate::script::IntoScript for PropState {
+    fn into_value(self) -> crate::script::Value {
+        crate::script::Value::List(
+            self.iter()
+                .map(crate::script::IntoScript::into_value)
+                .collect(),
+        )
+    }
+}
+
+impl crate::script::FromScript for PropState {
+    fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
+        let kinds: Vec<HeldState> = crate::script::FromScript::from_value(value)?;
+        Ok(Self(kinds.into_iter().fold(0, |bits, kind| {
+            bits | HeldState::ALL
+                .iter()
+                .find(|(known, _)| *known == kind)
+                .map_or(0, |&(_, bit)| bit)
+        })))
     }
 }
 

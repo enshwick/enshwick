@@ -34,7 +34,15 @@ pub(crate) fn expand_derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                 "`Script` takes a struct with named fields or a newtype",
             )),
         },
-        Data::Enum(data) => derive_choice(input, data),
+        Data::Enum(data)
+            if data
+                .variants
+                .iter()
+                .all(|v| matches!(v.fields, Fields::Unit)) =>
+        {
+            derive_choice(input, data)
+        }
+        Data::Enum(data) => derive_union(input, data),
         Data::Union(_) => Err(syn::Error::new_spanned(
             ident,
             "`Script` takes a struct or an enum",
@@ -42,10 +50,27 @@ pub(crate) fn expand_derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     }
 }
 
+/// The type's name in a script: `#[script(name = "...")]` on the type,
+/// for a type whose Rust name another module's type has too, else its
+/// Rust name.
+fn type_name(input: &DeriveInput) -> String {
+    let mut name = input.ident.to_string();
+    for attr in input.attrs.iter().filter(|a| a.path().is_ident("script")) {
+        // Other arguments, such as `context`, are read where they act.
+        let _read = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("name") {
+                name = meta.value()?.parse::<syn::LitStr>()?.value();
+            }
+            Ok(())
+        });
+    }
+    name
+}
+
 fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
     let script = quote!(::enshwick::script);
     let ident = &input.ident;
-    let name = ident.to_string();
+    let name = type_name(input);
     let doc = schema_doc(&input.attrs);
     let shown: Vec<&syn::Field> = named.named.iter().filter(|f| !hidden(f)).collect();
     let entries = shown.iter().map(|f| {
@@ -56,18 +81,51 @@ fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
             .unwrap_or_default();
         let doc = schema_doc(&f.attrs);
         let ty = &f.ty;
-        quote!(#script::Field::new(#field, #doc, <#ty as #script::Typed>::TY))
+        let new = if defaulted(f) {
+            quote!(defaulted)
+        } else {
+            quote!(new)
+        };
+        quote!(#script::Field::#new(#field, #doc, <#ty as #script::Typed>::TY))
     });
     let values = shown.iter().map(|f| {
         let field = &f.ident;
         quote!(#script::IntoScript::into_value(self.#field))
+    });
+    // `#[script(context)]`: a hook's `&mut` argument a handler gets as a
+    // value and changes by returning the changed value.
+    let context = input.attrs.iter().any(|attr| {
+        attr.path().is_ident("script")
+            && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "context")
+    });
+    let context = context.then(|| {
+        quote! {
+            impl #script::Context for #ident {
+                const VIEW: &'static #script::Ty = <Self as #script::Typed>::TY;
+                const CHANGE: &'static #script::Ty = <Self as #script::Typed>::TY;
+
+                fn view(&self) -> #script::Value {
+                    #script::IntoScript::into_value(::core::clone::Clone::clone(self))
+                }
+
+                fn apply(&mut self, change: #script::Value) -> ::core::result::Result<(), #script::Error> {
+                    *self = #script::FromScript::from_value(change)?;
+                    ::core::result::Result::Ok(())
+                }
+            }
+        }
     });
     let from = (shown.len() == named.named.len()).then(|| {
         let count = shown.len();
         let fields = shown.iter().map(|f| {
             let field = &f.ident;
             let label = field.as_ref().map(|i| i.unraw().to_string()).unwrap_or_default();
-            quote!(#field: ::enshwick::__private::argument(&mut fields, #label)?)
+            let read = if defaulted(f) {
+                quote!(argument_or_default)
+            } else {
+                quote!(argument)
+            };
+            quote!(#field: ::enshwick::__private::#read(&mut fields, #label)?)
         });
         quote! {
             impl #script::FromScript for #ident {
@@ -94,7 +152,17 @@ fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
         }
 
         #from
+
+        #context
     }
+}
+
+/// Whether `#[script(default)]` marks `field`: a script may leave it out.
+fn defaulted(field: &syn::Field) -> bool {
+    field.attrs.iter().any(|attr| {
+        attr.path().is_ident("script")
+            && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "default")
+    })
 }
 
 fn derive_newtype(ident: &Ident, inner: &Type) -> TokenStream {
@@ -121,7 +189,7 @@ fn derive_newtype(ident: &Ident, inner: &Type) -> TokenStream {
 fn derive_choice(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenStream> {
     let script = quote!(::enshwick::script);
     let ident = &input.ident;
-    let name = ident.to_string();
+    let name = type_name(input);
     let doc = schema_doc(&input.attrs);
     let mut values = Vec::new();
     let mut variants = Vec::new();
@@ -134,14 +202,23 @@ fn derive_choice(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<Token
         }
         let label = variant.ident.to_string();
         let variant_doc = schema_doc(&variant.attrs);
-        values.push(quote!((#label, #variant_doc)));
-        variants.push((&variant.ident, label));
+        let cfg: Vec<&syn::Attribute> = variant
+            .attrs
+            .iter()
+            .filter(|a| a.path().is_ident("cfg"))
+            .collect();
+        values.push(quote!(#(#cfg)* (#label, #variant_doc)));
+        variants.push((&variant.ident, label, cfg));
     }
-    let into = variants.iter().map(|(v, label)| quote!(Self::#v => #label));
-    let from = variants.iter().map(|(v, label)| quote!(#label => Self::#v));
+    let into = variants
+        .iter()
+        .map(|(v, label, cfg)| quote!(#(#cfg)* Self::#v => #label));
+    let from = variants
+        .iter()
+        .map(|(v, label, cfg)| quote!(#(#cfg)* #label => Self::#v));
     let names = variants
         .iter()
-        .map(|(_, label)| format!("{label:?}"))
+        .map(|(_, label, _)| format!("{label:?}"))
         .collect::<Vec<_>>()
         .join(", ");
     Ok(quote! {
@@ -168,6 +245,137 @@ fn derive_choice(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<Token
                         ::std::format!("{text:?} is not one of {}", #names),
                     )),
                 })
+            }
+        }
+    })
+}
+
+/// An enum whose variants carry one value or none, as a `Union`: a unit
+/// variant crosses as its name, one with a value as a table of one key.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one pass over the variants builds the description and both conversions together"
+)]
+fn derive_union(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenStream> {
+    let script = quote!(::enshwick::script);
+    let ident = &input.ident;
+    let name = type_name(input);
+    let doc = schema_doc(&input.attrs);
+    let mut described = Vec::new();
+    let mut into = Vec::new();
+    let mut from_name = Vec::new();
+    let mut from_table = Vec::new();
+    for variant in &data.variants {
+        let v = &variant.ident;
+        let label = v.to_string();
+        let variant_doc = schema_doc(&variant.attrs);
+        let cfg: Vec<&syn::Attribute> = variant
+            .attrs
+            .iter()
+            .filter(|a| a.path().is_ident("cfg"))
+            .collect();
+        match &variant.fields {
+            Fields::Unit => {
+                described.push(quote!(#(#cfg)* #script::Variant::new(#label, #variant_doc, ::core::option::Option::None)));
+                into.push(
+                    quote!(#(#cfg)* Self::#v => #script::Value::String(::std::string::String::from(#label))),
+                );
+                from_name.push(quote!(#(#cfg)* #label => ::core::result::Result::Ok(Self::#v)));
+            }
+            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+                let ty = &fields.unnamed[0].ty;
+                described.push(quote!(#(#cfg)* #script::Variant::new(
+                    #label,
+                    #variant_doc,
+                    ::core::option::Option::Some(<#ty as #script::Typed>::TY),
+                )));
+                into.push(
+                    quote!(#(#cfg)* Self::#v(value) => #script::Value::Map(::std::vec![(
+                        ::std::string::String::from(#label),
+                        #script::IntoScript::into_value(value),
+                    )])),
+                );
+                from_table.push(quote!(#(#cfg)* #label => ::core::result::Result::Ok(Self::#v(
+                    #script::FromScript::from_value(value).map_err(|e| #script::Error::new(::std::format!("{}: {e}", #label)))?,
+                ))));
+            }
+            Fields::Named(fields) => {
+                let record = format!("{name}{label}");
+                let names: Vec<&Ident> = fields
+                    .named
+                    .iter()
+                    .filter_map(|f| f.ident.as_ref())
+                    .collect();
+                let labels: Vec<String> = names.iter().map(|i| i.unraw().to_string()).collect();
+                let docs = fields.named.iter().map(|f| schema_doc(&f.attrs));
+                let tys = fields.named.iter().map(|f| &f.ty);
+                let count = names.len();
+                described.push(quote!(#(#cfg)* #script::Variant::new(
+                    #label,
+                    #variant_doc,
+                    ::core::option::Option::Some(&#script::Ty::Record(&#script::Record::new(
+                        #record,
+                        #variant_doc,
+                        &[#(#script::Field::new(#labels, #docs, <#tys as #script::Typed>::TY)),*],
+                    ))),
+                )));
+                into.push(quote!(#(#cfg)* Self::#v { #(#names),* } => #script::Value::Map(::std::vec![(
+                    ::std::string::String::from(#label),
+                    #script::Value::Record(::std::vec![#(#script::IntoScript::into_value(#names)),*]),
+                )])));
+                from_table.push(quote!(#(#cfg)* #label => {
+                    let mut fields = ::enshwick::__private::record_fields(value, #count)
+                        .map_err(|e| #script::Error::new(::std::format!("{}: {e}", #label)))?;
+                    ::core::result::Result::Ok(Self::#v {
+                        #(#names: ::enshwick::__private::argument(&mut fields, #labels)?,)*
+                    })
+                }));
+            }
+            Fields::Unnamed(_) => {
+                return Err(syn::Error::new_spanned(
+                    variant,
+                    "`Script` takes an enum whose variants carry one value, named fields or none",
+                ));
+            }
+        }
+    }
+    Ok(quote! {
+        impl #script::Typed for #ident {
+            const TY: &'static #script::Ty = &#script::Ty::Union(&#script::Union::new(
+                #name,
+                #doc,
+                &[#(#described),*],
+            ));
+        }
+
+        impl #script::IntoScript for #ident {
+            fn into_value(self) -> #script::Value {
+                match self { #(#into,)* }
+            }
+        }
+
+        impl #script::FromScript for #ident {
+            fn from_value(value: #script::Value) -> ::core::result::Result<Self, #script::Error> {
+                match value {
+                    #script::Value::String(text) => match text.as_str() {
+                        #(#from_name,)*
+                        _ => ::core::result::Result::Err(#script::Error::new(::std::format!(
+                            "{text:?} is no variant of {} without a value", #name
+                        ))),
+                    },
+                    #script::Value::Map(mut entries) if entries.len() == 1 => {
+                        let (key, value) = entries.remove(0);
+                        match key.as_str() {
+                            #(#from_table,)*
+                            _ => ::core::result::Result::Err(#script::Error::new(::std::format!(
+                                "{key:?} is no variant of {} with a value", #name
+                            ))),
+                        }
+                    }
+                    _ => ::core::result::Result::Err(#script::Error::new(::std::format!(
+                        "expected a {}: a variant's name, or a table of one variant and its value", #name
+                    ))),
+                }
             }
         }
     })
@@ -223,7 +431,7 @@ struct Parameter {
     pass: TokenStream,
 }
 
-fn parameter(index: usize, typed: &PatType) -> syn::Result<Parameter> {
+fn parameter(index: usize, typed: &PatType, generics: &syn::Generics) -> syn::Result<Parameter> {
     let script = quote!(::enshwick::script);
     let param = match &*typed.pat {
         Pat::Ident(p) => p.ident.to_string(),
@@ -236,51 +444,19 @@ fn parameter(index: usize, typed: &PatType) -> syn::Result<Parameter> {
     };
     let local = format_ident!("arg{index}");
     let ty = &*typed.ty;
-    if let Some((inputs, output)) = closure_bound(ty) {
-        let names: Vec<Ident> = (0..inputs.len()).map(|n| format_ident!("p{n}")).collect();
-        // A closure that lends its argument, `&T`, hands the script a copy.
-        let owned: Vec<Type> = inputs
-            .iter()
-            .map(|input| match input {
-                Type::Reference(r) => (*r.elem).clone(),
-                other => other.clone(),
-            })
-            .collect();
-        let values: Vec<TokenStream> = inputs
-            .iter()
-            .zip(&names)
-            .map(|(input, name)| {
-                let owned = if matches!(input, Type::Reference(_)) {
-                    quote!(::core::clone::Clone::clone(#name))
-                } else {
-                    quote!(#name)
-                };
-                quote!(#script::IntoScript::into_value(#owned))
-            })
-            .collect();
-        return Ok(Parameter {
-            describe: quote! {
-                #script::Param::new(#param, &#script::Ty::Function(&#script::Signature::new(
-                    &[#(#script::Param::new("", <#owned as #script::Typed>::TY)),*],
-                    <#output as #script::Answer>::TY,
-                )))
-            },
-            read: quote! {
-                let #local = {
-                    let callback: #script::Callback = ::enshwick::__private::argument(&mut args, #param)?;
-                    move |#(#names: #inputs),*| -> #output {
-                        <#output as #script::Answer>::from_answer(
-                            callback.call(::std::vec![#(#values),*]),
-                        )
-                    }
-                };
-            },
-            pass: quote!(#local),
-        });
+    if let Some((inputs, output)) = closure_bound(ty).or_else(|| generic_closure(ty, generics)) {
+        return closure(&param, &local, &inputs, &output);
     }
     let (owned, pass): (Type, TokenStream) = match ty {
         Type::Reference(r) if matches!(&*r.elem, Type::Path(p) if p.path.is_ident("str")) => {
             (syn::parse_quote!(::std::string::String), quote!(&#local))
+        }
+        Type::Reference(r) if matches!(&*r.elem, Type::Slice(_)) => {
+            let Type::Slice(slice) = &*r.elem else {
+                unreachable!("matched as a slice")
+            };
+            let elem = &slice.elem;
+            (syn::parse_quote!(::std::vec::Vec<#elem>), quote!(&#local))
         }
         Type::Reference(r) => ((*r.elem).clone(), quote!(&#local)),
         other => (other.clone(), quote!(#local)),
@@ -292,12 +468,135 @@ fn parameter(index: usize, typed: &PatType) -> syn::Result<Parameter> {
     })
 }
 
+/// The closure bound of `ty` when it names a type parameter of `generics`
+/// bounded by `Fn`, inline or in the `where` clause.
+fn generic_closure(ty: &Type, generics: &syn::Generics) -> Option<(Vec<Type>, Type)> {
+    let Type::Path(path) = ty else { return None };
+    let ident = path.path.get_ident()?;
+    let inline = generics
+        .type_params()
+        .filter(|p| p.ident == *ident)
+        .flat_map(|p| p.bounds.iter());
+    let clause = generics
+        .where_clause
+        .iter()
+        .flat_map(|w| w.predicates.iter())
+        .filter_map(|p| match p {
+            syn::WherePredicate::Type(t) if matches!(&t.bounded_ty, Type::Path(b) if b.path.is_ident(ident)) => {
+                Some(t.bounds.iter())
+            }
+            _ => None,
+        })
+        .flatten();
+    let bounds = inline.chain(clause).cloned().collect();
+    closure_bound(&Type::ImplTrait(syn::TypeImplTrait {
+        attrs: Vec::new(),
+        impl_token: syn::token::Impl::default(),
+        bounds,
+    }))
+}
+
+/// A closure parameter: the script passes a function, called with each
+/// argument as a value. A `&T` argument hands the script a copy; a `&mut T`
+/// argument hands it `T`'s [`Context`] view, and what the function returns
+/// besides nil is applied back to it.
+fn closure(param: &str, local: &Ident, inputs: &[Type], output: &Type) -> syn::Result<Parameter> {
+    let script = quote!(::enshwick::script);
+    let names: Vec<Ident> = (0..inputs.len()).map(|n| format_ident!("p{n}")).collect();
+    let context = inputs
+        .iter()
+        .position(|input| matches!(input, Type::Reference(r) if r.mutability.is_some()));
+    let described: Vec<TokenStream> = inputs
+        .iter()
+        .map(|input| match input {
+            Type::Reference(r) if r.mutability.is_some() => {
+                let elem = &r.elem;
+                quote!(<#elem as #script::Context>::VIEW)
+            }
+            Type::Reference(r) => {
+                let elem = &r.elem;
+                quote!(<#elem as #script::Typed>::TY)
+            }
+            other => quote!(<#other as #script::Typed>::TY),
+        })
+        .collect();
+    let values: Vec<TokenStream> = inputs
+        .iter()
+        .zip(&names)
+        .map(|(input, name)| match input {
+            Type::Reference(r) if r.mutability.is_some() => quote!(#script::Context::view(&*#name)),
+            Type::Reference(_) => {
+                quote!(#script::IntoScript::into_value(::core::clone::Clone::clone(#name)))
+            }
+            _ => quote!(#script::IntoScript::into_value(#name)),
+        })
+        .collect();
+    let (ret, body) = match context {
+        Some(at) => {
+            if !matches!(output, Type::Tuple(t) if t.elems.is_empty()) {
+                return Err(syn::Error::new_spanned(
+                    output,
+                    "a `#[script]` closure with a `&mut` argument returns nothing: the script's answer changes the argument",
+                ));
+            }
+            let Type::Reference(r) = &inputs[at] else {
+                unreachable!("the position is of a reference")
+            };
+            let elem = &r.elem;
+            let name = &names[at];
+            (
+                quote!(&#script::Ty::Optional(<#elem as #script::Context>::CHANGE)),
+                quote! {
+                    match callback.call(::std::vec![#(#values),*]) {
+                        ::core::result::Result::Ok(#script::Value::Nil) | ::core::result::Result::Err(_) => {}
+                        ::core::result::Result::Ok(change) => {
+                            if let ::core::result::Result::Err(error) = #script::Context::apply(#name, change) {
+                                callback.fault(&error);
+                            }
+                        }
+                    }
+                },
+            )
+        }
+        None => (
+            quote!(<#output as #script::Answer>::TY),
+            quote! {
+                <#output as #script::Answer>::from_answer(
+                    callback.call(::std::vec![#(#values),*]),
+                )
+            },
+        ),
+    };
+    Ok(Parameter {
+        describe: quote! {
+            #script::Param::new(#param, &#script::Ty::Function(&#script::Signature::new(
+                &[#(#script::Param::new("", #described)),*],
+                #ret,
+            )))
+        },
+        read: quote! {
+            let #local = {
+                let callback: #script::Callback = ::enshwick::__private::argument(&mut args, #param)?;
+                move |#(#names: #inputs),*| -> #output { #body }
+            };
+        },
+        pass: quote!(#local),
+    })
+}
+
 /// The answer type's description and the body that calls the method and
 /// converts what it returns.
 fn answer(method: &ImplItemFn, passes: &[TokenStream]) -> syn::Result<(TokenStream, TokenStream)> {
     let script = quote!(::enshwick::script);
     let name = &method.sig.ident;
-    let call = quote!(this.#name(#(#passes),*));
+    // A method that takes `self` by value runs on a copy of the script's
+    // object, as a builder does: `tx:place_prop(...)` returns the next one.
+    let by_value = matches!(method.sig.inputs.first(), Some(FnArg::Receiver(r)) if matches!(r.kind, syn::ReceiverKind::Value));
+    let call = if by_value {
+        quote!(::enshwick::__private::owned(this).#name(#(#passes),*))
+    } else {
+        quote!(this.#name(#(#passes),*))
+    };
     Ok(match &method.sig.output {
         ReturnType::Default => (
             quote!(&#script::Ty::Nil),
@@ -323,18 +622,40 @@ fn answer(method: &ImplItemFn, passes: &[TokenStream]) -> syn::Result<(TokenStre
                     "a `#[script]` method's `Result` names its `Ok` type",
                 ));
             }
-            None => (
-                quote!(<#ty as #script::Typed>::TY),
-                quote!(::core::result::Result::Ok(#script::IntoScript::into_value(#call))),
-            ),
+            // A borrowed answer reaches the script as its own copy.
+            None => match &**ty {
+                Type::Reference(r) => match &*r.elem {
+                    Type::Slice(slice) => {
+                        let elem = &slice.elem;
+                        (
+                            quote!(<::std::vec::Vec<#elem> as #script::Typed>::TY),
+                            quote!(::core::result::Result::Ok(#script::IntoScript::into_value(<[#elem]>::to_vec(#call)))),
+                        )
+                    }
+                    elem => (
+                        quote!(<#elem as #script::Typed>::TY),
+                        quote!(::core::result::Result::Ok(#script::IntoScript::into_value(::core::clone::Clone::clone(#call)))),
+                    ),
+                },
+                _ => (
+                    quote!(<#ty as #script::Typed>::TY),
+                    quote!(::core::result::Result::Ok(#script::IntoScript::into_value(#call))),
+                ),
+            },
         },
     })
 }
 
-/// The `Function` of one `#[script]` method of `self_ty`.
-fn function(method: &ImplItemFn, self_ty: &Type) -> syn::Result<TokenStream> {
+/// The `Function` of one `#[script]` method of `self_ty`, or its
+/// `InitFunction` when `self_ty` is `Load`.
+fn function(
+    method: &ImplItemFn,
+    self_ty: &Type,
+    starting: bool,
+    name: Option<String>,
+) -> syn::Result<TokenStream> {
     let script = quote!(::enshwick::script);
-    let label = method.sig.ident.to_string();
+    let label = name.unwrap_or_else(|| method.sig.ident.to_string());
     let doc = schema_doc(&method.attrs);
     if doc.is_empty() {
         return Err(syn::Error::new_spanned(
@@ -358,7 +679,7 @@ fn function(method: &ImplItemFn, self_ty: &Type) -> syn::Result<TokenStream> {
             FnArg::Receiver(_) => None,
         })
         .enumerate()
-        .map(|(i, typed)| parameter(i, typed))
+        .map(|(i, typed)| parameter(i, typed, &method.sig.generics))
         .collect::<syn::Result<Vec<_>>>()?;
     let describes = parameters.iter().map(|p| &p.describe);
     let reads = parameters.iter().map(|p| &p.read);
@@ -369,12 +690,17 @@ fn function(method: &ImplItemFn, self_ty: &Type) -> syn::Result<TokenStream> {
     } else {
         quote!(let mut args = args.into_iter();)
     };
+    let (kind, this) = if starting {
+        (quote!(InitFunction), quote!(&mut ::enshwick::Load<'_>))
+    } else {
+        (quote!(Function), quote!(&#self_ty))
+    };
     Ok(quote! {
-        #script::Function::new(
+        #script::#kind::new(
             #label,
             #doc,
             #script::Signature::new(&[#(#describes),*], #ret),
-            |this: &#self_ty, args: ::std::vec::Vec<#script::Value>| {
+            |this: #this, args: ::std::vec::Vec<#script::Value>| {
                 #take
                 #(#reads)*
                 #body
@@ -386,17 +712,45 @@ fn function(method: &ImplItemFn, self_ty: &Type) -> syn::Result<TokenStream> {
 pub(crate) fn expand_impl(part: &Ident, mut item: ItemImpl) -> syn::Result<TokenStream> {
     let script = quote!(::enshwick::script);
     let self_ty = item.self_ty.clone();
+    // `impl Load` methods run while the mod starts, as in a Rust mod's init.
+    let starting = matches!(&*self_ty, Type::Path(p) if p.path.segments.last().is_some_and(|s| s.ident == "Load"));
     let constant = format_ident!("SCRIPT_{}", part.to_string().to_uppercase());
     let mut functions = Vec::new();
     for entry in &mut item.items {
         let ImplItem::Fn(method) = entry else {
             continue;
         };
-        let before = method.attrs.len();
-        method.attrs.retain(|a| !a.path().is_ident("script"));
-        if method.attrs.len() != before {
-            functions.push(function(method, &self_ty)?);
-        }
+        let Some(at) = method
+            .attrs
+            .iter()
+            .position(|a| a.path().is_ident("script"))
+        else {
+            continue;
+        };
+        let attr = method.attrs.remove(at);
+        // `#[script(name = "...")]` gives a crate's adapter the name of the
+        // Rust method it stands for.
+        let name = match &attr.meta {
+            syn::Meta::List(_) => {
+                let pair: syn::MetaNameValue = attr.parse_args()?;
+                let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(name),
+                    ..
+                }) = pair.value
+                else {
+                    return Err(syn::Error::new_spanned(
+                        pair,
+                        "`#[script(name = \"...\")]` takes a string",
+                    ));
+                };
+                Some(name.value())
+            }
+            _ => None,
+        };
+        // A method behind a `cfg` keeps its entry behind the same one.
+        let cfgs = method.attrs.iter().filter(|a| a.path().is_ident("cfg"));
+        let entry = function(method, &self_ty, starting, name)?;
+        functions.push(quote!(#(#cfgs)* #entry));
     }
     if functions.is_empty() {
         return Err(syn::Error::new_spanned(
@@ -405,12 +759,17 @@ pub(crate) fn expand_impl(part: &Ident, mut item: ItemImpl) -> syn::Result<Token
         ));
     }
     let generics = item.generics.clone();
+    let ty = if starting {
+        quote!(#script::InitFunction)
+    } else {
+        quote!(#script::Function<Self>)
+    };
     Ok(quote! {
         #item
 
         impl #generics #self_ty {
             #[doc(hidden)]
-            pub const #constant: &'static [#script::Function<Self>] = &[#(#functions),*];
+            pub const #constant: &'static [#ty] = &[#(#functions),*];
         }
     })
 }

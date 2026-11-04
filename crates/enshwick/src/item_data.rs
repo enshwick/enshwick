@@ -56,6 +56,7 @@ use core::marker::PhantomData;
 
 use crate::abi::{Status, Str};
 use crate::inventory::ItemInstance;
+use crate::resources::Value as Data;
 use crate::{Host, Load, Off};
 
 /// The largest encoded value.
@@ -260,5 +261,57 @@ impl Load<'_> {
             },
             || format!("item data {id:?}"),
         )
+    }
+}
+
+impl crate::script::Object for ItemData<Data> {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "ItemData",
+        "A kind of item data with a game data value per item, from `item_data`.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_VALUES];
+}
+
+#[crate::script(values)]
+impl ItemData<Data> {
+    /// The item's value, as [`ItemData::get`] reads it.
+    #[script(name = "get")]
+    pub(crate) fn get_script(&self, item: ItemInstance) -> Option<Data> {
+        self.get(item)
+    }
+
+    /// Sets the item's value, as [`ItemData::set`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`ItemData::set`].
+    #[script(name = "set")]
+    pub(crate) fn set_script(&self, item: ItemInstance, value: &Data) -> Result<(), SetError> {
+        self.set(item, value)
+    }
+
+    /// Removes the item's value, as [`ItemData::remove`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`ItemData::set`].
+    #[script(name = "remove")]
+    pub(crate) fn remove_script(&self, item: ItemInstance) -> Result<(), SetError> {
+        self.remove(item)
+    }
+}
+
+#[cfg(feature = "unstable")]
+#[crate::script(item_data)]
+impl Load<'_> {
+    /// Opens the item data kind `id` of game data values, as
+    /// [`Load::item_data`] opens one of a Rust type.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::item_data`].
+    #[script(name = "item_data")]
+    pub(crate) fn item_data_script(&mut self, id: &str) -> Result<ItemData<Data>, Off> {
+        self.item_data(id)
     }
 }

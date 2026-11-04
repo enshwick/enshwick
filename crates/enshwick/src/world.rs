@@ -13,6 +13,7 @@ mod build;
 mod capture;
 mod containers;
 mod entities;
+mod fields;
 mod geometry;
 mod players;
 mod prop_state;
@@ -223,7 +224,7 @@ impl Player {
 /// # Examples
 ///
 /// See [`World::near`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct Placed {
     /// The entity.
     pub entity: Entity,
@@ -313,12 +314,56 @@ pub struct World(&'static Resolved);
 
 impl crate::script::Bound for World {
     const NAME: &'static str = "world";
-    const DOC: &'static str = "The server's world: players, chat, notices and positions. Unstable: may change in any release.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
-        &[Self::SCRIPT_PLAYERS, Self::SCRIPT_THINGS];
+    const DOC: &'static str = "The server's world: players, accounts, entities, props, vitals and edits in transactions. Unstable: may change in any release.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[
+        Self::SCRIPT_PLAYERS,
+        Self::SCRIPT_THINGS,
+        Self::SCRIPT_ACCOUNTS,
+        Self::SCRIPT_BUILD,
+        Self::SCRIPT_ENTITIES,
+        Self::SCRIPT_PROPS,
+        Self::SCRIPT_TRANSACTIONS,
+        Self::SCRIPT_VITALS,
+        Self::SCRIPT_METERS,
+        Self::SCRIPT_FIELDS,
+        Self::SCRIPT_CAPTURE,
+    ];
 
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         load.world()
+    }
+}
+
+#[crate::script(meters)]
+impl World {
+    /// Changes an item's meter on its entity `pide` to what `change` returns
+    /// for the value now, as `World::change_item_meter` does; nil keeps it.
+    ///
+    /// # Errors
+    ///
+    /// As [`World::change_item_meter`].
+    #[script(name = "change_item_meter")]
+    pub(crate) fn change_item_meter_script(
+        self,
+        pide: Entity,
+        change: impl Fn(i32) -> Option<i32>,
+    ) -> Result<Meter, WorldError> {
+        self.change_item_meter(pide, |now| change(now).unwrap_or(now))
+    }
+
+    /// Changes `entity`'s shroud time to what `change` returns for the time
+    /// now, as `World::change_shroud_time` does; nil keeps it.
+    ///
+    /// # Errors
+    ///
+    /// As [`World::change_shroud_time`].
+    #[script(name = "change_shroud_time")]
+    pub(crate) fn change_shroud_time_script(
+        self,
+        entity: Entity,
+        change: impl Fn(i32) -> Option<i32>,
+    ) -> Result<Meter, WorldError> {
+        self.change_shroud_time(entity, |now| change(now).unwrap_or(now))
     }
 }
 
@@ -587,6 +632,7 @@ impl World {
     ///
     /// See [`World`].
     #[must_use]
+    #[script]
     pub fn used_item(&self, entity: Entity) -> Option<ItemId> {
         let data = self.component(entity, self.0.used_item)?;
         // SAFETY: `component` returned the entity's live UsedItem, valid until
@@ -607,6 +653,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn has_label(&self, entity: Entity) -> Option<bool> {
         let label = self.0.label?;
         let Some(data) = self.component(entity, label) else {
@@ -624,6 +671,7 @@ impl World {
     ///
     /// See [`World`].
     #[must_use]
+    #[script]
     pub fn template(&self, entity: Entity) -> Option<[u8; 16]> {
         let mut out = [0u8; 16];
         let status =
@@ -650,6 +698,7 @@ impl World {
     ///     }
     /// }
     /// ```
+    #[script]
     pub fn save(self) -> Result<(), WorldError> {
         WorldError::from_status((self.0.host.api().save_world)(self.0.host.handle()))
     }
@@ -669,6 +718,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn key(self) -> Option<String> {
         crate::state::world_key(self.0.host)
     }
@@ -687,6 +737,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn data_dir(self) -> Option<std::path::PathBuf> {
         crate::state::data_dir(self.0.host)
     }

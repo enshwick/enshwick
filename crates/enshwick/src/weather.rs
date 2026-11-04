@@ -40,7 +40,7 @@ use crate::{Host, Load};
 /// # Examples
 ///
 /// See [`WeatherAt`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum WeatherState {
     /// Clear.
@@ -67,7 +67,7 @@ pub enum WeatherState {
 ///     weather.at(at).is_some_and(|now| now.state() == WeatherState::Rain)
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct WeatherAt {
     /// How clear it is.
@@ -107,7 +107,7 @@ impl WeatherAt {
 /// # Examples
 ///
 /// See [`Front`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum WeatherPhenomenonEffect {
     /// Clouds without rain.
@@ -131,7 +131,7 @@ pub enum WeatherPhenomenonEffect {
 ///     weather.fronts().iter().filter(|front| front.kind == WeatherPhenomenonEffect::Blizzard).count()
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct Front {
     /// The weather layer it belongs to.
@@ -153,7 +153,7 @@ pub struct Front {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Forecast {
     /// Clear skies everywhere.
@@ -176,6 +176,18 @@ pub struct Weather {
     host: Host,
 }
 
+impl crate::script::Bound for Weather {
+    const NAME: &'static str = "weather";
+    const DOC: &'static str =
+        "The weather of the server's world: what it is where, its fronts, and setting it.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_SKY];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, crate::Off> {
+        Ok(load.weather())
+    }
+}
+
+#[crate::script(sky)]
 impl Weather {
     /// How the weather is at `position`, in metres; `None` off the game
     /// thread or while no world runs.
@@ -184,6 +196,7 @@ impl Weather {
     ///
     /// See [`WeatherAt`].
     #[must_use]
+    #[script]
     pub fn at(&self, position: [f64; 3]) -> Option<WeatherAt> {
         let fixed = crate::ecs::fixed(position);
         let mut out = [0.0f32; 4];
@@ -204,6 +217,7 @@ impl Weather {
     ///
     /// See [`Front`].
     #[must_use]
+    #[script]
     pub fn fronts(&self) -> Vec<Front> {
         let blank = WeatherFront {
             header: Header::of::<WeatherFront>(),
@@ -268,6 +282,7 @@ impl Weather {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn set(&self, forecast: Forecast, lasting: Option<Duration>) -> Result<(), WorldError> {
         let effect = match forecast {
             Forecast::Clear => WeatherFront::NONE,

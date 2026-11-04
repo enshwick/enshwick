@@ -33,6 +33,21 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.schedule.every(30, function()
+    local ok, markers = pcall(enshwick.map.markers)
+    local waypoints = 0
+    for _, player in enshwick.world.players() do
+        local set, at = pcall(enshwick.map.waypoint, player.entity)
+        if set and at then
+            waypoints += 1
+        end
+    end
+    enshwick.log.info(`{ok and #markers or 0} markers, {waypoints} waypoints set`)
+    return true
+end)
+```
+
 ## Markers
 
 `map.markers()` lists every marker the scene places, in the scene's order:

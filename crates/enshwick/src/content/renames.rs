@@ -129,6 +129,7 @@ fn renamed_from(list: &[(Guid, Guid)], id: ItemId) -> ItemId {
     current
 }
 
+#[crate::script(content_renames)]
 impl Load<'_> {
     /// Hands the loader every content rename the mod ever made, oldest
     /// first; call it before adding the renamed content, so an item is
@@ -141,6 +142,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`Renames`].
+    #[script]
     pub fn rename_content(&mut self, renames: Renames) -> Result<(), Off> {
         if let Some((from, _)) = renames.list.iter().find(|(from, to)| from == to) {
             return Err(Off::new(format!(

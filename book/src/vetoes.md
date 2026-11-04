@@ -47,6 +47,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+-- Nothing is built in a ring around the world's centre.
+enshwick.vetoes.on_build(function(placement)
+    local at = placement.position
+    return math.sqrt(at.x * at.x + at.z * at.z) > 50
+end)
+```
+
 The server runs the cursor check on the cursor each player's client sends,
 and the client runs it for its own prediction, so the filter runs on both
 sides, on the cursor systems' worker threads, on every frame a player aims to

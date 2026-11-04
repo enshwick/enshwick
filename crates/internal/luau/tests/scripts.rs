@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn a_task_runs_on_ticks_until_it_answers_false() {
         let loader = run(r"local runs = 0
-            enshwick.scheduler.every(0, function()
+            enshwick.schedule.every(0, function()
                 runs += 1
                 enshwick.log.info(`run {runs}`)
                 return runs < 2
@@ -696,6 +696,50 @@ mod tests {
         assert_eq!(ask(1, u64::MAX), Decision::Changed(20));
         assert_eq!(ask(9, 1), Decision::Refused);
         assert_eq!(ask(1, 1), Decision::Kept(10));
+    }
+
+    #[test]
+    fn a_script_s_link_takes_an_order_and_a_malformed_one_refuses_the_start() {
+        let linked = |order: &str| {
+            run_full(
+                &format!(
+                    r#"enshwick.extend(require("./points/price"), function() return nil end, {order})"#
+                ),
+                Limits::default(),
+                Scripts::new().with("points/price.luau", price_module()),
+                None,
+                FakeHost::new(),
+            )
+        };
+        {
+            let (loader, status) = linked(r#"{ after = { "you.haggling" }, priority = 5 }"#);
+            assert_eq!(status, Status::OK, "{:?}", loader.logs());
+            assert_eq!(loader.attached_points(), ["you.trading-post:price"]);
+        }
+        {
+            let (loader, status) = run_full(
+                r#"local price = require("./points/price")
+                enshwick.extend(price, function() return nil end)
+                enshwick.extend(price, function() return nil end, { priority = 5 })"#,
+                Limits::default(),
+                Scripts::new().with("points/price.luau", price_module()),
+                None,
+                FakeHost::new(),
+            );
+            assert_ne!(status, Status::OK);
+            assert!(
+                logged(&loader, "linked already, in another order"),
+                "{:?}",
+                loader.logs()
+            );
+        }
+        let (loader, status) = linked(r#"{ priority = "first" }"#);
+        assert_ne!(status, Status::OK);
+        assert!(
+            logged(&loader, "enshwick.extend: order"),
+            "{:?}",
+            loader.logs()
+        );
     }
 
     #[test]

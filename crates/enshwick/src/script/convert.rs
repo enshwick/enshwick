@@ -1,4 +1,3 @@
-use core::fmt::Write as _;
 use std::ops::ControlFlow;
 use std::time::Duration;
 
@@ -16,6 +15,7 @@ fn expected(what: &str, value: &Value) -> Error {
         Value::Function(_) => "a function",
         Value::Map(_) => "a table of data",
         Value::Bytes(_) => "bytes",
+        Value::Object(_) => "an object",
     };
     Error::new(format!("expected {what}, got {got}"))
 }
@@ -88,6 +88,218 @@ macro_rules! whole_numbers {
 }
 
 whole_numbers!(u8, u16, u32, i8, i16, i32);
+
+impl Typed for usize {
+    const TY: &'static Ty = &Ty::Number;
+}
+
+impl IntoScript for usize {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a count or a size past 2^53 does not occur"
+    )]
+    fn into_value(self) -> Value {
+        Value::Number(self as f64)
+    }
+}
+
+impl FromScript for usize {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        let Value::Number(n) = value else {
+            return Err(expected("a number", &value));
+        };
+        if n.fract() != 0.0 || !(0.0..=9_007_199_254_740_992.0).contains(&n) {
+            return Err(Error::new(format!(
+                "{n} is not a whole number from 0 to 2^53"
+            )));
+        }
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "checked above: a whole number from 0 to 2^53"
+        )]
+        Ok(n as Self)
+    }
+}
+
+macro_rules! number_arrays {
+    ($(($t:ty, $n:literal)),*) => {$(
+        impl Typed for [$t; $n] {
+            const TY: &'static Ty = &Ty::List(<$t as Typed>::TY);
+        }
+
+        impl IntoScript for [$t; $n] {
+            fn into_value(self) -> Value {
+                Value::List(self.into_iter().map(IntoScript::into_value).collect())
+            }
+        }
+
+        impl FromScript for [$t; $n] {
+            fn from_value(value: Value) -> Result<Self, Error> {
+                let list: Vec<$t> = Vec::from_value(value)?;
+                list.try_into().map_err(|list: Vec<$t>| {
+                    Error::new(format!("expected {} numbers, got {}", $n, list.len()))
+                })
+            }
+        }
+    )*};
+}
+
+number_arrays!(
+    (f32, 4),
+    (u32, 3),
+    (u32, 2),
+    (u16, 2),
+    (f64, 2),
+    ([i64; 3], 2)
+);
+
+/// An offset in voxels or metres, small enough for a script's number.
+impl Typed for [i64; 3] {
+    const TY: &'static Ty = &Ty::List(&Ty::Number);
+}
+
+impl IntoScript for [i64; 3] {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "an offset within the world is far below 2^53"
+    )]
+    fn into_value(self) -> Value {
+        Value::List(self.into_iter().map(|n| Value::Number(n as f64)).collect())
+    }
+}
+
+impl FromScript for [i64; 3] {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        // A 32.32 fixed-point coordinate passes 2^31 at half a metre.
+        const LIMIT: f64 = 9_007_199_254_740_992.0;
+        let list: Vec<f64> = Vec::from_value(value)?;
+        let list = list
+            .into_iter()
+            .map(|n| {
+                if n.fract() != 0.0 || !(-LIMIT..=LIMIT).contains(&n) {
+                    return Err(Error::new(format!(
+                        "{n} is not a whole number from -2^53 to 2^53"
+                    )));
+                }
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "checked above: a whole number within 2^53 either side of zero"
+                )]
+                Ok(n as i64)
+            })
+            .collect::<Result<Vec<i64>, Error>>()?;
+        list.try_into()
+            .map_err(|list: Vec<i64>| Error::new(format!("expected 3 numbers, got {}", list.len())))
+    }
+}
+
+impl Typed for std::path::PathBuf {
+    const TY: &'static Ty = &Ty::String;
+}
+
+impl IntoScript for std::path::PathBuf {
+    fn into_value(self) -> Value {
+        Value::String(self.to_string_lossy().into_owned())
+    }
+}
+
+/// A side by name, as `mods.side` answers it.
+impl Typed for crate::abi::Side {
+    const TY: &'static Ty = &Ty::Choice(&super::Choice::new(
+        "Side",
+        "Which binary of the game runs, or where a mod runs.",
+        &[
+            (
+                "server",
+                "The dedicated server; as a mod's side, where the world runs.",
+            ),
+            (
+                "client",
+                "The game client, as a binary; never a mod's side.",
+            ),
+            (
+                "both",
+                "As a mod's side, where the world runs and on every client in it.",
+            ),
+        ],
+    ));
+}
+
+impl IntoScript for crate::abi::Side {
+    fn into_value(self) -> Value {
+        use crate::abi::Side;
+        let name = match self {
+            Side::CLIENT => "client",
+            Side::BOTH => "both",
+            _ => "server",
+        };
+        Value::String(name.to_owned())
+    }
+}
+
+impl FromScript for crate::abi::Side {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        use crate::abi::Side;
+        match String::from_value(value)?.as_str() {
+            "server" => Ok(Side::SERVER),
+            "client" => Ok(Side::CLIENT),
+            "both" => Ok(Side::BOTH),
+            other => Err(Error::new(format!(
+                "{other:?} is not one of \"server\", \"client\", \"both\""
+            ))),
+        }
+    }
+}
+
+/// A log level by name, as settings and log lines spell it.
+impl Typed for crate::abi::Level {
+    const TY: &'static Ty = &Ty::Choice(&super::Choice::new(
+        "Level",
+        "How much a log keeps, from errors alone to development detail.",
+        &[
+            ("error", "Something failed and a feature is off."),
+            ("warn", "Something unexpected that the mod handled."),
+            ("info", "A milestone worth one line."),
+            ("debug", "Detail for development, off in releases."),
+        ],
+    ));
+}
+
+impl IntoScript for crate::abi::Level {
+    fn into_value(self) -> Value {
+        Value::String(self.name().to_owned())
+    }
+}
+
+/// A pair of texts, such as a name and its value: a list of two strings.
+impl Typed for (String, String) {
+    const TY: &'static Ty = &Ty::List(&Ty::String);
+}
+
+impl IntoScript for (String, String) {
+    fn into_value(self) -> Value {
+        Value::List(vec![Value::String(self.0), Value::String(self.1)])
+    }
+}
+
+impl FromScript for (String, String) {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        let pair: Vec<String> = Vec::from_value(value)?;
+        let [first, second]: [String; 2] = pair.try_into().map_err(|pair: Vec<String>| {
+            Error::new(format!("expected 2 strings, got {}", pair.len()))
+        })?;
+        Ok((first, second))
+    }
+}
+
+impl FromScript for std::path::PathBuf {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        String::from_value(value).map(Self::from)
+    }
+}
+
+number_arrays!((u8, 3));
 
 impl Typed for f64 {
     const TY: &'static Ty = &Ty::Number;
@@ -212,18 +424,22 @@ impl FromScript for [f32; 3] {
     }
 }
 
-/// A GUID, such as a template's, as 32 lowercase hex digits.
+/// A GUID in memory order, such as a template's, as the text
+/// [`Guid`](crate::content::Guid) writes, so every GUID a script holds has
+/// one form.
 impl Typed for [u8; 16] {
     const TY: &'static Ty = &Ty::String;
 }
 
 impl IntoScript for [u8; 16] {
     fn into_value(self) -> Value {
-        let mut text = String::with_capacity(32);
-        for byte in self {
-            let _written = write!(text, "{byte:02x}");
-        }
-        Value::String(text)
+        crate::content::Guid(self).into_value()
+    }
+}
+
+impl FromScript for [u8; 16] {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        crate::content::Guid::from_value(value).map(|guid| guid.0)
     }
 }
 
@@ -309,7 +525,39 @@ impl Answer for () {
     fn from_answer(_answer: Result<Value, Error>) -> Self {}
 }
 
-/// `false` stops; nothing or anything else goes on; an error stops.
+/// The script's text; nil or an error is empty text. A runtime turns the mod
+/// off for an error or an answer of another type, as for every callback.
+impl Answer for String {
+    const TY: &'static Ty = &Ty::Optional(&Ty::String);
+
+    fn from_answer(answer: Result<Value, Error>) -> Self {
+        match answer {
+            Ok(Value::String(text)) => text,
+            _ => Self::new(),
+        }
+    }
+}
+
+/// A filter's answer: `false` refuses; nil or an error lets it through, as
+/// without the script, and the runtime turns the mod off for the error.
+impl Answer for bool {
+    const TY: &'static Ty = &Ty::Optional(&Ty::Bool);
+
+    fn from_answer(answer: Result<Value, Error>) -> Self {
+        !matches!(answer, Ok(Value::Bool(false)))
+    }
+}
+
+/// The script's value; nil or an error is `None`, as without the script.
+impl<T: FromScript> Answer for Option<T> {
+    const TY: &'static Ty = &Ty::Optional(T::TY);
+
+    fn from_answer(answer: Result<Value, Error>) -> Self {
+        answer.ok().and_then(|value| T::from_value(value).ok())
+    }
+}
+
+/// `false` stops; nil goes on; an error stops.
 impl Answer for ControlFlow<()> {
     const TY: &'static Ty = &Ty::Optional(&Ty::Bool);
 
@@ -347,4 +595,96 @@ pub fn argument<T: FromScript>(
     name: &str,
 ) -> Result<T, Error> {
     T::from_value(args.next().unwrap_or(Value::Nil)).map_err(|e| e.within(name))
+}
+
+#[doc(hidden)]
+/// [`argument`] for a field `#[script(default)]` marks: nil is `T`'s
+/// default.
+///
+/// # Errors
+///
+/// As [`argument`].
+pub fn argument_or_default<T: FromScript + Default>(
+    args: &mut std::vec::IntoIter<Value>,
+    name: &str,
+) -> Result<T, Error> {
+    match args.next() {
+        None | Some(Value::Nil) => Ok(T::default()),
+        Some(value) => T::from_value(value).map_err(|e| e.within(name)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::abi::Side;
+
+    #[test]
+    fn a_count_takes_only_whole_numbers_from_zero_to_two_to_the_53() {
+        assert_eq!(usize::from_value(Value::Number(3.0)).ok(), Some(3));
+        for refused in [2.5, -1.0, 1e16] {
+            assert!(
+                usize::from_value(Value::Number(refused)).is_err(),
+                "{refused}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_fixed_point_position_past_half_a_metre_reads_back() {
+        let far = [100_i64 << 32, -(50_i64 << 32), 1];
+        assert_eq!(<[i64; 3]>::from_value(far.into_value()).ok(), Some(far));
+        for refused in [0.5, 1e16] {
+            let list = Value::List(vec![
+                Value::Number(refused),
+                Value::Number(0.0),
+                Value::Number(0.0),
+            ]);
+            assert!(<[i64; 3]>::from_value(list).is_err(), "{refused}");
+        }
+    }
+
+    #[test]
+    fn a_side_reads_back_from_its_name() {
+        for (side, name) in [
+            (Side::SERVER, "server"),
+            (Side::CLIENT, "client"),
+            (Side::BOTH, "both"),
+        ] {
+            assert!(matches!(side.into_value(), Value::String(ref text) if text == name));
+            assert_eq!(
+                Side::from_value(Value::String(name.into())).ok(),
+                Some(side)
+            );
+        }
+    }
+
+    #[test]
+    fn a_guid_in_memory_order_reads_as_the_content_guid_text() {
+        let bytes: [u8; 16] = core::array::from_fn(|i| u8::try_from(i * 15 + 1).unwrap());
+        assert_eq!(<[u8; 16]>::from_value(bytes.into_value()).ok(), Some(bytes));
+        let text = "6943053a-32c1-4718-ae22-e61427ddf54d";
+        let guid = crate::content::Guid::parse(text);
+        assert!(matches!(guid.0.into_value(), Value::String(ref t) if t == text));
+        assert_eq!(
+            <[u8; 16]>::from_value(Value::String(text.into())).ok(),
+            Some(guid.0)
+        );
+        for refused in ["0".repeat(32), "0".repeat(36), "+f".repeat(18)] {
+            assert!(
+                <[u8; 16]>::from_value(Value::String(refused.clone())).is_err(),
+                "{refused}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_answer_that_does_not_fit_reads_as_without_the_script() {
+        assert_eq!(String::from_answer(Ok(Value::String("hi".into()))), "hi");
+        assert_eq!(String::from_answer(Ok(Value::Nil)), "");
+        assert!(!bool::from_answer(Ok(Value::Bool(false))));
+        assert!(bool::from_answer(Ok(Value::Bool(true))));
+        assert!(bool::from_answer(Ok(Value::Nil)));
+        assert!(bool::from_answer(Err(Error::new("boom"))));
+    }
 }

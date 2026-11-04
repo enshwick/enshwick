@@ -14,7 +14,7 @@ use super::super::Guid;
 /// # Examples
 ///
 /// See [`RecipeView::kind`](super::RecipeView::kind).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum RecipeKind {
     /// A building block, such as a wall or floor block.

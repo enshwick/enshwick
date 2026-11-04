@@ -31,7 +31,11 @@ use crate::inventory::{Bar, SlotRef};
 use crate::{Entity, ItemId};
 use crate::{Load, Off};
 
+mod script;
 mod workshop;
+
+#[doc(hidden)]
+pub use script::SurvivorFns;
 
 pub use workshop::{WORKSHOP_SURVIVORS, WorkshopSurvivor};
 
@@ -44,7 +48,7 @@ pub use crate::abi::NpcId;
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub enum Purpose {
     /// The pass that keeps one entity per survivor looks at `entity`, whose
@@ -157,7 +161,7 @@ impl Lookup {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub enum Answer {
     /// The game's own answer.
@@ -174,7 +178,7 @@ pub enum Answer {
 /// # Examples
 ///
 /// See [`Load::on_survivor_bed_check`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct BedCheck {
     /// The survivor, as the game's active NPC state names it.
     pub npc_id: NpcId,
@@ -194,7 +198,7 @@ pub struct BedCheck {
 /// # Examples
 ///
 /// See [`Load::on_summon`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct Summon {
     /// The item used.
@@ -338,7 +342,7 @@ unsafe fn read_summon(summon: *const RawSummon) -> Option<Summon> {
 /// # Examples
 ///
 /// See [`Load::on_summon`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum SummonVerdict {
     /// The use goes on as the game decides.
@@ -413,6 +417,7 @@ where
 
 type Register<R> = extern "system" fn(crate::abi::ModHandle, R, *mut c_void) -> crate::abi::Status;
 
+#[crate::script(survivors)]
 impl Load<'_> {
     fn register<F, R>(
         &mut self,
@@ -473,6 +478,7 @@ impl Load<'_> {
     ///     load.on_survivor_bed_check(|check| (0..3).all(|a| (check.home[a] - check.bed_at[a]).abs() < 200))
     /// }
     /// ```
+    #[script]
     pub fn on_survivor_bed_check<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&BedCheck) -> bool + Send + Sync + 'static,
@@ -511,6 +517,7 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
+    #[script]
     pub fn on_summon<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&Summon) -> SummonVerdict + Send + Sync + 'static,
@@ -544,6 +551,7 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
+    #[script]
     pub fn on_summoned<F>(&mut self, handler: F) -> Result<(), Off>
     where
         F: Fn(&Summon) + Send + Sync + 'static,
@@ -573,6 +581,7 @@ impl Load<'_> {
     ///     load.add_summon_item(enshwick::ItemId::new(0x5e01), NpcId(1_201_801_546))
     /// }
     /// ```
+    #[script]
     pub fn add_summon_item(&mut self, item: ItemId, survivor: NpcId) -> Result<(), Off> {
         let host = self.host();
         let status = (host.api().summon_item)(host.handle(), item, survivor);

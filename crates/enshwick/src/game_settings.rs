@@ -50,7 +50,7 @@ macro_rules! game_enum {
         /// # Examples
         ///
         /// See [`Settings`].
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
         #[non_exhaustive]
         pub enum $name {
             $($(#[$vdoc])* $variant,)*
@@ -313,7 +313,8 @@ macro_rules! settings {
         /// # Examples
         ///
         /// See the [module](self).
-        #[derive(Clone, Copy, Debug, PartialEq)]
+        #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+        #[script(context)]
         #[non_exhaustive]
         pub struct Settings {
             $($(#[$doc])* pub $field: $ty,)*
@@ -465,6 +466,40 @@ pub struct GameSettings {
     size: usize,
 }
 
+impl crate::script::Bound for GameSettings {
+    const NAME: &'static str = "game_settings";
+    const DOC: &'static str =
+        "The server's game settings: read them, change them for now, or keep a change.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_SETTINGS, Self::SCRIPT_READS];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.game_settings()
+    }
+}
+
+/// The settings in force and the preset the world started from, as
+/// `GameSettings::read` gives them to a script.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, crate::Script)]
+pub struct SettingsRead {
+    /// The settings.
+    pub settings: Settings,
+    /// The preset.
+    pub preset: GameSettingsPreset,
+}
+
+#[crate::script(reads)]
+impl GameSettings {
+    /// The settings in force and the world's preset, as
+    /// [`GameSettings::read`] reads them.
+    #[script(name = "read")]
+    pub(crate) fn read_script(&self) -> Option<SettingsRead> {
+        GameSettings::read(self).map(|(settings, preset)| SettingsRead { settings, preset })
+    }
+}
+
+#[crate::script(settings)]
 impl GameSettings {
     /// The settings in force and the preset they came from; `None` off the
     /// game thread or while no world runs.
@@ -496,6 +531,7 @@ impl GameSettings {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn change(&self, change: impl FnOnce(&mut Settings)) -> Result<Settings, WorldError> {
         let (bytes, settings) = self.changed(change)?;
         let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Missing)?;
@@ -525,6 +561,7 @@ impl GameSettings {
     ///     Ok(())
     /// }
     /// ```
+    #[script]
     pub fn keep(&self, change: impl FnOnce(&mut Settings)) -> Result<Settings, WorldError> {
         let (before, _preset) = self.raw()?;
         let (bytes, settings) = self.changed(change)?;
@@ -558,6 +595,7 @@ impl GameSettings {
     ///     let _forgotten = settings.forget_kept();
     /// }
     /// ```
+    #[script]
     pub fn forget_kept(&self) -> Result<(), WorldError> {
         WorldError::from_status((self.host.api().forget_game_settings)(self.host.handle()))
     }

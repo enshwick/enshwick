@@ -128,3 +128,35 @@ come from the built-in server while it hosts a game, as server events do.
 to the mod's handlers. `game_event_type(name, hash, size)` gives the fake build an
 event type that `load.game_event_types()` lists and `load.game_event_type` resolves;
 give it the offsets the mod resolves with `field_offset`.
+
+## From Luau
+
+`enshwick.on` takes the name of a typed game event, such as `HitEvent` or
+`EntityDiedEvent`. The handler gets the event's fields as
+`game_events::HitEvent` has them, a mask as the list of its bit names, a game
+value as its name. A value the API does not name arrives as
+`Other(<number>)`, a name of ours with the game's number in it:
+
+```luau
+enshwick.on("HitEvent", function(hit)
+    if hit.health_change < 0 and hit.root_source_id then
+        enshwick.log.info(`{hit.root_source_id} hit {hit.target_id}`)
+    end
+end)
+```
+
+Any other game event is read by its reflected type and the fields the script
+names, each with how to read it: `u8`, `i8`, `u16`, `i16`, `u32`, `i32`,
+`u64`, `i64`, `f32`, `f64`, `bool` or `entity`, the 64-bit ones as strings.
+`enshwick.game_event_types()` lists every type of the running build with
+its size. A field the type lacks on this build leaves the mod off at start,
+with the reason in the log.
+
+```luau
+enshwick.on_game_type("keen::ecs::EntityDiedEvent", { deadEntityId = "entity" }, function(event)
+    enshwick.log.info(`entity {event.deadEntityId} died`)
+end)
+```
+
+Game events run on the server's game thread before the step's systems, as
+for a Rust mod; on a client, only while it hosts a game.

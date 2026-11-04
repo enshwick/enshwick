@@ -28,6 +28,27 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local function id(name: string): number
+    return enshwick.resources.guid_hash(enshwick.content.guid(`you.staffs:{name}`))
+end
+local BOSSES = { kinds = { "CORPSES" }, bosses_only = true }
+local LOCKED_CHESTS = { kinds = { "CHESTS" }, locked_only = true }
+
+enshwick.loot.add_loot({ items = { id("staff") }, chance = 0.10, count = { 1, 1 }, from = BOSSES })
+enshwick.loot.add_loot({ items = { id("staff") }, chance = 0.02, count = { 1, 1 }, from = LOCKED_CHESTS })
+enshwick.loot.add_loot({
+    items = { id("ring"), id("amulet") },
+    chance = 0.01,
+    count = { 1, 2 },
+    from = { kinds = { "CORPSES" } },
+})
+```
+
+In Luau, a drop's `chance` may come from the mod's
+[settings](../settings.md#settings-of-a-luau-mod), such as
+`enshwick.settings().staff_chance`, read while the mod starts.
+
 ## When loot rolls
 
 - The game rolls a container's loot once, when a player first opens it:

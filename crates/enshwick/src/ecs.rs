@@ -319,7 +319,7 @@ type SlotRoot = unsafe extern "system" fn(
 ///     ComponentType::resolve(load, "keen::ecs::UsedItem")
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct ComponentType(u32);
 
 impl ComponentType {
@@ -703,6 +703,45 @@ pub fn metres(fixed: [i64; 3]) -> [f64; 3] {
 )]
 pub fn fixed(metres: [f64; 3]) -> [i64; 3] {
     metres.map(|m| (m * FIXED_PER_METRE) as i64)
+}
+
+/// The free functions of [`ecs`](self) a script reaches, as its namespace
+/// `ecs`: the world's fixed-point coordinates and metres.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct EcsFns;
+
+#[crate::script(ecs_fns)]
+#[expect(
+    clippy::unused_self,
+    reason = "a script call takes its namespace, though a free function reads nothing of it"
+)]
+impl EcsFns {
+    /// The engine's fixed-point coordinates in metres, as [`metres`]
+    /// converts them.
+    #[script]
+    #[must_use]
+    pub fn metres(self, fixed: [i64; 3]) -> [f64; 3] {
+        metres(fixed)
+    }
+
+    /// Metres in the engine's fixed-point coordinates, as [`fixed`]
+    /// converts them.
+    #[script]
+    #[must_use]
+    pub fn fixed(self, metres: [f64; 3]) -> [i64; 3] {
+        fixed(metres)
+    }
+}
+
+impl crate::script::Bound for EcsFns {
+    const NAME: &'static str = "ecs";
+    const DOC: &'static str = "The world's fixed-point coordinates and metres.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_ECS_FNS];
+
+    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
+        Ok(Self)
+    }
 }
 
 /// The position a `CurrentTransform` component holds, in metres: x, y and z
