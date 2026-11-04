@@ -364,6 +364,10 @@ mod tests {
                 names.insert(format!("{prefix}{}", function.name()));
                 signatures.push(function.signature());
             }
+            for function in namespace.request_function() {
+                names.insert(format!("{prefix}{}", function.name()));
+                signatures.push(function.signature());
+            }
         }
         let mut classes = Vec::new();
         for signature in signatures {
@@ -553,6 +557,7 @@ mod tests {
                 .iter()
                 .map(script::Declared::name)
                 .chain(namespace.init_functions().map(script::InitFunction::name))
+                .chain(namespace.request_function().map(|f| f.name()))
                 .collect::<Vec<_>>();
             for name in names {
                 assert!(

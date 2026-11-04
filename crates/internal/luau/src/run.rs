@@ -418,7 +418,11 @@ fn begin(
 ) -> Result<Runtime, Off> {
     let host = load.host();
     let mut namespaces = Vec::new();
-    for namespace in script::NAMESPACES {
+    // A namespace a script asks for opens when its getter runs at start.
+    for namespace in script::NAMESPACES
+        .iter()
+        .filter(|n| n.request_function().is_none())
+    {
         match namespace.open(load) {
             Ok(opened) => namespaces.push((namespace, opened)),
             Err(off) => host.log(

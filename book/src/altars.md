@@ -26,8 +26,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 ```luau
+local altars = enshwick.altars.altars()
 enshwick.on("AltarsChanged", function()
-    for _, altar in enshwick.altars.list() do
+    for _, altar in altars:list() do
         local low, high = altar.zone.min, altar.zone.max
         enshwick.log.info(`altar {altar.entity} level {altar.level} zone {low[1]},{low[2]},{low[3]} to {high[1]},{high[2]},{high[3]}`)
     end

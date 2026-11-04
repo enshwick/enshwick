@@ -137,6 +137,13 @@ fn namespaces() -> Vec<(&'static str, &'static str, Vec<Entry>)> {
             signature: f.signature(),
             starting: true,
         }));
+        // The getter a script calls at start before the namespace's functions.
+        entries.extend(namespace.request_function().map(|f| Entry {
+            name: f.name(),
+            doc: f.doc(),
+            signature: f.signature(),
+            starting: true,
+        }));
     }
     merged
 }
@@ -457,6 +464,7 @@ mod tests {
                 .iter()
                 .map(Declared::name)
                 .chain(namespace.init_functions().map(script::InitFunction::name))
+                .chain(namespace.request_function().map(|f| f.name()))
                 .collect::<Vec<_>>();
             for name in names {
                 assert!(text.contains(&format!("{indent}{name}: (")), "{name}");

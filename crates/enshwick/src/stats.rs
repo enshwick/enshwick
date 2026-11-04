@@ -184,6 +184,15 @@ impl crate::script::Bound for Stats {
     }
 }
 
+impl crate::script::Object for Stats {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "Stats",
+        "Stats of entities and items: values, modifiers, sources and definitions.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        <Self as crate::script::Bound>::PARTS;
+}
+
 #[crate::script(helpers)]
 #[expect(
     clippy::unused_self,

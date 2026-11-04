@@ -111,6 +111,11 @@ mod tests {
                 calls.push((format!("{path}.{}", f.name()), f.signature()));
                 classes_in(f.signature().ret(), &mut classes);
             }
+            // A getter goes first, so the namespace's functions run opened.
+            for f in namespace.request_function() {
+                calls.insert(0, (format!("{path}.{}", f.name()), f.signature()));
+                classes_in(f.signature().ret(), &mut classes);
+            }
         }
         let mut main = String::from(
             "local seen = 0\n\

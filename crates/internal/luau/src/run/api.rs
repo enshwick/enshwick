@@ -486,18 +486,10 @@ impl Inner {
                         to_lua(lua, &bridge, answer, signature.ret())
                     })?
                 };
-                let weak = Arc::downgrade(vm);
-                table.raw_set(
-                    function.name(),
-                    lua.create_function(move |_, args: MultiValue| {
-                        if !weak.upgrade().is_some_and(|vm| vm.starting.load(Ordering::Acquire)) {
-                            return Err(mlua::Error::runtime(format!(
-                                "{what}: allowed only while the mod starts, at the top level of main.luau"
-                            )));
-                        }
-                        during.call::<MultiValue>(args)
-                    })?,
-                )?;
+                table.raw_set(function.name(), start_only(vm, what, during)?)?;
+            }
+            if let Some(getter) = namespace.request_function() {
+                requested(vm, &bridge, &table, namespace, getter, scope, load)?;
             }
         }
         for pair in api.pairs::<String, LuaValue>() {
@@ -507,4 +499,73 @@ impl Inner {
         }
         Ok(())
     }
+}
+
+/// `during`, a function of the start's scope, as the function `what` that
+/// raises an error once the start is over.
+fn start_only(vm: &Arc<Vm>, what: String, during: Function) -> mlua::Result<Function> {
+    let weak = Arc::downgrade(vm);
+    vm.lua.create_function(move |_, args: MultiValue| {
+        if !weak
+            .upgrade()
+            .is_some_and(|vm| vm.starting.load(Ordering::Acquire))
+        {
+            return Err(mlua::Error::runtime(format!(
+                "{what}: allowed only while the mod starts, at the top level of main.luau"
+            )));
+        }
+        during.call::<MultiValue>(args)
+    })
+}
+
+/// Puts `namespace`, which a script asks for, into `table`: its `getter`
+/// opens it on `load` at start and returns the handle, as a Rust mod's
+/// `Load` method does in `init`; its functions raise an error until then.
+fn requested<'scope, 'env>(
+    vm: &Arc<Vm>,
+    bridge: &Scope,
+    table: &Table,
+    namespace: &'static script::Namespace,
+    getter: script::Declared,
+    scope: &'scope mlua::Scope<'scope, 'env>,
+    load: &'env Mutex<&'env mut Load<'_>>,
+) -> mlua::Result<()> {
+    let lua = &vm.lua;
+    let ask = format!("enshwick.{}.{}", namespace.name(), getter.name());
+    let slot: Arc<OnceLock<script::Opened>> = Arc::default();
+    for declared in namespace.functions() {
+        let (slot, bridge, ask) = (slot.clone(), bridge.clone(), ask.clone());
+        let what = format!("enshwick.{}.{}", namespace.name(), declared.name());
+        let signature = declared.signature();
+        table.raw_set(
+            declared.name(),
+            lua.create_function(move |lua, args: MultiValue| {
+                let opened = slot.get().ok_or_else(|| {
+                    mlua::Error::runtime(format!(
+                        "{what}: call {ask}() at the top level of main.luau first"
+                    ))
+                })?;
+                let values = arguments(lua, &bridge, args, signature, &what)?;
+                let answer = opened
+                    .call(&declared, values)
+                    .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
+                to_lua(lua, &bridge, answer, signature.ret())
+            })?,
+        )?;
+    }
+    let during = {
+        let (bridge, what) = (bridge.clone(), ask.clone());
+        scope.create_function(move |lua, ()| {
+            let mut load = load.try_relock().ok_or_else(|| {
+                mlua::Error::runtime(format!("{what}: called from inside another start call"))
+            })?;
+            let (opened, handle) = namespace
+                .request(&mut load)
+                .ok_or_else(|| mlua::Error::runtime(format!("{what}: no such function")))?
+                .map_err(|off| mlua::Error::runtime(format!("{what}: {off}")))?;
+            let _first = slot.set(opened);
+            to_lua(lua, &bridge, handle, getter.signature().ret())
+        })?
+    };
+    table.raw_set(getter.name(), start_only(vm, ask, during)?)
 }

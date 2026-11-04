@@ -86,6 +86,12 @@ Names are the Rust API's: `enshwick.world.notify_all` is
   On a game build without what the handle needs, the table keeps only its
   start-time functions, and the log says why, so a script checks the
   function it calls: `if enshwick.weather.at then`.
+- A handle whose opening switches a loader feature on opens only when the
+  script asks, as a Rust mod asks `Load` in `init`: `enshwick.altars.altars()`,
+  `enshwick.stats.stats()` and `enshwick.map.fog_of_war()` at the top level
+  of `main.luau` open it and return it as an object. Until then the table's
+  functions raise an error, so a mod that never asks arms no altar hooks and
+  copies no fog.
 - A call a Rust mod makes on `Load` during `init`, such as
   `load.define_affix(...)`, is a function of its module's table that a script
   calls at the top level of `main.luau`: `enshwick.affixes.define_affix(...)`.

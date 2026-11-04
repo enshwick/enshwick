@@ -45,6 +45,15 @@ impl crate::script::Bound for FogOfWar {
     }
 }
 
+impl crate::script::Object for FogOfWar {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "FogOfWar",
+        "The client's fog of war, which the loader copies for the mod.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        <Self as crate::script::Bound>::PARTS;
+}
+
 /// The fog's size, scale and how often it changed, as one read found it.
 ///
 /// # Examples

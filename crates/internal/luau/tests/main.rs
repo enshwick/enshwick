@@ -2,6 +2,7 @@
 //! into one binary.
 
 mod affixes;
+mod altars;
 mod book;
 mod calls;
 mod content;

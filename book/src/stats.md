@@ -43,11 +43,12 @@ local luck = enshwick.stats.define_stat("you.blessings:luck", {
 })
 -- A built-in kind the platform applies to the game.
 local health = enshwick.stats.open_stat("enshwick:health_max")
+local stats = enshwick.stats.stats()
 
 enshwick.on("PlayerJoined", function(player)
     local minute = { For = 60 }
-    enshwick.stats.set(player.entity, "bless", { stat = health, op = "Add", value = 50 }, minute)
-    enshwick.stats.set(player.entity, "bless", { stat = luck, op = "Add", value = 0.1 }, minute)
+    stats:set(player.entity, "bless", { stat = health, op = "Add", value = 50 }, minute)
+    stats:set(player.entity, "bless", { stat = luck, op = "Add", value = 0.1 }, minute)
 end)
 ```
 

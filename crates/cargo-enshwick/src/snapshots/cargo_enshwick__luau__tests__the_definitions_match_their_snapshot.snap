@@ -564,6 +564,16 @@ export type FogImage = {
 	at: (self: FogImage, pixel: {number}) -> number?,
 }
 
+--- The client's fog of war, which the loader copies for the mod.
+export type FogOfWar = {
+	--- The fog's size, scale and version.
+	state: (self: FogOfWar) -> FogState,
+	--- Copies the box of `size` pixels at `min`.
+	read: (self: FogOfWar, min: {number}, size: {number}) -> FogImage,
+	--- The coverage where `position` is, in metres; nil outside the fog.
+	coverage: (self: FogOfWar, position: vector) -> number?,
+}
+
 --- The fog's size, scale and how often it changed, as one read found it.
 export type FogState = {
 	--- The image's width in pixels.
@@ -1643,6 +1653,34 @@ export type Station = {
 	template: string,
 }
 
+--- Stats of entities and items: values, modifiers, sources and definitions.
+export type Stats = {
+	--- The value of `stat` on `entity`: what the server worked out after the last step a source changed, or the default. Any thread, without locks; a client answers defaults.
+	value: (self: Stats, entity: number, stat: Stat) -> number,
+	--- Whether `stat` is on for `entity`: its value is not 0.
+	is_on: (self: Stats, entity: number, stat: Stat) -> boolean,
+	--- Sets the mod's modifier `key` on `entity` for `modifier.stat`, replacing the one the mod set before under the same key and stat. The value follows after the next step. On the server, any thread.
+	set: (self: Stats, entity: number, key: string, modifier: Modifier, lasting: Lasting) -> (),
+	--- Removes the mod's modifier `key` on `entity` for `stat`.
+	remove: (self: Stats, entity: number, key: string, stat: Stat) -> (),
+	--- What `item` gives the entity that wears it; empty for an item without any. On a client, what the server sent.
+	item: (self: Stats, item: ItemInstance) -> ItemStats,
+	--- Sets what `item` gives the entity that wears it; an empty `ItemStats` removes it. Clients that run Enshwick get it, and the entities that wear the item follow after the next step. Unstable: needs the `unstable` feature and may change in any release. The value is kept as item data, which sets aside, after a restart, a value on an item outside a placed container or a player's inventory.
+	set_item: (self: Stats, item: ItemInstance, stats: ItemStats) -> (),
+	--- Every modifier that counts toward `stat` on `entity`, or toward every stat for nil, in the order they apply. On the server, any thread.
+	sources: (self: Stats, entity: number, stat: Stat?) -> {Source},
+	--- The id and definition of `stat`; nil for a kind opened but never defined. Any thread.
+	info: (self: Stats, stat: Stat) -> StatInfo?,
+	--- Watches `entity` for the items it wears and the buffs it has, or stops watching it. Players are always watched, and so is every entity a mod keeps a modifier on; watch other entities whose buffs should count, such as an enemy a mod curses. Any thread, on the process that runs the world; elsewhere it does nothing.
+	watch: (self: Stats, entity: number, watch: boolean) -> (),
+	--- The key a stat id hashes to, as `key_of` gives it.
+	key_of: (self: Stats, id: string) -> number,
+	--- The text key that names the stat `id`, as `name_key` gives it.
+	name_key: (self: Stats, id: string) -> string?,
+	--- The value `def` gives with `modifiers`, each an op and its value, as `aggregate` gives it.
+	aggregate: (self: Stats, def: StatDef, modifiers: {ScriptModifier}) -> number,
+}
+
 --- A summoning staff's use, from `Load.on_summon` and `Load.on_summoned`.
 export type Summon = {
 	--- The item used.
@@ -2523,6 +2561,9 @@ declare enshwick: {
 		read: (min: {number}, size: {number}) -> FogImage,
 		--- The coverage where `position` is, in metres; nil outside the fog.
 		coverage: (position: vector) -> number?,
+		--- The world's map on the server: its markers, its frame, waypoints and snapshots.
+		--- Only while the mod starts, at the top level of main.luau.
+		fog_of_war: () -> FogOfWar,
 	},
 	--- The clock of the server's world: the time of day and how fast it runs.
 	daytime: {
@@ -2552,6 +2593,9 @@ declare enshwick: {
 		set_base_cap: (bases: number) -> (),
 		--- How the game groups altars into bases, as `grouping` reads it.
 		grouping: () -> Grouping?,
+		--- Flame Altars: their list, their bases, zones and limits.
+		--- Only while the mod starts, at the top level of main.luau.
+		altars: () -> Altars,
 		--- Runs `filter` for every altar of the server's world when the loader sizes the altar zones: after altars change, and after `ZoneSizes.changed`. Filters of several mods run in load order, each on the size the last one left; the mod follows the altars too. On the server's game thread.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_altar_zone: (filter: (arg1: AltarZone) -> AltarZone?) -> ZoneSizes,
@@ -2605,6 +2649,9 @@ declare enshwick: {
 		name_key: (id: string) -> string?,
 		--- The value `def` gives with `modifiers`, each an op and its value, as `aggregate` gives it.
 		aggregate: (def: StatDef, modifiers: {ScriptModifier}) -> number,
+		--- Stats of entities and items: values, modifiers, sources and definitions.
+		--- Only while the mod starts, at the top level of main.luau.
+		stats: () -> Stats,
 		--- Defines the mod's stat kind `id`, named with `id!`. Its text is `<name>.name` in the mod's texts (`name_key`). Call it during `init`, on both sides.
 		--- Only while the mod starts, at the top level of main.luau.
 		define_stat: (id: string, def: StatDef) -> Stat,

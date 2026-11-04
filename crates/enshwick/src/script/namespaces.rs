@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use super::{Bound, Error, Function, InitFunction, Signature, Value};
+use super::{Bound, Error, Function, InitFunction, IntoScript as _, Object, Signature, Ty, Value};
 
 /// A part of the API as one namespace of a script, its type erased: what it
 /// declares, and how a runtime opens it for a mod.
@@ -24,6 +24,23 @@ pub struct Namespace {
     describe: fn() -> Vec<Declared>,
     open: fn(&mut crate::Load<'_>) -> Result<Opened, crate::Off>,
     init: &'static [&'static [InitFunction]],
+    request: Option<Request>,
+}
+
+/// The start-time call that opens a namespace a script asks for, as a Rust
+/// mod asks [`Load`](crate::Load) for the handle in `init`.
+#[derive(Debug)]
+struct Request {
+    name: &'static str,
+    signature: &'static Signature,
+    open: fn(&mut crate::Load<'_>) -> Result<(Opened, Value), crate::Off>,
+}
+
+/// The signature of `T`'s getter: no parameters, the handle as an object.
+struct Getter<T>(core::marker::PhantomData<T>);
+
+impl<T: Object> Getter<T> {
+    const SIGNATURE: &'static Signature = &Signature::new(&[], &Ty::Object(T::CLASS));
 }
 
 /// A function of a [`Namespace`] as definitions declare it.
@@ -115,7 +132,62 @@ impl Namespace {
             describe: describe::<T>,
             open: open::<T>,
             init: &[],
+            request: None,
         }
+    }
+
+    /// [`Namespace::of`] for a handle whose opening switches a loader
+    /// feature on: a script opens it with `getter` at start, as a Rust mod
+    /// calls the `Load` method of that name in `init`, so a mod that never
+    /// asks pays nothing.
+    const fn on_request<T: Bound + Object>(getter: &'static str) -> Self {
+        Self {
+            request: Some(Request {
+                name: getter,
+                signature: Getter::<T>::SIGNATURE,
+                open: request::<T>,
+            }),
+            ..Self::of::<T>()
+        }
+    }
+
+    /// The start-time function that opens this namespace, for a namespace a
+    /// script asks for; `None` for one [`Namespace::open`] opens for every
+    /// mod.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,standalone_crate
+    /// let altars = enshwick::script::NAMESPACES.iter().find(|n| n.request_function().is_some());
+    /// assert!(altars.is_some_and(|n| n.request_function().is_some_and(|f| f.name() == "altars")));
+    /// ```
+    #[must_use]
+    pub fn request_function(&self) -> Option<Declared> {
+        self.request.as_ref().map(|request| Declared {
+            index: 0,
+            name: request.name,
+            doc: self.doc,
+            signature: request.signature,
+        })
+    }
+
+    /// Opens a namespace a script asks for with
+    /// [`Namespace::request_function`]: the namespace and its handle as an
+    /// object; `None` for a namespace [`Namespace::open`] opens.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`](crate::Off) when the game build lacks what it needs, or
+    /// after `init`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Namespace::request_function`].
+    pub fn request(
+        &self,
+        load: &mut crate::Load<'_>,
+    ) -> Option<Result<(Opened, Value), crate::Off>> {
+        self.request.as_ref().map(|request| (request.open)(load))
     }
 
     /// The [`Load`](crate::Load) methods of `init` as the namespace `name`,
@@ -131,6 +203,7 @@ impl Namespace {
             describe: Vec::new,
             open: |_| Ok(Opened(Arc::new(|_, _| Err(Error::new("no such function"))))),
             init,
+            request: None,
         }
     }
 
@@ -229,13 +302,21 @@ impl Declared {
 }
 
 fn open<T: Bound>(load: &mut crate::Load<'_>) -> Result<Opened, crate::Off> {
+    T::resolve(load).map(opened)
+}
+
+fn request<T: Bound + Object>(load: &mut crate::Load<'_>) -> Result<(Opened, Value), crate::Off> {
     let this = T::resolve(load)?;
-    Ok(Opened(Arc::new(move |index, args| {
+    Ok((opened(this), this.into_value()))
+}
+
+fn opened<T: Bound>(this: T) -> Opened {
+    Opened(Arc::new(move |index, args| {
         T::functions()
             .nth(index)
             .ok_or_else(|| Error::new(format!("{} has no such function", T::NAME)))?
             .call(&this, args)
-    })))
+    }))
 }
 
 /// Every namespace a script reaches, in the order a runtime opens them.
@@ -329,10 +410,10 @@ pub const NAMESPACES: &[Namespace] = &[
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::map::Map>(),
     #[cfg(feature = "unstable")]
-    Namespace::of::<crate::map::FogOfWar>(),
+    Namespace::on_request::<crate::map::FogOfWar>("fog_of_war"),
     Namespace::of::<crate::daytime::Clock>(),
     Namespace::starting("daytime", "", &[crate::Load::SCRIPT_DAYTIME]),
-    Namespace::of::<crate::altars::Altars>(),
+    Namespace::on_request::<crate::altars::Altars>("altars"),
     Namespace::starting(
         "altars",
         "",
@@ -351,7 +432,7 @@ pub const NAMESPACES: &[Namespace] = &[
             crate::Load::SCRIPT_LOOT_PASS,
         ],
     ),
-    Namespace::of::<crate::stats::Stats>(),
+    Namespace::on_request::<crate::stats::Stats>("stats"),
     Namespace::starting("stats", "", &[crate::Load::SCRIPT_STATS]),
     Namespace::of::<crate::voxels::Voxels>(),
     Namespace::of::<crate::terrain::Terrain>(),
