@@ -219,4 +219,21 @@ mod tests {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
     }
+
+    #[test]
+    fn a_script_writes_pixels_as_png_and_reads_them_back() {
+        let loader = run(r#"
+            local r = enshwick.resources
+            local pixels = buffer.create(8)
+            buffer.writeu32(pixels, 0, 0xff0000ff)
+            buffer.writeu32(pixels, 4, 0xff00ff00)
+            local image = r.decode_png(r.encode_png(pixels, 2, 1))
+            print(`png {image.width}x{image.height} second {buffer.readu32(image.pixels, 4) == 0xff00ff00}`)
+            print(`texture {buffer.len(r.decode_texture(37, 1, 1, buffer.fromstring("abcd")))}`)
+            print(`bad {pcall(r.encode_png, pixels, 3, 1)}`)
+        "#);
+        for line in ["png 2x1 second true", "texture 4", "bad false"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
 }

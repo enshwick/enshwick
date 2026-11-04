@@ -495,6 +495,52 @@ impl Resources {
         Ok(self.host.game_version()?.to_owned())
     }
 
+    /// The pixels of PNG `png` as `{ width, height, pixels }`, the pixels a
+    /// buffer of RGBA bytes, row by row; nil when it does not read or is
+    /// larger than 2048 on a side.
+    #[script]
+    #[must_use]
+    pub fn decode_png(self, png: &Bytes) -> Data {
+        crate::content::icons::decode_png(&png.0).map_or(Data::Nil, |(pixels, width, height)| {
+            Data::Struct(vec![
+                ("width".into(), Data::Uint(width.into())),
+                ("height".into(), Data::Uint(height.into())),
+                ("pixels".into(), Data::Bytes(pixels)),
+            ])
+        })
+    }
+
+    /// RGBA `pixels`, `width` by `height`, as PNG bytes.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the pixels are not `width * height * 4` bytes.
+    #[script]
+    pub fn encode_png(self, pixels: &Bytes, width: u32, height: u32) -> Result<Bytes, Off> {
+        crate::content::icons::encode_png(&pixels.0, width, height)
+            .map(Bytes)
+            .ok_or_else(|| Off::new(format!("pixels are not {width} by {height} RGBA")))
+    }
+
+    /// The RGBA pixels of a texture's content `data`, `width` by `height`,
+    /// in the game's `format` code (a block-compressed format or RGBA).
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a format this API does not read and data too short.
+    #[script]
+    pub fn decode_texture(
+        self,
+        format: u8,
+        width: u32,
+        height: u32,
+        data: &Bytes,
+    ) -> Result<Bytes, Off> {
+        crate::content::icons::decode(format, width, height, &data.0)
+            .map(Bytes)
+            .ok_or_else(|| Off::new(format!("texture format {format} does not read")))
+    }
+
     /// The nil GUID's text, all zero: no resource.
     #[script]
     #[must_use]

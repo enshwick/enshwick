@@ -220,6 +220,37 @@ pub fn decode_png(png: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     ))
 }
 
+/// RGBA pixels, `width` by `height`, eight bits each, as PNG bytes, for an
+/// image a tool writes out or [`decode_png`] reads back; `None` when the
+/// pixels are not `width * height * 4` bytes.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::icons::{decode_png, encode_png};
+///
+/// let png = encode_png(&[255, 0, 0, 255], 1, 1).ok_or("not encoded")?;
+/// assert_eq!(decode_png(&png), Some((vec![255, 0, 0, 255], 1, 1)));
+/// # Ok::<(), &str>(())
+/// ```
+#[must_use]
+pub fn encode_png(rgba: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
+    use zune_core::bit_depth::BitDepth;
+    use zune_core::colorspace::ColorSpace;
+    use zune_core::options::EncoderOptions;
+
+    let (w, h) = (usize::try_from(width).ok()?, usize::try_from(height).ok()?);
+    if rgba.len() != w.checked_mul(h)?.checked_mul(4)? {
+        return None;
+    }
+    let options = EncoderOptions::new(w, h, ColorSpace::RGBA, BitDepth::Eight);
+    let mut out = Vec::new();
+    zune_png::PngEncoder::new(rgba, options)
+        .encode(&mut out)
+        .ok()?;
+    Some(out)
+}
+
 /// The loader's table ids of a UI image's fields, in [`ImageLayout`] order:
 /// the type is not reflected, so the ids are the table's alone.
 pub(crate) const IMAGE_FIELDS: [&str; 6] = [

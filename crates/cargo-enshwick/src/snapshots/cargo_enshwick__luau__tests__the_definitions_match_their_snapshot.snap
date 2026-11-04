@@ -461,6 +461,12 @@ declare enshwick: {
 		serve_new: (key: any, value: any) -> (),
 		--- The version string of the game's archive: the build number, the branch and when the build was made, split by `|`.
 		game_version: () -> string,
+		--- The pixels of PNG `png` as `{ width, height, pixels }`, the pixels a buffer of RGBA bytes, row by row; nil when it does not read or is larger than 2048 on a side.
+		decode_png: (png: buffer) -> any,
+		--- RGBA `pixels`, `width` by `height`, as PNG bytes.
+		encode_png: (pixels: buffer, width: number, height: number) -> buffer,
+		--- The RGBA pixels of a texture's content `data`, `width` by `height`, in the game's `format` code (a block-compressed format or RGBA).
+		decode_texture: (format: number, width: number, height: number, data: buffer) -> buffer,
 		--- The nil GUID's text, all zero: no resource.
 		nil_guid: () -> string,
 		--- The GUID a content hash reads as, four numbers as `content_hashes` lists them: its words in memory order.
