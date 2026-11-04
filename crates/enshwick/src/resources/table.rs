@@ -430,3 +430,74 @@ impl Host {
         Ok(registry.decode(ty.qualified_name(), &bytes)?)
     }
 }
+
+/// Serves `value` as the new resource `key`, of the type its key names; the
+/// loader builds it from any vanilla resource of that type, whose bytes the
+/// value replaces.
+pub(crate) fn serve_new(
+    host: Host,
+    key: crate::abi::ResourceKey,
+    value: &super::Value,
+) -> Result<(), Off> {
+    let registry = Registry::game()?;
+    let ty = registry.hashed(key.type_hash).ok_or_else(|| {
+        Off::new(format!(
+            "resource type {:#010x} is not a type of this build",
+            key.type_hash
+        ))
+    })?;
+    let name = ty.qualified_name();
+    // The loader opens a base in the game's database; any resource of the
+    // type serves, as the value's bytes replace it whole.
+    let base = host
+        .resource_keys(Some(ty))?
+        .into_iter()
+        .next()
+        .ok_or_else(|| Off::new(format!("the game has no {name} to build a new one from")))?;
+    let bytes = registry.encode(name, value, None)?;
+    crate::content::serve(host, key, base, move |_| Some(bytes.clone()))
+}
+
+impl crate::Load<'_> {
+    /// Serves `value` as the new resource `key`, of the type its key names,
+    /// with no vanilla resource as its base: every field the value leaves
+    /// out is zero. Declare the key's GUID with [`Load::declare`](crate::Load::declare).
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] outside the game, for a type the build lacks or has no
+    /// resource of, a value that does not fit the type, and when the loader
+    /// refuses the serve, such as after init.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::{Id, id};
+    /// use enshwick::resources::Value;
+    ///
+    /// const TABLE: Id = id!("balance");
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let guid = load.declare(TABLE)?;
+    ///     let value = Value::Struct(vec![("damage".into(), Value::Float(2.0))]);
+    ///     load.serve_new(guid.key_by_hash(enshwick::resources::fnv1a32(b"demo::Table")), &value)
+    /// }
+    /// ```
+    pub fn serve_new(
+        &mut self,
+        key: crate::abi::ResourceKey,
+        value: &super::Value,
+    ) -> Result<(), Off> {
+        serve_new(self.host(), key, value)
+    }
+}
+
+/// Declares the content id `id`, `<mod>:<name>`, for the mod `host` serves,
+/// and returns its GUID.
+pub(crate) fn declare(host: Host, id: &str) -> Result<crate::content::Guid, Off> {
+    let mut out = [0u8; 16];
+    let status = (host.api().declare_content)(host.handle(), Str::new(id), &raw mut out);
+    crate::load::ok(status, crate::content::Guid(out), || {
+        format!("content id {id}")
+    })
+}

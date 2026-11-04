@@ -457,6 +457,33 @@ impl Resources {
         )?))
     }
 
+    /// Declares the mod's content id `id`, `<mod>:<name>`, and returns its
+    /// GUID's text, for a resource the mod serves. Allowed while the mod
+    /// initialises.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a malformed id, one outside the mod's namespace, or one
+    /// whose game id another content id has.
+    #[script]
+    pub fn declare(self, id: &str) -> Result<String, Off> {
+        Ok(super::table::declare(self.host, id)?.to_string())
+    }
+
+    /// Serves `value` as the new resource `key`, of the type its key names,
+    /// with no vanilla resource as its base: every field the value leaves out
+    /// is zero. Allowed while the mod initialises.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a malformed key, a type the build lacks or has no resource
+    /// of, a value that does not fit the type, and when the loader refuses
+    /// the serve.
+    #[script]
+    pub fn serve_new(self, key: &Data, value: &Data) -> Result<(), Off> {
+        super::table::serve_new(self.host, self.key_of(key)?, value)
+    }
+
     /// The nil GUID's text, all zero: no resource.
     #[script]
     #[must_use]

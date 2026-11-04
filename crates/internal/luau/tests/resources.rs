@@ -170,4 +170,24 @@ mod tests {
             assert!(logged(&loader, &line), "{line}: {:?}", loader.logs());
         }
     }
+
+    #[test]
+    fn a_script_declares_an_id_and_serves_a_new_resource_from_a_value_alone() {
+        let loader = run(r#"
+            local guid = enshwick.resources.declare("you.luau:big_table")
+            enshwick.resources.serve_new({ guid = guid, type = "demo::balance::Table" }, { damage = 4, side = "Right" })
+            print(`declared {guid}`)
+        "#);
+        let line = loader
+            .logs()
+            .into_iter()
+            .find_map(|(_, line)| line.split("declared ").nth(1).map(str::to_owned))
+            .unwrap_or_else(|| panic!("{:?}", loader.logs()));
+        let guid = Guid::try_parse(line.trim()).unwrap();
+        let new = guid.key_by_hash(fnv1a32(b"demo::balance::Table"));
+        let built = loader.build_resource(&new, &bytes(2.5, 9)).unwrap();
+        let mut expected = bytes(4.0, 0);
+        expected[4] = 1;
+        assert_eq!(built, expected, "the value alone, its count left zero");
+    }
 }

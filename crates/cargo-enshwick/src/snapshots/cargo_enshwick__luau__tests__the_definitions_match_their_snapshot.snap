@@ -455,6 +455,10 @@ declare enshwick: {
 		decode: (type_name: string, bytes: buffer) -> any,
 		--- `value`, of the type qualified as `type_name`, as resource bytes: written over `base` when given, keeping the bytes of what did not change, else into new bytes.
 		encode: (type_name: string, value: any, base: buffer?) -> buffer,
+		--- Declares the mod's content id `id`, `<mod>:<name>`, and returns its GUID's text, for a resource the mod serves. Allowed while the mod initialises.
+		declare: (id: string) -> string,
+		--- Serves `value` as the new resource `key`, of the type its key names, with no vanilla resource as its base: every field the value leaves out is zero. Allowed while the mod initialises.
+		serve_new: (key: any, value: any) -> (),
 		--- The nil GUID's text, all zero: no resource.
 		nil_guid: () -> string,
 		--- The GUID a content hash reads as, four numbers as `content_hashes` lists them: its words in memory order.
