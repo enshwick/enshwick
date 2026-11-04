@@ -9,19 +9,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, anyhow, bail};
 use enshwick_gamedata::reflect::{Image, Layout, Reflection};
-use enshwick_gamedata::typed::{Catalogue, Renames};
+use enshwick_gamedata::typed::{Catalogue, RENAMES, Renames, SNAPSHOTS, build_name, snapshot_path};
 use enshwick_gamedata::{Side, Table, embedded, exact, file_name, newest};
 
-/// Where the snapshots live, below the repository root.
-pub(crate) const SNAPSHOTS: &str = "crates/enshwick-gamedata/typed";
-/// The rename table, beside the snapshots.
-pub(crate) const RENAMES: &str = "renames.toml";
-/// The API crate's sources, below the repository root.
-const API_SRC: &str = "crates/enshwick/src";
-/// The loader's id table, below the repository root.
-const IDS: &str = "crates/enshwick-gamedata/src/typed/ids.rs";
 /// The one hand-written file among the generated modules.
-const RUNTIME: &str = "typed/runtime.rs";
+const RUNTIME: &str = "crates/enshwick/src/typed/runtime.rs";
+/// The folder of the generated modules.
+const TYPED: &str = "crates/enshwick/src/typed";
 
 fn tables() -> anyhow::Result<Vec<Table>> {
     embedded()
@@ -30,49 +24,18 @@ fn tables() -> anyhow::Result<Vec<Table>> {
         .collect()
 }
 
-/// The words a generated file's header names a build by.
-fn build_name(table: &Table) -> String {
-    let age = table.fingerprint().age();
-    table.steam_build().map_or_else(
-        || format!("{} build {age}", table.side().as_str()),
-        |steam| format!("{} build {age} (Steam {steam})", table.side().as_str()),
-    )
-}
-
-/// The snapshot file of the build `table` is for.
-pub(crate) fn snapshot_path(root: &Path, table_file: &str) -> PathBuf {
-    root.join(SNAPSHOTS)
-        .join(Path::new(table_file).with_extension("jsonl"))
-}
-
-/// Snapshots the covered types of the executable `exe` and returns the
-/// snapshot's path.
+/// The catalogue of the game executable `bytes` hold.
 ///
 /// # Errors
 ///
-/// When the executable does not read, holds no reflection data or has no
-/// build table.
-pub(crate) fn snapshot(root: &Path, exe: &Path) -> anyhow::Result<PathBuf> {
-    let bytes = std::fs::read(exe).with_context(|| exe.display().to_string())?;
-    let image =
-        Image::parse(&bytes, Layout::File, None).with_context(|| exe.display().to_string())?;
-    let fingerprint = image
-        .fingerprint()
-        .ok_or_else(|| anyhow!("{} names no build", exe.display()))?;
-    let side = [Side::Server, Side::Client]
-        .into_iter()
-        .find(|side| exact(&tables().unwrap_or_default(), *side, fingerprint).is_some())
-        .ok_or_else(|| anyhow!("{}: no build table; pin it first", exe.display()))?;
+/// When they do not read or hold no reflection data.
+pub(crate) fn catalogue(bytes: &[u8]) -> anyhow::Result<Catalogue> {
+    let image = Image::parse(bytes, Layout::File, None)?;
     let catalogue = Catalogue::from_reflection(&Reflection::scan(&image));
     if catalogue.snapshot().is_empty() {
-        bail!("{} holds no reflection data", exe.display());
+        bail!("no reflection data");
     }
-    let path = snapshot_path(root, &file_name(side, fingerprint));
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).with_context(|| dir.display().to_string())?;
-    }
-    std::fs::write(&path, catalogue.snapshot()).with_context(|| path.display().to_string())?;
-    Ok(path)
+    Ok(catalogue)
 }
 
 /// The rename table beside the snapshots; empty when there is none yet.
@@ -89,30 +52,20 @@ pub(crate) fn renames(root: &Path) -> anyhow::Result<Renames> {
     }
 }
 
-/// Every generated file of the newest server build's snapshot, by path
-/// below `root`.
-fn generated(root: &Path) -> anyhow::Result<(BTreeMap<PathBuf, String>, String)> {
-    let tables = tables()?;
-    let table = newest(&tables, Side::Server).ok_or_else(|| anyhow!("no server build table"))?;
-    let path = snapshot_path(root, &table.file_name());
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("{}: run with --from the build's executable", path.display()))?;
-    let catalogue = Catalogue::from_snapshot(&text).with_context(|| path.display().to_string())?;
-    let build = build_name(table);
-    let mut files: BTreeMap<PathBuf, String> = catalogue
-        .rust(&build)?
+/// Every generated file of `catalogue`, by path below `root`, with the
+/// generated modules already there that no longer belong.
+fn generated(
+    root: &Path,
+    catalogue: &Catalogue,
+    build: &str,
+) -> anyhow::Result<(BTreeMap<PathBuf, String>, Vec<PathBuf>)> {
+    let files: BTreeMap<PathBuf, String> = catalogue
+        .files(build, &renames(root)?)?
         .into_iter()
-        .map(|(file, text)| (root.join(API_SRC).join(file), text))
+        .map(|(path, text)| (root.join(path), text))
         .collect();
-    files.insert(root.join(IDS), catalogue.ids_file(&build, &renames(root)?)?);
-    Ok((files, build))
-}
-
-/// The generated modules already in `root` that no longer belong there.
-fn stale(root: &Path, files: &BTreeMap<PathBuf, String>) -> Vec<PathBuf> {
-    let dir = root.join(API_SRC).join("typed");
-    let runtime = root.join(API_SRC).join(RUNTIME);
-    std::fs::read_dir(&dir)
+    let runtime = root.join(RUNTIME);
+    let stale = std::fs::read_dir(root.join(TYPED))
         .into_iter()
         .flatten()
         .flatten()
@@ -122,25 +75,81 @@ fn stale(root: &Path, files: &BTreeMap<PathBuf, String>) -> Vec<PathBuf> {
                 && *path != runtime
                 && !files.contains_key(path)
         })
-        .collect()
+        .collect();
+    Ok((files, stale))
 }
 
-/// Snapshots `from` when given, then writes the typed API, or with `check`
-/// fails when the committed files differ from what it would write.
+/// Writes the typed API of `catalogue`, read from `build`, into `root`.
 ///
 /// # Errors
 ///
-/// When a file does not read or write, the snapshot is missing, or with
-/// `check`, when a generated file differs.
+/// When a file does not write.
+pub(crate) fn write_api(root: &Path, catalogue: &Catalogue, build: &str) -> anyhow::Result<usize> {
+    let (files, stale) = generated(root, catalogue, build)?;
+    for (path, text) in &files {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).with_context(|| dir.display().to_string())?;
+        }
+        std::fs::write(path, text).with_context(|| path.display().to_string())?;
+    }
+    for path in &stale {
+        std::fs::remove_file(path).with_context(|| path.display().to_string())?;
+    }
+    Ok(files.len())
+}
+
+/// Writes `catalogue` as the snapshot of `side`'s build `fingerprint`.
+///
+/// # Errors
+///
+/// When the file does not write.
+pub(crate) fn write_snapshot(
+    root: &Path,
+    catalogue: &Catalogue,
+    side: Side,
+    fingerprint: enshwick_gamedata::Fingerprint,
+) -> anyhow::Result<PathBuf> {
+    let path = root.join(snapshot_path(&file_name(side, fingerprint)));
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).with_context(|| dir.display().to_string())?;
+    }
+    std::fs::write(&path, catalogue.snapshot()).with_context(|| path.display().to_string())?;
+    Ok(path)
+}
+
+/// Snapshots `from` when given, then writes the typed API from the newest
+/// server build's snapshot, or with `check` fails when the committed files
+/// differ from what it would write.
+///
+/// # Errors
+///
+/// When a file does not read or write, the build has no table, the
+/// snapshot is missing, or with `check`, when a generated file differs.
 pub(crate) fn run(root: &Path, from: Option<&Path>, check: bool) -> anyhow::Result<String> {
+    let tables = tables()?;
     let mut done = Vec::new();
     if let Some(exe) = from {
         let exe = crate::types::executable(exe)?;
-        done.push(format!("snapshot {}", snapshot(root, &exe)?.display()));
+        let bytes = std::fs::read(&exe).with_context(|| exe.display().to_string())?;
+        let fingerprint = Image::parse(&bytes, Layout::File, None)?
+            .fingerprint()
+            .ok_or_else(|| anyhow!("{} names no build", exe.display()))?;
+        let side = [Side::Server, Side::Client]
+            .into_iter()
+            .find(|side| exact(&tables, *side, fingerprint).is_some())
+            .ok_or_else(|| anyhow!("{}: no build table; pin it first", exe.display()))?;
+        let catalogue = catalogue(&bytes).with_context(|| exe.display().to_string())?;
+        let path = write_snapshot(root, &catalogue, side, fingerprint)?;
+        done.push(format!("snapshot {}", path.display()));
     }
-    let (files, build) = generated(root)?;
-    let stale = stale(root, &files);
+    let table = newest(&tables, Side::Server).ok_or_else(|| anyhow!("no server build table"))?;
+    let path = root.join(snapshot_path(&table.file_name()));
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("{}: run with --from the build's executable", path.display()))?;
+    let catalogue = Catalogue::from_snapshot(&text).with_context(|| path.display().to_string())?;
+    let build = build_name(table);
     if check {
+        let (files, stale) = generated(root, &catalogue, &build)?;
         let mut differ: Vec<String> = files
             .iter()
             .filter(|(path, text)| std::fs::read_to_string(path).ok().as_ref() != Some(*text))
@@ -155,18 +164,9 @@ pub(crate) fn run(root: &Path, from: Option<&Path>, check: bool) -> anyhow::Resu
         }
         return Ok(format!("the typed API matches {build}"));
     }
-    for (path, text) in &files {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).with_context(|| dir.display().to_string())?;
-        }
-        std::fs::write(path, text).with_context(|| path.display().to_string())?;
-    }
-    for path in &stale {
-        std::fs::remove_file(path).with_context(|| path.display().to_string())?;
-    }
+    let written = write_api(root, &catalogue, &build)?;
     done.push(format!(
-        "wrote {} files of the typed API from {build}",
-        files.len()
+        "wrote {written} files of the typed API from {build}"
     ));
     Ok(done.join("\n"))
 }

@@ -1,7 +1,10 @@
-//! The typed API's source: the reflected types the API covers and every
-//! type they reach, as a [`Catalogue`] read from a build's reflection and
-//! kept as a snapshot beside the build tables. The generator writes the API
-//! crate's `typed` modules from it, so a new build needs no hand change.
+//! The typed API's source: the reflected types the API covers, as a
+//! [`Catalogue`].
+//!
+//! A catalogue holds every covered type and every type it reaches, read
+//! from a build's reflection and kept as a snapshot beside the build tables.
+//! The generator writes the API crate's `typed` modules from it, so a new
+//! build needs no hand change.
 
 /// The table of typed API ids `typed/ids.rs` holds, sorted by id.
 macro_rules! id_table {
@@ -48,6 +51,54 @@ pub fn engine_name(id: &str) -> Option<&'static str> {
         .binary_search_by(|(known, _)| (*known).cmp(id))
         .ok()
         .map(|at| ids::IDS[at].1)
+}
+
+/// Where the snapshots and the rename table live, below the enshwick
+/// repository root.
+pub const SNAPSHOTS: &str = "crates/enshwick-gamedata/typed";
+
+/// The rename table's file in [`SNAPSHOTS`].
+pub const RENAMES: &str = "renames.toml";
+
+/// The snapshot file of the build a table of `table_file` is for, below
+/// the repository root.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::typed::snapshot_path;
+///
+/// assert_eq!(
+///     snapshot_path("server-00-1.toml"),
+///     "crates/enshwick-gamedata/typed/server-00-1.jsonl"
+/// );
+/// ```
+#[must_use]
+pub fn snapshot_path(table_file: &str) -> String {
+    let stem = table_file.strip_suffix(".toml").unwrap_or(table_file);
+    format!("{SNAPSHOTS}/{stem}.jsonl")
+}
+
+/// The words a generated file's header names the build of `table` by.
+///
+/// # Examples
+///
+/// ```
+/// let tables: Vec<_> = enshwick_gamedata::embedded()
+///     .iter()
+///     .filter_map(|(_, text)| enshwick_gamedata::Table::parse(text).ok())
+///     .collect();
+/// let server = enshwick_gamedata::newest(&tables, enshwick_gamedata::Side::Server);
+/// assert!(server.is_some_and(|t| enshwick_gamedata::typed::build_name(t).starts_with("server build")));
+/// ```
+#[must_use]
+pub fn build_name(table: &crate::Table) -> String {
+    let age = table.fingerprint().age();
+    let side = table.side().as_str();
+    table.steam_build().map_or_else(
+        || format!("{side} build {age}"),
+        |steam| format!("{side} build {age} (Steam {steam})"),
+    )
 }
 
 /// What a covered type is to a mod: a component an entity holds, an event
@@ -161,6 +212,10 @@ mod kind_byte {
 
     use crate::reflect::Kind;
 
+    #[expect(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "serde's serialize_with passes a reference"
+    )]
     pub(super) fn serialize<S: Serializer>(kind: &Kind, out: S) -> Result<S::Ok, S::Error> {
         out.serialize_u8(kind.byte())
     }
@@ -378,11 +433,8 @@ impl Catalogue {
     pub fn snapshot(&self) -> String {
         let mut out = String::new();
         for ty in self.types.values() {
-            #[expect(
-                clippy::expect_used,
-                reason = "a struct of strings and numbers serializes"
-            )]
-            out.push_str(&serde_json::to_string(ty).expect("a type serializes"));
+            // A struct of strings and numbers always serializes.
+            out.push_str(&serde_json::to_string(ty).unwrap_or_default());
             out.push('\n');
         }
         out

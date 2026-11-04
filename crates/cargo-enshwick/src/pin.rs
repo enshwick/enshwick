@@ -119,12 +119,90 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
     if sections.is_empty() {
         bail!("no row is for the old build {}", spell(old_fp));
     }
-    let text = report::render(&spell(old_fp), &spell(new_fp), &sections);
+    let (typed_text, typed_settled) = typed(args, &old_bytes, &new_bytes, old_fp, new_fp)?;
+    let text = format!(
+        "{}\n{typed_text}",
+        report::render(&spell(old_fp), &spell(new_fp), &sections)
+    );
     finish(staged, args.report.as_deref(), &text)?;
-    Ok(sections
+    if args.write {
+        write_typed(args, &new_bytes, old_fp, new_fp)?;
+    }
+    Ok(typed_settled
+        && sections
+            .iter()
+            .flat_map(|s| &s.lines)
+            .all(|l| !l.status.needs_human()))
+}
+
+/// The side whose embedded table is for the build `fingerprint`.
+fn side_of(fingerprint: Fingerprint) -> anyhow::Result<enshwick_gamedata::Side> {
+    use enshwick_gamedata::{Side, Table};
+
+    let tables: Vec<Table> = enshwick_gamedata::embedded()
         .iter()
-        .flat_map(|s| &s.lines)
-        .all(|l| !l.status.needs_human()))
+        .filter_map(|(_, text)| Table::parse(text).ok())
+        .collect();
+    [Side::Server, Side::Client]
+        .into_iter()
+        .find(|side| enshwick_gamedata::exact(&tables, *side, fingerprint).is_some())
+        .with_context(|| format!("no table is for the old build {}", spell(fingerprint)))
+}
+
+/// The typed API's part of the report: what the new build changed in the
+/// covered types, and whether all of it settles without a person.
+fn typed(
+    args: &Args,
+    old: &[u8],
+    new: &[u8],
+    old_fp: Fingerprint,
+    new_fp: Fingerprint,
+) -> anyhow::Result<(String, bool)> {
+    let side = side_of(old_fp)?;
+    let before = crate::generate::catalogue(old).context("the old executable")?;
+    let after = crate::generate::catalogue(new).context("the new executable")?;
+    let diff = before.diff(&after, &crate::generate::renames(&args.repo)?);
+    Ok((
+        format!(
+            "Typed API, {} build {} to {}:\n{diff}",
+            side.as_str(),
+            old_fp.age(),
+            new_fp.age()
+        ),
+        !diff.needs_person(),
+    ))
+}
+
+/// With `--write`: the new build's snapshot, the renames its diff found in
+/// the rename table and, for a server build, the typed API regenerated.
+fn write_typed(
+    args: &Args,
+    new: &[u8],
+    old_fp: Fingerprint,
+    new_fp: Fingerprint,
+) -> anyhow::Result<()> {
+    let side = side_of(old_fp)?;
+    let after = crate::generate::catalogue(new)?;
+    let old = args.old.as_deref().context("--old is needed")?;
+    let before = crate::generate::catalogue(&read(old)?)?;
+    let renames = crate::generate::renames(&args.repo)?;
+    let found = renames.clone().with(&before.diff(&after, &renames));
+    if found != renames {
+        let path = args
+            .repo
+            .join(enshwick_gamedata::typed::SNAPSHOTS)
+            .join(enshwick_gamedata::typed::RENAMES);
+        fs::write(&path, found.to_toml()).with_context(|| path.display().to_string())?;
+    }
+    crate::generate::write_snapshot(&args.repo, &after, side, new_fp)?;
+    if side == enshwick_gamedata::Side::Server {
+        let steam = args
+            .steam_build
+            .map_or_else(String::new, |steam| format!(" (Steam {steam})"));
+        let build = format!("server build {}{steam}", new_fp.age());
+        crate::generate::write_api(&args.repo, &after, &build)?;
+    }
+    Ok(())
 }
 
 /// Writes the report to `report` before the staged files, so a report that

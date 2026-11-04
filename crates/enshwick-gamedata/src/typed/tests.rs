@@ -302,6 +302,44 @@ fn every_covered_type_reads_as_its_generated_item() {
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 
+/// The committed typed API is what the committed snapshot generates, file
+/// for file: a hand edit, a stale module or a generator change not run
+/// again fails here, on every run that touches either crate.
+#[test]
+#[cfg_attr(miri, ignore = "generates thousands of items")]
+fn the_committed_typed_api_is_what_its_snapshot_generates() {
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let tables: Vec<crate::Table> = crate::embedded()
+        .iter()
+        .map(|(_, text)| crate::Table::parse(text).unwrap())
+        .collect();
+    let build = build_name(crate::newest(&tables, crate::Side::Server).unwrap());
+    let renames = std::fs::read_to_string(repo.join(SNAPSHOTS).join(RENAMES)).map_or_else(
+        |_| Renames::default(),
+        |text| Renames::parse(&text).unwrap(),
+    );
+    let files = committed().files(&build, &renames).unwrap();
+    let mut differ: Vec<String> = files
+        .iter()
+        .filter(|(path, text)| {
+            std::fs::read_to_string(repo.join(path)).ok().as_ref() != Some(*text)
+        })
+        .map(|(path, _)| path.clone())
+        .collect();
+    for entry in std::fs::read_dir(repo.join("crates/enshwick/src/typed")).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        let key = format!("crates/enshwick/src/typed/{name}");
+        if name != "runtime.rs" && !files.contains_key(&key) {
+            differ.push(format!("{key} (stale)"));
+        }
+    }
+    assert!(
+        differ.is_empty(),
+        "run cargo enshwick generate: {differ:#?}"
+    );
+}
+
 proptest::proptest! {
     /// Every kind byte maps to a Rust type with balanced brackets.
     #[test]

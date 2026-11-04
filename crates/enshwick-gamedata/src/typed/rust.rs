@@ -89,8 +89,7 @@ fn root_of(catalogue: &Catalogue) -> String {
     catalogue
         .types
         .keys()
-        .filter_map(|name| split(name).0.first().copied())
-        .next()
+        .find_map(|name| split(name).0.first().copied())
         .unwrap_or_default()
         .to_owned()
 }
@@ -412,7 +411,8 @@ fn enum_item(ty: &Ty, place: &Place, doc: &str) -> String {
     let mut taken = BTreeSet::from(["Other".to_owned()]);
     for (name, value) in &ty.values {
         let base = camel(name);
-        let variant = (1..)
+        // One suffix more than there are constants always finds a free name.
+        let variant = (1..=ty.values.len() + 1)
             .map(|n| {
                 if n == 1 {
                     base.clone()
@@ -465,6 +465,40 @@ impl Catalogue {
         }
         out.push_str("}\n");
         Ok(out)
+    }
+
+    /// Every file the typed API is generated into, by path below the
+    /// enshwick repository root: the API crate's `typed` modules and the
+    /// loader's id table.
+    ///
+    /// # Errors
+    ///
+    /// [`GenerateError`] when two types take one Rust name in one module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::typed::{Catalogue, Renames};
+    ///
+    /// let files = Catalogue::default().files("test", &Renames::default())?;
+    /// assert!(files.contains_key("crates/enshwick/src/typed.rs"));
+    /// # Ok::<(), enshwick_gamedata::typed::GenerateError>(())
+    /// ```
+    pub fn files(
+        &self,
+        build: &str,
+        renames: &Renames,
+    ) -> Result<BTreeMap<String, String>, GenerateError> {
+        let mut files: BTreeMap<String, String> = self
+            .rust(build)?
+            .into_iter()
+            .map(|(path, text)| (format!("crates/enshwick/src/{path}"), text))
+            .collect();
+        files.insert(
+            "crates/enshwick-gamedata/src/typed/ids.rs".to_owned(),
+            self.ids_file(build, renames)?,
+        );
+        Ok(files)
     }
 }
 
