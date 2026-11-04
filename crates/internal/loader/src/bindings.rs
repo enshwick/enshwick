@@ -72,24 +72,31 @@ pub fn parse(text: &str) -> (BTreeMap<String, Override>, Vec<String>) {
 
 /// The file for `entries`, each `<mod id>:<control>` with the keys in force
 /// where they differ from the mod's defaults: scan codes, with the key's US
-/// name beside each.
+/// name beside each. `kept` are the file's entries for controls no running
+/// mod declares, written back as they were, read or not.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick_loader::bindings::{parse, render};
 ///
-/// let text = render(&[("you.cars:horn".to_owned(), [Some(0x24), Some(0)])]);
+/// let kept: toml::Table = "[\"you.boats:horn\"]\nkey = \"Hyper+X\"\n".parse()?;
+/// let text = render(&[("you.cars:horn".to_owned(), [Some(0x24), Some(0)])], &kept);
 /// assert!(text.contains("key = 36 # J"));
+/// assert!(text.contains("Hyper+X"));
 /// assert_eq!(parse(&text).0["you.cars:horn"], [Some(0x24), Some(0)]);
+/// # Ok::<(), toml::de::Error>(())
 /// ```
 #[must_use]
-pub fn render(entries: &[(String, Override)]) -> String {
+pub fn render(entries: &[(String, Override)], kept: &toml::Table) -> String {
     let mut text = String::from(
         "# The keys of mod controls, written by the Mods screen. Each is a scan code\n\
          # with its US key name beside it; a name such as \"Shift+E\" works too, and\n\
          # 0 unbinds. A control not listed keeps its mod's keys.\n",
     );
+    if !kept.is_empty() {
+        let _ = write!(text, "\n{kept}");
+    }
     for (control, slots) in entries {
         if slots.iter().all(Option::is_none) {
             continue;
@@ -246,7 +253,7 @@ mod tests {
                 [Some(0), Some(key("Mouse4").bits())],
             ),
         ];
-        let text = render(&entries);
+        let text = render(&entries, &toml::Table::new());
         assert!(!text.contains("boost"), "{text}");
         assert!(text.contains("# Ctrl+H"), "{text}");
         let (read, problems) = parse(&text);
@@ -254,6 +261,20 @@ mod tests {
         assert_eq!(read.len(), 2);
         assert_eq!(read["you.lights:on"], entries[2].1);
         assert_eq!(read["you.cars:horn"], entries[0].1);
+    }
+
+    #[test]
+    fn another_mod_s_entries_survive_a_write_even_when_they_do_not_read() {
+        let file = "stray = 1\n[\"you.boats:horn\"]\nkey = \"Hyper+X\"\nsecond = 37\n\
+                    [\"you.lights:on\"]\nkey = 35\n";
+        let kept: toml::Table = file.parse().unwrap();
+        let mine = [("you.cars:horn".to_owned(), [Some(key("J").bits()), None])];
+        let text = render(&mine, &kept);
+        let written: toml::Table = text.parse().unwrap();
+        assert_eq!(written["you.boats:horn"], kept["you.boats:horn"], "{text}");
+        assert_eq!(written["you.lights:on"], kept["you.lights:on"]);
+        assert_eq!(written["stray"], kept["stray"]);
+        assert_eq!(parse(&text).0["you.cars:horn"], mine[0].1);
     }
 
     #[test]

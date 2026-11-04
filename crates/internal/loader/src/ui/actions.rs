@@ -37,27 +37,6 @@ static WAS_DOWN: AtomicBool = AtomicBool::new(false);
 /// Asked to open the window, for a hint's mod and action.
 static OPEN: Mutex<Option<(String, String)>> = Mutex::new(None);
 
-/// Whether the game's window has the focus.
-fn focused() -> bool {
-    use windows_sys::Win32::System::Threading::GetCurrentProcessId;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetWindowThreadProcessId,
-    };
-    // SAFETY: `GetForegroundWindow` takes no arguments and may return null,
-    // checked below.
-    let window = unsafe { GetForegroundWindow() };
-    if window.is_null() {
-        return false;
-    }
-    let mut process = 0u32;
-    // SAFETY: `window` is a non-null handle, checked by the guard before it,
-    // and `process` is a live `u32` the call writes; a handle that closed
-    // meanwhile only fails the call, leaving `process` 0.
-    unsafe { GetWindowThreadProcessId(window, &raw mut process) };
-    // SAFETY: `GetCurrentProcessId` takes no arguments and cannot fail.
-    process == unsafe { GetCurrentProcessId() }
-}
-
 /// Whether the key went down since the last frame.
 fn pressed(key: u32) -> bool {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
@@ -68,7 +47,7 @@ fn pressed(key: u32) -> bool {
     // pointer; an unknown code returns 0.
     let down = unsafe { GetAsyncKeyState(key) } < 0;
     let was = WAS_DOWN.swap(down, Ordering::Relaxed);
-    down && !was && focused()
+    down && !was && crate::controls::focused()
 }
 
 /// Adds the hint line to the HUD and opens the window when the player

@@ -256,7 +256,7 @@ fn rated_messages_pass_until_the_burst_is_spent() {
 }
 
 #[test]
-fn unrated_messages_and_administrators_always_pass() {
+fn an_action_run_over_the_rate_is_answered_busy_and_not_run() {
     let mut queries = Queries::default();
     let now = Instant::now();
     over_the_rate(&mut queries, 7, now);
@@ -265,7 +265,22 @@ fn unrated_messages_and_administrators_always_pass() {
         action: "clear".into(),
         args: String::new(),
     };
-    assert_eq!(queries.gate(7, false, &run, now), Gate::Pass);
+    assert!(matches!(
+        queries.gate(7, false, &run, now),
+        Gate::Busy(Message::Result { ok: false, .. })
+    ));
+}
+
+#[test]
+fn unrated_messages_and_administrators_always_pass() {
+    let mut queries = Queries::default();
+    let now = Instant::now();
+    over_the_rate(&mut queries, 7, now);
+    let sync = Message::Sync {
+        id: "zones".into(),
+        values: String::new(),
+    };
+    assert_eq!(queries.gate(7, false, &sync, now), Gate::Pass);
     let query = Message::Query { id: String::new() };
     assert!((0..100).all(|_| queries.gate(8, true, &query, now) == Gate::Pass));
 }

@@ -6,6 +6,7 @@
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
@@ -186,7 +187,16 @@ pub(crate) fn register(
 }
 
 /// The system that runs players' inventory actions.
-const ACTIONS_SYSTEM: &str = "inventory_actions";
+pub(crate) const ACTIONS_SYSTEM: &str = "inventory_actions";
+/// Whether the link on [`ACTIONS_SYSTEM`] is made, which reads the players'
+/// input for the controls that follow game actions.
+static READS_INPUTS: AtomicBool = AtomicBool::new(false);
+
+/// Whether the players' input is read each step, for the controls that
+/// follow game actions.
+pub(crate) fn reads_inputs() -> bool {
+    READS_INPUTS.load(Ordering::Acquire)
+}
 
 pub(crate) fn link(loader: &'static Loader) {
     let filters = FILTERS.seal();
@@ -250,6 +260,7 @@ pub(crate) fn link(loader: &'static Loader) {
         inventory_actions,
         none,
     );
+    READS_INPUTS.store(actions, Ordering::Release);
     let hold_ready = offers && transfers && sorting && dismantling && actions;
     if !hold_ready {
         crate::log!(
@@ -842,15 +853,15 @@ unsafe fn player_inputs(ctx: *mut u64) {
     }
     let players = PLAYERS.load();
     let players = players.as_deref().map_or(&[][..], Vec::as_slice);
-    crate::controls::players_seen(players);
-    for &player in players {
-        // SAFETY: the caller guarantees the system's live context, at its
-        // entry on its thread.
-        if let Some(input) = unsafe { components.component(ctx, player, layout.player_input) } {
-            // SAFETY: `input` is the player's live `PlayerInput`, read on
-            // the game thread during the step.
-            unsafe { crate::controls::server_input(player, input) };
-        }
+    // SAFETY: each pointer is the player's live `PlayerInput` component in
+    // the server's world, read at the system's entry on its thread, before
+    // the system runs.
+    unsafe {
+        crate::controls::step(players, |player| {
+            // SAFETY: the caller guarantees the system's live context, at
+            // its entry on its thread.
+            unsafe { components.component(ctx, player, layout.player_input) }
+        });
     }
 }
 

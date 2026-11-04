@@ -34,6 +34,7 @@ use enshwick::abi::{
 pub(crate) use demo::open as open_demo;
 pub(crate) use dialog::show;
 use engine::{Engine, HudWindow, PopupFn, UiText, Window};
+pub(crate) use map::play_data;
 pub(crate) use map::set as set_markers;
 pub(crate) use mods::mismatch_screen_on;
 

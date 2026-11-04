@@ -249,6 +249,15 @@ type PlaceFn = unsafe extern "system" fn(
 ) -> u32;
 type PickupFn = unsafe extern "system" fn(context: *mut u8, target: *const u8, tool: u32) -> u8;
 
+/// Whether the link after the server's step is made.
+static STEPPED: AtomicBool = AtomicBool::new(false);
+
+/// Whether the loader's work after the server's step runs, as the controls
+/// that follow game actions need.
+pub(crate) fn stepped() -> bool {
+    STEPPED.load(Ordering::Acquire)
+}
+
 /// Links what the subscriptions need; a missing symbol leaves its events
 /// silent and says so.
 pub(crate) fn link(loader: &'static Loader) {
@@ -290,6 +299,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let feature = "server events";
     let stepped = link(&[], pinned::server::POST_STEP)
         .is_some_and(|target| loader.link_feature(feature, target, &STEP_NEXT, step, none));
+    STEPPED.store(stepped, Ordering::Release);
     if let Some(target) = link(
         &[Event::WORLD_LOADED, Event::SHUTDOWN_STARTED],
         pinned::server::SET_STATE,
@@ -420,6 +430,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         "interaction steps",
         crate::interactions::after_step(loader, step)
     );
+    part!("control firings", crate::controls::after_step(loader));
     part!("stat steps", crate::stats::after_step(loader, step, now));
     part!("action hints", crate::actions::after_step(loader, now));
     part!(

@@ -1,6 +1,7 @@
 //! The keyboard and mouse as Windows reports them, beside the game's own
-//! Raw Input: scan codes turned into virtual keys for the current layout,
-//! each key read once a frame, and key names in the player's layout.
+//! Raw Input: scan codes turned into virtual keys for the layout of the
+//! game window's thread, each key read once a frame, and key names in the
+//! player's layout.
 
 use core::cell::RefCell;
 
@@ -19,19 +20,21 @@ const MODIFIER_CODES: [u32; 3] = [0x2a, 0x1d, 0x38];
 /// The mouse buttons' virtual keys, by their number in a [`Key`].
 const MOUSE: [u16; 5] = [VK_LBUTTON, VK_RBUTTON, VK_MBUTTON, VK_XBUTTON1, VK_XBUTTON2];
 
-/// The bit of a key that went down since the last read of it.
-const TAPPED: u8 = 1;
-/// The bit of a key that is down.
-const DOWN: u8 = 2;
-
-thread_local! {
-    /// The layout the virtual keys were made for, and each scan code's
-    /// virtual key, made on a layout change.
-    static LAYOUT: RefCell<(isize, Vec<(u32, u16)>)> = const { RefCell::new((0, Vec::new())) };
+/// The controls' keys as virtual keys, made again only when the keys or the
+/// layout change.
+#[derive(Default)]
+struct Mapped {
+    layout: usize,
+    bound: Vec<[u32; 2]>,
+    vks: Vec<[u16; 2]>,
 }
 
-/// Whether the game's window has the focus.
-pub(crate) fn focused() -> bool {
+thread_local! {
+    static MAPPED: RefCell<Mapped> = RefCell::new(Mapped::default());
+}
+
+/// The thread of the game's window while it has the focus.
+pub(crate) fn focused_thread() -> Option<u32> {
     use windows_sys::Win32::System::Threading::GetCurrentProcessId;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GetForegroundWindow, GetWindowThreadProcessId,
@@ -40,15 +43,28 @@ pub(crate) fn focused() -> bool {
     // checked below.
     let window = unsafe { GetForegroundWindow() };
     if window.is_null() {
-        return false;
+        return None;
     }
     let mut process = 0u32;
     // SAFETY: `window` is a non-null handle, checked by the guard before it,
     // and `process` is a live `u32` the call writes; a handle that closed
-    // meanwhile only fails the call, leaving `process` 0.
-    unsafe { GetWindowThreadProcessId(window, &raw mut process) };
+    // meanwhile only fails the call, returning 0 and leaving `process` 0.
+    let thread = unsafe { GetWindowThreadProcessId(window, &raw mut process) };
     // SAFETY: `GetCurrentProcessId` takes no arguments and cannot fail.
-    process == unsafe { GetCurrentProcessId() }
+    (thread != 0 && process == unsafe { GetCurrentProcessId() }).then_some(thread)
+}
+
+/// Whether the game's window has the focus.
+pub(crate) fn focused() -> bool {
+    focused_thread().is_some()
+}
+
+/// The keyboard layout of thread `thread`, the game window's, whose input
+/// the player types in.
+fn layout(thread: u32) -> usize {
+    // SAFETY: `GetKeyboardLayout` takes a thread id by value; an id that
+    // ended meanwhile returns null.
+    unsafe { GetKeyboardLayout(thread) }.expose_provenance()
 }
 
 /// The numpad digit or point of scan code `code`: `MapVirtualKeyExW` gives
@@ -73,99 +89,93 @@ fn numpad(code: u32) -> Option<u16> {
 }
 
 /// The virtual key of the key with scan code `code` (bit 8 extended, bit 9
-/// a mouse button) in the current layout; 0 for none.
-fn virtual_key(code: u32) -> u16 {
+/// a mouse button) in layout `layout`; 0 for none.
+fn virtual_key(code: u32, layout: usize) -> u16 {
     if code & 0x200 != 0 {
         return MOUSE.get((code & 0xff) as usize).copied().unwrap_or(0);
     }
-    // SAFETY: `GetKeyboardLayout` takes a thread id by value; 0 is this
-    // thread.
-    let layout = unsafe { GetKeyboardLayout(0) };
-    LAYOUT.with_borrow_mut(|(made_for, keys)| {
-        if *made_for != layout as isize {
-            *made_for = layout as isize;
-            keys.clear();
-        }
-        if let Some((_, vk)) = keys.iter().find(|(c, _)| *c == code) {
-            return *vk;
-        }
-        if let Some(vk) = numpad(code) {
-            keys.push((code, vk));
-            return vk;
-        }
-        let scan = if code & 0x100 != 0 {
-            0xe000 | (code & 0xff)
-        } else {
-            code & 0xff
-        };
-        // SAFETY: `MapVirtualKeyExW` takes its arguments by value and
-        // returns 0 for a code without a key.
-        let vk = unsafe { MapVirtualKeyExW(scan, MAPVK_VSC_TO_VK_EX, layout) };
-        let vk = u16::try_from(vk).unwrap_or(0);
-        keys.push((code, vk));
-        vk
-    })
+    if let Some(vk) = numpad(code) {
+        return vk;
+    }
+    let scan = if code & 0x100 != 0 {
+        0xe000 | (code & 0xff)
+    } else {
+        code & 0xff
+    };
+    // SAFETY: `MapVirtualKeyExW` takes its arguments by value and returns 0
+    // for a code without a key or a layout that is gone.
+    let vk = unsafe {
+        MapVirtualKeyExW(
+            scan,
+            MAPVK_VSC_TO_VK_EX,
+            core::ptr::with_exposed_provenance_mut(layout),
+        )
+    };
+    u16::try_from(vk).unwrap_or(0)
 }
 
-/// What Windows says of virtual key `vk`: [`DOWN`] and [`TAPPED`] bits.
-fn state(vk: u16) -> u8 {
+/// Whether virtual key `vk` is down now.
+fn down(vk: u16) -> bool {
     // SAFETY: `GetAsyncKeyState` takes a key code by value and keeps no
-    // pointer; an unknown code returns 0.
-    let raw = unsafe { GetAsyncKeyState(i32::from(vk)) };
-    let mut bits = 0;
-    if raw < 0 {
-        bits |= DOWN;
-    }
-    if raw & 1 != 0 {
-        bits |= TAPPED;
-    }
-    bits
+    // pointer; an unknown code returns 0. Only the sign bit is read: the
+    // low bit belongs to whichever reader asked last.
+    unsafe { GetAsyncKeyState(i32::from(vk)) < 0 }
 }
 
-/// The keys of one frame, each read once.
-pub(super) struct States {
-    keys: [u8; 256],
-    modifiers: u32,
+/// The modifiers held now, as the bits of a [`Key`].
+fn modifiers() -> u32 {
+    MODIFIERS
+        .iter()
+        .enumerate()
+        .filter(|(_, vk)| down(**vk))
+        .fold(0, |bits, (bit, _)| bits | 1 << (16 + bit))
 }
 
-/// Reads every key in `bound` and the modifiers, once: also while the
-/// controls do not fire, so a key typed in the chat does not count as a tap
-/// once it closes.
-pub(super) fn read(bound: &[[u32; 2]]) -> States {
-    let mut keys = [0u8; 256];
-    for &bits in bound.iter().flatten().filter(|&&b| b != 0) {
-        let vk = virtual_key(bits & 0x3ff);
-        if let Some(slot) = keys.get_mut(usize::from(vk))
-            && vk != 0
-            && *slot == 0
-        {
-            *slot = state(vk) | 0x80;
+/// Fills `out` with whether each control on `bound` is down: one of its
+/// keys with exactly its modifiers, in the layout of the game window's
+/// thread `window`. With no window, the game's window lacks the focus or a
+/// window is open, and nothing is down or read.
+pub(super) fn chords(bound: &[[u32; 2]], window: Option<u32>, out: &mut Vec<bool>) {
+    out.clear();
+    let Some(window) = window else {
+        out.resize(bound.len(), false);
+        return;
+    };
+    MAPPED.with_borrow_mut(|mapped| {
+        let layout = layout(window);
+        if mapped.layout != layout || mapped.bound != bound {
+            mapped.layout = layout;
+            mapped.bound.clear();
+            mapped.bound.extend_from_slice(bound);
+            mapped.vks.clear();
+            mapped.vks.extend(bound.iter().map(|keys| {
+                keys.map(|bits| {
+                    if bits == 0 {
+                        0
+                    } else {
+                        virtual_key(bits & 0x3ff, layout)
+                    }
+                })
+            }));
         }
-    }
-    let mut modifiers = 0;
-    for (bit, vk) in MODIFIERS.iter().enumerate() {
-        if state(*vk) & DOWN != 0 {
-            modifiers |= 1 << (16 + bit);
-        }
-    }
-    States { keys, modifiers }
-}
-
-impl States {
-    /// Whether a control on `bound` is down now, and whether one of its
-    /// keys was tapped since the last frame, each with exactly its
-    /// modifiers.
-    pub(super) fn chord(&self, bound: [u32; 2]) -> (bool, bool) {
-        let mut down = false;
-        let mut tapped = false;
-        for key in bound.iter().filter_map(|&bits| Key::from_bits(bits)) {
-            let vk = virtual_key(key.code());
-            let state = self.keys.get(usize::from(vk)).copied().unwrap_or(0);
-            down |= chord_down(key, state & DOWN != 0, self.modifiers);
-            tapped |= chord_down(key, state & TAPPED != 0, self.modifiers);
-        }
-        (down, tapped)
-    }
+        let held = modifiers();
+        // Each key is read once a frame, however many controls share it:
+        // 0 not read yet, 1 up, 2 down.
+        let mut seen = [0u8; 256];
+        let mut is_down = |vk: u16| {
+            let slot = &mut seen[usize::from(vk & 0xff)];
+            if *slot == 0 {
+                *slot = if down(vk) { 2 } else { 1 };
+            }
+            *slot == 2
+        };
+        out.extend(bound.iter().zip(&mapped.vks).map(|(keys, vks)| {
+            keys.iter().zip(vks).any(|(&bits, &vk)| {
+                vk != 0
+                    && Key::from_bits(bits).is_some_and(|key| chord_down(key, is_down(vk), held))
+            })
+        }));
+    });
 }
 
 /// The name of one key's scan code in the player's layout.
@@ -209,15 +219,11 @@ pub(crate) fn key_name(bits: u32) -> String {
 /// Every key a control may take, whether each is down, the modifiers held
 /// and whether Escape is down: what the controls page's capture looks at.
 pub(crate) fn capture_keys() -> (Vec<Key>, Vec<bool>, u32, bool) {
+    let layout = layout(focused_thread().unwrap_or(0));
     let keys: Vec<Key> = Key::every().collect();
-    let down = keys
+    let held = keys
         .iter()
-        .map(|key| state(virtual_key(key.code())) & DOWN != 0)
+        .map(|key| down(virtual_key(key.code(), layout)))
         .collect();
-    let modifiers = MODIFIERS
-        .iter()
-        .enumerate()
-        .filter(|(_, vk)| state(**vk) & DOWN != 0)
-        .fold(0, |bits, (bit, _)| bits | 1 << (16 + bit));
-    (keys, down, modifiers, state(VK_ESCAPE) & DOWN != 0)
+    (keys, held, modifiers(), down(VK_ESCAPE))
 }

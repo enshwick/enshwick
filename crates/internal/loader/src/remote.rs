@@ -180,13 +180,17 @@ impl Message {
         }
     }
 
-    /// Whether the server answers it with a reply of its own making, so a
-    /// player who is no administrator sends it at [`QUERY_RATE`] only.
+    /// Whether the server answers it with a reply of its own making or runs
+    /// a mod's handler for it, so a player who is no administrator sends it
+    /// at [`QUERY_RATE`] only.
     #[must_use]
     pub const fn is_rated(&self) -> bool {
         matches!(
             self,
-            Self::Query { .. } | Self::Edit { .. } | Self::ActionsQuery { .. }
+            Self::Query { .. }
+                | Self::Edit { .. }
+                | Self::ActionsQuery { .. }
+                | Self::ActionRun { .. }
         )
     }
 
