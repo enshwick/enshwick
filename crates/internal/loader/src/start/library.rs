@@ -41,12 +41,16 @@ pub(super) struct Library {
     pub(super) ready: ReadyFn,
 }
 
+/// What [`libraries`] calls after each DLL it loads: the DLL's file name and
+/// where it is mapped, its first byte and end.
+pub(super) type Loaded<'a> = dyn FnMut(&str, Option<(usize, usize)>) + 'a;
+
 /// What `mods/` holds: the mods with readable manifests, one per folder, and
 /// their manifests; in a game also the proxies of other mods beside it.
 pub(super) fn libraries(
     mods_dir: &Path,
     run: Run,
-    loaded: &mut dyn FnMut(&str, Option<(usize, usize)>),
+    loaded: &mut Loaded<'_>,
 ) -> (Vec<Library>, Vec<Candidate>, Vec<OtherDll>) {
     if run == Run::Game {
         note_old_layout(mods_dir);
@@ -245,7 +249,7 @@ pub(super) fn unload(library: &Library) {
 /// told apart from the folder's other DLLs, the mod's own, by their export
 /// tables before they load. A second such DLL in a folder is skipped, named
 /// with the first; the loader's own folder holds no mod.
-fn discover(mods_dir: &Path, loaded: &mut dyn FnMut(&str, Option<(usize, usize)>)) -> Vec<Library> {
+fn discover(mods_dir: &Path, loaded: &mut Loaded<'_>) -> Vec<Library> {
     let mut mods = Vec::new();
     for folder in folders(mods_dir) {
         let name = folder

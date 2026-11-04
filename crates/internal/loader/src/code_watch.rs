@@ -271,10 +271,12 @@ const LEAD: usize = 2;
 /// The bytes [`branch`] looks at, at most.
 pub const BRANCH_BYTES: usize = 16;
 
-/// Where the instruction at the start of `code`, which lies at `address`,
-/// sends control: `jmp` or `call` rel32, `jmp [rip+rel32]` to the address
-/// `cell` reads in its cell, or `mov rax` or `mov r11` of an address and a
-/// jump to that register; `None` for anything else.
+/// Where the jump at the start of `code`, which lies at `address`, sends
+/// control; `None` when it is no jump.
+///
+/// The jumps are `jmp` or `call` rel32, `jmp [rip+rel32]` to the address
+/// `cell` reads in its cell, and `mov rax` or `mov r11` of an address then
+/// a jump to that register.
 ///
 /// # Examples
 ///
@@ -337,7 +339,7 @@ pub fn reaches(
             if inside(to) {
                 return true;
             }
-            match read(to).and_then(|code| branch(&code, to, &cell)) {
+            match read(to).and_then(|code| branch(&code, to, cell)) {
                 Some(next) => to = next,
                 None => return false,
             }
@@ -347,8 +349,8 @@ pub fn reaches(
     (offset.saturating_sub(LEAD)..offset + len).any(|at| {
         now.get(at..)
             .zip(text.checked_add(at))
-            .and_then(|(code, address)| branch(code, address, &cell))
-            .is_some_and(&follow)
+            .and_then(|(code, address)| branch(code, address, cell))
+            .is_some_and(follow)
     })
 }
 
