@@ -7,6 +7,8 @@
 //! moves data that no longer fits to the end of the bytes, as
 //! [`Blob`](crate::content::Blob) does.
 
+mod rebase;
+
 use std::borrow::Cow;
 
 use super::{Field, Kind, Registry, Type, Value, Variant};
@@ -175,10 +177,11 @@ impl<'a> Registry<'a> {
     fn struct_fields<'r>(&'r self, ty: &'r Type<'a>) -> Vec<&'r Field<'a>> {
         let mut fields: Vec<&Field<'a>> = Vec::new();
         for field in self.all_fields(ty) {
-            if !fields
-                .iter()
-                .any(|f| f.name() == field.name() && f.offset() == field.offset())
-            {
+            // A derived field of a base field's name shadows it: the base's bytes
+            // stay as they are.
+            if let Some(same) = fields.iter_mut().find(|f| f.name() == field.name()) {
+                *same = field;
+            } else {
                 fields.push(field);
             }
         }
@@ -477,6 +480,10 @@ fn not_fit(value: impl core::fmt::Display, ty: &Type<'_>) -> CodecError {
 fn coerce<'v>(ty: &Type<'_>, value: &'v Value) -> Result<Cow<'v, Value>, CodecError> {
     let kind = ty.kind();
     Ok(Cow::Owned(match (kind, value) {
+        (
+            Kind::Enum | Kind::Bitmask8 | Kind::Bitmask16 | Kind::Bitmask32 | Kind::Bitmask64,
+            Value::Text(text),
+        ) if text.parse::<u64>().is_ok() => Value::Uint(text.parse().unwrap_or(0)),
         (Kind::Enum, Value::Text(name)) => Value::Name(name.clone()),
         (
             Kind::Enum | Kind::Bitmask8 | Kind::Bitmask16 | Kind::Bitmask32 | Kind::Bitmask64,
@@ -583,10 +590,9 @@ impl<'a> Encoder<'_, 'a> {
         let coerced = coerce(ty, value)?;
         let value = coerced.as_ref();
         match (ty.kind(), value) {
-            (
-                Kind::BlobArray | Kind::BlobString | Kind::BlobOptional | Kind::BlobVariant,
-                Value::Bytes(_),
-            ) if fresh => {
+            (Kind::BlobArray | Kind::BlobOptional | Kind::BlobVariant, Value::Bytes(_))
+                if fresh =>
+            {
                 // Its offset counts from where it was read; moved, it would
                 // point elsewhere.
                 Err(CodecError::new(format!(
@@ -898,21 +904,45 @@ impl<'a> Encoder<'_, 'a> {
         } else {
             None
         };
-        let (start, fresh) = match place {
-            Some(start) => (start, false),
+        let (start, kept) = match place {
+            Some(start) => (start, items.len()),
             None if count == 0 => {
                 self.write(at, &[0; 8])?;
                 return Ok(());
             }
             None => {
+                // The old elements, when readable, move with their bytes, so
+                // fields the type does not reflect keep their values.
+                let old_count = usize::try_from(current).unwrap_or(0).min(items.len());
+                let old = if fresh {
+                    None
+                } else {
+                    self.existing(at, at, old_count.saturating_mul(stride))
+                };
                 let align = usize::from(inner.align().max(inner.element_align()));
                 let start = self.append(len, align);
+                let kept = match old {
+                    Some(old_start) => {
+                        self.bytes
+                            .copy_within(old_start..old_start + old_count * stride, start);
+                        for i in 0..old_count {
+                            let (from, to) = (old_start + i * stride, start + i * stride);
+                            self.rebase(inner, to, from.cast_signed() - to.cast_signed(), depth)?;
+                        }
+                        old_count
+                    }
+                    None => 0,
+                };
                 self.point(at, at, start)?;
                 self.write(at + 4, &count.to_le_bytes())?;
-                (start, true)
+                (start, kept)
             }
         };
-        self.elements(inner, items, start, stride, fresh, depth)
+        for (i, item) in items.iter().enumerate() {
+            self.value(inner, item, start + i * stride, i >= kept, depth + 1)
+                .map_err(|e| e.within(&index(i)))?;
+        }
+        Ok(())
     }
 
     fn string(&mut self, data: &[u8], at: usize, fresh: bool) -> Result<(), CodecError> {
@@ -923,7 +953,11 @@ impl<'a> Encoder<'_, 'a> {
                 return Ok(());
             }
             if let Some(start) = self.existing(at, at, data.len()) {
-                return self.write(start, data);
+                // The engine may share one string between headers: a changed
+                // one is written fresh, never over the shared bytes.
+                if self.read(start, data.len()) == Some(data) {
+                    return Ok(());
+                }
             }
         }
         if count == 0 {

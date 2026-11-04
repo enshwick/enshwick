@@ -497,3 +497,136 @@ fn header_bytes_holding_an_offset_refuse_to_move() {
     );
     assert_eq!(items.len(), 1);
 }
+
+/// Elements with a string, a number and a field the type does not reflect.
+fn element_registry() -> Registry<'static> {
+    Registry::new([
+        Type::new("demo::uint8", Kind::Uint8, 1, 1),
+        Type::new("demo::uint16", Kind::Uint16, 2, 2),
+        Type::new("demo::uint32", Kind::Uint32, 4, 4),
+        Type::new("demo::BlobString", Kind::BlobString, 8, 4),
+        Type::new("demo::Elem", Kind::Struct, 16, 4).with_fields(vec![
+            Field::new("name", 0, "demo::BlobString"),
+            Field::new("a", 8, "demo::uint32"),
+            Field::new("hidden", 12, "demo::uint32").untyped(),
+        ]),
+        Type::new("demo::BlobArray<demo::Elem>", Kind::BlobArray, 8, 4).with_inner("demo::Elem"),
+        Type::new("demo::Holder", Kind::Struct, 8, 4).with_fields(vec![Field::new(
+            "elems",
+            0,
+            "demo::BlobArray<demo::Elem>",
+        )]),
+        Type::new("demo::Pair", Kind::Struct, 16, 4).with_fields(vec![
+            Field::new("a", 0, "demo::BlobString"),
+            Field::new("b", 8, "demo::BlobString"),
+        ]),
+        Type::new("demo::Base", Kind::Struct, 1, 1).with_fields(vec![Field::new(
+            "v",
+            0,
+            "demo::uint8",
+        )]),
+        Type::new("demo::Derived", Kind::Struct, 4, 2)
+            .with_inner("demo::Base")
+            .with_fields(vec![Field::new("v", 2, "demo::uint16")]),
+    ])
+}
+
+fn elem(name: &str, a: u32) -> Value {
+    Value::Struct(vec![
+        ("name".into(), Value::Text(name.into())),
+        ("a".into(), Value::Uint(a.into())),
+    ])
+}
+
+#[test]
+fn a_grown_array_keeps_its_old_elements_unreflected_bytes_and_their_strings() {
+    let registry = element_registry();
+    let holder = Value::Struct(vec![("elems".into(), Value::List(vec![elem("first", 1)]))]);
+    let mut base = registry.encode("demo::Holder", &holder, None).unwrap();
+    let (start, _) = crate::content::Blob::new(&base).array(0).unwrap();
+    base[start + 12..start + 16].copy_from_slice(&0xabcd_u32.to_le_bytes());
+    let grown = Value::Struct(vec![(
+        "elems".into(),
+        Value::List(vec![elem("first", 1), elem("second", 2)]),
+    )]);
+    let bytes = registry
+        .encode("demo::Holder", &grown, Some(&base))
+        .unwrap();
+    assert_eq!(registry.decode("demo::Holder", &bytes).unwrap(), grown);
+    let (moved, count) = crate::content::Blob::new(&bytes).array(0).unwrap();
+    assert_eq!(count, 2);
+    assert_ne!(moved, start, "the array moved");
+    assert_eq!(
+        bytes[moved + 12..moved + 16],
+        0xabcd_u32.to_le_bytes(),
+        "the hidden field came along"
+    );
+}
+
+#[test]
+fn a_string_kept_as_bytes_moves_with_a_grown_array() {
+    let registry = element_registry();
+    let holder = Value::Struct(vec![(
+        "elems".into(),
+        Value::List(vec![Value::Struct(vec![(
+            "name".into(),
+            Value::Bytes(vec![0xff, 0xfe]),
+        )])]),
+    )]);
+    let bytes = registry.encode("demo::Holder", &holder, None).unwrap();
+    let back = registry.decode("demo::Holder", &bytes).unwrap();
+    let Some(Value::List(elems)) = back.field("elems") else {
+        panic!("elems")
+    };
+    assert_eq!(
+        elems[0].field("name"),
+        Some(&Value::Bytes(vec![0xff, 0xfe]))
+    );
+}
+
+#[test]
+fn unnamed_values_as_decimal_text_write_back() {
+    let registry = registry();
+    let base = registry
+        .encode(
+            "demo::Root",
+            &root("x", vec![], Value::Nil, Value::Nil),
+            None,
+        )
+        .unwrap();
+    let change = Value::Struct(vec![
+        ("side".into(), Value::Text("9".into())),
+        ("mask".into(), Value::Text("4".into())),
+    ]);
+    let bytes = registry.encode("demo::Root", &change, Some(&base)).unwrap();
+    assert_eq!((bytes[28], bytes[29]), (9, 4));
+}
+
+#[test]
+fn a_derived_field_shadows_its_base_field_of_the_same_name() {
+    let registry = element_registry();
+    let base = [7, 0, 1, 0];
+    let value = registry.decode("demo::Derived", &base).unwrap();
+    assert_eq!(value, Value::Struct(vec![("v".into(), Value::Uint(1))]));
+    let bytes = registry
+        .encode(
+            "demo::Derived",
+            &Value::Struct(vec![("v".into(), Value::Uint(500))]),
+            Some(&base),
+        )
+        .unwrap();
+    assert_eq!(bytes, [7, 0, 0xf4, 0x01]);
+}
+
+#[test]
+fn a_changed_string_never_writes_over_bytes_another_header_shares() {
+    let registry = element_registry();
+    // Both headers point at the one "abc" after them.
+    let mut base = vec![16, 0, 0, 0, 3, 0, 0, 0, 8, 0, 0, 0, 3, 0, 0, 0];
+    base.extend_from_slice(b"abc\0");
+    let change = Value::Struct(vec![("a".into(), Value::Text("xyz".into()))]);
+    let bytes = registry.encode("demo::Pair", &change, Some(&base)).unwrap();
+    let pair = registry.decode("demo::Pair", &bytes).unwrap();
+    assert_eq!(pair.field("a"), Some(&Value::Text("xyz".into())));
+    assert_eq!(pair.field("b"), Some(&Value::Text("abc".into())));
+}
