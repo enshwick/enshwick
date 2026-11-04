@@ -16,6 +16,7 @@ fn kind(value: &LuaValue) -> &'static str {
         LuaValue::Table(_) => "a table",
         LuaValue::Function(_) => "a function",
         LuaValue::Buffer(_) => "a buffer",
+        none if *none == LuaValue::NULL => "resources.none()",
         _ => "another kind of value",
     }
 }
@@ -71,7 +72,10 @@ pub(crate) fn to_lua(
             }
             LuaValue::Table(table)
         }
+        (Value::Nil, Ty::Optional(_)) => LuaValue::Nil,
         (value, Ty::Optional(inner_ty)) => to_lua(lua, scope, value, inner_ty)?,
+        // A table drops a nil item or field, so nil inside game data is `none`.
+        (Value::Nil, Ty::Data) => LuaValue::NULL,
         (Value::Function(callback), Ty::Function(signature)) => {
             let scope = scope.clone();
             LuaValue::Function(lua.create_function(move |lua, args: MultiValue| {
@@ -179,6 +183,7 @@ fn data(value: LuaValue, depth: usize) -> Result<Value, Error> {
     )]
     Ok(match value {
         LuaValue::Nil => Value::Nil,
+        none if none == LuaValue::NULL => Value::Nil,
         LuaValue::Boolean(b) => Value::Bool(b),
         LuaValue::Buffer(buffer) => Value::Bytes(buffer.to_vec()),
         LuaValue::Integer(i) => Value::Number(i as f64),

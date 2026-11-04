@@ -104,7 +104,12 @@ impl FromScript for Data {
         Ok(match value {
             Value::Nil => Self::Nil,
             Value::Bool(b) => Self::Bool(b),
-            Value::Number(n) if n.fract() == 0.0 && n.abs() < 9.2e18 => Self::Int(n as i64),
+            // -0.0 stays a float: as an integer it would lose its sign.
+            Value::Number(n)
+                if n.fract() == 0.0 && n.abs() < 9.2e18 && (n != 0.0 || n.is_sign_positive()) =>
+            {
+                Self::Int(n as i64)
+            }
             Value::Number(n) => Self::Float(n),
             Value::String(text) => Self::Text(text),
             Value::Bytes(bytes) => Self::Bytes(bytes),
@@ -129,16 +134,13 @@ impl FromScript for Data {
     }
 }
 
-impl Answer for Data {
+impl Answer for Result<Data, Error> {
     const TY: &'static Ty = &Ty::Data;
 
-    /// The script's value; nothing for an error, which leaves the resource
-    /// as it was.
+    /// The script's value, or why there is none: an error the runtime
+    /// reported, or a return that is not game data.
     fn from_answer(answer: Result<Value, Error>) -> Self {
-        answer
-            .ok()
-            .and_then(|value| Self::from_value(value).ok())
-            .unwrap_or(Self::Nil)
+        answer.and_then(Data::from_value)
     }
 }
 
@@ -146,11 +148,22 @@ fn text(value: impl Into<String>) -> Data {
     Data::Text(value.into())
 }
 
+/// A struct of `fields` without those that are nil, so a script reads an
+/// absent name as nil rather than as `resources.none()`.
+fn record(fields: Vec<(String, Data)>) -> Data {
+    Data::Struct(
+        fields
+            .into_iter()
+            .filter(|(_, value)| *value != Data::Nil)
+            .collect(),
+    )
+}
+
 fn attributes(list: &[super::Attribute<'_>]) -> Data {
     Data::List(
         list.iter()
             .map(|a| {
-                Data::Struct(vec![
+                record(vec![
                     ("name".into(), text(a.name())),
                     ("value_type".into(), a.value_type().map_or(Data::Nil, text)),
                     ("value".into(), text(a.value())),
@@ -163,7 +176,7 @@ fn attributes(list: &[super::Attribute<'_>]) -> Data {
 /// `ty` as script data, by the names of its accessors.
 fn describe(ty: &Type<'_>) -> Data {
     let optional = |name: Option<&str>| name.map_or(Data::Nil, text);
-    Data::Struct(vec![
+    record(vec![
         ("name".into(), text(ty.name())),
         ("impact_name".into(), text(ty.impact_name())),
         ("qualified_name".into(), text(ty.qualified_name())),
@@ -195,7 +208,7 @@ fn describe(ty: &Type<'_>) -> Data {
                 ty.fields()
                     .iter()
                     .map(|f| {
-                        Data::Struct(vec![
+                        record(vec![
                             ("name".into(), text(f.name())),
                             ("type_name".into(), optional(f.type_name())),
                             ("offset".into(), Data::Uint(f.offset().into())),
@@ -262,15 +275,13 @@ fn hash_of(data: &Data) -> Result<[u32; 4], Off> {
 #[derive(Clone, Copy, Debug)]
 pub struct Resources {
     host: Host,
-    registry: &'static Registry<'static>,
 }
 
 impl Resources {
     /// `key` as script data: `{ guid, type, part }`, the type by its
     /// qualified name when the build has it.
-    fn key_data(&self, key: ResourceKey) -> Data {
-        let ty = self
-            .registry
+    fn key_data(registry: &Registry<'_>, key: ResourceKey) -> Data {
+        let ty = registry
             .hashed(key.type_hash)
             .map_or(Data::Uint(key.type_hash.into()), |ty| {
                 text(ty.qualified_name())
@@ -284,7 +295,7 @@ impl Resources {
 
     /// The key `data` names: a GUID as text, a type by qualified name or
     /// hash, a part (0 when left out).
-    fn key_of(&self, data: &Data) -> Result<ResourceKey, Off> {
+    fn key_of(data: &Data) -> Result<ResourceKey, Off> {
         let guid = match data.field("guid") {
             Some(Data::Text(text)) => Guid::try_parse(text),
             Some(Data::Guid(guid)) => Some(*guid),
@@ -292,8 +303,7 @@ impl Resources {
         }
         .ok_or_else(|| Off::new("a key's guid is GUID text"))?;
         let type_hash = match data.field("type") {
-            Some(Data::Text(name)) => self
-                .registry
+            Some(Data::Text(name)) => Registry::game()?
                 .named(name)
                 .map(Type::qualified_hash)
                 .ok_or_else(|| Off::new(format!("{name} is not a type of this build")))?,
@@ -332,40 +342,67 @@ impl Resources {
     /// The type of qualified name `name`, the full name with its namespace, as
     /// a table of its names, hashes, layout, fields, constants and
     /// attributes; nil when the build lacks it.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] outside the game and when the game holds no reflection data,
+    /// as for every call that reads the types.
     #[script]
-    pub fn named(self, name: &str) -> Data {
-        self.registry.named(name).map_or(Data::Nil, describe)
+    pub fn named(self, name: &str) -> Result<Option<Data>, Off> {
+        Ok(Registry::game()?.named(name).map(describe))
     }
 
     /// The type whose qualified name hashes to `hash`, as `named` gives it.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] as for `named`.
     #[script]
-    pub fn hashed(self, hash: u32) -> Data {
-        self.registry.hashed(hash).map_or(Data::Nil, describe)
+    pub fn hashed(self, hash: u32) -> Result<Option<Data>, Off> {
+        Ok(Registry::game()?.hashed(hash).map(describe))
     }
 
     /// The type of impact name `name`, such as `demo.Table`, as `named`
     /// gives it.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] as for `named`.
     #[script]
-    pub fn impact_named(self, name: &str) -> Data {
-        self.registry.impact_named(name).map_or(Data::Nil, describe)
+    pub fn impact_named(self, name: &str) -> Result<Option<Data>, Off> {
+        Ok(Registry::game()?.impact_named(name).map(describe))
     }
 
     /// The type whose impact name hashes to `hash`, as `named` gives it.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] as for `named`.
     #[script]
-    pub fn impact_hashed(self, hash: u32) -> Data {
-        self.registry
-            .impact_hashed(hash)
-            .map_or(Data::Nil, describe)
+    pub fn impact_hashed(self, hash: u32) -> Result<Option<Data>, Off> {
+        Ok(Registry::game()?.impact_hashed(hash).map(describe))
     }
 
     /// The qualified name of every type of the build.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] as for `named`.
     #[script]
-    #[must_use]
-    pub fn type_names(self) -> Vec<String> {
-        self.registry
+    pub fn type_names(self) -> Result<Vec<String>, Off> {
+        Ok(Registry::game()?
             .iter()
             .map(|ty| ty.qualified_name().to_owned())
-            .collect()
+            .collect())
+    }
+
+    /// The value that stands for nil inside game data: an absent optional
+    /// or variant, or one to clear in an edit, where a table cannot hold nil.
+    /// A field the edit leaves out keeps its value.
+    #[script]
+    #[must_use]
+    pub fn none(self) -> Data {
+        Data::Nil
     }
 
     /// The keys of the game's own resources of the type qualified as
@@ -376,9 +413,10 @@ impl Resources {
     /// [`Off`] for a type the build lacks and when the archive does not read.
     #[script]
     pub fn resource_keys(self, type_name: Option<String>) -> Result<Data, Off> {
+        let registry = Registry::game()?;
         let ty = match type_name {
             Some(name) => Some(
-                self.registry
+                registry
                     .named(&name)
                     .ok_or_else(|| Off::new(format!("{name} is not a type of this build")))?,
             ),
@@ -386,7 +424,9 @@ impl Resources {
         };
         let keys = self.host.resource_keys(ty)?;
         Ok(Data::List(
-            keys.into_iter().map(|key| self.key_data(key)).collect(),
+            keys.into_iter()
+                .map(|key| Self::key_data(registry, key))
+                .collect(),
         ))
     }
 
@@ -437,7 +477,7 @@ impl Resources {
     /// [`Off`] when the bytes do not read as that type.
     #[script]
     pub fn decode(self, type_name: &str, bytes: &Bytes) -> Result<Data, Off> {
-        Ok(self.registry.decode(type_name, &bytes.0)?)
+        Ok(Registry::game()?.decode(type_name, &bytes.0)?)
     }
 
     /// `value`, of the type qualified as `type_name`, as resource bytes:
@@ -450,7 +490,7 @@ impl Resources {
     #[script]
     pub fn encode(self, type_name: &str, value: &Data, base: Option<Bytes>) -> Result<Bytes, Off> {
         let base = base.map(|base| base.0);
-        Ok(Bytes(self.registry.encode(
+        Ok(Bytes(Registry::game()?.encode(
             type_name,
             value,
             base.as_deref(),
@@ -481,7 +521,7 @@ impl Resources {
     /// the serve.
     #[script]
     pub fn serve_new(self, key: &Data, value: &Data) -> Result<(), Off> {
-        super::table::serve_new(self.host, self.key_of(key)?, value)
+        super::table::serve_new(self.host, Self::key_of(key)?, value)
     }
 
     /// The version string of the game's archive: the build number, the
@@ -500,8 +540,8 @@ impl Resources {
     /// larger than 2048 on a side.
     #[script]
     #[must_use]
-    pub fn decode_png(self, png: &Bytes) -> Data {
-        crate::content::icons::decode_png(&png.0).map_or(Data::Nil, |(pixels, width, height)| {
+    pub fn decode_png(self, png: &Bytes) -> Option<Data> {
+        crate::content::icons::decode_png(&png.0).map(|(pixels, width, height)| {
             Data::Struct(vec![
                 ("width".into(), Data::Uint(width.into())),
                 ("height".into(), Data::Uint(height.into())),
@@ -619,13 +659,15 @@ impl Resources {
     /// that does not read as its type.
     #[script]
     pub fn game_value(self, key: &Data) -> Result<Data, Off> {
-        self.host.game_value(self.key_of(key)?)
+        self.host.game_value(Self::key_of(key)?)
     }
 
     /// Serves the resource `key`, built from the resource `base` the first
     /// time the game reads it: `patch` gets the base's value and returns
     /// the value to serve, which may name only the fields it changes; nil
-    /// serves the base unchanged. Allowed while the mod initialises.
+    /// serves the base unchanged. A patch that fails, returns what is not
+    /// game data or does not fit the type is logged, and the base is served
+    /// unchanged. Allowed while the mod initialises.
     ///
     /// # Errors
     ///
@@ -636,27 +678,29 @@ impl Resources {
         self,
         key: &Data,
         base: &Data,
-        patch: impl Fn(Data) -> Data + Send + Sync + 'static,
+        patch: impl Fn(Data) -> Result<Data, Error> + Send + Sync + 'static,
     ) -> Result<(), Off> {
-        let (key, base) = (self.key_of(key)?, self.key_of(base)?);
-        let registry = self.registry;
+        let (key, base) = (Self::key_of(key)?, Self::key_of(base)?);
+        let registry = Registry::game()?;
         let name = registry
             .hashed(base.type_hash)
             .ok_or_else(|| Off::new("the base's type is not a type of this build"))?
             .qualified_name();
         let host = self.host;
         crate::content::serve(self.host, key, base, move |bytes| {
-            let warn = |error: super::CodecError| {
-                host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
+            let edited = || -> Result<Vec<u8>, String> {
+                let value = registry.decode(name, bytes).map_err(|e| e.to_string())?;
+                match patch(value).map_err(|e| e.to_string())? {
+                    Data::Nil => Ok(bytes.to_vec()),
+                    edited => registry
+                        .encode(name, &edited, Some(bytes))
+                        .map_err(|e| e.to_string()),
+                }
             };
-            let value = registry.decode(name, bytes).map_err(warn).ok()?;
-            match patch(value) {
-                Data::Nil => Some(bytes.to_vec()),
-                edited => registry
-                    .encode(name, &edited, Some(bytes))
-                    .map_err(warn)
-                    .ok(),
-            }
+            Some(edited().unwrap_or_else(|error| {
+                host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
+                bytes.to_vec()
+            }))
         })
     }
 }
@@ -668,10 +712,7 @@ impl crate::script::Bound for Resources {
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LOOKUPS];
 
     fn resolve(load: &mut crate::Load<'_>) -> Result<Self, Off> {
-        Ok(Self {
-            host: load.host(),
-            registry: Registry::game()?,
-        })
+        Ok(Self { host: load.host() })
     }
 }
 
