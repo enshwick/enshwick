@@ -18,7 +18,8 @@ const LUAU_KEYWORDS: &[&str] = &[
 
 /// The namespaces and the last name of a full name, split at `::` outside
 /// template brackets: `keen::ecs::Health` is `(["keen", "ecs"], "Health")`.
-pub(crate) fn split(full: &str) -> (Vec<&str>, &str) {
+#[must_use]
+pub fn split(full: &str) -> (Vec<&str>, &str) {
     let mut parts = Vec::new();
     let (mut depth, mut start) = (0usize, 0);
     let bytes = full.as_bytes();
@@ -69,7 +70,8 @@ fn words(name: &str) -> Vec<String> {
 
 /// `name` as a Rust field or module name: `rangeX` is `range_x`, a keyword
 /// a raw identifier.
-pub(crate) fn snake(name: &str) -> String {
+#[must_use]
+pub fn snake(name: &str) -> String {
     let joined = words(name)
         .iter()
         .map(|w| w.to_ascii_lowercase())
@@ -79,7 +81,8 @@ pub(crate) fn snake(name: &str) -> String {
 }
 
 /// `name` as a Rust constant: `MagicalFog` is `MAGICAL_FOG`.
-pub(crate) fn shout(name: &str) -> String {
+#[must_use]
+pub fn shout(name: &str) -> String {
     let joined = words(name)
         .iter()
         .map(|w| w.to_ascii_uppercase())
@@ -88,11 +91,14 @@ pub(crate) fn shout(name: &str) -> String {
     rust_ident(joined)
 }
 
-/// `name` as a Rust type: each piece between characters that are no
+/// `name` as a Rust type.
+///
+/// Each piece between characters that are no
 /// letter or digit starts with a capital and the pieces join, as in
 /// `uint` to `Uint` or a template's name; an underscore stays only between
 /// two digits, as in `f32_4x4` to `F32_4x4`.
-pub(crate) fn camel(name: &str) -> String {
+#[must_use]
+pub fn camel(name: &str) -> String {
     let mut joined = String::new();
     for piece in name.split(|c: char| !c.is_ascii_alphanumeric()) {
         let mut chars = piece.chars();
@@ -123,7 +129,8 @@ fn rust_ident(mut name: String) -> String {
 }
 
 /// Whether `name` is a bare Luau field name.
-pub(crate) fn is_luau_name(name: &str) -> bool {
+#[must_use]
+pub fn is_luau_name(name: &str) -> bool {
     !name.is_empty()
         && !name.starts_with(|c: char| c.is_ascii_digit())
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
@@ -131,7 +138,8 @@ pub(crate) fn is_luau_name(name: &str) -> bool {
 }
 
 /// `name` with `_2`, `_3` and on appended until `taken` does not hold it.
-pub(crate) fn unique(name: String, taken: &mut std::collections::BTreeSet<String>) -> String {
+#[must_use]
+pub fn unique(name: String, taken: &mut std::collections::BTreeSet<String>) -> String {
     if !taken.contains(&name) {
         taken.insert(name.clone());
         return name;

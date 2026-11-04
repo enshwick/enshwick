@@ -220,6 +220,8 @@ pub mod terrain;
 #[cfg(feature = "test")]
 pub mod test;
 pub mod time;
+#[cfg(feature = "typed")]
+pub mod typed;
 pub mod ui;
 pub mod vetoes;
 pub mod voxels;

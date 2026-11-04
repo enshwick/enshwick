@@ -119,12 +119,105 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
     if sections.is_empty() {
         bail!("no row is for the old build {}", spell(old_fp));
     }
-    let text = report::render(&spell(old_fp), &spell(new_fp), &sections);
+    // The typed part never costs the table report: a failure is a line of it.
+    let compared = old_side(ported.first().map(|(side, ..)| *side), old_fp)
+        .and_then(|side| typed(args, side, &old_bytes, &new_bytes, old_fp, new_fp));
+    let (typed_text, typed_settled) = match &compared {
+        Ok(typed) => (typed.report.clone(), typed.settled),
+        Err(why) => (format!("Typed API: not compared: {why:#}\n"), false),
+    };
+    let text = format!(
+        "{}\n{typed_text}",
+        report::render(&spell(old_fp), &spell(new_fp), &sections)
+    );
     finish(staged, args.report.as_deref(), &text)?;
-    Ok(sections
-        .iter()
-        .flat_map(|s| &s.lines)
-        .all(|l| !l.status.needs_human()))
+    if let (true, Ok(typed)) = (args.write, &compared) {
+        write_typed(args, typed, new_fp)?;
+    }
+    Ok(typed_settled
+        && sections
+            .iter()
+            .flat_map(|s| &s.lines)
+            .all(|l| !l.status.needs_human()))
+}
+
+/// The side of the old build `fingerprint`: the side of the repository's
+/// table rows that ported, else of a table compiled into this binary.
+fn old_side(
+    ported: Option<Side>,
+    fingerprint: Fingerprint,
+) -> anyhow::Result<enshwick_gamedata::Side> {
+    if let Some(side) = ported {
+        return Ok(match side {
+            Side::Server => enshwick_gamedata::Side::Server,
+            Side::Client => enshwick_gamedata::Side::Client,
+        });
+    }
+    crate::generate::side_of(&crate::generate::tables()?, fingerprint)
+        .with_context(|| format!("no table is for the old build {}", spell(fingerprint)))
+}
+
+/// The typed API's part of a pin: the report of what the new build changed
+/// in the covered types, whether all of it settles without a person, and
+/// what `--write` keeps of it.
+struct Typed {
+    report: String,
+    settled: bool,
+    side: enshwick_gamedata::Side,
+    after: enshwick_gamedata::typed::Catalogue,
+    renames: enshwick_gamedata::typed::Renames,
+}
+
+/// Compares the covered types of the two builds.
+fn typed(
+    args: &Args,
+    side: enshwick_gamedata::Side,
+    old: &[u8],
+    new: &[u8],
+    old_fp: Fingerprint,
+    new_fp: Fingerprint,
+) -> anyhow::Result<Typed> {
+    let before = crate::generate::catalogue(old).context("the old executable")?;
+    let after = crate::generate::catalogue(new).context("the new executable")?;
+    let known = crate::generate::renames(&args.repo)?;
+    let diff = before.diff(&after, &known);
+    Ok(Typed {
+        report: format!(
+            "Typed API, {} build {} to {}:\n{diff}",
+            side.as_str(),
+            old_fp.age(),
+            new_fp.age()
+        ),
+        settled: !diff.needs_person(),
+        side,
+        renames: known.clone().with(&diff),
+        after,
+    })
+}
+
+/// With `--write` in the enshwick repository: the new build's snapshot,
+/// the renames its diff found in the rename table and, for a server build,
+/// the typed API regenerated. Another repository, such as the mods', holds
+/// no typed API and is left alone.
+fn write_typed(args: &Args, typed: &Typed, new_fp: Fingerprint) -> anyhow::Result<()> {
+    let snapshots = args.repo.join(enshwick_gamedata::typed::SNAPSHOTS);
+    if !snapshots.is_dir() {
+        return Ok(());
+    }
+    if typed.renames != crate::generate::renames(&args.repo)? {
+        let path = snapshots.join(enshwick_gamedata::typed::RENAMES);
+        let text = typed.renames.to_toml().context("the rename table")?;
+        fs::write(&path, text).with_context(|| path.display().to_string())?;
+    }
+    crate::generate::write_snapshot(&args.repo, &typed.after, typed.side, new_fp)?;
+    if typed.side == enshwick_gamedata::Side::Server {
+        let steam = args
+            .steam_build
+            .map_or_else(String::new, |steam| format!(" (Steam {steam})"));
+        let build = format!("server build {}{steam}", new_fp.age());
+        crate::generate::write_api(&args.repo, &typed.after, &build)?;
+    }
+    Ok(())
 }
 
 /// Writes the report to `report` before the staged files, so a report that
@@ -505,6 +598,16 @@ mod tests {
             new_name("1.0 server", None, fp),
             format!("1.0 server ({}/9)", "ab".repeat(16))
         );
+    }
+
+    #[test]
+    fn the_old_build_s_side_comes_from_the_repository_row_this_binary_may_not_know() {
+        let unknown = Fingerprint::new([0xcd; 16], 1);
+        assert_eq!(
+            old_side(Some(Side::Client), unknown).unwrap(),
+            enshwick_gamedata::Side::Client
+        );
+        assert!(old_side(None, unknown).is_err());
     }
 
     #[test]

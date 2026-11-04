@@ -134,6 +134,8 @@ mod terrain;
 mod ticks;
 #[cfg(feature = "unstable")]
 mod transactions;
+#[cfg(feature = "typed")]
+mod typed;
 mod ui;
 mod vanilla_items;
 mod vetoes;

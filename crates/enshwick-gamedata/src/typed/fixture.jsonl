@@ -1,0 +1,14 @@
+{"name":"demo::BlobArray<demo::ecs::Fuel>","kind":24,"size":8,"align":4,"inner":"demo::ecs::Fuel"}
+{"name":"demo::BlobOptional<demo::ecs::Fuel>","kind":26,"size":4,"align":4,"inner":"demo::ecs::Fuel"}
+{"name":"demo::BlobString","kind":25,"size":8,"align":4}
+{"name":"demo::ItemId","kind":17,"size":4,"align":4,"inner":"demo::uint32"}
+{"name":"demo::LootResource","kind":18,"size":24,"align":4,"fields":[{"name":"items","offset":0,"ty":"demo::BlobArray<demo::ecs::Fuel>"},{"name":"name","offset":8,"ty":"demo::BlobString"},{"name":"spare","offset":16,"ty":"demo::BlobOptional<demo::ecs::Fuel>"},{"name":"item","offset":20,"ty":"demo::ItemId"}],"roles":["resource"]}
+{"name":"demo::bool","kind":1,"size":1,"align":1}
+{"name":"demo::ecs::Component","kind":18,"size":1,"align":1}
+{"name":"demo::ecs::Event","kind":18,"size":8,"align":8}
+{"name":"demo::ecs::Faction","kind":12,"size":1,"align":1,"values":[["Player",0],["Enemy",1],["Other",2]]}
+{"name":"demo::ecs::FactionFlags","kind":13,"size":1,"align":1,"inner":"demo::ecs::Faction"}
+{"name":"demo::ecs::Fuel","kind":18,"size":8,"align":4,"base":"demo::ecs::Component","fields":[{"name":"amount","offset":0,"ty":"demo::float32"},{"name":"isBurning","offset":4,"ty":"demo::bool"},{"name":"hidden","offset":5}],"attributes":["server_only"],"roles":["component"]}
+{"name":"demo::ecs::Rang","kind":18,"size":16,"align":8,"base":"demo::ecs::Event","fields":[{"name":"faction","offset":8,"ty":"demo::ecs::Faction"},{"name":"allies","offset":9,"ty":"demo::ecs::FactionFlags"}],"roles":["event"]}
+{"name":"demo::float32","kind":10,"size":4,"align":4}
+{"name":"demo::uint32","kind":6,"size":4,"align":4}

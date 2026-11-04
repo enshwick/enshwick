@@ -9,6 +9,12 @@ Each entry names the pull request that made the change.
 ### Added
 
 - `cargo enshwick luau` writes the `controls` namespace (#930).
+- `cargo enshwick generate` writes the typed API from the newest server
+  build's snapshot, snapshots an executable first with `--from`, and with
+  `--check` fails when the committed files differ. `cargo enshwick pin`
+  reports what the new build changed in the covered types and marks what
+  needs a person; with `--write` in the enshwick repository it keeps the new
+  build's snapshot and renames and writes the typed API again (#931).
 
 ### Changed
 

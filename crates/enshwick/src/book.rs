@@ -27,7 +27,7 @@ chapters! {
     Services => "services.md",
     Luau => "luau.md",
     FindingTheGame => "finding-the-game.md",
-    GameTypes => "game-types.md",
+    TypedStability => "concepts/typed-stability.md",
     ResourceValues => "resource-values.md",
     Hooks => "hooks.md",
     MidFunctionHooks => "mid-function-hooks.md",
@@ -66,6 +66,14 @@ struct Calls;
 #[doc = include_str!("../../../book/src/extending.md")]
 #[expect(dead_code, reason = "the doc comment carries the chapter")]
 struct Extending;
+
+// The typed API's chapter runs only with its feature.
+#[cfg(feature = "typed")]
+mod typed {
+    chapters! {
+        GameTypes => "game-types.md",
+    }
+}
 
 // Chapters whose examples use unstable calls, if only to show a stable one
 // in context, run only with the `unstable` feature.

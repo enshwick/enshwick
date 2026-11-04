@@ -3,7 +3,6 @@
 //! structs the API does not wrap.
 
 mod luau;
-mod names;
 mod rust;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -141,7 +140,7 @@ pub(crate) fn select(catalogue: &Catalogue, wanted: &[String]) -> anyhow::Result
 
 /// The executable `from` names: the file itself, or the game's executable
 /// in the folder.
-fn executable(from: &Path) -> anyhow::Result<PathBuf> {
+pub(crate) fn executable(from: &Path) -> anyhow::Result<PathBuf> {
     if from.is_file() {
         return Ok(from.to_path_buf());
     }

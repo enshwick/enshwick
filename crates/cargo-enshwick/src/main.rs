@@ -10,6 +10,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use enshwick::content::Guid;
 
 mod deps;
+mod generate;
 mod install;
 mod manifest;
 mod new;
@@ -137,6 +138,20 @@ enum Command {
         #[arg(long)]
         luau: Option<PathBuf>,
     },
+    /// Writes the typed API, `enshwick::typed`, from the newest server
+    /// build's snapshot of the game's reflection; with `--from`, snapshots
+    /// that executable's reflection first.
+    Generate {
+        /// The game executable, or the game folder holding it, to snapshot.
+        #[arg(long, conflicts_with = "check")]
+        from: Option<PathBuf>,
+        /// The enshwick repository to write in.
+        #[arg(long, default_value = ".")]
+        root: PathBuf,
+        /// Writes nothing and fails when the committed files differ.
+        #[arg(long)]
+        check: bool,
+    },
     /// Prints the GUID and game id of each content id, `<mod>:<name>`.
     Id {
         /// The content ids.
@@ -240,6 +255,7 @@ fn main() -> ExitCode {
             rust,
             luau,
         } => types::run(&from, &names, rust.as_deref(), luau.as_deref()),
+        Command::Generate { from, root, check } => generate::run(&root, from.as_deref(), check),
     };
     match outcome {
         Ok(done) => {

@@ -23,7 +23,17 @@ Each entry names the pull request that made the change.
   them with `controls.declare`. The fake host reads keys on a client with
   `keys`, looks at a player's game actions with `game_actions` and takes the
   player's keys with `FakeHost::bind` (#930).
-
+- `typed`, behind the `typed` feature, which turns on `unstable`: a typed
+  item for every component, event and resource the game reflects (648, 128
+  and 211 on server build 479) and every type they reach, generated from the
+  game's reflection and read and written by field name through the
+  `resources` codec. `ComponentType`, `EventType` and `ResourceType` resolve
+  an item on the running build and check its shape, every nested array and
+  optional included, so a type a game update changed turns off alone with
+  the build named; they read and write a component, handle an event, read a
+  game resource and serve a changed one in load order. The book's chapter on
+  the game's own types shows each, and a concepts chapter explains what each
+  kind of game update does (#931).
 - `resources` reads any game resource as typed values and writes it back:
   `Registry::game` holds every reflected type of the running build (names,
   hashes, layout, fields, constants, attributes), `Registry::decode` and

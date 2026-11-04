@@ -29,6 +29,7 @@ pub mod reflect;
 mod resolve;
 mod routes;
 mod table;
+pub mod typed;
 mod version;
 
 pub use parts::{Part, PartState};
