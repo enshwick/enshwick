@@ -1,0 +1,38 @@
+//! Any game resource as typed values, read and written by its reflected type.
+//!
+//! The [`Registry`] holds the build's types; its codec reads a resource's
+//! bytes into a [`Value`] tree and writes the tree back for
+//! [`Load::serve`](crate::Load::serve). Type names are the game's own
+//! reflected names, given as data.
+//!
+//! # Examples
+//!
+//! ```
+//! use enshwick::resources::{Field, Kind, Registry, Type, Value};
+//!
+//! let registry = Registry::new([
+//!     Type::new("keen::float32", Kind::Float32, 4, 4),
+//!     Type::new("keen::Table", Kind::Struct, 4, 4)
+//!         .with_fields(vec![Field::new("damage", 0, "keen::float32")]),
+//! ]);
+//! let base = 2.5f32.to_le_bytes();
+//! let mut table = registry.decode("keen::Table", &base)?;
+//! *table.field_mut("damage").ok_or("no damage")? = Value::Float(5.0);
+//! assert_eq!(registry.encode("keen::Table", &table, Some(&base))?, 5.0f32.to_le_bytes());
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+
+mod codec;
+mod kind;
+mod registry;
+mod types;
+mod value;
+
+pub use codec::CodecError;
+pub use kind::Kind;
+pub use registry::Registry;
+pub use types::{Attribute, Constant, Field, Type, fnv1a32};
+pub use value::{Value, Variant};
+
+#[cfg(test)]
+mod tests;

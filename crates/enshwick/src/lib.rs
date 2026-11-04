@@ -193,6 +193,7 @@ mod rates;
 pub mod raw;
 #[cfg(doctest)]
 mod refused;
+pub mod resources;
 mod rules;
 pub mod schedule;
 #[cfg(feature = "unstable")]

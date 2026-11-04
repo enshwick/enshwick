@@ -293,16 +293,66 @@ impl Archive {
     }
 
     /// The keys of the resources of type `type_hash`, the fnv1a32 hash of
-    /// the type's qualified name, for a type the game keeps one resource of.
+    /// the type's qualified name, in the archive's order.
     #[must_use]
     pub fn keys_of(&self, type_hash: u32) -> Vec<ResourceKey> {
-        self.resources
-            .keys()
-            .filter(|(_, ty, _)| *ty == type_hash)
-            .map(|&(guid, type_hash, part)| ResourceKey {
+        let mut keys = self.keys();
+        keys.retain(|key| key.type_hash == type_hash);
+        keys
+    }
+
+    /// Every resource key the archive holds, in the order their bytes lie,
+    /// so reading them in turn unpacks each chunk once.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::archive::Archive;
+    ///
+    /// if let Some(archive) = Archive::open(std::path::Path::new("game"), "enshrouded") {
+    ///     assert!(!archive.keys().is_empty());
+    /// }
+    /// ```
+    #[must_use]
+    pub fn keys(&self) -> Vec<ResourceKey> {
+        let mut keys: Vec<_> = self.resources.iter().collect();
+        keys.sort_unstable_by_key(|(key, place)| (place.at, **key));
+        keys.into_iter()
+            .map(|(&(guid, type_hash, part), _)| ResourceKey {
                 guid,
                 type_hash,
                 part,
+            })
+            .collect()
+    }
+
+    /// Every content hash the archive holds, in the archive's order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::archive::Archive;
+    ///
+    /// if let Some(archive) = Archive::open(std::path::Path::new("game"), "enshrouded") {
+    ///     let first = archive.contents().into_iter().next();
+    ///     assert!(first.is_none_or(|hash| archive.content(&hash).is_some()));
+    /// }
+    /// ```
+    #[must_use]
+    pub fn contents(&self) -> Vec<ContentHash> {
+        let Some((keys, count)) = location(&self.header, CONTENT_KEYS) else {
+            return Vec::new();
+        };
+        let held = self.header.len().saturating_sub(keys) / 16;
+        (0..count.min(held))
+            .filter_map(|i| {
+                let key = keys + i * 16;
+                Some([
+                    word(&self.header, key)?,
+                    word(&self.header, key + 4)?,
+                    word(&self.header, key + 8)?,
+                    word(&self.header, key + 12)?,
+                ])
             })
             .collect()
     }
