@@ -11,17 +11,18 @@ Each entry names the pull request that made the change.
 - `controls` lets a mod declare controls: a name, a label, a default and a
   second `Key` (a scan code with exact modifiers, or a mouse button), the
   phases it fires on and a hold time, with `Load::control`. The client
-  fires them only while its player is in the world with nothing open, and
-  never takes the key from the game; a control linked to a `GameAction`
-  fires on the server for the player whose action fired, also without
-  Enshwick on their client. Players rebind them on the Mods screen's
+  fires them only while its player is in the world with no window open, a
+  building tool in hand included, and never takes the key from the game; a
+  control linked to a `GameAction` fires on the server, after the step, for
+  the player whose action fired, also without Enshwick on their client.
+  Players rebind them on the Mods screen's
   Controls page, which captures the next key and warns when two controls
   share one, and the keys they change live in `mod-controls.toml` in the
   game's folder. `Actions::run` sends the server a player action from a
   control. `HostApi::control` and `run_action`, ABI 11.3. Luau declares
-  them with `controls.declare`. The fake host reads keys with `keys`, fires
-  game actions with `game_action` and takes the player's keys with
-  `FakeHost::bind` (#930).
+  them with `controls.declare`. The fake host reads keys on a client with
+  `keys`, looks at a player's game actions with `game_actions` and takes the
+  player's keys with `FakeHost::bind` (#930).
 
 - `resources` reads any game resource as typed values and writes it back:
   `Registry::game` holds every reflected type of the running build (names,
