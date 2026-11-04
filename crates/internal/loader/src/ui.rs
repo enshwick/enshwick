@@ -100,6 +100,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::HOST_ANSWER.id(),
     pinned::ui::HOST_ANSWERED.id(),
     pinned::ui::HUD.id(),
+    pinned::ui::HUD_SCREEN.id(),
     pinned::ui::HUD_VISIBLE.id(),
     pinned::ui::LABEL_ALIGN.id(),
     pinned::ui::LABEL_DRAW.id(),

@@ -58,10 +58,12 @@ pub enum Feature {
     Points,
     /// Calls the mod serves to others.
     Calls,
+    /// Controls the mod declared.
+    Controls,
 }
 
 /// How many features there are.
-pub const FEATURES: usize = 19;
+pub const FEATURES: usize = 20;
 
 impl Feature {
     /// The feature in the report.
@@ -87,6 +89,7 @@ impl Feature {
             Self::Resources => "resources",
             Self::Points => "extension points",
             Self::Calls => "calls",
+            Self::Controls => "controls",
         }
     }
 
@@ -110,6 +113,7 @@ impl Feature {
         Self::Resources,
         Self::Points,
         Self::Calls,
+        Self::Controls,
     ];
 }
 

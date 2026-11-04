@@ -46,6 +46,7 @@ pub(crate) const FRAME_STRETCH: Symbol = Symbol::new("ui.frame_stretch");
 pub(crate) const HOST_ANSWER: Constant = Constant::new("ui.host_answer");
 pub(crate) const HOST_ANSWERED: Constant = Constant::new("ui.host_answered");
 pub(crate) const HUD: Symbol = Symbol::new("ui.hud");
+pub(crate) const HUD_SCREEN: Constant = Constant::new("ui.hud_screen");
 pub(crate) const HUD_VISIBLE: Symbol = Symbol::new("ui.hud_visible");
 pub(crate) const LABEL_ALIGN: Constant = Constant::new("ui.label_align");
 pub(crate) const LABEL_DRAW: Symbol = Symbol::new("ui.label_draw");

@@ -918,6 +918,11 @@ class = "pattern"
 reason = "read in building.seam_check, which has no route"
 
 [[class]]
+entries = ["ui.hud_screen"]
+class = "pattern"
+reason = "read in ui.hud_visible after three loads no one-step route shape covers"
+
+[[class]]
 entries = ["building.seam_check"]
 class = "pattern"
 reason = "its 1 caller(s) are anonymous functions no route reaches, and it holds no unique string or type"

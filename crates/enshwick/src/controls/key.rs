@@ -265,6 +265,13 @@ impl Key {
         self.0 & !CODE
     }
 
+    /// Every key a control may take, without modifiers, for the loader's
+    /// key capture.
+    #[doc(hidden)]
+    pub fn every() -> impl Iterator<Item = Self> {
+        NAMES.iter().map(|(_, code)| Self(*code))
+    }
+
     /// Whether the key is a mouse button.
     ///
     /// # Examples

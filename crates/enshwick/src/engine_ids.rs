@@ -287,6 +287,10 @@ ids! {
     INTERACTION_OFFER_ACCEPT_GUEST = "interaction_offer.accept_guest";
     INTERACTION_OFFER_DISABLED = "interaction_offer.disabled";
     PLAYER_INPUT = "player_input";
+    PLAYER_INPUT_DIGITAL = "player_input.digital";
+    PLAYER_INPUT_TYPE = "player_input_type";
+    HUD_SCREEN_TYPE = "hud_screen_type";
+    HUD_SCREEN_IN_GAME = "hud_screen_type.in_game";
     BOSS = "boss";
     INTERACTION_LOCK = "interaction_lock";
     INTERACTION_LOCK_ITEM = "interaction_lock.item";

@@ -813,6 +813,25 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::ecs::InteractionOfferRuntime", "isDisabled"),
     ),
     (ids::PLAYER_INPUT, Fact::Type("keen::ecs::PlayerInput")),
+    (
+        ids::PLAYER_INPUT_DIGITAL,
+        Fact::Path(&[
+            ("keen::ecs::PlayerInput", "fromClient"),
+            ("keen::ecs::ClientPlayerInputData", "digitalInput"),
+        ]),
+    ),
+    (
+        ids::PLAYER_INPUT_TYPE,
+        Fact::Type("keen::ecs::PlayerInputType"),
+    ),
+    (ids::HUD_SCREEN_TYPE, Fact::Type("keen::HudScreenType")),
+    (
+        ids::HUD_SCREEN_IN_GAME,
+        Fact::Constant {
+            ty: "keen::HudScreenType",
+            name: "InGame",
+        },
+    ),
     (ids::BOSS, Fact::Type("keen::ecs::Boss")),
     (
         ids::INTERACTION_LOCK,
