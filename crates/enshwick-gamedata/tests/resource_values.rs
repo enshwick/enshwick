@@ -48,18 +48,33 @@ mod tests {
                 return None;
             }
             let registry = self.registry;
+            let mut ty = ty;
+            for _ in 0..16 {
+                if ty.kind() != Kind::Typedef {
+                    break;
+                }
+                ty = registry.named(ty.inner()?)?;
+            }
             let inner = || ty.inner().and_then(|name| registry.named(name));
             match ty.kind() {
-                Kind::Typedef => self.walk(inner()?, at, depth + 1),
+                Kind::Typedef => None,
                 Kind::Struct => {
                     let mut chain = vec![ty];
                     while let Some(base) = chain.last()?.base().and_then(|n| registry.named(n)) {
-                        if chain.len() > 16 {
-                            return None;
+                        if chain.len() >= 32 || chain.iter().any(|seen| std::ptr::eq(*seen, base)) {
+                            break;
                         }
                         chain.push(base);
                     }
-                    for field in chain.iter().flat_map(|ty| ty.fields()) {
+                    // A derived field shadows a base field of its name, as in the codec.
+                    let mut fields: Vec<&Field<'a>> = Vec::new();
+                    for field in chain.iter().rev().flat_map(|ty| ty.fields()) {
+                        match fields.iter_mut().find(|f| f.name() == field.name()) {
+                            Some(same) => *same = field,
+                            None => fields.push(field),
+                        }
+                    }
+                    for field in fields {
                         let Some(name) = field.type_name() else {
                             continue;
                         };
@@ -78,22 +93,22 @@ mod tests {
                 Kind::BlobArray => {
                     let count = usize::try_from(self.word(at + 4)?).ok()?;
                     let inner = inner()?;
-                    let stride = usize::try_from(inner.size())
-                        .ok()?
-                        .next_multiple_of(usize::from(inner.align().max(1)));
+                    let size = usize::try_from(inner.size()).ok()?;
+                    let stride = size.next_multiple_of(usize::from(inner.align().max(1)));
                     let start = self.target(at)?;
                     // An array whose elements run past the resource holds packed
                     // data the codec keeps as bytes.
-                    let fits = count.checked_mul(stride).filter(|len| {
-                        *len > 0
+                    let fits = count.checked_mul(stride).is_some_and(|len| {
+                        len > 0
                             && start
-                                .checked_add(*len)
+                                .checked_add(len)
                                 .is_some_and(|end| end <= self.bytes.len())
                     });
-                    let Some(len) = fits else {
+                    if !fits {
                         return Some(());
-                    };
-                    self.record(at, start, len)?;
+                    }
+                    // The last element's tail padding holds no value.
+                    self.record(at, start, (count - 1) * stride + size)?;
                     (0..count).try_for_each(|i| self.walk(inner, start + i * stride, depth + 1))
                 }
                 Kind::BlobString => {
@@ -128,9 +143,13 @@ mod tests {
         }
     }
 
+    /// The resource's own bytes, the root of every walk, stand as a block of
+    /// this header position.
+    const ROOT: usize = usize::MAX;
+
     /// The pairs of header positions whose blocks start at the same byte or
-    /// overlap, in the `ty` resource `bytes`; `None` when the headers do not
-    /// walk.
+    /// overlap, in the `ty` resource `bytes`, the resource's own bytes as
+    /// [`ROOT`]; `None` when the headers do not walk.
     fn shared_blocks(
         registry: &Registry<'_>,
         ty: &Type<'_>,
@@ -142,6 +161,7 @@ mod tests {
             found: BTreeMap::new(),
         };
         blocks.walk(ty, 0, 0)?;
+        blocks.record(ROOT, 0, usize::try_from(ty.size()).ok()?)?;
         let mut ranges: Vec<(usize, usize, usize)> = blocks
             .found
             .iter()
@@ -207,6 +227,29 @@ mod tests {
         assert_eq!(shared_blocks(&registry, ty, &pair_bytes(10)), Some(vec![]));
     }
 
+    #[test]
+    fn a_header_pointing_into_the_resource_s_own_bytes_is_found_shared() {
+        let registry = pair();
+        let ty = registry.named("demo::Pair").unwrap();
+        assert_eq!(
+            shared_blocks(&registry, ty, &pair_bytes(-8)),
+            Some(vec![(8, ROOT)])
+        );
+    }
+
+    #[test]
+    fn a_base_field_a_derived_field_shadows_is_not_walked() {
+        let mut types: Vec<Type<'static>> = pair().iter().cloned().collect();
+        types.push(
+            Type::new("demo::Derived", Kind::Struct, 16, 4)
+                .with_inner("demo::Pair")
+                .with_fields(vec![Field::new("b", 8, "demo::uint8")]),
+        );
+        let registry = Registry::new(types);
+        let ty = registry.named("demo::Derived").unwrap();
+        assert_eq!(shared_blocks(&registry, ty, &pair_bytes(8)), Some(vec![]));
+    }
+
     /// Decodes every resource of the archive beside `var`'s executable,
     /// encodes each over its own bytes, and lists the types that failed with
     /// a count and the first error; then lists the resources whose blob
@@ -231,6 +274,7 @@ mod tests {
         let mut failed: BTreeMap<String, (usize, String)> = BTreeMap::new();
         let mut unknown = 0usize;
         let mut shared: Vec<String> = Vec::new();
+        let mut unwalked: Vec<&str> = Vec::new();
         for key in &keys {
             let Some(ty) = registry.hashed(key.type_hash) else {
                 unknown += 1;
@@ -241,7 +285,7 @@ mod tests {
             match shared_blocks(&registry, ty, &base) {
                 Some(pairs) if pairs.is_empty() => {}
                 Some(pairs) => shared.push(format!("{name}: headers at {pairs:?}")),
-                None => shared.push(format!("{name}: headers lead outside the resource")),
+                None => unwalked.push(name),
             }
             let outcome = registry.decode(name, &base).and_then(|value| {
                 let again = registry.encode(name, &value, Some(&base))?;
@@ -270,6 +314,12 @@ mod tests {
             report.join("\n")
         );
         assert_eq!(unknown, 0, "resources of a type the executable lacks");
+        assert!(
+            unwalked.is_empty(),
+            "{} resources have blob headers the walk does not follow, first {:?}",
+            unwalked.len(),
+            &unwalked[..unwalked.len().min(20)]
+        );
         assert!(
             shared.is_empty(),
             "{} resources share a blob block, so an in-place write changes two values:\n{}",
