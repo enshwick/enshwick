@@ -6,16 +6,18 @@ use crate::abi::Side;
 use crate::resources::Bytes;
 use crate::{Host, Off};
 
-/// The script view of the loaded mods: which mods run, the side the mod runs
-/// on, and the files of its own folder, read-only.
+/// The script view of the loaded mods: which mods run, whether this game
+/// runs the server, the side the mod runs on, and the files of its own
+/// folder, read-only.
 ///
 /// The Rust API offers the same through [`is_running`](super::is_running),
-/// [`Host::build`] and [`Load::mod_dir`](crate::Load::mod_dir).
+/// [`Host::hosting`], [`Host::build`] and
+/// [`Load::mod_dir`](crate::Load::mod_dir).
 ///
 /// # Examples
 ///
 /// ```lua
-/// if enshwick.mods.side() == "server" and enshwick.mods.is_running("you.lockers") then
+/// if enshwick.mods.hosting() and enshwick.mods.is_running("you.lockers") then
 ///     local names = buffer.tostring(enshwick.mods.read("data/names.txt"))
 /// end
 /// ```
@@ -49,7 +51,18 @@ impl Mods {
         super::is_running(id)
     }
 
-    /// Where the mod runs: `server` or `client`.
+    /// Whether this game runs the server now, so the mod's server logic
+    /// acts: always on the dedicated server; on a client while it hosts a
+    /// game, single player included, as mods run with server behaviour
+    /// there.
+    #[script]
+    #[must_use]
+    pub fn hosting(self) -> bool {
+        self.host.hosting()
+    }
+
+    /// The game executable the mod runs in: `server` for the dedicated
+    /// server, `client` for the game, which may also host one (`hosting`).
     #[script]
     #[must_use]
     pub fn side(self) -> String {

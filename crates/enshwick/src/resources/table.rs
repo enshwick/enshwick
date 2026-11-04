@@ -352,13 +352,25 @@ impl Host {
     #[must_use]
     pub fn game_content(&self, hash: [u32; 4]) -> Option<Vec<u8>> {
         let api = self.api();
-        let mut buffer = vec![0u8; usize::try_from(hash[0]).ok()?];
         let mut len = 0u32;
+        // The length comes from the archive, not from the hash's first word,
+        // which a caller may have made up.
+        let status = (api.content_read)(
+            self.handle(),
+            &raw const hash,
+            core::ptr::null_mut(),
+            0,
+            &raw mut len,
+        );
+        if status != Status::BAD_ARGS {
+            return None;
+        }
+        let mut buffer = vec![0u8; usize::try_from(len).ok()?];
         let status = (api.content_read)(
             self.handle(),
             &raw const hash,
             buffer.as_mut_ptr(),
-            u32::try_from(buffer.len()).ok()?,
+            len,
             &raw mut len,
         );
         (status == Status::OK).then(|| {
@@ -486,8 +498,10 @@ pub(crate) fn serve_new(
 
 impl crate::Load<'_> {
     /// Serves `value` as the new resource `key`, of the type its key names,
-    /// with no vanilla resource as its base: every field the value leaves
-    /// out is zero. Declare the key's GUID with [`Load::declare`](crate::Load::declare).
+    /// built from the value alone: every field the value leaves out is zero.
+    /// The game must hold a resource of that type, which the loader opens as
+    /// the base whose bytes the value replaces. Declare the key's GUID with
+    /// [`Load::declare`](crate::Load::declare).
     ///
     /// # Errors
     ///

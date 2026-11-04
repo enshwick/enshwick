@@ -1,5 +1,6 @@
 ---
 source: crates/cargo-enshwick/src/luau.rs
+assertion_line: 286
 expression: definitions()
 ---
 --!strict
@@ -434,15 +435,17 @@ declare enshwick: {
 	--- The game's types, its resources by type and as values, and resources served from an edit.
 	resources: {
 		--- The type of qualified name `name`, the full name with its namespace, as a table of its names, hashes, layout, fields, constants and attributes; nil when the build lacks it.
-		named: (name: string) -> any,
+		named: (name: string) -> any?,
 		--- The type whose qualified name hashes to `hash`, as `named` gives it.
-		hashed: (hash: number) -> any,
+		hashed: (hash: number) -> any?,
 		--- The type of impact name `name`, such as `demo.Table`, as `named` gives it.
-		impact_named: (name: string) -> any,
+		impact_named: (name: string) -> any?,
 		--- The type whose impact name hashes to `hash`, as `named` gives it.
-		impact_hashed: (hash: number) -> any,
+		impact_hashed: (hash: number) -> any?,
 		--- The qualified name of every type of the build.
 		type_names: () -> {string},
+		--- The value that stands for nil inside game data: an absent optional or variant, or one to clear in an edit, where a table cannot hold nil. A field the edit leaves out keeps its value.
+		none: () -> any,
 		--- The keys of the game's own resources of the type qualified as `type_name`, or of every resource for nil, as `{ guid, type, part }`.
 		resource_keys: (type_name: string?) -> any,
 		--- The hashes of the game's own contents, each a list of four numbers.
@@ -457,12 +460,12 @@ declare enshwick: {
 		encode: (type_name: string, value: any, base: buffer?) -> buffer,
 		--- Declares the mod's content id `id`, `<mod>:<name>`, and returns its GUID's text, for a resource the mod serves. Allowed while the mod initialises.
 		declare: (id: string) -> string,
-		--- Serves `value` as the new resource `key`, of the type its key names, with no vanilla resource as its base: every field the value leaves out is zero. Allowed while the mod initialises.
+		--- Serves `value` as the new resource `key`, of the type its key names, built from the value alone: every field the value leaves out is zero. The game must hold a resource of that type, which the loader opens as the base whose bytes the value replaces. Allowed while the mod initialises.
 		serve_new: (key: any, value: any) -> (),
 		--- The version string of the game's archive: the build number, the branch and when the build was made, split by `|`.
 		game_version: () -> string,
 		--- The pixels of PNG `png` as `{ width, height, pixels }`, the pixels a buffer of RGBA bytes, row by row; nil when it does not read or is larger than 2048 on a side.
-		decode_png: (png: buffer) -> any,
+		decode_png: (png: buffer) -> any?,
 		--- RGBA `pixels`, `width` by `height`, as PNG bytes.
 		encode_png: (pixels: buffer, width: number, height: number) -> buffer,
 		--- The RGBA pixels of a texture's content `data`, `width` by `height`, in the game's `format` code (a block-compressed format or RGBA).
@@ -483,14 +486,16 @@ declare enshwick: {
 		crc64: (bytes: buffer) -> any,
 		--- The value of the game's own resource `key`, read from its archive.
 		game_value: (key: any) -> any,
-		--- Serves the resource `key`, built from the resource `base` the first time the game reads it: `patch` gets the base's value and returns the value to serve, which may name only the fields it changes; nil serves the base unchanged. Allowed while the mod initialises.
+		--- Serves the resource `key`, built from the resource `base` the first time the game reads it: `patch` gets the base's value and returns the value to serve, which may name only the fields it changes; nil serves the base unchanged. A patch that fails, returns what is not game data or does not fit the type is logged, and the base is served unchanged. Allowed while the mod initialises.
 		serve: (key: any, base: any, patch: (arg1: any) -> any) -> (),
 	},
 	--- The loaded mods, the side the mod runs on, and its own folder, read-only.
 	mods: {
 		--- Whether the mod `id`, such as `you.lockers`, runs in this game.
 		is_running: (id: string) -> boolean,
-		--- Where the mod runs: `server` or `client`.
+		--- Whether this game runs the server now, so the mod's server logic acts: always on the dedicated server; on a client while it hosts a game, single player included, as mods run with server behaviour there.
+		hosting: () -> boolean,
+		--- The game executable the mod runs in: `server` for the dedicated server, `client` for the game, which may also host one (`hosting`).
 		side: () -> string,
 		--- The bytes of the file `path`, relative to the mod's folder.
 		read: (path: string) -> buffer,

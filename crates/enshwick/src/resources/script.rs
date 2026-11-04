@@ -511,8 +511,10 @@ impl Resources {
     }
 
     /// Serves `value` as the new resource `key`, of the type its key names,
-    /// with no vanilla resource as its base: every field the value leaves out
-    /// is zero. Allowed while the mod initialises.
+    /// built from the value alone: every field the value leaves out is zero.
+    /// The game must hold a resource of that type, which the loader opens as
+    /// the base whose bytes the value replaces. Allowed while the mod
+    /// initialises.
     ///
     /// # Errors
     ///

@@ -741,8 +741,8 @@ pub struct HostApi {
     /// Copies the game's own content `hash` from its archive into `out`, at
     /// most `capacity` bytes, and writes its length to `len`;
     /// [`Status::MISSING`] for a hash the archive lacks or keeps
-    /// compressed, [`Status::BAD_ARGS`] when `capacity` is short, with
-    /// `len` written. Reads the archive's files, never the game's memory.
+    /// compressed, [`Status::BAD_ARGS`] when `capacity` is short or `out`
+    /// null, with `len` written, so a null `out` asks for the length. Reads the archive's files, never the game's memory.
     /// Any thread.
     pub content_read: extern "system" fn(
         me: ModHandle,

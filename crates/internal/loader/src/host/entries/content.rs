@@ -3,7 +3,7 @@
 use enshwick::abi as api_frame;
 use enshwick::abi::{ModHandle, Status, Str};
 
-use crate::host::memory::{put, text};
+use crate::host::memory::{put, put_list, text};
 use crate::host::{caller, caller_index, calling, entry};
 
 pub(crate) extern "system" fn serve_resource(
@@ -468,28 +468,6 @@ pub(crate) extern "system" fn icons_ready(me: ModHandle) -> Status {
     })
 }
 
-/// Copies up to `capacity` of `items` to a non-null `out` and writes how
-/// many there are to a non-null `count`.
-///
-/// # Safety
-///
-/// - A non-null `out` is writable for `capacity` items, aligned, apart from
-///   `items`, and untouched by the mod during the call.
-/// - A non-null `count` points at a writable, aligned `u32` that no other
-///   thread touches during the call.
-unsafe fn copy_out<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
-    if !out.is_null() {
-        let copied = items.len().min(capacity as usize);
-        // SAFETY: the caller guarantees `capacity` writable items at the
-        // non-null `out`, apart from the loader's list; `copied` is at most
-        // `capacity`.
-        unsafe { out.copy_from_nonoverlapping(items.as_ptr(), copied) };
-    }
-    // SAFETY: the caller guarantees a non-null `count` points at a writable,
-    // aligned `u32` that no other thread touches during the call.
-    unsafe { put(count, u32::try_from(items.len()).unwrap_or(u32::MAX)) }
-}
-
 /// Every resource key of the game's archive, in archive order, read once.
 static RESOURCE_KEYS: std::sync::OnceLock<Option<Vec<api_frame::ResourceKey>>> =
     std::sync::OnceLock::new();
@@ -530,7 +508,7 @@ pub(crate) extern "system" fn resource_keys(
         // SAFETY: `HostApi::resource_keys` has the mod pass `out` null or
         // writable for `capacity` keys and `count` null or a writable `u32`,
         // untouched by the mod during the call.
-        unsafe { copy_out(keys, out, capacity, count) }
+        unsafe { put_list(keys, out, capacity, count) }
     })
 }
 
@@ -553,7 +531,7 @@ pub(crate) extern "system" fn content_hashes(
         // SAFETY: `HostApi::content_hashes` has the mod pass `out` null or
         // writable for `capacity` hashes and `count` null or a writable `u32`,
         // untouched by the mod during the call.
-        unsafe { copy_out(hashes, out, capacity, count) }
+        unsafe { put_list(hashes, out, capacity, count) }
     })
 }
 

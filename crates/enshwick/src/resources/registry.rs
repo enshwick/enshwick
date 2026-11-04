@@ -27,6 +27,7 @@ pub struct Registry<'a> {
     by_name: FxHashMap<&'a str, usize>,
     by_hash: FxHashMap<u32, usize>,
     by_impact: FxHashMap<&'a str, usize>,
+    by_impact_hash: FxHashMap<u32, usize>,
 }
 
 impl<'a> Registry<'a> {
@@ -46,6 +47,10 @@ impl<'a> Registry<'a> {
             registry.by_name.insert(ty.qualified_name(), index);
             registry.by_hash.entry(ty.qualified_hash()).or_insert(index);
             registry.by_impact.entry(ty.impact_name()).or_insert(index);
+            registry
+                .by_impact_hash
+                .entry(ty.impact_hash())
+                .or_insert(index);
             registry.types.push(ty);
         }
         registry
@@ -94,7 +99,7 @@ impl<'a> Registry<'a> {
     /// ```
     #[must_use]
     pub fn impact_hashed(&self, hash: u32) -> Option<&Type<'a>> {
-        self.types.iter().find(|ty| ty.impact_hash() == hash)
+        self.types.get(*self.by_impact_hash.get(&hash)?)
     }
 
     /// Every type, in the order the registry was built from.

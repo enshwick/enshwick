@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::abi::{ResourceKey, Status};
+    use enshwick::abi::{ResourceKey, Side, Status};
     use enshwick::content::Guid;
     use enshwick::resources::{Constant, Field, Kind, Type, fnv1a32};
     use enshwick::test::{FakeHost, Installed};
@@ -60,8 +60,12 @@ mod tests {
     }
 
     fn run(main: &str) -> Installed {
+        run_on(FakeHost::new(), main)
+    }
+
+    fn run_on(host: FakeHost, main: &str) -> Installed {
         *CASE.lock().unwrap() = Some(Scripts::new().with("main.luau", main));
-        let loader = FakeHost::new()
+        let loader = host
             .types([
                 Type::new("demo::float32", Kind::Float32, 4, 4),
                 Type::new("demo::uint64", Kind::Uint64, 8, 8),
@@ -287,14 +291,28 @@ mod tests {
         let loader = run(r#"
             local m = enshwick.mods
             print(`names {buffer.tostring(m.read("data/names.txt"))} listed {m.list("data")[1]}`)
-            print(`side {m.side()} other {m.is_running("you.other")}`)
+            print(`side {m.side()} hosting {m.hosting()} other {m.is_running("you.other")}`)
             print(`escape {pcall(m.read, "../secret.txt")}`)
         "#);
         for line in [
             "names ada listed names.txt",
-            "side server other false",
+            "side server hosting true other false",
             "escape false",
         ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
+    fn a_client_that_hosts_a_game_runs_the_server_and_one_that_joins_does_not() {
+        for (hosting, line) in [
+            (true, "side client hosting true"),
+            (false, "side client hosting false"),
+        ] {
+            let loader = run_on(
+                FakeHost::new().side(Side::CLIENT).hosting(hosting),
+                "print(`side {enshwick.mods.side()} hosting {enshwick.mods.hosting()}`)",
+            );
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
     }

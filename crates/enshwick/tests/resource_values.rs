@@ -130,6 +130,14 @@ mod tests {
     }
 
     #[test]
+    fn content_reads_at_its_archive_length_whatever_its_hash_claims() {
+        let _loader = start(host().archive([1, 0, 0, 0], vec![1, 2, 3, 4]));
+        let host = enshwick::host().unwrap();
+        assert_eq!(host.game_content([1, 0, 0, 0]), Some(vec![1, 2, 3, 4]));
+        assert_eq!(host.game_content([u32::MAX, 0, 0, 0]), None);
+    }
+
+    #[test]
     fn a_resource_reads_as_its_value_and_a_served_edit_reaches_the_game() {
         let loader = start(host());
         assert_eq!(SERVED.get(), Some(&Ok(())));
