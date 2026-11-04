@@ -263,6 +263,32 @@ mod tests {
     }
 
     #[test]
+    fn a_key_written_by_its_name_reads_as_its_scan_code() {
+        let (overrides, problems) = parse("[\"you.cars:horn\"]\nkey = \"Ctrl+J\"\n");
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(
+            overrides["you.cars:horn"],
+            [Some(key("Ctrl+J").bits()), None]
+        );
+    }
+
+    #[test]
+    fn a_capture_binds_the_new_key_with_the_modifiers_held() {
+        let keys = [key("Mouse1"), key("G")];
+        let mut capture = Capture::new(&[true, false], false);
+        let shift = key("Shift+G").modifiers();
+        assert_eq!(
+            capture.look(&[true, true], &keys, shift, false),
+            Some(Captured::Key(key("Shift+G")))
+        );
+        let mut plain = Capture::new(&[false, false], false);
+        assert_eq!(
+            plain.look(&[false, true], &keys, 0, false),
+            Some(Captured::Key(key("G")))
+        );
+    }
+
+    #[test]
     fn escape_cancels_and_a_key_held_since_the_start_never_binds() {
         let keys = [key("Mouse1"), key("F4")];
         let mut capture = Capture::new(&[true, false], true);

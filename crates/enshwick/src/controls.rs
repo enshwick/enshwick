@@ -517,29 +517,7 @@ impl Controls {
         hold_ms: u32,
         on: impl Fn(String, Option<Player>) + Send + Sync + 'static,
     ) -> Result<(), Off> {
-        let mut control = Control::new(name, label).hold_for(Duration::from_millis(hold_ms.into()));
-        if !key.is_empty() {
-            control = control.key(Key::parse(key)?);
-        }
-        if !link.is_empty() {
-            let action = GameAction::ALL
-                .iter()
-                .find(|a| a.name() == link)
-                .ok_or_else(|| Off::new(format!("control {name}: no game action {link}")))?;
-            control = control.link(*action);
-        }
-        if !phases.is_empty() {
-            let mut picked = Vec::with_capacity(phases.len());
-            for phase in &phases {
-                picked.push(match phase.as_str() {
-                    "press" => Phase::Press,
-                    "release" => Phase::Release,
-                    "hold" => Phase::Hold,
-                    other => return Err(Off::new(format!("control {name}: no phase {other}"))),
-                });
-            }
-            control = control.fires(&picked);
-        }
+        let control = script_control(name, label, key, link, &phases, hold_ms)?;
         declare(self.host, &control, move |fired| {
             let phase = match fired.phase {
                 Phase::Press => "press",
@@ -549,6 +527,42 @@ impl Controls {
             on(phase.to_owned(), fired.player.clone());
         })
     }
+}
+
+/// The control a script's `controls.declare` names, its key, game action
+/// and phases read from their names.
+fn script_control(
+    name: &str,
+    label: &str,
+    key: &str,
+    link: &str,
+    phases: &[String],
+    hold_ms: u32,
+) -> Result<Control, Off> {
+    let mut control = Control::new(name, label).hold_for(Duration::from_millis(hold_ms.into()));
+    if !key.is_empty() {
+        control = control.key(Key::parse(key)?);
+    }
+    if !link.is_empty() {
+        let action = GameAction::ALL
+            .iter()
+            .find(|a| a.name() == link)
+            .ok_or_else(|| Off::new(format!("control {name}: no game action {link}")))?;
+        control = control.link(*action);
+    }
+    if !phases.is_empty() {
+        let mut picked = Vec::with_capacity(phases.len());
+        for phase in phases {
+            picked.push(match phase.as_str() {
+                "press" => Phase::Press,
+                "release" => Phase::Release,
+                "hold" => Phase::Hold,
+                other => return Err(Off::new(format!("control {name}: no phase {other}"))),
+            });
+        }
+        control = control.fires(&picked);
+    }
+    Ok(control)
 }
 
 impl crate::script::Bound for Controls {
@@ -662,7 +676,11 @@ mod tests {
             (false, 2100),
         ]
         .into_iter()
-        .map(|(down, at)| key.look(down, false, at, 500))
+        .map(|(down, at)| {
+            let fired = key.look(down, false, at, 500);
+            assert_eq!(key.is_down(), down);
+            fired
+        })
         .collect();
         assert_eq!(
             looks,
@@ -703,8 +721,42 @@ mod tests {
     }
 
     #[test]
+    fn a_script_names_its_key_game_action_and_phases() {
+        let phases = ["hold".to_owned(), "release".to_owned()];
+        let control = script_control(
+            "lights",
+            "Lights",
+            "Shift+L",
+            "ContextualAction_Tap",
+            &phases,
+            250,
+        )
+        .unwrap();
+        assert_eq!(control.keys, [Some(Key::parse("Shift+L").unwrap()), None]);
+        assert_eq!(control.link, Some(GameAction::ContextualActionTap));
+        assert_eq!(control.fires, ControlSpec::HOLD | ControlSpec::RELEASE);
+        assert_eq!(control.hold, Duration::from_millis(250));
+        let plain = script_control("x", "X", "", "", &[], 500).unwrap();
+        assert_eq!(
+            (plain.keys, plain.link, plain.fires),
+            ([None, None], None, ControlSpec::PRESS)
+        );
+        for (key, link, phase) in [
+            ("Hyper", "", "press"),
+            ("", "Fly", "press"),
+            ("", "", "tap"),
+        ] {
+            let phases = [phase.to_owned()];
+            assert!(
+                script_control("x", "X", key, link, &phases, 0).is_err(),
+                "{key} {link} {phase}"
+            );
+        }
+    }
+
+    #[test]
     fn a_control_fires_on_the_phases_it_names() {
-        let both = Control::new("x", "X").fires(&[Phase::Press, Phase::Hold]);
+        let both = Control::new("x", "X").fires(&[Phase::Press, Phase::Hold, Phase::Press]);
         assert_eq!(both.fires, ControlSpec::PRESS | ControlSpec::HOLD);
         assert!(is_valid_name("horn-2"));
         assert!(!is_valid_name("Horn"));

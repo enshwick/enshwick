@@ -347,6 +347,51 @@ mod tests {
     }
 
     #[test]
+    fn extended_keys_and_mouse_buttons_carry_their_set_1_codes() {
+        for (name, code) in [
+            ("NumpadEnter", 0x11c),
+            ("NumpadDivide", 0x135),
+            ("Home", 0x147),
+            ("Up", 0x148),
+            ("PageUp", 0x149),
+            ("Left", 0x14b),
+            ("Right", 0x14d),
+            ("End", 0x14f),
+            ("Down", 0x150),
+            ("PageDown", 0x151),
+            ("Insert", 0x152),
+            ("Delete", 0x153),
+            ("Mouse1", 0x200),
+            ("Mouse2", 0x201),
+            ("Mouse3", 0x202),
+            ("Mouse4", 0x203),
+            ("Mouse5", 0x204),
+            ("E", 0x12),
+            ("F12", 0x58),
+        ] {
+            assert_eq!(Key::parse(name).unwrap().bits(), code, "{name}");
+        }
+        assert!(Key::parse("Mouse4").unwrap().is_mouse());
+        assert!(!Key::parse("Delete").unwrap().is_mouse());
+        assert!(!Key::parse("E").unwrap().is_mouse());
+    }
+
+    #[test]
+    fn a_code_without_a_name_is_no_key_and_every_named_key_is_listed() {
+        assert_eq!(Key::from_bits(0x5f), None);
+        assert_eq!(Key::from_bits(0x205), None);
+        let every: Vec<Key> = Key::every().collect();
+        assert_eq!(every.len(), NAMES.len());
+        assert!(every.contains(&Key::parse("Mouse5").unwrap()));
+        assert!(every.iter().all(|k| k.modifiers() == 0));
+    }
+
+    #[test]
+    fn a_modifier_named_twice_counts_once() {
+        assert_eq!(Key::parse("Shift+Shift+E"), Key::parse("Shift+E"));
+    }
+
+    #[test]
     fn modifiers_print_in_one_order_whatever_order_they_came_in() {
         let key = Key::parse("alt + shift + ctrl + mouse5").unwrap();
         assert_eq!(key.to_string(), "Shift+Ctrl+Alt+Mouse5");
