@@ -35,12 +35,19 @@ mod tests {
             local merged = texts:merge(enshwick.i18n.parse('[en]\nb = "B"\n'))
             local missing = merged:missing_in({ "uk" })
             enshwick.log.info(`missing {#missing} {missing[1][1]} {missing[1][2]}`)
-            enshwick.log.info(`untranslated {#merged:untranslated()}`)
+            local untranslated = merged:untranslated()
+            enshwick.log.info(`untranslated {#untranslated} {untranslated[1][1]} {untranslated[1][2]}`)
+            enshwick.log.info(`toml {enshwick.i18n.parse(merged:to_toml()):get("b", "en")}`)
             enshwick.log.info(`kept {texts:get("b", "en")}`)
             "#,
         );
         assert!(logged(&loader, "missing 1 uk b"), "{:?}", loader.logs());
-        assert!(logged(&loader, "untranslated 1"));
+        assert!(
+            logged(&loader, "untranslated 1 uk b"),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(logged(&loader, "toml B"));
         assert!(logged(&loader, "kept nil"));
     }
 
@@ -78,5 +85,18 @@ mod tests {
             "enshwick.log.info(`language {enshwick.i18n.language()}`)",
         );
         assert!(logged(&loader, "language en"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn a_script_s_texts_are_the_texts_toml_of_its_folder() {
+        let dir = std::env::temp_dir().join(format!("enshwick-luau-texts-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("texts.toml"), "[en]\nhello = \"Hello\"\n").unwrap();
+        let loader = run(
+            FakeHost::new().mod_dir(dir.to_str().unwrap()),
+            r#"enshwick.log.info(`text {enshwick.i18n.texts():get("hello", "uk")}`)"#,
+        );
+        let _cleaned = std::fs::remove_dir_all(&dir);
+        assert!(logged(&loader, "text Hello"), "{:?}", loader.logs());
     }
 }

@@ -613,3 +613,57 @@ pub fn argument_or_default<T: FromScript + Default>(
         Some(value) => T::from_value(value).map_err(|e| e.within(name)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::abi::Side;
+
+    #[test]
+    fn a_count_takes_only_whole_numbers_from_zero_to_two_to_the_53() {
+        assert_eq!(usize::from_value(Value::Number(3.0)).ok(), Some(3));
+        for refused in [2.5, -1.0, 1e16] {
+            assert!(
+                usize::from_value(Value::Number(refused)).is_err(),
+                "{refused}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_side_reads_back_from_its_name() {
+        for (side, name) in [
+            (Side::SERVER, "server"),
+            (Side::CLIENT, "client"),
+            (Side::BOTH, "both"),
+        ] {
+            assert!(matches!(side.into_value(), Value::String(ref text) if text == name));
+            assert_eq!(
+                Side::from_value(Value::String(name.into())).ok(),
+                Some(side)
+            );
+        }
+    }
+
+    #[test]
+    fn a_guid_reads_back_from_its_32_hex_digits_and_nothing_else() {
+        let bytes: [u8; 16] = core::array::from_fn(|i| u8::try_from(i * 15 + 1).unwrap());
+        assert_eq!(<[u8; 16]>::from_value(bytes.into_value()).ok(), Some(bytes));
+        for refused in ["0".repeat(31), "0".repeat(33), "g".repeat(32)] {
+            assert!(
+                <[u8; 16]>::from_value(Value::String(refused.clone())).is_err(),
+                "{refused}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_answer_that_does_not_fit_reads_as_without_the_script() {
+        assert_eq!(String::from_answer(Ok(Value::String("hi".into()))), "hi");
+        assert_eq!(String::from_answer(Ok(Value::Nil)), "");
+        assert!(!bool::from_answer(Ok(Value::Bool(false))));
+        assert!(bool::from_answer(Ok(Value::Bool(true))));
+        assert!(bool::from_answer(Ok(Value::Nil)));
+        assert!(bool::from_answer(Err(Error::new("boom"))));
+    }
+}
