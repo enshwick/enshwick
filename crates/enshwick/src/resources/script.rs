@@ -691,19 +691,21 @@ impl Resources {
             .qualified_name();
         let host = self.host;
         crate::content::serve(self.host, key, base, move |bytes| {
-            let edited = || -> Result<Vec<u8>, String> {
-                let value = registry.decode(name, bytes).map_err(|e| e.to_string())?;
-                match patch(value).map_err(|e| e.to_string())? {
-                    Data::Nil => Ok(bytes.to_vec()),
-                    edited => registry
-                        .encode(name, &edited, Some(bytes))
-                        .map_err(|e| e.to_string()),
-                }
-            };
-            Some(edited().unwrap_or_else(|error| {
+            let keep = |error: &dyn std::fmt::Display| {
                 host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
-                bytes.to_vec()
-            }))
+                Some(bytes.to_vec())
+            };
+            let value = match registry.decode(name, bytes) {
+                Ok(value) => value,
+                Err(error) => return keep(&error),
+            };
+            match patch(value) {
+                Ok(Data::Nil) => Some(bytes.to_vec()),
+                Ok(edited) => registry
+                    .encode(name, &edited, Some(bytes))
+                    .map_or_else(|error| keep(&error), Some),
+                Err(error) => keep(&error),
+            }
         })
     }
 }
