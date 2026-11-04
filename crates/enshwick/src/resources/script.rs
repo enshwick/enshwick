@@ -324,6 +324,10 @@ impl Resources {
 }
 
 #[crate::script(lookups)]
+#[expect(
+    clippy::unused_self,
+    reason = "a script call takes its namespace, though a pure helper reads nothing of it"
+)]
 impl Resources {
     /// The type of qualified name `name`, the full name with its namespace, as
     /// a table of its names, hashes, layout, fields, constants and
