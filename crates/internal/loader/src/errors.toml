@@ -7,6 +7,10 @@
 # `cause` (why it happens) and `fix` (what to do, in order). A step: `id`,
 # `question` (answered yes or no), and for each answer either the next step's
 # id or a code.
+#
+# The texts above are English. Each entry carries the same texts in every other
+# language under `translations.<language>`, with the site's language codes; the
+# site writes the pages of a language from them, at /<language>/errors/<code>/.
 
 [[error]]
 code = "E1001"
@@ -14,11 +18,21 @@ title = "Enshwick started in a program that is not Enshrouded"
 cause = "Another program loaded the powrprof.dll from the game's folder, so nothing loads in it."
 fix = "Nothing to do for the game. Start Enshrouded or its dedicated server as usual."
 
+[error.translations.uk]
+title = "Enshwick запустився в програмі, яка не є Enshrouded"
+cause = "Інша програма завантажила powrprof.dll із теки гри, тому в ній нічого не завантажується."
+fix = "Для гри нічого робити не треба. Запускайте Enshrouded або його виділений сервер як завжди."
+
 [[error]]
 code = "E1002"
 title = "Enshwick cannot read the game's files"
 cause = "The game's executable in memory does not look like the game Enshwick knows, so nothing loads."
 fix = "Verify the game files in Steam, then start the game again."
+
+[error.translations.uk]
+title = "Enshwick не може прочитати файли гри"
+cause = "Виконуваний файл гри в пам'яті не схожий на гру, яку знає Enshwick, тому нічого не завантажується."
+fix = "Перевірте цілісність файлів гри у Steam, а тоді запустіть гру знову."
 
 [[error]]
 code = "E1003"
@@ -26,11 +40,21 @@ title = "This game version is new to Enshwick"
 cause = "The game was updated and this Enshwick has no table for the new version, so the game runs without mods."
 fix = "Update Enshwick. Until a new Enshwick is out, play without mods or wait."
 
+[error.translations.uk]
+title = "Ця версія гри нова для Enshwick"
+cause = "Гру оновили, а цей Enshwick не має таблиці для нової версії, тому гра працює без модів."
+fix = "Оновіть Enshwick. Поки нового Enshwick немає, грайте без модів або зачекайте."
+
 [[error]]
 code = "E1004"
 title = "Enshwick's table does not match this game"
 cause = "The game files differ from the version Enshwick's table was made for, so nothing loads."
 fix = "Verify the game files in Steam. If that does not help, update Enshwick."
+
+[error.translations.uk]
+title = "Таблиця Enshwick не відповідає цій грі"
+cause = "Файли гри відрізняються від версії, для якої зроблено таблицю Enshwick, тому нічого не завантажується."
+fix = "Перевірте цілісність файлів гри у Steam. Якщо це не допоможе, оновіть Enshwick."
 
 [[error]]
 code = "E1005"
@@ -38,11 +62,21 @@ title = "Some Enshwick features are off on this game version"
 cause = "This game version is new to Enshwick. Enshwick found most of what it needs, but the features and mods that need the rest stay off."
 fix = "Update Enshwick when a new version is out. The log names each feature that is off."
 
+[error.translations.uk]
+title = "Частина функцій Enshwick вимкнена на цій версії гри"
+cause = "Ця версія гри нова для Enshwick. Enshwick знайшов більшість того, що йому потрібно, але функції й моди, яким потрібна решта, лишаються вимкненими."
+fix = "Оновіть Enshwick, коли вийде нова версія. Журнал називає кожну вимкнену функцію."
+
 [[error]]
 code = "E1006"
 title = "Windows' own powrprof.dll is missing"
 cause = "Enshwick passes the game's power settings calls on to Windows' powrprof.dll, which did not load."
 fix = "Under Proton, check that the launch options read WINEDLLOVERRIDES=\"powrprof=n,b\" %command%. On Windows, run the system file checker."
+
+[error.translations.uk]
+title = "Бракує системного powrprof.dll Windows"
+cause = "Enshwick передає виклики гри до налаштувань живлення системному powrprof.dll Windows, а той не завантажився."
+fix = "У Proton перевірте, що параметри запуску мають вигляд WINEDLLOVERRIDES=\"powrprof=n,b\" %command%. У Windows запустіть перевірку системних файлів."
 
 [[error]]
 code = "E1007"
@@ -50,11 +84,21 @@ title = "Enshwick's settings file has a mistake"
 cause = "A line in enshwick.toml in the game's folder, or in a world's <save>-mod-settings/enshwick/enshwick.toml, does not read. Enshwick uses every line that reads; a line that does not read keeps its default, so a world's require_enshwick stays on. A file that is not TOML at all reads as the defaults, and the log names the line and column where it stops reading."
 fix = "Fix the lines the log names and restart, or delete the file to get a fresh one on the next start."
 
+[error.translations.uk]
+title = "У файлі налаштувань Enshwick є помилка"
+cause = "Рядок у enshwick.toml у теці гри або в <збереження>-mod-settings/enshwick/enshwick.toml світу не читається. Enshwick бере кожен рядок, що читається. Рядок, що не читається, лишає типове значення, тож require_enshwick світу лишається увімкненим. Файл, який зовсім не є TOML, читається як типові значення, а журнал називає рядок і стовпець, де читання зупинилося."
+fix = "Виправте рядки, які називає журнал, і перезапустіть гру. Або видаліть файл, і наступний запуск створить новий."
+
 [[error]]
 code = "E1008"
 title = "Enshwick did not start"
 cause = "The game loaded Windows' powrprof.dll instead of Enshwick's, or mods/enshwick/enshwick.dll is missing."
 fix = "Extract Enshwick into the game's folder again. Under Proton, add WINEDLLOVERRIDES=\"powrprof=n,b\" %command% to the launch options."
+
+[error.translations.uk]
+title = "Enshwick не запустився"
+cause = "Гра завантажила powrprof.dll Windows замість powrprof.dll Enshwick, або бракує mods/enshwick/enshwick.dll."
+fix = "Розпакуйте Enshwick у теку гри ще раз. У Proton додайте WINEDLLOVERRIDES=\"powrprof=n,b\" %command% до параметрів запуску."
 
 [[error]]
 code = "E1009"
@@ -62,11 +106,21 @@ title = "Another mod replaced Enshwick's powrprof.dll"
 cause = "Some mods bring their own powrprof.dll, dinput8.dll, winmm.dll or dbghelp.dll. One of them took the place of Enshwick's."
 fix = "Put Enshwick's powrprof.dll back into the game's folder. The other mod's powrprof.dll cannot run beside it; keep one of the two mods."
 
+[error.translations.uk]
+title = "Інший мод замінив powrprof.dll Enshwick"
+cause = "Деякі моди мають власний powrprof.dll, dinput8.dll, winmm.dll або dbghelp.dll. Один із них став на місце файлу Enshwick."
+fix = "Поверніть powrprof.dll Enshwick у теку гри. powrprof.dll іншого мода не може працювати поруч із ним, тому залиште один із двох модів."
+
 [[error]]
 code = "E2001"
 title = "A mod is made for another Enshwick"
 cause = "The mod was built for another version of Enshwick. A mod starts with the Enshwick version it was built for and with later versions. A release that changes how mods talk to Enshwick needs the mod rebuilt. A mod built for a newer Enshwick does not start on an older one."
 fix = "If the log says to update Enshwick, install the newer Enshwick. Otherwise install the version of the mod made for your Enshwick version, which the log names. If there is none yet, ask the mod author to rebuild the mod for it."
+
+[error.translations.uk]
+title = "Мод зроблено для іншого Enshwick"
+cause = "Мод зібрано для іншої версії Enshwick. Мод запускається з версією Enshwick, для якої його зібрано, і з пізнішими. Випуск, що змінює зв'язок модів з Enshwick, вимагає перезібрати мод. Мод, зібраний для новішого Enshwick, не запускається на старішому."
+fix = "Якщо журнал каже оновити Enshwick, встановіть новіший Enshwick. Інакше встановіть версію мода для вашої версії Enshwick; журнал її називає. Якщо такої ще немає, попросіть автора мода перезібрати мод для неї."
 
 [[error]]
 code = "E2002"
@@ -74,11 +128,21 @@ title = "A mod did not start because of another mod"
 cause = "The mod needs another mod that is missing, needs another version of it, or does not work beside a mod you have."
 fix = "Install or update the mod the log names, or remove one of the two that do not work together."
 
+[error.translations.uk]
+title = "Мод не запустився через інший мод"
+cause = "Мод потребує іншого мода, якого немає, потребує іншої його версії або не працює поруч із модом, який у вас є."
+fix = "Встановіть або оновіть мод, який називає журнал, або видаліть один із двох модів, що не працюють разом."
+
 [[error]]
 code = "E2003"
 title = "A mod turned itself off"
 cause = "The mod could not start on this game version or with these settings, or it failed while the game ran."
 fix = "Read the reason in the log or on the Mods screen. Update the mod, or report it with the Enshwick report attached."
+
+[error.translations.uk]
+title = "Мод вимкнув себе"
+cause = "Мод не зміг запуститися на цій версії гри або з цими налаштуваннями, або дав збій під час гри."
+fix = "Прочитайте причину в журналі або на екрані Mods. Оновіть мод або повідомте про проблему й додайте звіт Enshwick."
 
 [[error]]
 code = "E2004"
@@ -86,11 +150,21 @@ title = "A file in the mods folder is not a working mod"
 cause = "A DLL in mods/ could not be loaded, or it has only part of what an Enshwick mod needs."
 fix = "Download the mod again. If it is not an Enshwick mod, remove it from mods/."
 
+[error.translations.uk]
+title = "Файл у теці mods не є робочим модом"
+cause = "DLL у mods/ не вдалося завантажити, або в ній є лише частина того, що потрібно моду Enshwick."
+fix = "Завантажте мод ще раз. Якщо це не мод Enshwick, приберіть його з mods/."
+
 [[error]]
 code = "E2005"
 title = "The same mod is installed twice"
 cause = "Two folders in mods/ hold the same mod, or one folder holds two mods. Enshwick runs one and names the other."
 fix = "Delete the folder or file the log names, so each mod has one folder of its own."
+
+[error.translations.uk]
+title = "Той самий мод встановлено двічі"
+cause = "Дві теки в mods/ містять той самий мод, або одна тека містить два моди. Enshwick запускає один і називає інший."
+fix = "Видаліть теку або файл, які називає журнал, щоб кожен мод мав власну теку."
 
 [[error]]
 code = "E2007"
@@ -98,11 +172,21 @@ title = "A mod stopped the game to keep a world safe"
 cause = "A mod keeps data the game cannot open without it, and it does not run now, so the game stops before the world loads."
 fix = "Update Enshwick and the mod. To open the world anyway, at your own risk, delete the hold file the log names."
 
+[error.translations.uk]
+title = "Мод зупинив гру, щоб уберегти світ"
+cause = "Мод зберігає дані, які гра не відкриє без нього, а зараз він не працює, тому гра зупиняється до завантаження світу."
+fix = "Оновіть Enshwick і мод. Щоб усе одно відкрити світ на власний ризик, видаліть файл утримання, який називає журнал."
+
 [[error]]
 code = "E3001"
 title = "The server runs mods you lack"
 cause = "The server needs mods you do not have, or have in another version, so you do not join."
 fix = "Install the mods and versions the dialog lists, then join again."
+
+[error.translations.uk]
+title = "На сервері є моди, яких у вас немає"
+cause = "Серверу потрібні моди, яких у вас немає або які у вас іншої версії, тому ви не приєднуєтеся."
+fix = "Встановіть моди й версії, які перелічує діалог, а тоді приєднайтеся знову."
 
 [[step]]
 id = "start"
@@ -110,11 +194,17 @@ question = "Does the game start when you remove powrprof.dll from the game's fol
 yes = "loader-log"
 no = "not-enshwick"
 
+[step.translations.uk]
+question = "Чи запускається гра, коли ви прибираєте powrprof.dll із теки гри?"
+
 [[step]]
 id = "not-enshwick"
 question = "Does the game start after you verify its files in Steam?"
 yes = "loader-log"
 no = "E1002"
+
+[step.translations.uk]
+question = "Чи запускається гра після перевірки цілісності її файлів у Steam?"
 
 [[step]]
 id = "loader-log"
@@ -122,11 +212,17 @@ question = "With powrprof.dll back, is there a file logs/enshwick_<date>_<time>.
 yes = "game-stops"
 no = "other-proxy"
 
+[step.translations.uk]
+question = "Коли powrprof.dll знову на місці, чи є поруч із грою файл logs/enshwick_<дата>_<час>.log?"
+
 [[step]]
 id = "other-proxy"
 question = "Did another mod come with its own powrprof.dll, dinput8.dll, winmm.dll or dbghelp.dll?"
 yes = "E1009"
 no = "E1008"
+
+[step.translations.uk]
+question = "Чи мав інший мод власний powrprof.dll, dinput8.dll, winmm.dll або dbghelp.dll?"
 
 [[step]]
 id = "game-stops"
@@ -134,8 +230,14 @@ question = "Does the game close before the world loads, with \"holds this game\"
 yes = "E2007"
 no = "mods-off"
 
+[step.translations.uk]
+question = "Чи закривається гра до завантаження світу, а в журналі є \"holds this game\"?"
+
 [[step]]
 id = "mods-off"
 question = "Does the log say the game version is unknown or new?"
 yes = "E1003"
 no = "E2003"
+
+[step.translations.uk]
+question = "Чи пише журнал, що версія гри невідома або нова?"

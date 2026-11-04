@@ -100,7 +100,7 @@ pub fn load_failure(file: &str, error: &std::io::Error) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::path::{Path, PathBuf};
 
     use super::*;
@@ -138,6 +138,16 @@ mod tests {
         title: String,
         cause: String,
         fix: String,
+        #[serde(default)]
+        translations: BTreeMap<String, ErrorText>,
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct ErrorText {
+        title: String,
+        cause: String,
+        fix: String,
     }
 
     #[derive(serde::Deserialize)]
@@ -147,6 +157,14 @@ mod tests {
         question: String,
         yes: String,
         no: String,
+        #[serde(default)]
+        translations: BTreeMap<String, StepText>,
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct StepText {
+        question: String,
     }
 
     fn source() -> Source {
@@ -259,6 +277,35 @@ mod tests {
                     "{} leads to {target}",
                     step.id
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn every_code_and_step_carries_every_language_the_file_translates_to() {
+        let source = source();
+        let languages: BTreeSet<&String> = source
+            .error
+            .iter()
+            .flat_map(|e| e.translations.keys())
+            .chain(source.step.iter().flat_map(|s| s.translations.keys()))
+            .collect();
+        for error in &source.error {
+            let code = &error.code;
+            let carried: BTreeSet<&String> = error.translations.keys().collect();
+            assert_eq!(carried, languages, "{code}");
+            for text in error.translations.values() {
+                for field in [&text.title, &text.cause, &text.fix] {
+                    assert!(!field.trim().is_empty(), "{code}");
+                }
+            }
+        }
+        for step in &source.step {
+            let id = &step.id;
+            let carried: BTreeSet<&String> = step.translations.keys().collect();
+            assert_eq!(carried, languages, "{id}");
+            for text in step.translations.values() {
+                assert!(text.question.ends_with('?'), "{id}");
             }
         }
     }
