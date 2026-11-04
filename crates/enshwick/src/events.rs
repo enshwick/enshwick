@@ -318,6 +318,15 @@ pub struct TickPeriod {
     handle: TickHandle,
 }
 
+impl crate::script::Object for TickPeriod {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "TickPeriod",
+        "A tick handler's period, from `on_tick`, to change while the game runs.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_PERIOD];
+}
+
+#[crate::script(period)]
 impl TickPeriod {
     pub(crate) const fn new(host: crate::Host, handle: TickHandle) -> Self {
         Self { host, handle }
@@ -334,6 +343,7 @@ impl TickPeriod {
     /// # Examples
     ///
     /// See [`TickPeriod`].
+    #[script]
     pub fn set_every(self, every: Duration) -> Result<(), crate::Off> {
         let status =
             (self.host.api().set_tick_every)(self.host.handle(), self.handle, nanos(every));

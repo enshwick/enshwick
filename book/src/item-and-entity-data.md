@@ -51,6 +51,22 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+-- `<this mod>:bonus`; its values are Luau tables.
+local bonus = enshwick.item_data.item_data("bonus")
+local ring = { pide = 900, item = 0x5e01 }
+if bonus:get(ring) == nil then
+    bonus:set(ring, { fire = 12 })
+end
+
+-- `<this mod>:owner`, kept on the server alone.
+local owners = enshwick.entity_data.entity_data("owner", "Server")
+local chest = 4200
+if owners:get(chest) == nil then
+    owners:set(chest, { player = "7" })
+end
+```
+
 ## What carries data
 
 - **An item** with an entity of its own, its PIDE: weapons, armour and other

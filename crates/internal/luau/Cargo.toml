@@ -23,6 +23,7 @@ mlua.workspace = true
 enshwick = { workspace = true, features = ["test"] }
 proptest.workspace = true
 enshwick-gamedata.workspace = true
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing"] }
 
 [lints]
 workspace = true

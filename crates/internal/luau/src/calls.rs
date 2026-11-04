@@ -123,6 +123,63 @@ impl CallDesc {
     }
 }
 
+/// A call a script serves, as `Load::serve_call` serves a `#[call]` type:
+/// its description, how the input reads and how the answer is written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ServedCall {
+    pub(crate) call: DescribedCall,
+    pub(crate) input: Read,
+    pub(crate) output: Read,
+}
+
+impl ServedCall {
+    /// The call `table` defines for the mod `id`: `name`, its local name;
+    /// `major`, 1 unless given; `fields`, the input's primitive fields as
+    /// `define_event` takes them; and `output`, the answer's primitive read.
+    ///
+    /// Every field and the answer read a primitive, laid out and hashed
+    /// here as `#[call]` lays out and hashes them, so a Rust caller of the
+    /// same call matches, and the answer the script writes is valid for its
+    /// type.
+    pub(crate) fn parse(table: &Table, id: &str) -> mlua::Result<Self> {
+        let bad = |why: String| mlua::Error::runtime(format!("enshwick.serve_call: {why}"));
+        let input = crate::points::EventDesc::parse_definition(table)?;
+        let local = input.event.name.clone();
+        let name = if local.contains(':') {
+            local
+        } else {
+            format!("{id}:{local}")
+        };
+        if !name.starts_with(&format!("{id}:")) || !enshwick::content::is_id(&name) {
+            return Err(bad(format!("{name:?} is no call of this mod")));
+        }
+        let major = table.get::<Option<u32>>("major")?.unwrap_or(1);
+        let Read::Primitive(answer) = read_of(&table.get("output")?, 0)? else {
+            return Err(bad(format!(
+                "{name}: a script answers with a number, boolean, GUID or id"
+            )));
+        };
+        let hash = enshwick::services::layout_hash(
+            "output",
+            answer.shape(),
+            answer.size(),
+            answer.align(),
+            0,
+        );
+        let size = u32::try_from(answer.size()).map_err(|_| bad(format!("{name}: too large")))?;
+        Ok(Self {
+            call: DescribedCall::new(
+                &name,
+                major,
+                (input.event.fields.clone(), input.event.size),
+                (vec![DescribedField::new("output", hash)], size),
+            ),
+            input: Read::Struct(input.fields),
+            output: Read::Primitive(answer),
+        })
+    }
+}
+
 /// A call's error, as a script reads it.
 fn why(error: CallError) -> &'static str {
     match error {

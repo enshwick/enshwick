@@ -114,7 +114,7 @@ pub const LOADER_FILES: [&str; 2] = [STUB_FILE, LOADER_FILE];
 ///     enshwick::info!("the first mod in load order is {}", entry.id);
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, crate::Script)]
 pub struct ModIndex(pub u32);
 
 impl ModIndex {
@@ -148,7 +148,7 @@ impl core::fmt::Display for ModIndex {
 ///     enshwick::info!("{} {} from {}", entry.id, entry.version, entry.file);
 /// }
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 pub struct ModEntry {
     /// The mod id; `enshwick` for the loader.
     pub id: String,

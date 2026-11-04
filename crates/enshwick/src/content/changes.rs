@@ -42,7 +42,8 @@ pub const MAX_FACTOR: f64 = 100.0;
 /// assert!(Field::MaxStackSize.check(Value::Set(999.0)).is_ok());
 /// assert!(Field::MaxStackSize.check(Value::Set(0.0)).is_err());
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
+#[script(name = "ChangeField")]
 #[non_exhaustive]
 pub enum Field {
     /// How many of an item one inventory slot holds, 1 to 65535; the entry
@@ -418,7 +419,7 @@ pub enum Entry {
 /// assert_eq!(Value::Times(2.0).to_string(), "times 2");
 /// assert_eq!(Value::Set(999.0).to_string(), "999");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub enum Value {
     /// The value becomes this.
@@ -541,7 +542,7 @@ pub enum ValueError {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct Change {
     /// The vanilla entry, such as an item's GUID, or a fill table's for
     /// [`Change::in_table`].
@@ -767,6 +768,7 @@ impl Field {
     }
 }
 
+#[crate::script(content_change)]
 impl Load<'_> {
     /// Declares `change` during `init`, from `source`, such as
     /// `items.toml:12`, which the conflict reports name. The loader merges it
@@ -784,6 +786,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn change(&mut self, change: &Change, source: &str) -> Result<(), Off> {
         change.field.unstable_gate()?;
         change

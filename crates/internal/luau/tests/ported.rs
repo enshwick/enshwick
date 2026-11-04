@@ -462,6 +462,54 @@ mod tests {
         );
     }
 
+    /// Ported script 5: every item of the game's data, exported as JSON
+    /// for a wiki into the mod's export folder in the game folder.
+    #[test]
+    fn ported_script_five_exports_every_item_for_a_wiki() {
+        let types = item_types();
+        let registry = Registry::new(types.clone());
+        let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+        let item = Value::Struct(vec![
+            ("id".into(), Value::Uint(chest.fnv1a().into())),
+            ("guid".into(), Value::Guid(chest)),
+        ]);
+        let game =
+            std::env::temp_dir().join(format!("enshwick-ported-five-{}", std::process::id()));
+        let mod_dir = game.join("mods").join("you.luau");
+        *CASE.lock().unwrap() = Some(Scripts::new().with(
+            "main.luau",
+            r#"
+            local r = enshwick.resources
+            local rows = {}
+            for _, key in r.resource_keys("demo::Item") do
+                local item = r.game_value(key)
+                table.insert(rows, `\{"id":{item.id},"guid":"{item.guid}"\}`)
+            end
+            local json = `[{table.concat(rows, ",")}]`
+            enshwick.files.write_atomically(`{enshwick.export_dir()}/items.json`, buffer.fromstring(json))
+            "#,
+        ));
+        let loader = FakeHost::new()
+            .types(types)
+            .mod_dir(mod_dir.to_str().unwrap())
+            .resource(
+                chest.key_by_hash(fnv1a32(b"demo::Item")),
+                registry.encode("demo::Item", &item, None).unwrap(),
+            )
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Luau)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let exported =
+            std::fs::read_to_string(game.join("export").join("you.luau").join("items.json"));
+        let _cleaned = std::fs::remove_dir_all(&game);
+        assert_eq!(
+            exported.unwrap(),
+            format!(r#"[{{"id":{},"guid":"{chest}"}}]"#, chest.fnv1a())
+        );
+    }
+
     /// A skill tree: nodes with an id, a cost, a position and the ids they
     /// link to.
     fn skill_types() -> Vec<Type<'static>> {

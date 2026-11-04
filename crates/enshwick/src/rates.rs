@@ -19,7 +19,6 @@
 use crate::Host;
 use crate::abi::{RateId, Status};
 use crate::content::recipes::RecipeKind;
-#[cfg(feature = "unstable")]
 use crate::{Load, Off};
 
 /// The largest factor a mod sets and the largest product in force.
@@ -31,7 +30,7 @@ pub const MAX_FACTOR: f32 = 100.0;
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum ExperienceGroup {
     /// Defeated enemies.
@@ -82,7 +81,7 @@ impl ExperienceGroup {
 ///
 /// assert_eq!(Rate::from_id(Rate::FactoryProductionSpeed.id()), Some(Rate::FactoryProductionSpeed));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Rate {
     /// Experience from one source.
@@ -309,6 +308,71 @@ pub struct RateHandle {
     rate: Rate,
 }
 
+impl crate::script::Object for RateHandle {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "RateHandle",
+        "The mod's factor on one of the game's rates, from `rate`.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_HANDLE];
+}
+
+/// The free functions of [`rates`](self) as a script's namespace `rates`.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct RateFns;
+
+#[crate::script(rate_fns)]
+#[expect(
+    clippy::unused_self,
+    reason = "a script call takes its namespace, though a free function reads nothing of it"
+)]
+impl RateFns {
+    /// Whether `factor` is one the loader takes, as [`is_valid_factor`] says.
+    #[script]
+    #[must_use]
+    pub fn is_valid_factor(self, factor: f32) -> bool {
+        is_valid_factor(factor)
+    }
+
+    /// Every mod's factors together, as [`combine`] combines them.
+    #[script]
+    #[must_use]
+    pub fn combine(self, factors: Vec<f32>) -> f32 {
+        combine(factors)
+    }
+
+    /// A whole `value` scaled by `factor`, as [`scale_whole`] rounds it.
+    #[script]
+    #[must_use]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        reason = "a script's whole number fits an f64 and an i64 alike"
+    )]
+    pub fn scale_whole(self, value: f64, factor: f32) -> f64 {
+        scale_whole(value as i64, factor) as f64
+    }
+
+    /// Every rate a mod may change.
+    #[script]
+    #[must_use]
+    pub fn all(self) -> Vec<Rate> {
+        Rate::all().collect()
+    }
+}
+
+impl crate::script::Bound for RateFns {
+    const NAME: &'static str = "rates";
+    const DOC: &'static str =
+        "The game's rates, such as experience and drops, each mod's factor on them combined.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_RATE_FNS];
+
+    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}
+
+#[crate::script(handle)]
 impl RateHandle {
     /// The rate this handle sets.
     ///
@@ -322,6 +386,7 @@ impl RateHandle {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub const fn rate(&self) -> Rate {
         self.rate
     }
@@ -340,6 +405,7 @@ impl RateHandle {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn set(&self, factor: f32) -> Result<(), RateError> {
         if !is_valid_factor(factor) {
             return Err(RateError::OutOfRange(factor));
@@ -352,6 +418,7 @@ impl RateHandle {
 }
 
 #[cfg(feature = "unstable")]
+#[crate::script(rates)]
 impl Load<'_> {
     /// Declares that this mod multiplies `rate` and hands back the handle
     /// that sets its factor, 1 until set. The loader scales the game's
@@ -369,6 +436,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn rate(&mut self, rate: Rate) -> Result<RateHandle, Off> {
         if !crate::rules::may_declare_rate(rate.id(), self.joins()) {
             return Err(Off::new(format!(

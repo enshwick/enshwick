@@ -41,7 +41,7 @@ pub use crate::abi::BuffTypeId;
 /// # Examples
 ///
 /// See [`BuffType`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum BuffSlotType {
     /// A food buff.
@@ -88,6 +88,7 @@ impl BuffSlotType {
     clippy::struct_field_names,
     reason = "the fields take the game's names, `buffTypeId` among them"
 )]
+#[derive(crate::Script)]
 pub struct BuffType {
     /// Its id.
     pub buff_type_id: BuffTypeId,
@@ -119,6 +120,7 @@ pub struct BuffType {
     clippy::struct_field_names,
     reason = "the fields take the game's names, `buffEntityId` among them"
 )]
+#[derive(crate::Script)]
 pub struct Buff {
     /// Its type.
     pub type_id: BuffTypeId,
@@ -145,7 +147,7 @@ pub struct Buff {
 /// let strong = Apply::new().level(3).lasting(Duration::from_mins(5));
 /// assert_eq!(strong.level, Some(3));
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct Apply {
     /// How long it lasts, in game time; `None` for the type's own.
@@ -205,6 +207,18 @@ fn nanos(duration: i64) -> Duration {
     Duration::from_nanos(u64::try_from(duration).unwrap_or(0))
 }
 
+impl crate::script::Bound for Buffs {
+    const NAME: &'static str = "buffs";
+    const DOC: &'static str =
+        "Buffs: their types, and the buffs entities have, applied and removed.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_BUFFS];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, crate::Off> {
+        Ok(load.buffs())
+    }
+}
+
+#[crate::script(buffs)]
 impl Buffs {
     /// Every buff and debuff type of the running game; empty off the game
     /// thread or while no world runs.
@@ -213,6 +227,7 @@ impl Buffs {
     ///
     /// See [`BuffType`].
     #[must_use]
+    #[script]
     pub fn types(&self) -> Vec<BuffType> {
         let blank = BuffTypeInfo {
             header: Header::of::<BuffTypeInfo>(),
@@ -250,6 +265,7 @@ impl Buffs {
     /// # Examples
     ///
     /// See [`Buff`].
+    #[script]
     pub fn of(&self, entity: Entity) -> Result<Vec<Buff>, WorldError> {
         let blank = ActiveBuff {
             header: Header::of::<ActiveBuff>(),
@@ -289,6 +305,7 @@ impl Buffs {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn has(&self, entity: Entity, id: BuffTypeId) -> bool {
         self.of(entity)
             .is_ok_and(|on| on.iter().any(|buff| buff.type_id == id))
@@ -310,6 +327,7 @@ impl Buffs {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn apply(&self, entity: Entity, id: BuffTypeId, how: Apply) -> Result<(), WorldError> {
         let duration = how.duration.map_or(0, |duration| {
             i64::try_from(duration.as_nanos())
@@ -347,6 +365,7 @@ impl Buffs {
     ///     buffs.remove(player, poison).unwrap_or(false)
     /// }
     /// ```
+    #[script]
     pub fn remove(&self, entity: Entity, id: BuffTypeId) -> Result<bool, WorldError> {
         let mut removed = 0u8;
         WorldError::check(

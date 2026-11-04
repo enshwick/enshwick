@@ -31,6 +31,21 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+In Luau, `change` and `keep` take a function that changes the settings it
+gets and returns them, and return the settings in force:
+
+```luau
+enshwick.on("WorldLoaded", function()
+    local ok, why = pcall(enshwick.game_settings.change, function(settings)
+        settings.enable_durability = false
+        return settings
+    end)
+    if not ok then
+        enshwick.log.warn(`durability unchanged: {why}`)
+    end
+end)
+```
+
 ## Reading
 
 `read()` returns the settings in force as a `Settings` and the `GameSettingsPreset` they

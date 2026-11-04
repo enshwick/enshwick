@@ -44,6 +44,7 @@ use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use crate::abi::{NetMessage, Status, Str};
+use crate::resources::{Bytes, Value as Data};
 use crate::{Host, Load, Off, PlayerKey};
 
 /// The largest message a channel carries, encoded, in bytes.
@@ -96,7 +97,7 @@ fn is_pe(bytes: &[u8]) -> bool {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub enum Peer {
     /// The server, as a client sees it.
     Server,
@@ -349,6 +350,93 @@ impl Load<'_> {
             id,
             _message: PhantomData,
         })
+    }
+}
+
+impl crate::script::Object for Channel<Data> {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "Channel",
+        "A channel of game data messages between the mod's server and client parts.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_MESSAGES];
+}
+
+#[crate::script(messages)]
+impl Channel<Data> {
+    /// Sends `message` to `to`, as [`Channel::send`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Channel::send`].
+    #[script(name = "send")]
+    pub(crate) fn send_script(&self, to: Peer, message: &Data) -> Result<(), SendError> {
+        self.send(to, message)
+    }
+
+    /// Sends `message` to every client that runs Enshwick, as
+    /// [`Channel::broadcast`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Channel::send`].
+    #[script(name = "broadcast")]
+    pub(crate) fn broadcast_script(&self, message: &Data) -> Result<(), SendError> {
+        self.broadcast(message)
+    }
+
+    /// Whether `peer` takes messages now, as [`Channel::is_ready`] says.
+    #[script(name = "is_ready")]
+    pub(crate) fn is_ready_script(&self, peer: Peer) -> bool {
+        self.is_ready(peer)
+    }
+}
+
+/// The free functions of [`net`](self) as a script's namespace `net`.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct NetFns;
+
+#[crate::script(net_fns)]
+#[expect(
+    clippy::unused_self,
+    reason = "a script call takes its namespace, though a free function reads nothing of it"
+)]
+impl NetFns {
+    /// Whether `bytes` start like executable code, as [`looks_like_code`]
+    /// says.
+    #[script]
+    #[must_use]
+    pub fn looks_like_code(self, bytes: &Bytes) -> bool {
+        looks_like_code(&bytes.0)
+    }
+}
+
+impl crate::script::Bound for NetFns {
+    const NAME: &'static str = "net";
+    const DOC: &'static str = "Messages between a mod's server part and its client part.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_NET_FNS];
+
+    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}
+
+#[crate::script(net)]
+impl Load<'_> {
+    /// Opens the mod's channel `name`, in `version`, for game data messages,
+    /// as [`Load::channel`] opens one of a Rust type.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::channel`].
+    #[script(name = "channel")]
+    pub(crate) fn channel_script(
+        &mut self,
+        name: &str,
+        version: u16,
+        handler: impl Fn(Peer, Data) + Send + Sync + 'static,
+    ) -> Result<Channel<Data>, Off> {
+        self.channel(name, version, handler)
     }
 }
 

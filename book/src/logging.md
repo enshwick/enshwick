@@ -14,6 +14,15 @@ enshwick::info!("{} altars merged", 3);
 enshwick::debug!("bed {} checked", 1210);
 ```
 
+```luau
+enshwick.log.info(`{3} altars merged`)
+print("bed 1210 checked") -- as enshwick.log.info
+```
+
+In Luau, `enshwick.log` has `info`, `warn` and `error`, and `level` reads
+the mod's level; the macros that log once or at most once a period are
+Rust's.
+
 For lines that may repeat:
 
 | Macro                                                                       | Logs                                                                                           |

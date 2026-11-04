@@ -50,7 +50,6 @@
 #[cfg(feature = "unstable")]
 use core::ffi::c_void;
 
-#[cfg(feature = "unstable")]
 use crate::Off;
 use crate::WorldError;
 pub use crate::abi::KnowledgeId;
@@ -65,7 +64,7 @@ use crate::{Host, Load};
 /// # Examples
 ///
 /// See [`Known`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum KnowledgeType {
     /// Set or not.
@@ -85,7 +84,7 @@ pub enum KnowledgeType {
 /// # Examples
 ///
 /// See [`Known`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Scope {
     /// The world's, shared by every player.
@@ -107,7 +106,7 @@ pub enum Scope {
 ///         .is_some_and(|known| known.r#type == KnowledgeType::Flags && known.has_flag(1))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct Known {
     /// The knowledge id.
@@ -166,7 +165,7 @@ impl Known {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Grant {
     /// Sets a bool.
@@ -187,7 +186,7 @@ pub enum Grant {
 ///
 /// See [`Knowledge::revoke`].
 #[cfg(feature = "unstable")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Revoke {
     /// Clears a bool.
@@ -229,6 +228,17 @@ pub struct Knowledge {
     host: Host,
 }
 
+impl crate::script::Bound for Knowledge {
+    const NAME: &'static str = "knowledge";
+    const DOC: &'static str = "Knowledge of players, accounts and the world: recipes, quests and every other value the game keeps.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_KNOWN];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        Ok(load.knowledge())
+    }
+}
+
+#[crate::script(known)]
 impl Knowledge {
     fn read(&self, entity: Entity, id: KnowledgeId) -> Option<Known> {
         let mut info = KnowledgeInfo {
@@ -252,6 +262,7 @@ impl Knowledge {
     ///
     /// See [`Known`].
     #[must_use]
+    #[script]
     pub fn get(&self, player: Entity, id: KnowledgeId) -> Option<Known> {
         self.read(player, id)
     }
@@ -267,6 +278,7 @@ impl Knowledge {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn world(&self, id: KnowledgeId) -> Option<Known> {
         self.read(Entity::NONE, id)
     }
@@ -287,6 +299,7 @@ impl Knowledge {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn grant(&self, player: Entity, id: KnowledgeId, grant: Grant) -> Result<(), WorldError> {
         let (kind, value) = grant.raw();
         WorldError::from_status((self.host.api().grant_knowledge)(
@@ -313,6 +326,7 @@ impl Knowledge {
     ///     let _granted = knowledge.grant_world(place, Grant::Set);
     /// }
     /// ```
+    #[script]
     pub fn grant_world(&self, id: KnowledgeId, grant: Grant) -> Result<(), WorldError> {
         self.grant(Entity(0), id, grant)
     }
@@ -346,6 +360,7 @@ impl Knowledge {
     /// }
     /// ```
     #[cfg(feature = "unstable")]
+    #[script]
     pub fn revoke(
         &self,
         player: Entity,
@@ -381,6 +396,7 @@ impl Knowledge {
     /// }
     /// ```
     #[cfg(feature = "unstable")]
+    #[script]
     pub fn revoke_world(&self, id: KnowledgeId, revoke: Revoke) -> Result<(), WorldError> {
         self.revoke(Entity(0), id, revoke)
     }
@@ -408,6 +424,7 @@ impl Knowledge {
     ///     let _queued = knowledge.grant_account(account, recipe.into(), Grant::Flag(0));
     /// }
     /// ```
+    #[script]
     pub fn grant_account(
         &self,
         account: PlayerKey,
@@ -439,6 +456,7 @@ impl Knowledge {
     /// }
     /// ```
     #[cfg(feature = "unstable")]
+    #[script]
     pub fn revoke_account(
         &self,
         account: PlayerKey,
@@ -478,6 +496,7 @@ impl Knowledge {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn quests(&self) -> Vec<KnowledgeId> {
         let mut ids = vec![KnowledgeId::default(); 256];
         loop {
@@ -508,6 +527,7 @@ impl Knowledge {
     ///
     /// See [`Knowledge::quests`].
     #[must_use]
+    #[script]
     pub fn completed(&self, player: Entity, quest: KnowledgeId) -> bool {
         self.get(player, quest).is_some_and(|known| known.is_set())
     }
@@ -523,7 +543,7 @@ impl Knowledge {
 ///
 /// See `Load::on_knowledge_input`.
 #[cfg(feature = "unstable")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Refusal {
     /// An id the game does not know.
@@ -575,7 +595,7 @@ impl Refusal {
 ///
 /// See `Load::on_knowledge_input`.
 #[cfg(feature = "unstable")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct KnowledgeRequest {
     /// The asking player's character.
@@ -636,6 +656,7 @@ const fn kind_of(raw: u8) -> KnowledgeType {
     }
 }
 
+#[crate::script(knowledge)]
 impl Load<'_> {
     /// Runs `filter` on the knowledge each client asks the server for in
     /// its input, after the loader's guard; its answer, `true` to let the
@@ -677,6 +698,22 @@ impl Load<'_> {
             |user| (host.api().knowledge_input_filter)(host.handle(), run_input::<F>, user),
             "knowledge input filter",
         )
+    }
+
+    /// Runs `filter` on each player's knowledge input, as
+    /// [`Load::on_knowledge_input`] does; its answer replaces the verdict so
+    /// far, and nil or an error keeps it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_knowledge_input`].
+    #[cfg(feature = "unstable")]
+    #[script(name = "on_knowledge_input")]
+    pub(crate) fn on_knowledge_input_script<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&KnowledgeRequest) -> Option<bool> + Send + Sync + 'static,
+    {
+        self.on_knowledge_input(move |request| filter(request).unwrap_or(request.allowed))
     }
 
     /// The [`Knowledge`] of the server's world; on a client, the built-in

@@ -2,15 +2,17 @@
 //! dependencies, and the subscriptions, events and calls they set up at start.
 
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, OnceLock, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
-use enshwick::Relock as _;
 use enshwick::abi::Level;
+use enshwick::points::Order;
+use enshwick::script;
+use enshwick::{Load, Relock as _};
 use mlua::{Function, Lua, MultiValue, Table, Value as LuaValue};
 
 use super::{Asked, Defined, Inner, Scope, Vm};
 use crate::bridge::{arguments, to_lua};
-use crate::calls::CallDesc;
+use crate::calls::{CallDesc, ServedCall};
 use crate::files::{Requirer, Scripts};
 use crate::points::{EventDesc, PointDesc, Read, encode};
 use crate::subscribe::Subscription;
@@ -92,6 +94,76 @@ impl Inner {
         Ok(())
     }
 
+    /// Puts `serve_call` into `api`: the calls `vm`'s scripts serve other
+    /// mods, settled at start.
+    fn serve_functions(&self, vm: &Arc<Vm>, api: &Table) -> mlua::Result<()> {
+        let weak = Arc::downgrade(vm);
+        let id = self.id.clone();
+        api.raw_set(
+            "serve_call",
+            vm.lua
+                .create_function(move |_, (call, handler): (Table, Function)| {
+                    let vm = weak
+                        .upgrade()
+                        .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                    let desc = ServedCall::parse(&call, &id)?;
+                    let name = desc.call.name.clone();
+                    {
+                        let mut served = vm.served.relock();
+                        if served.iter().any(|d| d.call.name == name) {
+                            return Err(mlua::Error::runtime(format!(
+                                "enshwick.serve_call: {name} is served already"
+                            )));
+                        }
+                        served.push(desc);
+                    }
+                    vm.subscribe("enshwick.serve_call", Subscription::Call(name), handler)
+                })?,
+        )
+    }
+
+    /// `enshwick.extend(point, handler, order)`: links the handler into the
+    /// point, its order parsed as `points::Order` reads.
+    fn extend_function(&self, vm: &Arc<Vm>) -> mlua::Result<Function> {
+        let weak = Arc::downgrade(vm);
+        let bridge = Scope {
+            inner: Weak::clone(&self.me),
+            vm: Arc::downgrade(vm),
+        };
+        vm.lua.create_function(
+            move |_, (point, handler, order): (Table, Function, LuaValue)| {
+                let vm = weak
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                let mut desc = PointDesc::parse(&point)?;
+                if !order.is_nil() {
+                    desc.order =
+                        crate::bridge::from_lua(&bridge, order, <Order as script::Typed>::TY)
+                            .and_then(script::FromScript::from_value)
+                            .map_err(|e| {
+                                mlua::Error::runtime(format!("enshwick.extend: order: {e}"))
+                            })?;
+                }
+                let sub = Subscription::Point(desc.point.name.clone());
+                {
+                    // A script's handlers of one point make one link, with one order.
+                    let mut points = vm.points.relock();
+                    match points.iter().find(|d| d.point.name == desc.point.name) {
+                        Some(linked) if linked.order != desc.order => {
+                            return Err(mlua::Error::runtime(format!(
+                                "enshwick.extend: {} is linked already, in another order",
+                                desc.point.name
+                            )));
+                        }
+                        Some(_) => {}
+                        None => points.push(desc),
+                    }
+                }
+                vm.subscribe("enshwick.extend", sub, handler)
+            },
+        )
+    }
+
     /// Puts `extend`, `refuse`, `on_game_type`, `game_event_types` and `on`
     /// into `api`, the subscriptions `vm`'s scripts make at start.
     fn subscription_functions(&self, vm: &Arc<Vm>, api: &Table) -> mlua::Result<()> {
@@ -100,24 +172,7 @@ impl Inner {
         refuse.set_readonly(true);
         let _first = vm.refuse.set(refuse.clone());
         api.raw_set("refuse", refuse)?;
-        let weak = Arc::downgrade(vm);
-        api.raw_set(
-            "extend",
-            lua.create_function(move |_, (point, handler): (Table, Function)| {
-                let vm = weak
-                    .upgrade()
-                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
-                let desc = PointDesc::parse(&point)?;
-                let sub = Subscription::Point(desc.point.name.clone());
-                {
-                    let mut points = vm.points.relock();
-                    if !points.iter().any(|d| d.point.name == desc.point.name) {
-                        points.push(desc);
-                    }
-                }
-                vm.subscribe("enshwick.extend", sub, handler)
-            })?,
-        )?;
+        api.raw_set("extend", self.extend_function(vm)?)?;
         let weak = Arc::downgrade(vm);
         api.raw_set(
             "on_mod_event",
@@ -192,7 +247,7 @@ impl Inner {
         };
         let api = lua.create_table()?;
         for (namespace, opened) in &self.namespaces {
-            let table = lua.create_table()?;
+            let table = namespace_table(lua, &api, namespace.name())?;
             for declared in namespace.functions() {
                 let scope = scope.clone();
                 let opened = opened.clone();
@@ -209,8 +264,6 @@ impl Inner {
                     })?,
                 )?;
             }
-            table.set_readonly(true);
-            api.raw_set(namespace.name(), table)?;
         }
         let settings = scope.clone();
         api.raw_set(
@@ -226,6 +279,8 @@ impl Inner {
         )?;
         api.raw_set("deps", self.deps_table(lua)?)?;
         self.subscription_functions(vm, &api)?;
+        self.serve_functions(vm, &api)?;
+        follow_settings(lua, &api)?;
         self.mod_functions(lua, &api)?;
         let globals = lua.globals();
         globals.raw_set("enshwick", api.clone())?;
@@ -346,5 +401,110 @@ impl Inner {
             }
         };
         desc.function(lua, caller)
+    }
+}
+
+/// The table of the namespace `name` in `api`, made on first use: parts of
+/// one name share it.
+fn namespace_table(lua: &Lua, api: &Table, name: &str) -> mlua::Result<Table> {
+    if name.is_empty() {
+        return Ok(api.clone());
+    }
+    if let Some(table) = api.raw_get::<Option<Table>>(name)? {
+        return Ok(table);
+    }
+    let table = lua.create_table()?;
+    api.raw_set(name, table.clone())?;
+    Ok(table)
+}
+
+/// Follows the mod's settings as `Load::on_settings` and
+/// `Load::on_settings_change` do: the handler gets the values in force now,
+/// as each world loads and stops, and, for the second, as they change.
+const FOLLOW_SETTINGS: &str = r#"
+local api, live = ...
+return function(handler)
+    handler(api.settings())
+    api.on("SettingsReplaced", function() handler(api.settings()) end)
+    if live then
+        api.on("SettingsChanged", function() handler(api.settings()) end)
+    end
+end
+"#;
+
+/// Puts `on_settings` and `on_settings_change` in `api`, beside `settings`
+/// and `on`, which they call.
+fn follow_settings(lua: &Lua, api: &Table) -> mlua::Result<()> {
+    for (name, live) in [("on_settings", false), ("on_settings_change", true)] {
+        let follow: Function = lua
+            .load(FOLLOW_SETTINGS)
+            .set_name(format!("=enshwick.{name}"))
+            .call((api.clone(), live))?;
+        api.raw_set(name, follow)?;
+    }
+    Ok(())
+}
+
+impl Inner {
+    /// Puts each namespace's [`Load`] functions into `api` for the start:
+    /// each runs on `load` through a function of `scope`, which ends with
+    /// the start; a call after it raises an error naming the call. Then
+    /// makes every namespace table read-only.
+    pub(super) fn init_functions<'scope, 'env>(
+        &self,
+        vm: &Arc<Vm>,
+        api: &Table,
+        scope: &'scope mlua::Scope<'scope, 'env>,
+        load: &'env Mutex<&'env mut Load<'_>>,
+    ) -> mlua::Result<()> {
+        let lua = &vm.lua;
+        let bridge = Scope {
+            inner: Weak::clone(&self.me),
+            vm: Arc::downgrade(vm),
+        };
+        for namespace in script::NAMESPACES {
+            let table = namespace_table(lua, api, namespace.name())?;
+            for function in namespace.init_functions() {
+                let what = if namespace.name().is_empty() {
+                    format!("enshwick.{}", function.name())
+                } else {
+                    format!("enshwick.{}.{}", namespace.name(), function.name())
+                };
+                let signature = function.signature();
+                let during = {
+                    let (bridge, what) = (bridge.clone(), what.clone());
+                    scope.create_function(move |lua, args: MultiValue| {
+                        let values = arguments(lua, &bridge, args, signature, &what)?;
+                        let mut load = load.try_relock().ok_or_else(|| {
+                            mlua::Error::runtime(format!(
+                                "{what}: called from inside another start call"
+                            ))
+                        })?;
+                        let answer = function
+                            .call(&mut load, values)
+                            .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
+                        to_lua(lua, &bridge, answer, signature.ret())
+                    })?
+                };
+                let weak = Arc::downgrade(vm);
+                table.raw_set(
+                    function.name(),
+                    lua.create_function(move |_, args: MultiValue| {
+                        if !weak.upgrade().is_some_and(|vm| vm.starting.load(Ordering::Acquire)) {
+                            return Err(mlua::Error::runtime(format!(
+                                "{what}: allowed only while the mod starts, at the top level of main.luau"
+                            )));
+                        }
+                        during.call::<MultiValue>(args)
+                    })?,
+                )?;
+            }
+        }
+        for pair in api.pairs::<String, LuaValue>() {
+            if let (_, LuaValue::Table(table)) = pair? {
+                table.set_readonly(true);
+            }
+        }
+        Ok(())
     }
 }

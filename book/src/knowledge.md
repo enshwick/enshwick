@@ -28,6 +28,21 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.on("QuestCompleted", function(done)
+    local total = 0
+    for _, quest in enshwick.knowledge.quests() do
+        if enshwick.knowledge.completed(done.entity, quest) then
+            total += 1
+        end
+    end
+    local player = enshwick.world.player(done.entity)
+    if player then
+        enshwick.world.broadcast(`{player.name} completed a quest ({total} so far)`)
+    end
+end)
+```
+
 ## Ids and values
 
 Every knowledge id is the world's, shared by every player, or each player's

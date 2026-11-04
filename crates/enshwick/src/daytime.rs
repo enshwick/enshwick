@@ -52,7 +52,7 @@ const HOUR: f64 = 3_600_000_000_000.0;
 ///     }
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct TimeOfDay {
     /// The time of day in hours, from 0 up to 24.
@@ -108,12 +108,14 @@ pub struct Clock {
     host: Host,
 }
 
+#[crate::script(clock)]
 impl Clock {
     /// The clock now; `None` off the game thread or while no world runs.
     ///
     /// # Examples
     ///
     /// See [`TimeOfDay`].
+    #[script]
     #[must_use]
     pub fn now(&self) -> Option<TimeOfDay> {
         let mut info = DaytimeInfo {
@@ -143,6 +145,7 @@ impl Clock {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn set_hours(&self, hours: f32) -> Result<(), WorldError> {
         if !hours.is_finite() {
             return Err(WorldError::Refused);
@@ -182,6 +185,26 @@ pub struct ClockSpeed {
     host: Host,
 }
 
+impl crate::script::Bound for Clock {
+    const NAME: &'static str = "daytime";
+    const DOC: &'static str =
+        "The clock of the server's world: the time of day and how fast it runs.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_CLOCK];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        Ok(load.clock())
+    }
+}
+
+impl crate::script::Object for ClockSpeed {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "ClockSpeed",
+        "The mod's factor on how fast the server's clock runs.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_SPEED];
+}
+
+#[crate::script(speed)]
 impl ClockSpeed {
     /// The largest factor the loader takes.
     pub const MAX: f32 = 1000.0;
@@ -199,6 +222,7 @@ impl ClockSpeed {
     /// # Examples
     ///
     /// See [`ClockSpeed`].
+    #[script]
     pub fn set(&self, factor: f32) -> Result<(), WorldError> {
         if !(0.0..=Self::MAX).contains(&factor) {
             return Err(WorldError::Refused);
@@ -207,6 +231,7 @@ impl ClockSpeed {
     }
 }
 
+#[crate::script(daytime)]
 impl Load<'_> {
     /// The [`Clock`] of the server's world; on a client, the built-in
     /// server's while it hosts a game.
@@ -229,6 +254,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`ClockSpeed`].
+    #[script]
     pub fn clock_speed(&mut self) -> Result<ClockSpeed, Off> {
         let host = self.host();
         let status = (host.api().time_speed_control)(host.handle());

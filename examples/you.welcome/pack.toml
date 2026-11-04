@@ -1,7 +1,7 @@
 id = "you.welcome"
 version = "0.1.0"
 name = "Welcome"
-description = "Greets each player who joins and says how many are online."
+description = "Greets each player who joins, counts their visits to the world, and says how many are online."
 authors = ["Enshwick"]
 license = "MIT"
 side = "server"

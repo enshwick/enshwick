@@ -1,0 +1,174 @@
+//! `enshwick.content`: a Luau mod adds items and recipes and changes
+//! vanilla values while it starts, through the same calls and checks as a
+//! Rust mod.
+
+#[cfg(test)]
+mod tests {
+    use enshwick::abi::Status;
+    use enshwick::content::categories::ItemCategoryMask;
+    use enshwick::content::changes::{Field, Items, Value};
+    use enshwick::content::{EngineFacts as _, Guid, Id, types};
+    use enshwick::test::FakeHost;
+
+    use crate::harness::{logged, run, start};
+
+    const CHEST: &str = "6943053a-32c1-4718-ae22-e61427ddf54d";
+
+    #[test]
+    fn a_script_adds_an_item_cloned_from_a_vanilla_one() {
+        let loader = run(
+            FakeHost::new().items(),
+            &format!(
+                r#"enshwick.content.add_item({{ id = "you.luau:locker", like = "{CHEST}" }})"#
+            ),
+        );
+        assert_eq!(loader.content_ids(), ["you.luau:locker"]);
+        let locker = Id::new("you.luau:locker").guid();
+        let item = FakeHost::new().items().hash(types::ITEM_INFO.id()).unwrap();
+        assert!(
+            loader
+                .resources()
+                .iter()
+                .any(|r| r.key == locker.key_by_hash(item))
+        );
+    }
+
+    #[test]
+    fn a_script_adds_a_recipe_beside_a_vanilla_one() {
+        let loader = run(
+            FakeHost::new().items().recipes(),
+            &format!(
+                r#"
+                enshwick.content.add_item({{ id = "you.luau:locker", like = "{CHEST}" }})
+                enshwick.content.add_recipe({{
+                    id = "you.luau:locker.recipe",
+                    like = "{CHEST}",
+                    output = enshwick.content.guid("you.luau:locker"),
+                    output_count = 1,
+                    cost = 2,
+                }})
+                "#
+            ),
+        );
+        assert!(
+            loader
+                .content_ids()
+                .contains(&"you.luau:locker.recipe".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_recipe_a_function_makes_is_asked_for_while_the_mod_starts() {
+        let loader = run(
+            FakeHost::new().items().recipes(),
+            &format!(
+                r#"
+                enshwick.content.add_recipe_with(function()
+                    return {{
+                        id = "you.luau:box.recipe",
+                        like = "{CHEST}",
+                        output = enshwick.content.guid("you.luau:box"),
+                        output_count = 1,
+                        cost = 2,
+                    }}
+                end)
+                "#
+            ),
+        );
+        assert!(
+            loader
+                .content_ids()
+                .contains(&"you.luau:box.recipe".to_owned()),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
+    fn a_script_changes_a_vanilla_stack_size_and_a_category_of_items() {
+        let loader = run(
+            FakeHost::new(),
+            &format!(
+                r#"
+                enshwick.content.change({{ entry = "{CHEST}", field = "MaxStackSize", value = {{ Set = 99 }} }}, "stacks")
+                enshwick.content.change_items({{ items = {{ Category = {{ "Materials" }} }}, field = "MaxStackSize", value = {{ Times = 4 }} }}, "materials")
+                "#
+            ),
+        );
+        let changes = loader.changes();
+        assert_eq!(changes.len(), 1, "{:?}", loader.logs());
+        assert_eq!(changes[0].0.entry, Guid::parse(CHEST));
+        assert_eq!(changes[0].0.field, Field::MaxStackSize);
+        assert_eq!(changes[0].0.value, Value::Set(99.0));
+        assert_eq!(changes[0].1, "stacks");
+        let items = loader.item_changes();
+        assert_eq!(
+            items[0].0.items,
+            Items::Category(ItemCategoryMask::MATERIALS)
+        );
+        assert_eq!(items[0].0.value, Value::Times(4.0));
+    }
+
+    #[test]
+    fn a_change_the_api_refuses_raises_an_error_naming_the_call() {
+        let loader = run(
+            FakeHost::new(),
+            r#"
+            local ok, why = pcall(enshwick.content.change_items,
+                { items = "Stackable", field = "DamageMod", value = { Times = 2 } }, "damage")
+            enshwick.log.info(`refused {not ok} {why}`)
+            local ok2, why2 = pcall(enshwick.content.change_items,
+                { items = "Stackable", field = "Nope", value = { Times = 2 } }, "nope")
+            enshwick.log.info(`unknown {not ok2} {why2}`)
+            "#,
+        );
+        assert!(logged(&loader, "refused true"), "{:?}", loader.logs());
+        assert!(logged(&loader, "enshwick.content.change_items"));
+        assert!(logged(&loader, "unknown true"));
+        assert!(logged(&loader, "\"Nope\" is not one of"));
+        assert!(loader.item_changes().is_empty());
+    }
+
+    #[test]
+    fn a_malformed_content_id_fails_the_start_with_the_reason() {
+        let (loader, status) = start(
+            FakeHost::new().items(),
+            &format!(r#"enshwick.content.add_item({{ id = "Locker", like = "{CHEST}" }})"#),
+        );
+        assert_ne!(status, Status::OK);
+        assert!(logged(&loader, "is no content id"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn content_calls_after_the_start_are_refused() {
+        let loader = run(
+            FakeHost::new(),
+            r#"
+            local declare = enshwick.content.declare
+            enshwick.on("WorldSaved", function()
+                local ok, why = pcall(declare, "you.luau:late")
+                enshwick.log.info(`late {not ok} {why}`)
+            end)
+            "#,
+        );
+        let _handled = loader.raise::<enshwick::events::WorldSaved>(&());
+        assert!(logged(&loader, "late true"));
+        assert!(loader.content_ids().is_empty());
+    }
+
+    #[test]
+    fn a_script_reads_vanilla_lookups_and_helpers() {
+        let loader = run(
+            FakeHost::new(),
+            r#"
+            enshwick.log.info(`fill {enshwick.content.fill(3, 4)}`)
+            enshwick.log.info(`id {enshwick.content.is_id("you.luau:x")} {enshwick.content.is_id("x")}`)
+            local ok = pcall(enshwick.content.item, "Chest_Wood")
+            enshwick.log.info(`lookup outside the game {not ok}`)
+            "#,
+        );
+        assert!(logged(&loader, "fill 0.75"));
+        assert!(logged(&loader, "id true false"));
+        assert!(logged(&loader, "lookup outside the game true"));
+    }
+}

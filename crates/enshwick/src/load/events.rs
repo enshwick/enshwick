@@ -8,6 +8,7 @@ use crate::services::{Emitter, ModEvent};
 
 use super::{Load, Off, event_spec, hand_over, ok};
 
+#[crate::script(ticks)]
 impl Load<'_> {
     /// Calls `handler` on every event `E` with its typed data: a loader event
     /// of [`events`](crate::events) on the thread that raises it, or a typed
@@ -90,6 +91,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
+    #[script]
     pub fn on_tick(
         &mut self,
         every: Duration,
@@ -118,6 +120,7 @@ impl Load<'_> {
     ///     load.on_every_step(|tick| enshwick::debug!("step {}", tick.step))
     /// }
     /// ```
+    #[script]
     pub fn on_every_step(
         &mut self,
         handler: impl Fn(&TickData) + Send + Sync + 'static,

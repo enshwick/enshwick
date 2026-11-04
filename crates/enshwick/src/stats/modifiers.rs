@@ -16,7 +16,9 @@ use super::defs::{Stat, StatDef, StatKey, StatType};
 /// # Examples
 ///
 /// See [`aggregate`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, crate::Script,
+)]
 #[non_exhaustive]
 pub enum Op {
     /// Adds the value.
@@ -127,7 +129,7 @@ pub fn aggregate(def: &StatDef, modifiers: impl IntoIterator<Item = (Op, f32)>) 
 ///     Modifier::new(health, Op::Add, 50.0)
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct Modifier {
     /// The stat.
     pub stat: Stat,
@@ -184,7 +186,7 @@ impl Modifier {
 /// # Examples
 ///
 /// See [`ItemStats`].
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
 pub struct ItemModifier {
     /// The stat.
     pub stat: StatKey,
@@ -211,7 +213,7 @@ pub struct ItemModifier {
 /// assert_eq!(postcard::from_bytes::<ItemStats>(&bytes)?, ring);
 /// # Ok::<(), postcard::Error>(())
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
 pub struct ItemStats {
     /// The modifiers, in the order they apply.
     pub modifiers: Vec<ItemModifier>,
@@ -227,7 +229,7 @@ pub struct ItemStats {
 /// # Examples
 ///
 /// See the [module](crate::stats).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Lasting {
     /// Until the mod removes it or the entity leaves the world.
@@ -274,7 +276,7 @@ pub enum ModifyError {
 ///     matches!(origin, Origin::Item(_))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Origin {
     /// An item the entity wears.
@@ -296,7 +298,7 @@ pub enum Origin {
 /// # Examples
 ///
 /// See [`Stats::sources`](crate::stats::Stats::sources).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct Source {
     /// Where it comes from.

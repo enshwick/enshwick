@@ -325,3 +325,43 @@ each of these is in
 [`enshwick-game-rates`](https://github.com/enshwick/mods/tree/main/game-rates)
 reads its comfort setting as `multiplier` in its `[comfort]` group, beside
 its recipe rates.
+
+## Settings of a Luau mod
+
+A [Luau mod](luau.md) declares its settings in `pack.toml`, one
+`[[setting]]` table each, in the order the Mods screen shows them:
+
+```toml
+[[setting]]
+key = "greeting"
+default = "Welcome"
+doc = "What a player who joins reads before their name."
+
+[[setting]]
+key = "announce_minutes"
+default = 30
+min = 1
+max = 1440
+doc = "How often the log counts the players online, in minutes."
+```
+
+| Field | Meaning |
+| --- | --- |
+| `key` | the key in each world's `<stem>-mod-settings/<id>/settings.toml`, of `[a-z0-9_]` |
+| `default` | the value until a world sets another; its type is the setting's |
+| `doc` | what it does, for the file's comments and the Mods screen |
+| `min`, `max` | the range of a number |
+| `choices` | the values it accepts |
+| `text` | the key of its label in the pack's `texts.toml`; `config.<key>` unless given |
+
+The loader writes the file from these on first start, checks every value
+against its declaration, and shows the settings behind the mod's gear on the
+Mods screen, as it does a Rust mod's. `enshwick.settings()` returns the
+values in force as a table. A `SettingsChanged` handler runs after the new
+values are in place, so it reads them again there:
+
+```luau
+enshwick.on("SettingsChanged", function()
+    enshwick.log.info(`greeting now {enshwick.settings().greeting}`)
+end)
+```

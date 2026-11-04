@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use enshwick::script::{self, Choice, Record, Signature, Ty};
+use enshwick::script::{self, Choice, Class, Declared, Record, Signature, Ty, Union};
 
 /// The file name editors are pointed at.
 pub const DEFINITIONS_FILE: &str = "enshwick.d.luau";
@@ -14,6 +14,131 @@ pub const DEFINITIONS_FILE: &str = "enshwick.d.luau";
 enum Named {
     Record(&'static Record),
     Choice(&'static Choice),
+    Object(&'static Class),
+    Union(&'static Union),
+}
+
+impl Named {
+    /// The type's declaration, with its doc.
+    fn write(&self, out: &mut String) {
+        match self {
+            Self::Record(record) => {
+                comment(record.doc(), "", out);
+                let _written = writeln!(out, "export type {} = {{", record.name());
+                for field in record.fields() {
+                    comment(field.doc(), "\t", out);
+                    let ty = render(field.ty());
+                    let ty = if field.has_default() && !ty.ends_with('?') {
+                        format!("{ty}?")
+                    } else {
+                        ty
+                    };
+                    let _written = writeln!(out, "\t{}: {ty},", field.name());
+                }
+                out.push_str("}\n");
+            }
+            Self::Object(class) => {
+                comment(class.doc(), "", out);
+                let _written = writeln!(out, "export type {} = {{", class.name());
+                for method in class.methods() {
+                    comment(method.doc(), "\t", out);
+                    let params = function(method.signature());
+                    let _written = writeln!(
+                        out,
+                        "\t{}: (self: {}{}{},",
+                        method.name(),
+                        class.name(),
+                        if params.starts_with("()") { "" } else { ", " },
+                        &params[1..]
+                    );
+                }
+                out.push_str("}\n");
+            }
+            Self::Union(union) => {
+                comment(union.doc(), "", out);
+                let variants: Vec<String> = union
+                    .variants()
+                    .iter()
+                    .map(|v| match v.ty() {
+                        Some(ty) => format!("{{ {}: {} }}", v.name(), render(ty)),
+                        None => format!("{:?}", v.name()),
+                    })
+                    .collect();
+                let _written = writeln!(
+                    out,
+                    "export type {} = {}",
+                    union.name(),
+                    variants.join(" | ")
+                );
+            }
+            Self::Choice(choice) => {
+                comment(choice.doc(), "", out);
+                let variants: Vec<String> = choice.names().map(|n| format!("{n:?}")).collect();
+                let _written = writeln!(
+                    out,
+                    "export type {} = {}",
+                    choice.name(),
+                    variants.join(" | ")
+                );
+            }
+        }
+    }
+}
+
+/// A function of a namespace as the definitions declare it: callable any
+/// time, or only while the mod starts.
+struct Entry {
+    name: &'static str,
+    doc: &'static str,
+    signature: &'static Signature,
+    starting: bool,
+}
+
+impl Entry {
+    /// The entry's line in a table type at `indent`, with its doc.
+    fn write(&self, indent: &str, out: &mut String) {
+        comment(self.doc, indent, out);
+        if self.starting {
+            let _written = writeln!(
+                out,
+                "{indent}--- Only while the mod starts, at the top level of main.luau."
+            );
+        }
+        let _written = writeln!(out, "{indent}{}: {},", self.name, function(self.signature));
+    }
+}
+
+/// Every namespace by name, with all its parts' functions, in the order
+/// [`script::NAMESPACES`] first names each; the empty name is `enshwick`'s
+/// own functions.
+fn namespaces() -> Vec<(&'static str, &'static str, Vec<Entry>)> {
+    let mut merged: Vec<(&'static str, &'static str, Vec<Entry>)> = Vec::new();
+    for namespace in script::NAMESPACES {
+        let known = merged
+            .iter()
+            .position(|(name, ..)| *name == namespace.name());
+        let at = known.unwrap_or_else(|| {
+            merged.push((namespace.name(), "", Vec::new()));
+            merged.len() - 1
+        });
+        let (_, doc, entries) = &mut merged[at];
+        if doc.is_empty() {
+            *doc = namespace.doc();
+        }
+        entries.extend(namespace.functions().iter().map(|f: &Declared| Entry {
+            name: f.name(),
+            doc: f.doc(),
+            signature: f.signature(),
+            starting: false,
+        }));
+        entries.extend(namespace.init_functions().map(|f| Entry {
+            name: f.name(),
+            doc: f.doc(),
+            signature: f.signature(),
+            starting: true,
+        }));
+    }
+    merged
 }
 
 /// Collects every named type inside `ty`.
@@ -31,6 +156,16 @@ fn collect(ty: &'static Ty, named: &mut BTreeMap<&'static str, Named>) {
             named.insert(choice.name(), Named::Choice(choice));
         }
         Ty::Function(signature) => collect_signature(signature, named),
+        Ty::Union(union) if named.insert(union.name(), Named::Union(union)).is_none() => {
+            for ty in union.variants().iter().filter_map(script::Variant::ty) {
+                collect(ty, named);
+            }
+        }
+        Ty::Object(class) if named.insert(class.name(), Named::Object(class)).is_none() => {
+            for method in class.methods() {
+                collect_signature(method.signature(), named);
+            }
+        }
         _ => {}
     }
 }
@@ -60,6 +195,8 @@ fn render(ty: &Ty) -> String {
         Ty::Function(signature) => function(signature),
         Ty::Data => "any".to_owned(),
         Ty::Bytes => "buffer".to_owned(),
+        Ty::Object(class) => class.name().to_owned(),
+        Ty::Union(union) => union.name().to_owned(),
         _ => "nil".to_owned(),
     }
 }
@@ -93,14 +230,16 @@ fn function(signature: &Signature) -> String {
 /// `doc` as Luau doc comment lines at `indent`, with rustdoc links reduced
 /// to their text.
 fn comment(doc: &str, indent: &str, out: &mut String) {
-    let text = plain(doc);
+    // Luau reaches `Clock::now` as `Clock.now`.
+    let text = plain(doc).replace("::", ".");
     for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
         let _written = writeln!(out, "{indent}--- {line}");
     }
 }
 
-/// `doc` without rustdoc link targets: `[`X`](path)` and `[`X`]` become
-/// `` `X` ``.
+/// `doc` without rustdoc link targets, `[`X`](path)` and `[`X`]` become
+/// `` `X` ``, and with Luau's words for Rust's values: `` `None` `` is nil,
+/// `` `Some(x)` `` and `` `Ok(x)` `` are `` `x` ``.
 fn plain(doc: &str) -> String {
     let mut out = String::with_capacity(doc.len());
     let mut rest = doc;
@@ -109,7 +248,7 @@ fn plain(doc: &str) -> String {
         let after = &rest[start + 1..];
         let Some(end) = after.find(']') else {
             out.push_str(&rest[start..]);
-            return out;
+            return luau_words(&out);
         };
         out.push_str(&after[..end]);
         rest = &after[end + 1..];
@@ -120,15 +259,34 @@ fn plain(doc: &str) -> String {
         }
     }
     out.push_str(rest);
+    luau_words(&out)
+}
+
+/// `text` with `` `None` `` as nil and `` `Some(x)` `` and `` `Ok(x)` ``
+/// as `` `x` ``.
+fn luau_words(text: &str) -> String {
+    let mut out = text.replace("`None`", "nil");
+    for wrapper in ["`Some(", "`Ok("] {
+        while let Some(start) = out.find(wrapper) {
+            let inner = start + wrapper.len();
+            let Some(close) = out[inner..].find(")`") else {
+                break;
+            };
+            out.replace_range(
+                start..inner + close + 2,
+                &format!("`{}`", &out[inner..inner + close]),
+            );
+        }
+    }
     out
 }
 
 /// Every named type the definitions declare, by name.
 fn named() -> BTreeMap<&'static str, Named> {
     let mut named = BTreeMap::new();
-    for namespace in script::NAMESPACES {
-        for function in namespace.functions() {
-            collect_signature(function.signature(), &mut named);
+    for (_, _, entries) in namespaces() {
+        for entry in entries {
+            collect_signature(entry.signature, &mut named);
         }
     }
     for event in script::events() {
@@ -169,27 +327,7 @@ pub fn definitions() -> String {
     );
     for ty in named.values() {
         out.push('\n');
-        match ty {
-            Named::Record(record) => {
-                comment(record.doc(), "", &mut out);
-                let _written = writeln!(out, "export type {} = {{", record.name());
-                for field in record.fields() {
-                    comment(field.doc(), "\t", &mut out);
-                    let _written = writeln!(out, "\t{}: {},", field.name(), render(field.ty()));
-                }
-                out.push_str("}\n");
-            }
-            Named::Choice(choice) => {
-                comment(choice.doc(), "", &mut out);
-                let variants: Vec<String> = choice.names().map(|n| format!("{n:?}")).collect();
-                let _written = writeln!(
-                    out,
-                    "export type {} = {}",
-                    choice.name(),
-                    variants.join(" | ")
-                );
-            }
-        }
+        ty.write(&mut out);
     }
     out.push_str("\ndeclare enshwick: {\n");
     out.push_str("\t--- Calls `handler` on every loader or typed game event named `event`, with its data; subscribe at the top level of main.luau. A game value the API does not name arrives as `Other(<number>)`, a name of ours.\n\ton: ");
@@ -206,7 +344,7 @@ pub fn definitions() -> String {
     out.push_str(",\n");
     out.push_str("\t--- Calls `handler` on every game event of the reflected type `type_name`, with the fields `fields` names, each read as its kind: u8, i8, u16, i16, u32, i32, u64, i64, f32, f64, bool or entity; 64-bit values as strings. Subscribe at the top level of main.luau.\n\ton_game_type: (type_name: string, fields: { [string]: string }, handler: (event: { [string]: any }) -> ()) -> (),\n");
     out.push_str("\t--- Every game event type of the running build, with its size in bytes, read from the game's reflection.\n\tgame_event_types: () -> { { name: string, size: number } },\n");
-    out.push_str("\t--- Links `handler` into another mod's extension point, as `cargo enshwick deps <alias> --luau` describes it: it gets the input and the answer so far, and returns a new answer, nothing to keep it, or `enshwick.refuse`. Subscribe at the top level of main.luau.\n\textend: (point: { name: string }, handler: (input: any, answer: any) -> any) -> (),\n");
+    out.push_str("\t--- Links `handler` into another mod's extension point, as `cargo enshwick deps <alias> --luau` describes it: it gets the input and the answer so far, and returns a new answer, nothing to keep it, or `enshwick.refuse`. `order` places the link among the point's others: `after` a mod sees its answer, `before` a mod leaves it the last word, and among the rest the lower `priority` runs first. Subscribe at the top level of main.luau.\n\textend: (point: { name: string }, handler: (input: any, answer: any) -> any, order: { before: { string }?, after: { string }?, priority: number? }?) -> (),\n");
     out.push_str(
         "\t--- What a point's handler returns to refuse, on a refusable point.\n\trefuse: {},\n",
     );
@@ -215,17 +353,17 @@ pub fn definitions() -> String {
     out.push_str("\t--- Defines a mod event of this mod for others to hear, at the top level of main.luau, by its local name (`greeted` for `<mod id>:greeted`); `send` hands every subscriber the data.\n\tdefine_event: (event: { name: string }) -> { send: (data: any) -> () },\n");
     out.push_str("\t--- The mods `pack.toml` names in `requires` and `after`, by alias: each mod's id, and whether it runs now.\n\tdeps: { [string]: { id: string, running: () -> boolean } },\n");
     out.push_str("\t--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.\n\tsettings: () -> { [string]: any },\n");
-    for namespace in script::NAMESPACES {
-        comment(namespace.doc(), "\t", &mut out);
-        let _written = writeln!(out, "\t{}: {{", namespace.name());
-        for function in namespace.functions() {
-            comment(function.doc(), "\t\t", &mut out);
-            let _written = writeln!(
-                out,
-                "\t\t{}: {},",
-                function.name(),
-                self::function(function.signature())
-            );
+    for (name, doc, entries) in namespaces() {
+        if name.is_empty() {
+            for entry in &entries {
+                entry.write("\t", &mut out);
+            }
+            continue;
+        }
+        comment(doc, "\t", &mut out);
+        let _written = writeln!(out, "\t{name}: {{");
+        for entry in &entries {
+            entry.write("\t\t", &mut out);
         }
         out.push_str("\t},\n");
     }
@@ -247,6 +385,43 @@ mod tests {
     }
 
     #[test]
+    fn no_two_types_share_a_name() {
+        let doc = |named: &Named| match named {
+            Named::Record(r) => r.doc(),
+            Named::Choice(c) => c.doc(),
+            Named::Union(u) => u.doc(),
+            Named::Object(o) => o.doc(),
+        };
+        let mut first: BTreeMap<&str, &str> = BTreeMap::new();
+        let mut clashes = Vec::new();
+        let signatures = namespaces()
+            .into_iter()
+            .flat_map(|(_, _, entries)| entries.into_iter().map(|e| e.signature));
+        for signature in signatures {
+            let mut one = BTreeMap::new();
+            collect_signature(signature, &mut one);
+            for (name, named) in &one {
+                let known = *first.entry(name).or_insert_with(|| doc(named));
+                if known != doc(named) {
+                    clashes.push(*name);
+                }
+            }
+        }
+        clashes.sort_unstable();
+        clashes.dedup();
+        assert!(clashes.is_empty(), "types of one name: {clashes:?}");
+    }
+
+    #[test]
+    fn rust_values_read_as_luau_s() {
+        assert_eq!(
+            plain("`None` off the thread, `Some(true)` or `Ok(false)` else."),
+            "nil off the thread, `true` or `false` else."
+        );
+        assert_eq!(plain("`Some(x` stays"), "`Some(x` stays");
+    }
+
+    #[test]
     fn the_definitions_speak_no_rust() {
         let rust = [
             "::", "`None`", "`Some", "`Ok", "`Err", "Option<", "Result<", "Vec<",
@@ -263,13 +438,25 @@ mod tests {
     fn the_definitions_declare_every_namespace_function_and_event() {
         let text = definitions();
         for namespace in script::NAMESPACES {
-            assert!(text.contains(&format!("\t{}: {{", namespace.name())));
-            for function in namespace.functions() {
+            // The namespace without a name is the `enshwick` table itself.
+            let indent = if namespace.name().is_empty() {
+                "\t"
+            } else {
                 assert!(
-                    text.contains(&format!("\t\t{}: (", function.name())),
+                    text.contains(&format!("\t{}: {{", namespace.name())),
                     "{}",
-                    function.name()
+                    namespace.name()
                 );
+                "\t\t"
+            };
+            let names = namespace
+                .functions()
+                .iter()
+                .map(Declared::name)
+                .chain(namespace.init_functions().map(script::InitFunction::name))
+                .collect::<Vec<_>>();
+            for name in names {
+                assert!(text.contains(&format!("{indent}{name}: (")), "{name}");
             }
         }
         for event in script::events() {

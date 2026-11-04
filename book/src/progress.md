@@ -21,6 +21,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.progress.on_skill("AirborneArchitect", function(check)
+    if check.gate == "FlyMode" then
+        return true
+    end
+    return nil
+end)
+```
+
 ## Comfort
 
 Each tick every comfort provider in a base registers its comfort for its

@@ -23,14 +23,16 @@
 //! assert!(matches!(Purse { coins: 3 }.into_value(), Value::Record(_)));
 //! ```
 
-use core::ffi::c_void;
 use std::sync::Arc;
 
 pub(crate) mod convert;
+mod events;
 mod namespaces;
+mod objects;
 #[cfg(test)]
 #[cfg(feature = "unstable")]
 mod tests;
+mod unions;
 
 #[cfg_attr(
     not(feature = "unstable"),
@@ -39,7 +41,17 @@ mod tests;
         reason = "the script binding is public only with `unstable`"
     )
 )]
+pub use events::{EventKind, GameEventKind, events, game_events};
+#[cfg_attr(
+    not(feature = "unstable"),
+    expect(
+        unused_imports,
+        reason = "the script binding is public only with `unstable`"
+    )
+)]
 pub use namespaces::{Declared, Log, NAMESPACES, Namespace, Opened};
+pub use objects::{Class, Handle, Object};
+pub use unions::{Union, Variant};
 
 /// A value's type as a script language sees it.
 ///
@@ -75,6 +87,10 @@ pub enum Ty {
     Data,
     /// Raw bytes: a Luau `buffer`.
     Bytes,
+    /// A Rust handle with methods, held as an [`Object`].
+    Object(&'static Class),
+    /// One of an enum's variants, some carrying a value.
+    Union(&'static Union),
 }
 
 /// A named type with named fields, from [`#[derive(Script)]`](macro@crate::Script).
@@ -138,13 +154,41 @@ pub struct Field {
     name: &'static str,
     doc: &'static str,
     ty: &'static Ty,
+    defaulted: bool,
 }
 
 impl Field {
     #[doc(hidden)]
     #[must_use]
     pub const fn new(name: &'static str, doc: &'static str, ty: &'static Ty) -> Self {
-        Self { name, doc, ty }
+        Self {
+            name,
+            doc,
+            ty,
+            defaulted: false,
+        }
+    }
+
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn defaulted(name: &'static str, doc: &'static str, ty: &'static Ty) -> Self {
+        Self {
+            name,
+            doc,
+            ty,
+            defaulted: true,
+        }
+    }
+
+    /// Whether a script may leave the field out, for its Rust default, as
+    /// `#[script(default)]` marks it.
+    ///
+    /// # Examples
+    ///
+    /// See the [module](self).
+    #[must_use]
+    pub const fn has_default(&self) -> bool {
+        self.defaulted
     }
 
     /// The Rust field's name.
@@ -465,6 +509,167 @@ impl<T> Function<T> {
     }
 }
 
+/// The call shim an [`InitFunction`] runs: the mod's [`Load`](crate::Load)
+/// and the arguments, each already of its parameter's type.
+///
+/// # Examples
+///
+/// See [`InitFunction`].
+pub type InitCall = fn(&mut crate::Load<'_>, Vec<Value>) -> Result<Value, Error>;
+
+/// A method of [`Load`](crate::Load) a script may call while the mod
+/// starts, as a Rust mod calls it in `init`, from
+/// [`#[script]`](macro@crate::script) on an `impl Load` block.
+///
+/// # Examples
+///
+/// ```rust,standalone_crate
+/// use enshwick::script::{InitFunction, Value};
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     let log_dir: &InitFunction = enshwick::script::NAMESPACES
+///         .iter()
+///         .flat_map(|n| n.init_functions())
+///         .find(|f| f.name() == "mod_dir")
+///         .ok_or(enshwick::Off::new("no mod_dir"))?;
+///     let _dir: Value = log_dir.call(load, Vec::new())?;
+///     Ok(())
+/// }
+/// ```
+pub struct InitFunction {
+    name: &'static str,
+    doc: &'static str,
+    signature: Signature,
+    call: InitCall,
+}
+
+impl core::fmt::Debug for InitFunction {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("InitFunction")
+            .field("name", &self.name)
+            .field("signature", &self.signature)
+            .finish_non_exhaustive()
+    }
+}
+
+impl InitFunction {
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn new(
+        name: &'static str,
+        doc: &'static str,
+        signature: Signature,
+        call: InitCall,
+    ) -> Self {
+        Self {
+            name,
+            doc,
+            signature,
+            call,
+        }
+    }
+
+    /// The method's name, the same in Rust and in a script.
+    ///
+    /// # Examples
+    ///
+    /// See [`InitFunction`].
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// The method's doc comment up to its first section.
+    ///
+    /// # Examples
+    ///
+    /// See [`InitFunction`].
+    #[must_use]
+    pub const fn doc(&self) -> &'static str {
+        self.doc
+    }
+
+    /// Its parameters and answer.
+    ///
+    /// # Examples
+    ///
+    /// See [`InitFunction`].
+    #[must_use]
+    pub const fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    /// Calls the method on `load` with `args`, one per parameter, each of
+    /// the parameter's type.
+    ///
+    /// # Errors
+    ///
+    /// As [`Function::call`].
+    ///
+    /// # Examples
+    ///
+    /// See [`InitFunction`].
+    pub fn call(&self, load: &mut crate::Load<'_>, args: Vec<Value>) -> Result<Value, Error> {
+        if args.len() > self.signature.params.len() {
+            return Err(Error::new(format!(
+                "{} takes {} arguments, not {}",
+                self.name,
+                self.signature.params.len(),
+                args.len()
+            )));
+        }
+        (self.call)(load, args)
+    }
+}
+
+/// What a hook hands a script's handler in place of its `&mut` argument:
+/// a view of it as a value, and the change the handler returns, applied
+/// back; a handler that returns nil changes nothing.
+///
+/// # Examples
+///
+/// ```rust,standalone_crate
+/// use enshwick::script::{Context, Error, Ty, Typed, Value};
+///
+/// struct Price(u32);
+///
+/// impl Context for Price {
+///     const VIEW: &'static Ty = <u32 as Typed>::TY;
+///     const CHANGE: &'static Ty = <u32 as Typed>::TY;
+///
+///     fn view(&self) -> Value {
+///         Value::Number(self.0.into())
+///     }
+///
+///     fn apply(&mut self, change: Value) -> Result<(), Error> {
+///         self.0 = enshwick::script::FromScript::from_value(change)?;
+///         Ok(())
+///     }
+/// }
+///
+/// let mut price = Price(3);
+/// price.apply(Value::Number(5.0))?;
+/// assert_eq!(price.0, 5);
+/// # Ok::<(), Error>(())
+/// ```
+pub trait Context {
+    /// What the handler gets.
+    const VIEW: &'static Ty;
+    /// What the handler may return besides nil.
+    const CHANGE: &'static Ty;
+
+    /// The handler's view of the context.
+    fn view(&self) -> Value;
+
+    /// Applies what the handler returned, of [`Context::CHANGE`].
+    ///
+    /// # Errors
+    ///
+    /// [`Error`] for a change the context refuses; the runtime turns the
+    /// script's mod off with it.
+    fn apply(&mut self, change: Value) -> Result<(), Error>;
+}
+
 /// A part of the API a script reaches as one namespace, such as `world`.
 ///
 /// # Examples
@@ -529,6 +734,8 @@ pub enum Value {
     Map(Vec<(String, Value)>),
     /// [`Ty::Bytes`], and raw bytes inside [`Ty::Data`].
     Bytes(Vec<u8>),
+    /// [`Ty::Object`].
+    Object(Handle),
 }
 
 /// The function behind a [`Callback`].
@@ -549,7 +756,13 @@ type CallbackFn = dyn Fn(Vec<Value>) -> Result<Value, Error> + Send + Sync;
 /// assert!(matches!(double.call(vec![Value::Number(2.0)]), Ok(Value::Number(4.0))));
 /// ```
 #[derive(Clone)]
-pub struct Callback(Arc<CallbackFn>);
+pub struct Callback {
+    function: Arc<CallbackFn>,
+    fault: Option<Arc<FaultFn>>,
+}
+
+/// What a [`Callback`]'s runtime does with an answer the API cannot use.
+type FaultFn = dyn Fn(&Error) + Send + Sync;
 
 impl core::fmt::Debug for Callback {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -566,7 +779,33 @@ impl Callback {
     pub fn new(
         function: impl Fn(Vec<Value>) -> Result<Value, Error> + Send + Sync + 'static,
     ) -> Self {
-        Self(Arc::new(function))
+        Self {
+            function: Arc::new(function),
+            fault: None,
+        }
+    }
+
+    /// The same function, with `fault` told of an answer the API cannot
+    /// use, such as a change a [`Context`] refuses.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,standalone_crate
+    /// use enshwick::script::{Callback, Error, Value};
+    ///
+    /// let told = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    /// let seen = told.clone();
+    /// let callback = Callback::new(|_| Ok(Value::Nil))
+    ///     .with_fault(move |_| seen.store(true, std::sync::atomic::Ordering::Relaxed));
+    /// callback.fault(&Error::new("no"));
+    /// assert!(told.load(std::sync::atomic::Ordering::Relaxed));
+    /// ```
+    #[must_use]
+    pub fn with_fault(self, fault: impl Fn(&Error) + Send + Sync + 'static) -> Self {
+        Self {
+            fault: Some(Arc::new(fault)),
+            ..self
+        }
     }
 
     /// Calls the function with `args`.
@@ -579,7 +818,19 @@ impl Callback {
     ///
     /// See [`Callback`].
     pub fn call(&self, args: Vec<Value>) -> Result<Value, Error> {
-        (self.0)(args)
+        (self.function)(args)
+    }
+
+    /// Tells the runtime that the function's answer did not fit, with
+    /// `error`; without a runtime to tell, nothing happens.
+    ///
+    /// # Examples
+    ///
+    /// See [`Callback::with_fault`].
+    pub fn fault(&self, error: &Error) {
+        if let Some(fault) = &self.fault {
+            fault(error);
+        }
     }
 }
 
@@ -684,227 +935,4 @@ pub trait Answer {
     /// The Rust answer for the script's; an error, which the runtime has
     /// reported, answers as the API would without the script.
     fn from_answer(answer: Result<Value, Error>) -> Self;
-}
-
-/// A loader event a script subscribes to, from the tables of
-/// [`events`](crate::events).
-///
-/// # Examples
-///
-/// ```rust,standalone_crate
-/// let joined = enshwick::script::events().find(|e| e.name() == "PlayerJoined");
-/// assert!(joined.is_some_and(|e| e.event() == enshwick::abi::Event::PLAYER_JOINED));
-/// ```
-#[derive(Debug)]
-pub struct EventKind {
-    name: &'static str,
-    doc: &'static str,
-    event: crate::abi::Event,
-    data: &'static Ty,
-    read: unsafe fn(*const c_void) -> Option<Value>,
-}
-
-impl EventKind {
-    pub(crate) const fn new(
-        name: &'static str,
-        doc: &'static str,
-        event: crate::abi::Event,
-        data: &'static Ty,
-        read: unsafe fn(*const c_void) -> Option<Value>,
-    ) -> Self {
-        Self {
-            name,
-            doc,
-            event,
-            data,
-            read,
-        }
-    }
-
-    /// The event's Rust name, such as `PlayerJoined`.
-    ///
-    /// # Examples
-    ///
-    /// See [`EventKind`].
-    #[must_use]
-    pub const fn name(&self) -> &'static str {
-        self.name
-    }
-
-    /// The event's doc comment.
-    ///
-    /// # Examples
-    ///
-    /// See [`EventKind`].
-    #[must_use]
-    pub const fn doc(&self) -> &'static str {
-        self.doc
-    }
-
-    /// The raw event.
-    ///
-    /// # Examples
-    ///
-    /// See [`EventKind`].
-    #[must_use]
-    pub const fn event(&self) -> crate::abi::Event {
-        self.event
-    }
-
-    /// What a handler gets; [`Ty::Nil`] for events without data.
-    ///
-    /// # Examples
-    ///
-    /// See [`EventKind`].
-    #[must_use]
-    pub const fn data(&self) -> &'static Ty {
-        self.data
-    }
-
-    /// The event's data from the raw pointer the loader passes with it.
-    ///
-    /// # Safety
-    ///
-    /// - `raw` is null or the pointer the loader passed with
-    ///   [`EventKind::event`]: the event's data, readable for the size its
-    ///   header states; no alignment is needed.
-    /// - No other thread writes that data during the call.
-    #[must_use]
-    pub unsafe fn read(&self, raw: *const c_void) -> Option<Value> {
-        // SAFETY: the caller passes the loader's pointer for this event with
-        // no other thread writing its data, by this function's `# Safety`,
-        // which is what the reader asks.
-        unsafe { (self.read)(raw) }
-    }
-}
-
-/// Every loader event a script may subscribe to.
-///
-/// # Examples
-///
-/// See [`EventKind`].
-pub fn events() -> impl Iterator<Item = &'static EventKind> {
-    crate::events::SCRIPT_EVENTS
-        .iter()
-        .flat_map(|part| part.iter())
-}
-
-/// The function behind [`GameEventKind::subscribe`].
-type SubscribeGame = fn(&mut crate::Load<'_>, Box<GameHandler>) -> Result<(), crate::Off>;
-
-/// A handler of a typed game event: it gets the event's data as a function
-/// that converts it, so a handler with nothing to do converts nothing.
-type GameHandler = dyn Fn(&dyn Fn() -> Value) + Send + Sync;
-
-/// A typed game event a script subscribes to, from
-/// [`game_events`](crate::game_events): its data and how to subscribe.
-///
-/// # Examples
-///
-/// ```rust,standalone_crate
-/// let died = enshwick::script::game_events().find(|e| e.name() == "EntityDiedEvent");
-/// assert!(died.is_some());
-/// ```
-#[derive(Debug)]
-pub struct GameEventKind {
-    record: &'static Record,
-    data: &'static Ty,
-    subscribe: SubscribeGame,
-}
-
-impl GameEventKind {
-    pub(crate) const fn of<E>() -> Self
-    where
-        E: crate::events::Kind<Data = E> + IntoScript + Clone + Send + Sync,
-    {
-        let record = match E::TY {
-            Ty::Record(record) => *record,
-            #[expect(
-                clippy::panic,
-                reason = "evaluated at compile time: a typed game event that is no record does not build"
-            )]
-            _ => panic!("a typed game event derives Script as a record"),
-        };
-        Self {
-            record,
-            data: E::TY,
-            subscribe: subscribe_game::<E>,
-        }
-    }
-
-    /// The event's Rust name, the game's type name without its namespace,
-    /// such as `EntityDiedEvent`.
-    ///
-    /// # Examples
-    ///
-    /// See [`GameEventKind`].
-    #[must_use]
-    pub const fn name(&self) -> &'static str {
-        self.record.name()
-    }
-
-    /// The event's doc comment up to its first section.
-    ///
-    /// # Examples
-    ///
-    /// See [`GameEventKind`].
-    #[must_use]
-    pub const fn doc(&self) -> &'static str {
-        self.record.doc()
-    }
-
-    /// What a handler gets.
-    ///
-    /// # Examples
-    ///
-    /// See [`GameEventKind`].
-    #[must_use]
-    pub const fn data(&self) -> &'static Ty {
-        self.data
-    }
-
-    /// Calls `handler` with each event's data, as
-    /// [`Load::on`](crate::Load::on) does for the Rust type.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`](crate::Off) when this build lacks a field of the event, or
-    /// after `init`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,standalone_crate
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let died = enshwick::script::game_events()
-    ///         .find(|e| e.name() == "EntityDiedEvent")
-    ///         .ok_or(enshwick::Off::new("no such event"))?;
-    ///     died.subscribe(load, |data| enshwick::debug!("{:?}", data()))
-    /// }
-    /// ```
-    pub fn subscribe(
-        &self,
-        load: &mut crate::Load<'_>,
-        handler: impl Fn(&dyn Fn() -> Value) + Send + Sync + 'static,
-    ) -> Result<(), crate::Off> {
-        (self.subscribe)(load, Box::new(handler))
-    }
-}
-
-fn subscribe_game<E>(
-    load: &mut crate::Load<'_>,
-    handler: Box<GameHandler>,
-) -> Result<(), crate::Off>
-where
-    E: crate::events::Kind<Data = E> + IntoScript + Clone + Send + Sync,
-{
-    load.on::<E>(move |event| handler(&|| event.clone().into_value()))
-}
-
-/// Every typed game event a script may subscribe to.
-///
-/// # Examples
-///
-/// See [`GameEventKind`].
-pub fn game_events() -> impl Iterator<Item = &'static GameEventKind> {
-    crate::game_events::SCRIPT_KINDS.iter()
 }

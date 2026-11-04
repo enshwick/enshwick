@@ -174,3 +174,42 @@ let loader = enshwick::test::FakeHost::new().install();
 loader.serve_call(|input: &PriceOf| input.item * 10);
 assert_eq!(loader.call(&PriceOf { item: 1 }), Err(enshwick::services::CallError::Unmatched));
 ```
+
+## From Luau
+
+A [Luau mod](luau.md) calls another mod's call through the module
+`cargo enshwick deps <alias> --luau` writes for it, as for a
+[point](extending.md#from-luau):
+
+```bash
+cargo enshwick deps trading_post --from <server DLL> --luau
+```
+
+`enshwick.caller` at the top level of `main.luau` returns the function that
+runs it once the start is over:
+
+```luau
+local price_of = enshwick.caller(require("./deps/trading_post/price-of"))
+
+enshwick.on("WorldSaved", function()
+    local coins, why = price_of({ item = 7, count = 1 })
+    if coins then
+        enshwick.log.info(`item 7 sells for {coins}`)
+    else
+        enshwick.log.warn(`no price: {why}`)
+    end
+end)
+```
+
+The function answers nil and why not: `unmatched` when no running mod serves
+the call as described or the start is not over, `off` when the server or its
+handler is, and `failed` when its handler failed. A call asked for after the
+start raises an error: it takes the next start.
+
+The input's fields are numbers, booleans, entities and GUIDs. The runtime
+works out each field's layout hash from its name, type and offset and refuses
+a module whose hashes do not match, so a module edited by hand no longer
+reaches the server. A call whose input holds a value type or an enum is for
+Rust mods only: `cargo enshwick deps --luau` leaves it out and says why,
+since a script could forge such a field's description and send the server a
+value its type forbids. The answer may be of any type.

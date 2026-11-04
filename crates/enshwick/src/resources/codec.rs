@@ -955,12 +955,10 @@ impl<'a> Encoder<'_, 'a> {
             if count == 0 {
                 return Ok(());
             }
-            if let Some(start) = self.existing(at, at, data.len()) {
-                // The engine may share one string between headers: a changed
-                // one is written fresh, never over the shared bytes.
-                if self.read(start, data.len()) == Some(data) {
-                    return Ok(());
-                }
+            if let Some(start) = self.existing(at, at, data.len())
+                && self.read(start, data.len()) == Some(data)
+            {
+                return Ok(());
             }
         }
         if count == 0 {

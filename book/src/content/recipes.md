@@ -42,6 +42,18 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local LOCKER = "you.lockers:locker"
+
+enshwick.content.add_recipe({
+    id = `{LOCKER}.recipe`,
+    like = enshwick.content.item("Prop_Storage_24_T1_Box"),
+    output = enshwick.content.guid(LOCKER),
+    output_count = 1,
+    cost = 2,
+})
+```
+
 The new recipe is a copy of the first recipe that makes `like`: same
 workshop, unlock and duration. It makes `output_count` of `output`, and each
 of its ingredient counts is the copied recipe's times `cost`. Here the locker

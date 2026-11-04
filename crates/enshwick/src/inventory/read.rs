@@ -67,10 +67,38 @@ impl crate::script::Bound for Inventories {
     const NAME: &'static str = "inventory";
     const DOC: &'static str =
         "Inventories on the server: their slots and counts, and items given, taken and moved.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_STOCK];
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_STOCK, Self::SCRIPT_READS];
 
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         load.inventories()
+    }
+}
+
+#[crate::script(reads)]
+impl Inventories {
+    /// The stack in `slot`, as `Reader::slot` reads it.
+    #[script(name = "slot")]
+    pub(crate) fn slot_script(&self, slot: SlotRef) -> Option<Slot> {
+        self.read().slot(slot)
+    }
+
+    /// The inventory at the root of `slot`'s, as `Reader::root` reads it.
+    #[script(name = "root")]
+    pub(crate) fn root_script(&self, slot: SlotRef) -> Option<Entity> {
+        self.read().root(slot)
+    }
+
+    /// The durability of the item `pide`, as `Reader::durability` reads it.
+    #[script(name = "durability")]
+    pub(crate) fn durability_script(&self, pide: Entity) -> Option<Bar> {
+        self.read().durability(pide)
+    }
+
+    /// The meter of the item `pide`, as `Reader::meter` reads it.
+    #[script(name = "meter")]
+    pub(crate) fn meter_script(&self, pide: Entity) -> Option<Bar> {
+        self.read().meter(pide)
     }
 }
 
@@ -203,6 +231,7 @@ impl Inventories {
     ///     });
     /// }
     /// ```
+    #[script]
     pub fn submit(&self, batch: &Batch, done: impl FnOnce(&Outcome) + Send + 'static) -> Ticket {
         let ticket = Ticket::default();
         let pending = Pending {
@@ -414,6 +443,7 @@ impl Inventories {
     ///     })
     /// }
     /// ```
+    #[script]
     pub fn renew(
         &self,
         root: Entity,

@@ -127,7 +127,7 @@ pub mod builtin;
 /// # Examples
 ///
 /// See [`Load::on_stats_changed`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct StatChange {
     /// The entity.
@@ -145,7 +145,7 @@ pub struct StatChange {
 /// # Examples
 ///
 /// See [`Stats::info`].
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct StatInfo {
     /// The full id, `<mod>:<name>`.
@@ -172,6 +172,55 @@ pub struct Stats {
     items: ItemData<ItemStats>,
 }
 
+impl crate::script::Bound for Stats {
+    const NAME: &'static str = "stats";
+    const DOC: &'static str =
+        "Stats of entities and items: values, modifiers, sources and definitions.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_VALUES, Self::SCRIPT_HELPERS];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.stats()
+    }
+}
+
+#[crate::script(helpers)]
+#[expect(
+    clippy::unused_self,
+    reason = "a script call takes its namespace, though a free function reads nothing of it"
+)]
+impl Stats {
+    /// The key a stat id hashes to, as [`key_of`] gives it.
+    #[script(name = "key_of")]
+    pub(crate) fn key_of_script(self, id: &str) -> StatKey {
+        key_of(id)
+    }
+
+    /// The text key that names the stat `id`, as [`name_key`] gives it.
+    #[script(name = "name_key")]
+    pub(crate) fn name_key_script(self, id: &str) -> Option<String> {
+        name_key(id)
+    }
+
+    /// The value `def` gives with `modifiers`, each an op and its value, as
+    /// [`aggregate`] gives it.
+    #[script(name = "aggregate")]
+    pub(crate) fn aggregate_script(self, def: &StatDef, modifiers: Vec<ScriptModifier>) -> f32 {
+        aggregate(def, modifiers.into_iter().map(|m| (m.op, m.value)))
+    }
+}
+
+/// An op and its value, as `aggregate` takes them from a script.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, crate::Script)]
+pub struct ScriptModifier {
+    /// What it does.
+    pub op: Op,
+    /// Its value.
+    pub value: f32,
+}
+
+#[crate::script(values)]
 impl Stats {
     /// The value of `stat` on `entity`: what the server worked out after the
     /// last step a source changed, or the default. Any thread, without
@@ -181,6 +230,7 @@ impl Stats {
     ///
     /// See the [module](self).
     #[must_use]
+    #[script]
     pub fn value(&self, entity: Entity, stat: Stat) -> f32 {
         let mut out = 0.0;
         let status =
@@ -198,6 +248,7 @@ impl Stats {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn is_on(&self, entity: Entity, stat: Stat) -> bool {
         self.value(entity, stat) != 0.0
     }
@@ -214,6 +265,7 @@ impl Stats {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn set(
         &self,
         entity: Entity,
@@ -242,6 +294,7 @@ impl Stats {
     ///     let _removed = stats.remove(player, "bless", health);
     /// }
     /// ```
+    #[script]
     pub fn remove(&self, entity: Entity, key: &str, stat: Stat) -> Result<(), ModifyError> {
         let data = StatModifierData {
             stat: stat.index,
@@ -285,6 +338,7 @@ impl Stats {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn item(&self, item: ItemInstance) -> ItemStats {
         self.items.get(item).unwrap_or_default()
     }
@@ -313,6 +367,7 @@ impl Stats {
     /// }
     /// ```
     #[cfg(feature = "unstable")]
+    #[script]
     pub fn set_item(&self, item: ItemInstance, stats: &ItemStats) -> Result<(), SetError> {
         if *stats == ItemStats::default() {
             self.items.remove(item)
@@ -334,6 +389,7 @@ impl Stats {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn sources(&self, entity: Entity, stat: Option<Stat>) -> Vec<Source> {
         let stat = stat.map_or(u32::MAX, |s| s.index);
         let mut out = vec![StatSource::default(); 32];
@@ -418,6 +474,7 @@ impl Stats {
     /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
+    #[script]
     pub fn info(&self, stat: Stat) -> Option<StatInfo> {
         let mut def = StatDef::additive().to_data();
         let mut id = Str::EMPTY;
@@ -449,6 +506,7 @@ impl Stats {
     ///     stats.watch(enemy, true);
     /// }
     /// ```
+    #[script]
     pub fn watch(&self, entity: Entity, watch: bool) {
         let _status = (self.host.api().stat_watch)(self.host.handle(), entity, u8::from(watch));
     }
@@ -487,6 +545,7 @@ where
     crate::host::guard("panic in a stats handler", || (), || handler(&change));
 }
 
+#[crate::script(stats)]
 impl Load<'_> {
     fn open_stat_with(&mut self, id: Id, def: Option<&StatDef>) -> Result<Stat, Off> {
         let host = self.host();
@@ -510,6 +569,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn define_stat(&mut self, id: Id, def: &StatDef) -> Result<Stat, Off> {
         def.check()
             .map_err(|why| Off::new(format!("stat {:?}: {why}", id.to_string())))?;
@@ -528,6 +588,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn open_stat(&mut self, id: Id) -> Result<Stat, Off> {
         self.open_stat_with(id, None)
     }
@@ -568,6 +629,7 @@ impl Load<'_> {
     ///     load.add_buff_modifiers(BuffTypeId(0x89cb_0b34), &[Modifier::new(fire, Op::Add, 0.2)])
     /// }
     /// ```
+    #[script]
     pub fn add_buff_modifiers(
         &mut self,
         buff: BuffTypeId,
@@ -605,6 +667,7 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
+    #[script]
     pub fn on_stats_changed<F>(&mut self, handler: F) -> Result<(), Off>
     where
         F: Fn(&StatChange) + Send + Sync + 'static,

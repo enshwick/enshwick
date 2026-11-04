@@ -12,7 +12,7 @@ use crate::{Load, Off};
 /// # Examples
 ///
 /// See [`Load::on_rename`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 pub struct Rename {
     /// The entity being renamed.
     pub entity: Entity,
@@ -60,6 +60,7 @@ where
     ))
 }
 
+#[crate::script(world_rename)]
 impl Load<'_> {
     /// Runs `filter` before the server applies a player's rename of any
     /// entity, on its game thread; returning `false` refuses the rename. The
@@ -78,6 +79,7 @@ impl Load<'_> {
     ///     load.on_rename(|rename| rename.player.as_ref().is_some_and(|p| p.is_admin()))
     /// }
     /// ```
+    #[script]
     pub fn on_rename<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&Rename) -> bool + Send + Sync + 'static,

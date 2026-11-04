@@ -34,6 +34,17 @@ pub struct FogOfWar {
     host: Host,
 }
 
+impl crate::script::Bound for FogOfWar {
+    const NAME: &'static str = "map";
+    const DOC: &'static str =
+        "The world's map on the server: its markers, its frame, waypoints and snapshots.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_FOG];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.fog_of_war()
+    }
+}
+
 /// The fog's size, scale and how often it changed, as one read found it.
 ///
 /// # Examples
@@ -45,7 +56,7 @@ pub struct FogOfWar {
 ///     state.pixel_of([0.0, 0.0, state.size_z - 1.0])
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct FogState {
     /// The image's width in pixels.
     pub width: u32,
@@ -136,6 +147,15 @@ pub struct FogImage {
     coverage: Vec<u8>,
 }
 
+impl crate::script::Object for FogImage {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "FogImage",
+        "A box of the fog of war, as one read copied it.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_IMAGE];
+}
+
+#[crate::script(image)]
 impl FogImage {
     /// The fog as the copy found it.
     ///
@@ -143,6 +163,7 @@ impl FogImage {
     ///
     /// See [`FogImage`].
     #[must_use]
+    #[script]
     pub const fn state(&self) -> FogState {
         self.state
     }
@@ -153,6 +174,7 @@ impl FogImage {
     ///
     /// See [`FogImage`].
     #[must_use]
+    #[script]
     pub const fn min(&self) -> [u32; 2] {
         self.min
     }
@@ -163,6 +185,7 @@ impl FogImage {
     ///
     /// See [`FogImage`].
     #[must_use]
+    #[script]
     pub const fn size(&self) -> [u32; 2] {
         self.size
     }
@@ -173,6 +196,7 @@ impl FogImage {
     ///
     /// See [`FogImage`].
     #[must_use]
+    #[script]
     pub fn coverage(&self) -> &[u8] {
         &self.coverage
     }
@@ -189,6 +213,7 @@ impl FogImage {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn at(&self, pixel: [u32; 2]) -> Option<u8> {
         let x = pixel[0]
             .checked_sub(self.min[0])
@@ -237,6 +262,7 @@ impl FogError {
     }
 }
 
+#[crate::script(fog)]
 impl FogOfWar {
     pub(crate) fn open(load: &Load<'_>) -> Result<Self, Off> {
         let host = load.host();
@@ -254,6 +280,7 @@ impl FogOfWar {
     /// # Examples
     ///
     /// See [`FogImage`].
+    #[script]
     pub fn state(self) -> Result<FogState, FogError> {
         let mut info = FogInfo::EMPTY;
         let status = (self.host.api().fog_read)(
@@ -280,6 +307,7 @@ impl FogOfWar {
     /// # Examples
     ///
     /// See [`FogImage`].
+    #[script]
     pub fn read(self, min: [u32; 2], size: [u32; 2]) -> Result<FogImage, FogError> {
         let len = (size[0] as usize)
             .checked_mul(size[1] as usize)
@@ -318,6 +346,7 @@ impl FogOfWar {
     /// # Examples
     ///
     /// See [`FogOfWar`].
+    #[script]
     pub fn coverage(self, position: [f64; 3]) -> Result<Option<u8>, FogError> {
         let Some(pixel) = self.state()?.pixel_of(position) else {
             return Ok(None);

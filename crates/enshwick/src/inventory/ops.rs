@@ -15,7 +15,8 @@ use super::{MAX_INVENTORIES, MAX_OPS, OP_LOG, inventories};
 /// let loot = Op::MoveAll { from: Entity(40), to: Entity(2), include_special: false };
 /// let _ = loot;
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[script(name = "InventoryOp")]
 pub enum Op {
     /// New items: merged into stacks of the same item, then free slots.
     Give {
@@ -257,6 +258,61 @@ pub struct Batch {
     pub(super) allow_partial: bool,
     notify: bool,
     pub(super) actor: Entity,
+}
+
+impl crate::script::Typed for Batch {
+    const TY: &'static crate::script::Ty = &crate::script::Ty::Record(&crate::script::Record::new(
+        "Batch",
+        "Inventory operations the server runs together in its next inventory step.",
+        &[
+            crate::script::Field::new(
+                "ops",
+                "The operations, in order.",
+                <Vec<Op> as crate::script::Typed>::TY,
+            ),
+            crate::script::Field::defaulted(
+                "allow_partial",
+                "Whether the ops that succeed stay when another fails.",
+                &crate::script::Ty::Bool,
+            ),
+            crate::script::Field::defaulted(
+                "notify",
+                "Whether players see the game's notices of what they got.",
+                &crate::script::Ty::Bool,
+            ),
+            crate::script::Field::defaulted(
+                "actor",
+                "The player it acts for; their character's entity.",
+                <Entity as crate::script::Typed>::TY,
+            ),
+        ],
+    ));
+}
+
+impl crate::script::IntoScript for Batch {
+    fn into_value(self) -> crate::script::Value {
+        crate::script::Value::Record(vec![
+            self.ops.into_value(),
+            self.allow_partial.into_value(),
+            self.notify.into_value(),
+            self.actor.into_value(),
+        ])
+    }
+}
+
+impl crate::script::FromScript for Batch {
+    fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
+        let mut fields = crate::script::convert::record_fields(value, 4)?;
+        Ok(Self {
+            ops: crate::script::convert::argument(&mut fields, "ops")?,
+            allow_partial: crate::script::convert::argument_or_default(
+                &mut fields,
+                "allow_partial",
+            )?,
+            notify: crate::script::convert::argument_or_default(&mut fields, "notify")?,
+            actor: crate::script::convert::argument_or_default(&mut fields, "actor")?,
+        })
+    }
 }
 
 impl Batch {

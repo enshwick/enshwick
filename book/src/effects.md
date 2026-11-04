@@ -24,6 +24,22 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+## From Luau
+
+A Luau mod reaches the same calls through `enshwick.effects`; here each
+player who joins starts at the world's centre:
+
+```luau
+enshwick.on("PlayerJoined", function(player)
+    local ok, why = pcall(enshwick.effects.teleport, player.entity, vector.create(0, 100, 0), {
+        search_best_spawn_position = true,
+    })
+    if not ok then
+        enshwick.log.warn(`no teleport: {why}`)
+    end
+end)
+```
+
 ## Raising game events
 
 An event a mod raises goes where the game's own go: the loader puts it into

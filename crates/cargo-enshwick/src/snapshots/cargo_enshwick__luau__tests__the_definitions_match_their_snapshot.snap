@@ -16,6 +16,169 @@ export type AcceptOfferedInteractionEvent = {
 	offer_id: number,
 }
 
+--- What the game does to an account, as its account actions name it.
+export type AccountAction = "Kick" | "Ban" | "UnBan"
+
+--- Rolls on crafted items, for `Load.add_craft_affixes`.
+export type AffixCraft = {
+	--- The chance each fitting crafted item rolls at all, from 0 to 1.
+	chance: number,
+	--- What a roll may give.
+	rules: RollRules,
+}
+
+--- An affix's definition, for `Load.define_affix`.
+export type AffixDef = {
+	--- The modifiers and their ranges.
+	ranges: {Range},
+	--- How likely it rolls against the others, 100 by default.
+	weight: number,
+	--- How rare it is.
+	rarity: ItemRarity,
+	--- The item categories it rolls on.
+	categories: {string},
+	--- Affixes of one group never roll together on an item.
+	group: string?,
+}
+
+--- What an affix is called and how rare it is, from `Affixes.info`.
+export type AffixInfo = {
+	--- The text key that names it in its owner's texts, see `name_key`.
+	text: string,
+	--- How rare it is.
+	rarity: ItemRarity,
+}
+
+--- Rolls on random loot, for `Load.add_loot_affixes`.
+export type AffixLoot = {
+	--- The containers whose rolled loot rolls affixes.
+	from: LootSource,
+	--- The chance each fitting item rolls at all, from 0 to 1.
+	chance: number,
+	--- What a roll may give.
+	rules: RollRules,
+}
+
+--- How many enemies attack at once. The loader reads the game's value of each variant by its constant's name.
+export type AggroPoolAmount = "Few" | "Normal" | "Many" | "Extreme" | { Other: number }
+
+--- One Flame Altar.
+export type Altar = {
+	--- The altar's entity.
+	entity: number,
+	--- Its Flame level; 0 until the engine has reported it.
+	level: number,
+	--- Tilted off the vertical: its zone is unknown and empty, and it keeps the engine's size.
+	tilted: boolean,
+	--- Where it stands, in metres.
+	position: vector,
+	--- Its zone as the engine has built it now, growth by any mod included.
+	zone: CellBox,
+	--- Its vanilla zone at each level from 1 to the current one, each inside the next; empty while the level is unknown.
+	levels: {CellBox},
+}
+
+--- How many altars a Flame level allows, as an altar limit filter sees it; see `Load.on_altar_limit`.
+export type AltarLimit = {
+	--- The Flame level.
+	flame_level: number,
+	--- The altars the game itself allows at that level.
+	vanilla: number,
+	--- The altars allowed so far, as the filters before have left it; the filter's answer.
+	allowed: number,
+}
+
+--- One altar's zone as the loader sizes it; see `Load.on_altar_zone`. A filter sees the size the filters before it left, the vanilla one first, and may change `grow` and `height`.
+export type AltarZone = {
+	--- The altar.
+	altar: number,
+	--- The altar's level.
+	level: number,
+	--- Cells added to the vanilla zone on every horizontal side, at least 0; 0 keeps the vanilla width.
+	grow: string,
+	--- The zone's height in cells.
+	height: string,
+}
+
+--- The world's Flame Altars and the bases they make.
+export type Altars = {
+	--- Every altar of the server's world as it is now; empty while no world runs or when the loader refuses. Any thread.
+	list: (self: Altars) -> {Altar},
+	--- The bases the altars form now; see `bases_of`.
+	bases: (self: Altars) -> {Base},
+}
+
+--- The answer to a `Lookup`. The name is enshwick's, not the game's.
+export type Answer = "Vanilla" | { Entity: number } | "Nobody"
+
+--- How a buff is given, for `Buffs.apply`.
+export type Apply = {
+	--- How long it lasts, in game time; nil for the type's own.
+	duration: number?,
+	--- Its level, for a new buff; nil for none.
+	level: number?,
+}
+
+--- A value with its maximum on an item's own entity, as the item's slot shows it: its durability, or its meter (see `FuelSetup`). The name is enshwick's: the game's durability or fuel value with its maximum.
+export type Bar = {
+	--- What is left.
+	current: number,
+	--- When full.
+	max: number,
+}
+
+--- Altars whose zones touch or overlap, which the engine groups into one base.
+export type Base = {
+	--- Its altars, by entity, smallest first.
+	altars: {number},
+	--- Their zones, in the same order.
+	zones: {CellBox},
+	--- The smallest box holding every zone.
+	bounds: CellBox,
+}
+
+--- The most altar zones and bases the game groups now; see `base_limit`.
+export type BaseLimit = {
+	--- Altar zones the game puts into bases.
+	zones: number,
+	--- Bases the game holds.
+	bases: number,
+	--- Altar zones the game's own grouping takes, without the raised limit.
+	vanilla_zones: number,
+	--- Bases the game's own code holds.
+	vanilla_bases: number,
+	--- The most altar zones a mod may ask for.
+	max_zones: number,
+	--- The most bases a mod may ask for.
+	max_bases: number,
+}
+
+--- Inventory operations the server runs together in its next inventory step.
+export type Batch = {
+	--- The operations, in order.
+	ops: {InventoryOp},
+	--- Whether the ops that succeed stay when another fails.
+	allow_partial: boolean?,
+	--- Whether players see the game's notices of what they got.
+	notify: boolean?,
+	--- The player it acts for; their character's entity.
+	actor: number?,
+}
+
+--- A survivor's bed the game kept, from `Load.on_survivor_bed_check`. The name is enshwick's; the game's own bed check has none.
+export type BedCheck = {
+	--- The survivor, as the game's active NPC state names it.
+	npc_id: number,
+	--- Its entity.
+	entity: number,
+	--- The bed, as the survivor's NPC record names it.
+	bed_id: number,
+	--- Where the survivor belongs: its saved spawn cell, or where it stands.
+	home: {number},
+	--- Where the bed stands.
+	bed_at: {number},
+}
+
 --- What a player did to a building block, the fields the engine's building events share; the name is enshwick's, not the game's.
 export type Block = {
 	--- The player's character.
@@ -29,6 +192,52 @@ export type Block = {
 	--- The material's feedback id.
 	material: number,
 }
+
+--- A box of cells, by its lowest and highest corner.
+export type Bounds = {
+	--- The lowest corner.
+	min: {number},
+	--- The highest corner.
+	max: {number},
+}
+
+--- A buff an entity has, from `Buffs.of`.
+export type Buff = {
+	--- Its type.
+	type_id: number,
+	--- The buff's own entity, which carries its effect.
+	buff_entity_id: number,
+	--- Where the entity holds it, its type's slot.
+	slot: BuffSlotType,
+	--- Its level, when it has one.
+	level: number?,
+	--- How long it lasts in all, in game time.
+	life_time: number,
+	--- How long it has left, in game time; the name is enshwick's.
+	remaining: number,
+}
+
+--- Where an entity holds a buff.
+export type BuffSlotType = "Food" | "Buff" | "Debuff" | "Rested" | "TerrainDebuff" | { Other: number }
+
+--- A buff type of the running game, from `Buffs.types`.
+export type BuffType = {
+	--- Its id.
+	buff_type_id: number,
+	--- Where an entity holds it.
+	slot: BuffSlotType,
+	--- How long it lasts by default, in game time.
+	default_life_time: number,
+	--- Whether the game saves it with a character.
+	is_saved: boolean,
+	--- Whether the game shows it nowhere.
+	hide_in_ui: boolean,
+	--- The `LocaTag` of its name, which a client shows.
+	name: number,
+}
+
+--- Why the server refuses a player's edit, from `World.can_build`; the variants carry the names of the game's `CursorFlag` refusals.
+export type BuildRefusal = { NoPermission: PlayerPermissions } | "CursorOutsideBuildingZone" | "CursorInsideStrictBuildInhibitorZone" | { Unchecked: WorldError }
 
 --- The data of the `BuildingPlaced` and `BuildingRemoved` events.
 export type BuildingData = {
@@ -70,6 +279,91 @@ export type BuildingTearDownEvent = {
 	block: Block,
 }
 
+--- An object a player places, checked against the building zones it may reach into.
+export type BuildingZoneCheck = {
+	--- The building zones, half-open.
+	zones: {Bounds},
+	--- The object's box, both corners included.
+	object: Bounds,
+	--- How far an object reaches past a zone.
+	margin: number,
+}
+
+--- One affix of the pool a roll draws from.
+export type Candidate = {
+	--- The affix's key.
+	key: number,
+	--- Its definition.
+	def: AffixDef,
+}
+
+--- A box of the world copied with the props inside it, to place again elsewhere.
+export type Capture = {
+	--- Where the region's lowest corner lay in the world, or lies after `Capture.translated`.
+	origin: (self: Capture) -> VoxelPos,
+	--- The region's voxels along each axis.
+	size: (self: Capture) -> {number},
+	--- The region's voxels, with places counted from its corner: the corner voxel is at `(0, 0, 0)`.
+	voxels: (self: Capture) -> VoxelBox,
+	--- The region's props, with positions in metres from its corner.
+	props: (self: Capture) -> {CapturedProp},
+	--- The capture turned by `quarter_turns` quarter turns about the vertical, each taking the +x side to +z, as seen from above. The region keeps its corner: the turned region's lowest corner is still `Capture.origin`. Voxels move to their turned places, and props turn their positions and orientations with them; a turned orientation has w at or above zero.
+	rotated: (self: Capture, quarter_turns: number) -> Capture,
+	--- The capture moved by `by` voxels; nil when its corner would leave the coordinates of the world.
+	translated: (self: Capture, by: {number}) -> Capture?,
+}
+
+--- A prop as a `Capture` keeps it: the item to place and where, without the entity, whose id lasts one session.
+export type CapturedProp = {
+	--- The item it was placed from, its `UsedItem`.
+	item: number,
+	--- Where it stands and which way it faces, counted from the capture's corner.
+	transform: WorldTransform,
+}
+
+--- A world-aligned, half-open box of whole 0.5 m cells; axis 1 is up.
+export type CellBox = {
+	--- The inclusive lower corner.
+	min: {number},
+	--- The exclusive upper corner.
+	max: {number},
+}
+
+--- One change of a vanilla value: the entry, the field, the item inside the entry where the field names one, and the value.
+export type Change = {
+	--- The vanilla entry, such as an item's GUID, or a fill table's for `Change.in_table`.
+	entry: string,
+	--- What changes.
+	field: ChangeField,
+	--- The item inside the entry: a recipe's ingredient for `Field.Ingredient`, or a fill table's item.
+	item: string?,
+	--- How.
+	value: Value,
+}
+
+--- A vanilla value a `Change` changes; each says what its entry is.
+export type ChangeField = "MaxStackSize" | "Output" | "Cost" | "Ingredient" | "CraftingDuration" | "Slots" | "DamageMod" | "SpeedMod" | "Armor" | "BurnTime" | "EnergyOutput" | "ComfortAmount" | "StackSize" | "Count" | "SpawnProbability" | "Weight" | "Station"
+
+--- A change of a vanilla value the mod sets and resets while the game runs.
+export type ChangeHandle = {
+	--- The field this handle changes.
+	field: (self: ChangeHandle) -> ChangeField,
+	--- Puts `value` in force as this mod's value. Any thread; it builds resources again, so it suits a settings change, not a frame.
+	set: (self: ChangeHandle, value: Value) -> (),
+	--- Takes this mod's value out, as if it never set one.
+	reset: (self: ChangeHandle) -> (),
+}
+
+--- A channel of game data messages between the mod's server and client parts.
+export type Channel = {
+	--- Sends `message` to `to`, as `Channel.send` does.
+	send: (self: Channel, to: Peer, message: any) -> (),
+	--- Sends `message` to every client that runs Enshwick, as `Channel.broadcast` does.
+	broadcast: (self: Channel, message: any) -> (),
+	--- Whether `peer` takes messages now, as `Channel.is_ready` says.
+	is_ready: (self: Channel, peer: Peer) -> boolean,
+}
+
 --- The data of the `ChunkLoaded` and `ChunkUnloaded` events.
 export type ChunkData = {
 	--- The chunk's index in the world's grid: `z * width + x`.
@@ -80,6 +374,46 @@ export type ChunkData = {
 	z: number,
 	--- Its side in metres: it spans `x * size` to `(x + 1) * size` on one axis and `z * size` to `(z + 1) * size` on the other, at any height.
 	size: number,
+}
+
+--- The mod's factor on how fast the server's clock runs.
+export type ClockSpeed = {
+	--- Sets the mod's factor on the clock's speed: 1 leaves it, 2 makes the days pass twice as fast, 0 stops the clock. Clients follow after the next step.
+	set: (self: ClockSpeed, factor: number) -> (),
+}
+
+--- A comfort provider in a base registering its comfort; a base keeps the best per category and a player's comfort is the sum.
+export type Comfort = {
+	--- The comfort category.
+	category: number,
+	--- The comfort it registers, after the filters before this one.
+	value: number,
+	--- Where the provider stands, in metres.
+	position: vector,
+}
+
+--- What a loot container is and holds, read in one go. The name is enshwick's: several of the game's components read together.
+export type Container = {
+	--- The container.
+	entity: number,
+	--- Where it stands, in metres; y is up.
+	position: vector,
+	--- Whether it holds nothing, as the game last recorded.
+	is_empty: boolean,
+	--- Whether it despawns on its own after a while (`LifeTime`).
+	expires: boolean,
+	--- Its `AreaLootOverride`: `true` when area loot may take it, `false` when excluded (items a player dropped), nil without one.
+	area_loot: boolean?,
+	--- Its interaction offer; nil without one.
+	offer: InteractionOfferRuntime?,
+}
+
+--- One content GUID the save holds and the GUID it reads as from now on.
+export type ContentRename = {
+	--- The GUID as the save holds it.
+	from: string,
+	--- The GUID it reads as.
+	to: string,
 }
 
 --- A player asked a station to craft, before the server checks ingredients.
@@ -102,8 +436,75 @@ export type CraftRecipeSuccessEvent = {
 	recipe_id: number,
 }
 
+--- How hard the shroud's curse hits. The loader reads the game's value of each variant by its constant's name.
+export type CurseModifier = "Easy" | "Normal" | "Hard" | { Other: number }
+
+--- Damage about to reach an entity's health, for a filter to see and change.
+export type Damage = {
+	--- What deals it, as `Damage.cause` says.
+	cause: (self: Damage) -> DamageCause,
+	--- The entity that takes it, as `Damage.target` says.
+	target: (self: Damage) -> number,
+	--- What dealt a hit, as `Damage.source` says.
+	source: (self: Damage) -> number?,
+	--- Who dealt a hit, as `Damage.attacker` says.
+	attacker: (self: Damage) -> number?,
+	--- A hit's damage of type `ty`, as `Damage.amount` reads it.
+	amount: (self: Damage, ty: DamageTypeNew) -> number,
+	--- Sets a hit's damage of type `ty`, as `Damage.set` does.
+	set: (self: Damage, ty: DamageTypeNew, amount: number) -> (),
+	--- The damage the health takes, as `Damage.total` sums it.
+	total: (self: Damage) -> number,
+	--- Scales the damage by `factor`, as `Damage.scale` does.
+	scale: (self: Damage, factor: number) -> (),
+	--- Scales a hit's damage of type `ty`, as `Damage.scale_type` does.
+	scale_type: (self: Damage, ty: DamageTypeNew, factor: number) -> (),
+	--- Takes all damage away, as `Damage.cancel` does.
+	cancel: (self: Damage) -> (),
+}
+
+--- What deals damage. Unstable: needs the `unstable` feature and may change in any release. The name is enshwick's: the loader's hook points, not a game type. A cause the game names among its death causes (`DeathCause`) takes that name; the others are enshwick's and say so.
+export type DamageCause = "Impact" | "FallDamage" | "Fog" | "DeadlyFog" | "Suffocated" | "DrowningDeath" | "Freezing" | "AdminKill" | { Other: number }
+
+--- A damage type, as the game sorts a hit's damage.
+export type DamageTypeNew = "PhysicalCut" | "PhysicalPierce" | "PhysicalBlunt" | "MagicalFire" | "MagicalIce" | "MagicalFog" | "MagicalLightning" | "Healing" | "Poison" | "Wood" | "Stone" | "Metal" | "Explosion"
+
+--- How a derived recipe differs from the vanilla one it copies.
+export type Derived = {
+	--- The vanilla output count times this.
+	output: number,
+	--- The vanilla ingredient counts times this.
+	cost: number,
+	--- The workshop the copy is made at, such as one from `Load.add_workshop`; nil keeps the vanilla recipe's.
+	workshop: string?,
+}
+
 --- How a request ended.
 export type Done = "Committed" | "RolledBack" | "Unavailable" | "TimedOut" | "Refused"
+
+--- A mod item in random loot, for `Load.add_loot`.
+export type Drop = {
+	--- The items' game ids, `ItemId.from_guid` of their GUIDs; a drop that hits gives one of them, each as likely.
+	items: {number},
+	--- The chance per roll, from 0 to 1.
+	chance: number,
+	--- How many, at least and at most; each count in between is as likely.
+	count: {number},
+	--- How full each dropped item's meter starts (see `FuelSetup`); nil for its template's start.
+	meter: MeterRoll?,
+	--- Where it may drop.
+	from: LootSource,
+}
+
+--- A kind of entity data with a game data value per entity, from `entity_data`.
+export type EntityData = {
+	--- The entity's value, as `EntityData.get` reads it.
+	get: (self: EntityData, entity: number) -> any?,
+	--- Sets the entity's value, as `EntityData.set` does.
+	set: (self: EntityData, entity: number, value: any) -> (),
+	--- Removes the entity's value, as `EntityData.remove` does.
+	remove: (self: EntityData, entity: number) -> (),
+}
 
 --- An entity died, with who killed it as far as the engine kept track, read while the dead entity is still in the world.
 export type EntityDiedEvent = {
@@ -115,6 +516,30 @@ export type EntityDiedEvent = {
 	killer_player: number?,
 }
 
+--- One character's experience before the server applies it, from `Load.on_experience`: a filter may change `gained`.
+export type Experience = {
+	--- The character.
+	entity: number,
+	--- Its level.
+	level: number,
+	--- Experience inside the level.
+	progress: number,
+	--- What the level needs.
+	need: number,
+	--- Gained experience the game applies next, at most one level a tick.
+	gained: number,
+}
+
+--- The groups of experience sources the game's settings give one factor each, and so one rate each.
+export type ExperienceGroup = "Combat" | "Mining" | "ExplorationQuests"
+
+--- A field of a writable component type, read and written as its kind.
+export type Field = {
+}
+
+--- How a script reads and writes a component field: one of the scalar types `World.get` takes.
+export type FieldKind = "U8" | "I8" | "U16" | "I16" | "U32" | "I32" | "U64" | "I64" | "F32" | "F64" | "Bool" | "Entity"
+
 --- A player acted at a Flame Altar.
 export type FlameAltarEvent = {
 	--- The player's character.
@@ -125,6 +550,80 @@ export type FlameAltarEvent = {
 	type: string,
 }
 
+--- A box of the fog of war, as one read copied it.
+export type FogImage = {
+	--- The fog as the copy found it.
+	state: (self: FogImage) -> FogState,
+	--- The box's corner, in pixels.
+	min: (self: FogImage) -> {number},
+	--- The box's width and height, in pixels.
+	size: (self: FogImage) -> {number},
+	--- The box's coverage, row by row.
+	coverage: (self: FogImage) -> {number},
+	--- The coverage of fog pixel `pixel`; nil outside the box.
+	at: (self: FogImage, pixel: {number}) -> number?,
+}
+
+--- The fog's size, scale and how often it changed, as one read found it.
+export type FogState = {
+	--- The image's width in pixels.
+	width: number,
+	--- The image's height in pixels.
+	height: number,
+	--- The metres one pixel covers along each axis.
+	metres_per_pixel: number,
+	--- The world's z size the fog covers, in metres.
+	size_z: number,
+	--- Grows whenever pixels changed: a mod that compares it reads again only when it moved.
+	version: string,
+	--- Changes with each world the client enters; the copy of a world is gone once the client leaves it.
+	session: string,
+}
+
+--- The weather to start, for `Weather.set`. The name is enshwick's, not the game's.
+export type Forecast = "Clear" | "Rain" | "Blizzard" | "Any"
+
+--- A front of weather, from `Weather.fronts`.
+export type Front = {
+	--- The weather layer it belongs to.
+	layer: number,
+	--- What it brings.
+	kind: WeatherPhenomenonEffect,
+	--- Where it is, in metres.
+	position: vector,
+	--- How far it reaches, in metres.
+	radius: number,
+	--- How long it has left, in game time.
+	remaining: number,
+}
+
+--- A count each item keeps, from 0 to `max`, for `NewItem.meter`. The game keeps it on the item's own entity as the water pouch keeps its water: it saves it with the world, sends it to players and draws it as a bar on the item's slot. Read and change it with `World.item_meter`; set it for each new item with `Op.Give`'s `fill` or a `Drop`'s fill. The item gets an entity template, cloned from the water pouch's: `template` is that template's id, the mod's own and fixed forever, as saves hold its GUID. Items with the same meter may share one template.
+export type FuelSetup = {
+	--- The id of the item's entity template; the name is enshwick's.
+	template: string,
+	--- The most it holds, 1 or more.
+	max_fuel_charges: number,
+	--- What a new item holds when nothing sets its fill, a count where the game keeps a percentage; the name is enshwick's.
+	start: number,
+}
+
+--- The preset the server's settings came from. The loader reads the game's value of each variant by its constant's name.
+export type GameSettingsPreset = "Default" | "Relaxed" | "Hard" | "Survival" | "Custom" | { Other: number }
+
+--- A difficulty from very easy to very hard, such as fishing's. The loader reads the game's value of each variant by its constant's name.
+export type GenericDifficulty = "VeryEasy" | "Easy" | "Normal" | "Hard" | "VeryHard" | { Other: number }
+
+--- What a grant does, by the kind of the knowledge. The name is enshwick's, not the game's.
+export type Grant = "Set" | { Add: number } | { Flag: number }
+
+--- How many altar zones and bases the game's last grouping found, from `grouping`.
+export type Grouping = {
+	--- Altar zones in the world.
+	zones: number,
+	--- Bases they form.
+	bases: number,
+}
+
 --- A player's equipment slot changed.
 export type HandleEquipmentSlotChangedEvent = {
 	--- The player's character.
@@ -132,6 +631,9 @@ export type HandleEquipmentSlotChangedEvent = {
 	--- The slot.
 	equipment_slot: string,
 }
+
+--- A kind of state a prop holds that the game keeps on the prop itself and a prop placed again from its item would not have; the names are the game's components.
+export type HeldState = "Inventory" | "Growth" | "FactoryStation" | "NpcBed" | "StoreAssociatedNpcIds" | "CustomPlayerString" | "Fuel" | "LogicGraphNodeConnected" | "LogicGraphTrigger"
 
 --- A hit the server resolved, damage or healing, written where health changes. Fall and shroud damage change health without a hit.
 export type HitEvent = {
@@ -157,6 +659,119 @@ export type HitEvent = {
 	target_faction: number,
 }
 
+--- A mod's hold on a world's saves: while set, the world does not save.
+export type Hold = {
+	--- Sets the hold with `reason`, one line the loader logs; written to a temporary file first, then renamed.
+	set: (self: Hold, reason: string) -> (),
+	--- Releases the hold; nothing happens when it is not set.
+	clear: (self: Hold) -> (),
+	--- The reason, while the hold is set.
+	reason: (self: Hold) -> string?,
+	--- The reason `Hold.set_text` gave as a text, as the loader reads it with `Texts.reason`; nil while the hold is not set or was set with one line.
+	text: (self: Hold) -> string?,
+	--- Holds the saves for `reason`, with the text of the mod's texts key `key` and `args`, each a name and its value, for players, as `Hold.set_text` does.
+	set_text: (self: Hold, reason: string, key: string, args: {{string}}) -> (),
+}
+
+--- An item's own icon, for `NewItem.icon`.
+export type Icon = {
+	--- The icon's id, the mod's own.
+	id: string,
+	--- The vanilla icon it starts from: an item's GUID for an item drawn from its model, or the GUID in an item's `iconImage`.
+	like: string,
+	--- Where its pixels come from.
+	pixels: Pixels,
+}
+
+--- A line of the item's tooltip, for `NewItem.stats`: the text of a tag and a number, as the game shows an armour's bonuses.
+export type ImpactUiValue = {
+	--- The tag of the line's text, given text with `Load.add_texts`.
+	loca_id: string,
+	--- The number.
+	value: number,
+	--- How the number reads.
+	value_format: StatFormat,
+}
+
+--- The last interaction a player started with a container.
+export type InteractionOfferRuntime = {
+	--- The entity that last opened or looted the container; nil before anyone did.
+	guest_id: number?,
+	--- When, in the game's nanoseconds; changes with each interaction.
+	last_accept_time: string,
+	--- Whether the game offers no interaction now.
+	is_disabled: boolean,
+}
+
+--- One change in a `Batch`.
+export type InventoryOp = { Give: InventoryOpGive } | { Take: InventoryOpTake } | { DestroySlot: string } | { MoveSlot: InventoryOpMoveSlot } | { Renew: InventoryOpRenew } | { MoveAll: InventoryOpMoveAll }
+
+--- New items: merged into stacks of the same item, then free slots.
+export type InventoryOpGive = {
+	--- The inventory.
+	to: number,
+	--- The item id.
+	item: number,
+	--- How many.
+	count: number,
+	--- How full each new item's meter starts; nil for its template's start. Items without a meter ignore it.
+	fill: number?,
+}
+
+--- Moves every stack of one inventory into another, as "take all" does. What does not fit stays in the source.
+export type InventoryOpMoveAll = {
+	--- The source inventory.
+	from: number,
+	--- The destination inventory.
+	to: number,
+	--- Also the source's action bar, equipment and locked slots.
+	include_special: boolean,
+}
+
+--- Moves a stack, or part of it, into an inventory's free or matching slots. What does not fit stays in the source.
+export type InventoryOpMoveSlot = {
+	--- The stack.
+	slot: string,
+	--- The inventory.
+	to: number,
+	--- How many; nil for the whole stack.
+	amount: number?,
+}
+
+--- Replaces the stack in a slot with new items, each with its own entity and its meter at `fill`, asked for the same slot: gives an item that lost its entity, such as one from before its mod gave it a `FuelSetup`, a fresh one.
+export type InventoryOpRenew = {
+	--- The stack.
+	slot: string,
+	--- The inventory the slot belongs to, at its root (`Reader.root`).
+	root: number,
+	--- The new items' id.
+	item: number,
+	--- How many.
+	count: number,
+	--- Their meter's fill.
+	fill: number,
+}
+
+--- Removes items, from whichever stacks hold them.
+export type InventoryOpTake = {
+	--- The inventory.
+	from: number,
+	--- The item id.
+	item: number,
+	--- How many.
+	count: number,
+}
+
+--- A kind of item data with a game data value per item, from `item_data`.
+export type ItemData = {
+	--- The item's value, as `ItemData.get` reads it.
+	get: (self: ItemData, item: ItemInstance) -> any?,
+	--- Sets the item's value, as `ItemData.set` does.
+	set: (self: ItemData, item: ItemInstance, value: any) -> (),
+	--- Removes the item's value, as `ItemData.remove` does.
+	remove: (self: ItemData, item: ItemInstance) -> (),
+}
+
 --- An item's static data.
 export type ItemInfo = {
 	--- The item id.
@@ -169,6 +784,50 @@ export type ItemInfo = {
 	category: number,
 }
 
+--- One item: its own entity and the item id it holds.
+export type ItemInstance = {
+	--- The item's own entity.
+	pide: number,
+	--- The item id.
+	item: number,
+}
+
+--- A modifier as an item keeps it, naming its stat by key, so it reads the same in every process.
+export type ItemModifier = {
+	--- The stat.
+	stat: number,
+	--- What it does.
+	op: Op,
+	--- Its value.
+	value: number,
+}
+
+--- How rare an affix is.
+export type ItemRarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary"
+
+--- What a single item gives the entity that wears it, kept as its item data of kind `ITEM_KIND`: modifiers of its own and the affixes it rolled.
+export type ItemStats = {
+	--- The modifiers, in the order they apply.
+	modifiers: {ItemModifier},
+	--- The affixes it rolled, which apply after its own modifiers.
+	affixes: {Rolled},
+	--- Whether it rolled affixes, even none; an item rolls once unless a mod rolls it again on purpose.
+	rolled: boolean,
+}
+
+--- The vanilla items an `ItemsChange` reaches at once. A stack size reaches only items one slot already holds more than one of and that keep no state of their own, such as durability; container slots reach only items that place a container or are backpacks, and `Items.Containers` and `Items.Backpacks` pick one kind alone.
+export type Items = { Category: {string} } | "Stackable" | "Containers" | "Backpacks"
+
+--- One change of a field of every vanilla item a selection picks.
+export type ItemsChange = {
+	--- The items.
+	items: Items,
+	--- What changes.
+	field: ChangeField,
+	--- How.
+	value: Value,
+}
+
 --- The data of the `KnowledgeChanged` event.
 export type KnowledgeData = {
 	--- The player's character, or 0 for the world's knowledge.
@@ -179,12 +838,97 @@ export type KnowledgeData = {
 	value: number,
 }
 
+--- Knowledge a client asks the server for in its input, from `Load.on_knowledge_input`. The name is enshwick's, not the game's. Unstable: needs the `unstable` feature and may change in any release.
+export type KnowledgeRequest = {
+	--- The asking player's character.
+	player: number,
+	--- The knowledge id.
+	id: number,
+	--- The kind the client names.
+	kind: KnowledgeType,
+	--- Whose the id is; nil for an id the game does not know.
+	scope: Scope?,
+	--- Ignored for a bool, added for a counter, the bit to set for flags.
+	value: number,
+	--- Why the loader's guard would refuse it, in any mode.
+	refusal: Refusal?,
+	--- Whether it goes through so far: after the guard, which refuses only when enforcing, and the filters that ran before.
+	allowed: boolean,
+}
+
+--- What a knowledge value is.
+export type KnowledgeType = "Bool" | "Counter" | "Flags" | { Other: number }
+
+--- A knowledge value, from `Knowledge.get` or `Knowledge.world`.
+export type Known = {
+	--- The knowledge id.
+	id: number,
+	--- What it is.
+	type: KnowledgeType,
+	--- Whose it is.
+	scope: Scope,
+	--- The value: 0 or 1, a count, or bits.
+	value: number,
+	--- The bits the game expects of a flags value; 0 for any.
+	expected_flags: number,
+}
+
+--- How long a modifier a mod sets on an entity lasts.
+export type Lasting = "UntilRemoved" | { For: number } | "Saved"
+
+--- How much a log keeps, from errors alone to development detail.
+export type Level = "error" | "warn" | "info" | "debug"
+
 --- A character reached a new level.
 export type LevelUpEvent = {
 	--- The player's character.
 	player_entity_id: number,
 	--- The level reached.
 	level: number,
+}
+
+--- The game's level table, during an experience pass.
+export type Levels = {
+}
+
+--- A line of what an item gives, from `Affixes.lines`.
+export type Line = {
+	--- The stat's index in this process (see `Stat.index`); its text and format come from `Stats.info`.
+	stat: number,
+	--- What it does.
+	op: Op,
+	--- Its value.
+	value: number,
+	--- The affix it comes from, by index (see `Affixes.info`); nil for the item's own modifiers.
+	affix: number?,
+}
+
+--- A survivor lookup the game makes, for `on_survivor_lookup` to answer.
+export type Lookup = {
+	--- The survivor, as `Lookup.survivor` holds it.
+	survivor: (self: Lookup) -> number,
+	--- The game's own answer, as `Lookup.vanilla` holds it.
+	vanilla: (self: Lookup) -> number?,
+	--- Who asks, as `Lookup.purpose` holds it.
+	purpose: (self: Lookup) -> Purpose,
+	--- The bed `entity` sleeps in, as `Lookup.bed_of` tells; nil once the handler's call is over.
+	bed_of: (self: Lookup, entity: number) -> number?,
+}
+
+--- A wait of the engine's event loop on its handles, about to happen.
+export type LoopWait = {
+	--- What the game is about to wait, in milliseconds: the time left, truncated.
+	ms: number,
+	--- The time left before the loop's deadline, in nanoseconds.
+	left_ns: string,
+}
+
+--- Which of the event loop's waits `Load.on_loop_wait` found and hooked.
+export type LoopWaits = {
+	--- The wait on handles, on the server and the client.
+	handles: boolean,
+	--- The client's wait on handles and window messages.
+	messages: boolean,
 }
 
 --- A player opened loot, a chest or a container.
@@ -197,8 +941,208 @@ export type LootInteractionEvent = {
 	loot_all: boolean,
 }
 
+--- Where a `Drop` may come from.
+export type LootSource = {
+	--- The kinds of container.
+	kinds: {string},
+	--- Only bosses' corpses.
+	bosses_only: boolean?,
+	--- Only chests that need a key or a lockpick.
+	locked_only: boolean?,
+	--- Only these loot label ids (`Roll.labels`); empty for any.
+	labels: {number}?,
+	--- Only these world nodes (`Roll.node`); empty for any.
+	nodes: {number}?,
+}
+
+--- The fill table a vanilla container rolls, from `Vanilla.loot_table`.
+export type LootTable = {
+	--- The table's GUID, a `DefaultInventoryResource`.
+	table: string,
+	--- How many container templates roll it, this one among them.
+	containers: number,
+}
+
+--- A Flame Altar in a `MapSnapshot`.
+export type MapAltar = {
+	--- Where it stands, in metres.
+	position: vector,
+	--- Its Flame level; 0 while unknown.
+	level: number,
+	--- Its building zone, `min, max` in half-open 0.5 m cells, as `CellBox` holds it.
+	zone: {{number}},
+	--- The base it belongs to, numbered from 0 within the snapshot; altars whose zones touch share one. nil for an altar with an empty zone, which forms no base.
+	base: number?,
+}
+
+--- Where the map of the world starts and how far it reaches, in metres on the world's x and z axes. The name is Enshwick's own: the game keeps these facts with the scene's biome map. A map image or grid drawn over the world puts its corner at `origin` and spans `size`; the game's own map divides it into cells of `metres_per_cell` on each side.
+export type MapFrame = {
+	--- The map's corner of lowest x and z, in metres, x then z.
+	origin: {number},
+	--- How far the map reaches from `origin`, in metres, x then z.
+	size: {number},
+	--- The metres one cell of the game's map covers on each axis.
+	metres_per_cell: number,
+}
+
+--- A marker on the map that the world comes with: a `MapMarker` the scene places.
+export type MapMarker = {
+	--- Where it is, in metres.
+	position: vector,
+	--- Its type; nil for a marker without one.
+	marker_type: number?,
+	--- The text tag of its label, the game's `markerId`, which `game_text` reads by `Guid.fnv1a` on a client; nil for a marker without one.
+	label: string?,
+}
+
+--- A player in a `MapSnapshot`.
+export type MapPlayer = {
+	--- The same for the same account in every session, as `Player.key`; a public map may leave it out.
+	key: string,
+	--- The name the client sent; untrusted, may repeat between players.
+	name: string,
+	--- Where the character is, in metres; nil while it has no place, such as while it loads.
+	position: vector?,
+	--- Where the player's waypoint is, in metres, while it is on.
+	waypoint: vector?,
+}
+
+--- A map marker in a `MapSnapshot`.
+export type MapPoint = {
+	--- Where it is, in metres.
+	position: vector,
+	--- Its `MapMarkerTypeId` key.
+	marker_type: number?,
+	--- Its label's text id, `Guid.fnv1a` of the tag.
+	label: number?,
+}
+
+--- What the game server shows on a map at one moment, as plain data for a process outside the game such as a web map beside a dedicated server. It holds the players, the Flame Altars, the markers and the map's frame, in Enshwick's own format, not the game's. It carries no texts, since a dedicated server has none: a marker's label is the id of its text tag, which a reader with the game's texts looks up.
+export type MapSnapshot = {
+	--- The players in the game, by player slot.
+	players: {MapPlayer},
+	--- The Flame Altars, by entity.
+	altars: {MapAltar},
+	--- The world's map markers, in the scene's order.
+	markers: {MapPoint},
+	--- The map's frame; nil for a scene without one.
+	frame: MapFrame?,
+}
+
+--- A value with its maximum, such as health. The name is enshwick's: one attribute's current and maximum value.
+export type Meter = {
+	--- The value now.
+	current: number,
+	--- The most it holds now, buffs and gear included.
+	max: number,
+}
+
+--- How full a dropped item's meter starts, for `Drop.meter`: `min` to `max` of `of`, each count in between as likely.
+export type MeterRoll = {
+	--- The fewest.
+	min: number,
+	--- The most.
+	max: number,
+	--- The meter's maximum, as its `FuelSetup` says.
+	of: number,
+}
+
+--- One loaded mod, or the loader itself, from `all`.
+export type ModEntry = {
+	--- The mod id; `enshwick` for the loader.
+	id: string,
+	--- The mod's SemVer version.
+	version: string,
+	--- Where the mod runs, `Side.SERVER` or `Side.BOTH`; a `Side.BOTH` mod counts in the join check.
+	side: Side,
+	--- Whether the mod runs: not refused at init and not faulted since.
+	running: boolean,
+	--- The DLL's path relative to the game's folder, with `/` separators, such as `mods/you.trading-post/trading_post.dll`. Empty in `join_missing` for a mod this client does not have.
+	file: string,
+	--- The name players read; empty when the manifest names none, and always in `join_missing`. `ModEntry.label` gives the name, or the id without one.
+	name: string,
+	--- One sentence on what the mod does; empty for none.
+	description: string,
+	--- The authors' names.
+	authors: {string},
+	--- An SPDX licence expression; empty for none.
+	license: string,
+	--- Where players read about the mod; empty for none.
+	homepage: string,
+	--- The mod's place in load order in `all`; nil for the loader and in `join_missing`.
+	index: number?,
+}
+
+--- One modifier of one stat.
+export type Modifier = {
+	--- The stat.
+	stat: Stat,
+	--- What it does.
+	op: Op,
+	--- Its value.
+	value: number,
+}
+
+--- A new item for `Load.add_item`.
+export type NewItem = {
+	--- The new item's id; its game id is `ItemId.from_guid` of its GUID.
+	id: string,
+	--- The vanilla item it is cloned from: what it looks like and does.
+	like: string,
+	--- The tag of its name, given text with `Load.add_texts`; nil keeps the vanilla item's name.
+	name: string?,
+	--- The tag of its description; nil keeps the vanilla one.
+	description: string?,
+	--- The name in the registry's debug list; the id when empty.
+	debug_name: string?,
+	--- A count each item keeps, such as charges, which the game saves, sends to players and shows as a bar on the item.
+	meter: FuelSetup?,
+	--- Lines the item's tooltip shows after the vanilla item's.
+	stats: {ImpactUiValue}?,
+	--- An icon of its own; nil keeps the vanilla item's. It shows on a client whose loader knows the build's texture code.
+	icon: Icon?,
+}
+
+--- A new recipe for `Load.add_recipe`.
+export type NewRecipe = {
+	--- The new recipe's id; its game id is `RecipeId.from_guid` of its GUID.
+	id: string,
+	--- The item whose recipe is copied: same workshop, unlock and duration.
+	like: string,
+	--- The item the recipe makes.
+	output: string,
+	--- How many it makes.
+	output_count: number,
+	--- The copied recipe's ingredient counts times this.
+	cost: number,
+	--- The workshop the recipe is made at, such as one from `Load.add_workshop`; nil keeps the copied recipe's.
+	workshop: string?,
+}
+
+--- A new workshop for `Load.add_workshop`, named by one id. The station item is `id`; the station's other ids derive from it with `Id.part`: its template `<id>.template`, its workshop `<id>.workshop`, its recipe `<id>.recipe`, and the tags of its name and description, `<id>.name` and `<id>.description`. So `id` is a plain id, never one derived with `Id.part`, even when the same id written in full would fit. Every id is the mod's own and never changes: saves keep the template GUID of each placed station and the item id of each stack.
+export type NewWorkshop = {
+	--- The vanilla station cloned: what the new one looks like and does.
+	like: Station,
+	--- The new station item, whose id the station's other ids derive from.
+	id: string,
+	--- Whether the station takes the name `NewWorkshop.name`, which also names the workshop; `false` keeps the vanilla names. Give the tag its text with `Load.add_texts`.
+	named: boolean,
+	--- Whether the station item takes the description `NewWorkshop.description`; `false` keeps the vanilla one.
+	described: boolean,
+	--- With a cost, the station is crafted by the recipe `NewWorkshop.recipe`, a copy of the vanilla station's whose ingredient counts are times this; nil adds no recipe.
+	recipe_cost: number?,
+	--- The item's name in the registry's debug list; the id unless set.
+	debug_name: string,
+}
+
 --- How a notice reached a player, from `notify`.
 export type Notice = "OnScreen" | "Chat"
+
+--- What a survivor does on `Effects.npc_command`.
+export type NpcCommandType = { GoToPosition: vector } | "Reset"
+
+--- How a modifier acts on a stat. Modifiers apply in this order: every `Add` to the default, then every `Multiply`, then the greatest `Max` as a floor; an `Override` replaces the result, the last one in source order winning. The kind's range applies last.
+export type Op = "Add" | "Multiply" | "Max" | "Override"
 
 --- Why an operation failed.
 export type OpError = "NotRun" | "InvalidState" | "OutOfMemory" | "Other"
@@ -211,12 +1155,47 @@ export type OpResult = {
 	remaining: number,
 }
 
+--- Where a modifier that counts toward a stat comes from, from `Stats.sources`.
+export type Origin = { Item: ItemInstance } | { Buff: number } | { Mod: OriginMod }
+
+--- A modifier a mod keeps on the entity: the mod that set it and the hash of its key.
+export type OriginMod = {
+	--- The mod that set it; `ModIndex.entry` names it.
+	index: number,
+	--- The hash of the modifier's key.
+	key: number,
+}
+
 --- What became of a request, with a result per operation once it ran.
 export type Outcome = {
 	--- How it ended.
 	done: Done,
 	--- One per operation when the request ran, else empty.
 	ops: {OpResult},
+}
+
+--- Who a message comes from or goes to.
+export type Peer = "Server" | { Player: string }
+
+--- Where an `Icon`'s pixels come from.
+export type Pixels = { Tint: Tint } | { Png: buffer }
+
+--- An entity with a place in the world, from `World.entities` and `World.near`.
+export type Placed = {
+	--- The entity.
+	entity: number,
+	--- Where it is, in metres.
+	position: vector,
+}
+
+--- A placement the game allows, from `Load.on_build`. The name is enshwick's: the game's cursor check has none, and a refusal sets the game's `NoPermission` cursor flag.
+export type Placement = {
+	--- The building player's character.
+	player: number,
+	--- The item placed: a building block, a prop or another placeable.
+	item: number,
+	--- Where, in metres.
+	position: vector,
 }
 
 --- A connected player, as the server sees them.
@@ -263,6 +1242,76 @@ export type PlayerDeathData = {
 	killer_entity: number,
 }
 
+--- A permission the server grants a player through its user groups, one bit of the game's `PlayerPermissions`.
+export type PlayerPermissions = "CanEditBase" | "CanEditWorld"
+
+--- A character's level and experience, from `World.progress`. The name is enshwick's: read from the game's attribute sets.
+export type Progress = {
+	--- The level.
+	level: number,
+	--- Experience gained toward the next level.
+	experience: number,
+	--- Experience the next level needs in all.
+	experience_needed: number,
+}
+
+--- A placed prop, from `World.props_in` and `Capture`.
+export type Prop = {
+	--- The prop's entity.
+	entity: number,
+	--- The item it was placed from, its `UsedItem`.
+	item: number,
+	--- Where it stands and which way it faces, its `CurrentTransform`.
+	transform: WorldTransform,
+}
+
+--- Who asks for a survivor's entity, with what it works on. The name is enshwick's, not the game's.
+export type Purpose = { Uniqueness: PurposeUniqueness } | { Spawn: PurposeSpawn } | { BedOwner: PurposeBedOwner } | { AssignBed: PurposeAssignBed } | { PreviousOccupant: PurposePreviousOccupant } | { Roaming: PurposeRoaming } | "BedBinding" | "Cursor"
+
+--- A player gives `bed` at `bed_at` to the survivor with its staff: answer the entity that gets it.
+export type PurposeAssignBed = {
+	--- The bed.
+	bed: number,
+	--- Its cell.
+	bed_at: {number},
+}
+
+--- A bed at `bed_at` binding its sleeper: answer the entity that may sleep there, or `Answer.Nobody`.
+export type PurposeBedOwner = {
+	--- The bed's cell.
+	bed_at: {number},
+}
+
+--- The same assignment asks who slept in `bed` before: answer that entity, or `Answer.Nobody`. `Lookup.bed_of` tells.
+export type PurposePreviousOccupant = {
+	--- The bed.
+	bed: number,
+	--- Its cell.
+	bed_at: {number},
+}
+
+--- A survivor's idle behaviour: `entity` stands at `at`; answer the entity whose base it keeps to.
+export type PurposeRoaming = {
+	--- The survivor's entity.
+	entity: number,
+	--- Where it stands.
+	at: {number},
+}
+
+--- A summoning staff used at `target`: answer the entity to move there, or `Answer.Nobody` to spawn a new one. The move then reaches only the answered entity.
+export type PurposeSpawn = {
+	--- The cell the staff aims at.
+	target: {number},
+}
+
+--- The pass that keeps one entity per survivor looks at `entity`, whose home is `home`. Answer `entity` to keep it, another entity to have the game remove `entity`, or `Answer.Nobody` when there is no entity yet. After an answer that keeps another entity than the game's, the survivor's record stays on the game's own.
+export type PurposeUniqueness = {
+	--- The entity looked at.
+	entity: number,
+	--- Its saved spawn cell, or where it stands.
+	home: {number},
+}
+
 --- The data of the `QuestCompleted` event.
 export type QuestData = {
 	--- The player's character.
@@ -271,6 +1320,80 @@ export type QuestData = {
 	quest: number,
 }
 
+--- How many enemies random spawners bring. The loader reads the game's value of each variant by its constant's name.
+export type RandomSpawnerAmount = "Few" | "Normal" | "Many" | "Extreme" | "Automatic" | { Other: number }
+
+--- One modifier of an affix with the range its value rolls in.
+export type Range = {
+	--- The stat.
+	stat: Stat,
+	--- What it does.
+	op: Op,
+	--- The least value.
+	min: number,
+	--- The greatest value.
+	max: number,
+	--- The value rolls in steps of this from `min`; 0 for any value.
+	step: number?,
+}
+
+--- What a rate multiplies. The type's name is enshwick's. A rate the game has a setting for takes that setting's name; the others (`Comfort`, `SkillPoints`, `Loot`, `RecipeOutput`) are enshwick's.
+export type Rate = { Experience: ExperienceGroup } | "FactoryProductionSpeed" | "ResourceDropStackAmount" | "Comfort" | "SkillPoints" | "Loot" | { RecipeOutput: RecipeKind }
+
+--- The mod's factor on one of the game's rates, from `rate`.
+export type RateHandle = {
+	--- The rate this handle sets.
+	rate: (self: RateHandle) -> Rate,
+	--- Puts `factor` in force as this mod's factor for the rate: 1 is vanilla, 2 doubles, 0 takes it all, except where a rate keeps a least value (`Rate.FactoryProductionSpeed`, `Rate.Loot`). The game uses it from the next time it reads the rate. Any thread; neither allocates nor locks once every mod is initialised.
+	set: (self: RateHandle, factor: number) -> (),
+}
+
+--- What the item a recipe makes is, as the game classes it, from `RecipeView.kind`; the game may class more items in later builds. The name is enshwick's: the game has no recipe kind; it follows from the output item's equipment slot and, for a placed prop, its item tags. A kind the game names itself takes its name: `RecipeKind.Decorative` is the game's crafting group of that name.
+export type RecipeKind = "BuildingBlock" | "Roof" | "Overgrowth" | "Terrain" | "Decorative" | "ComfortFurniture" | "Other"
+
+--- A vanilla recipe as `derive_recipes` shows it.
+export type RecipeView = {
+	--- The recipe's GUID.
+	guid: string,
+	--- Its name in the registry's debug list.
+	debug_name: string,
+	--- The item it makes; nil for a recipe that makes nothing.
+	output: string?,
+	--- How many it makes.
+	output_count: number,
+	--- What kind of thing it makes, when the game says.
+	kind: RecipeKind?,
+}
+
+--- The vanilla recipes a `RecipesChange` reaches at once.
+export type Recipes = { Kind: RecipeKind } | { Workshop: string }
+
+--- One change of a field of every vanilla recipe a selection picks.
+export type RecipesChange = {
+	--- The recipes.
+	recipes: Recipes,
+	--- What changes.
+	field: ChangeField,
+	--- How.
+	value: Value,
+}
+
+--- Why the loader's knowledge guard refuses a client's request. The name is enshwick's, not the game's. Unstable: needs the `unstable` feature and may change in any release.
+export type Refusal = "Unknown" | "Kind" | "World" | "Counter" | "FlagBit" | "Experience" | "SkillPoints" | "Quest" | { Other: number }
+
+--- A player's rename of an entity, for `Load.on_rename`.
+export type Rename = {
+	--- The entity being renamed.
+	entity: number,
+	--- The renaming player, when the server could tell.
+	player: Player?,
+	--- The new name the client sent.
+	text: string,
+}
+
+--- Who gets a kind's values.
+export type Replication = "Server" | "Clients"
+
 --- A downed player was revived.
 export type RevivedPlayerEvent = {
 	--- The revived player's character.
@@ -278,6 +1401,149 @@ export type RevivedPlayerEvent = {
 	--- Who revived them.
 	source_entity_id: number?,
 }
+
+--- What a revoke takes back, by the kind of the knowledge. The name is enshwick's, not the game's. Unstable: needs the `unstable` feature and may change in any release.
+export type Revoke = "Clear" | { Sub: number } | { Unflag: number }
+
+--- What a roll may give, for `roll` and `Affixes.roll`.
+export type RollRules = {
+	--- The fewest affixes.
+	min: number,
+	--- The most affixes.
+	max: number,
+	--- The rarest an affix may be.
+	max_rarity: ItemRarity,
+}
+
+--- An affix an item rolled: its key and each modifier's value, in the order of the affix's ranges.
+export type Rolled = {
+	--- The affix.
+	affix: number,
+	--- The values.
+	values: {number},
+}
+
+--- A `RecipeRule` a script gives, owning its names.
+export type Rule = { Recipe: string } | { Output: string } | { Workshop: string } | "Hand"
+
+--- Whose a knowledge value is. The name is enshwick's, not the game's.
+export type Scope = "World" | "Player"
+
+--- An op and its value, as `aggregate` takes them from a script.
+export type ScriptModifier = {
+	--- What it does.
+	op: Op,
+	--- Its value.
+	value: number,
+}
+
+--- The server's game settings, typed; read and changed through `GameSettings`. Factors are 1 for the game's normal value.
+export type Settings = {
+	--- The characters' health.
+	player_health_factor: number,
+	--- The characters' mana.
+	player_mana_factor: number,
+	--- The characters' stamina.
+	player_stamina_factor: number,
+	--- The characters' body heat.
+	player_body_heat_factor: number,
+	--- How long characters hold their breath.
+	player_diving_time_factor: number,
+	--- Whether items wear out.
+	enable_durability: boolean,
+	--- Whether hunger turns into starving.
+	enable_starving_debuff: boolean,
+	--- How long food buffs last.
+	food_buff_duration_factor: number,
+	--- How long a character goes hungry before starving, in game time.
+	from_hunger_to_starving: number,
+	--- How long characters last in the shroud.
+	shroud_time_factor: number,
+	--- What a dead character leaves behind.
+	tombstone_mode: TombstoneMode,
+	--- Whether gliders meet turbulence.
+	enable_glider_turbulences: boolean,
+	--- How often rain and storms come.
+	weather_frequency: WeatherFrequency,
+	--- How hard fishing is.
+	fishing_difficulty: GenericDifficulty,
+	--- Damage to terrain and resources when mining.
+	mining_damage_factor: number,
+	--- How fast plants grow.
+	plant_growth_speed_factor: number,
+	--- How many resources a drop stacks.
+	resource_drop_stack_amount_factor: number,
+	--- How fast workshops produce.
+	factory_production_speed_factor: number,
+	--- What recycling a perk upgrade returns.
+	perk_upgrade_recycling_factor: number,
+	--- What perks cost.
+	perk_cost_factor: number,
+	--- Experience from combat.
+	experience_combat_factor: number,
+	--- Experience from mining.
+	experience_mining_factor: number,
+	--- Experience from exploration and quests.
+	experience_exploration_quests_factor: number,
+	--- How many enemies random spawners bring.
+	random_spawner_amount: RandomSpawnerAmount,
+	--- How many enemies attack at once.
+	aggro_pool_amount: AggroPoolAmount,
+	--- The enemies' damage, for enemies spawned after a change.
+	enemy_damage_factor: number,
+	--- The enemies' health, for enemies spawned after a change.
+	enemy_health_factor: number,
+	--- The enemies' stamina, for enemies spawned after a change.
+	enemy_stamina_factor: number,
+	--- How far enemies notice characters.
+	enemy_perception_range_factor: number,
+	--- The bosses' damage.
+	boss_damage_factor: number,
+	--- The bosses' health.
+	boss_health_factor: number,
+	--- The threat bonus.
+	threat_bonus: number,
+	--- Whether enemies leave characters alone until attacked.
+	pacify_all_enemies: boolean,
+	--- What startling a tamed animal costs.
+	taming_startle_repercussion: TamingStartleRepercussion,
+	--- How long the day lasts in real time; the clock keeps its hour.
+	day_time_duration: number,
+	--- How long the night lasts in real time.
+	night_time_duration: number,
+	--- How hard the shroud's curse hits.
+	curse_modifier: CurseModifier,
+	--- The Flame level from which the shroud lifts where it is cleared.
+	flame_level_fog_removal: number,
+}
+
+--- The settings in force and the preset the world started from, as `GameSettings.read` gives them to a script.
+export type SettingsRead = {
+	--- The settings.
+	settings: Settings,
+	--- The preset.
+	preset: GameSettingsPreset,
+}
+
+--- The shape of an edit. The name is enshwick's, not the game's.
+export type Shape = "Round" | "Square"
+
+--- Which binary of the game runs, or where a mod runs.
+export type Side = "server" | "client" | "both"
+
+--- A skill the API names, for `Load.on_skill`; the loader knows each one's node per game build.
+export type Skill = "AirborneArchitect"
+
+--- The game asking whether a character unlocked a skill.
+export type SkillCheck = {
+	--- Who asks.
+	gate: SkillGate,
+	--- The game's own answer.
+	unlocked: boolean,
+}
+
+--- Which game check asks about a skill node. The name is enshwick's, not the game's.
+export type SkillGate = "FlyMode" | "Other"
 
 --- One slot and what it holds.
 export type Slot = {
@@ -291,6 +1557,179 @@ export type Slot = {
 	count: number,
 	--- The item's own entity, for items with durability or a level.
 	pide: number?,
+}
+
+--- One modifier that counts toward a stat, with its origin.
+export type Source = {
+	--- Where it comes from.
+	origin: Origin,
+	--- The stat's index in this process (see `Stat.index`).
+	stat: number,
+	--- What it does.
+	op: Op,
+	--- Its value.
+	value: number,
+}
+
+--- How an entity starts, for `Effects.spawn`.
+export type Spawn = {
+	--- The level the game scales the entity to, as for enemies; nil for the template's own.
+	level: number?,
+	--- Game time after which the game removes the entity; nil keeps it. The name is enshwick's, not the game's.
+	despawn_after: number?,
+	--- The orientation, a quaternion `x, y, z, w`; nil for none turned.
+	orientation: {number}?,
+}
+
+--- A stat kind from `define_stat` or `open_stat`, valid in this game process.
+export type Stat = {
+	--- The kind's stored name.
+	key: (self: Stat) -> number,
+	--- The kind's index in this process, as the loader's calls name it.
+	index: (self: Stat) -> number,
+}
+
+--- A stat whose value changed, for `Load.on_stats_changed`.
+export type StatChange = {
+	--- The entity.
+	entity: number,
+	--- The stat.
+	stat: Stat,
+	--- The value before.
+	old: number,
+	--- The value now.
+	new: number,
+}
+
+--- A stat kind's definition, for `Load.define_stat`.
+export type StatDef = {
+	--- What the number is.
+	ty: StatType,
+	--- The value without modifiers.
+	default: number,
+	--- The least value.
+	min: number,
+	--- The greatest value.
+	max: number,
+	--- How the value reads.
+	format: StatFormat,
+}
+
+--- How a `ImpactUiValue`'s number reads. The name is enshwick's: the game's number format together with its signed flag.
+export type StatFormat = "Number" | "Signed" | "Percent"
+
+--- What a stat kind is called and how it reads, from `Stats.info`.
+export type StatInfo = {
+	--- The full id, `<mod>:<name>`.
+	id: string,
+	--- The text key that names it in its owner's texts, see `name_key`.
+	text: string,
+	--- The definition.
+	def: StatDef,
+}
+
+--- What a stat's number is. The name is enshwick's, not the game's.
+export type StatType = "Additive" | "Multiplicative" | "Flag"
+
+--- A vanilla crafting station: its item and the template the item places.
+export type Station = {
+	--- The station item.
+	item: string,
+	--- The template the item places.
+	template: string,
+}
+
+--- A summoning staff's use, from `Load.on_summon` and `Load.on_summoned`.
+export type Summon = {
+	--- The item used.
+	item: number,
+	--- The ammunition used, if any.
+	ammo: number?,
+	--- The template it places.
+	template: string,
+	--- The target cell.
+	target: {number},
+	--- The slot the used item lies in.
+	slot: string,
+	--- The used item's own entity; nil for an item without one.
+	pide: number?,
+	--- The used item's meter (see `FuelSetup`) as clients see it; nil for an item without one.
+	meter: Bar?,
+	--- In `Load.on_summoned`: whether the use took the item.
+	consumed: boolean,
+}
+
+--- What a summon filter makes of a staff's use, from `Load.on_summon`. The name is enshwick's, not the game's.
+export type SummonVerdict = "Allow" | "Take" | "Refuse"
+
+--- What startling a tamed animal costs its taming. The loader reads the game's value of each variant by its constant's name.
+export type TamingStartleRepercussion = "KeepProgress" | "LoseSomeProgress" | "LoseAllProgress" | { Other: number }
+
+--- What a change a mod sets later reaches.
+export type Target = { Entry: string } | { Items: Items }
+
+--- The most worker threads the task groups start with; 0 leaves a group as the game sizes it.
+export type TaskWorkers = {
+	--- The default group, which also sizes the ECS task queue.
+	default: number,
+	--- The background group: streaming, saves and other slow work.
+	background: number,
+}
+
+--- How an entity arrives, for `Effects.teleport`. The name is enshwick's: the game takes a whole arrival transform. Unstable: needs the `unstable` feature and may change in any release.
+export type Teleport = {
+	--- Let the game look for a free spot near the target to stand on, as it does for respawns.
+	search_best_spawn_position: boolean?,
+	--- The orientation to arrive in, a quaternion `x, y, z, w`; nil keeps the entity's own. The name is enshwick's: the game takes a whole arrival transform.
+	facing: {number}?,
+}
+
+--- The world's terrain, or a dry run of its edits that changes nothing.
+export type Terrain = {
+	--- The terrain materials of the running game; empty off the game thread or before the game has loaded them.
+	materials: (self: Terrain) -> {TerrainTerraformingConfig},
+	--- Adds a mound of `material` at `position`, in metres: `radius` across and `height` high at its middle, as a player's shovel does. Returns the volume added, in cubic metres.
+	add: (self: Terrain, position: vector, radius: number, height: number, material: number, shape: Shape) -> number,
+	--- Digs out the terrain within `radius` of `position`, in metres, as a pickaxe would with no limit. A material in `protect` is left, and the dig stops at the first shell of half a metre that meets it, as a pickaxe stops at rock it cannot break. Returns the volume removed, in cubic metres.
+	dig: (self: Terrain, position: vector, radius: number, shape: Shape, protect: {number}) -> number,
+	--- Flattens the ground within `radius` of `position`, in metres, to the level of `position`: ground above goes, and gaps below are filled with `material`. Returns whether anything changed.
+	flatten: (self: Terrain, position: vector, radius: number, material: number, shape: Shape) -> boolean,
+	--- The same terrain for edits that only count: each returns what it would change and changes nothing.
+	dry: (self: Terrain) -> Terrain,
+}
+
+--- A terrain material of the running game, from `Terrain.materials`.
+export type TerrainTerraformingConfig = {
+	--- Its voxel id, 1 to 127.
+	terrain_material: number,
+	--- The item digging it yields.
+	terrain_item: number,
+	--- How hard it is to dig: the game's hardness category from 0.
+	hardness: number,
+	--- The health a voxel of it has against tools.
+	health_points: number,
+	--- Whether a player's tool can flatten it.
+	can_be_flattened: boolean,
+}
+
+--- A mod's texts by language and key, with the lookup and fill the game's own texts use.
+export type Texts = {
+	--- Adds `other`'s texts over these, as `Texts.merge` does, and returns the texts merged: a script's object stays as it was.
+	merge: (self: Texts, other: Texts) -> Texts,
+	--- The text of `key` in `language`, else in its next language, English last, as `Texts.get` looks it up.
+	get: (self: Texts, key: string, language: string) -> string?,
+	--- The text of `key` in `language` with each `{name}` replaced by the value `args` pairs with it, as `Texts.fill` fills it; `args` is a list of `{ name, value }`.
+	fill: (self: Texts, key: string, language: string, args: {{string}}) -> string,
+	--- The texts as TOML, a table per language code, as `Texts.to_toml` writes them.
+	to_toml: (self: Texts) -> string,
+	--- Every language with a text for `key`, each as `{ code, text }`, as `Texts.translations` lists them.
+	translations: (self: Texts, key: string) -> {{string}},
+	--- Every language with texts of its own, as `Texts.languages` lists them.
+	languages: (self: Texts) -> {string},
+	--- Each of `languages` with each key it lacks, as `{ code, key }`, as `Texts.missing_in` pairs them.
+	missing_in: (self: Texts, languages: {string}) -> {{string}},
+	--- Each language with each key another language has and it lacks, as `{ code, key }`, as `Texts.untranslated` pairs them.
+	untranslated: (self: Texts) -> {{string}},
 }
 
 --- The data of the `Ticked` event. A handler on a period sees the steps and the time since its own last call; an every-step handler sees one step and the time since the step before.
@@ -309,6 +1748,193 @@ export type TickData = {
 	game: string,
 }
 
+--- A tick handler's period, from `on_tick`, to change while the game runs.
+export type TickPeriod = {
+	--- Runs the handler about every `every` from the next step on: its next call comes `every` after its last, or on the next step when that time has passed. `Duration.ZERO` runs it on every step.
+	set_every: (self: TickPeriod, every: number) -> (),
+}
+
+--- The clock as it was when read, from `Clock.now`. The name is enshwick's; its day and night lengths are the game settings' fields of the same names.
+export type TimeOfDay = {
+	--- The time of day in hours, from 0 up to 24.
+	hours: number,
+	--- Whether it is day.
+	is_day: boolean,
+	--- The hour the day starts at.
+	day_starts: number,
+	--- The hour the night starts at.
+	night_starts: number,
+	--- How long the day lasts in real time at speed 1.
+	day_time_duration: number,
+	--- How long the night lasts in real time at speed 1.
+	night_time_duration: number,
+	--- How fast the clock runs now: 1 normally, faster while players sleep, times every mod's factor.
+	speed: number,
+}
+
+--- A recolouring: every pixel moves `amount` percent of the way toward `colour` at the pixel's own brightness, so shading stays and the hue changes; alpha stays.
+export type Tint = {
+	--- The colour, red, green and blue.
+	colour: {number},
+	--- How far each pixel moves toward it, 0 to 100.
+	amount: number,
+}
+
+--- What a dead character leaves behind. The loader reads the game's value of each variant by its constant's name.
+export type TombstoneMode = "AddBackpackMaterials" | "Everything" | "NoTombstone" | { Other: number }
+
+--- A batch of world edits, written together and undone together once committed.
+export type Transaction = {
+	--- Adds a mound of `material`, as `Terrain.add` does, to the changes.
+	terrain_add: (self: Transaction, position: vector, radius: number, height: number, material: number, shape: Shape) -> Transaction,
+	--- Digs out the terrain, as `Terrain.dig` does, as one of the changes.
+	terrain_dig: (self: Transaction, position: vector, radius: number, shape: Shape, protect: {number}) -> Transaction,
+	--- Flattens the ground, as `Terrain.flatten` does, as one of the changes.
+	terrain_flatten: (self: Transaction, position: vector, radius: number, material: number, shape: Shape) -> Transaction,
+	--- Writes `voxels` over their box, whatever was there: air, ground and building blocks alike, each voxel with its fill. A box read with `Voxels.read`, moved with `VoxelBox.moved_to`, pastes it elsewhere. Like a player's, voxels written outside every base are not saved; `World.persists` tells.
+	write_voxels: (self: Transaction, voxels: VoxelBox) -> Transaction,
+	--- Tears down the building blocks in the box of `size` voxels from `min`: their voxels turn to air, and the ground stays. The game's `BuildingTearDownEvent` tells its listeners.
+	erase_block: (self: Transaction, min: VoxelPos, size: {number}) -> Transaction,
+	--- Places a building block as a player's building tool does: the `VoxelBlueprintItem` of `shape` in the building material `material` places, centred on `at`'s position and turned by its orientation, which the game keeps in quarter turns. As a player's building tool does, it writes over air and over ground and building voxels softer than `Unbreakable`, and leaves the rest. The game's `BuildingPlaceEvent` tells its listeners. It takes no cost from anyone. `Transaction.commit` refuses a `shape` with no `VoxelBlueprintItem` and a `material` whose `ChangeVoxelData` places no building material.
+	place_block: (self: Transaction, shape: number, material: number, at: WorldTransform) -> Transaction,
+	--- Places a prop as a player places one from `item`: the template the item places, with the item it came from, standing at `at`. The game's `BuildingPlaceEvent` tells its listeners, and its `LogicEntityPlacedEvent` for a logic prop. It takes no cost from anyone. The prop is in the world from the step after it is placed, and the transaction is applied once it stands there; `World.transaction_entities` lists it. `Transaction.commit` refuses an item that places nothing, and one that places a creature or a flame altar, which founds a base, with `WorldError.NotAProp`. Like a player's, a prop placed outside every base is not saved; `World.persists` tells.
+	place_prop: (self: Transaction, item: number, at: WorldTransform) -> Transaction,
+	--- Removes the prop `entity` as the game tears one down, without loot, and raises the game's `BuildingTearDownEvent`. A prop that holds state a player would lose is refused: items, any plant, a production queue, assigned survivors, written text, fuel a player put in a prop that does not refill itself, logic wiring or a logic trigger (each a `HeldState`). The transaction fails with `WorldError.HoldsState` before it writes anything; empty it first, or use `Transaction.remove_prop_discarding_state`. The loader keeps players from the prop for the step before it goes and checks again then, so nothing put in meanwhile is lost. A creature or a flame altar fails with `WorldError.NotAProp`.
+	remove_prop: (self: Transaction, entity: number) -> Transaction,
+	--- Removes the prop `entity` even when it holds state a player would lose. Destructive: a chest's items, a plant and its growth, a station's queue, survivors' places, written text, fuel, logic wiring and a trigger's settings are gone for good, and an undo will not bring the prop back without them, so it refuses with `WorldError.HoldsState`. Without state, it is `Transaction.remove_prop`. A creature or a flame altar still fails with `WorldError.NotAProp`.
+	remove_prop_discarding_state: (self: Transaction, entity: number) -> Transaction,
+	--- The changes so far.
+	len: (self: Transaction) -> number,
+	--- Whether it holds no change yet.
+	is_empty: (self: Transaction) -> boolean,
+	--- Hands the changes to the loader, which writes them at the server's next quiet moments; `World.transaction_status` follows them.
+	commit: (self: Transaction) -> string,
+}
+
+--- Where a committed `Transaction` stands, from `World.transaction_status`.
+export type TransactionStatus = "Pending" | "Applied" | "Undoing" | "Undone" | { Failed: WorldError } | { NotAllowed: BuildRefusal } | "Expired" | { UndoRefused: WorldError }
+
+--- A skill node a character unlocked, from `World.skills`. The name is enshwick's: one entry of the game's unlocked skill nodes and their levels.
+export type UnlockedSkill = {
+	--- The node in the game's skill tree.
+	node: number,
+	--- Its level, from 1, for nodes that level up; 0 for the others.
+	level: number,
+}
+
+--- How a `Change` changes its value.
+export type Value = { Set: number } | { Times: number }
+
+--- An entity's health, stamina and mana, from `World.vitals`. The name is enshwick's: read from the game's attribute sets.
+export type Vitals = {
+	--- Health; every entity with vitals has it.
+	health: Meter,
+	--- Stamina, for characters and the actors that have it.
+	stamina: Meter?,
+	--- Mana, for characters and the actors that have it.
+	mana: Meter?,
+}
+
+--- One voxel: what it is made of and how full it is.
+export type Voxel = {
+	--- Its material.
+	material: VoxelMaterial,
+	--- How full it is, 0 to 255.
+	fill: number,
+}
+
+--- A box of voxels: its lowest corner, its size, and its voxels, x fastest, then y, then z.
+export type VoxelBox = {
+	--- The lowest voxel's place.
+	min: VoxelPos,
+	--- Its voxels along each axis.
+	size: {number},
+	--- Its voxels.
+	voxels: {Voxel},
+}
+
+--- What a voxel is made of. The kinds are enshwick's names for the ranges of the game's material ids.
+export type VoxelMaterial = "Air" | { Terrain: number } | { Building: number } | { Unknown: number }
+
+--- A voxel's place, in voxels of half a metre from the world's corner.
+export type VoxelPos = {
+	--- Across.
+	x: number,
+	--- Up.
+	y: number,
+	--- Across the other way.
+	z: number,
+}
+
+--- How the weather is at a place, from `Weather.at`: weights that add up to 1, as the game's systems weigh it. The name is enshwick's, not the game's.
+export type WeatherAt = {
+	--- How clear it is.
+	clear: number,
+	--- How rainy.
+	rain: number,
+	--- How snowy.
+	snow: number,
+	--- How stormy.
+	blizzard: number,
+}
+
+--- How often rain and storms come. The loader reads the game's value of each variant by its constant's name.
+export type WeatherFrequency = "Disabled" | "Rare" | "Normal" | "Often" | { Other: number }
+
+--- What a front brings.
+export type WeatherPhenomenonEffect = "None" | "Rain" | "Blizzard" | { Other: number }
+
+--- A workshop survivor of the game, with its summoning staff and template.
+export type WorkshopSurvivor = {
+	--- The short name, as `WorkshopSurvivor.key` gives it.
+	key: (self: WorkshopSurvivor) -> string,
+	--- The survivor's id, as `WorkshopSurvivor.id` gives it.
+	id: (self: WorkshopSurvivor) -> number,
+	--- The vanilla summoning staff, as `WorkshopSurvivor.staff` gives it.
+	staff: (self: WorkshopSurvivor) -> string,
+	--- The survivor's template, as `WorkshopSurvivor.template` gives it.
+	template: (self: WorkshopSurvivor) -> string,
+	--- The survivor's name in `language`, as `WorkshopSurvivor.name` gives it.
+	name: (self: WorkshopSurvivor, language: string) -> string?,
+}
+
+--- Why the server's world refused a request.
+export type WorldError = "WrongThread" | "Gone" | "Missing" | "Refused" | "Lacks" | "NotLoaded" | "OutsideWorld" | "StaticHalf" | { HoldsState: {HeldState} } | "NotAProp"
+
+--- The mod's data for the world running now, saved beside it.
+export type WorldStore = {
+	--- What `read` answers for the data now; nil while no world runs.
+	with: (self: WorldStore, read: (arg1: any) -> any) -> any?,
+	--- Changes the data to what `change` returns for it, a table; nil or an error keeps it. False while no world runs.
+	update: (self: WorldStore, change: (arg1: any) -> any) -> boolean,
+	--- Writes the data now, as `WorldStore.flush` does.
+	flush: (self: WorldStore) -> (),
+	--- Why the store is shut, as `WorldStore.shut_reason` says.
+	shut_reason: (self: WorldStore) -> string?,
+	--- The world's key, as `WorldStore.key` gives it.
+	key: (self: WorldStore) -> string?,
+}
+
+--- Where a thing stands and which way it faces: the game's `WorldTransform` without its scale, which is 1 for every prop the game places.
+export type WorldTransform = {
+	--- The position in metres, from the game's 32.32 fixed point.
+	position: vector,
+	--- The rotation as a unit quaternion, x, y, z then w, as the game stores it, with y up.
+	orientation: {number},
+}
+
+--- A reflected component type a mod may write, from `world.writable_type`.
+export type WritableType = {
+	--- The reflected name, as `WritableType.name` gives it.
+	name: (self: WritableType) -> string,
+	--- The reflected size, as `WritableType.size` gives it.
+	size: (self: WritableType) -> number,
+	--- The component type, as `WritableType.ty` gives it.
+	ty: (self: WritableType) -> number,
+	--- The field `name`, read and written as `kind`, as `WritableType.field` resolves one for a Rust type.
+	field: (self: WritableType, name: string, kind: FieldKind) -> Field,
+}
+
 --- A character gained experience.
 export type XpGainedEvent = {
 	--- The player's character.
@@ -317,6 +1943,14 @@ export type XpGainedEvent = {
 	amount: number,
 	--- Where from.
 	source: string,
+}
+
+--- The altars' zone sizes a filter changed, to tell the game when they change again.
+export type ZoneSizes = {
+	--- The altars.
+	altars: (self: ZoneSizes) -> Altars,
+	--- Has the loader size the altar zones again on the server's next step, as when the mod's settings change what its filter answers. Any thread.
+	changed: (self: ZoneSizes) -> (),
 }
 
 declare enshwick: {
@@ -359,8 +1993,8 @@ declare enshwick: {
 	on_game_type: (type_name: string, fields: { [string]: string }, handler: (event: { [string]: any }) -> ()) -> (),
 	--- Every game event type of the running build, with its size in bytes, read from the game's reflection.
 	game_event_types: () -> { { name: string, size: number } },
-	--- Links `handler` into another mod's extension point, as `cargo enshwick deps <alias> --luau` describes it: it gets the input and the answer so far, and returns a new answer, nothing to keep it, or `enshwick.refuse`. Subscribe at the top level of main.luau.
-	extend: (point: { name: string }, handler: (input: any, answer: any) -> any) -> (),
+	--- Links `handler` into another mod's extension point, as `cargo enshwick deps <alias> --luau` describes it: it gets the input and the answer so far, and returns a new answer, nothing to keep it, or `enshwick.refuse`. `order` places the link among the point's others: `after` a mod sees its answer, `before` a mod leaves it the last word, and among the rest the lower `priority` runs first. Subscribe at the top level of main.luau.
+	extend: (point: { name: string }, handler: (input: any, answer: any) -> any, order: { before: { string }?, after: { string }?, priority: number? }?) -> (),
 	--- What a point's handler returns to refuse, on a refusable point.
 	refuse: {},
 	--- Calls `handler` with the data of another mod's event, as `cargo enshwick deps <alias> --luau` describes it or a description of the script's own (fields with `name` and `read`, laid out as Rust lays them out). Subscribe at the top level of main.luau.
@@ -381,8 +2015,10 @@ declare enshwick: {
 		warn: (text: string) -> (),
 		--- Writes `text` to the mod's log as an error; the mod keeps running.
 		error: (text: string) -> (),
+		--- The most detailed level the mod's log keeps, as `Host.log_level` answers it.
+		level: () -> Level,
 	},
-	--- The server's world: players, chat, notices and positions. Unstable: may change in any release.
+	--- The server's world: players, accounts, entities, props, vitals and edits in transactions. Unstable: may change in any release.
 	world: {
 		--- The connected player whose character is `entity`.
 		player: (entity: number) -> Player?,
@@ -390,6 +2026,8 @@ declare enshwick: {
 		player_by_key: (key: string) -> Player?,
 		--- The connected players named `name`, ignoring case; names are untrusted and may repeat, so a command that wants one player refuses more than one.
 		players_named: (name: string) -> {Player},
+		--- Gives `entity` the name `text`, as a player's rename does: the game shows it on hover, sends it to every client and saves it with the world. The game keeps 255 bytes; an empty text removes the name. On the game thread only; `false` elsewhere or when the entity is gone.
+		set_label: (entity: number, text: string) -> boolean,
 		--- Sends `text` to every player's chat, after the next step; callable from any thread. Each line becomes a message of its own.
 		broadcast: (text: string) -> (),
 		--- Sends `text` to `player`'s chat alone, after the next step; callable from any thread.
@@ -402,9 +2040,91 @@ declare enshwick: {
 		players: () -> {Player},
 		--- `entity`'s position in metres.
 		position: (entity: number) -> vector?,
+		--- The item `entity` was placed from, which it keeps across saves.
+		used_item: (entity: number) -> number?,
+		--- Whether `entity` carries a name a player or `World.set_label` gave it; nil when the world cannot tell.
+		has_label: (entity: number) -> boolean?,
+		--- `entity`'s template GUID, in file order.
+		template: (entity: number) -> string?,
+		--- Asks the server to save the world now, as its timed saves do; `WorldSaved` follows once the save is on disk. A save already under way counts as asked.
+		save: () -> (),
+		--- The key of the world the server runs: its save file's name without `.ksd`, such as `world0`, the same in every session; nil before the server has read the world. The game gives a deleted world's name to its next new world, so a key names a slot, not one world for ever. On a client it is the key of the game it hosts, and nil once that game ends. Any thread.
+		key: () -> string?,
+		--- The mod's data folder in the world the server runs, `<stem>-mod-data/<id>` beside the world's save, made on first use; nil while no world runs. The loader renames the folder aside when a new world takes the save's name, so what a mod keeps there belongs to this world. Any thread.
+		data_dir: () -> string?,
+		--- Asks the game to kick, ban or unban the account `key`, as its administrators do; the mod decides who may ask. A dedicated server keeps its ban list in `bannedAccounts` of `enshrouded_server.json`; a hosted game keeps it until it ends.
+		account_action: (action: AccountAction, key: string) -> (),
+		--- Mutes the account `key` in chat, or lifts its mute when `muted` is false. The server then drops every line that player types before anyone else reads it, and tells the player now and then with one of the game's notices. A mute belongs to the world: it is kept beside its save and lasts across restarts until it is lifted. The mod decides who may ask. Any thread.
+		set_muted: (key: string, muted: boolean) -> (),
+		--- Whether the account `key` is muted in chat. Any thread.
+		muted: (key: string) -> boolean,
+		--- Whether the server lets `player` edit the box between the corners `a` and `b` in metres; a mod that edits the world for a player asks first. The permissions are the game's terrain tool rule: `CanEditWorld` always, `CanEditBase` where the box overlaps a building zone. Enshwick adds two tests the game's building cursor runs for items: both corners inside the world's building area, and no strict no-build zone the world places. An item's other rules, such as one that needs a zone, are not part of it.
+		can_build: (player: Player, a: vector, b: vector) -> (),
+		--- Whether a save keeps changes in the box between corners `a` and `b`, in metres. The game saves a world only inside its bases, the flame altars' build zones: a prop placed or terrain changed anywhere else is gone after a restart, a player's as well as a mod's. The box must lie wholly inside one base's zone, half a metre in from its edges.
+		persists: (a: vector, b: vector) -> boolean,
+		--- Every entity with a component of type `ty` and a place in the world, such as every bed or every chest; with `World.transform_type`, every placed entity. The engine walks every such archetype, so call it now and then, not every step. On the game thread only; empty elsewhere.
+		entities: (ty: number) -> {Placed},
+		--- The entities with a component of type `ty` within `radius` metres of `point`, nearest first; with `World.transform_type`, every placed entity there. On the game thread only; empty elsewhere.
+		near: (point: vector, radius: number, ty: number) -> {Placed},
+		--- The component type every placed entity has, `CurrentTransform`.
+		transform_type: () -> number,
+		--- The world's containers of a kind in `kinds`, with their places: by default what players build, such as storage chests; see `ContainerKinds` for the rest. Each kind is told apart by a component the game gives it. Call it now and then, as `World.entities`. On the game thread only; empty elsewhere and on a build that lacks any of those components.
+		containers: (kinds: {string}) -> {Placed},
+		--- Asks the server to destroy `entity` after the systems of the next step, as the game removes things itself: no loot and no death.
+		destroy: (entity: number) -> (),
+		--- The props whose position lies in the box between corners `a` and `b`, in metres, edges included, by entity: what a player placed there from an item, told apart by the template the item places, not the things a world comes with. Creatures placed from items (animals, pets, survivors) and flame altars are no props and are left out; the entity calls reach them. The engine walks every entity with a `UsedItem`, so call it now and then, not every step.
+		props_in: (a: vector, b: vector) -> {Prop},
+		--- Starts a `Transaction` of the server's world.
+		transaction: () -> Transaction,
+		--- Starts a `Transaction` for `player`: before it writes anything, the loader checks that the server lets the player edit the box of every change, as `World.can_build` does, and a refusal fails it with `TransactionStatus.NotAllowed` and the reason, writing nothing. The check runs at the transaction's first step on the server's game thread, so `Transaction.commit` does not refuse a player; `World.transaction_status` tells. Building events name the player as the owner.
+		transaction_for: (player: Player) -> Transaction,
+		--- Undoes transaction `id` of this mod: a queued one is dropped, one written in whole or in part gets every brick it touched back as it was. The undo runs at the server's next quiet moments. It first checks that every brick still holds what the transaction left there: a brick changed since (a player's or another edit) stops it before it writes anything, so undo transactions that overlap newest first. It checks each brick again right before writing it back: a brick changed while it runs stops it at that brick, keeping the bricks already put back, and the undo may be asked again once the change is gone. `World.transaction_status` tells how it went.
+		undo: (id: string) -> (),
+		--- The props transaction `id` of this mod placed and still holds, oldest first; empty for an id the loader no longer remembers, or not this mod's. A prop is in the world from the step after the one that placed it.
+		transaction_entities: (id: string) -> {number},
+		--- Where transaction `id` of this mod stands; nil for an id the loader no longer remembers (it keeps the newest few thousand) or not this mod's.
+		transaction_status: (id: string) -> TransactionStatus?,
+		--- `entity`'s health, stamina and mana; nil when it has no health, off the game thread, or on a build without stat reads.
+		vitals: (entity: number) -> Vitals?,
+		--- Sets `entity`'s health to `value`, kept between 1 and its maximum, so a write never kills; returns the health it now has. The game sends it to clients and regenerates from it as from any other value. On the game thread only.
+		set_health: (entity: number, value: number) -> Meter,
+		--- Adds `amount` to `entity`'s health, kept between 1 and its maximum: a negative amount takes health but never kills. Returns the health it now has. On the game thread only.
+		heal: (entity: number, amount: number) -> Meter,
+		--- Sets `entity`'s stamina to `value`, kept between 0 and its maximum; returns the stamina it now has. On the game thread only.
+		set_stamina: (entity: number, value: number) -> Meter,
+		--- Sets `entity`'s mana to `value`, kept between 0 and its maximum; returns the mana it now has. On the game thread only.
+		set_mana: (entity: number, value: number) -> Meter,
+		--- The meter of an item's own entity, its PIDE (see `FuelSetup`): the count it holds and its maximum. nil for an entity without one, off the game thread, or on a build without the reads.
+		item_meter: (pide: number) -> Meter?,
+		--- How long `entity`, a character, holds out in the shroud before it drains health, in seconds, and the most it holds; nil for an entity without it, off the game thread, or on a build without it. It runs down in the shroud and refills outside.
+		shroud_time: (entity: number) -> Meter?,
+		--- Whether `entity`, a character, stands in the shroud where it drains them, outside the altars' reach; nil for an entity that is no actor, off the game thread, or on a build without it.
+		in_shroud: (entity: number) -> boolean?,
+		--- The skill nodes `entity`, a character, unlocked, with their levels; nil for an entity without skills, off the game thread, or on a build without them. The game saves them with the character.
+		skills: (entity: number) -> {UnlockedSkill}?,
+		--- `entity`'s level and experience; nil for an entity without them, off the game thread, or on a build without stat reads.
+		progress: (entity: number) -> Progress?,
+		--- Changes an item's meter on its entity `pide` to what `change` returns for the value now, as `World.change_item_meter` does; nil keeps it.
+		change_item_meter: (pide: number, change: (arg1: number) -> number?) -> Meter,
+		--- Changes `entity`'s shroud time to what `change` returns for the time now, as `World.change_shroud_time` does; nil keeps it.
+		change_shroud_time: (entity: number, change: (arg1: number) -> number?) -> Meter,
+		--- The value of `field` in `entity`'s component, as `World.get` reads it; a 64-bit one as decimal text.
+		get: (entity: number, field: Field) -> any?,
+		--- Writes `value` to `field` in `entity`'s component, as `World.set` does.
+		set: (entity: number, field: Field, value: any) -> (),
+		--- Lets `write` change `entity`'s component of type `ty`, as `World.update` does: it gets the component's bytes and returns them changed, of the same length, or nil to keep them.
+		update: (entity: number, ty: WritableType, write: (arg1: buffer) -> buffer?) -> (),
+		--- The voxels and props of the region between voxels `a` and `b`, both included, as plain data counted from the region's lowest corner. It reads the voxels in tiles of up to `READ_MAX`, 32 metres a side, at most `CAPTURE_TILES` of them, and takes a prop whose position lies in the region. Each tile read took 2.4 to 3.1 milliseconds on a server copy under Rosetta and Wine, so a capture holds the game thread for at most about 50 milliseconds. A mod captures a bigger region in parts over several steps itself. Every voxel read can pull a part of the world into memory: a region not loaded yet fails with `WorldError.NotLoaded` after every tile has started loading, so the next try a second or so later finds more of it.
+		capture: (a: VoxelPos, b: VoxelPos) -> Capture,
+		--- Runs `filter` before the server applies a player's rename of any entity, on its game thread; returning `false` refuses the rename. The game itself checks no permission for renames. A client runs it while it hosts a game.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_rename: (filter: (arg1: Rename) -> boolean?) -> (),
+		--- The component type `name` for writes, as `WritableType.resolve` resolves it.
+		--- Only while the mod starts, at the top level of main.luau.
+		writable_type: (name: string) -> WritableType,
 	},
 	--- Work for the server's game thread: on the next pass, after a delay, or repeatedly.
-	scheduler: {
+	schedule: {
 		--- Runs `task` on the scheduler's next pass, within the tick period.
 		next_tick: (task: () -> ()) -> (),
 		--- Runs `task` on the first pass at least `delay` from now.
@@ -416,6 +2136,8 @@ declare enshwick: {
 	inventory: {
 		--- The static data of `item`; none for an unknown item, or while no world runs. Any thread.
 		item_info: (item: number) -> ItemInfo?,
+		--- Submits `batch` from any thread. `done` runs on the game thread after a later step with the outcome, which the returned `Ticket` also holds. A batch that breaks a limit is refused without reaching the game. If the mod is turned off first, `done` never runs.
+		submit: (batch: Batch, done: (arg1: Outcome) -> ()) -> (),
 		--- Every slot of the inventory `root`, as a reader reads it on the server's game thread; empty elsewhere.
 		slots: (root: number) -> {Slot},
 		--- How many items `item` the inventory `root` holds, as a reader reads it on the server's game thread; 0 elsewhere.
@@ -430,6 +2152,16 @@ declare enshwick: {
 		move_slot: (slot: string, to: number, amount: number?, done: (arg1: Outcome) -> ()) -> (),
 		--- Moves every stack of the inventory `from` into `to`, as the game's "take all" does; what does not fit stays in the source. The source's action bar, equipment and locked slots stay; a move in a batch can include them.
 		move_all: (from: number, to: number, done: (arg1: Outcome) -> ()) -> (),
+		--- Renews every stack of `items` in the inventory `root` that has no entity of its own, each with its meter at `fill`, in one transaction (`Op.Renew`): items from before their mod gave them a meter get one at once. Reads on the game thread, as `Inventories.read`; nil when nothing needs it, without calling `done`.
+		renew: (root: number, items: {number}, fill: number, done: (arg1: Outcome) -> ()) -> nil?,
+		--- The stack in `slot`, as `Reader.slot` reads it.
+		slot: (slot: string) -> Slot?,
+		--- The inventory at the root of `slot`'s, as `Reader.root` reads it.
+		root: (slot: string) -> number?,
+		--- The durability of the item `pide`, as `Reader.durability` reads it.
+		durability: (pide: number) -> Bar?,
+		--- The meter of the item `pide`, as `Reader.meter` reads it.
+		meter: (pide: number) -> Bar?,
 	},
 	--- The game's types, its resources by type and as values, and resources served from an edit.
 	resources: {
@@ -463,12 +2195,6 @@ declare enshwick: {
 		serve_new: (key: any, value: any) -> (),
 		--- The version string of the game's archive: the build number, the branch and when the build was made, split by `|`.
 		game_version: () -> string,
-		--- The pixels of PNG `png` as `{ width, height, pixels }`, the pixels a buffer of RGBA bytes, row by row; nil when it does not read or is larger than 2048 on a side.
-		decode_png: (png: buffer) -> any?,
-		--- RGBA `pixels`, `width` by `height`, as PNG bytes.
-		encode_png: (pixels: buffer, width: number, height: number) -> buffer,
-		--- The RGBA pixels of a texture's content `data`, `width` by `height`, in the game's `format` code (a block-compressed format or RGBA).
-		decode_texture: (format: number, width: number, height: number, data: buffer) -> buffer,
 		--- The nil GUID's text, all zero: no resource.
 		nil_guid: () -> string,
 		--- The GUID a content hash reads as, four numbers as `content_hashes` lists them: its words in memory order.
@@ -492,6 +2218,10 @@ declare enshwick: {
 	mods: {
 		--- Whether the mod `id`, such as `you.lockers`, runs in this game.
 		is_running: (id: string) -> boolean,
+		--- Every loaded mod, the loader first, in load order, as `all` lists them.
+		all: () -> {ModEntry},
+		--- The server's mods that the last refused join found missing on this client or in another version, as `join_missing` lists them.
+		join_missing: () -> {ModEntry},
 		--- Whether this game runs the server now, so the mod's server logic acts: always on the dedicated server; on a client while it hosts a game, single player included, as mods run with server behaviour there.
 		hosting: () -> boolean,
 		--- The game executable the mod runs in: `server` for the dedicated server, `client` for the game, which may also host one (`hosting`).
@@ -505,5 +2235,489 @@ declare enshwick: {
 	controls: {
 		--- Declares the control `name`, shown as `label`, on `key`, a key name such as `Shift+E` or empty for none, following the game action `link` by its game name, such as `ContextualAction`, or empty. It fires on `phases`, of `press`, `release` and `hold`, or on press when empty, and holds after `hold_ms`; `on` gets the phase and, on the server, the player whose game action fired. Allowed while the mod initialises.
 		declare: (name: string, label: string, key: string, link: string, phases: {string}, hold_ms: number, on: (arg1: string, arg2: Player?) -> ()) -> (),
+	},
+	--- The server's console: lines a tool runs as an administrator with no character.
+	console: {
+		--- Runs the console line `line` and returns its answer, as `run` does.
+		run: (line: string) -> string,
+	},
+	--- Messages between a mod's server part and its client part.
+	net: {
+		--- Whether `bytes` start like executable code, as `looks_like_code` says.
+		looks_like_code: (bytes: buffer) -> boolean,
+		--- Opens the mod's channel `name`, in `version`, for game data messages, as `Load.channel` opens one of a Rust type.
+		--- Only while the mod starts, at the top level of main.luau.
+		channel: (name: string, version: number, handler: (arg1: Peer, arg2: any) -> ()) -> Channel,
+	},
+	pacing: {
+		--- Runs `handler` where the server's game loop has picked its wait, as `Load.on_server_wait` does: it returns the wait in nanoseconds, or nil to keep it.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_server_wait: (handler: (arg1: string) -> string?) -> boolean,
+		--- Runs `handler` before every wait of the engine's event loop on its handles, on the thread that waits: the app's main loop, the server's game loop and its session, and on the client its message wait too. A handler that sleeps must never sleep past `left_ns`, and must leave the waiting to the game, so it sees every event. Allowed during `Mod.init` only.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_loop_wait: (handler: (arg1: LoopWait) -> ()) -> LoopWaits,
+		--- Caps the worker threads of the task groups as the task system starts. The engine sizes them from the logical CPUs it sees, which under Wine are the host's, whatever a container allows. Only the dedicated server starts its task system after the loader arms hooks; on the client it has started already and the result is `false`, as it is when this build lacks the site or both caps are 0. The game's log shows the counts it started with: `task Group 'Default' Worker:…`. Allowed during `Mod.init` only.
+		--- Only while the mod starts, at the top level of main.luau.
+		cap_task_workers: (caps: TaskWorkers) -> boolean,
+	},
+	--- The world's fixed-point coordinates and metres.
+	ecs: {
+		--- The engine's fixed-point coordinates in metres, as `metres` converts them.
+		metres: (fixed: {number}) -> vector,
+		--- Metres in the engine's fixed-point coordinates, as `fixed` converts them.
+		fixed: (metres: vector) -> {number},
+	},
+	damage: {
+		--- Runs `filter` on damage about to reach an entity's health, as `Load.on_damage` does: it gets the damage as an object whose methods change it.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_damage: (filter: (arg1: Damage) -> ()) -> (),
+	},
+	--- Effects a mod has on the server's world: survivor orders, toggles, threat, pings, teleports and spawns.
+	effects: {
+		--- Orders survivor `npc`, by its survivor id, as the game does when a player sends it somewhere; the survivor's own behaviour carries the order out.
+		npc_command: (npc: number, order: NpcCommandType) -> (),
+		--- Switches the logic signal `signal` on or off as `sender` would, the way levers and pressure plates drive doors and lights.
+		set_toggle: (sender: number, signal: number, on: boolean) -> (),
+		--- Makes the enemy `attacker` take notice of `target` with `threat`, as a hit or a call for help does.
+		add_threat: (attacker: number, target: number, threat: number) -> (),
+		--- Pings `position`, in metres, on the map as `sender` would; the players see it as a ping from them. Unstable: needs the `unstable` feature and may change in any release.
+		ping: (sender: number, position: vector) -> (),
+		--- Asks the server to move `entity` to `position`, in metres, after the next step, as its admin teleport does: the entity jumps there and clients see it arrive. Unstable: needs the `unstable` feature and may change in any release.
+		teleport: (entity: number, position: vector, how: Teleport) -> (),
+		--- Asks the server to spawn an entity of `template`, its GUID as `World.template` gives it, at `position` in metres, as its admin spawn does: an enemy, an animal, a survivor or a prop. The new entity's id comes back at once; the entity is in the world after the next step, and a template the game does not know spawns nothing.
+		spawn: (template: string, position: vector, how: Spawn) -> number,
+	},
+	--- Survivors: the game's lookups of them, their beds, summoning staffs and the workshop survivors.
+	survivors: {
+		--- The survivor with the short name `key`, as `WorkshopSurvivor.find` finds it.
+		find: (key: string) -> WorkshopSurvivor?,
+		--- The survivor whose summoning staff has the game id `item`, as `WorkshopSurvivor.by_staff` finds it.
+		by_staff: (item: number) -> WorkshopSurvivor?,
+		--- Every workshop survivor of the game, as `WORKSHOP_SURVIVORS` lists them.
+		workshop_survivors: () -> {WorkshopSurvivor},
+		--- Runs `filter` after a survivor's own check kept its bed; returning `false` makes the game clear the bed. Server's worker threads, for every survivor with a bed on every tick: keep it quick and never block.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_survivor_bed_check: (filter: (arg1: BedCheck) -> boolean?) -> (),
+		--- Runs `filter` before a summoning staff spawns or moves a survivor: `SummonVerdict.Take` makes the use take the item, in the same transaction and only when the spawn or move works; `SummonVerdict.Refuse` refuses the use, and nothing spawns, moves or is taken. On the thread of the use, inside the game's step.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_summon: (filter: (arg1: Summon) -> SummonVerdict?) -> (),
+		--- Runs `handler` after a summoning staff's use spawned or moved a survivor, with `Summon.consumed` saying whether it took the item: the place to spend a charge of a staff with a meter. On the thread of the use, inside the game's step: hand game work to the `Scheduler`.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_summoned: (handler: (arg1: Summon) -> ()) -> (),
+		--- Files item `item` as a summoning staff of `survivor`, so the game treats it as that survivor's staff on both sides: the cursor, the unlock check and the placement.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_summon_item: (item: number, survivor: number) -> (),
+		--- Makes `handler` the answer to the game's survivor lookups, as `Load.on_survivor_lookup` does: it gets the lookup as an object.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_survivor_lookup: (handler: (arg1: Lookup) -> Answer?) -> (),
+		--- Makes `merge` decide what the survivor menu shows, as `Load.on_survivor_status` does: it gets the status bytes as a list.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_survivor_status: (merge: (arg1: number, arg2: {number}) -> number?) -> (),
+	},
+	item_data: {
+		--- Opens the item data kind `id` of game data values, as `Load.item_data` opens one of a Rust type.
+		--- Only while the mod starts, at the top level of main.luau.
+		item_data: (id: string) -> ItemData,
+	},
+	entity_data: {
+		--- Opens the entity data kind `id` of game data values, as `Load.entity_data` opens one of a Rust type.
+		--- Only while the mod starts, at the top level of main.luau.
+		entity_data: (id: string, replication: Replication) -> EntityData,
+	},
+	--- The mod's store `name` for the world running now, of game data a script keeps, as `Load.world_store` opens a Rust mod's.
+	--- Only while the mod starts, at the top level of main.luau.
+	world_store: (name: string) -> WorldStore,
+	--- Calls `handler` on the server's game thread about every `every` of wall time, after the step that reaches it, and on the first step after `init`; `Duration.ZERO` calls it every step. Steps in between cost the mod nothing. The `TickData` says how many steps and how much time passed since the handler's last call; the `TickPeriod` changes the period later. A panic in `handler` turns the mod off.
+	--- Only while the mod starts, at the top level of main.luau.
+	on_tick: (every: number, handler: (arg1: TickData) -> ()) -> TickPeriod,
+	--- Calls `handler` on the server's game thread after every server step, for work that follows each step: per-step state, input or the camera. Every call costs the mod about a microsecond (a server copy of build 399), on every step, so a handler that can wait takes `on_tick`. A panic in `handler` turns the mod off.
+	--- Only while the mod starts, at the top level of main.luau.
+	on_every_step: (handler: (arg1: TickData) -> ()) -> (),
+	--- The mod's data folder in the world that runs, `<stem>-mod-data/<id>` beside the world's save; nil while no world runs, as during init before a hosted game or a dedicated server's world loads. A world's state belongs there; `WorldStore` keeps it for you, and `World.data_dir` answers the same once the world runs.
+	--- Only while the mod starts, at the top level of main.luau.
+	data_dir: () -> string?,
+	--- The mod's folder in `mods/`, which holds its installation, such as an installation `Hold`.
+	--- Only while the mod starts, at the top level of main.luau.
+	mod_dir: () -> string,
+	--- The folder `export/<mod id>/` in the game folder, where a mod writes files for tools outside the game, such as a wiki or a map; a mod may write to any other path too.
+	--- Only while the mod starts, at the top level of main.luau.
+	export_dir: () -> string,
+	--- The data a mod keeps for a world, and holds on its saves.
+	state: {
+		--- The hold kept in the world's data folder `dir`, as `Hold.new` makes it.
+		hold: (dir: string) -> Hold,
+		--- Every hold set in `dir`, each a mod and its reason, as `super.holds` lists them.
+		holds: (dir: string) -> {{string}},
+	},
+	--- Files a mod writes whole, such as exports for tools outside the game.
+	files: {
+		--- Writes `contents` to `path` whole, making its folders, as `write_atomically` writes.
+		write_atomically: (path: string, contents: buffer) -> (),
+		--- Where `write_atomically` keeps the file it replaced, as `backup_path` names it.
+		backup_path: (path: string) -> string,
+	},
+	vetoes: {
+		--- Runs `filter` on each player's craft request in the server's world, before the crafting system reads it; returning `false` refuses it, and nothing is made or taken. It runs on the game thread, where `World` reads work, in the dedicated server or a hosting client.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_craft: (filter: (arg1: CraftRecipeEvent) -> boolean?) -> (),
+		--- Runs `filter` after the game's cursor check allows a placement; returning `false` refuses it as the game refuses a placement without building permission. It runs on both sides, on the cursor systems' worker threads: the server's answer decides, and a client running the mod shows the cursor as not allowed. The cursor check runs on every frame a player aims to build, so `filter` must not allocate, lock or log, and gives the same answer on both sides.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_build: (filter: (arg1: Placement) -> boolean?) -> (),
+	},
+	progress: {
+		--- Answers the game's checks of `skill`: `true` unlocks it for that check, `false` locks it, nil keeps the game's answer. It runs on both sides, on the checking thread, and only for `skill`.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_skill: (skill: Skill, handler: (arg1: SkillCheck) -> boolean?) -> (),
+		--- Runs `filter` on each comfort a provider registers, as `Load.on_comfort` does: the comfort it answers registers; nil keeps the comfort as it was.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_comfort: (filter: (arg1: Comfort) -> number?) -> (),
+		--- Runs `filter` on each tick's experience with the level table, as `Load.on_experience` does: it returns the changed list, or nil to keep it.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_experience: (filter: (arg1: {Experience}, arg2: Levels) -> {Experience}?) -> (),
+	},
+	status: {
+		--- Adds `source` to the loader's status summary: whenever the summary is written, the loader calls it and shows each line it returns under the mod. It runs on a loader thread or the game thread, never inside a hook, and should only read what the mod keeps, such as atomics.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_status: (source: () -> string?) -> (),
+	},
+	--- Buffs: their types, and the buffs entities have, applied and removed.
+	buffs: {
+		--- Every buff and debuff type of the running game; empty off the game thread or while no world runs.
+		types: () -> {BuffType},
+		--- The buffs `entity` has.
+		of: (entity: number) -> {Buff},
+		--- Whether `entity` has a buff of type `id`; `false` when it holds no buffs or off the game thread.
+		has: (entity: number, id: number) -> boolean,
+		--- Gives `entity` a buff of type `id`, at once, as the game restores a character's saved buffs; one it has already is renewed to the duration asked and keeps its level. The game checks no faction or death: the mod decides who gets it.
+		apply: (entity: number, id: number, how: Apply) -> (),
+		--- Removes every buff of type `id` from `entity`, as the game cleanses one: it goes in the next step, without what the type does when it runs out. Returns whether the entity had it.
+		remove: (entity: number, id: number) -> boolean,
+	},
+	--- Knowledge of players, accounts and the world: recipes, quests and every other value the game keeps.
+	knowledge: {
+		--- Knowledge `id` of the player whose character is `player`; for an id of the world's, the world's value. nil for an id the game does not know, a player not in the game, or off the game thread.
+		get: (player: number, id: number) -> Known?,
+		--- Knowledge `id` of the world; nil for an id the game does not know, a player's id, or off the game thread.
+		world: (id: number) -> Known?,
+		--- Grants knowledge `id` to the player whose character is `player` (or to the world, for an id of the world's), as the game grants it: the next step applies it with what follows. A grant only adds: a bool set, a counter raised, a bit set.
+		grant: (player: number, id: number, grant: Grant) -> (),
+		--- Grants knowledge `id` of the world's, as `Knowledge.grant` does.
+		grant_world: (id: number, grant: Grant) -> (),
+		--- Takes knowledge `id` back from the player whose character is `player` (or from the world, for an id of the world's): a bool cleared, a counter lowered, a bit cleared. It applies at once, the clients get it again, and the next save keeps it; what the grant brought, such as experience or unlocks chained on it, stays, and a quest whose steps still hold is rewarded again. `KnowledgeChanged` reports it after the next step. Unstable: needs the `unstable` feature and may change in any release.
+		revoke: (player: number, id: number, revoke: Revoke) -> (),
+		--- Takes knowledge `id` of the world's back, as `Knowledge.revoke` does. Unstable: needs the `unstable` feature and may change in any release.
+		revoke_world: (id: number, revoke: Revoke) -> (),
+		--- Grants knowledge `id` of a player's to the account whose `Player.key` is `account`, as `Knowledge.grant` does: now when its character is in the game, else once its next character has loaded in this world. The loader keeps waiting changes with the world, so they outlast restarts.
+		grant_account: (account: string, id: number, grant: Grant) -> (),
+		--- Takes knowledge `id` of a player's back from the account whose `Player.key` is `account`, as `Knowledge.revoke` does, now or once its next character has loaded in this world, as `Knowledge.grant_account` waits. Unstable: needs the `unstable` feature and may change in any release.
+		revoke_account: (account: string, id: number, revoke: Revoke) -> (),
+		--- Every quest id of the running game; empty off the game thread or while no world runs.
+		quests: () -> {number},
+		--- Whether the player whose character is `player` completed quest `quest` and got its rewards.
+		completed: (player: number, quest: number) -> boolean,
+		--- Runs `filter` on each player's knowledge input, as `Load.on_knowledge_input` does; its answer replaces the verdict so far, and nil or an error keeps it.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_knowledge_input: (filter: (arg1: KnowledgeRequest) -> boolean?) -> (),
+	},
+	--- The server's game settings: read them, change them for now, or keep a change.
+	game_settings: {
+		--- Lets `change` edit the settings in force and applies them as the game's admin command does: systems see them from the next step and every client gets them; the preset becomes `GameSettingsPreset.Custom`. Returns the settings now in force.
+		change: (change: (arg1: Settings) -> Settings?) -> Settings,
+		--- Changes the settings as `change` does and keeps the fields whose value it changed with the running world: the loader applies them again each time the world loads, by the end of its first step, over what the configuration says. Fields it leaves as they were are not kept. Several mods' kept fields add up; the last value kept for a field wins.
+		keep: (change: (arg1: Settings) -> Settings?) -> Settings,
+		--- Forgets every field kept for the running world, by any mod, and puts back the values the world loaded with.
+		forget_kept: () -> (),
+		--- The settings in force and the world's preset, as `GameSettings.read` reads them.
+		read: () -> SettingsRead?,
+	},
+	--- The game's rates, such as experience and drops, each mod's factor on them combined.
+	rates: {
+		--- Whether `factor` is one the loader takes, as `is_valid_factor` says.
+		is_valid_factor: (factor: number) -> boolean,
+		--- Every mod's factors together, as `combine` combines them.
+		combine: (factors: {number}) -> number,
+		--- A whole `value` scaled by `factor`, as `scale_whole` rounds it.
+		scale_whole: (value: number, factor: number) -> number,
+		--- Every rate a mod may change.
+		all: () -> {Rate},
+		--- Declares that this mod multiplies `rate` and hands back the handle that sets its factor, 1 until set. The loader scales the game's answers in every process the mod runs in; what the server decides, such as experience and loot, counts on the dedicated server and on a client while it hosts a game.
+		--- Only while the mod starts, at the top level of main.luau.
+		rate: (rate: Rate) -> RateHandle,
+	},
+	--- Affixes: bundles of stat modifiers rolled onto single items, their lines and rolls.
+	affixes: {
+		--- What `item` gives, a line per modifier: its own first, then each affix's, for a tooltip. On a client, from what the server sent. Any thread.
+		lines: (item: ItemInstance) -> {Line},
+		--- The text key and rarity of affix `affix`, an index from a `Line`. Any thread.
+		info: (affix: number) -> AffixInfo?,
+		--- Rolls `item` from the pool of every mod's affixes that fit its category, replacing the affixes it had, from `seed` or a fresh one; `once` rolls only an item that never rolled. How many it rolled. On the server's game thread.
+		roll: (item: ItemInstance, rules: RollRules, seed: string?, once: boolean) -> number,
+		--- The affixes an item of the game's `ItemCategory` numbered `category` rolls from `pool` under `rules`, from `seed`, as `roll` rolls them; each of `pool` is `{ key, def }`. Its name differs from Rust's, since `roll` rolls an item, as `Affixes.roll` does.
+		roll_pool: (pool: {Candidate}, category: number, rules: RollRules, seed: string) -> {Rolled},
+		--- `stats` rolled anew from `pool`, as `reroll` rolls them; nil when `once` and it rolled before.
+		reroll: (stats: ItemStats, pool: {Candidate}, category: number, rules: RollRules, seed: string, once: boolean) -> ItemStats?,
+		--- Defines the mod's affix `id`, named with `id!`. Its text is `<name>.name` in the mod's texts (`name_key`). Call it during `init`, on both sides, so clients name what items rolled.
+		--- Only while the mod starts, at the top level of main.luau.
+		define_affix: (id: string, def: AffixDef) -> number,
+		--- Rolls affixes onto the items with an entity that random loot puts into containers `rule.from` matches, each at `rule.chance`, as the container rolls its loot. Each item rolls once: an item rolled before, by this rule or another, stays as it is. On the server.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_loot_affixes: (rule: AffixLoot) -> (),
+		--- Rolls affixes onto the items with an entity a player crafts, each at `rule.chance`: the items new in the crafter's inventories within a second of the craft request. Each item rolls once. On the server.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_craft_affixes: (rule: AffixCraft) -> (),
+	},
+	--- The game's languages and texts, and a mod's own translations.
+	i18n: {
+		--- The language the player reads the game in, as `language` gives it.
+		language: () -> string,
+		--- The game's own text of tag `id` in the player's language, as `game_text` reads it; nil on a server.
+		game_text: (id: number) -> string?,
+		--- The game's own text of tag `id` in `language`, as `game_text_in` reads it.
+		game_text_in: (id: number, language: string) -> string?,
+		--- Texts from TOML, a table per language code, as `Texts.parse` reads them.
+		parse: (toml: string) -> Texts,
+		--- The mod's texts: the `texts.toml` of its folder, handed to the loader as `Load.texts` hands a Rust mod's.
+		--- Only while the mod starts, at the top level of main.luau.
+		texts: () -> Texts,
+		--- Texts from `toml`, handed to the loader as `Load.texts_from` hands them.
+		--- Only while the mod starts, at the top level of main.luau.
+		texts_from: (toml: string) -> Texts,
+		--- Gives each game tag the translations of its key, as `Load.add_texts` does; `tags` is a list of `{ key, content id }`.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_texts: (texts: Texts, tags: {{string}}) -> (),
+	},
+	--- The weather of the server's world: what it is where, its fronts, and setting it.
+	weather: {
+		--- How the weather is at `position`, in metres; nil off the game thread or while no world runs.
+		at: (position: vector) -> WeatherAt?,
+		--- The fronts now, one per weather layer that has one; empty off the game thread or while no world runs.
+		fronts: () -> {Front},
+		--- Starts new weather in every layer at once: fronts of the forecast where a layer has them and clear skies elsewhere, for `lasting` of game time or the game's own for nil; `Forecast.Any` lets the game pick anew. The game places the fronts itself, as for its own. Clients follow, and the next save keeps it. Moving the clock forward with `Clock.set_hours` uses up the time the fronts have, and the game picks new ones.
+		set: (forecast: Forecast, lasting: number?) -> (),
+	},
+	--- The world's map on the server: its markers, its frame, waypoints and snapshots.
+	map: {
+		--- Every marker of the scene the server runs, in the scene's order. The loader reads them from the game's data once per scene, apart from the game thread, so a call after that is cheap.
+		markers: () -> {MapMarker},
+		--- The markers whose position lies in the box between corners `a` and `b`, in metres, edges included.
+		markers_in: (a: vector, b: vector) -> {MapMarker},
+		--- The frame of the map of the scene the server runs: where the map starts, how far it reaches and the size of its cells, in metres. The loader reads it from the game's data once per scene, apart from the game thread, as it reads the markers.
+		frame: () -> MapFrame,
+		--- Where `player` has set the waypoint all players see, in metres; nil while it is off or for an entity without one. The server keeps it only while the player plays.
+		waypoint: (player: number) -> vector?,
+		--- What the map shows now as a `MapSnapshot`: every player with position and waypoint, the Flame Altars of `altars` with their bases, every marker and the map's frame. Without `altars` the snapshot has none; without a frame its `frame` is nil; on a game build without waypoints no player has one. The loader reads every marker, so take one now and then, not every step.
+		snapshot: (altars: Altars?) -> MapSnapshot,
+		--- The fog's size, scale and version.
+		state: () -> FogState,
+		--- Copies the box of `size` pixels at `min`.
+		read: (min: {number}, size: {number}) -> FogImage,
+		--- The coverage where `position` is, in metres; nil outside the fog.
+		coverage: (position: vector) -> number?,
+	},
+	--- The clock of the server's world: the time of day and how fast it runs.
+	daytime: {
+		--- The clock now; nil off the game thread or while no world runs.
+		now: () -> TimeOfDay?,
+		--- Sets the time of day to `hours`, taken modulo 24; every client jumps to it after the next step. The world moves forward to the next time the clock shows that hour, as if the hours between had passed.
+		set_hours: (hours: number) -> (),
+		--- The mod's `ClockSpeed`: its factor on how fast the server's clock runs. The loader follows the game's speed for it from the start.
+		--- Only while the mod starts, at the top level of main.luau.
+		clock_speed: () -> ClockSpeed,
+	},
+	--- Flame Altars: their list, their bases, zones and limits.
+	altars: {
+		--- Every altar of the server's world as it is now; empty while no world runs or when the loader refuses. Any thread.
+		list: () -> {Altar},
+		--- The bases the altars form now; see `bases_of`.
+		bases: () -> {Base},
+		--- The cell of a position in the game's 32.32 fixed point.
+		cell_of_fixed: (fixed: {number}) -> {number},
+		--- The cell of a position in metres.
+		cell_of_metres: (metres: vector) -> {number},
+		--- The bases `altars` make, as `bases_of` groups them.
+		bases_of: (altars: {Altar}) -> {Base},
+		--- The limit of bases in force, as `base_limit` reads it.
+		base_limit: () -> BaseLimit?,
+		--- Sets the world's cap of bases, as `set_base_cap` does.
+		set_base_cap: (bases: number) -> (),
+		--- How the game groups altars into bases, as `grouping` reads it.
+		grouping: () -> Grouping?,
+		--- Runs `filter` for every altar of the server's world when the loader sizes the altar zones: after altars change, and after `ZoneSizes.changed`. Filters of several mods run in load order, each on the size the last one left; the mod follows the altars too. On the server's game thread.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_altar_zone: (filter: (arg1: AltarZone) -> AltarZone?) -> ZoneSizes,
+		--- Runs `filter` when the game refuses a placement for its zones, as `Load.on_building_zone_check` does; `true` accepts it after all, and nil or an error keeps the game's refusal.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_building_zone_check: (filter: (arg1: BuildingZoneCheck) -> boolean?) -> (),
+		--- Runs `filter` when the game asks how many altars a Flame level allows, on both sides. Filters of several mods run in load order, each on the count the last one left, the game's own first; the loader keeps the answer within the zones the game can group (`base_limit`).
+		--- Only while the mod starts, at the top level of main.luau.
+		on_altar_limit: (filter: (arg1: AltarLimit) -> AltarLimit?) -> (),
+		--- Lets the game group every listed altar zone into its bases, up to 32 altars a Flame level in 16 bases, refusing an altar that would start a 17th base; `false` when the platform does not recognise this build's code, and the game keeps its own. The loader's hooks go in together: when one cannot be armed, none does and the game keeps 16, which `base_limit` tells from `Mod.ready` on.
+		--- Only while the mod starts, at the top level of main.luau.
+		raise_base_limit: () -> boolean,
+		--- As `Load.raise_base_limit`, up to `zones` altars a Flame level in up to `bases` bases; values below the game's own count as the game's, and the largest request of every mod holds. Bases past 16 need more of the game's code; where the loader cannot arm all of it, the game keeps 16 bases with the zones raised, which `base_limit` tells. A world lowers the bases below the request with `set_base_cap`. Unstable: needs the `unstable` feature and may change in any release.
+		--- Only while the mod starts, at the top level of main.luau.
+		request_base_limits: (zones: number, bases: number) -> boolean,
+	},
+	--- Mod items in random loot, and the game's loot passes.
+	loot: {
+		--- Replaces every drop the mod added with `drops`, after init too, as `replace_drops` does.
+		replace_drops: (drops: {Drop}) -> (),
+		--- Adds a mod item to random loot on the server, the dedicated one or a client's while it hosts: each roll of a container `drop.from` matches adds the item at `drop.chance`, on top of the vanilla loot. Containers roll once, when first opened, so loot already rolled in a save stays as it was. The item must be in the game's item registry, a vanilla item or one from `Load.add_item`; unknown items are skipped by the game.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_loot: (drop: Drop) -> (),
+		--- Runs `handler` after every run of the game's loot container check, as `Load.on_loot_pass` does, with that run's containers as a list.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_loot_pass: (handler: (arg1: {Container}) -> ()) -> (),
+	},
+	--- Stats of entities and items: values, modifiers, sources and definitions.
+	stats: {
+		--- The value of `stat` on `entity`: what the server worked out after the last step a source changed, or the default. Any thread, without locks; a client answers defaults.
+		value: (entity: number, stat: Stat) -> number,
+		--- Whether `stat` is on for `entity`: its value is not 0.
+		is_on: (entity: number, stat: Stat) -> boolean,
+		--- Sets the mod's modifier `key` on `entity` for `modifier.stat`, replacing the one the mod set before under the same key and stat. The value follows after the next step. On the server, any thread.
+		set: (entity: number, key: string, modifier: Modifier, lasting: Lasting) -> (),
+		--- Removes the mod's modifier `key` on `entity` for `stat`.
+		remove: (entity: number, key: string, stat: Stat) -> (),
+		--- What `item` gives the entity that wears it; empty for an item without any. On a client, what the server sent.
+		item: (item: ItemInstance) -> ItemStats,
+		--- Sets what `item` gives the entity that wears it; an empty `ItemStats` removes it. Clients that run Enshwick get it, and the entities that wear the item follow after the next step. Unstable: needs the `unstable` feature and may change in any release. The value is kept as item data, which sets aside, after a restart, a value on an item outside a placed container or a player's inventory.
+		set_item: (item: ItemInstance, stats: ItemStats) -> (),
+		--- Every modifier that counts toward `stat` on `entity`, or toward every stat for nil, in the order they apply. On the server, any thread.
+		sources: (entity: number, stat: Stat?) -> {Source},
+		--- The id and definition of `stat`; nil for a kind opened but never defined. Any thread.
+		info: (stat: Stat) -> StatInfo?,
+		--- Watches `entity` for the items it wears and the buffs it has, or stops watching it. Players are always watched, and so is every entity a mod keeps a modifier on; watch other entities whose buffs should count, such as an enemy a mod curses. Any thread, on the process that runs the world; elsewhere it does nothing.
+		watch: (entity: number, watch: boolean) -> (),
+		--- The key a stat id hashes to, as `key_of` gives it.
+		key_of: (id: string) -> number,
+		--- The text key that names the stat `id`, as `name_key` gives it.
+		name_key: (id: string) -> string?,
+		--- The value `def` gives with `modifiers`, each an op and its value, as `aggregate` gives it.
+		aggregate: (def: StatDef, modifiers: {ScriptModifier}) -> number,
+		--- Defines the mod's stat kind `id`, named with `id!`. Its text is `<name>.name` in the mod's texts (`name_key`). Call it during `init`, on both sides.
+		--- Only while the mod starts, at the top level of main.luau.
+		define_stat: (id: string, def: StatDef) -> Stat,
+		--- Opens stat kind `id`: a built-in one from `builtin`, or another mod's through `deps!`. A kind no mod defines keeps 0 and reads nothing. Call it during `init`, on both sides.
+		--- Only while the mod starts, at the top level of main.luau.
+		open_stat: (id: string) -> Stat,
+		--- Gives every entity that has buff `buff` the `modifiers`, while it has it: a mod's own buff type, or a vanilla one. Buffs count on watched entities (see `Stats.watch`). Call it during `init`.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_buff_modifiers: (buff: number, modifiers: {Modifier}) -> (),
+		--- Runs `handler` for every stat value that changed on a watched entity, on the server's game thread after the step that changed it.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_stats_changed: (handler: (arg1: StatChange) -> ()) -> (),
+	},
+	--- The world's voxels, read a box or one at a time.
+	voxels: {
+		--- The voxels of the box of `size` voxels from `min`, its lowest corner.
+		read: (min: VoxelPos, size: {number}) -> VoxelBox,
+		--- The voxel at `at`.
+		sample: (at: VoxelPos) -> Voxel,
+	},
+	--- The world's terrain: add, dig and flatten ground, and its materials.
+	terrain: {
+		--- The terrain materials of the running game; empty off the game thread or before the game has loaded them.
+		materials: () -> {TerrainTerraformingConfig},
+		--- Adds a mound of `material` at `position`, in metres: `radius` across and `height` high at its middle, as a player's shovel does. Returns the volume added, in cubic metres.
+		add: (position: vector, radius: number, height: number, material: number, shape: Shape) -> number,
+		--- Digs out the terrain within `radius` of `position`, in metres, as a pickaxe would with no limit. A material in `protect` is left, and the dig stops at the first shell of half a metre that meets it, as a pickaxe stops at rock it cannot break. Returns the volume removed, in cubic metres.
+		dig: (position: vector, radius: number, shape: Shape, protect: {number}) -> number,
+		--- Flattens the ground within `radius` of `position`, in metres, to the level of `position`: ground above goes, and gaps below are filled with `material`. Returns whether anything changed.
+		flatten: (position: vector, radius: number, material: number, shape: Shape) -> boolean,
+		--- The same terrain for edits that only count: each returns what it would change and changes nothing.
+		dry: () -> Terrain,
+	},
+	--- Game content from mods: new items, recipes and workshops, and changes to vanilla ones.
+	content: {
+		--- The vanilla item named `name`, as the game's data names it, such as `Chest_Wood`; an error names the nearest names.
+		item: (name: string) -> string,
+		--- The vanilla recipe named `name`.
+		recipe: (name: string) -> string,
+		--- The vanilla loot table named `name` and how many containers roll it.
+		loot_table: (name: string) -> LootTable,
+		--- The vanilla station item named `name` and the template it places.
+		station: (name: string) -> Station,
+		--- The workshop of the vanilla station item named `name`.
+		workshop: (name: string) -> string,
+		--- How many slots the container that `item` places holds; nil for an item that places none.
+		container_slots: (item: string) -> number?,
+		--- Every vanilla recipe that makes `item`.
+		recipes_making: (item: string) -> {string},
+		--- Turns off the recipes `rule` names: `{ Recipe = name }`, `{ Output = item name }`, `{ Workshop = station item name }` or `"Hand"`; a name is a GUID, a content id or a debug name.
+		disable: (rule: Rule) -> (),
+		--- Turns the recipes `rule` names back on.
+		enable: (rule: Rule) -> (),
+		--- Whether the recipe `recipe` is turned off.
+		is_disabled: (recipe: string) -> boolean,
+		--- Builds the game's recipes again, with every rule as it is now.
+		rebuild_recipes: () -> (),
+		--- The item id `id` reads as now, after every mod's renames.
+		current_id: (id: number) -> number,
+		--- The tag of a vanilla item's name, from the game's archive.
+		vanilla_name_tag: (item: string) -> string?,
+		--- The name a vanilla item has in `language`, on a client.
+		vanilla_name: (item: string, language: string) -> string?,
+		--- The fill that makes the game give an item `count` of `max`.
+		fill: (count: number, max: number) -> number,
+		--- The fill a meter's `start` stands for.
+		start_fill: (meter: FuelSetup) -> number,
+		--- The GUID a derived copy of the recipe `base` takes under `salt`.
+		derived_guid: (base: string, salt: number) -> string,
+		--- Whether `id` is a content id, `<mod>:<name>`.
+		is_id: (id: string) -> boolean,
+		--- The GUID of the content id `id`.
+		guid: (id: string) -> string,
+		--- The pixels of PNG `png` as `{ width, height, pixels }`, the pixels a buffer of RGBA bytes, row by row; nil when it does not read or is larger than 2048 on a side.
+		decode_png: (png: buffer) -> any?,
+		--- RGBA `rgba`, `width` by `height`, as PNG bytes.
+		encode_png: (rgba: buffer, width: number, height: number) -> buffer,
+		--- The RGBA pixels of a texture's content `data`, `width` by `height`, in the game's `format` code (a block-compressed format or RGBA).
+		decode: (format: number, width: number, height: number, data: buffer) -> buffer,
+		--- RGBA `rgba` moved toward `tint`'s colour by its amount; a script's buffer comes back changed, as Rust changes the slice in place.
+		tint: (rgba: buffer, tint: Tint) -> buffer,
+		--- The most recipes one workshop lists.
+		workshop_limit: () -> number,
+		--- The new ceiling a roll scaled to `scaled` of `max` takes when the most it rolls becomes `new_max`.
+		scaled_ceiling: (scaled: number, max: number, new_max: number) -> number,
+		--- Declares the mod's content id `id` and returns its GUID. The content calls declare what they create themselves; call it for content the mod serves with `Load.serve`. Declaring one id again is allowed.
+		--- Only while the mod starts, at the top level of main.luau.
+		declare: (id: string) -> string,
+		--- Gives `LocaTag` `tag` the text `text` in `language`; the client shows it wherever the game asks for the tag, such as the name of an item whose `name` field holds `tag`. `Load.add_texts` gives many at once.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_text: (tag: string, language: string, text: string) -> (),
+		--- Adds an item to the game, on the server and the client alike: the item data cloned from a vanilla item, listed in the item registry beside items other mods add, and with a `FuelSetup` its entity template, listed in the template collection. Players see it once a recipe, loot or an action gives it to them.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_item: (item: NewItem) -> (),
+		--- Adds a recipe to the game, on the server and the client alike: a copy of the recipe that makes `like`, at the same workshop and unlocked with it, making `output` instead, beside recipes other mods add. The client's crafting menu lists it right after the copied recipe (see `menu`). Unstable: needs the `unstable` feature and may change in any release.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_recipe: (recipe: NewRecipe) -> (),
+		--- Adds a derived copy of each vanilla recipe `choose` picks: same workshop and unlock, its output and cost scaled as `Derived` says, beside the original, in the registry and in the client's crafting menu. `choose` sees only the game's own recipes, never those mods add. `salt` keeps the copies' GUIDs apart from other mods'; use the mod id. Unstable: needs the `unstable` feature and may change in any release.
+		--- Only while the mod starts, at the top level of main.luau.
+		derive_recipes: (salt: string, choose: (arg1: RecipeView) -> Derived?) -> (),
+		--- Adds a recipe as `add_recipe` does, asking `recipe` for it each time the registry is built, so a cost read from settings applies through `rebuild_recipes`. Every answer keeps the id of the first; an answer that fails or is nil keeps the first recipe. Unstable.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_recipe_with: (recipe: () -> NewRecipe?) -> (),
+		--- Adds a crafting station with a workshop of its own, on the server and the client alike: the vanilla station's template and item cloned, the template crafting at the new workshop, the item placing the new template, both listed beside what other mods add, a crafting menu for the workshop on the client, and optionally a copy of the vanilla station's recipe that makes the new one. Recipes target the workshop with `NewRecipe.workshop` or `Derived.workshop`. When the mod is removed, the loader serves the vanilla template under the new one's GUID, so placed stations load as the vanilla station.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_workshop: (new: NewWorkshop) -> string,
+		--- Serves `icon`'s UI image, built from the vanilla one it starts from when the client first shows it. `Load.add_item` does it for an item's icon.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_icon: (icon: Icon) -> (),
+		--- Hands the loader every content rename the mod ever made, oldest first; call it before adding the renamed content, so an item is served under its old GUIDs too.
+		--- Only while the mod starts, at the top level of main.luau.
+		rename_content: (renames: {ContentRename}) -> (),
+		--- Declares `change` during `init`, from `source`, such as `items.toml:12`, which the conflict reports name. The loader merges it with every mod's changes as the module says, and applies it on this side; a value players' games read needs the same change on every side, so such a mod is a join mod. The loader keeps every stack size above the game's that a world was saved with and never serves less, and holds the game on a build it would leave vanilla.
+		--- Only while the mod starts, at the top level of main.luau.
+		change: (change: Change, source: string) -> (),
+		--- Declares `change` during `init`, from `source`, as `Load.change` declares a change of one entry; the loader turns it into one change of each vanilla item the selection picks, read from the game's data, in this mod's place in load order. Items of mods are not picked.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_items: (change: ItemsChange, source: string) -> (),
+		--- Declares `change` during `init`, from `source`, as `Load.change` declares a change of one recipe; the loader turns it into one change of each vanilla recipe the selection picks, read from the game's data, in this mod's place in load order. Recipes of mods are not picked, and a recipe the mod changes by name keeps that change of the field alone.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_recipes: (change: RecipesChange, source: string) -> (),
+		--- Declares during `init` a change of `field` of `target`, from `source`, whose value the mod sets later through the handle. The loader builds what it reaches from the first read on, so a set after init needs no restart. A field players' games read needs the same value on every side: only a mod with `join: true` declares one, and it sets the value from a synced setting.
+		--- Only while the mod starts, at the top level of main.luau.
+		declare_change: (target: Target, field: ChangeField, source: string) -> ChangeHandle,
 	},
 }

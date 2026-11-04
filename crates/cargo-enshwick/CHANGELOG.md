@@ -18,6 +18,11 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `cargo enshwick luau` writes the definitions of the whole
+  API, with the Luau words for Rust's values, an `order` for
+  `enshwick.extend`, and module names for types two modules share
+  (`LootSource`, `InventoryOp`, `UnlockedSkill`, `ChangeField`,
+  `ContentRename`); write a mod's `types/enshwick.d.luau` again (#928).
 - **Breaking:** `cargo enshwick new --side` takes `server` or `both`, a new
   Luau mod writes no `join` key, `cargo enshwick deps` reads `requires` and
   `after` alone, and `cargo enshwick manifest` shows the side instead of a

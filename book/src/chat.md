@@ -54,6 +54,18 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+A Luau mod calls the same functions of `enshwick.world`; here each player who
+joins gets a notice:
+
+```luau
+enshwick.on("PlayerJoined", function(joined)
+    local player = enshwick.world.player(joined.entity)
+    if player and enshwick.world.notify(player, "Welcome") == "Chat" then
+        enshwick.log.info(`{player.name} reads notices in chat`)
+    end
+end)
+```
+
 The game raises these messages on the client, in the client's own world, so
 the server cannot raise one for a client. A notice travels as a
 [message](messages.md) to the client's loader, which shows the text through a

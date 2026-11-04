@@ -80,7 +80,7 @@ pub fn vanilla_name(item: Guid, language: crate::i18n::Language) -> Option<&'sta
 /// assert_eq!(item.debug_name, locker.to_string());
 /// assert!(item.meter.is_none() && item.stats.is_empty());
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 pub struct NewItem {
     /// The new item's id; its game id is [`ItemId::from_guid`](crate::ItemId::from_guid) of its GUID.
     pub id: Id,
@@ -91,12 +91,14 @@ pub struct NewItem {
     pub name: Option<Guid>,
     /// The tag of its description; `None` keeps the vanilla one.
     pub description: Option<Guid>,
-    /// The name in the registry's debug list; the id unless set.
+    /// The name in the registry's debug list; the id when empty.
+    #[script(default)]
     pub debug_name: String,
     /// A count each item keeps, such as charges, which the game saves,
     /// sends to players and shows as a bar on the item.
     pub meter: Option<FuelSetup>,
     /// Lines the item's tooltip shows after the vanilla item's.
+    #[script(default)]
     pub stats: Vec<ImpactUiValue>,
     /// An icon of its own; `None` keeps the vanilla item's. It shows on a
     /// client whose loader knows the build's texture code.
@@ -146,7 +148,7 @@ impl NewItem {
 /// let charges = FuelSetup { template: id!("charges"), max_fuel_charges: 5, start: 3 };
 /// assert!(charges.start <= charges.max_fuel_charges);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct FuelSetup {
     /// The id of the item's entity template; the name is enshwick's.
     pub template: Id,
@@ -211,7 +213,7 @@ pub fn fill(count: u16, max: u16) -> f32 {
 /// };
 /// assert_eq!(charges.value, 3);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct ImpactUiValue {
     /// The tag of the line's text, given text with [`Load::add_texts`].
     pub loca_id: Guid,
@@ -229,7 +231,7 @@ pub struct ImpactUiValue {
 /// # Examples
 ///
 /// See [`ImpactUiValue`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum StatFormat {
     /// A plain number: `3`.
@@ -603,6 +605,7 @@ pub fn list_item(
     Some(registry.into_bytes())
 }
 
+#[crate::script(content_items)]
 impl Load<'_> {
     /// Adds an item to the game, on the server and the client alike: the
     /// item data cloned from a vanilla item, listed in the item registry
@@ -632,7 +635,11 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
-    pub fn add_item(&mut self, item: NewItem) -> Result<(), Off> {
+    #[script]
+    pub fn add_item(&mut self, mut item: NewItem) -> Result<(), Off> {
+        if item.debug_name.is_empty() {
+            item.debug_name = item.id.to_string();
+        }
         self.declare(item.id)?;
         if let Some(meter) = item.meter {
             self.declare(meter.template)?;

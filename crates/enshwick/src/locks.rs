@@ -4,7 +4,7 @@
 use std::panic::Location;
 use std::sync::{
     Condvar, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
-    WaitTimeoutResult,
+    TryLockError, WaitTimeoutResult,
 };
 use std::time::Duration;
 
@@ -35,6 +35,9 @@ mod sealed {
 pub trait Relock<T: ?Sized>: sealed::Sealed {
     /// The guard, also after a thread panicked holding the lock.
     fn relock(&self) -> MutexGuard<'_, T>;
+    /// The guard if no one holds the lock, also after a thread panicked
+    /// holding it; `None` while it is held, by this thread too.
+    fn try_relock(&self) -> Option<MutexGuard<'_, T>>;
 }
 
 /// Takes an [`RwLock`] after a panic too, as [`Relock`] takes a
@@ -119,6 +122,20 @@ impl<T: ?Sized> Relock<T> for Mutex<T> {
             self.clear_poison();
             poisoned.into_inner()
         })
+    }
+
+    #[track_caller]
+    #[inline]
+    fn try_relock(&self) -> Option<MutexGuard<'_, T>> {
+        match self.try_lock() {
+            Ok(guard) => Some(guard),
+            Err(TryLockError::WouldBlock) => None,
+            Err(TryLockError::Poisoned(poisoned)) => {
+                poisoned_at(Location::caller());
+                self.clear_poison();
+                Some(poisoned.into_inner())
+            }
+        }
     }
 }
 

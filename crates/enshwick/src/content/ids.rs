@@ -14,7 +14,9 @@ use super::ResourceType;
 /// assert_eq!(enshwick::ItemId::from_guid(CHEST).get(), 1_302_084_846);
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Shape)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Shape, serde::Serialize, serde::Deserialize,
+)]
 #[shape(api = "guid")]
 pub struct Guid(pub [u8; 16]);
 

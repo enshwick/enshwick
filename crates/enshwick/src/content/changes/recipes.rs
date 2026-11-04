@@ -24,7 +24,7 @@ use super::{Entry, Field, Value, ValueError, field_and_value};
 /// assert!(Recipes::Workshop(kiln).picks(bricks));
 /// assert!(!Recipes::Kind(RecipeKind::Roof).picks(bricks));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Recipes {
     /// Every recipe whose output is of this kind.
@@ -94,7 +94,7 @@ impl Recipes {
 ///     load.change_recipes(&roofs, "my-mod")
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct RecipesChange {
     /// The recipes.
     pub recipes: Recipes,
@@ -224,6 +224,7 @@ impl RecipesChange {
     }
 }
 
+#[crate::script(content_change_recipes)]
 impl Load<'_> {
     /// Declares `change` during `init`, from `source`, as
     /// [`Load::change`] declares a change of one recipe; the loader turns it
@@ -241,6 +242,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`RecipesChange`].
+    #[script]
     pub fn change_recipes(&mut self, change: &RecipesChange, source: &str) -> Result<(), Off> {
         change.field.unstable_gate()?;
         change

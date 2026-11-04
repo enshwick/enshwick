@@ -42,6 +42,19 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+-- pack.toml declares the setting `combat`, from 0 to 100, 1 by default.
+local combat = enshwick.rates.rate({ Experience = "Combat" })
+local function apply()
+    local ok, why = pcall(combat.set, combat, enshwick.settings().combat)
+    if not ok then
+        enshwick.log.warn(`combat experience unchanged: {why}`)
+    end
+end
+enshwick.on("SettingsReplaced", apply)
+enshwick.on("SettingsChanged", apply)
+```
+
 ## Rates
 
 | Rate | What it multiplies |

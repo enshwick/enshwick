@@ -33,7 +33,7 @@ use crate::{Load, Off};
 /// assert_eq!(row.need - row.progress, 90);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, crate::Script)]
 pub struct Experience {
     /// The character.
     pub entity: Entity,
@@ -65,7 +65,7 @@ const _: () = {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Skill {
     /// Airborne Architect, which opens the building fly mode.
@@ -88,7 +88,7 @@ impl Skill {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum SkillGate {
     /// The building fly mode gate, on both sides.
@@ -102,7 +102,7 @@ pub enum SkillGate {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct SkillCheck {
     /// Who asks.
@@ -117,7 +117,7 @@ pub struct SkillCheck {
 /// # Examples
 ///
 /// See [`Load::on_comfort`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct Comfort {
     /// The comfort category.
     pub category: u32,
@@ -132,7 +132,7 @@ pub struct Comfort {
 /// # Examples
 ///
 /// See [`Load::on_experience`].
-#[derive(Debug)]
+#[derive(Clone, Debug, crate::Script)]
 pub struct Levels {
     cap: u32,
     need_for: Option<unsafe extern "system" fn(*mut c_void, u32) -> u32>,
@@ -244,6 +244,46 @@ where
     );
 }
 
+#[crate::script(progress_hooks)]
+impl Load<'_> {
+    /// Runs `filter` on each comfort a provider registers, as
+    /// `Load::on_comfort` does: the comfort it answers registers; nil keeps
+    /// the comfort as it was.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_comfort`].
+    #[script(name = "on_comfort")]
+    pub(crate) fn on_comfort_script(
+        &mut self,
+        filter: impl Fn(Comfort) -> Option<i32> + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        self.on_comfort(move |comfort| filter(*comfort).unwrap_or(comfort.value))
+    }
+
+    /// Runs `filter` on each tick's experience with the level table, as
+    /// `Load::on_experience` does: it returns the changed list, or nil to
+    /// keep it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_experience`].
+    #[script(name = "on_experience")]
+    pub(crate) fn on_experience_script(
+        &mut self,
+        filter: impl Fn(Vec<Experience>, Levels) -> Option<Vec<Experience>> + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        self.on_experience(move |all, levels| {
+            if let Some(changed) = filter(all.to_vec(), levels.clone()) {
+                for (slot, new) in all.iter_mut().zip(changed) {
+                    *slot = new;
+                }
+            }
+        })
+    }
+}
+
+#[crate::script(progress)]
 impl Load<'_> {
     /// Answers the game's checks of `skill`: `Some(true)` unlocks it for
     /// that check, `Some(false)` locks it, `None` keeps the game's answer. It
@@ -257,6 +297,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn on_skill<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
     where
         F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static,

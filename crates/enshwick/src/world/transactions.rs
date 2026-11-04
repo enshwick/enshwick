@@ -17,7 +17,7 @@ use super::{BuildRefusal, Player, PropState, World, WorldError, WorldTransform};
 /// # Examples
 ///
 /// See [`Transaction`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, crate::Script)]
 pub struct TransactionId(u64);
 
 impl TransactionId {
@@ -51,7 +51,7 @@ impl TransactionId {
 ///     )
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub enum TransactionStatus {
     /// Queued, or written in part: a large transaction spreads over the
@@ -147,7 +147,7 @@ impl TransactionStatus {
 ///     }
 /// }
 /// ```
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 #[must_use = "a transaction changes nothing until it is committed"]
 pub struct Transaction {
     host: Host,
@@ -156,18 +156,17 @@ pub struct Transaction {
     actor: Entity,
 }
 
-/// A change as the loader takes it, with what it points at.
-#[derive(Debug)]
+/// A change as the loader takes it; a voxel write keeps its voxels, and its
+/// header pointing at them is made at the commit, so a change owns no
+/// pointer and a copy of a transaction is a whole one.
+#[derive(Clone, Debug)]
 enum Change {
     Terrain(TerrainEdit),
-    Voxels(
-        VoxelWrite,
-        #[expect(
-            dead_code,
-            reason = "holds the voxels the write points at until the commit"
-        )]
-        Vec<crate::abi::Voxel>,
-    ),
+    Voxels {
+        min: [u32; 3],
+        size: [u32; 3],
+        voxels: Vec<crate::abi::Voxel>,
+    },
     Erase(VoxelRegion),
     Block(BlockPlace),
     PlaceProp(PropPlace),
@@ -175,11 +174,33 @@ enum Change {
 }
 
 impl Change {
-    /// The op the loader reads, pointing into this change.
-    fn op(&self) -> TransactionOp {
+    /// The header of a voxel write, pointing at its voxels, which live as
+    /// long as the change.
+    fn voxel_write(&self) -> Option<VoxelWrite> {
+        let Self::Voxels { min, size, voxels } = self else {
+            return None;
+        };
+        Some(VoxelWrite {
+            header: Header::of::<VoxelWrite>(),
+            min: *min,
+            size: *size,
+            voxels: voxels.as_ptr(),
+            count: voxels.len() as u64,
+        })
+    }
+
+    /// The op the loader reads, pointing into this change, or for a voxel
+    /// write into the next of `writes`, the headers [`Change::voxel_write`]
+    /// made in order.
+    fn op<'a>(&'a self, writes: &mut core::slice::Iter<'a, VoxelWrite>) -> TransactionOp {
         let (kind, data) = match self {
             Self::Terrain(edit) => (TransactionOp::TERRAIN, (&raw const *edit).cast()),
-            Self::Voxels(write, _) => (TransactionOp::VOXELS, (&raw const *write).cast()),
+            Self::Voxels { .. } => (
+                TransactionOp::VOXELS,
+                writes
+                    .next()
+                    .map_or(core::ptr::null(), |w| (&raw const *w).cast()),
+            ),
             Self::Erase(region) => (TransactionOp::ERASE, (&raw const *region).cast()),
             Self::Block(block) => (TransactionOp::BLOCK, (&raw const *block).cast()),
             Self::PlaceProp(prop) => (TransactionOp::PLACE_PROP, (&raw const *prop).cast()),
@@ -193,6 +214,15 @@ impl Change {
     }
 }
 
+impl crate::script::Object for Transaction {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "Transaction",
+        "A batch of world edits, written together and undone together once committed.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_EDITS];
+}
+
+#[crate::script(edits)]
 impl Transaction {
     /// Adds a mound of `material`, as [`Terrain::add`](crate::terrain::Terrain::add)
     /// does, to the changes.
@@ -200,6 +230,7 @@ impl Transaction {
     /// # Examples
     ///
     /// See [`Transaction`].
+    #[script]
     pub fn terrain_add(
         mut self,
         position: [f64; 3],
@@ -220,6 +251,7 @@ impl Transaction {
     /// # Examples
     ///
     /// See [`Transaction`].
+    #[script]
     pub fn terrain_dig(
         mut self,
         position: [f64; 3],
@@ -250,6 +282,7 @@ impl Transaction {
     ///         .is_ok()
     /// }
     /// ```
+    #[script]
     pub fn terrain_flatten(
         mut self,
         position: [f64; 3],
@@ -285,16 +318,13 @@ impl Transaction {
     ///     world.transaction().write_voxels(&up).commit().is_ok()
     /// }
     /// ```
+    #[script]
     pub fn write_voxels(mut self, voxels: &VoxelBox) -> Self {
-        let raw: Vec<crate::abi::Voxel> = voxels.as_slice().iter().map(|v| v.to_abi()).collect();
-        let write = VoxelWrite {
-            header: Header::of::<VoxelWrite>(),
+        self.changes.push(Change::Voxels {
             min: voxels.min().to_array(),
             size: voxels.size(),
-            voxels: raw.as_ptr(),
-            count: raw.len() as u64,
-        };
-        self.changes.push(Change::Voxels(write, raw));
+            voxels: voxels.as_slice().iter().map(|v| v.to_abi()).collect(),
+        });
         self
     }
 
@@ -311,6 +341,7 @@ impl Transaction {
     ///     world.transaction().erase_block(corner, [8, 8, 8]).commit().is_ok()
     /// }
     /// ```
+    #[script]
     pub fn erase_block(mut self, min: VoxelPos, size: [u32; 3]) -> Self {
         self.changes.push(Change::Erase(VoxelRegion {
             header: Header::of::<VoxelRegion>(),
@@ -342,6 +373,7 @@ impl Transaction {
     ///     world.transaction().place_block(shape, stone, at).commit().is_ok()
     /// }
     /// ```
+    #[script]
     pub fn place_block(mut self, shape: ItemId, material: ItemId, at: WorldTransform) -> Self {
         self.changes.push(Change::Block(BlockPlace {
             header: Header::of::<BlockPlace>(),
@@ -375,6 +407,7 @@ impl Transaction {
     ///     world.transaction().place_prop(chest, WorldTransform::at(at)).commit().is_ok()
     /// }
     /// ```
+    #[script]
     pub fn place_prop(mut self, item: ItemId, at: WorldTransform) -> Self {
         self.changes.push(Change::PlaceProp(PropPlace {
             header: Header::of::<PropPlace>(),
@@ -408,6 +441,7 @@ impl Transaction {
     ///     world.transaction().remove_prop(crate_entity).commit().is_ok()
     /// }
     /// ```
+    #[script]
     pub fn remove_prop(mut self, entity: Entity) -> Self {
         self.changes.push(Change::RemoveProp(PropRemove {
             header: Header::of::<PropRemove>(),
@@ -435,6 +469,7 @@ impl Transaction {
     ///     world.transaction().remove_prop_discarding_state(ruined).commit().is_ok()
     /// }
     /// ```
+    #[script]
     pub fn remove_prop_discarding_state(mut self, entity: Entity) -> Self {
         self.changes.push(Change::RemoveProp(PropRemove {
             header: Header::of::<PropRemove>(),
@@ -454,6 +489,7 @@ impl Transaction {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn len(&self) -> usize {
         self.changes.len()
     }
@@ -464,6 +500,7 @@ impl Transaction {
     ///
     /// See [`Transaction::len`].
     #[must_use]
+    #[script]
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
     }
@@ -489,8 +526,15 @@ impl Transaction {
     /// # Examples
     ///
     /// See [`Transaction`].
+    #[script]
     pub fn commit(self) -> Result<TransactionId, WorldError> {
-        let ops: Vec<TransactionOp> = self.changes.iter().map(Change::op).collect();
+        let writes: Vec<VoxelWrite> = self
+            .changes
+            .iter()
+            .filter_map(Change::voxel_write)
+            .collect();
+        let mut next = writes.iter();
+        let ops: Vec<TransactionOp> = self.changes.iter().map(|c| c.op(&mut next)).collect();
         let count = u32::try_from(ops.len()).map_err(|_| WorldError::Refused)?;
         let mut id = 0u64;
         let api = self.host.api();
@@ -509,12 +553,14 @@ impl Transaction {
     }
 }
 
+#[crate::script(transactions)]
 impl World {
     /// Starts a [`Transaction`] of the server's world.
     ///
     /// # Examples
     ///
     /// See [`Transaction`].
+    #[script]
     pub fn transaction(self) -> Transaction {
         Transaction {
             host: self.0.host,
@@ -542,6 +588,7 @@ impl World {
     ///     world.transaction_for(player).erase_block(corner, [8, 8, 8]).commit().is_ok()
     /// }
     /// ```
+    #[script]
     pub fn transaction_for(self, player: &Player) -> Transaction {
         Transaction {
             actor: player.entity,
@@ -570,6 +617,7 @@ impl World {
     /// # Examples
     ///
     /// See [`Transaction`].
+    #[script]
     pub fn undo(self, id: TransactionId) -> Result<(), WorldError> {
         let host = self.0.host;
         WorldError::from_status((host.api().transaction_undo)(host.handle(), id.0))
@@ -588,6 +636,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn transaction_entities(self, id: TransactionId) -> Vec<Entity> {
         let host = self.0.host;
         let mut count = 0u32;
@@ -626,6 +675,7 @@ impl World {
     ///
     /// See [`TransactionStatus`].
     #[must_use]
+    #[script]
     pub fn transaction_status(self, id: TransactionId) -> Option<TransactionStatus> {
         let host = self.0.host;
         let mut info = TransactionInfo {

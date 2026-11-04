@@ -21,6 +21,9 @@ use crate::locks::Relock;
 use crate::{Host, Load, Off};
 
 pub(crate) mod reason;
+mod script;
+#[doc(hidden)]
+pub use script::I18nFns;
 
 /// The language the player reads the game in, for a mod's own texts in its
 /// dialogs, windows and answers.
@@ -320,6 +323,24 @@ pub const MOD_NAME: &str = "mod.name";
 /// assert_eq!(enshwick::i18n::MOD_DESCRIPTION, "mod.description");
 /// ```
 pub const MOD_DESCRIPTION: &str = "mod.description";
+
+impl crate::script::Typed for Language {
+    const TY: &'static crate::script::Ty = &crate::script::Ty::String;
+}
+
+impl crate::script::IntoScript for Language {
+    fn into_value(self) -> crate::script::Value {
+        crate::script::Value::String(self.code().to_owned())
+    }
+}
+
+impl crate::script::FromScript for Language {
+    fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
+        let code = String::from_value(value)?;
+        Self::from_code(&code)
+            .ok_or_else(|| crate::script::Error::new(format!("{code:?} is no language code")))
+    }
+}
 
 /// A mod's texts by language and key.
 ///

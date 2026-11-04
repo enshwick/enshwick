@@ -195,6 +195,7 @@ pub struct Load<'a> {
     _init: core::marker::PhantomData<&'a ()>,
 }
 
+#[crate::script(dirs)]
 impl Load<'_> {
     pub(crate) fn new(host: Host) -> Self {
         Self::of(host, false, None)
@@ -348,6 +349,7 @@ impl Load<'_> {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn data_dir(&self) -> Option<std::path::PathBuf> {
         crate::state::data_dir(self.host)
     }
@@ -368,6 +370,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
+    #[script]
     pub fn mod_dir(&self) -> Result<std::path::PathBuf, Off> {
         let mut out = Str::EMPTY;
         let status = (self.api().mod_dir)(self.host.handle(), &raw mut out);
@@ -375,6 +378,37 @@ impl Load<'_> {
         // SAFETY: the loader keeps the path alive for the process.
         let path = unsafe { out.as_str() }.ok_or_else(|| Off::new("mod folder: not UTF-8"))?;
         Ok(std::path::PathBuf::from(path))
+    }
+
+    /// The folder `export/<mod id>/` in the game folder, where a mod writes
+    /// files for tools outside the game, such as a wiki or a map; a mod may
+    /// write to any other path too.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::mod_dir`], and for a mod folder outside a `mods/` folder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let items = load.export_dir()?.join("items.json");
+    ///     enshwick::files::write_atomically(&items, "[]").map_err(|e| enshwick::Off::new(e.to_string()))
+    /// }
+    /// ```
+    #[script]
+    pub fn export_dir(&self) -> Result<std::path::PathBuf, Off> {
+        let dir = self.mod_dir()?;
+        match (
+            dir.file_name(),
+            dir.parent().and_then(std::path::Path::parent),
+        ) {
+            (Some(id), Some(game)) => Ok(game.join("export").join(id)),
+            _ => Err(Off::new(format!(
+                "export folder: {} is no folder in mods/",
+                dir.display()
+            ))),
+        }
     }
 
     /// A value of type `T` kept per world in the mod's data folder of that

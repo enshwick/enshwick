@@ -320,16 +320,32 @@ mod tests {
     #[test]
     fn a_script_writes_pixels_as_png_and_reads_them_back() {
         let loader = run(r#"
-            local r = enshwick.resources
+            local c = enshwick.content
             local pixels = buffer.create(8)
             buffer.writeu32(pixels, 0, 0xff0000ff)
             buffer.writeu32(pixels, 4, 0xff00ff00)
-            local image = r.decode_png(r.encode_png(pixels, 2, 1))
+            local image = c.decode_png(c.encode_png(pixels, 2, 1))
             print(`png {image.width}x{image.height} second {buffer.readu32(image.pixels, 4) == 0xff00ff00}`)
-            print(`texture {buffer.len(r.decode_texture(37, 1, 1, buffer.fromstring("abcd")))}`)
-            print(`bad {pcall(r.encode_png, pixels, 3, 1)}`)
+            print(`texture {buffer.len(c.decode(37, 1, 1, buffer.fromstring("abcd")))}`)
+            print(`bad {pcall(c.encode_png, pixels, 3, 1)}`)
+            local tinted = c.tint(pixels, { colour = { 0, 0, 255 }, amount = 100 })
+            print(`tint {buffer.readu8(tinted, 2)}`)
         "#);
-        for line in ["png 2x1 second true", "texture 4", "bad false"] {
+        let mut pixels = [0xff, 0, 0, 0xff, 0, 0xff, 0, 0xff];
+        enshwick::content::icons::tint(
+            &mut pixels,
+            enshwick::content::icons::Tint {
+                colour: [0, 0, 255],
+                amount: 100,
+            },
+        );
+        let tinted = format!("tint {}", pixels[2]);
+        for line in [
+            "png 2x1 second true",
+            "texture 4",
+            "bad false",
+            tinted.as_str(),
+        ] {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
     }

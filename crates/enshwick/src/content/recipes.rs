@@ -31,6 +31,7 @@ use derive::menu_entry;
 #[cfg(feature = "unstable")]
 use derive::{derived_entries, recipe_guids, vanilla_registry};
 
+#[crate::script(content_recipes)]
 impl Load<'_> {
     /// Adds a recipe to the game, on the server and the client alike: a copy
     /// of the recipe that makes `like`, at the same workshop and unlocked with
@@ -65,6 +66,7 @@ impl Load<'_> {
     /// }
     /// ```
     #[cfg(feature = "unstable")]
+    #[script]
     pub fn add_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
         self.push_recipe(recipe)
     }
@@ -166,6 +168,7 @@ impl Load<'_> {
     /// }
     /// ```
     #[cfg(feature = "unstable")]
+    #[script]
     pub fn derive_recipes(
         &mut self,
         salt: &str,

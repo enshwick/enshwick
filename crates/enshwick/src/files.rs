@@ -204,6 +204,55 @@ fn keep_backup(path: &Path) -> io::Result<()> {
     }
 }
 
+/// The functions of [`files`](self) a script calls, as its namespace
+/// `files`: a script writes files, such as exports for a wiki or a map, and
+/// reads only its own folder.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct FilesFns;
+
+#[crate::script(files_fns)]
+#[expect(
+    clippy::unused_self,
+    clippy::needless_pass_by_value,
+    reason = "a script call takes its namespace and hands its values over as its own copies"
+)]
+impl FilesFns {
+    /// Writes `contents` to `path` whole, making its folders, as
+    /// [`write_atomically`] writes.
+    ///
+    /// # Errors
+    ///
+    /// As [`write_atomically`].
+    #[script]
+    pub fn write_atomically(
+        self,
+        path: PathBuf,
+        contents: crate::resources::Bytes,
+    ) -> io::Result<()> {
+        write_atomically(&path, contents.0)
+    }
+
+    /// Where [`write_atomically`] keeps the file it replaced, as
+    /// [`backup_path`] names it.
+    #[script]
+    #[must_use]
+    pub fn backup_path(self, path: PathBuf) -> PathBuf {
+        backup_path(&path)
+    }
+}
+
+impl crate::script::Bound for FilesFns {
+    const NAME: &'static str = "files";
+    const DOC: &'static str =
+        "Files a mod writes whole, such as exports for tools outside the game.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_FILES_FNS];
+
+    fn resolve(_load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
+        Ok(Self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

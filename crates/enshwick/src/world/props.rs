@@ -21,7 +21,7 @@ use super::{World, WorldError};
 /// let upright = WorldTransform { position: [10.0, 2.0, 4.5], orientation: [0.0, 0.0, 0.0, 1.0] };
 /// assert_eq!(upright, WorldTransform::at([10.0, 2.0, 4.5]));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
 pub struct WorldTransform {
     /// The position in metres, from the game's 32.32 fixed point.
     pub position: [f64; 3],
@@ -53,7 +53,7 @@ impl WorldTransform {
 /// # Examples
 ///
 /// See [`World::props_in`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct Prop {
     /// The prop's entity.
     pub entity: Entity,
@@ -75,7 +75,7 @@ pub struct Prop {
 /// let prop = Prop { entity: enshwick::Entity(41), item: ItemId::new(7), transform: WorldTransform::at([1.0, 2.0, 3.0]) };
 /// assert_eq!(CapturedProp::from(prop).item, ItemId::new(7));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
 pub struct CapturedProp {
     /// The item it was placed from, its `UsedItem`.
     pub item: ItemId,
@@ -104,6 +104,7 @@ pub(crate) fn span(a: [f64; 3], b: [f64; 3]) -> Option<([f64; 3], [f64; 3])> {
     Some((low, high))
 }
 
+#[crate::script(props)]
 impl World {
     /// The props whose position lies in the box between corners `a` and
     /// `b`, in metres, edges included, by entity: what a player placed
@@ -132,6 +133,7 @@ impl World {
     ///     Ok(props.iter().filter(|prop| prop.item == torch).count())
     /// }
     /// ```
+    #[script]
     pub fn props_in(self, a: [f64; 3], b: [f64; 3]) -> Result<Vec<Prop>, WorldError> {
         let (low, high) = span(a, b).ok_or(WorldError::Refused)?;
         let orientation = self.0.orientation.ok_or(WorldError::Missing)?;

@@ -26,6 +26,7 @@ fn fresh_seed(item: ItemInstance) -> u64 {
     now ^ (u64::from(item.pide.0) << 32 | u64::from(item.item.get()))
 }
 
+#[crate::script(rolling)]
 impl Affixes {
     /// Rolls `item` from the pool of every mod's affixes that fit its
     /// category, replacing the affixes it had, from `seed` or a fresh one;
@@ -46,6 +47,7 @@ impl Affixes {
     ///     let _rolled = affixes.roll(item, RollRules::new(1, 3), None, false);
     /// }
     /// ```
+    #[script]
     pub fn roll(
         &self,
         item: ItemInstance,
@@ -78,7 +80,7 @@ impl Affixes {
 /// # Examples
 ///
 /// See the [module](crate::affixes).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct AffixLoot {
     /// The containers whose rolled loot rolls affixes.
@@ -144,7 +146,7 @@ impl AffixLoot {
 /// let rule = AffixCraft::new(0.25, RollRules::new(1, 2));
 /// assert_eq!(rule.chance, 0.25);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct AffixCraft {
     /// The chance each fitting crafted item rolls at all, from 0 to 1.
@@ -187,6 +189,7 @@ fn try_roll(affixes: Affixes, item: ItemInstance, chance: f64, rules: RollRules)
     let _rolled = affixes.roll(item, rules, None, true);
 }
 
+#[crate::script(affix_rolls)]
 impl Load<'_> {
     /// Rolls affixes onto the items with an entity that random loot puts
     /// into containers `rule.from` matches, each at `rule.chance`, as the
@@ -201,6 +204,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](crate::affixes).
+    #[script]
     pub fn add_loot_affixes(&mut self, rule: AffixLoot) -> Result<(), Off> {
         if !(0.0..=1.0).contains(&rule.chance) {
             return Err(Off::new(format!(
@@ -245,6 +249,7 @@ impl Load<'_> {
     ///     load.add_craft_affixes(AffixCraft::new(0.2, RollRules::new(1, 1)))
     /// }
     /// ```
+    #[script]
     pub fn add_craft_affixes(&mut self, rule: AffixCraft) -> Result<(), Off> {
         if !(0.0..=1.0).contains(&rule.chance) {
             return Err(Off::new(format!(

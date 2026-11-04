@@ -11,7 +11,7 @@ use super::{World, WorldError};
 /// # Examples
 ///
 /// See [`World::account_action`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum AccountAction {
     /// Removes a player online from the game.
@@ -33,6 +33,7 @@ impl AccountAction {
     }
 }
 
+#[crate::script(accounts)]
 impl World {
     /// Asks the game to kick, ban or unban the account `key`, as its
     /// administrators do; the mod decides who may ask. A dedicated server
@@ -58,6 +59,7 @@ impl World {
     ///     }
     /// }
     /// ```
+    #[script]
     pub fn account_action(self, action: AccountAction, key: PlayerKey) -> Result<(), WorldError> {
         WorldError::from_status((self.0.host.api().account_action)(
             self.0.host.handle(),
@@ -91,6 +93,7 @@ impl World {
     ///     }
     /// }
     /// ```
+    #[script]
     pub fn set_muted(self, key: PlayerKey, muted: bool) -> Result<(), WorldError> {
         WorldError::from_status((self.0.host.api().chat_mute_set)(
             self.0.host.handle(),
@@ -115,6 +118,7 @@ impl World {
     ///     !world.muted(key).unwrap_or(false)
     /// }
     /// ```
+    #[script]
     pub fn muted(self, key: PlayerKey) -> Result<bool, WorldError> {
         let mut muted = 0u8;
         WorldError::from_status((self.0.host.api().chat_mute_has)(

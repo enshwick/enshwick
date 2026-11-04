@@ -17,6 +17,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.on("PlayerJoined", function(player)
+    enshwick.log.info(`entity {player.entity} joined`)
+end)
+enshwick.on("WorldSaved", function()
+    enshwick.log.info("saved")
+end)
+```
+
 - Subscribe during `init`. Once every mod is initialised the loader closes
   subscriptions; a later call fails.
 - The handler runs on the thread that raises the event, until the mod is off.

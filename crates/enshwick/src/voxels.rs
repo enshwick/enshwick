@@ -206,6 +206,7 @@ fn index(metres: f64) -> Option<u32> {
     Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
 )]
 #[non_exhaustive]
+#[derive(crate::Script)]
 pub enum VoxelMaterial {
     /// Empty: no ground and no building.
     #[default]
@@ -614,6 +615,7 @@ pub struct Voxels {
     host: Host,
 }
 
+#[crate::script(reads)]
 impl Voxels {
     /// The reads through `host`.
     #[cfg(feature = "unstable")]
@@ -638,6 +640,7 @@ impl Voxels {
     /// # Examples
     ///
     /// See [`VoxelBox`].
+    #[script]
     pub fn read(&self, min: VoxelPos, size: [u32; 3]) -> Result<VoxelBox, WorldError> {
         let count = abi::Voxel::read_count(min.to_array(), size).ok_or(WorldError::Refused)?;
         let mut raw =
@@ -667,6 +670,7 @@ impl Voxels {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn sample(&self, at: VoxelPos) -> Result<Voxel, WorldError> {
         let mut raw = abi::Voxel::default();
         let corner = at.to_array();
@@ -692,6 +696,119 @@ impl Load<'_> {
     #[must_use]
     pub fn voxels(&mut self) -> Voxels {
         Voxels { host: self.host() }
+    }
+}
+
+use crate::script::{
+    Error as ScriptError, Field as ScriptField, FromScript, IntoScript, Record, Ty, Typed, Value,
+};
+
+impl Typed for VoxelPos {
+    const TY: &'static Ty = &Ty::Record(&Record::new(
+        "VoxelPos",
+        "A voxel's place, in voxels of half a metre from the world's corner.",
+        &[
+            ScriptField::new("x", "Across.", &Ty::Number),
+            ScriptField::new("y", "Up.", &Ty::Number),
+            ScriptField::new("z", "Across the other way.", &Ty::Number),
+        ],
+    ));
+}
+
+impl IntoScript for VoxelPos {
+    fn into_value(self) -> Value {
+        Value::Record(vec![
+            self.x.into_value(),
+            self.y.into_value(),
+            self.z.into_value(),
+        ])
+    }
+}
+
+impl FromScript for VoxelPos {
+    fn from_value(value: Value) -> Result<Self, ScriptError> {
+        let mut fields = crate::script::convert::record_fields(value, 3)?;
+        let x = crate::script::convert::argument(&mut fields, "x")?;
+        let y = crate::script::convert::argument(&mut fields, "y")?;
+        let z = crate::script::convert::argument(&mut fields, "z")?;
+        Ok(Self::new(x, y, z))
+    }
+}
+
+impl Typed for Voxel {
+    const TY: &'static Ty = &Ty::Record(&Record::new(
+        "Voxel",
+        "One voxel: what it is made of and how full it is.",
+        &[
+            ScriptField::new("material", "Its material.", <VoxelMaterial as Typed>::TY),
+            ScriptField::new("fill", "How full it is, 0 to 255.", &Ty::Number),
+        ],
+    ));
+}
+
+impl IntoScript for Voxel {
+    fn into_value(self) -> Value {
+        Value::Record(vec![self.material().into_value(), self.fill().into_value()])
+    }
+}
+
+impl FromScript for Voxel {
+    fn from_value(value: Value) -> Result<Self, ScriptError> {
+        let mut fields = crate::script::convert::record_fields(value, 2)?;
+        let material = crate::script::convert::argument(&mut fields, "material")?;
+        let fill = crate::script::convert::argument(&mut fields, "fill")?;
+        Ok(Self::new(material, fill))
+    }
+}
+
+impl Typed for VoxelBox {
+    const TY: &'static Ty = &Ty::Record(&Record::new(
+        "VoxelBox",
+        "A box of voxels: its lowest corner, its size, and its voxels, x fastest, then y, then z.",
+        &[
+            ScriptField::new("min", "The lowest voxel's place.", <VoxelPos as Typed>::TY),
+            ScriptField::new(
+                "size",
+                "Its voxels along each axis.",
+                &Ty::List(&Ty::Number),
+            ),
+            ScriptField::new("voxels", "Its voxels.", &Ty::List(<Voxel as Typed>::TY)),
+        ],
+    ));
+}
+
+impl IntoScript for VoxelBox {
+    fn into_value(self) -> Value {
+        Value::Record(vec![
+            self.min.into_value(),
+            Value::List(self.size.into_iter().map(IntoScript::into_value).collect()),
+            self.voxels.into_value(),
+        ])
+    }
+}
+
+impl FromScript for VoxelBox {
+    fn from_value(value: Value) -> Result<Self, ScriptError> {
+        let mut fields = crate::script::convert::record_fields(value, 3)?;
+        let min = crate::script::convert::argument(&mut fields, "min")?;
+        let size: Vec<u32> = crate::script::convert::argument(&mut fields, "size")?;
+        let voxels = crate::script::convert::argument(&mut fields, "voxels")?;
+        let size: [u32; 3] = size
+            .try_into()
+            .map_err(|_| ScriptError::new("size: expected 3 numbers"))?;
+        Self::new(min, size, voxels).ok_or_else(|| {
+            ScriptError::new("the box's voxels are not size x times size y times size z")
+        })
+    }
+}
+
+impl crate::script::Bound for Voxels {
+    const NAME: &'static str = "voxels";
+    const DOC: &'static str = "The world's voxels, read a box or one at a time.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_READS];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, crate::Off> {
+        Ok(load.voxels())
     }
 }
 

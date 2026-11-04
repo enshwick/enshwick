@@ -24,7 +24,7 @@ use super::{Change, Field, Value, ValueError, field_and_value};
 /// assert!(Items::Stackable.picks(Field::MaxStackSize, &wood));
 /// assert!(!Items::Containers.picks(Field::Slots, &wood));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Items {
     /// Every item of these categories.
@@ -138,7 +138,7 @@ impl Field {
 ///     load.change_items(&stacks, "my-mod")
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct ItemsChange {
     /// The items.
     pub items: Items,
@@ -266,6 +266,7 @@ impl ItemsChange {
     }
 }
 
+#[crate::script(content_change_items)]
 impl Load<'_> {
     /// Declares `change` during `init`, from `source`, as
     /// [`Load::change`] declares a change of one entry; the loader turns it
@@ -282,6 +283,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`ItemsChange`].
+    #[script]
     pub fn change_items(&mut self, change: &ItemsChange, source: &str) -> Result<(), Off> {
         change.field.unstable_gate()?;
         change

@@ -21,10 +21,13 @@ pub mod loot_tables;
 pub mod menu;
 pub mod recipes;
 pub mod renames;
+mod script;
 pub mod vanilla;
 pub mod workshops;
 
 pub use ids::*;
+#[doc(hidden)]
+pub use script::{Content, Rule};
 
 impl crate::Host {
     /// A vanilla resource's bytes from the game's archive; see
@@ -499,6 +502,7 @@ pub(crate) fn named(id: Id) -> Result<Id, Off> {
     crate::load::ok(status, id, || format!("content id {id}"))
 }
 
+#[crate::script(content_ids)]
 impl Load<'_> {
     /// Declares the mod's content id `id` and returns its GUID. The content
     /// calls declare what they create themselves; call it for content the
@@ -523,6 +527,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
+    #[script]
     pub fn declare(&mut self, id: Id) -> Result<Guid, Off> {
         let api = self.host().api();
         let mut out = [0u8; 16];
@@ -552,6 +557,7 @@ impl Load<'_> {
     ///     load.add_text(LOCKER_NAME, Language::UK_UA, "Шафка")
     /// }
     /// ```
+    #[script]
     pub fn add_text(
         &mut self,
         tag: Guid,

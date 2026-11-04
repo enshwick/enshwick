@@ -72,6 +72,51 @@ impl ContainerKinds {
     }
 }
 
+/// Every kind by its constant's name, for a script, which names the kinds
+/// it means.
+const KIND_NAMES: [(&str, ContainerKinds); 8] = [
+    ("PLACED", ContainerKinds::PLACED),
+    ("LOOT", ContainerKinds::LOOT),
+    ("DROPS", ContainerKinds::DROPS),
+    ("CHARACTERS", ContainerKinds::CHARACTERS),
+    ("NPCS", ContainerKinds::NPCS),
+    ("ANIMALS", ContainerKinds::ANIMALS),
+    ("PLANTS", ContainerKinds::PLANTS),
+    ("OTHER", ContainerKinds::OTHER),
+];
+
+impl crate::script::Typed for ContainerKinds {
+    const TY: &'static crate::script::Ty = &crate::script::Ty::List(&crate::script::Ty::String);
+}
+
+impl crate::script::IntoScript for ContainerKinds {
+    fn into_value(self) -> crate::script::Value {
+        crate::script::Value::List(
+            KIND_NAMES
+                .iter()
+                .filter(|(_, kind)| self.contains(*kind))
+                .map(|(name, _)| crate::script::Value::String((*name).to_owned()))
+                .collect(),
+        )
+    }
+}
+
+impl crate::script::FromScript for ContainerKinds {
+    fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
+        let names: Vec<String> = crate::script::FromScript::from_value(value)?;
+        names.iter().try_fold(Self(0), |kinds, name| {
+            if name == "ALL" {
+                return Ok(Self::ALL);
+            }
+            KIND_NAMES
+                .iter()
+                .find(|(known, _)| known == name)
+                .map(|&(_, kind)| kinds.union(kind))
+                .ok_or_else(|| crate::script::Error::new(format!("{name:?} is no container kind")))
+        })
+    }
+}
+
 impl Default for ContainerKinds {
     fn default() -> Self {
         Self::PLACED

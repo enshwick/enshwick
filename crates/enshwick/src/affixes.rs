@@ -50,7 +50,7 @@ use crate::{Host, Load, Off};
 /// # Examples
 ///
 /// See [`Affixes::info`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct AffixInfo {
     /// The text key that names it in its owner's texts, see
@@ -94,6 +94,7 @@ pub struct Affixes {
     host: Host,
 }
 
+#[crate::script(affixes)]
 impl Affixes {
     /// What `item` gives, a line per modifier: its own first, then each
     /// affix's, for a tooltip. On a client, from what the server sent. Any
@@ -107,6 +108,7 @@ impl Affixes {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn lines(&self, item: ItemInstance) -> Vec<Line> {
         let mut out = vec![ItemLine::default(); 16];
         loop {
@@ -152,6 +154,7 @@ impl Affixes {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn info(&self, affix: AffixId) -> Option<AffixInfo> {
         let mut text = Str::EMPTY;
         let mut rarity = 0u8;
@@ -174,6 +177,7 @@ impl Affixes {
     }
 }
 
+#[crate::script(affix_defs)]
 impl Load<'_> {
     /// Defines the mod's affix `id`, named with [`id!`](crate::content::id).
     /// Its text is `<name>.name` in the mod's texts
@@ -189,6 +193,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn define_affix(&mut self, id: Id, def: &AffixDef) -> Result<AffixId, Off> {
         let full = id.to_string();
         def.check()
@@ -221,6 +226,9 @@ mod defs;
 mod roll;
 #[cfg(feature = "unstable")]
 mod rolling;
+mod script;
+#[doc(hidden)]
+pub use script::AffixFns;
 #[cfg(test)]
 mod tests;
 

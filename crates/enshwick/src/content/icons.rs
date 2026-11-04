@@ -35,7 +35,7 @@ pub const MAX_SIDE: u32 = 2048;
 /// };
 /// assert!(matches!(ghostly.pixels, Pixels::Tint(_)));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct Icon {
     /// The icon's id, the mod's own.
     pub id: Id,
@@ -51,7 +51,7 @@ pub struct Icon {
 /// # Examples
 ///
 /// See [`Icon`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Pixels {
     /// The vanilla icon's pixels, recoloured.
@@ -74,7 +74,7 @@ pub enum Pixels {
 /// tint(&mut white, Tint { colour: [0, 128, 255], amount: 100 });
 /// assert_eq!(white, [0, 128, 255, 200]);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct Tint {
     /// The colour, red, green and blue.
     pub colour: [u8; 3],
@@ -431,6 +431,7 @@ pub(crate) fn ready() -> bool {
     crate::host().is_some_and(|host| (host.api().icons_ready)(host.handle()).is_ok())
 }
 
+#[crate::script(content_icons)]
 impl Load<'_> {
     /// Serves `icon`'s UI image, built from the vanilla one it starts from
     /// when the client first shows it. [`Load::add_item`] does it for an
@@ -455,6 +456,7 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
+    #[script]
     pub fn add_icon(&mut self, icon: Icon) -> Result<(), Off> {
         self.declare(icon.id)?;
         // A build without the layout, such as the dedicated server, shows

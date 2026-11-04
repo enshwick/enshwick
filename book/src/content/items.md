@@ -39,6 +39,27 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local LOCKER = "you.lockers:locker"
+
+local texts = enshwick.i18n.texts_from([[
+[en]
+"locker.name" = "Locker"
+"locker.description" = "A chest only its owner can open."
+]])
+enshwick.i18n.add_texts(texts, {
+    { "locker.name", `{LOCKER}.name` },
+    { "locker.description", `{LOCKER}.description` },
+})
+enshwick.content.add_item({
+    id = LOCKER,
+    -- The vanilla storage box, by the debug name the item registry gives it.
+    like = enshwick.content.item("Prop_Storage_24_T1_Box"),
+    name = enshwick.content.guid(`{LOCKER}.name`),
+    description = enshwick.content.guid(`{LOCKER}.description`),
+})
+```
+
 A real mod keeps the texts in `src/texts.toml` and reads them with
 `load.texts()`; see [Texts](texts.md).
 [`vanilla::item`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/vanilla.rs)

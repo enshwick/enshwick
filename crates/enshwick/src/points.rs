@@ -42,7 +42,7 @@ pub use described::{DescribedField, DescribedPoint, DescribedVerdict};
 /// assert!(Mode::Override.changes());
 /// assert!(!Mode::Observe.changes());
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Mode {
     /// Links see the answer and change nothing.
@@ -285,6 +285,59 @@ impl Order {
     #[must_use]
     pub const fn priority_value(&self) -> i32 {
         self.priority
+    }
+}
+
+#[expect(
+    unreachable_pub,
+    reason = "a script sees only a record's public fields; the record stays inside"
+)]
+mod script_order {
+    /// Where a link stands in its point's chain, each field optional.
+    #[derive(Clone, Debug, Default, crate::Script)]
+    pub struct Order {
+        /// The mods whose links run after this one.
+        #[script(default)]
+        pub before: Vec<String>,
+        /// The mods whose links run before this one.
+        #[script(default)]
+        pub after: Vec<String>,
+        /// Lower runs earlier.
+        #[script(default)]
+        pub priority: i32,
+    }
+}
+
+impl crate::script::Typed for Order {
+    const TY: &'static crate::script::Ty = <script_order::Order as crate::script::Typed>::TY;
+}
+
+impl crate::script::IntoScript for Order {
+    fn into_value(self) -> crate::script::Value {
+        let owned = |ids: Vec<&str>| ids.into_iter().map(str::to_owned).collect();
+        crate::script::IntoScript::into_value(script_order::Order {
+            before: owned(self.before),
+            after: owned(self.after),
+            priority: self.priority,
+        })
+    }
+}
+
+impl crate::script::FromScript for Order {
+    fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
+        let order = <script_order::Order as crate::script::FromScript>::from_value(value)?;
+        // shortcut: a script's mod ids leak their text for the process, as a
+        // script's content ids do; links are made only at start.
+        let leaked = |ids: Vec<String>| -> Vec<&'static str> {
+            ids.into_iter()
+                .map(|id| &*Box::leak(id.into_boxed_str()))
+                .collect()
+        };
+        Ok(Self {
+            before: leaked(order.before),
+            after: leaked(order.after),
+            priority: order.priority,
+        })
     }
 }
 

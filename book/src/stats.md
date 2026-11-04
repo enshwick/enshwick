@@ -33,6 +33,24 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+A Luau mod defines and opens kinds while it starts and sets modifiers
+through `enshwick.stats`; here each player who joins is blessed for a minute:
+
+```luau
+-- A kind of this mod's own, from 0 to 1.
+local luck = enshwick.stats.define_stat("you.blessings:luck", {
+    ty = "Additive", default = 0, min = 0, max = 1, format = "Number",
+})
+-- A built-in kind the platform applies to the game.
+local health = enshwick.stats.open_stat("enshwick:health_max")
+
+enshwick.on("PlayerJoined", function(player)
+    local minute = { For = 60 }
+    enshwick.stats.set(player.entity, "bless", { stat = health, op = "Add", value = 50 }, minute)
+    enshwick.stats.set(player.entity, "bless", { stat = luck, op = "Add", value = 0.1 }, minute)
+end)
+```
+
 ## Kinds
 
 A stat kind has a [content id](content.md#content-ids) and a `StatDef`:

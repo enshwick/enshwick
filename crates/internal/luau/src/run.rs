@@ -20,11 +20,10 @@ use mlua::{Function, Lua, MultiValue, Table, Value as LuaValue};
 use crate::bridge::{from_lua, to_lua};
 use enshwick::packs::SCRIPT_MAIN as MAIN;
 
-use crate::calls::CallDesc;
+use crate::calls::{CallDesc, ServedCall};
 use crate::files::Scripts;
 use crate::points::{EventDesc, PointDesc, Read, decode};
 use crate::subscribe::{RawReader, Subscription, raw_table};
-use enshwick::points::Order;
 use enshwick::services::{DescribedCall, DescribedCaller, DescribedEmitter};
 use sandbox::describe;
 use std::sync::OnceLock;
@@ -142,6 +141,8 @@ pub(crate) struct Vm {
     points: Mutex<Vec<PointDesc>>,
     /// The descriptions of the mod events the scripts subscribe to.
     events: Mutex<Vec<EventDesc>>,
+    /// The descriptions of the calls the scripts serve.
+    served: Mutex<Vec<ServedCall>>,
     /// `enshwick.refuse`, which a point's handler returns to refuse.
     refuse: OnceLock<Table>,
 }
@@ -284,6 +285,17 @@ pub(crate) struct Scope {
     vm: Weak<Vm>,
 }
 
+#[cfg(test)]
+impl Scope {
+    /// A scope of no mod, for converting values in tests.
+    pub(crate) const fn detached() -> Self {
+        Self {
+            inner: Weak::new(),
+            vm: Weak::new(),
+        }
+    }
+}
+
 impl Scope {
     /// Calls the script's `function` from the API with `args`, as a
     /// function of `signature`; an error once its VM was replaced.
@@ -296,11 +308,14 @@ impl Scope {
         let stale = || script::Error::new("the scripts stopped");
         let inner = self.inner.upgrade().ok_or_else(stale)?;
         let vm = self.vm.upgrade().ok_or_else(stale)?;
-        let current = inner
-            .vm
-            .load()
-            .as_ref()
-            .is_some_and(|now| Arc::ptr_eq(now, &vm));
+        // While `main.luau` runs, its VM is not yet the mod's; a start-time
+        // call, such as `add_recipe_with`, may call back into it then.
+        let current = vm.starting.load(Ordering::Acquire)
+            || inner
+                .vm
+                .load()
+                .as_ref()
+                .is_some_and(|now| Arc::ptr_eq(now, &vm));
         if !current {
             return Err(stale());
         }
@@ -313,7 +328,17 @@ impl Scope {
             function.call::<LuaValue>(lua_args)
         });
         let answer = answer.ok_or_else(|| script::Error::new("the script failed"))?;
-        from_lua(self, answer, signature.ret())
+        from_lua(self, answer, signature.ret()).inspect_err(|error| {
+            inner.fail(&format!("a function passed to the API answered {error}"));
+        })
+    }
+
+    /// Turns the mod off: a function it passed answered what the API
+    /// cannot use.
+    pub(crate) fn fault(&self, error: &script::Error) {
+        if let Some(inner) = self.inner.upgrade() {
+            inner.fail(&format!("a function passed to the API answered {error}"));
+        }
     }
 }
 
@@ -442,7 +467,7 @@ fn begin(
         })?;
     }
     let vm = inner
-        .run_main(scripts)
+        .run_main(load, scripts)
         .map_err(|error| Off::new(error.to_string()))?;
     let events = vm.events();
     inner.vm.store(Some(vm));
@@ -548,9 +573,11 @@ fn subscribe(
                 // the loader matched to the owner's; `encode` writes that
                 // primitive's valid bytes, a bool as 0 or 1.
                 unsafe {
-                    load.extend_described_point(&point, &Order::new(), move |input, answer| {
-                        handled.run_point(&key, &desc, input, answer)
-                    })
+                    load.extend_described_point(
+                        &point,
+                        &desc.order.clone(),
+                        move |input, answer| handled.run_point(&key, &desc, input, answer),
+                    )
                 }?;
             }
             Subscription::ModEvent(name) => {
@@ -571,6 +598,32 @@ fn subscribe(
                 load.on_described_mod_event(&desc.event, move |data| {
                     handled.deliver(&key, |lua, _| decode(lua, data, 0, &read));
                 })?;
+            }
+            Subscription::Call(name) => {
+                let desc = inner
+                    .vm
+                    .load()
+                    .as_ref()
+                    .and_then(|vm| {
+                        vm.served
+                            .relock()
+                            .iter()
+                            .find(|d| d.call.name == *name)
+                            .cloned()
+                    })
+                    .ok_or_else(|| Off::new(format!("call {name} has no description")))?;
+                let key = sub.clone();
+                let call = desc.call.clone();
+                // SAFETY: `ServedCall::parse` accepts only a primitive answer
+                // and works out its hash itself from that primitive, as
+                // `#[call]` does, so a caller reads it as that primitive;
+                // `encode` writes the primitive's valid bytes, a bool as 0
+                // or 1, and a failed encode fails the call.
+                unsafe {
+                    load.serve_described_call(&call, move |input, output| {
+                        handled.serve(&key, &desc, input, output)
+                    })
+                }?;
             }
             Subscription::Raw(spec) => {
                 let (ty, reader) = RawReader::resolve(load, spec, &inner.event_types)?;

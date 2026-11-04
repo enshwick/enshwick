@@ -11,6 +11,7 @@ use mlua::{Function, Lua, Value as LuaValue};
 
 use super::{Inner, Scope};
 use crate::bridge::to_lua;
+use crate::calls::ServedCall;
 use crate::points::{PointDesc, Read, decode, encode};
 use crate::subscribe::Subscription;
 
@@ -84,6 +85,50 @@ impl Inner {
             DescribedVerdict::Set(value)
         } else {
             DescribedVerdict::Pass
+        }
+    }
+
+    /// Runs the handler of the served call `sub` on its `input` and writes
+    /// its answer to `output`; `false` fails the call: the mod is off, the
+    /// handler returned nil or raised an error, which also turns it off.
+    pub(super) fn serve(
+        &self,
+        sub: &Subscription,
+        desc: &ServedCall,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> bool {
+        if self.off.load(Ordering::Acquire) {
+            return false;
+        }
+        let Some(vm) = self.vm.load_full() else {
+            return false;
+        };
+        let Some(handler) = vm
+            .handlers
+            .relock()
+            .iter()
+            .find(|(key, _)| key == sub)
+            .map(|(_, handler)| handler.clone())
+        else {
+            return false;
+        };
+        let answer = self.call(&vm, &|| sub.name(), |vm| {
+            let lua_input = decode(&vm.lua, input, 0, &desc.input)?;
+            let result: LuaValue = handler.call(lua_input)?;
+            if result.is_nil() {
+                return Ok(None);
+            }
+            let mut bytes = vec![0u8; output.len()];
+            encode(&result, &desc.output, &mut bytes, 0)?;
+            Ok(Some(bytes))
+        });
+        match answer.flatten() {
+            Some(bytes) => {
+                output.copy_from_slice(&bytes);
+                true
+            }
+            None => false,
         }
     }
 

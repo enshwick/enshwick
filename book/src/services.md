@@ -58,7 +58,7 @@ pub struct Sold {
 - Every field's type implements [`Shape`](#shapes): its structural hash
   reaches into the type, so a change inside it refuses the link with the name
   of the outer field.
-- An event's data has no padding, since a [Luau mod](luau.md#mod-events)
+- An event's data has no padding, since a [Luau mod](#mod-events)
   hears it as bytes: the build fails on a gap, and its bytes become fields of
   their own.
 
@@ -292,3 +292,58 @@ service and event with its publisher and subscribers.
 | `only v2 from <id> <version> is published`               | The user was built for another major                      |
 | `... fields this mod needs: <field> and later are newer` | The publisher is older than the user's declaration        |
 | `field <n> is <name> here and <name> at the publisher`   | A field differs: the two mods compiled other declarations |
+
+## From Luau
+
+A [Luau mod](luau.md) offers and uses another mod's work through calls and
+events, not services: a service is a table of native functions.
+
+### Other mods by alias
+
+`pack.toml` names the mods a Luau mod depends on under aliases, as a
+[data pack](content/packs.md#packtoml) does. `enshwick.deps` holds a table
+per alias of `requires` and `after`, as `deps!` does for a Rust mod: `id` is
+the mod's id, and `running()` says whether it runs now. A mod of `requires`
+always runs beside this one. Read `running()` for one of `after`:
+
+```toml
+[after]
+lanterns = "you.lanterns"
+```
+
+```luau
+if enshwick.deps.lanterns.running() then
+    enshwick.log.info(`{enshwick.deps.lanterns.id} lights the way`)
+end
+```
+
+### Mod events
+
+A Luau mod hears another mod's events and sends its own.
+`cargo enshwick deps <alias> --luau` writes the description of each event the
+owner declares, beside its points. A description may also be written by hand:
+each field with a `name` and how it reads, `u8` to `i64`, `f32`, `f64`,
+`bool`, `guid`, or an id: `entity`, `item_id`, `recipe_id`,
+`knowledge_id`, `skill_node`, `player_key`, `buff_type_id` or `npc_id`, laid
+out and hashed as Rust lays out a `#[repr(C)]` struct of those fields:
+
+```luau
+local greeted = enshwick.define_event({ name = "greeted", fields = {
+    { name = "player", read = "entity" },
+    { name = "times", read = "u16" },
+} })
+
+enshwick.on_mod_event(require("./deps/trading_post/sold"), function(sold)
+    greeted.send({ player = sold.character, times = 1 })
+end)
+```
+
+The loader matches a subscription by its layout hashes, as for a Rust mod,
+and leaves it idle, with the reason in the log, when the defining mod's
+event differs or is smaller. `define_event` takes the event's local name:
+`greeted` is `you.greeter:greeted`, as `#[event(name = "greeted")]` is for a
+Rust mod. An event a script defines has primitive fields only.
+`define_event` raises an error for a new event, or for changed fields, after
+the start: either takes the next start. A `send` before `main.luau` has
+finished reaches no one. Other mods hear the event only when `pack.toml`
+exports it, as `exports = ["event:greeted"]`.

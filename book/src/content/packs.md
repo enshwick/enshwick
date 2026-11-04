@@ -72,7 +72,7 @@ lockers = "you.lockers"
 | `requires`, `after`, `breaks` | the mods and packs it relates to, as a Rust mod's [manifest](../concepts/loader-and-abi.md#the-manifest) names them: tables keyed by an alias of `[a-z][a-z0-9_]*`, each a mod id or `{ id, version }`; `after` takes no version. An alias is unique across the three tables, and neither `vanilla` nor a Luau keyword |
 | `exports` | what the pack offers other mods, each `event:<name>` for an event its scripts define or `content:<name>` for its content, such as `["event:greeted"]` for the event `<id>:greeted`; the loader refuses other mods the rest, matching kind and name (see [what other mods may use](../concepts/loader-and-abi.md#what-other-mods-may-use)) |
 | `enshwick` | the Enshwick releases the pack is made for, as a version requirement such as `"=1.0.0-alpha.12"`; a loader of another release skips the pack and logs both versions. Empty for any |
-| `[[setting]]` | a setting of a [Luau mod](../luau.md#settings), one table each |
+| `[[setting]]` | a setting of a [Luau mod](../settings.md#settings-of-a-luau-mod), one table each |
 
 ## Names and references
 

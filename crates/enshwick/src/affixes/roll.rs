@@ -11,7 +11,7 @@ use super::defs::{AffixDef, AffixId, AffixKey, ItemRarity};
 /// # Examples
 ///
 /// See [`roll`].
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
 pub struct Rolled {
     /// The affix.
     pub affix: AffixKey,
@@ -46,7 +46,7 @@ pub struct Candidate<'a> {
 /// let rules = RollRules::new(1, 3).max_rarity(ItemRarity::Rare);
 /// assert_eq!((rules.min, rules.max), (1, 3));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub struct RollRules {
     /// The fewest affixes.
@@ -247,7 +247,7 @@ pub fn lines_of(
 /// # Examples
 ///
 /// See [`Affixes::lines`](crate::affixes::Affixes::lines).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct Line {
     /// The stat's index in this process (see [`Stat::index`](crate::stats::Stat::index)); its text and

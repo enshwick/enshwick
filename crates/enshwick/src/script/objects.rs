@@ -1,0 +1,192 @@
+//! Rust handles a script holds as objects and calls their methods on, such
+//! as the `Rate` that `load.rate(...)` returns.
+
+use core::any::Any;
+use std::sync::Arc;
+
+use super::namespaces::declare;
+use super::{Declared, Error, FromScript, Function, IntoScript, Ty, Typed, Value};
+
+/// A Rust handle a script holds as an object with the handle's
+/// [`#[script]`](macro@crate::script) methods, called as `handle:method()`.
+///
+/// # Examples
+///
+/// ```rust,standalone_crate
+/// use enshwick::script::{Class, Function, IntoScript, Object, Value};
+///
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Counter(u32);
+///
+/// #[enshwick::script(counts)]
+/// impl Counter {
+///     /// The count.
+///     #[script]
+///     pub fn get(&self) -> u32 {
+///         self.0
+///     }
+/// }
+///
+/// impl Object for Counter {
+///     const CLASS: &'static Class = &Class::of::<Self>("Counter", "A count.");
+///     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_COUNTS];
+/// }
+///
+/// let Value::Object(handle) = Counter(3).into_value() else { unreachable!() };
+/// let get = handle.class().methods().into_iter().find(|m| m.name() == "get");
+/// let answer = handle.call(&get.ok_or(enshwick::script::Error::new("no get"))?, Vec::new())?;
+/// assert!(matches!(answer, Value::Number(n) if n == 3.0));
+/// # Ok::<(), enshwick::script::Error>(())
+/// ```
+pub trait Object: Clone + Send + Sync + 'static {
+    /// Its class: the Rust type's name, its doc and its methods.
+    const CLASS: &'static Class;
+    /// The method lists of every [`#[script]`](macro@crate::script) block
+    /// of the type.
+    const PARTS: &'static [&'static [Function<Self>]];
+}
+
+/// The type of an [`Object`], its Rust type erased.
+///
+/// # Examples
+///
+/// See [`Object`].
+#[derive(Debug)]
+pub struct Class {
+    name: &'static str,
+    doc: &'static str,
+    describe: fn() -> Vec<Declared>,
+    call: fn(&(dyn Any + Send + Sync), usize, Vec<Value>) -> Result<Value, Error>,
+}
+
+impl Class {
+    /// The class of `T`, named `name`, the Rust type's name, with `doc`, one
+    /// sentence.
+    ///
+    /// # Examples
+    ///
+    /// See [`Object`].
+    #[must_use]
+    pub const fn of<T: Object>(name: &'static str, doc: &'static str) -> Self {
+        Self {
+            name,
+            doc,
+            describe: || declare(T::PARTS.iter().flat_map(|part| part.iter())),
+            call: call::<T>,
+        }
+    }
+
+    /// The Rust type's name, the object's type in a script.
+    ///
+    /// # Examples
+    ///
+    /// See [`Object`].
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// What the object is for, one sentence.
+    ///
+    /// # Examples
+    ///
+    /// See [`Object`].
+    #[must_use]
+    pub const fn doc(&self) -> &'static str {
+        self.doc
+    }
+
+    /// Its methods, in the order [`Handle::call`] indexes them.
+    ///
+    /// # Examples
+    ///
+    /// See [`Object`].
+    #[must_use]
+    pub fn methods(&self) -> Vec<Declared> {
+        (self.describe)()
+    }
+}
+
+fn call<T: Object>(
+    this: &(dyn Any + Send + Sync),
+    index: usize,
+    args: Vec<Value>,
+) -> Result<Value, Error> {
+    let this = this
+        .downcast_ref::<T>()
+        .ok_or_else(|| Error::new("an object of another class"))?;
+    T::PARTS
+        .iter()
+        .flat_map(|part| part.iter())
+        .nth(index)
+        .ok_or_else(|| Error::new(format!("{} has no such method", T::CLASS.name)))?
+        .call(this, args)
+}
+
+/// An [`Object`] on its way to or from a script, its type erased.
+///
+/// # Examples
+///
+/// See [`Object`].
+#[derive(Clone)]
+pub struct Handle {
+    class: &'static Class,
+    this: Arc<dyn Any + Send + Sync>,
+}
+
+impl core::fmt::Debug for Handle {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("Handle").field(&self.class.name).finish()
+    }
+}
+
+impl Handle {
+    /// Its class.
+    ///
+    /// # Examples
+    ///
+    /// See [`Object`].
+    #[must_use]
+    pub const fn class(&self) -> &'static Class {
+        self.class
+    }
+
+    /// Calls `method`, one of [`Class::methods`] of its class, with `args`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Function::call`], and for a method past the end of its class.
+    ///
+    /// # Examples
+    ///
+    /// See [`Object`].
+    pub fn call(&self, method: &Declared, args: Vec<Value>) -> Result<Value, Error> {
+        (self.class.call)(&*self.this, method.index(), args)
+    }
+}
+
+impl<T: Object> Typed for T {
+    const TY: &'static Ty = &Ty::Object(T::CLASS);
+}
+
+impl<T: Object> IntoScript for T {
+    fn into_value(self) -> Value {
+        Value::Object(Handle {
+            class: T::CLASS,
+            this: Arc::new(self),
+        })
+    }
+}
+
+impl<T: Object> FromScript for T {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        match value {
+            Value::Object(handle) => handle
+                .this
+                .downcast_ref::<T>()
+                .cloned()
+                .ok_or_else(|| Error::new(format!("expected a {}", T::CLASS.name))),
+            _ => Err(Error::new(format!("expected a {}", T::CLASS.name))),
+        }
+    }
+}

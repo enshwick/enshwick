@@ -51,6 +51,23 @@ impl Mods {
         super::is_running(id)
     }
 
+    /// Every loaded mod, the loader first, in load order, as
+    /// [`all`](super::all) lists them.
+    #[script]
+    #[must_use]
+    pub fn all(self) -> Vec<super::ModEntry> {
+        super::all()
+    }
+
+    /// The server's mods that the last refused join found missing on this
+    /// client or in another version, as
+    /// [`join_missing`](super::join_missing) lists them.
+    #[script]
+    #[must_use]
+    pub fn join_missing(self) -> Vec<super::ModEntry> {
+        super::join_missing()
+    }
+
     /// Whether this game runs the server now, so the mod's server logic
     /// acts: always on the dedicated server; on a client while it hosts a
     /// game, single player included, as mods run with server behaviour

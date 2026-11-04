@@ -16,6 +16,7 @@
 //! filtered by [`Source`]: corpses, bosses, chests, locked chests, loot labels.
 
 mod drops;
+mod script;
 
 #[doc(hidden)]
 pub use drops::ReplaceDropsError;
@@ -43,7 +44,7 @@ const ROW_WORDS: usize = 9;
 /// # Examples
 ///
 /// See [`Container`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct InteractionOfferRuntime {
     /// The entity that last opened or looted the container; `None` before
     /// anyone did.
@@ -75,7 +76,7 @@ pub struct InteractionOfferRuntime {
 /// assert!(corpse.is_enemy_loot());
 /// assert!(corpse.is_open());
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct Container {
     /// The container.
     pub entity: Entity,
@@ -479,6 +480,60 @@ fn after_check(next: crate::Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: 
             || (),
             || handler(&LootPass { containers, ctx }),
         );
+    }
+}
+
+#[crate::script(loot_pass)]
+impl Load<'_> {
+    /// Runs `handler` after every run of the game's loot container check, as
+    /// `Load::on_loot_pass` does, with that run's containers as a list.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_loot_pass`].
+    #[script(name = "on_loot_pass")]
+    pub(crate) fn on_loot_pass_script(
+        &mut self,
+        handler: impl Fn(Vec<Container>) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        self.on_loot_pass(move |pass| {
+            let mut containers = Vec::new();
+            pass.each(|container| containers.push(*container));
+            handler(containers);
+        })
+    }
+}
+
+/// The free functions of [`loot`](self) as a script's namespace `loot`.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct LootFns;
+
+#[crate::script(loot_fns)]
+#[expect(
+    clippy::unused_self,
+    reason = "a script call takes its namespace, though a free function reads nothing of it"
+)]
+impl LootFns {
+    /// Replaces every drop the mod added with `drops`, after init too, as
+    /// [`replace_drops`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`replace_drops`].
+    #[script]
+    pub fn replace_drops(self, drops: Vec<Drop>) -> Result<(), Off> {
+        replace_drops(drops)
+    }
+}
+
+impl crate::script::Bound for LootFns {
+    const NAME: &'static str = "loot";
+    const DOC: &'static str = "Mod items in random loot, and the game's loot passes.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LOOT_FNS];
+
+    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
+        Ok(Self)
     }
 }
 

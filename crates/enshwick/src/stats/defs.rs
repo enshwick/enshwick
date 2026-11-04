@@ -8,7 +8,7 @@ use crate::content::items::StatFormat;
 /// # Examples
 ///
 /// See [`StatDef`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum StatType {
     /// A sum of points, 0 by default, such as extra health.
@@ -33,7 +33,7 @@ pub enum StatType {
 /// let haste = StatDef::multiplicative();
 /// assert_eq!(haste.default, 1.0);
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct StatDef {
     /// What the number is.
@@ -244,6 +244,7 @@ pub(crate) struct DefineStatError {
     Ord,
     serde::Serialize,
     serde::Deserialize,
+    crate::Script,
 )]
 pub struct StatKey(pub u32);
 
@@ -259,6 +260,15 @@ pub struct Stat {
     pub(super) key: StatKey,
 }
 
+impl crate::script::Object for Stat {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "Stat",
+        "A stat kind from `define_stat` or `open_stat`, valid in this game process.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_KIND];
+}
+
+#[crate::script(kind)]
 impl Stat {
     /// The kind's stored name.
     ///
@@ -270,6 +280,7 @@ impl Stat {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub const fn key(self) -> StatKey {
         self.key
     }
@@ -284,6 +295,7 @@ impl Stat {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub const fn index(self) -> u32 {
         self.index
     }

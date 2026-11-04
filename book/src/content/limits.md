@@ -29,6 +29,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.content.change_items({
+    items = { Category = { "Materials" } },
+    field = "MaxStackSize",
+    value = { Times = 4 },
+}, "stacks")
+```
+
 A stack size reaches only items that already stack and keep no state of
 their own, such as durability; weapons and armour stay at one. Overlapping
 selections of two mods report one conflict line per pair, with the count of
