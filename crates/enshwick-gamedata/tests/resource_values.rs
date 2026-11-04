@@ -24,6 +24,12 @@ mod tests {
         let registry = Reflection::scan(&image).registry();
         let stem = exe.file_stem().unwrap().to_str().unwrap();
         let archive = Archive::open(exe.parent().unwrap(), stem).unwrap();
+        let version = archive.version().unwrap();
+        let build = version.split('|').next().unwrap();
+        assert!(
+            build.parse::<u32>().is_ok() && version.contains("game38"),
+            "{version}"
+        );
         let keys = archive.keys();
         let mut failed: BTreeMap<String, (usize, String)> = BTreeMap::new();
         let mut unknown = 0usize;

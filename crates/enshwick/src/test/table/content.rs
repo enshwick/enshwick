@@ -499,3 +499,10 @@ pub(crate) extern "system" fn types(
     };
     crate::test::table::mods::list(table.entries(), out, entry_size, capacity, count)
 }
+
+pub(crate) extern "system" fn game_version(_me: ModHandle, out: *mut Str) -> Status {
+    match with(None, |s| s.host.game_version) {
+        Some(version) => put(out, Str::new(version)),
+        None => Status::MISSING,
+    }
+}

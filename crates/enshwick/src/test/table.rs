@@ -36,9 +36,9 @@ use build::{
 };
 use content::{
     add_text, change_data, content_hashes, content_read, content_serve, declare_change,
-    entity_data_open, game_text, icons_ready, item_data_get, item_data_open, item_data_set,
-    rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_keys, resource_read,
-    serve_resource, set_change, types,
+    entity_data_open, game_text, game_version, icons_ready, item_data_get, item_data_open,
+    item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_keys,
+    resource_read, serve_resource, set_change, types,
 };
 use gameplay::{
     account_knowledge, altar_limit_filter, altar_zone_filter, altar_zones_changed, altars,
@@ -984,4 +984,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     resource_keys,
     content_hashes,
     types,
+    game_version,
 };

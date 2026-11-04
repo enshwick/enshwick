@@ -367,6 +367,32 @@ impl Host {
         })
     }
 
+    /// The version string of the game's archive, such as
+    /// `1283531|^/game38/branches/release_1.0|2026-10-30T09:15:50.868196Z`:
+    /// the build number, the branch and when the build was made.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the archive does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// if let Some(host) = enshwick::host() {
+    ///     if let Ok(version) = host.game_version() {
+    ///         assert!(version.contains('|'));
+    ///     }
+    /// }
+    /// ```
+    pub fn game_version(&self) -> Result<&'static str, Off> {
+        let mut out = Str::EMPTY;
+        let status = (self.api().game_version)(self.handle(), &raw mut out);
+        crate::load::ok(status, (), || "game version".to_owned())?;
+        // SAFETY: `HostApi::game_version` promises the string valid and
+        // unchanged for the life of the process.
+        unsafe { out.as_str() }.ok_or_else(|| Off::new("game version: not UTF-8"))
+    }
+
     /// Serves `bytes` as game content, such as a texture's pixels, kept for
     /// the life of the process, and returns the hash a resource names it by;
     /// the same bytes give the same hash.

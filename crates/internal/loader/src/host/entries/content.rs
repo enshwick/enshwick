@@ -585,3 +585,18 @@ pub(crate) extern "system" fn types(
         unsafe { crate::host::entries::mods::list(entries, out, entry_size, capacity, count) }
     })
 }
+
+pub(crate) extern "system" fn game_version(me: ModHandle, out: *mut Str) -> Status {
+    entry("game_version", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        match crate::archive::game().and_then(crate::archive::Archive::version) {
+            // SAFETY: `HostApi::game_version` has the mod pass `out` null or
+            // pointing at a writable, aligned `Str` that no other thread
+            // touches during the call; the archive lives for the process.
+            Some(version) => unsafe { put(out, Str::new(version)) },
+            None => Status::MISSING,
+        }
+    })
+}

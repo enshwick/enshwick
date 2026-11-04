@@ -484,6 +484,17 @@ impl Resources {
         super::table::serve_new(self.host, self.key_of(key)?, value)
     }
 
+    /// The version string of the game's archive: the build number, the
+    /// branch and when the build was made, split by `|`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the archive does not read.
+    #[script]
+    pub fn game_version(self) -> Result<String, Off> {
+        Ok(self.host.game_version()?.to_owned())
+    }
+
     /// The nil GUID's text, all zero: no resource.
     #[script]
     #[must_use]

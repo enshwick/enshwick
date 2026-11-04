@@ -1578,4 +1578,11 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Writes the version string of the game's archive to `out`, such as
+    /// `1283531|^/game38/branches/release_1.0|2026-10-30T09:15:50.868196Z`:
+    /// the build number, the branch and when the build was made. The string
+    /// is the loader's, valid and unchanged for the life of the process.
+    /// [`Status::MISSING`] when the archive does not read. Any thread. A
+    /// panic in the loader returns [`Status::REFUSED`].
+    pub game_version: extern "system" fn(me: ModHandle, out: *mut Str) -> Status,
 }

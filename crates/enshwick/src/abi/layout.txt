@@ -283,7 +283,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1456 align 8
+HostApi size 1464 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -465,6 +465,7 @@ HostApi size 1456 align 8
     resource_keys at 1432 size 8 type extern "system" fn(ModHandle, u32, *mut ResourceKey, u32, *mut u32) -> Status
     content_hashes at 1440 size 8 type extern "system" fn(ModHandle, *mut [u32; 4], u32, *mut u32) -> Status
     types at 1448 size 8 type extern "system" fn(ModHandle, *mut TypeEntry, u32, u32, *mut u32) -> Status
+    game_version at 1456 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32

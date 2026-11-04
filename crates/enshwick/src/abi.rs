@@ -724,7 +724,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 179 * 8);
+    assert!(size_of::<HostApi>() == 24 + 180 * 8);
+    assert!(core::mem::offset_of!(HostApi, game_version) == 24 + 179 * 8);
     assert!(core::mem::offset_of!(HostApi, resource_keys) == 24 + 176 * 8);
     assert!(core::mem::offset_of!(HostApi, content_hashes) == 24 + 177 * 8);
     assert!(core::mem::offset_of!(HostApi, types) == 24 + 178 * 8);

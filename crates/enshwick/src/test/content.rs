@@ -121,6 +121,21 @@ impl FakeHost {
         self
     }
 
+    /// Gives the game's archive the version string `version`, for
+    /// `Host::game_version`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().game_version("1|demo|2026").install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn game_version(mut self, version: &'static str) -> Self {
+        self.game_version = Some(version);
+        self
+    }
+
     /// Gives the game the reflected `types`, for
     /// [`Registry::game`](crate::resources::Registry::game); a later call
     /// replaces them.

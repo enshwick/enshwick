@@ -24,6 +24,9 @@ pub type ContentHash = [u32; 4];
 /// The header's magic, `KFC4`.
 const MAGIC: u32 = 0x3443_464b;
 /// Header fields: each a location, an offset from the field and a count.
+// The version string: an offset from the field and its length (client
+/// archive 1283531, server archive 1273043).
+const VERSION: usize = 0x10;
 const CONTENT_BUCKETS: usize = 0x40;
 const CONTENT_KEYS: usize = 0x48;
 const CONTENT_VALUES: usize = 0x50;
@@ -299,6 +302,26 @@ impl Archive {
         let mut keys = self.keys();
         keys.retain(|key| key.type_hash == type_hash);
         keys
+    }
+
+    /// The archive's version string, such as
+    /// `1283531|^/game38/branches/release_1.0|2026-10-30T09:15:50.868196Z` on
+    /// client archive 1283531: the build number, the branch and when it was
+    /// built. `None` when the header holds no UTF-8 string there.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::archive::Archive;
+    ///
+    /// if let Some(archive) = Archive::open(std::path::Path::new("game"), "enshrouded") {
+    ///     assert!(archive.version().is_some_and(|v| v.contains('|')));
+    /// }
+    /// ```
+    #[must_use]
+    pub fn version(&self) -> Option<&str> {
+        let (at, len) = location(&self.header, VERSION)?;
+        std::str::from_utf8(self.header.get(at..at.checked_add(len)?)?).ok()
     }
 
     /// Every resource key the archive holds, in the order their bytes lie,

@@ -62,6 +62,7 @@ mod tests {
             ])
             .resource(key(), bytes(2.5, u64::MAX))
             .archive([4, 1, 2, 3], vec![5, 6, 7, 8])
+            .game_version("1283531|^/game38/branches/release_1.0|2026")
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Luau)`.
         let status =
@@ -83,6 +84,7 @@ mod tests {
             local value = enshwick.resources.game_value(keys[1])
             print(`keys {#keys} damage {value.damage} side {value.side} count {value.count}`)
             print(`missing {enshwick.resources.named("demo::Nothing") == nil}`)
+            print(`build {string.split(enshwick.resources.game_version(), "|")[1]}`)
         "#);
         assert!(
             logged(&loader, "type Table in demo::balance fields 3 second side"),
@@ -98,6 +100,7 @@ mod tests {
             loader.logs()
         );
         assert!(logged(&loader, "missing true"), "{:?}", loader.logs());
+        assert!(logged(&loader, "build 1283531"), "{:?}", loader.logs());
     }
 
     #[test]
