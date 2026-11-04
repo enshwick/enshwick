@@ -6,6 +6,10 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `cargo enshwick luau` writes the `controls` namespace (#930).
+
 ### Changed
 
 - **Breaking:** `cargo enshwick new --side` takes `server` or `both`, a new
