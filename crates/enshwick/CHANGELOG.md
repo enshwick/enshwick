@@ -16,6 +16,9 @@ Each entry names the pull request that made the change.
   `UiExtension`, ABI 11.4. The fake host draws a screen's panels with
   `draw_screen`. The example mod `you.chest-panel` adds one to the storage
   chest screen (#933).
+- Luau links an interaction filter with
+  `enshwick.interactions.on_interaction`, whose `Interaction` is a table
+  and whose kind an `InteractionKind` name (#933).
 
 - `controls` lets a mod declare controls: a name, a label, a default and a
   second `Key` (a scan code with exact modifiers, or a mouse button), the

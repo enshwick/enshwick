@@ -380,6 +380,7 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<crate::state::StateFns>(),
     Namespace::of::<crate::files::FilesFns>(),
     Namespace::starting("vetoes", "", &[crate::Load::SCRIPT_VETOES]),
+    Namespace::starting("interactions", "", &[crate::Load::SCRIPT_INTERACTIONS]),
     Namespace::starting(
         "progress",
         "",

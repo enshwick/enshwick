@@ -83,6 +83,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local LOCKED_CHEST = 0x5e01
+enshwick.interactions.on_interaction(function(i)
+    local guarded = i.kind == "Open" or i.kind == "Move" or i.kind == "Sort"
+    return not (i.item == LOCKED_CHEST and guarded)
+end)
+```
+
 | Kind         | When it is asked                                          | What a refusal does              |
 | ------------ | --------------------------------------------------------- | -------------------------------- |
 | `Open`       | The game is about to offer the Open prompt                | No prompt                        |

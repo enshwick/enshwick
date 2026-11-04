@@ -11,6 +11,7 @@ mod deps;
 mod every_call;
 mod harness;
 mod i18n;
+mod interactions;
 mod inventory;
 mod mods;
 mod parity;
