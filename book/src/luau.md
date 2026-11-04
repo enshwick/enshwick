@@ -175,6 +175,7 @@ function without one, unless this table names it and says why.
 | `points::Load::define_point`, `points::OwnedPoint::*`, `points::Decision::*` | A point's owner declares it from a Rust type with `#[point]`, and its manifest carries the schema other mods link against. A pack declares no points, so a Luau mod links into points but owns none. |
 | `config::*` | Settings from a Rust type or a schema built in code. A Luau mod declares its settings in `pack.toml`, which the loader reads into the same schema; `enshwick.settings()` returns the values in force, and `SettingsChanged` says when they change. |
 | `packs::*` | Reading a pack's folder and files. The loader reads a Luau mod's own folder as its pack, and a script adds content from code through `enshwick.content` and `enshwick.affixes`. |
+| `typed::EventType::*`, `typed::ResourceType::*` | Rust types generated from the game's reflection, which a Rust mod compiles in. Luau reaches the same events with `enshwick.on_game_type` and the same resources as values with `enshwick.resources.game_value` and `serve`; `cargo enshwick types --luau` writes their types for the editor. |
 | `affixes::roll` | `enshwick.affixes.roll` rolls an item, as `Affixes::roll` does, since a namespace holds one function of a name. The roll from a pool is `enshwick.affixes.roll_pool`. |
 | `affixes::lines_of` | The loader's own listing of an item's lines from the pool it keeps. A script reads them with `enshwick.affixes.lines`. |
 
