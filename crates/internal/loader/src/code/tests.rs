@@ -268,3 +268,22 @@ fn only_workshops_past_the_limit_get_full_lists() {
     assert_eq!(lists[&7], [0x10, 0x30, 0x40]);
     assert!(full_lists(&registry[..0x30], layout, 2).is_none());
 }
+
+#[test]
+fn a_jump_is_read_only_where_all_its_bytes_read() {
+    use crate::code_watch::BRANCH_BYTES;
+    const PAGE: usize = 0x1000;
+    let page = crate::pages::allocate(None, PAGE).expect("a fresh page");
+    let base = page.as_ptr().expose_provenance();
+    let jump = [0xE9, 1, 2, 3, 4];
+    // SAFETY: `base` is the start of the read-write page just committed.
+    unsafe { crate::memory::write_bytes(base, PAGE - BRANCH_BYTES, &jump) };
+    let last = code_at(base + PAGE - BRANCH_BYTES).expect("the page's last bytes read");
+    assert_eq!(last[..jump.len()], jump);
+    assert_eq!(
+        code_at(base + PAGE - BRANCH_BYTES + 1),
+        None,
+        "past the page"
+    );
+    assert_eq!(code_at(0), None);
+}

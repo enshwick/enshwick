@@ -206,21 +206,7 @@ impl Watching {
         image: Option<(usize, usize)>,
         stage: crate::code_watch::Stage,
     ) {
-        use crate::code_watch::{BRANCH_BYTES, reaches};
-        /// The first bytes of the code at `at`, when they read.
-        fn code_at(at: usize) -> Option<[u8; BRANCH_BYTES]> {
-            let region = crate::pages::query(at).filter(crate::pages::Region::reads)?;
-            if at.checked_add(BRANCH_BYTES)? > region.end {
-                return None;
-            }
-            let mut code = [0; BRANCH_BYTES];
-            // SAFETY: `pages::query` just found `at..at + BRANCH_BYTES`
-            // committed and readable; the loader is still starting, so the
-            // code a hook jumps through is held by the module that wrote it,
-            // and a byte has no invalid value.
-            unsafe { crate::memory::read_bytes(at, 0, &mut code) };
-            Some(code)
-        }
+        use crate::code_watch::reaches;
         let before = self.watch.changes().len();
         let now = self.now();
         let made = |offset, len| {
@@ -272,6 +258,22 @@ pub(crate) fn entry_rva(base: u64) -> Option<usize> {
     let pe = word(0x3c)?;
     // `AddressOfEntryPoint`, 16 bytes into the optional header.
     word(pe + 24 + 16)
+}
+
+/// The first [`BRANCH_BYTES`](crate::code_watch::BRANCH_BYTES) bytes at
+/// `at`, for following a jump; `None` unless all of them read.
+fn code_at(at: usize) -> Option<[u8; crate::code_watch::BRANCH_BYTES]> {
+    let region = crate::pages::query(at).filter(crate::pages::Region::reads)?;
+    if at.checked_add(crate::code_watch::BRANCH_BYTES)? > region.end {
+        return None;
+    }
+    let mut code = [0; crate::code_watch::BRANCH_BYTES];
+    // SAFETY: `pages::query` just found `at..at + BRANCH_BYTES` committed
+    // and readable; the loader is still starting, so the code a hook jumps
+    // through is held by the module that wrote it, and a byte has no
+    // invalid value.
+    unsafe { crate::memory::read_bytes(at, 0, &mut code) };
+    Some(code)
 }
 
 /// The game's `.text` as the executable on disk holds it, relocated to
