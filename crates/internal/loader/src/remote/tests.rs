@@ -256,7 +256,7 @@ fn rated_messages_pass_until_the_burst_is_spent() {
 }
 
 #[test]
-fn an_action_run_over_the_rate_is_answered_busy_and_not_run() {
+fn action_runs_have_a_rate_of_their_own_and_over_it_are_busy_and_not_run() {
     let mut queries = Queries::default();
     let now = Instant::now();
     over_the_rate(&mut queries, 7, now);
@@ -265,10 +265,22 @@ fn an_action_run_over_the_rate_is_answered_busy_and_not_run() {
         action: "clear".into(),
         args: String::new(),
     };
+    let passed = (0..100)
+        .take_while(|_| queries.gate(7, false, &run, now) == Gate::Pass)
+        .count();
+    assert_eq!(
+        f64::from(u32::try_from(passed).unwrap()),
+        RUN_BURST,
+        "spent queries leave the runs alone"
+    );
     assert!(matches!(
         queries.gate(7, false, &run, now),
         Gate::Busy(Message::Result { ok: false, .. })
     ));
+    let query = Message::Query { id: String::new() };
+    let mut fresh = Queries::default();
+    while fresh.gate(8, false, &run, now) == Gate::Pass {}
+    assert_eq!(fresh.gate(8, false, &query, now), Gate::Pass);
 }
 
 #[test]

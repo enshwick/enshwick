@@ -404,7 +404,7 @@ pub(crate) fn frame(context: usize) {
     let _ran = KEYS_FUSE.run("the mod control keys", || {
         // SAFETY: the one caller passes the frame's live interface context,
         // on the interface thread.
-        let open = unsafe { in_game(context, gate) };
+        let open = unsafe { in_game(context, gate) } && !crate::ui::window_shown();
         let window = if open { input::focused_thread() } else { None };
         let now = now_ms();
         LOOK.with_borrow_mut(|(trackers, down)| {

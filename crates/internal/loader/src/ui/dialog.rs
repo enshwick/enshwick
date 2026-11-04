@@ -131,6 +131,11 @@ thread_local! {
     static CURRENT: core::cell::RefCell<Option<Current>> = const { core::cell::RefCell::new(None) };
 }
 
+/// Whether a dialog shows, on the interface thread.
+pub(super) fn showing() -> bool {
+    CURRENT.with_borrow(Option::is_some)
+}
+
 /// The GUIDs of the loader's dialog text tags: title and message per slot.
 #[expect(clippy::cast_possible_truncation, reason = "the index fits a byte")]
 const TAGS: [[u8; 16]; 2 * KEPT] = {
