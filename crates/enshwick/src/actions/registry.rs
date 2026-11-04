@@ -329,7 +329,6 @@ impl Registry {
                     self.say(&d.action.help, language, &[])
                 },
                 per_player: d.action.on.is_some(),
-                hint: d.action.hint,
                 offered,
                 subject: subject_text,
                 args: Vec::new(),
@@ -437,27 +436,6 @@ impl Registry {
             }
         }
         Ok(())
-    }
-
-    /// The actions with a hint that `player` has at hand.
-    pub(super) fn hints(&self, player: &Player, language: Language) -> String {
-        let declared = self.declared.relock_read();
-        let mut out = String::new();
-        for d in declared
-            .iter()
-            .filter(|d| d.action.hint && Self::allowed(d, player))
-        {
-            let ask = self.ask(player, language);
-            if let Some(Ok(subject)) = d.action.at.as_ref().map(|at| at(&ask)) {
-                out.push_str(&sheet::clean(&d.action.id));
-                out.push('\t');
-                out.push_str(&sheet::clean(&self.say(&d.action.label, language, &[])));
-                out.push('\t');
-                out.push_str(&sheet::clean(&subject.label));
-                out.push('\n');
-            }
-        }
-        out
     }
 }
 

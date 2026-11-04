@@ -8,6 +8,15 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Load::extend_screen` adds a panel at an `Edge` of one of the game's
+  screens, a `ui::HudScreenType` such as `StorageChest`, filled with the
+  widgets of `Frame` once per frame while the player has that screen open.
+  The loader draws it in a window of its own above the game's screen and
+  never changes the screen's layout. `HostApi::ui_extension` and
+  `UiExtension`, ABI 11.4. The fake host draws a screen's panels with
+  `draw_screen`. The example mod `you.chest-panel` adds one to the storage
+  chest screen (#933).
+
 - `controls` lets a mod declare controls: a name, a label, a default and a
   second `Key` (a scan code with exact modifiers, or a mouse button), the
   phases it fires on and a hold time, with `Load::control`. The client
@@ -670,6 +679,11 @@ Each entry names the pull request that made the change.
 
 ### Removed
 
+- **Breaking:** the shared actions window is gone: the F7 key, its line on
+  the HUD, the Actions button above the Mods screen's list, `Action::hint`,
+  `sheet::Entry::hint` and `ActionCall::HINTS`. A mod's actions show under
+  its name on the Mods screen, and its own controls and screen panels run
+  them with `Actions::run` (#933).
 - **Breaking:** dev reload is gone: the loader setting `dev_reload`, the
   copies under `mods/enshwick/reload/`, `ManifestFlags::RELOAD`, the
   `reload` key of a mod's table, `Mod::shutdown` and the

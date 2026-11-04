@@ -1,4 +1,21 @@
-use super::{Buf, Engine, NAV_CONFIG, PANEL_CONFIG, UiText, WINDOW_WIDTH, Window};
+use enshwick::abi::UiExtension;
+
+use super::{
+    Buf, EXTENSION_WIDTH, Engine, HUD_MARGIN, NAV_CONFIG, PANEL_CONFIG, UiText, WINDOW_WIDTH,
+    Window,
+};
+
+/// The game's alignment word for a panel at `edge` of its parent, centred
+/// along it: the vertical part in the high byte, the horizontal in the low,
+/// 1 for the start, 2 the centre, 3 the end, as the HUD's columns take it.
+const fn edge_align(edge: u32) -> u16 {
+    match edge {
+        UiExtension::LEFT => 0x201,
+        UiExtension::TOP => 0x102,
+        UiExtension::BOTTOM => 0x302,
+        _ => 0x203,
+    }
+}
 
 impl Engine {
     /// The node of a frame the game opened in `frame`.
@@ -37,7 +54,10 @@ impl Engine {
         name: &UiText,
         title: &UiText,
     ) {
-        crate::ui::window_drawn();
+        // A panel beside a game screen leaves the keys to that screen's own gate.
+        if window.edge.is_none() {
+            crate::ui::window_drawn();
+        }
         window.saved_nav = self.nav(context);
         let name = [name.ptr.expose_provenance() as u64, name.len];
         // SAFETY: `self.window_begin` is the game's `ui.window_begin`, its
@@ -66,17 +86,30 @@ impl Engine {
         // entry bytes checked in `Engine::resolve`, on the backdrop frame the
         // game filled one call earlier.
         unsafe { (self.frame_stretch)(window.backdrop.ptr()) };
-        let dim: u64 = 0x8000_0000 | u64::from(1.0f32.to_bits()) << 32;
-        // SAFETY: `self.frame_color` is the game's `ui.frame_color`, its
-        // entry bytes checked in `Engine::resolve`, on the filled backdrop
-        // frame, with `dim` a live local the game reads eight bytes of.
-        unsafe { (self.frame_color)(window.backdrop.ptr(), &raw const dim) };
+        if window.edge.is_some() {
+            let margin = [HUD_MARGIN; 4];
+            // SAFETY: `self.node_padding` is the game's `ui.node_padding`, its
+            // entry bytes checked in `Engine::resolve`, on the backdrop frame's
+            // node the game filled above, with four live floats.
+            unsafe { (self.node_padding)(self.frame_node(&window.backdrop), &raw const margin) };
+        } else {
+            let dim: u64 = 0x8000_0000 | u64::from(1.0f32.to_bits()) << 32;
+            // SAFETY: `self.frame_color` is the game's `ui.frame_color`, its
+            // entry bytes checked in `Engine::resolve`, on the filled
+            // backdrop frame, with `dim` a live local the game reads eight
+            // bytes of.
+            unsafe { (self.frame_color)(window.backdrop.ptr(), &raw const dim) };
+        }
         // SAFETY: `self.frame_open` is the game's `ui.frame_open`, its entry
         // bytes checked in `Engine::resolve`; `window.panel` holds the
         // table's `ui.frame_extent` bytes (`Layout::read`), name 0 for none.
         unsafe { (self.frame_open)(window.panel.ptr(), 0) };
         let panel = self.frame_node(&window.panel);
-        let padding = [90.0f32, 60.0, 90.0, 60.0];
+        let padding = if window.edge.is_some() {
+            [40.0f32, 30.0, 40.0, 30.0]
+        } else {
+            [90.0f32, 60.0, 90.0, 60.0]
+        };
         // SAFETY: `self.node_padding` is the game's `ui.node_padding`, its
         // entry bytes checked in `Engine::resolve`, on the node the game just
         // wrote into the panel frame, with four live floats.
@@ -86,14 +119,19 @@ impl Engine {
         // entry bytes checked in `Engine::resolve`, on the panel's node, with
         // two live floats.
         unsafe { (self.node_spacing)(panel, &raw const gap, 0) };
-        let centre: u16 = 0x202;
+        let align = window.edge.map_or(0x202, edge_align);
         // SAFETY: `self.node_align` is the game's `ui.node_align`, its entry
         // bytes checked in `Engine::resolve`, on the panel's node, with a
         // live alignment word.
-        unsafe { (self.node_align)(panel, &raw const centre) };
+        unsafe { (self.node_align)(panel, &raw const align) };
+        let width = if window.edge.is_some() {
+            EXTENSION_WIDTH
+        } else {
+            WINDOW_WIDTH
+        };
         // SAFETY: `self.node_width` is the game's `ui.node_width`, its entry
         // bytes checked in `Engine::resolve`, on the panel's node.
-        unsafe { (self.node_width)(panel, WINDOW_WIDTH) };
+        unsafe { (self.node_width)(panel, width) };
         // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`, its
         // entry bytes checked in `Engine::resolve`, on the panel's node.
         unsafe { (self.node_stretch)(panel, 0) };
@@ -172,5 +210,22 @@ impl Engine {
         // bytes checked in `Engine::resolve`, on the window object
         // `window_begin` started, whose frames are now closed.
         unsafe { (self.window_end)(window.object.ptr()) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_edge_puts_the_panel_at_its_side_centred_along_it() {
+        let words = [
+            UiExtension::LEFT,
+            UiExtension::RIGHT,
+            UiExtension::TOP,
+            UiExtension::BOTTOM,
+        ]
+        .map(edge_align);
+        assert_eq!(words, [0x201, 0x203, 0x102, 0x302]);
     }
 }

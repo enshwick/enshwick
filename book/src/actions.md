@@ -14,9 +14,9 @@ the platform offers it in the game's own interface:
 
 - on the mod's page of the [Mods screen](interface.md#the-mods-screen), in
   the game's settings rows and buttons;
-- for an action with a hint, as a line on the HUD while what it acts on is
-  at hand, such as "[F7] Who may use it: your locker at (2, 10, -4)", with a
-  key that opens a window of the mod's actions right there;
+- from the mod's own [controls](controls.md) and
+  [panels on the game's screens](interface.md#panels-on-the-games-screens),
+  which send one with `Actions::run`;
 - on the server's [console](chat.md#the-console), as the mod's id, the
   action and its values, such as a line typed in a dedicated server's
   console window.
@@ -71,7 +71,6 @@ language; a key without a text shows as it is, so plain English works too.
 | `.arg(Arg::...)`                    | an argument, in order: `player`, `choice`, `number`, `toggle`                                    |
 | `.allow(fn)`, `.admins()`           | who sees the action and may run it                                                               |
 | `.at(fn)`                           | what it acts on for a player, or why there is nothing, which the player reads beside it          |
-| `.hint()`                           | a HUD line and the key while the subject is at hand; needs `.at`                                 |
 
 Arguments are typed choices, never free text: a player online, picked from
 a list and named on the console; one of a few options; a number in a range
@@ -94,7 +93,7 @@ The server decides everything. It checks `.allow` and runs `.at` again on
 every run, whatever the client showed, and refuses values outside their
 types and ranges before the handler sees them. A mod's own permission rules,
 [extension points](extending.md) included, belong in `.at`, so the
-interface, the hint and the console all follow them.
+Mods screen, the mod's controls and panels, and the console all follow them.
 
 The platform's replies, such as "No player named Bob.", are under
 `actions.*` keys and take the mod's texts over them.
@@ -113,16 +112,12 @@ English.
 
 Actions run in the game server: the dedicated server, and a client while it
 hosts a game, single player included. The interface needs Enshwick on the
-player's client. The window and
-the Mods screen page ask the server each time they open, and the server
-sends the hints a player has at hand once a second while they change. The
-key is `F7`, read only while the game's window has the focus and the HUD
-shows.
+player's client. The Mods screen page asks the server each time it opens.
 
 ## Worked example
 
 [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
-declares who may open a Safe as a list action with a hint: `.at` finds the
+declares who may open a Safe as a list action: `.at` finds the
 Safe at hand, the player's own first, through the mod's own rules and its
 extension point; `on` names the players allowed there; a second action,
 `list`, names them.

@@ -449,6 +449,9 @@ pub(super) struct Window {
     saved_nav: usize,
     layer: u32,
     gap: f32,
+    /// The screen's edge a screen extension's panel sits at, undimmed;
+    /// `None` for a window centred over a dimmed screen.
+    edge: Option<u32>,
 }
 
 impl Window {
@@ -461,7 +464,18 @@ impl Window {
             saved_nav: 0,
             layer: 0x1f,
             gap: 30.0,
+            edge: None,
         }
+    }
+
+    /// A screen extension's window: its panel at `edge`
+    /// (`UiExtension::LEFT` and on) of the screen, on the extensions' layer.
+    pub(super) const fn extension(edge: u32) -> Self {
+        let mut window = Self::new();
+        window.layer = EXTENSION_LAYER;
+        window.gap = HUD_GAP;
+        window.edge = Some(edge);
+        window
     }
 
     /// A full screen of the loader's own on `layer`, its rows `gap` apart.
@@ -940,6 +954,13 @@ impl Engine {
 }
 
 const WINDOW_WIDTH: f32 = 900.0;
+/// A screen extension's panel width.
+const EXTENSION_WIDTH: f32 = 420.0;
+/// The layer of a screen extension's window, on client 520: above the
+/// game's screens, which draw on 6 (`DualInventory`, `lootViewerWindow`),
+/// below its button hints (0xa), split stack menu (0xb), tooltips (0xe)
+/// and the item being dragged (0xf).
+const EXTENSION_LAYER: u32 = 8;
 /// HUD elements the HUD hides from: full-screen menus, screenshot mode
 /// (0x400) and character dialogs (0x200), as the game's status bar.
 const HUD_MASK: u32 = 0x600;

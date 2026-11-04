@@ -11,7 +11,6 @@
 "actions.players.previous" = "上一頁玩家"
 "actions.no-players" = "沒有其他線上玩家。"
 "actions.close" = "關閉"
-"actions.hint" = "[{key}] {label}：{subject}"
 "controls" = "操作"
 "controls.key" = "按鍵：{key}"
 "controls.second" = "第二按鍵：{key}"

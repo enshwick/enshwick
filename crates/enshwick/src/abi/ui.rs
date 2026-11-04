@@ -56,6 +56,51 @@ impl UiFrame {
 /// [`Load::on_hud`](crate::Load::on_hud).
 pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut c_void);
 
+/// An element a mod adds to one of the game's screens, registered with
+/// [`HostApi::ui_extension`](super::HostApi::ui_extension): a panel at an edge of
+/// the screen that shows and hides with it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, Str, UiExtension};
+///
+/// let spec = UiExtension {
+///     header: Header::of::<UiExtension>(),
+///     screen: Str::new("StorageChest"),
+///     edge: UiExtension::RIGHT,
+///     reserved: 0,
+/// };
+/// assert_eq!(spec.edge, UiExtension::RIGHT);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct UiExtension {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The game's screen, by the name of its member of the game's screen
+    /// kinds, such as `StorageChest`. Valid for the call.
+    pub screen: Str,
+    /// The screen's edge the panel sits at: [`UiExtension::LEFT`] to
+    /// [`UiExtension::BOTTOM`].
+    pub edge: u32,
+    /// Zero.
+    pub reserved: u32,
+}
+
+impl_headed!(UiExtension);
+
+impl UiExtension {
+    /// The left edge, centred from top to bottom.
+    pub const LEFT: u32 = 0;
+    /// The right edge, centred from top to bottom.
+    pub const RIGHT: u32 = 1;
+    /// The top edge, centred from left to right.
+    pub const TOP: u32 = 2;
+    /// The bottom edge, centred from left to right.
+    pub const BOTTOM: u32 = 3;
+}
+
 /// One widget, drawn with [`HostApi::ui_widget`](super::HostApi::ui_widget): `kind` says which, and
 /// which fields it reads; the loader writes `index`, `value` and `result`
 /// back.

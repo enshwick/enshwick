@@ -432,7 +432,6 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     );
     part!("control firings", crate::controls::after_step(loader));
     part!("stat steps", crate::stats::after_step(loader, step, now));
-    part!("action hints", crate::actions::after_step(loader, now));
     part!(
         "knowledge change steps",
         crate::knowledge::changes::after_step(loader, step)

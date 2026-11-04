@@ -31,8 +31,6 @@ pub struct Entry {
     pub help: String,
     /// Whether it is a list of players with a switch each.
     pub per_player: bool,
-    /// Whether it shows as a hint on the HUD when at hand.
-    pub hint: bool,
     /// Whether the player may run it now.
     pub offered: bool,
     /// What it acts on, such as "your locker at (2, 10, -4)", when offered;
@@ -112,8 +110,7 @@ pub fn clean(text: &str) -> String {
 pub fn encode(entries: &[Entry]) -> String {
     let mut out = String::new();
     for entry in entries {
-        let flags =
-            u8::from(entry.per_player) | u8::from(entry.hint) << 1 | u8::from(entry.offered) << 2;
+        let flags = u8::from(entry.per_player) | u8::from(entry.offered) << 2;
         let _ = writeln!(
             out,
             "A\t{}\t{flags}\t{}\t{}\t{}",
@@ -167,7 +164,6 @@ pub fn decode(text: &str) -> Vec<Entry> {
                     label: (*label).to_owned(),
                     help: (*help).to_owned(),
                     per_player: flags & 1 != 0,
-                    hint: flags & 2 != 0,
                     offered: flags & 4 != 0,
                     subject: (*subject).to_owned(),
                     args: Vec::new(),
@@ -288,7 +284,6 @@ mod tests {
                 label: "Who may use it".into(),
                 help: "Let players use the locker".into(),
                 per_player: true,
-                hint: true,
                 offered: true,
                 subject: "Your locker at (2, 10, -4)".into(),
                 args: Vec::new(),

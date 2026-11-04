@@ -1,8 +1,7 @@
 //! Player actions across the wire: the server asks each mod that declared
-//! actions what a player may use, runs what the player picked in the
-//! interface or the console named and pushes the hints the player has at
-//! hand; the client keeps what its server offered, for the Mods screen, the
-//! HUD and the actions window.
+//! actions what a player may use and runs what the player picked in the
+//! interface, a mod's control or panel sent, or the console named; the
+//! client keeps what its server offered, for the Mods screen.
 //!
 //! The server decides everything. A client only shows the sheet the server
 //! sent and sends back an action's id and arguments; the server runs the
@@ -21,8 +20,6 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::remote::Message;
 
-/// How often the server looks for hints.
-const HINT_GAP: Duration = Duration::from_secs(1);
 /// The least time between two runs one player sends.
 const RUN_GAP: Duration = Duration::from_millis(200);
 
@@ -36,18 +33,16 @@ struct Registered {
 
 static REGISTERED: Mutex<Vec<Registered>> = Mutex::new(Vec::new());
 
-/// The server's state per client: the language it reads, the hints last
-/// sent and when it last ran an action.
+/// The server's state per client: the language it reads and when it last
+/// ran an action.
 #[derive(Default)]
 struct Client {
     language: u32,
-    hints: String,
     last_run: Option<Instant>,
 }
 
 struct ServerState {
     clients: rustc_hash::FxHashMap<u64, Client>,
-    next_hints: Option<Instant>,
 }
 
 static SERVER: Mutex<Option<ServerState>> = Mutex::new(None);
@@ -56,7 +51,6 @@ fn server_state<R>(f: impl FnOnce(&mut ServerState) -> R) -> R {
     let mut slot = SERVER.relock();
     f(slot.get_or_insert_with(|| ServerState {
         clients: rustc_hash::FxHashMap::default(),
-        next_hints: None,
     }))
 }
 
@@ -277,13 +271,6 @@ pub(crate) fn run(loader: &Loader, key: u64, id: &str, action: &str, args: &str)
     }
     crate::net::to_player(key, &Message::ActionResult { ok, text });
     send_sheets(loader, key, language);
-    // The run may have changed what is at hand.
-    server_state(|s| {
-        if let Some(client) = s.clients.get_mut(&key) {
-            client.hints.clear();
-        }
-        s.next_hints = None;
-    });
 }
 
 /// `text` cut to at most `max` bytes, at a character boundary.
@@ -293,65 +280,6 @@ fn cut(text: &str, max: usize) -> &str {
         end -= 1;
     }
     &text[..end]
-}
-
-/// Pushes each client the hints its player has at hand, once a second, on
-/// the server's game thread.
-pub(crate) fn after_step(loader: &Loader, now: Instant) {
-    let due = server_state(|s| {
-        if s.next_hints.is_some_and(|next| now < next) {
-            return false;
-        }
-        s.next_hints = Some(now + HINT_GAP);
-        true
-    });
-    if !due {
-        return;
-    }
-    let mods = running(loader);
-    if mods.is_empty() {
-        return;
-    }
-    let keys = crate::net::clients();
-    if keys.is_empty() {
-        return;
-    }
-    let Ok(players) = crate::world::players(loader) else {
-        return;
-    };
-    for key in keys {
-        let Some(player) = players
-            .iter()
-            .find(|p| p.key == enshwick::PlayerKey::new(key))
-        else {
-            continue;
-        };
-        let language = server_state(|s| s.clients.entry(key).or_default().language);
-        let mut text = String::new();
-        for r in &mods {
-            let Some(record) = loader.mods.get(r.owner.get()) else {
-                continue;
-            };
-            let lines = ask(*r, ActionCall::HINTS, player, language, "", "");
-            for line in lines.lines().filter(|l| !l.is_empty()) {
-                text.push_str(&sheet::clean(&record.id));
-                text.push('\t');
-                text.push_str(line);
-                text.push('\n');
-            }
-        }
-        let changed = server_state(|s| {
-            let client = s.clients.entry(key).or_default();
-            if client.hints == text {
-                return false;
-            }
-            client.hints.clone_from(&text);
-            true
-        });
-        if changed {
-            crate::net::to_player(key, &Message::ActionHints { text });
-        }
-    }
 }
 
 /// Forgets the clients, as when the server's world goes away.
@@ -370,19 +298,6 @@ pub(crate) struct ModSheet {
     pub(crate) entries: Vec<Entry>,
 }
 
-/// A hint the client heard.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Hint {
-    /// The mod.
-    pub(crate) id: String,
-    /// The action.
-    pub(crate) action: String,
-    /// Its label.
-    pub(crate) label: String,
-    /// What it acts on.
-    pub(crate) subject: String,
-}
-
 /// What the client heard from its server.
 #[derive(Debug, Default)]
 pub(crate) struct Heard {
@@ -392,8 +307,6 @@ pub(crate) struct Heard {
     incoming: crate::wire::Gathered<ModSheet, MAX_SHEETS>,
     /// The last run's outcome.
     pub(crate) result: Option<(bool, String)>,
-    /// The hints at hand.
-    pub(crate) hints: Vec<Hint>,
     /// Counts what was heard, so screens notice news.
     pub(crate) news: u64,
 }
@@ -441,26 +354,6 @@ pub(crate) fn result_heard(ok: bool, text: String) {
     hear(|heard| heard.result = Some((ok, text)));
 }
 
-/// The hints the server sent, on the client.
-pub(crate) fn hints_heard(text: &str) {
-    let hints = parse_hints(text);
-    hear(|heard| heard.hints = hints);
-}
-
-fn parse_hints(text: &str) -> Vec<Hint> {
-    text.lines()
-        .filter_map(|line| {
-            let mut fields = line.split('\t');
-            Some(Hint {
-                id: fields.next()?.to_owned(),
-                action: fields.next()?.to_owned(),
-                label: fields.next()?.to_owned(),
-                subject: fields.next()?.to_owned(),
-            })
-        })
-        .collect()
-}
-
 /// Asks the server for the player's actions; false while it takes no
 /// messages.
 pub(crate) fn ask_server() -> bool {
@@ -480,7 +373,7 @@ pub(crate) fn run_on_server(id: &str, action: &str, args: &str) -> bool {
 }
 
 /// The client joined a server that answered: it tells the server its
-/// language, which the hints need, and forgets the last server's actions.
+/// language and forgets the last server's actions.
 pub(crate) fn joined() {
     *HEARD.relock() = None;
     let _asked = ask_server();
@@ -489,20 +382,6 @@ pub(crate) fn joined() {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn hints_are_read_from_their_lines() {
-        let hints = parse_hints("you.trading-post\taccess\tWho may use it\tYour stall\nbad line\n");
-        assert_eq!(
-            hints,
-            [Hint {
-                id: "you.trading-post".into(),
-                action: "access".into(),
-                label: "Who may use it".into(),
-                subject: "Your stall".into(),
-            }]
-        );
-    }
 
     #[test]
     fn a_long_sheet_loses_players_before_actions() {

@@ -44,8 +44,7 @@ mod tests {
                     } else {
                         Ok(Subject::new(42, ask.say("locker", &[])))
                     }
-                })
-                .hint(),
+                }),
                 |request| {
                     RUNS.lock().unwrap().push(("access".into(), request.via));
                     let [Value::Player { key, name }, Value::Toggle(on)] = request.args else {
@@ -78,11 +77,6 @@ mod tests {
             assert!(
                 actions
                     .add(Action::new("access", "Taken"), |_| Outcome::done(""))
-                    .is_err()
-            );
-            assert!(
-                actions
-                    .add(Action::new("x", "No subject").hint(), |_| Outcome::done(""))
                     .is_err()
             );
             Ok(Self)
@@ -140,7 +134,7 @@ mod tests {
         let access = &sheet[0];
         assert_eq!(access.label, "Хто може користуватися");
         assert_eq!(access.help, "Let players open the locker");
-        assert!(access.per_player && access.hint && access.offered);
+        assert!(access.per_player && access.offered);
         assert_eq!(access.subject, "Твоя шафка");
         let names: Vec<&str> = access.players.iter().map(|p| p.1.as_str()).collect();
         assert_eq!(names, ["Ann", "Root"]);
@@ -234,13 +228,6 @@ mod tests {
             Some("1wipe 0 in 2")
         );
 
-        // Hints: the subject is at hand for a player with a character.
-        assert_eq!(
-            loader
-                .ask_actions(ActionCall::HINTS, &owner, 0, "", "")
-                .as_deref(),
-            Some("access\tWho may use it\tYour locker\n")
-        );
         let ghost = player(0, 5, "Ghost", false);
         assert_eq!(
             loader

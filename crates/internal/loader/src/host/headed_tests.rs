@@ -87,6 +87,7 @@ macro_rules! headed {
             TickData,
             TransactionInfo,
             UiDialog,
+            UiExtension,
             UiFrame,
             UiMarker,
             UiWidget,

@@ -18,7 +18,8 @@ use crate::abi::{
     SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef,
     StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
     TeleportRequest, TerrainEdit, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp,
-    TypeEntry, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
+    TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel,
+    WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -1042,7 +1043,7 @@ pub struct HostApi {
     /// Registers the mod's player actions: the loader asks `callback` with
     /// `user`, on the server's game thread, for the actions a player may
     /// use, to run one a player picked in the interface or the console
-    /// named, and for the hints a player has at hand. One registration per
+    /// named. One registration per
     /// mod. Allowed during
     /// `enshwick_mod_init` only.
     pub actions: extern "system" fn(me: ModHandle, callback: ActionFn, user: *mut c_void) -> Status,
@@ -1609,4 +1610,20 @@ pub struct HostApi {
     /// strings. Any thread. A panic in the loader returns
     /// [`Status::REFUSED`].
     pub run_action: extern "system" fn(me: ModHandle, action: Str, args: Str) -> Status,
+    /// Adds a panel at an edge of the game's screen `spec` names and calls
+    /// `callback` with `user` once per frame while that screen is open, on
+    /// the thread that draws the interface; the callback draws into the
+    /// panel with [`HostApi::ui_widget`], without a window of its own
+    /// ([`Status::REFUSED`] for [`UiWidget::WINDOW`] and [`UiWidget::END`]).
+    /// The panel never changes the game screen's own layout. Client only
+    /// ([`Status::MISSING`] on a server or for a screen this game build
+    /// lacks); [`Status::BAD_ARGS`] for an unknown edge or unreadable
+    /// screen name; allowed during `enshwick_mod_init` only. A panic in the
+    /// loader returns [`Status::REFUSED`].
+    pub ui_extension: extern "system" fn(
+        me: ModHandle,
+        spec: *const UiExtension,
+        callback: UiFrameFn,
+        user: *mut c_void,
+    ) -> Status,
 }

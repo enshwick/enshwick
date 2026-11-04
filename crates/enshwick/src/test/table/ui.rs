@@ -3,8 +3,8 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
-    UiWidget,
+    FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
+    UiFrameFn, UiMarker, UiWidget,
 };
 use crate::test::table::{State, text, with};
 
@@ -128,7 +128,7 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
                 id: label,
                 title: text(w.detail),
             },
-            UiWidget::END if open => Drawn::End,
+            UiWidget::END if open && s.extending != Some(frame) => Drawn::End,
             UiWidget::SOUND => Drawn::Sound(w.style),
             UiWidget::WINDOW | UiWidget::END => return Status::REFUSED,
             _ if !open => return Status::REFUSED,
@@ -202,6 +202,31 @@ pub(crate) extern "system" fn ui_hud(
             return Status::MISSING;
         }
         s.huds.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+/// Records an extension of a game screen, as the loader takes it: client
+/// only, a known edge and a readable screen name.
+pub(crate) extern "system" fn ui_extension(
+    _me: ModHandle,
+    spec: *const UiExtension,
+    callback: UiFrameFn,
+    user: *mut c_void,
+) -> Status {
+    let Some(spec) = super::get_headed(spec) else {
+        return Status::BAD_ARGS;
+    };
+    let screen = text(spec.screen);
+    if spec.edge > UiExtension::BOTTOM || screen.is_empty() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::MISSING;
+        }
+        s.extensions
+            .push((screen, spec.edge, callback, user.expose_provenance()));
         Status::OK
     })
 }

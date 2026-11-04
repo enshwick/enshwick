@@ -405,7 +405,6 @@ fn back(screen: &mut Screen) -> bool {
         Back::ServerList => open_server_list(screen),
         Back::Inside => {
             let done = match &mut screen.page {
-                Page::Actions(view) => view.back(),
                 Page::Controls(view) => view.back(),
                 _ => true,
             };
@@ -544,7 +543,7 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             match list(loader, paint, first) {
                 Listed::Settings(index) => settings_page(loader, from, index),
                 Listed::Actions(id) => {
-                    Next::Page(Page::Actions(super::actions::View::new(id, None)), None)
+                    Next::Page(Page::Actions(super::actions::View::new(id)), None)
                 }
                 Listed::Controls => Next::Page(Page::Controls(controls::View::default()), None),
                 Listed::Nothing => Next::Stay,

@@ -17,8 +17,8 @@ pub(super) enum Listed {
     Nothing,
     /// Opened mod `index`'s settings.
     Settings(usize),
-    /// Opened the actions of the mod with this id, or of every mod.
-    Actions(Option<String>),
+    /// Opened the actions of the mod with this id.
+    Actions(String),
     /// Opened the controls page.
     Controls,
 }
@@ -106,9 +106,6 @@ fn parts_off(paint: &Painter<'_>) {
 pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     let mods = &loader.mods;
     let mut done = Listed::Nothing;
-    if actions::any_offered() && paint.button(texts::text("actions").as_bytes(), true) {
-        done = Listed::Actions(None);
-    }
     if super::controls::any() && paint.button(texts::text("controls").as_bytes(), true) {
         done = Listed::Controls;
     }
@@ -147,7 +144,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             }
         }
         if actions::offers(&record.id) && paint.button(texts::text("actions").as_bytes(), true) {
-            done = Listed::Actions(Some(record.id.clone()));
+            done = Listed::Actions(record.id.clone());
         }
         let settings = record
             .settings_schema()

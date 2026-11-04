@@ -11,7 +11,6 @@
 "actions.players.previous" = "Previous players"
 "actions.no-players" = "No other players are online."
 "actions.close" = "Close"
-"actions.hint" = "[{key}] {label}: {subject}"
 "controls" = "Controls"
 "controls.key" = "Key: {key}"
 "controls.second" = "Second key: {key}"

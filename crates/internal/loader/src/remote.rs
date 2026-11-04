@@ -37,8 +37,6 @@ pub const ACTIONS_SHEET: u8 = 13;
 pub const ACTION_RUN: u8 = 14;
 /// The server's answer to a run.
 pub const ACTION_RESULT: u8 = 15;
-/// The actions with a hint the player has at hand.
-pub const ACTION_HINTS: u8 = 16;
 
 /// The least time between two changes one player sends.
 pub const EDIT_GAP: Duration = Duration::from_millis(250);
@@ -147,12 +145,6 @@ pub enum Message {
         /// What the player reads.
         text: String,
     },
-    /// The actions with a hint the player has at hand: a line
-    /// `mod<TAB>action<TAB>label<TAB>subject` each.
-    ActionHints {
-        /// The lines.
-        text: String,
-    },
 }
 
 fn put(out: &mut Vec<u8>, text: &str) {
@@ -184,7 +176,6 @@ impl Message {
             Self::ActionsSheet { .. } => ACTIONS_SHEET,
             Self::ActionRun { .. } => ACTION_RUN,
             Self::ActionResult { .. } => ACTION_RESULT,
-            Self::ActionHints { .. } => ACTION_HINTS,
         }
     }
 
@@ -256,7 +247,6 @@ impl Message {
                 put(&mut out, action);
                 put(&mut out, args);
             }
-            Self::ActionHints { text } => put(&mut out, text),
         }
         out
     }
@@ -336,9 +326,6 @@ impl Message {
                     text: take(bytes)?.to_owned(),
                 }
             }
-            ACTION_HINTS => Self::ActionHints {
-                text: take(bytes)?.to_owned(),
-            },
             _ => return None,
         })
     }

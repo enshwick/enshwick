@@ -11,7 +11,6 @@
 "actions.players.previous" = "Poprzedni gracze"
 "actions.no-players" = "Nie ma innych graczy online."
 "actions.close" = "Zamknij"
-"actions.hint" = "[{key}] {label}: {subject}"
 "controls" = "Sterowanie"
 "controls.key" = "Klawisz: {key}"
 "controls.second" = "Drugi klawisz: {key}"

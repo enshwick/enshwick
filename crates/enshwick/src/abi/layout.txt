@@ -1,4 +1,4 @@
-abi 11.3
+abi 11.4
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 144 align 8 born 144
@@ -299,7 +299,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1480 align 8
+HostApi size 1488 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -484,6 +484,7 @@ HostApi size 1480 align 8
     game_version at 1456 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
     control at 1464 size 8 type extern "system" fn(ModHandle, *const ControlSpec, unsafe extern "system" fn(*const ControlEvent, *mut c_void), *mut c_void) -> Status
     run_action at 1472 size 8 type extern "system" fn(ModHandle, Str, Str) -> Status
+    ui_extension at 1480 size 8 type extern "system" fn(ModHandle, *const UiExtension, unsafe extern "system" fn(*const UiFrame, *mut c_void), *mut c_void) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -935,6 +936,11 @@ UiDialog size 64 align 8 born 64
     detail at 40 size 16 type Str
     buttons at 56 size 4 type u32
     flags at 60 size 4 type u32
+UiExtension size 32 align 8 born 32
+    header at 0 size 8 type Header
+    screen at 8 size 16 type Str
+    edge at 24 size 4 type u32
+    reserved at 28 size 4 type u32
 UiFrame size 24 align 8 born 24
     header at 0 size 8 type Header
     token at 8 size 8 type u64

@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 3
+#define ENSHWICK_ABI_MINOR 4
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -124,8 +124,8 @@ typedef struct EnshwickStr {
 typedef struct EnshwickActionCall {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What the loader asks: `ActionCall::SHEET`, `ActionCall::RUN`,
-  // `ActionCall::HINTS` or `ActionCall::CONSOLE`.
+  // What the loader asks: `ActionCall::SHEET`, `ActionCall::RUN` or
+  // `ActionCall::CONSOLE`.
   uint32_t kind;
   // The language the player reads the game in, a
   // `Language` value.
@@ -145,9 +145,6 @@ typedef struct EnshwickActionCall {
 // The player runs an action from the interface: the reply is `1` or
 // `0`, whether it was done, and the text the player reads.
 #define EnshwickActionCall_RUN 1
-// The actions with a hint that the player has at hand now: a line
-// `<id><TAB><label><TAB><subject>` each.
-#define EnshwickActionCall_HINTS 2
 // The server's console runs an action from its text form, such as
 // `access Ann on`, in `action`: the action's id and its values as
 // words; `help` or nothing lists the actions. `player` is the console,
@@ -2942,6 +2939,30 @@ typedef struct EnshwickTypeEntry {
 // control with a key and a game action may run on the two threads at once.
 typedef void (*EnshwickControlFn)(const struct EnshwickControlEvent *event, void *user);
 
+// An element a mod adds to one of the game's screens, registered with
+// `HostApi::ui_extension`: a panel at an edge of
+// the screen that shows and hides with it.
+typedef struct EnshwickUiExtension {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The game's screen, by the name of its member of the game's screen
+  // kinds, such as `StorageChest`. Valid for the call.
+  struct EnshwickStr screen;
+  // The screen's edge the panel sits at: `UiExtension::LEFT` to
+  // `UiExtension::BOTTOM`.
+  uint32_t edge;
+  // Zero.
+  uint32_t reserved;
+} EnshwickUiExtension;
+// The left edge, centred from top to bottom.
+#define EnshwickUiExtension_LEFT 0
+// The right edge, centred from top to bottom.
+#define EnshwickUiExtension_RIGHT 1
+// The top edge, centred from left to right.
+#define EnshwickUiExtension_TOP 2
+// The bottom edge, centred from left to right.
+#define EnshwickUiExtension_BOTTOM 3
+
 // The table of services the loader offers a mod.
 //
 // A function appended at its end is a new
@@ -3906,7 +3927,7 @@ typedef struct EnshwickHostApi {
   // Registers the mod's player actions: the loader asks `callback` with
   // `user`, on the server's game thread, for the actions a player may
   // use, to run one a player picked in the interface or the console
-  // named, and for the hints a player has at hand. One registration per
+  // named. One registration per
   // mod. Allowed during
   // `enshwick_mod_init` only.
   EnshwickStatus (*actions)(EnshwickModHandle me, EnshwickActionFn callback, void *user);
@@ -4436,6 +4457,20 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*run_action)(EnshwickModHandle me,
                                struct EnshwickStr action,
                                struct EnshwickStr args);
+  // Adds a panel at an edge of the game's screen `spec` names and calls
+  // `callback` with `user` once per frame while that screen is open, on
+  // the thread that draws the interface; the callback draws into the
+  // panel with `HostApi::ui_widget`, without a window of its own
+  // (`Status::REFUSED` for `UiWidget::WINDOW` and `UiWidget::END`).
+  // The panel never changes the game screen's own layout. Client only
+  // (`Status::MISSING` on a server or for a screen this game build
+  // lacks); `Status::BAD_ARGS` for an unknown edge or unreadable
+  // screen name; allowed during `enshwick_mod_init` only. A panic in the
+  // loader returns `Status::REFUSED`.
+  EnshwickStatus (*ui_extension)(EnshwickModHandle me,
+                                 const struct EnshwickUiExtension *spec,
+                                 EnshwickUiFrameFn callback,
+                                 void *user);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

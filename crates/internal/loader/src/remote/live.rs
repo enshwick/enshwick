@@ -119,7 +119,6 @@ pub(crate) fn client(message: Message) {
             text,
         } => crate::actions::sheet_heard(first, last, id, label, &text),
         Message::ActionResult { ok, text } => crate::actions::result_heard(ok, text),
-        Message::ActionHints { text } => crate::actions::hints_heard(&text),
         Message::Query { .. }
         | Message::Edit { .. }
         | Message::ActionsQuery { .. }
@@ -201,8 +200,7 @@ fn answer(loader: &Loader, key: u64, message: Message) {
         | Message::Result { .. }
         | Message::Recipes { .. }
         | Message::ActionsSheet { .. }
-        | Message::ActionResult { .. }
-        | Message::ActionHints { .. } => {}
+        | Message::ActionResult { .. } => {}
     }
 }
 

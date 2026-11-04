@@ -14,7 +14,9 @@
 //! [`Load::on_hud`] draws lines and bars on the HUD each frame, at an
 //! [`Anchor`], hidden with the game's HUD; `Ui::set_markers`, with the
 //! `unstable` feature, shows the mod's markers on the map until it sets
-//! others.
+//! others. `Load::extend_screen`, with the `unstable` feature, adds a panel
+//! at an edge of one of the game's screens, such as a storage chest's, shown
+//! and hidden with it.
 //!
 //! Everything here is client only: [`Load::ui`] and [`Load::on_frame`] turn
 //! a mod's server part away with [`Off`].
@@ -49,6 +51,8 @@ use crate::abi::{Status, UiDialog};
 use crate::{Host, Load, Off};
 
 mod dialog;
+#[cfg(feature = "unstable")]
+mod extension;
 mod frame;
 mod hud;
 #[cfg(feature = "unstable")]
@@ -62,6 +66,8 @@ pub use widgets::{Button, Dropdown, Label, Screen, Slider, Sound, Style, Toggle}
 use dialog::{Answer, answered};
 use frame::{Drawer, draw_frame};
 
+#[cfg(feature = "unstable")]
+pub use extension::{Edge, HudScreenType};
 pub use hud::{Anchor, Hud};
 #[cfg(feature = "unstable")]
 pub use map::{MAX_MARKERS, Marker, MarkerColor};

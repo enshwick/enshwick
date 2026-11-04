@@ -1,3 +1,4 @@
+// Long file: the fake's one state struct and its `HostApi` table, which grow with every ABI entry.
 //! The loader's table, answering from the installed fake.
 
 use std::sync::{Mutex, MutexGuard};
@@ -68,7 +69,8 @@ use transactions::{
     transaction_undo,
 };
 use ui::{
-    fog_open, fog_read, map_marker_types, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget,
+    fog_open, fog_read, map_marker_types, ui_dialog, ui_extension, ui_frame, ui_hud, ui_markers,
+    ui_widget,
 };
 use world::{
     account_action, actions, build_rights, chat, chat_mute_has, chat_mute_set, component,
@@ -211,6 +213,11 @@ pub(crate) struct State {
     pub(crate) frames: Vec<(UiFrameFn, usize)>,
     /// HUD callbacks: callback and pointer.
     pub(crate) huds: Vec<(UiFrameFn, usize)>,
+    /// Extensions of game screens: screen name, edge, callback and pointer.
+    pub(crate) extensions: Vec<(String, u32, UiFrameFn, usize)>,
+    /// The frame token of the extension drawing now, whose window the
+    /// loader opened.
+    pub(crate) extending: Option<u64>,
     /// What the HUD drawing now drew, with each item's anchor, while one
     /// draws.
     pub(crate) hud: Option<(u64, Vec<(u32, super::Drawn)>)>,
@@ -623,6 +630,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         notices: Vec::new(),
         frames: Vec::new(),
         huds: Vec::new(),
+        extensions: Vec::new(),
+        extending: None,
         hud: None,
         markers: Vec::new(),
         config_checks: std::collections::BTreeMap::new(),
@@ -994,4 +1003,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     game_version,
     control,
     run_action,
+    ui_extension,
 };

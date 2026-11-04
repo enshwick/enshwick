@@ -197,6 +197,9 @@ pub(super) fn draw(
         return Status::BAD_ARGS;
     };
     let read_only = raw.flags & UiWidget::READ_ONLY != 0;
+    if drawing.extension && matches!(raw.kind, UiWidget::WINDOW | UiWidget::END) {
+        return Status::REFUSED;
+    }
     let order = widget_checks::order(raw.kind, drawing.window_open);
     if !order.is_ok() {
         return order;

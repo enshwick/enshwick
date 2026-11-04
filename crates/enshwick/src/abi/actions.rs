@@ -35,8 +35,8 @@ use crate::abi::{Entity, Header, PlayerInfo, Str};
 pub struct ActionCall {
     /// Size and version of this struct.
     pub header: Header,
-    /// What the loader asks: [`ActionCall::SHEET`], [`ActionCall::RUN`],
-    /// [`ActionCall::HINTS`] or [`ActionCall::CONSOLE`].
+    /// What the loader asks: [`ActionCall::SHEET`], [`ActionCall::RUN`] or
+    /// [`ActionCall::CONSOLE`].
     pub kind: u32,
     /// The language the player reads the game in, a
     /// [`Language`](crate::i18n::Language) value.
@@ -60,9 +60,6 @@ impl ActionCall {
     /// The player runs an action from the interface: the reply is `1` or
     /// `0`, whether it was done, and the text the player reads.
     pub const RUN: u32 = 1;
-    /// The actions with a hint that the player has at hand now: a line
-    /// `<id><TAB><label><TAB><subject>` each.
-    pub const HINTS: u32 = 2;
     /// The server's console runs an action from its text form, such as
     /// `access Ann on`, in `action`: the action's id and its values as
     /// words; `help` or nothing lists the actions. `player` is the console,
