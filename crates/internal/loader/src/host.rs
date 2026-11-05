@@ -403,67 +403,22 @@ impl Loader {
 
     /// Whether the code at symbol `id` is what the table expects, checked
     /// before a hook patches it or a detour relies on it, by
-    /// [`crate::builds::code_holds`]: on the build the table was made for,
-    /// the symbol's pattern matches where its code starts, when its pattern
-    /// finds it directly, its first eight bytes are the table's
-    /// `<id>.bytes`, when the table pins them, and its whole function holds
-    /// the table's body, when the table has one. A table carried over already
-    /// made every check while it found the symbol, so there only the
-    /// presence of a check counts; so does an engine route that found the
-    /// symbol, whose own match checks its code. False for a symbol the build
-    /// lacks.
+    /// [`crate::builds::code_holds`]: the anchors made every check of a
+    /// symbol while they found it (its pattern where its code starts, its
+    /// `<id>.bytes`, its whole function's body), so the presence of a check
+    /// counts; so does an engine route that found the symbol, whose own
+    /// match checks its code. False for a symbol the build lacks.
     pub(crate) fn code_holds(&self, id: Symbol) -> bool {
-        let Some(address) = self.address(id) else {
+        if self.address(id).is_none() {
             return false;
-        };
-        let exact = self.build.kind == crate::builds::Kind::Exact;
-        let head = self.build.head(id.id()).map(|(pattern, at)| {
-            !exact || {
-                let Some(start) = address
-                    .checked_sub(at)
-                    .and_then(|a| usize::try_from(a).ok())
-                else {
-                    return false;
-                };
-                let mut code = vec![0u8; pattern.len()];
-                // SAFETY: `start` is the table's `id` less the distance its
-                // pattern starts before it, code inside the game's image,
-                // which stays mapped and readable for the life of the
-                // process; a pattern spans code of the function it was made
-                // from, which the table checks against its build.
-                unsafe { crate::memory::read_bytes(start, 0, &mut code) };
-                pattern.matches(&code)
-            }
-        });
-        let bytes = self.build.constant(&format!("{id}.bytes")).map(|expected| {
-            !exact || {
-                let Ok(code) = usize::try_from(address) else {
-                    return false;
-                };
-                // SAFETY: `code` is the table's `id`, eight bytes of code
-                // inside the game's image, which stays mapped and
-                // readable for the life of the process and is not
-                // patched before this check.
-                let found: u64 = unsafe { crate::memory::read(code, 0) };
-                found == expected
-            }
-        });
-        let body = self.build.body(id.id()).map(|body| {
-            !exact || {
-                let Ok(start) = usize::try_from(address) else {
-                    return false;
-                };
-                let mut code = vec![0u8; body.len()];
-                // SAFETY: `start` is the table's `id`, the first byte of a
-                // function of `body.len()` bytes inside the game's image,
-                // which stays mapped and readable for the life of the
-                // process and is not patched before this check.
-                unsafe { crate::memory::read_bytes(start, 0, &mut code) };
-                body.holds(&code)
-            }
-        });
-        let routed = self.build.routed(id.id()).then_some(true);
-        crate::builds::code_holds(&[head, bytes, body, routed])
+        }
+        let checked = |present: bool| present.then_some(true);
+        crate::builds::code_holds(&[
+            checked(self.build.head(id.id()).is_some()),
+            checked(self.build.constant(&format!("{id}.bytes")).is_some()),
+            checked(self.build.body(id.id()).is_some()),
+            checked(self.build.routed(id.id())),
+        ])
     }
 
     /// [`Loader::link`] for a feature, after checking its target: a table

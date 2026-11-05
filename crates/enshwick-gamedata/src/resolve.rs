@@ -267,6 +267,34 @@ impl Resolved {
         routing
     }
 
+    /// Counts entry `id` as [`Self::missing`] when the table has no row for
+    /// it, such as an entry whose engine route found nothing on a build its
+    /// anchors do not cover; whether it was added.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::{Side, anchors};
+    ///
+    /// let mut resolved = anchors(Side::Server)?.fall_back(&[], 0, |_| None);
+    /// assert!(resolved.lack("f.unrouted"));
+    /// assert!(!resolved.lack("f.unrouted"));
+    /// assert!(resolved.missing().iter().any(|id| id == "f.unrouted"));
+    /// # Ok::<(), enshwick_gamedata::TableError>(())
+    /// ```
+    pub fn lack(&mut self, id: &str) -> bool {
+        if self.symbol(id).is_some() || self.constant(id).is_some() {
+            return false;
+        }
+        match self.missing.binary_search_by(|have| have.as_str().cmp(id)) {
+            Ok(_) => false,
+            Err(at) => {
+                self.missing.insert(at, id.to_owned());
+                true
+            }
+        }
+    }
+
     /// Whether an engine route found entry `id`, whose code the route's own
     /// match then checks.
     ///
@@ -308,6 +336,26 @@ fn find(entries: &[(String, u64)], id: &str) -> Option<u64> {
 /// ```
 pub fn anchors(side: Side) -> Result<Table, TableError> {
     Table::anchors(include_str!("../anchors/patterns.toml"), side)
+}
+
+/// Whether a compatibility report of this crate covers the build of `side`
+/// with `fingerprint`: a build the tests ran the anchors and routes on.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::{Fingerprint, Side, reported};
+///
+/// assert!(!reported(Side::Server, Fingerprint::new([0xee; 16], 1)));
+/// ```
+#[must_use]
+pub fn reported(side: Side, fingerprint: Fingerprint) -> bool {
+    let builds: &[(&str, &str, u32)] = include!(concat!(env!("OUT_DIR"), "/reported.rs"));
+    builds.iter().any(|&(s, guid, age)| {
+        s == side.as_str()
+            && age == fingerprint.age()
+            && crate::table::parse_guid(guid) == Some(fingerprint.guid())
+    })
 }
 
 /// Every table this crate embeds, as `(file name, text)`: the tables of the

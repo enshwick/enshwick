@@ -36,7 +36,7 @@ pub use parts::{Part, PartState};
 
 pub use entries::{Body, Constant, Locate, Operand, Symbol, Witness};
 pub use reflect::Fingerprint;
-pub use resolve::{Kind, Resolved, Routing, anchors, embedded, exact, newest};
+pub use resolve::{Kind, Resolved, Routing, anchors, embedded, exact, newest, reported};
 pub use routes::{Routed, Routes, ShapeNames, check_holds, make_check, shape_checks};
 pub use table::{MAX_PATTERN, Table, TableError, file_name};
 pub use version::{GameVersion, SteamBuild};

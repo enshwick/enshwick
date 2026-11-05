@@ -909,7 +909,7 @@ pub fn file_name(side: Side, fingerprint: Fingerprint) -> String {
 
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
-fn parse_guid(text: &str) -> Option<[u8; 16]> {
+pub(crate) fn parse_guid(text: &str) -> Option<[u8; 16]> {
     let digits = text.as_bytes();
     if digits.len() != 32 {
         return None;

@@ -132,11 +132,7 @@ pub(crate) fn supply(
     let slots = match read(archive, reflection) {
         Ok(slots) => slots,
         Err(why) => {
-            let held = match build.kind {
-                crate::builds::Kind::Exact => "attribute slots are the build table's",
-                crate::builds::Kind::Fallback => "attribute slots stay unknown",
-            };
-            crate::log!(WARN, "{why}: {held}");
+            crate::log!(WARN, "{why}: attribute slots stay unknown");
             return;
         }
     };

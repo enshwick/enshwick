@@ -1,40 +1,36 @@
-//! The running build's table of engine functions and constants that
-//! reflection does not describe, pinned by symbolic id as SKSE's Address
-//! Library does.
+//! The engine functions and constants that reflection does not describe,
+//! found on the running build by symbolic id as SKSE's Address Library pins
+//! them.
 //!
-//! The tables come as data (`enshwick-gamedata`), embedded in the
-//! loader. A build with its own table
-//! uses it whole, after its systems are checked against reflection. On a
-//! build without one, the newest table of the same side finds each entry by
-//! its code pattern, and what it cannot find stays missing: the features and
-//! mods that need it turn off, the rest runs.
+//! Every build is found the same way, with no table made for it: the
+//! anchors of `enshwick-gamedata` carried by their code patterns, then the
+//! engine routes. What neither finds stays missing: the features and mods
+//! that need it turn off, the rest runs.
 
+use std::path::Path;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::abi::Side;
 use enshwick_gamedata::reflect::Fingerprint;
-use enshwick_gamedata::{self as tables, Part, PartState, Resolved, Routing, Table};
+use enshwick_gamedata::{self as tables, Part, PartState, Resolved, Routing, SteamBuild};
 
-pub use enshwick_gamedata::Kind;
-
-/// Whether a build without a table runs on patterns; set from the settings.
+/// Whether a build no compatibility report covers runs; set from the
+/// settings.
 static PATTERNS: AtomicBool = AtomicBool::new(true);
 
-/// Sets whether a build without a table runs on its patterns.
+/// Sets whether a build no compatibility report covers runs on its anchors
+/// and routes.
 pub fn configure(patterns: bool) {
     PATTERNS.store(patterns, Ordering::Release);
 }
 
-/// The table the running build uses.
+/// What the running build has of the entries the loader knows.
 #[derive(Debug)]
 pub struct KnownBuild {
-    /// For the log, such as `1.0 server (1269579)`.
+    /// For the log, such as `server, Steam build 26430253, game 1287369,
+    /// executable <guid>/<age>`.
     pub name: String,
-    /// Whether the table was made for this build.
-    pub kind: Kind,
-    /// The name of the table a build without its own carries.
-    carried: Option<String>,
     table: Resolved,
     /// The names of the parts [`Self::lacking`] found, once asked.
     lacking: OnceLock<String>,
@@ -137,18 +133,24 @@ impl KnownBuild {
         })
     }
 
-    /// `reason` for entry `id` as this build tells it: on a build without a
-    /// table, an [`ABSENT`] entry is one the carried table lacks or one its
-    /// pattern did not find.
+    /// `reason` for entry `id` as this build tells it: an [`ABSENT`] entry
+    /// is one its anchor's pattern did not find, or one with no anchor that
+    /// no engine route found.
     #[must_use]
     pub fn reason<'a>(&self, id: &str, reason: &'a str) -> &'a str {
-        if self.kind != Kind::Fallback || reason != ABSENT {
+        if reason != ABSENT {
             reason
         } else if self.missing().iter().any(|m| m == id) {
-            "is not found by the carried table's patterns"
+            "is not found by its anchor's pattern"
         } else {
-            "is not in the carried table"
+            "is found by no engine route or anchor"
         }
+    }
+
+    /// Whether the build has every entry the loader knows: nothing missing.
+    #[must_use]
+    pub fn complete(&self) -> bool {
+        self.missing().is_empty()
     }
 
     /// How many symbols and constants this build has.
@@ -164,10 +166,11 @@ impl KnownBuild {
         self.table.routed(id)
     }
 
-    /// Takes into the table what `routes` find in `image` for the running
-    /// `side`: each entry a route finds is the engine's, and one the table
-    /// pins elsewhere goes off with a warning; the entries no route finds
-    /// keep their table row. The number of entries routed.
+    /// Takes into the build what `routes` find in `image` for the running
+    /// `side`: each entry a route finds is the engine's, and one an anchor
+    /// finds elsewhere goes off with a warning; an entry no route finds
+    /// keeps its anchor's answer, and one without an anchor is missing. The
+    /// number of entries routed.
     pub fn route(
         &mut self,
         routes: &tables::Routes,
@@ -185,66 +188,61 @@ impl KnownBuild {
                 Routing::Agrees | Routing::Supplied => count += 1,
                 Routing::Conflict { table, engine } => crate::log!(
                     WARN,
-                    "{id} off on {}: its engine route finds {engine:#x}, the build table {table:#x} ({})",
+                    "{id} off on {}: its engine route finds {engine:#x}, its anchor {table:#x} ({})",
                     self.name,
                     crate::errors::TABLE_MISMATCH
                 ),
-                _ => unfound.push(id),
+                _ => {
+                    self.table.lack(id);
+                    unfound.push(id);
+                }
             }
         }
         if !unfound.is_empty() {
             crate::log!(
                 DEBUG,
-                "not found by their engine route, so taken from the build table: {}",
+                "not found by their engine route: {}",
                 unfound.join(", ")
             );
         }
         count
     }
 
-    /// The start's line about this build, run as `fingerprint`, once the
-    /// engine routes ran: a build without its own table that misses nothing
-    /// and keeps no row from carrying logs at info, and only one that lacks
-    /// entries warns.
+    /// The start's line about this build, once the engine routes ran: at
+    /// info when nothing is missing, else a warning with the count.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::abi::{Level, Side};
-    /// use enshwick_gamedata::Fingerprint;
     ///
-    /// use enshwick_loader::builds::{load, select};
+    /// use enshwick_loader::builds::by_patterns;
     ///
-    /// let unknown = Fingerprint::new([0xee; 16], 1);
     /// let code = [0u8; 64];
-    /// let build = select(&load(), Side::SERVER, unknown, Some((&code, 0x1000)), |_| None)
-    ///     .ok_or("no server table")?;
-    /// let (level, line) = build.start_line(unknown);
+    /// let build = by_patterns(Side::SERVER, "server".into(), (&code, 0x1000), |_| None)
+    ///     .ok_or("no server anchors")?;
+    /// let (level, line) = build.start_line();
     /// assert_eq!(level, Level::WARN, "{line}");
     /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
-    pub fn start_line(&self, fingerprint: Fingerprint) -> (enshwick::abi::Level, String) {
+    pub fn start_line(&self) -> (enshwick::abi::Level, String) {
         use enshwick::abi::Level;
-        if self.kind == Kind::Exact {
-            return (Level::INFO, format!("game: {}", self.name));
-        }
-        if self.missing().is_empty() && self.table.uncarried().is_empty() {
+        if self.complete() {
             return (
                 Level::INFO,
                 format!(
-                    "game build {} runs without its own table: {} entries found by engine routes and the patterns of {}",
-                    fingerprint_name(fingerprint),
-                    self.entries(),
-                    self.carried.as_deref().unwrap_or(self.table.name())
+                    "game: {}, {} entries found by engine routes and anchors",
+                    self.name,
+                    self.entries()
                 ),
             );
         }
         (
             Level::WARN,
             format!(
-                "game build {} has no build table yet: {} entries found by engine routes or their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table ({})",
-                fingerprint_name(fingerprint),
+                "game: {}, {} entries found by engine routes and anchors, {} missing; features and mods that need a missing one stay off until a loader release finds it ({})",
+                self.name,
                 self.entries(),
                 self.missing().len(),
                 crate::errors::FEATURES_OFF
@@ -261,67 +259,60 @@ fn side(side: Side) -> Option<tables::Side> {
     }
 }
 
-/// Every table the loader embeds; one that does not read is logged and
-/// skipped.
+/// Every kept build's table, for tests that compare with what a build pins.
+#[cfg(test)]
 #[must_use]
-pub fn load() -> Vec<Table> {
+pub fn load() -> Vec<tables::Table> {
     tables::embedded()
         .iter()
-        .filter_map(|(file, text)| match Table::parse(text) {
-            Ok(table) => Some(table),
-            Err(e) => {
-                crate::log!(ERROR, "embedded build table {file}: {e}");
-                None
-            }
-        })
+        .map(|(_, text)| tables::Table::parse(text).unwrap())
         .collect()
 }
 
-/// The table for the running build among `tables`.
-///
-/// Its own when there is one; else, unless the settings turned it off, the
-/// newest table of its side carried over by patterns in `code` (the code
-/// section and its RVA), with `cell` reading the `u32` the game's image
-/// holds at an RVA for the constants the game keeps in data cells.
+/// The running build as the loader finds it: unless the settings turned
+/// off builds no compatibility report covers, [`by_patterns`]; the engine
+/// routes come after ([`KnownBuild::route`]).
 #[must_use]
 pub fn select(
-    tables: &[Table],
     running: Side,
     fingerprint: Fingerprint,
+    name: String,
     code: Option<(&[u8], u64)>,
     cell: impl Fn(u64) -> Option<u32> + Sync,
 ) -> Option<KnownBuild> {
-    let side = side(running)?;
-    if let Some(table) = tables::exact(tables, side, fingerprint) {
-        return Some(KnownBuild {
-            name: table.name().to_owned(),
-            kind: Kind::Exact,
-            carried: None,
-            table: table.resolve(),
-            lacking: OnceLock::new(),
-        });
-    }
-    if !PATTERNS.load(Ordering::Acquire) {
+    let reported = tables::reported(side(running)?, fingerprint);
+    if !reported && !PATTERNS.load(Ordering::Acquire) {
         return None;
     }
-    let (code, code_rva) = code?;
-    let base = tables::newest(tables, side)?;
-    let table = base.fall_back(code, code_rva, cell);
+    by_patterns(running, name, code?, cell)
+}
+
+/// The anchors of `running`'s side carried to the build by their patterns
+/// in `code` (the code section and its RVA), with `cell` reading the `u32`
+/// the game's image holds at an RVA for the constants the game keeps in
+/// data cells; `None` when the anchors do not read, which is logged.
+#[must_use]
+pub fn by_patterns(
+    running: Side,
+    name: String,
+    code: (&[u8], u64),
+    cell: impl Fn(u64) -> Option<u32> + Sync,
+) -> Option<KnownBuild> {
+    let anchors = match tables::anchors(side(running)?) {
+        Ok(anchors) => anchors,
+        Err(e) => {
+            crate::log!(ERROR, "embedded anchors: {e}");
+            return None;
+        }
+    };
     Some(KnownBuild {
-        name: format!(
-            "build {}, carried table {}",
-            fingerprint_name(fingerprint),
-            base.name()
-        ),
-        kind: Kind::Fallback,
-        carried: Some(base.name().to_owned()),
-        table,
+        name,
+        table: anchors.fall_back(code.0, code.1, cell),
         lacking: OnceLock::new(),
     })
 }
 
-/// A build as its fingerprint names it, `<guid>/<age>`, for a build no
-/// table names.
+/// A build as its fingerprint names it, `<guid>/<age>`.
 #[must_use]
 pub fn fingerprint_name(fingerprint: Fingerprint) -> String {
     use core::fmt::Write as _;
@@ -336,25 +327,52 @@ pub fn fingerprint_name(fingerprint: Fingerprint) -> String {
     name
 }
 
-/// The newest table of `running`'s side carried over by patterns in `code`
-/// even when the build has its own, to see what the patterns alone carry;
-/// `cell` reads as for [`select`].
+/// The Steam app ids of the client and the dedicated server.
+const APPS: [(Side, u32); 2] = [(Side::CLIENT, 1_203_620), (Side::SERVER, 2_278_520)];
+
+/// The Steam build of the game in `game_dir` on `running`'s side, from the
+/// appmanifest Steam keeps beside its library (`steamapps/`, two folders
+/// up) or SteamCMD inside the install (`steamapps/` in it).
 #[must_use]
-pub fn by_patterns(
-    tables: &[Table],
-    running: Side,
-    code: (&[u8], u64),
-    cell: impl Fn(u64) -> Option<u32> + Sync,
-) -> Option<KnownBuild> {
-    let base = tables::newest(tables, side(running)?)?;
-    let table = base.fall_back(code.0, code.1, cell);
-    Some(KnownBuild {
-        name: table.name().to_owned(),
-        kind: Kind::Fallback,
-        carried: Some(base.name().to_owned()),
-        table,
-        lacking: OnceLock::new(),
+pub fn steam_build(game_dir: &Path, running: Side) -> Option<SteamBuild> {
+    let (_, app) = APPS.iter().find(|(side, _)| *side == running)?;
+    let file = format!("appmanifest_{app}.acf");
+    let library = game_dir.parent()?.parent()?.join(&file);
+    let text = std::fs::read_to_string(game_dir.join("steamapps").join(&file))
+        .or_else(|_| std::fs::read_to_string(library))
+        .ok()?;
+    manifest_build(&text)
+}
+
+/// The `buildid` of an appmanifest's text.
+fn manifest_build(text: &str) -> Option<SteamBuild> {
+    text.lines().find_map(|line| {
+        let mut quoted = line.split('"').skip(1).step_by(2);
+        (quoted.next()? == "buildid")
+            .then(|| quoted.next()?.parse().ok().map(SteamBuild::new))
+            .flatten()
     })
+}
+
+/// The running build's name for the log and the status report: its side,
+/// then the Steam build, the game version its archive states and the
+/// executable's fingerprint, each where it reads.
+#[must_use]
+pub fn build_name(
+    running: Side,
+    steam: Option<SteamBuild>,
+    version: Option<&str>,
+    fingerprint: Fingerprint,
+) -> String {
+    let side = side(running).map_or("game", tables::Side::as_str);
+    let steam = steam.map(|b| format!("Steam build {b}, "));
+    let version = version.map(|v| format!("game {v}, "));
+    format!(
+        "{side}, {}{}executable {}",
+        steam.unwrap_or_default(),
+        version.unwrap_or_default(),
+        fingerprint_name(fingerprint)
+    )
 }
 
 /// Whether the code a hook relies on holds, from the checks its table offers.
@@ -421,7 +439,7 @@ pub const fn reflection_read(types: usize, systems: usize) -> bool {
     types > 0 && systems > 0
 }
 
-/// The embedded table of `side`'s newest build, for tests.
+/// What the newest kept build of `side` pins, for tests.
 ///
 /// # Panics
 ///
@@ -434,8 +452,6 @@ pub fn embedded(running: Side) -> KnownBuild {
     let table = tables::newest(&tables, side).unwrap();
     KnownBuild {
         name: table.name().to_owned(),
-        kind: Kind::Exact,
-        carried: None,
         table: table.resolve(),
         lacking: OnceLock::new(),
     }

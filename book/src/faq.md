@@ -69,7 +69,7 @@ when the mod itself returned `Err(Off)` from `init`, the line before it, at
 
 | Message in the loader's log                                                                         | What it means                                                                         |
 | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `unknown game build <guid>/<age>; the game runs vanilla until Enshwick has its build table`     | The game was updated and `build_patterns = false` in `enshwick.toml`                  |
+| `unknown game build <guid>/<age>; the game runs vanilla until an Enshwick release reports it`   | The game was updated and `build_patterns = false` in `enshwick.toml`                  |
 | `<name> is not where the build table says; nothing loads`                                       | The build looks known but does not match; treat it as unknown                         |
 | `this is not Enshrouded or its dedicated server; nothing loads`                                 | `powrprof.dll` was loaded by another program                                          |
 
