@@ -97,11 +97,54 @@ case.
 
 ## Can a Luau mod use them?
 
-A Luau mod reads and writes the same types by their game names through
-[game resources as values](resource-values.md); the Luau names of the typed
-items are not part of the Luau API yet.
+Yes. `enshwick.typed` opens the same generated items by their ids, the path in
+`enshwick::typed` with dots: `ecs.Health`, `ecs.EntityDiedEvent`,
+`LootSettingsResource`. Open them at the top level of `main.luau`, where a Rust
+mod resolves them in `init`:
 
-## Write the game's types into your crate
+```luau
+local health = enshwick.typed.component_type("ecs.NetworkHealth")
+local died = enshwick.typed.event_type("ecs.EntityDiedEvent")
+local loot = enshwick.typed.resource_type("LootSettingsResource")
+
+died:on(function(event)
+    local value = health:read(event.dead_entity_id.id)
+    if value then
+        enshwick.log.info(`died with {value.health}`)
+    end
+end)
+
+local key = loot:key("6943053a-32c1-4718-ae22-e61427ddf54d")
+loot:serve(key, key, function(value)
+    return value
+end)
+```
+
+A value is a table with the Rust item's field names, `base` for the type it
+derives from. An enum constant is its variant's name, such as `"MagicalFog"`,
+and a constant the item does not name is `{ Other = <name or number> }`. A
+`u64` or `i64` is a string of its decimal digits, a GUID a string, and a
+bitmask a list of its flags' constants. A value read through `enshwick.typed`
+goes through the generated Rust item, so a Luau mod reads and writes what a
+Rust mod does, and a type whose shape a game update changed is refused the
+same way.
+
+A Luau mod differs in three places. `ComponentType:read` and `write` take no
+world: the handle holds the server's world from the start. A write and a
+served change name every field of the item: return the table `read` or
+`game_value` gave, changed. A served change that returns nil serves the base
+unchanged.
+
+`cargo enshwick luau --out types/enshwick.d.luau --typed types/enshwick.typed.d.luau`
+writes the types of these values for the editor: `typed_ecs_NetworkHealth` for
+`ecs.NetworkHealth`, `typed_LootSettingsResource` for `LootSettingsResource`,
+named by the path since every Luau type shares one namespace. Point luau-lsp at
+the file beside `enshwick.d.luau` and name the type where it helps:
+
+```luau
+local health = enshwick.typed.component_type("ecs.NetworkHealth")
+local value: typed_ecs_NetworkHealth? = health:read(1)
+```## Write the game's types into your crate
 
 For a struct the typed API does not cover, such as one a
 [hooked system](ecs.md) hands you, `cargo enshwick types` writes the game's
@@ -187,8 +230,9 @@ in padding, and the struct's documentation names it.
 
 `game.d.luau` declares each struct as an exported record type, each enum as a
 union of its constants' names, and keeps the game's field names. Point luau-lsp
-at it beside `enshwick.d.luau`. It holds types only, and no Luau call returns
-game structs.
+at it beside `enshwick.d.luau`. It holds types only, by the game's names, for
+the values `enshwick.resources` and `enshwick.on_game_type` hand a script; the
+values of `enshwick.typed` take the types of `enshwick.typed.d.luau`.
 
 ### Write them again after an update
 
