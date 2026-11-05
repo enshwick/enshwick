@@ -303,14 +303,14 @@ pub const BRANCH_BYTES: usize = 16;
 #[must_use]
 pub fn branch(code: &[u8], address: usize, cell: impl Fn(usize) -> Option<usize>) -> Option<usize> {
     let len = jump_len(code)?;
-    let relative = |at: usize| {
+    let relative = |at: usize, next: usize| {
         let bytes: [u8; 4] = code.get(at..at + 4)?.try_into().ok()?;
         let delta = isize::try_from(i32::from_le_bytes(bytes)).ok()?;
-        address.checked_add(len)?.checked_add_signed(delta)
+        address.checked_add(next)?.checked_add_signed(delta)
     };
     match code {
-        [0xE8 | 0xE9, ..] => relative(1),
-        [0xFF, 0x25, ..] => cell(relative(2)?),
+        [0xE8 | 0xE9, ..] => relative(1, len),
+        [0xFF, 0x25, ..] => cell(relative(2, 6)?),
         _ => {
             let bytes: [u8; 8] = code.get(2..10)?.try_into().ok()?;
             usize::try_from(u64::from_le_bytes(bytes)).ok()
@@ -324,6 +324,8 @@ fn jump_len(code: &[u8]) -> Option<usize> {
     let ends = |tail: &[u8], len: usize| (code.get(10..len)? == tail).then_some(len);
     let len = match code {
         [0xE8 | 0xE9, ..] => 5,
+        // `jmp [rip+0]` with its address after it, as hook libraries write it.
+        [0xFF, 0x25, 0, 0, 0, 0, ..] if code.len() >= 14 => 14,
         [0xFF, 0x25, ..] => 6,
         [0x48, 0xB8, ..] => ends(&[0xFF, 0xE0], 12)?,
         [0x49, 0xBB, ..] => ends(&[0x41, 0xFF, 0xE3], 13)?,
@@ -671,6 +673,25 @@ mod tests {
         jump_at(&mut now, 0, 84, 0x50);
         jump_at(&mut now, 0, 89, 0x50);
         assert_eq!(pieces(&old, &now, 80, 94), [(80, 1), (84, 5), (89, 5)]);
+    }
+
+    #[test]
+    fn a_far_jump_with_its_address_inline_is_one_piece_whatever_the_address() {
+        let old = vec![0u8; 64];
+        let mut now = old.clone();
+        // `jmp [rip+0]` and the address after it, whose bytes hold a `jmp`
+        // opcode.
+        now[10..16].copy_from_slice(&[0xFF, 0x25, 0, 0, 0, 0]);
+        now[16..24].copy_from_slice(&0x7FFE_E900_9100u64.to_le_bytes());
+        assert_eq!(pieces(&old, &now, 10, 24), [(10, 14)]);
+        let read = |at: usize| (at == 16).then(|| now[16..24].to_vec());
+        assert_eq!(
+            branch(&now[10..], 10, |cell| {
+                let bytes: [u8; 8] = read(cell)?.try_into().ok()?;
+                usize::try_from(u64::from_le_bytes(bytes)).ok()
+            }),
+            Some(0x7FFE_E900_9100)
+        );
     }
 
     #[test]
