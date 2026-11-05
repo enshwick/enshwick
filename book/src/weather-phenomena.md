@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: The phenomena a weather layer picks from are data in the game's weather resource. With the typed feature, a mod adds phenomena and changes the game's own.
+-->
+
 # Weather phenomena
 
 The phenomena a weather layer picks from are data in the game's weather

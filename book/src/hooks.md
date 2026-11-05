@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A hook puts a function of the mod in front of a game function, for what the API has no call for. It may change the arguments, call on, or change the result.
+-->
+
 # Hooks
 
 A hook puts a function of the mod in front of a game function, for what the

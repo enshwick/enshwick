@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: What the enshwick crate keeps stable from 1.0 under Semantic Versioning, what the unstable feature holds, and how Luau mods and the ABI keep their versions.
+-->
+
 # Stability
 
 From 1.0 the `enshwick` crate follows

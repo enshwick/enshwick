@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod's client part draws windows, rows and dialogs with the game's own widgets, so its panels, fonts, sounds and button labels look like the game's.
+-->
+
 # The interface
 
 A mod's client part draws windows, rows and dialogs with the game's own

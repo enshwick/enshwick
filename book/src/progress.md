@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Three typed hooks cover how characters grow: skills, comfort and experience. A mod changes each of them on the server, with a worked example at the end.
+-->
+
 # Character progress
 
 Three typed hooks cover how characters grow, from

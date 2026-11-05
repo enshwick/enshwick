@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read the buff and debuff types the game knows, list the buffs an entity has, and give or remove one from a mod through the Buffs handle of the server's world.
+-->
+
 # Buffs
 
 [`load.buffs()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/buffs.rs)

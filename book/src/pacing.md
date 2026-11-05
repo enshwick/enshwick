@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: The engine paces its loops with waits on handles and sizes its thread pools from the CPUs it sees. A mod changes these places to make the game use less CPU.
+-->
+
 # Pacing and threads
 
 The engine paces its loops with waits on handles and sizes its thread pools

@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Hooks, mid-function handlers and hooked ECS systems run inside the game's own call stack, on its threads. These rules keep that code fast and the game alive.
+-->
+
 # Code in the game's frame
 
 Hooks, mid-function handlers and hooked ECS systems run inside the game's own

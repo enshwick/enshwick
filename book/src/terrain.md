@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read the terrain materials of the server's world, and add, dig and flatten ground as the game's terraforming does, through the Terrain handle from init.
+-->
+
 # Terrain
 
 [`load.terrain()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/terrain.rs)

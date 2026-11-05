@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read and set the time of day in the server's world with the Clock, and give the mod's say in how fast the clock runs with its ClockSpeed.
+-->
+
 # Time of day
 
 [`load.clock()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/daytime.rs)

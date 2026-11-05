@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A server owner takes vanilla or modded recipes out of a world with one file beside its save and no mod. A mod disables recipes too, through recipes::disable.
+-->
+
 # Disabling recipes
 
 A server owner takes recipes out of a world, vanilla ones or a mod's, with

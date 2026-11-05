@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A code patch replaces a few bytes of game code, such as a constant in an instruction, a jump or a loop bound, for what a hook cannot reach.
+-->
+
 # Code patches
 
 A code patch replaces a few bytes of game code: a constant in an instruction, a

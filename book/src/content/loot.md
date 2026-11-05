@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read the containers a dead enemy leaves, corpses and loot bags, and other containers that dissolve once emptied. Their items are emptied through inventories.
+-->
+
 # Loot containers
 
 [`enshwick::loot`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)

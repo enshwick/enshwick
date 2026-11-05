@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod ships its texts, item names, descriptions and chat phrases, in one TOML file with a table per language, which a server owner can add to or change.
+-->
+
 # Texts
 
 A mod ships its texts, item names, descriptions and chat phrases, in one

@@ -1,3 +1,8 @@
+<!--
+type: explanation
+description: The items of enshwick::typed come from one game build's reflection data. Most game updates need nothing from a mod; the rest turn off one type alone.
+-->
+
 # Typed types across game builds
 
 The items of `enshwick::typed` come from one game build's reflection data, and

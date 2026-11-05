@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A reward says when a player does this, give that. A mod declares it in code or a pack's rewards.toml; the server gives it and keeps who got it beside the save.
+-->
+
 # Rewards for actions
 
 A reward says "when a player does this, give that". A mod declares it in

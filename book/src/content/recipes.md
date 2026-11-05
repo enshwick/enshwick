@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Add a single recipe or derive recipes from vanilla ones, set their kind and place in the crafting menu, and keep within the game's workshop limit.
+-->
+
 # Recipes
 
 Two calls add recipes:

@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read any resource of the game's archive as typed values by its reflected type name, and serve a changed copy when the game reads it, for every resource type.
+-->
+
 # Game resources as values
 
 `enshwick::resources` reads any resource of the game's archive as typed values

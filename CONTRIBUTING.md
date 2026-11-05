@@ -53,6 +53,18 @@ rules the hooks enforce, and the ones they cannot, are in this file:
 - what mod authors need to know goes into [the modding book](book/src/SUMMARY.md)
   with the change; `cargo xtask check` checks its structure, and its Rust
   examples run as doctests;
+- a chapter opens with a comment that gives its page on
+  [enshwick.com](https://enshwick.com/dev/) a type (`tutorial`, `how-to`,
+  `reference` or `explanation`) and a description of 120 to 160 characters,
+  and `cargo xtask check` refuses a chapter without them:
+
+  ```markdown
+  <!--
+  type: how-to
+  description: A hook puts a function of the mod in front of a game function, for what the API has no call for. It may change the arguments, call on, or change the result.
+  -->
+  ```
+
 - the book's links to files and folders of this repository and of
   [enshwick/mods](https://github.com/enshwick/mods) name ones that exist:
   `cargo xtask check` looks the mods' up in the clone `ENSH_MODS_DIR` names,

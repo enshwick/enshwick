@@ -1,3 +1,8 @@
+<!--
+type: explanation
+description: Enshrouded ships a dedicated server and a client, and the Enshwick loader runs in both. A mod's side says where it runs: on a server or while a client hosts.
+-->
+
 # Sides and hosting
 
 Enshrouded ships two binaries: `enshrouded_server.exe`, the dedicated server,

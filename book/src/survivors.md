@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: The game keeps one entity per survivor. A mod that keeps several entities of one survivor answers the game's lookups for sleep, roaming, beds and summoning.
+-->
+
 # Survivors
 
 The game keeps one entity per survivor and asks for it from many of its

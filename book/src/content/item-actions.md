@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod hears a player use, trash, equip, unequip, pick up or place an item, may refuse the first four, and hears when every mod allowed a use.
+-->
+
 # What players do with items
 
 A mod hears a player use, trash, equip, unequip, pick up or place an item,

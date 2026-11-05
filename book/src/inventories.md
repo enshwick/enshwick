@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read what a chest, a corpse or a player holds, and change it through the game's own transactions, on the dedicated server or on a client while it hosts a game.
+-->
+
 # Inventories
 
 [`enshwick::inventory`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)

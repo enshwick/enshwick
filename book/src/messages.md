@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod of side both sends messages between its server and client parts through a channel, such as for something the client draws and the server decides.
+-->
+
 # Messages between server and client
 
 A mod of side `both` with a client part, such as one that draws something the

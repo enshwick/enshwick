@@ -1,3 +1,8 @@
+<!--
+type: explanation
+description: A mod's code runs on threads it does not own: the game thread, ECS worker threads and the loader's threads. The thread decides what the code may call.
+-->
+
 # Threads
 
 A mod's code runs on threads it does not own. Which thread decides what the

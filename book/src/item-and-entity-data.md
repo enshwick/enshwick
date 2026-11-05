@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod attaches data of its own to one item or entity, such as a ring's rolled bonus or a chest's owner, kept per world beside the game's save, never inside it.
+-->
+
 # Item and entity data
 
 Unstable: everything in this chapter needs the `unstable` feature and may

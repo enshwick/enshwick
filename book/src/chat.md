@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod sends chat lines to players and notices on screen, and a dedicated server's console runs the lines typed into its window. Players never type commands.
+-->
+
 # Chat, notices and the console
 
 A mod sends players chat lines and notices on screen. A dedicated server's

@@ -1,7 +1,8 @@
 //! The modding book's structure: every chapter `SUMMARY.md` links exists,
 //! every chapter is in `SUMMARY.md`, and every chapter is included by a
 //! doctest harness of the API crate, so its Rust examples compile. Every
-//! chapter's intro stays short.
+//! chapter opens with its page type and description and keeps its intro
+//! short.
 
 use std::path::Path;
 
@@ -33,9 +34,69 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
     });
     for chapter in &chapters {
         match std::fs::read_to_string(source.join(chapter)) {
-            Ok(text) => found.extend(intro_problem(chapter, &text)),
+            Ok(text) => {
+                found.extend(page_problems(chapter, &text));
+                found.extend(intro_problem(chapter, &text));
+            }
             Err(error) => found.push(format!("{SOURCE}/{chapter}: {error}")),
         }
+    }
+    found
+}
+
+/// The Diátaxis page types a chapter may declare.
+const PAGE_TYPES: [&str; 4] = ["tutorial", "how-to", "reference", "explanation"];
+/// The characters a description has: the site's search snippet, cut by
+/// search engines past the upper bound.
+const DESCRIPTION_CHARS: std::ops::RangeInclusive<usize> = 120..=160;
+
+/// The problems with the comment a chapter opens with, which mdBook hides
+/// and the site reads for the page's type and description:
+///
+/// ```text
+/// <!--
+/// type: how-to
+/// description: One or two sentences, 120 to 160 characters.
+/// -->
+/// ```
+fn page_problems(chapter: &str, text: &str) -> Vec<String> {
+    let at = format!("{SOURCE}/{chapter}");
+    let Some(block) = text
+        .strip_prefix("<!--\n")
+        .and_then(|rest| rest.split_once("\n-->"))
+        .map(|(block, _)| block)
+    else {
+        return vec![format!(
+            "{at}: opens with no <!-- type: … description: … --> comment"
+        )];
+    };
+    let mut found = Vec::new();
+    let (mut kind, mut description) = (None, None);
+    for line in block.lines() {
+        match line.split_once(": ") {
+            Some(("type", value)) => kind = Some(value),
+            Some(("description", value)) => description = Some(value),
+            _ => found.push(format!(
+                "{at}: the opening comment has an unknown line `{line}`"
+            )),
+        }
+    }
+    match kind {
+        None => found.push(format!("{at}: the opening comment has no type")),
+        Some(kind) if !PAGE_TYPES.contains(&kind) => found.push(format!(
+            "{at}: type `{kind}` is none of {}",
+            PAGE_TYPES.join(", ")
+        )),
+        Some(_) => {}
+    }
+    match description.map(|text| text.chars().count()) {
+        None => found.push(format!("{at}: the opening comment has no description")),
+        Some(chars) if !DESCRIPTION_CHARS.contains(&chars) => found.push(format!(
+            "{at}: the description has {chars} characters; keep it within {} to {}",
+            DESCRIPTION_CHARS.start(),
+            DESCRIPTION_CHARS.end()
+        )),
+        Some(_) => {}
     }
     found
 }
@@ -241,6 +302,53 @@ mod tests {
             )
         );
         assert_eq!(intro_problem("hooks.md", &short), None);
+    }
+
+    fn page(block: &str) -> String {
+        format!("<!--\n{block}\n-->\n\n# Title\n")
+    }
+
+    #[test]
+    fn a_chapter_with_a_type_and_a_fitting_description_passes() {
+        let text = page(&format!("type: how-to\ndescription: {}", "d".repeat(120)));
+        assert!(page_problems("hooks.md", &text).is_empty());
+    }
+
+    #[test]
+    fn a_chapter_without_the_opening_comment_is_named() {
+        assert_eq!(
+            page_problems("hooks.md", "# Title\n"),
+            ["book/src/hooks.md: opens with no <!-- type: … description: … --> comment"]
+        );
+    }
+
+    #[test]
+    fn an_unknown_type_a_long_description_and_stray_lines_are_named() {
+        let text = page(&format!(
+            "type: guide\ndescription: {}\nowner: me",
+            "d".repeat(161)
+        ));
+        assert_eq!(
+            page_problems("hooks.md", &text),
+            [
+                "book/src/hooks.md: the opening comment has an unknown line `owner: me`",
+                "book/src/hooks.md: type `guide` is none of tutorial, how-to, reference, explanation",
+                "book/src/hooks.md: the description has 161 characters; keep it within 120 to 160",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_comment_missing_its_type_and_description_names_both() {
+        let text = page("type:how-to");
+        assert_eq!(
+            page_problems("hooks.md", &text),
+            [
+                "book/src/hooks.md: the opening comment has an unknown line `type:how-to`",
+                "book/src/hooks.md: the opening comment has no type",
+                "book/src/hooks.md: the opening comment has no description",
+            ]
+        );
     }
 
     #[test]

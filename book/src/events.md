@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: The loader tells a mod what happens in the game through typed events, and its scheduler runs the mod's work on the game thread, from Rust and from Luau.
+-->
+
 # Events and the scheduler
 
 The loader tells mods what happens in the game through events, and runs work

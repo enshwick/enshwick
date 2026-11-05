@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: enshwick::test is a fake loader for a mod's unit tests: it answers as the game would, starts the mod through its exports and shows what the mod asked for.
+-->
+
 # Testing
 
 [`enshwick::test`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs) is a

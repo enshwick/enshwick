@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A Luau mod is a data pack with scripts: pack.toml and main.luau in a folder, using the modules, names and types of the Rust API, with its differences listed.
+-->
+
 # Luau mods
 
 A Luau mod is a [data pack](content/packs.md) with scripts: a folder in

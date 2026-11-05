@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod is a DLL that exports five functions over the C ABI, so C, C++, Zig or any language that includes a C header can write one. Build the example C mod.
+-->
+
 # Mods in C
 
 A mod is a DLL that exports five functions over the C ABI, so C, C++, Zig,

@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod adds game content with Enshwick: items, recipes, crafting stations, loot, texts and any other game resource, each under a content id of its own.
+-->
+
 # Content
 
 A mod can add game content: items, recipes, crafting stations, texts, and

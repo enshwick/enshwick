@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: One mod declares a typed call, another serves it, and any mod calls it by name, with the answer type checked by the loader. Calls work from Rust and from Luau.
+-->
+
 # Calls between mods
 
 Unstable: everything in this chapter needs the `unstable` feature and may

@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod lets other mods change one of its rules at a typed extension point: it asks a question, answers it first, and every linked mod may change the answer.
+-->
+
 # Extending other mods
 
 A mod can let other mods change one of its rules at an **extension point**:

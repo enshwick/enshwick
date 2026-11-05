@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: The loader writes one log folder for itself and every mod, a status summary of what runs, and turns a failing mod off with the reason in the log.
+-->
+
 # Logging and diagnostics
 
 The loader writes one log folder for itself and every mod, writes a status

@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: One mod offers functions to others as a service, a table of extern system functions, and tells them what happens with mod events sent to every subscribed mod.
+-->
+
 # Services between mods
 
 One mod can offer functions to others as a **service**, a table of

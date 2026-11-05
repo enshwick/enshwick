@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A damage filter runs on damage about to reach an entity's health in the server's world. It reads the cause and changes or cancels the damage before it lands.
+-->
+
 # Damage
 
 Unstable: everything in this chapter needs the `unstable` feature and may

@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A data pack adds items, recipes, workshops, loot and texts from TOML files with no code, and changes vanilla values such as how many of an item one slot holds.
+-->
+
 # Data packs
 
 A **data pack** adds items, recipes, workshops, loot and texts from TOML

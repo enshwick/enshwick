@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A workshop is what a crafting station crafts at. Load::add_workshop clones a vanilla station into a new one with a workshop of its own for a mod's recipes.
+-->
+
 # Workshops
 
 A workshop is what a crafting station crafts at.

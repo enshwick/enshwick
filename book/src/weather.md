@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read the weather at a place in the server's world and the fronts that make it, and start new weather, through the Weather handle a mod gets during init.
+-->
+
 # Weather and chunks
 
 [`load.weather()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/weather.rs)

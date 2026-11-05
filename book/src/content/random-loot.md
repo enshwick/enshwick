@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Put an item into the game's random loot with an exact chance per roll, on top of the vanilla loot, with load.add_loot and the drop it describes.
+-->
+
 # Random loot
 
 `load.add_loot(drop)` puts an item into random loot with an exact chance per

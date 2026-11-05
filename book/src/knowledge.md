@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read and change the values the game keeps for the world and each player through the Knowledge handle: recipes, quests, journal pages, skill points and more.
+-->
+
 # Knowledge and quests
 
 [`load.knowledge()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/knowledge.rs)

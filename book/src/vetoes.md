@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod refuses a craft, a placement or a player's interaction with an entity before the game acts on it. A filter that panics turns the mod off and lets it pass.
+-->
+
 # Crafting, building and interaction vetoes
 
 A mod may refuse a craft, a placement or a player's interaction with an

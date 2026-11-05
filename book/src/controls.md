@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod declares the keys its players press and handles each press, on the client or by changing the world. Players change the keys on the Mods screen.
+-->
+
 # Controls
 
 Unstable: everything in this chapter needs the `unstable` feature and may
