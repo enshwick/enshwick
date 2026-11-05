@@ -225,7 +225,7 @@ impl RouteRow {
             (Take::Spelled, Some(value)) if steps.iter().any(|s| s.spells(value)) => value,
             (Take::Spelled, _) => {
                 return Err(bad(
-                    "a `spelled` take names its `value`, and a step of the shape spells it: memory without a displacement for 0, else that displacement, scale or immediate",
+                    "a `spelled` take names its `value`, and a step of the shape spells it: memory without a displacement for 0, else an index scale or an immediate equal to it",
                 ));
             }
             (_, None) => 0,
