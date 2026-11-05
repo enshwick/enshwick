@@ -5,7 +5,7 @@ table = "1.0 client (1269579)"
 side = "client"
 game_version = 1269579
 entries = 857
-routed = 767
+routed = 777
 missing = ["bases.animal_value", "bases.base_ids", "bases.npc_value", "bases.record_base_id", "building.box_extent", "building.box_min", "building.box_size", "net.message_release", "voxel.grid_stride"]
 
 [[feature]]
