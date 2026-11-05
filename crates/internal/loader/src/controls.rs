@@ -408,7 +408,12 @@ pub(crate) fn frame(context: usize) {
         let window = if open { input::focused_thread() } else { None };
         let now = now_ms();
         LOOK.with_borrow_mut(|(trackers, down)| {
-            input::chords(&keys, window, down);
+            input::keys_down(
+                &keys,
+                window,
+                |c| trackers.get(c).is_some_and(Tracker::is_down),
+                down,
+            );
             trackers.resize(declared.len(), Tracker::default());
             for ((control, tracker), down) in declared.iter().zip(trackers.iter_mut()).zip(down) {
                 if control_off(control) {

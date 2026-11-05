@@ -55,6 +55,8 @@ mod tests {
                     .fires(&[Phase::Press, Phase::Hold, Phase::Release]),
                 note,
             )?;
+            load.control(Control::new("lights", "Lights").key(Key::parse("B")?), note)?;
+            load.control(Control::new("dim", "Dim").key(Key::parse("Ctrl+B")?), note)?;
             assert!(
                 load.control(Control::new("horn", "Again"), note).is_err(),
                 "a name is declared once"
@@ -109,7 +111,7 @@ mod tests {
     fn a_key_fires_its_control_and_the_control_asks_the_server() {
         let loader = client();
         let listed: Vec<String> = loader.controls().into_iter().map(|c| c.0).collect();
-        assert_eq!(listed, ["horn", "boost", "enter", "brake"]);
+        assert_eq!(listed, ["horn", "boost", "enter", "brake", "lights", "dim"]);
         let tick = Duration::from_millis(16);
         assert_eq!(loader.keys(&[key("H")], tick), 1);
         assert_eq!(loader.keys(&[key("H")], tick), 0, "held, not repeated");
@@ -134,11 +136,56 @@ mod tests {
     }
 
     #[test]
-    fn a_chord_holds_once_past_its_threshold_and_needs_exactly_its_modifiers() {
+    fn a_plain_key_fires_while_the_player_sprints() {
+        let loader = client();
+        assert_eq!(loader.keys(&[key("Shift+H")], Duration::from_millis(16)), 1);
+        assert_eq!(taken(), [("horn".to_owned(), Phase::Press, None)]);
+    }
+
+    #[test]
+    fn the_control_with_the_most_held_modifiers_wins_its_key() {
+        let loader = client();
+        let tick = Duration::from_millis(16);
+        let fired = |held: &[Key]| {
+            assert_eq!(loader.keys(held, tick), 1);
+            let _up = loader.keys(&[], tick);
+            taken().remove(0).0
+        };
+        assert_eq!(fired(&[key("Shift+B")]), "boost");
+        assert_eq!(fired(&[key("B")]), "lights");
+        assert_eq!(fired(&[key("Ctrl+B")]), "dim");
+        assert_eq!(fired(&[key("Alt+B")]), "lights");
+        assert_eq!(
+            loader.keys(&[key("Ctrl+Shift+B")], tick),
+            2,
+            "a tie fires both"
+        );
+        let names: Vec<String> = taken().into_iter().map(|f| f.0).collect();
+        assert_eq!(names, ["boost", "dim"]);
+    }
+
+    #[test]
+    fn a_modifier_change_while_the_key_is_held_fires_no_release_and_no_press() {
+        let loader = client();
+        let tick = Duration::from_millis(16);
+        let looks: Vec<usize> = [&[key("Shift+B")][..], &[key("B")], &[key("Ctrl+B")], &[]]
+            .into_iter()
+            .map(|held| loader.keys(held, tick))
+            .collect();
+        assert_eq!(looks, [1, 0, 0, 1]);
+        assert_eq!(
+            taken(),
+            [
+                ("boost".to_owned(), Phase::Press, None),
+                ("boost".to_owned(), Phase::Release, None)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_chord_holds_once_past_its_threshold() {
         let loader = client();
         let tick = Duration::from_millis(100);
-        assert_eq!(loader.keys(&[key("B")], tick), 0, "Shift is missing");
-        assert_eq!(loader.keys(&[key("Ctrl+Shift+B")], tick), 0);
         let looks: Vec<usize> = [true, true, true, true, true, false]
             .into_iter()
             .map(|down| {

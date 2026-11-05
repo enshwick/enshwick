@@ -7,7 +7,7 @@ use core::time::Duration;
 use crate::abi::{
     ControlEvent, ControlFn, ControlSpec, Header, ModHandle, PlayerInfo, Status, Str, read_headed,
 };
-use crate::controls::{GameAction, Key, Tracker, chord_down, is_valid_name, phases, valid_phases};
+use crate::controls::{GameAction, Key, Tracker, chords, is_valid_name, phases, valid_phases};
 
 use super::table::{Registration, text, with};
 use super::{FakeHost, Installed};
@@ -210,13 +210,24 @@ impl Installed {
                 return Vec::new();
             }
             let now = advance(&mut s.controls, after);
+            let controls = &mut s.controls.controls;
+            let bound: Vec<[u32; 2]> = controls
+                .iter()
+                .map(|c| c.keys.map(|key| key.map_or(0, Key::bits)))
+                .collect();
+            let mut held = Vec::new();
+            chords(
+                &bound,
+                |c| controls[c].tracker.is_down(),
+                |_, _, key| {
+                    down.iter()
+                        .find(|k| k.code() == key.code())
+                        .map(|k| k.modifiers())
+                },
+                &mut held,
+            );
             let mut calls = Vec::new();
-            for control in &mut s.controls.controls {
-                let held = control.keys.iter().flatten().any(|bound| {
-                    down.iter().any(|k| {
-                        k.code() == bound.code() && chord_down(*bound, true, k.modifiers())
-                    })
-                });
+            for (control, held) in controls.iter_mut().zip(held) {
                 let kind = control.tracker.look(held, now, control.hold_ms) & control.fires;
                 calls.extend(phases(kind).map(|kind| control.call(kind)));
             }

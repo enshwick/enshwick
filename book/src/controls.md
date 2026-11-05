@@ -37,8 +37,12 @@ A key is a place on the keyboard, not a letter: `Key::parse("Q")` is the key
 left of W on every layout, and the controls page shows it with the name the
 player's layout gives it. Names are those of a US keyboard, with Shift, Ctrl
 and Alt joined by `+`, such as `Shift+E`, and the mouse buttons `Mouse1` to
-`Mouse5`. A combination fires only with exactly its modifiers held, so
-`Shift+E` does not fire a control on `E`. Escape, the Windows keys, Alt
+`Mouse5`. A control fires when its key goes down with at least its
+modifiers held, so a control on `E` fires while the player sprints with
+Shift. Of the controls on one key, only those with the most of the held
+modifiers fire: with Shift held, `Shift+E` fires and `E` does not. A
+control stays down until its key goes up; pressing or letting go of a
+modifier meanwhile fires nothing. Escape, the Windows keys, Alt
 with F4 or Tab, and a modifier alone cannot be bound. A numpad digit fires
 while Num Lock is on; the numpad's Enter is not a key of its own, as
 Windows reports it as Enter.
