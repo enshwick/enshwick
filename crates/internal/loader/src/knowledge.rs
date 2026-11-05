@@ -134,6 +134,23 @@ impl Layout {
     fn entry_holds_its_fields(&self) -> bool {
         entry_holds(self.log_entry, self.log_entry_id, self.log_entry_value)
     }
+
+    fn request_holds_its_fields(&self) -> bool {
+        request_holds(self.request_kind, self.request_value, self.request_target)
+    }
+}
+
+/// Whether a trigger request of [`REQUEST`] bytes holds its `u8` kind at
+/// `kind` and its `u32` value and target at `value` and `target`, each
+/// after the request's `u32` id, so a moved field turns the feature off
+/// rather than being dropped from the request.
+const fn request_holds(kind: usize, value: usize, target: usize) -> bool {
+    kind >= 4
+        && value >= 4
+        && target >= 4
+        && kind.saturating_add(1) <= REQUEST
+        && value.saturating_add(4) <= REQUEST
+        && target.saturating_add(4) <= REQUEST
 }
 
 /// Whether a log entry of `size` bytes holds its `u32` id at `id` and its
@@ -223,6 +240,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 quest_id: field("keen::JournalCollectionResource", "entryId")?,
             })
             .filter(Layout::entry_holds_its_fields)
+            .filter(Layout::request_holds_its_fields)
         })
         .as_ref()
 }
@@ -645,5 +663,27 @@ mod tests {
         assert!(!entry_holds(4, 0, 4), "the value ends past the entry");
         assert!(!entry_holds(0x10, 0x10, 4), "the id ends past the entry");
         assert!(!entry_holds(0x10, usize::MAX, 4), "the id's end overflows");
+    }
+
+    #[test]
+    fn a_trigger_request_must_hold_its_fields_after_its_id() {
+        assert!(request_holds(4, 8, 0xc));
+        assert!(
+            !request_holds(4, 8, 0x10),
+            "the target ends past the request"
+        );
+        assert!(
+            !request_holds(4, 0xd, 0xc),
+            "the value ends past the request"
+        );
+        assert!(
+            !request_holds(0x10, 8, 0xc),
+            "the kind ends past the request"
+        );
+        assert!(!request_holds(0, 8, 0xc), "the kind overwrites the id");
+        assert!(
+            !request_holds(4, 8, usize::MAX),
+            "the target's end overflows"
+        );
     }
 }
