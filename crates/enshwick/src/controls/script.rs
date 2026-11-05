@@ -128,9 +128,9 @@ impl ControlFns {
 
     /// The key `bits` hold, as [`Key::from_bits`] reads them; nil for bits no
     /// key can be bound to.
-    #[script]
+    #[script(name = "from_bits")]
     #[must_use]
-    pub fn from_bits(self, bits: u32) -> Option<Key> {
+    pub(crate) fn key_of_bits_script(self, bits: u32) -> Option<Key> {
         Key::from_bits(bits)
     }
 
