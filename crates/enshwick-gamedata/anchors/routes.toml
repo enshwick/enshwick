@@ -3605,12 +3605,6 @@ loads = ["[server] Unable to find character name for '%s'"]
 check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rsi"]
 
 [[route]]
-id = "server.ban_list_changed"
-in = "server.account_action"
-shape = ["mov [r15+*],?", "xor esi,esi"]
-take = "value"
-
-[[route]]
 id = "server.blueprint_registry"
 in = "~fn:buffs.registry"
 shape = ["lea rdx,[rbp+0x300]", "mov r8,[rdi+*]"]
@@ -3632,12 +3626,6 @@ shape = [
   "mov r8l,?",
   "call {chat.post}",
 ]
-take = "value"
-
-[[route]]
-id = "server.config"
-in = "server.account_action"
-shape = ["xor esi,esi", "mov r15,[r15+*]"]
 take = "value"
 
 [[route]]

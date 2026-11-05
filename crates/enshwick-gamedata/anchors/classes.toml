@@ -418,11 +418,9 @@ entries = [
   "save.path_lengths",
   "save.phase",
   "server.account_action",
-  "server.ban_list_changed",
   "server.blueprint_registry",
   "server.build_zone_system",
   "server.chat_store",
-  "server.config",
   "server.custom_strings",
   "server.entry_state",
   "server.game_settings",
@@ -882,12 +880,6 @@ entries = [
   "bases.zone_list_len",
   "bases.zone_size",
   "building.cursor_no_permission",
-  "server.ban_entry_account",
-  "server.ban_entry_character_name",
-  "server.ban_entry_date",
-  "server.ban_entry_display_name",
-  "server.ban_name_length",
-  "server.ban_name_text",
   "ui.context_bundle",
   "ui.scroll_state_size",
   "voxel.finest_level",
@@ -962,7 +954,7 @@ class = "pattern"
 reason = "read in knowledge.set_values, which has no route"
 
 [[class]]
-entries = ["knowledge.set_world", "net.join_game", "server.ban_add"]
+entries = ["knowledge.set_world", "net.join_game"]
 class = "pattern"
 reason = "no direct call, jump, address load or relocated pointer reaches it, and it holds no unique string"
 
@@ -970,11 +962,6 @@ reason = "no direct call, jump, address load or relocated pointer reaches it, an
 entries = ["net.join_game.bytes"]
 class = "pattern"
 reason = "checks the code of net.join_game, which stays a pattern"
-
-[[class]]
-entries = ["server.ban_count", "server.ban_entry_size", "server.ban_list"]
-class = "pattern"
-reason = "read in server.ban_add, which has no route"
 
 [[class]]
 entries = [

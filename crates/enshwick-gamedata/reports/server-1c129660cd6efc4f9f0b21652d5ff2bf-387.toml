@@ -4,9 +4,9 @@
 table = "1.0 server (1269579)"
 side = "server"
 game_version = 1269579
-entries = 567
-routed = 499
-missing = ["bases.allocator", "bases.animal_value", "bases.answer_box", "bases.answer_error", "bases.answer_size", "bases.base_ids", "bases.client_create", "bases.client_destroy", "bases.client_size", "bases.container_data", "bases.heap_allocate", "bases.holder_at", "bases.npc_value", "bases.record_base_id", "building.box_extent", "building.box_min", "building.box_size", "ecs.spawn_component_hash", "ecs.spawn_requester", "server.ban_count", "server.ban_entry_account", "server.ban_entry_character_name", "server.ban_entry_date", "server.ban_entry_display_name", "server.ban_entry_size", "server.ban_list", "server.ban_name_length", "server.ban_name_text", "voxel.finest_level", "voxel.grid_stride"]
+entries = 564
+routed = 497
+missing = ["bases.allocator", "bases.animal_value", "bases.answer_box", "bases.answer_error", "bases.answer_size", "bases.base_ids", "bases.client_create", "bases.client_destroy", "bases.client_size", "bases.container_data", "bases.heap_allocate", "bases.holder_at", "bases.npc_value", "bases.record_base_id", "building.box_extent", "building.box_min", "building.box_size", "ecs.spawn_component_hash", "ecs.spawn_requester", "voxel.finest_level", "voxel.grid_stride"]
 
 [[feature]]
 name = "bases"
