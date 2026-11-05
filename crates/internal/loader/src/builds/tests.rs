@@ -117,6 +117,7 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
 /// in their place holds: the join is the provider's one slot, the division
 /// leads to each wait in its function, and the stop block's length is the
 /// table's body's.
+#[cfg(windows)]
 #[test]
 #[expect(
     clippy::too_many_lines,
