@@ -224,7 +224,7 @@ pub(crate) struct Loader {
     /// What was wrong in the loader settings file at start, a line each.
     pub(crate) settings_problems: Vec<String>,
     /// A newer Enshwick release, once the release check found one.
-    pub(crate) newer_release: OnceLock<semver::Version>,
+    pub(crate) newer_release: OnceLock<crate::releases::Release>,
     /// The code patches a thread kept out at arming, tried again later.
     pub(crate) retry: crate::retry::Retry,
 }

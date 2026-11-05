@@ -3,8 +3,11 @@
 
 use semver::Version;
 
-/// A release's page, without its version.
-const PAGE: &str = "https://github.com/enshwick/enshwick/releases/tag/v";
+/// The page of a release, without its tag.
+const PAGE: &str = "https://github.com/enshwick/enshwick/releases/tag/";
+/// The tag prefixes of a loader release: an alpha's, and release-plz's for
+/// the loader package.
+const TAG_PREFIXES: [&str; 2] = ["v", "enshwick-loader-v"];
 /// The most bytes of the list read; twenty releases with their notes take
 /// well under it.
 #[cfg_attr(not(windows), expect(dead_code, reason = "only Windows asks GitHub"))]
@@ -16,31 +19,52 @@ struct Listed {
     tag_name: String,
     #[serde(default)]
     draft: bool,
+    #[serde(default)]
+    prerelease: bool,
 }
 
-/// The newest release in `listing`, GitHub's JSON list of releases, that is
-/// newer than `running`; a prerelease counts only while `running` is one,
-/// and a tag that is no `v<version>` is skipped.
+/// A loader release newer than the running one.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Release {
+    /// The release's version.
+    pub version: Version,
+    /// The tag prefix it was published under, one of `TAG_PREFIXES`.
+    prefix: &'static str,
+}
+
+impl Release {
+    /// The release's page, built here rather than read from GitHub's answer,
+    /// so the screen shows no address the network chose.
+    #[must_use]
+    pub fn page(&self) -> String {
+        format!("{PAGE}{}{}", self.prefix, self.version)
+    }
+}
+
+/// The newest loader release in `listing`, GitHub's JSON list of releases,
+/// that is newer than `running` by SemVer precedence.
+///
+/// A prerelease, by its version or GitHub's flag, counts only while
+/// `running` is one; a tag that is no loader version is skipped.
 ///
 /// # Errors
 ///
 /// When `listing` is no JSON list of releases.
-pub fn newer(listing: &[u8], running: &Version) -> Result<Option<Version>, serde_json::Error> {
+pub fn newer(listing: &[u8], running: &Version) -> Result<Option<Release>, serde_json::Error> {
     let listed: Vec<Listed> = serde_json::from_slice(listing)?;
     Ok(listed
         .into_iter()
         .filter(|release| !release.draft)
-        .filter_map(|release| Version::parse(release.tag_name.strip_prefix('v')?).ok())
-        .filter(|version| !running.pre.is_empty() || version.pre.is_empty())
-        .filter(|version| version > running)
-        .max())
-}
-
-/// The page of release `version`, built here rather than read from GitHub's
-/// answer, so the screen shows no address the network chose.
-#[must_use]
-pub fn page(version: &Version) -> String {
-    format!("{PAGE}{version}")
+        .filter_map(|release| {
+            let (prefix, version) = TAG_PREFIXES.iter().find_map(|prefix| {
+                let version = Version::parse(release.tag_name.strip_prefix(prefix)?).ok()?;
+                Some((*prefix, version))
+            })?;
+            let pre = release.prerelease || !version.pre.is_empty();
+            (!pre || !running.pre.is_empty()).then_some(Release { version, prefix })
+        })
+        .filter(|release| release.version.cmp_precedence(running).is_gt())
+        .max_by(|a, b| a.version.cmp_precedence(&b.version)))
 }
 
 /// The running loader's version.
@@ -68,13 +92,14 @@ pub(crate) fn start(loader: &'static crate::host::Loader) {
             let running = running();
             match fetch::list() {
                 Ok(listing) => match newer(&listing, &running) {
-                    Ok(Some(version)) => {
+                    Ok(Some(release)) => {
                         crate::log!(
                             INFO,
-                            "Enshwick {version} is available, this is {running}: {}",
-                            page(&version)
+                            "Enshwick {} is available, this is {running}: {}",
+                            release.version,
+                            release.page()
                         );
-                        let _first = loader.newer_release.set(version);
+                        let _first = loader.newer_release.set(release);
                     }
                     Ok(None) => crate::log!(INFO, "Enshwick {running} is the newest release"),
                     Err(e) => {
@@ -94,7 +119,6 @@ mod fetch {
     use core::ffi::c_void;
     use core::ptr::{null, null_mut};
 
-    use windows_sys::Win32::Foundation::GetLastError;
     use windows_sys::Win32::Networking::WinHttp::{
         INTERNET_DEFAULT_HTTPS_PORT, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_FLAG_SECURE,
         WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE, WinHttpCloseHandle, WinHttpConnect,
@@ -113,8 +137,11 @@ mod fetch {
     #[derive(Debug, thiserror::Error)]
     pub(super) enum FetchReleasesError {
         /// A Windows HTTP call failed: no network, no answer in time, or TLS.
-        #[error("{call} failed with Windows error {code}")]
-        Call { call: &'static str, code: u32 },
+        #[error("{call} failed: {source}")]
+        Call {
+            call: &'static str,
+            source: std::io::Error,
+        },
         /// GitHub answered with another status than 200.
         #[error("GitHub answered with HTTP status {0}")]
         Status(u32),
@@ -146,9 +173,8 @@ mod fetch {
 
     /// The failure of `call` with the thread's last Windows error.
     fn failed(call: &'static str) -> FetchReleasesError {
-        // SAFETY: reads the calling thread's last error; no preconditions.
-        let code = unsafe { GetLastError() };
-        FetchReleasesError::Call { call, code }
+        let source = std::io::Error::last_os_error();
+        FetchReleasesError::Call { call, source }
     }
 
     /// `ok`, a Windows HTTP `BOOL`, as the failure of `call` when it is false.
@@ -263,21 +289,38 @@ mod tests {
         Version::parse(text).unwrap()
     }
 
-    fn listing(tags: &[(&str, bool)]) -> Vec<u8> {
+    /// A listing of `(tag, draft, prerelease)`.
+    fn flagged(tags: &[(&str, bool, bool)]) -> Vec<u8> {
         let releases: Vec<String> = tags
             .iter()
-            .map(|(tag, draft)| {
-                format!(r#"{{"tag_name":"{tag}","draft":{draft},"prerelease":true,"body":"x"}}"#)
+            .map(|(tag, draft, pre)| {
+                format!(r#"{{"tag_name":"{tag}","draft":{draft},"prerelease":{pre},"body":"x"}}"#)
             })
             .collect();
         format!("[{}]", releases.join(",")).into_bytes()
+    }
+
+    /// A listing of `(tag, draft)`, marked prerelease as the alpha workflow
+    /// marks it: by a prerelease part in the tag.
+    fn listing(tags: &[(&str, bool)]) -> Vec<u8> {
+        let flags: Vec<(&str, bool, bool)> = tags
+            .iter()
+            .map(|(tag, draft)| (*tag, *draft, tag.contains('-')))
+            .collect();
+        flagged(&flags)
+    }
+
+    fn found(list: &[u8], running: &str) -> Option<Version> {
+        newer(list, &version(running))
+            .unwrap()
+            .map(|release| release.version)
     }
 
     #[test]
     fn a_newer_alpha_is_found_while_an_alpha_runs() {
         let list = listing(&[("v1.0.0-alpha.13", false), ("v1.0.0-alpha.12", false)]);
         assert_eq!(
-            newer(&list, &version("1.0.0-alpha.12")).unwrap(),
+            found(&list, "1.0.0-alpha.12"),
             Some(version("1.0.0-alpha.13"))
         );
     }
@@ -285,7 +328,7 @@ mod tests {
     #[test]
     fn the_running_release_and_older_ones_are_not_newer() {
         let list = listing(&[("v1.0.0-alpha.12", false), ("v1.0.0-alpha.9", false)]);
-        assert_eq!(newer(&list, &version("1.0.0-alpha.12")).unwrap(), None);
+        assert_eq!(found(&list, "1.0.0-alpha.12"), None);
     }
 
     #[test]
@@ -296,7 +339,7 @@ mod tests {
             ("v1.0.0-alpha.14", false),
         ]);
         assert_eq!(
-            newer(&list, &version("1.0.0-alpha.12")).unwrap(),
+            found(&list, "1.0.0-alpha.12"),
             Some(version("1.0.0-alpha.20"))
         );
     }
@@ -304,20 +347,41 @@ mod tests {
     #[test]
     fn a_release_runs_ahead_of_alphas_but_ignores_them() {
         let list = listing(&[("v1.1.0-alpha.1", false), ("v1.0.1", false)]);
-        assert_eq!(
-            newer(&list, &version("1.0.0")).unwrap(),
-            Some(version("1.0.1"))
-        );
+        assert_eq!(found(&list, "1.0.0"), Some(version("1.0.1")));
         let list = listing(&[("v1.1.0-alpha.1", false)]);
-        assert_eq!(newer(&list, &version("1.0.0")).unwrap(), None);
+        assert_eq!(found(&list, "1.0.0"), None);
+    }
+
+    #[test]
+    fn a_release_github_marks_prerelease_is_ignored_while_a_release_runs() {
+        let list = flagged(&[("v1.1.0", false, true)]);
+        assert_eq!(found(&list, "1.0.0"), None);
+        assert_eq!(found(&list, "1.0.0-alpha.12"), Some(version("1.1.0")));
     }
 
     #[test]
     fn the_release_after_an_alpha_counts_while_the_alpha_runs() {
         let list = listing(&[("v1.0.0", false)]);
+        assert_eq!(found(&list, "1.0.0-alpha.12"), Some(version("1.0.0")));
+    }
+
+    #[test]
+    fn build_metadata_alone_is_not_a_newer_release() {
+        let list = listing(&[("v1.0.0-alpha.12+rebuild.1", false)]);
+        assert_eq!(found(&list, "1.0.0-alpha.12"), None);
+    }
+
+    #[test]
+    fn a_loader_release_tagged_by_release_plz_is_found_with_its_page() {
+        let list = listing(&[
+            ("enshwick-loader-v1.0.0", false),
+            ("enshwick-v1.2.0", false),
+        ]);
+        let release = newer(&list, &version("1.0.0-alpha.12")).unwrap().unwrap();
+        assert_eq!(release.version, version("1.0.0"));
         assert_eq!(
-            newer(&list, &version("1.0.0-alpha.12")).unwrap(),
-            Some(version("1.0.0"))
+            release.page(),
+            "https://github.com/enshwick/enshwick/releases/tag/enshwick-loader-v1.0.0"
         );
     }
 
@@ -330,7 +394,7 @@ mod tests {
             ("v1.0.0-alpha.13", false),
         ]);
         assert_eq!(
-            newer(&list, &version("1.0.0-alpha.12")).unwrap(),
+            found(&list, "1.0.0-alpha.12"),
             Some(version("1.0.0-alpha.13"))
         );
     }
@@ -344,9 +408,11 @@ mod tests {
     }
 
     #[test]
-    fn the_page_is_built_from_the_version() {
+    fn the_page_is_built_from_the_tag() {
+        let list = listing(&[("v1.0.0-alpha.13", false)]);
+        let release = newer(&list, &version("1.0.0-alpha.12")).unwrap().unwrap();
         assert_eq!(
-            page(&version("1.0.0-alpha.13")),
+            release.page(),
             "https://github.com/enshwick/enshwick/releases/tag/v1.0.0-alpha.13"
         );
     }

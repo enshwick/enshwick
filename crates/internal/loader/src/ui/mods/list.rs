@@ -74,12 +74,12 @@ fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
     parts_off(paint);
-    if let Some(version) = loader.newer_release.get() {
+    if let Some(release) = loader.newer_release.get() {
         let line = texts::fill(
             "mods.newer",
             &[
-                ("version", &version.to_string()),
-                ("address", &crate::releases::page(version)),
+                ("version", &release.version.to_string()),
+                ("address", &release.page()),
             ],
         );
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
