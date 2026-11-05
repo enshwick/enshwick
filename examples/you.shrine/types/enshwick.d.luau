@@ -363,6 +363,21 @@ export type Channel = {
 	is_ready: (self: Channel, peer: Peer) -> boolean,
 }
 
+--- What a chat line is.
+export type ChatKind = "Player" | "Emote" | "Notice"
+
+--- A chat line on the server, for `Load.on_chat_said` and `Load.on_chat`.
+export type ChatLine = {
+	--- The sender's account, nil when the game names none.
+	player: string?,
+	--- The sender's character, nil when it has none in the world.
+	entity: number?,
+	--- What the line is.
+	kind: ChatKind,
+	--- The text, at most the game's 1024 bytes; bytes that were not UTF-8 are replaced. Empty for a notice made of text tags.
+	text: string,
+}
+
 --- The data of the `ChunkLoaded` and `ChunkUnloaded` events.
 export type ChunkData = {
 	--- The chunk's index in the world's grid: `z * width + x`.
@@ -618,6 +633,16 @@ export type Front = {
 	radius: number,
 	--- How long it has left, in game time.
 	remaining: number,
+	--- The GUID of its phenomenon in the game's weather resource, which for one a mod added is the GUID its `PhenomenonId` holds; nil when the loader does not tell.
+	phenomenon: string?,
+}
+
+--- A front that started or ended, for `Load.on_front`.
+export type FrontChanged = {
+	--- The front as it started, or as it was last seen before it ended.
+	front: Front,
+	--- `true` when it started, `false` when it ended.
+	started: boolean,
 }
 
 --- A count each item keeps, from 0 to `max`, for `NewItem.meter`. The game keeps it on the item's own entity as the water pouch keeps its water: it saves it with the world, sends it to players and draws it as a bar on the item's slot. Read and change it with `World.item_meter`; set it for each new item with `Op.Give`'s `fill` or a `Drop`'s fill. The item gets an entity template, cloned from the water pouch's: `template` is that template's id, the mod's own and fixed forever, as saves hold its GUID. Items with the same meter may share one template.
@@ -1178,6 +1203,18 @@ export type NewItem = {
 	icon: Icon?,
 }
 
+--- A weather phenomenon of a mod's own: a copy of one of the game's, its clouds and look included, with values changed, in a weather layer. The game knows only clouds, rain and blizzards, so a phenomenon picks one of them; a new look needs client assets and is not offered. Every client draws weather from its own copy of the resource, so a mod that adds one runs on clients too.
+export type NewPhenomenon = {
+	--- Its content id, `mod:name`.
+	id: string,
+	--- The game's phenomenon it copies.
+	like: string,
+	--- The weather layer it joins, by its GUID; nil for the layer of `like`.
+	layer: string?,
+	--- The values it changes from `like`'s.
+	values: PhenomenonChange?,
+}
+
 --- A new recipe for `Load.add_recipe`.
 export type NewRecipe = {
 	--- The new recipe's id; its game id is `RecipeId.from_guid` of its GUID.
@@ -1251,6 +1288,24 @@ export type Outcome = {
 
 --- Who a message comes from or goes to.
 export type Peer = "Server" | { Player: string }
+
+--- Values a mod sets on a weather phenomenon; each nil keeps the value of the phenomenon it starts from.
+export type PhenomenonChange = {
+	--- How likely the game picks it in its layer, 0 to 1.
+	probability: number?,
+	--- The shortest it lasts, in game time.
+	duration_min: number?,
+	--- The longest it lasts, in game time.
+	duration_max: number?,
+	--- The smallest radius, in metres.
+	radius_min: number?,
+	--- The largest radius, in metres.
+	radius_max: number?,
+	--- How strong it is.
+	strength: number?,
+	--- What it brings: clouds alone, rain or a blizzard.
+	effect: WeatherPhenomenonEffect?,
+}
 
 --- Where an `Icon`'s pixels come from.
 export type Pixels = { Tint: Tint } | { Png: buffer }
@@ -2519,6 +2574,14 @@ declare enshwick: {
 		--- Only while the mod starts, at the top level of main.luau.
 		on_build: (filter: (arg1: Placement) -> boolean?) -> (),
 	},
+	chat: {
+		--- Runs `filter` on every line a player types, inside the game's chat post on the server's game thread, after the chat mute and in load order with other mods' filters; it keeps, drops or rewrites the line. A panic turns this filter off alone, and lines pass it. On a client it runs while it hosts a game.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_chat: (filter: (arg1: ChatLine) -> any) -> (),
+		--- Calls `handler` for every line that reached the server's chat, on the game thread after the step: a player's line as the filters left it, an emote or a notice. A player's lines reach it at most eight a second; lines a mod sends never do. A panic in `handler` turns the mod off.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_chat_said: (handler: (arg1: ChatLine) -> ()) -> (),
+	},
 	interactions: {
 		--- Runs `filter` before the game allows a player's interaction with an entity; returning `false` refuses it the game's own way. It runs in the server's world only, in the dedicated server or a hosting client, on the thread of the system that checks the interaction: keep it quick and never block. The game asks whether to offer an interaction for every entity in each player's reach on every frame, so `filter` runs many times a frame: it must not allocate, lock or log. Moves, sorts, stock draws, dismantling and upgrades ask once per action. An interaction without a player's character or without a target is allowed unasked.
 		--- Only while the mod starts, at the top level of main.luau.
@@ -2675,6 +2738,15 @@ declare enshwick: {
 		fronts: () -> {Front},
 		--- Starts new weather in every layer at once: fronts of the forecast where a layer has them and clear skies elsewhere, for `lasting` of game time or the game's own for nil; `Forecast.Any` lets the game pick anew. The game places the fronts itself, as for its own. Clients follow, and the next save keeps it. Moving the clock forward with `Clock.set_hours` uses up the time the fronts have, and the game picks new ones.
 		set: (forecast: Forecast, lasting: number?) -> (),
+		--- Calls `handler` when a front of the server's world starts and when it ends, about a second after, on the game thread; a mod gives the players inside its own weather a buff here. A panic in `handler` turns the mod off.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_front: (handler: (arg1: FrontChanged) -> ()) -> (),
+		--- Adds the weather phenomenon `new` to the game's weather, where the game picks it in its layer as it picks its own; mods that add phenomena apply in load order, each on the one before's result.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_weather_phenomenon: (new: NewPhenomenon) -> string,
+		--- Changes the values of the game's weather phenomenon `phenomenon`, or of one a mod added before; changes apply in load order.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_weather_phenomenon: (phenomenon: string, values: PhenomenonChange) -> (),
 	},
 	--- The world's map on the server: its markers, its frame, waypoints and snapshots.
 	map: {

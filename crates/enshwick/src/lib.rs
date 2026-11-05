@@ -133,6 +133,7 @@ pub mod altars;
 #[cfg(doctest)]
 mod book;
 pub mod buffs;
+pub mod chat;
 pub mod code;
 pub mod config;
 #[cfg(feature = "unstable")]

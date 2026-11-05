@@ -138,7 +138,7 @@ pub(crate) fn filter(player: u64, loca: [u32; 2], text: String, max_text: usize)
             ChatRewrite::DROP => return None,
             ChatRewrite::REWRITTEN => {
                 if let Some(new) = rewritten(&buffer, rewrite.len) {
-                    text = new.to_owned();
+                    new.clone_into(&mut text);
                 }
             }
             _ => {}
@@ -182,19 +182,18 @@ pub(crate) fn heard(loader: &Loader, said: Said) {
 
 /// Whether one more line of `player` fits its rate at `now`, counting it.
 fn admit(rate: &mut Vec<Rate>, player: u64, now: Instant) -> bool {
-    let index = match rate.iter().position(|&(key, ..)| key == player) {
-        Some(index) => index,
-        None => {
-            if rate.len() >= RATE_ACCOUNTS {
-                rate.retain(|&(_, start, _)| now.duration_since(start) < WINDOW);
-            }
-            if rate.len() >= RATE_ACCOUNTS {
-                // Every account is in this window: the line counts as over.
-                return false;
-            }
-            rate.push((player, now, 0));
-            rate.len() - 1
+    let index = if let Some(index) = rate.iter().position(|&(key, ..)| key == player) {
+        index
+    } else {
+        if rate.len() >= RATE_ACCOUNTS {
+            rate.retain(|&(_, start, _)| now.duration_since(start) < WINDOW);
         }
+        if rate.len() >= RATE_ACCOUNTS {
+            // Every account is in this window: the line counts as over.
+            return false;
+        }
+        rate.push((player, now, 0));
+        rate.len() - 1
     };
     let (_, start, count) = &mut rate[index];
     if now.duration_since(*start) >= WINDOW {

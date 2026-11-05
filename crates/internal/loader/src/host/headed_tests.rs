@@ -34,6 +34,8 @@ macro_rules! headed {
             BuildRights,
             BuildingData,
             CallSpec,
+            ChatLine,
+            ChatRewrite,
             ChunkData,
             Comfort,
             ControlEvent,

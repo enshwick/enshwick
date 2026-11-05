@@ -79,6 +79,7 @@
 //! ```
 
 mod calls;
+mod chat;
 mod content;
 #[cfg(feature = "unstable")]
 mod controls;

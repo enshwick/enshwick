@@ -20,6 +20,8 @@ mod build_rights;
 mod calls;
 #[cfg(feature = "unstable")]
 mod capture;
+#[cfg(feature = "unstable")]
+mod chat;
 mod config_check;
 mod config_errors;
 mod config_files;

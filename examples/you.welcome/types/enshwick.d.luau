@@ -363,6 +363,21 @@ export type Channel = {
 	is_ready: (self: Channel, peer: Peer) -> boolean,
 }
 
+--- What a chat line is.
+export type ChatKind = "Player" | "Emote" | "Notice"
+
+--- A chat line on the server, for `Load.on_chat_said` and `Load.on_chat`.
+export type ChatLine = {
+	--- The sender's account, nil when the game names none.
+	player: string?,
+	--- The sender's character, nil when it has none in the world.
+	entity: number?,
+	--- What the line is.
+	kind: ChatKind,
+	--- The text, at most the game's 1024 bytes; bytes that were not UTF-8 are replaced. Empty for a notice made of text tags.
+	text: string,
+}
+
 --- The data of the `ChunkLoaded` and `ChunkUnloaded` events.
 export type ChunkData = {
 	--- The chunk's index in the world's grid: `z * width + x`.
@@ -2558,6 +2573,14 @@ declare enshwick: {
 		--- Runs `filter` after the game's cursor check allows a placement; returning `false` refuses it as the game refuses a placement without building permission. It runs on both sides, on the cursor systems' worker threads: the server's answer decides, and a client running the mod shows the cursor as not allowed. The cursor check runs on every frame a player aims to build, so `filter` must not allocate, lock or log, and gives the same answer on both sides.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_build: (filter: (arg1: Placement) -> boolean?) -> (),
+	},
+	chat: {
+		--- Runs `filter` on every line a player types, inside the game's chat post on the server's game thread, after the chat mute and in load order with other mods' filters; it keeps, drops or rewrites the line. A panic turns this filter off alone, and lines pass it. On a client it runs while it hosts a game.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_chat: (filter: (arg1: ChatLine) -> any) -> (),
+		--- Calls `handler` for every line that reached the server's chat, on the game thread after the step: a player's line as the filters left it, an emote or a notice. A player's lines reach it at most eight a second; lines a mod sends never do. A panic in `handler` turns the mod off.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_chat_said: (handler: (arg1: ChatLine) -> ()) -> (),
 	},
 	interactions: {
 		--- Runs `filter` before the game allows a player's interaction with an entity; returning `false` refuses it the game's own way. It runs in the server's world only, in the dedicated server or a hosting client, on the thread of the system that checks the interaction: keep it quick and never block. The game asks whether to offer an interaction for every entity in each player's reach on every frame, so `filter` runs many times a frame: it must not allocate, lock or log. Moves, sorts, stock draws, dismantling and upgrades ask once per action. An interaction without a player's character or without a target is allowed unasked.

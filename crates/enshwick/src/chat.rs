@@ -122,7 +122,7 @@ impl Answer for ChatVerdict {
 
 /// A mod's chat filter and whether it panicked, which turns it off alone.
 struct Filter<F> {
-    filter: F,
+    run: F,
     off: AtomicBool,
     host: Host,
 }
@@ -144,7 +144,8 @@ where
 {
     // SAFETY: the loader passes a valid line and rewrite for the call, by
     // this function's `# Safety`.
-    let (Some(line), Some(rewrite)) = (unsafe { line.as_ref() }, unsafe { rewrite.as_mut() }) else {
+    let (Some(line), Some(rewrite)) = (unsafe { line.as_ref() }, unsafe { rewrite.as_mut() })
+    else {
         return ChatRewrite::KEEP;
     };
     // SAFETY: `user` is the leaked `Filter<F>`, by this function's `# Safety`.
@@ -153,7 +154,7 @@ where
         return ChatRewrite::KEEP;
     }
     let line = ChatLine::of(line);
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (filter.filter)(&line))) {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (filter.run)(&line))) {
         Ok(ChatVerdict::Keep) => ChatRewrite::KEEP,
         Ok(ChatVerdict::Drop) => ChatRewrite::DROP,
         Ok(ChatVerdict::Rewrite(text)) => {
@@ -166,7 +167,10 @@ where
         }
         Err(_) => {
             if !filter.off.swap(true, Ordering::AcqRel) {
-                filter.host.log(Level::WARN, "a chat filter panicked: it is off, and lines pass it");
+                filter.host.log(
+                    Level::WARN,
+                    "a chat filter panicked: it is off, and lines pass it",
+                );
             }
             ChatRewrite::KEEP
         }
@@ -204,7 +208,7 @@ impl Load<'_> {
     {
         let host = self.host();
         let filter = Filter {
-            filter,
+            run: filter,
             off: AtomicBool::new(false),
             host,
         };
@@ -237,7 +241,7 @@ impl Load<'_> {
             // SAFETY: subscribed under `Event::CHAT_SAID`, whose data the
             // loader passes as a `ChatLine`, null or valid for the call.
             let line = unsafe {
-                crate::abi::read_headed(raw.cast::<abi::ChatLine>(), size_of::<abi::ChatLine>())
+                abi::read_headed(raw.cast::<abi::ChatLine>(), size_of::<abi::ChatLine>())
             };
             if let Some(line) = line {
                 handler(&ChatLine::of(&line));
@@ -258,12 +262,18 @@ mod tests {
 
     #[test]
     fn a_script_answer_of_false_drops_text_rewrites_and_anything_else_keeps() {
-        assert_eq!(ChatVerdict::from_answer(Ok(Value::Bool(false))), ChatVerdict::Drop);
+        assert_eq!(
+            ChatVerdict::from_answer(Ok(Value::Bool(false))),
+            ChatVerdict::Drop
+        );
         assert_eq!(
             ChatVerdict::from_answer(Ok(Value::String("x".to_owned()))),
             ChatVerdict::Rewrite("x".to_owned())
         );
         assert_eq!(ChatVerdict::from_answer(Ok(Value::Nil)), ChatVerdict::Keep);
-        assert_eq!(ChatVerdict::from_answer(Ok(Value::Bool(true))), ChatVerdict::Keep);
+        assert_eq!(
+            ChatVerdict::from_answer(Ok(Value::Bool(true))),
+            ChatVerdict::Keep
+        );
     }
 }

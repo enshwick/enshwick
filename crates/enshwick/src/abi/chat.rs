@@ -107,9 +107,10 @@ impl ChatRewrite {
 }
 
 /// A mod's chat filter, registered with
-/// [`HostApi::chat_filter`](super::HostApi::chat_filter): called on the
-/// server's game thread, inside the game's chat post, for a player's line
-/// after the chat mute; it answers [`ChatRewrite::KEEP`],
+/// [`HostApi::chat_filter`](super::HostApi::chat_filter).
+///
+/// It is called on the server's game thread, inside the game's chat post,
+/// for a player's line after the chat mute; it answers [`ChatRewrite::KEEP`],
 /// [`ChatRewrite::DROP`] or [`ChatRewrite::REWRITTEN`], any other answer
 /// keeping the line. `line` and `rewrite` are borrowed for the call and
 /// never null; `line.text` is the text after the filters before this one.

@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 5
+#define ENSHWICK_ABI_MINOR 6
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -667,6 +667,62 @@ typedef uint32_t EnshwickChangeOp;
 // takes it.
 #define EnshwickChangeOp_RESET 2
 
+// A chat line on the server, borrowed for the call that hands it over.
+//
+// Raised with `Event::CHAT_SAID` after the step
+// for every line that reached the chat, and handed to each
+// `ChatFilterFn` for a player's line before anyone reads it. `text` is
+// valid UTF-8 (bytes that are not are replaced), at most the game's own
+// limit of 1024 bytes, and lives only for the call. Layout grows only by
+// appending; read a later field after `Header::covers`.
+typedef struct EnshwickChatLine {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The sender's account key; zero when the game names none.
+  EnshwickPlayerKey player;
+  // The sender's character, `Entity(0)` when it has none in the world.
+  EnshwickEntity entity;
+  // `ChatLine::PLAYER`, `ChatLine::EMOTE` or `ChatLine::NOTICE`.
+  uint32_t kind;
+  // The two text tags the game posts with the line, zero when unused.
+  uint32_t loca[2];
+  // The text, UTF-8, borrowed for the call; empty for a notice made of
+  // text tags.
+  struct EnshwickStr text;
+} EnshwickChatLine;
+// A line a player typed: the game posted it for what their client
+// sent, whatever chat type the client named.
+#define EnshwickChatLine_PLAYER 0
+// An emote the server posted for a player.
+#define EnshwickChatLine_EMOTE 1
+// Any other line the server posted itself, such as a player joining
+// or leaving.
+#define EnshwickChatLine_NOTICE 2
+
+// The buffer a `ChatFilterFn` writes a rewritten line into.
+//
+// The loader owns `buffer`, writable for `capacity` bytes during the call
+// only; the filter writes UTF-8 into it, sets `len` and answers
+// `ChatRewrite::REWRITTEN`. A `len` over `capacity`, or bytes that are
+// not UTF-8, keep the line as it was.
+typedef struct EnshwickChatRewrite {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // Where the filter writes the new text; never null.
+  uint8_t *buffer;
+  // Bytes `buffer` holds: the game's limit for a line.
+  uint32_t capacity;
+  // Bytes the filter wrote.
+  uint32_t len;
+} EnshwickChatRewrite;
+// The line goes on as it is.
+#define EnshwickChatRewrite_KEEP 0
+// The line is dropped as the chat mute drops it: nobody reads it, and
+// the filters after this one do not run.
+#define EnshwickChatRewrite_DROP 1
+// The line goes on as the text written into the buffer.
+#define EnshwickChatRewrite_REWRITTEN 2
+
 // The data of the `ChunkLoaded` and
 // `ChunkUnloaded` events.
 typedef struct EnshwickChunkData {
@@ -1078,6 +1134,12 @@ typedef uint32_t EnshwickEvent;
 // Deaths the game keeps no record of, such as freezing or an
 // administrator's kill, raise none. Server only.
 #define EnshwickEvent_PLAYER_DIED 20
+// A line reached the server's chat: a player's line the chat filters
+// kept, as they left it, an emote or another line the server posted;
+// data is a `ChatLine`. Lines the loader posts for
+// mods raise none, and a player's lines raise at most eight a second.
+// Raised on the game thread after the step. Server only. ABI 11.6.
+#define EnshwickEvent_CHAT_SAID 21
 
 // A mod event a mod defines, or the one it subscribes to.
 typedef struct EnshwickEventSpec {
@@ -1924,7 +1986,7 @@ typedef struct EnshwickWeatherFront {
   // How long it has left, in game nanoseconds.
   int64_t remaining;
   // The GUID of its phenomenon in the weather resource, all zero when
-  // the loader did not find it. ABI 11.5.
+  // the loader did not find it. ABI 11.6.
   uint8_t phenomenon[16];
 } EnshwickWeatherFront;
 // Clouds without rain, or nothing.
@@ -3011,6 +3073,19 @@ typedef struct EnshwickItemAction {
 // The game handles a refused action as one it already ran, so nothing
 // moves and nothing is lost.
 typedef uint8_t (*EnshwickItemActionFn)(const struct EnshwickItemAction *call, void *user);
+
+// A mod's chat filter, registered with
+// `HostApi::chat_filter`.
+//
+// It is called on the server's game thread, inside the game's chat post,
+// for a player's line after the chat mute; it answers `ChatRewrite::KEEP`,
+// `ChatRewrite::DROP` or `ChatRewrite::REWRITTEN`, any other answer
+// keeping the line. `line` and `rewrite` are borrowed for the call and
+// never null; `line.text` is the text after the filters before this one.
+// Never re-entered; it must not unwind.
+typedef uint8_t (*EnshwickChatFilterFn)(const struct EnshwickChatLine *line,
+                                        struct EnshwickChatRewrite *rewrite,
+                                        void *user);
 
 // The table of services the loader offers a mod.
 //
@@ -4537,6 +4612,18 @@ typedef struct EnshwickHostApi {
   // `Status::MISSING` on a build without the player input it reads. A
   // panic in the loader returns `Status::REFUSED`.
   EnshwickStatus (*item_filter)(EnshwickModHandle me, EnshwickItemActionFn callback, void *user);
+  // Adds `callback` with `user` to the chat filters, which run in load
+  // order on the server's game thread, inside the game's chat post, on
+  // every line a player typed that the chat mute let through; the first
+  // `ChatRewrite::DROP` drops the line,
+  // and a rewrite hands the new text to the filters after it. Lines the
+  // loader posts for mods pass no filter. Server only: on a client it
+  // runs while it hosts a game (`Status::MISSING` on a build without
+  // the chat post). Allowed during `enshwick_mod_init` only
+  // (`Status::TOO_LATE` after it); `callback` and `user` are kept for
+  // the life of the process and never freed by the loader. A panic in
+  // the loader returns `Status::REFUSED`. ABI 11.6.
+  EnshwickStatus (*chat_filter)(EnshwickModHandle me, EnshwickChatFilterFn callback, void *user);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.
