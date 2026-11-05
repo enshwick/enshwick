@@ -1,9 +1,11 @@
+mod builds;
+
 use iced_x86::{Decoder, DecoderOptions, Instruction};
 
 use super::shape::{self, Step};
 use super::{How, Routed, Routes};
 use crate::reflect::{Image, Layout, Reflection};
-use crate::{Side, Table, embedded, exact};
+use crate::{Side, Table, embedded};
 
 #[test]
 fn the_embedded_routes_read() {
@@ -782,139 +784,38 @@ fn a_scale_folds_the_factors_of_one_index_and_refuses_what_it_cannot_follow() {
     }
 }
 
-/// Entries a route finds on a table build that its own table does not pin
-/// and no pattern of the newest table finds there either, by table name.
-const UNPINNED_UNCHECKED: &[(&str, &[&str])] = &[
-    (
-        "1.0 client (1269579)",
-        &[
-            "bases.cursor",
-            "bases.entity_query",
-            "bases.set_insert",
-            "building.block_box",
-            "building.box_extent",
-            "building.box_min",
-            "building.box_size",
-            "recipe.limit_stop",
-            "ui.no_construct",
-            "ui.scroll_focus",
-            "ui.scroll_state_size",
-            "ui.text_field",
-            "ui.text_field_extent",
-            "ui.text_field_text",
-        ],
-    ),
-    (
-        "1.0 server (1269579)",
-        &[
-            "bases.cursor",
-            "bases.entity_query",
-            "bases.set_insert",
-            "building.block_box",
-            "building.box_extent",
-            "building.box_min",
-            "building.box_size",
-            "recipe.limit_stop",
-        ],
-    ),
-];
-
-/// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
-/// skipped without it), every route of their side finds, with no table
-/// behind it, the value their own table pins; an entry the table does not
-/// pin takes the value the newest table's patterns find there, or is one of
-/// [`UNPINNED_UNCHECKED`].
+/// An anchor row stands only for what the routes leave: an entry no route
+/// of its side finds, a symbol whose route does not check its code, a
+/// symbol a kept constant reads through, or the `.bytes` of a kept symbol.
 #[test]
-#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
-fn every_route_finds_what_the_own_table_pins() {
-    for (var, side) in [
-        ("ENSH_SERVER_EXE", Side::Server),
-        ("ENSH_CLIENT_EXE", Side::Client),
-    ] {
-        if let Ok(path) = std::env::var(var) {
-            routes_hold_on(std::path::Path::new(&path), side);
-        }
-    }
-}
-
-/// As [`every_route_finds_what_the_own_table_pins`] on every executable the
-/// opt-in `ENSH_EXES` lists (a path list, such as every kept build), each
-/// a server when its file is `enshrouded_server.exe`; skipped without it.
-#[test]
-#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
-fn every_route_holds_on_every_kept_build() {
-    let Some(list) = std::env::var_os("ENSH_EXES") else {
-        return;
-    };
-    for path in std::env::split_paths(&list) {
-        let server = path
-            .file_name()
-            .is_some_and(|name| name.eq_ignore_ascii_case("enshrouded_server.exe"));
-        let side = if server { Side::Server } else { Side::Client };
-        routes_hold_on(&path, side);
-    }
-}
-
-/// Runs every route of `side` with no table behind it on the executable at
-/// `path` and compares each with its own table, as the tests above say.
-fn routes_hold_on(path: &std::path::Path, side: Side) {
-    let var = path.display();
-    let tables: Vec<Table> = embedded()
-        .iter()
-        .map(|(_, text)| Table::parse(text).unwrap())
-        .collect();
+fn the_anchors_hold_only_what_no_route_replaces() {
     let routes = Routes::embedded().unwrap();
-    {
-        let bytes = std::fs::read(path).unwrap();
-        let image = Image::parse(&bytes, Layout::File, None).unwrap();
-        let reflection = Reflection::scan(&image);
-        let own = exact(&tables, side, image.fingerprint().unwrap())
-            .unwrap()
-            .resolve();
-        let text = image.range(image.section(".text").unwrap());
-        let code = image.read(text.start, text.end - text.start).unwrap();
-        let carried = crate::newest(&tables, side).unwrap().fall_back(
-            code,
-            text.start - image.base(),
-            |at| image.u32(image.base() + at),
-        );
-        let unchecked: &[&str] = UNPINNED_UNCHECKED
+    for side in [Side::Server, Side::Client] {
+        let anchors = crate::anchors(side).unwrap();
+        let read_through: Vec<&str> = anchors
+            .constants()
             .iter()
-            .find(|(name, _)| *name == own.name())
-            .map_or(&[], |(_, ids)| ids);
-        let wrong: Vec<String> = routes
-            .find(&image, &reflection, side, &empty())
-            .into_iter()
-            .filter_map(|(id, routed)| {
-                let (value, constant) = match routed {
-                    Some(Routed::Symbol(v) | Routed::Reached(v)) => (Some(v), false),
-                    Some(Routed::Constant(v)) => (Some(v), true),
-                    None => (None, false),
-                };
-                let entry = |table: &crate::Resolved| {
-                    if constant {
-                        table.constant(id)
-                    } else {
-                        table.symbol(id)
-                    }
-                };
-                let pinned = own.symbol(id).is_some() || own.constant(id).is_some();
-                let want = if pinned {
-                    entry(&own)
-                } else if value.is_none() || unchecked.contains(&id) {
-                    return None;
-                } else {
-                    entry(&carried)
-                };
-                (value != want).then(|| format!("{id}: route {routed:x?}, table {want:x?}"))
-            })
+            .filter_map(crate::Constant::via)
             .collect();
-        assert!(
-            wrong.is_empty(),
-            "{var} ({}), {} wrong:\n{}",
-            own.name(),
-            wrong.len(),
-            wrong.join("\n")
-        );
+        let kept: Vec<&str> = anchors.symbols().iter().map(crate::Symbol::id).collect();
+        let stale: Vec<&str> = anchors
+            .symbols()
+            .iter()
+            .map(crate::Symbol::id)
+            .filter(|id| {
+                routes.routes(id, side) && routes.checks(id, side) && !read_through.contains(id)
+            })
+            .chain(
+                anchors
+                    .constants()
+                    .iter()
+                    .map(crate::Constant::id)
+                    .filter(|id| match id.strip_suffix(".bytes") {
+                        Some(symbol) => !kept.contains(&symbol),
+                        None => routes.routes(id, side),
+                    }),
+            )
+            .collect();
+        assert!(stale.is_empty(), "{side:?}: {stale:?}");
     }
 }

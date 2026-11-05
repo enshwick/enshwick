@@ -5190,6 +5190,13 @@ shape = ["mov rdx,[rip+*]"]
 take = "address"
 
 [[route]]
+id = "ui.context_bundle"
+sides = ["client"]
+in = "ui.hud"
+shape = ["mov rax,[rip+?]", "mov rcx,[rax+*]", "movss xmm0,[rcx+?]"]
+take = "value"
+
+[[route]]
 id = "ui.context_host"
 sides = ["client"]
 in = "~fn:ui.context_host"

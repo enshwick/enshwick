@@ -3,7 +3,7 @@
 use enshwick::code::Pattern;
 
 use crate::reflect::Fingerprint;
-use crate::{Body, Routed, Side, Table};
+use crate::{Body, Routed, Side, Table, TableError};
 
 /// How a [`Resolved`] table came about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -288,7 +288,30 @@ fn find(entries: &[(String, u64)], id: &str) -> Option<u64> {
         .map(|i| entries[i].1)
 }
 
-/// Every table this crate embeds, as `(file name, text)`.
+/// The patterns the loader carries to every build of `side` after the
+/// engine routes: a table without a build whose rows find, on any build,
+/// the entries no route finds ([`Table::fall_back`] resolves it).
+///
+/// # Errors
+///
+/// [`TableError`] when the embedded anchors do not read; a test reads them
+/// on every build of the crate.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::{Side, anchors};
+///
+/// let server = anchors(Side::Server)?;
+/// assert!(server.symbols().iter().all(|s| s.pattern().is_some()));
+/// # Ok::<(), enshwick_gamedata::TableError>(())
+/// ```
+pub fn anchors(side: Side) -> Result<Table, TableError> {
+    Table::anchors(include_str!("../anchors/patterns.toml"), side)
+}
+
+/// Every table this crate embeds, as `(file name, text)`: the tables of the
+/// kept builds, which the tests compare the routes and anchors with.
 ///
 /// # Examples
 ///

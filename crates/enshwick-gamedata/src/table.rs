@@ -82,7 +82,7 @@ enum SymbolValue {
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SymbolFull {
-    rva: u64,
+    rva: Option<u64>,
     pattern: Option<String>,
     #[serde(default)]
     at: u64,
@@ -324,6 +324,48 @@ fn check_body_window(
     Ok(())
 }
 
+/// The symbol row `id` reads as; an `anchored` row has a pattern and no
+/// address, every other row an address.
+fn symbol(id: String, value: SymbolValue, anchored: bool) -> Result<Symbol, TableError> {
+    let bad = |why: &str| Err(TableError::Toml(format!("{id}: {why}")));
+    if id.strip_suffix(".bytes").is_some() {
+        return bad("pinned bytes are a constant, not a symbol");
+    }
+    let without_address = "an anchor is a pattern row without an address";
+    let (rva, text, locate, body) = match value {
+        SymbolValue::Plain(_) if anchored => return bad(without_address),
+        SymbolValue::Plain(rva) => (rva, None, Locate::At(0), None),
+        SymbolValue::Full(full) => {
+            let locate = match (full.rel, full.end) {
+                (Some(at), end) => Locate::Rel {
+                    at,
+                    end: end.unwrap_or(at + 4),
+                },
+                (None, None) => Locate::At(full.at),
+                (None, Some(_)) => return bad("`end` needs `rel`"),
+            };
+            let body = full.body.map(|body| body.body(&id)).transpose()?;
+            if let Some(body) = &body {
+                check_body_window(&id, body, full.pattern.as_deref(), locate)?;
+            }
+            let rva = match (full.rva, anchored) {
+                (Some(rva), false) => rva,
+                (None, true) if full.pattern.is_some() => 0,
+                (_, true) => return bad(without_address),
+                (None, false) => return bad("a symbol names its `rva`"),
+            };
+            (rva, full.pattern, locate, body)
+        }
+    };
+    Ok(Symbol {
+        pattern: pattern(&id, text)?,
+        id,
+        rva,
+        locate,
+        body,
+    })
+}
+
 fn pattern(id: &str, text: Option<String>) -> Result<Option<Pattern>, TableError> {
     text.map(|text| {
         let pattern = Pattern::parse(&text).map_err(|e| TableError::Pattern {
@@ -372,44 +414,51 @@ impl Table {
     /// ```
     pub fn parse(text: &str) -> Result<Self, TableError> {
         let file: TableFile = toml::from_str(text).map_err(|e| TableError::Toml(e.to_string()))?;
+        Self::from_file(file, false)
+    }
+
+    /// The anchors of `side` in the text of an anchors file, as a table
+    /// without a build: its symbols have no address.
+    pub(crate) fn anchors(text: &str, side: Side) -> Result<Self, TableError> {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Rows {
+            #[serde(default)]
+            symbols: BTreeMap<String, SymbolValue>,
+            #[serde(default)]
+            constants: BTreeMap<String, ConstantValue>,
+        }
+        let mut sides: BTreeMap<Side, Rows> =
+            toml::from_str(text).map_err(|e| TableError::Toml(e.to_string()))?;
+        let rows = sides.remove(&side).unwrap_or(Rows {
+            symbols: BTreeMap::new(),
+            constants: BTreeMap::new(),
+        });
+        Self::from_file(
+            TableFile {
+                name: format!("{} anchors", side.as_str()),
+                side,
+                guid: "0".repeat(32),
+                age: 0,
+                steam_build: None,
+                game_version: None,
+                revision: first_revision(),
+                checks: BTreeMap::new(),
+                symbols: rows.symbols,
+                constants: rows.constants,
+            },
+            true,
+        )
+    }
+
+    /// A table from its read file; an `anchored` one's symbols have no
+    /// address, every other table's have one.
+    fn from_file(file: TableFile, anchored: bool) -> Result<Self, TableError> {
         let guid = parse_guid(&file.guid).ok_or_else(|| TableError::Guid(file.guid.clone()))?;
         let symbols: Vec<Symbol> = file
             .symbols
             .into_iter()
-            .map(|(id, value)| {
-                if id.strip_suffix(".bytes").is_some() {
-                    return Err(TableError::Toml(format!(
-                        "{id}: pinned bytes are a constant, not a symbol"
-                    )));
-                }
-                let (rva, text, locate, body) = match value {
-                    SymbolValue::Plain(rva) => (rva, None, Locate::At(0), None),
-                    SymbolValue::Full(full) => {
-                        let locate = match (full.rel, full.end) {
-                            (Some(at), end) => Locate::Rel {
-                                at,
-                                end: end.unwrap_or(at + 4),
-                            },
-                            (None, None) => Locate::At(full.at),
-                            (None, Some(_)) => {
-                                return Err(TableError::Toml(format!("{id}: `end` needs `rel`")));
-                            }
-                        };
-                        let body = full.body.map(|body| body.body(&id)).transpose()?;
-                        if let Some(body) = &body {
-                            check_body_window(&id, body, full.pattern.as_deref(), locate)?;
-                        }
-                        (full.rva, full.pattern, locate, body)
-                    }
-                };
-                Ok(Symbol {
-                    pattern: pattern(&id, text)?,
-                    id,
-                    rva,
-                    locate,
-                    body,
-                })
-            })
+            .map(|(id, value)| symbol(id, value, anchored))
             .collect::<Result<_, TableError>>()?;
         let constants = file
             .constants

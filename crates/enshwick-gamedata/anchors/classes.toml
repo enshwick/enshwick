@@ -916,8 +916,8 @@ reason = "the count of an engine path's parts, which no instruction near its rea
 
 [[class]]
 entries = ["ui.context_bundle"]
-class = "pattern"
-reason = "read in a function nothing but its own unwind entry references, whose two callees nothing references either, so no route reaches it"
+class = "engine"
+reason = "an engine route reads it in ui.hud, the one routed function that loads it from the UI context"
 
 [[class]]
 entries = ["building.box_extent", "building.box_min", "building.box_size"]

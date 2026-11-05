@@ -1,0 +1,53 @@
+# The patterns the loader carries to every game build, after the engine
+# routes (`routes.toml`): per side, a row for each entry no route finds,
+# for each symbol whose route does not check its code, and for the
+# symbols a kept constant reads through. A row is a table row without
+# an address: its pattern finds the entry on any build where it matches
+# once and its witness, if any, agrees.
+
+[client.symbols]
+"net.provider_vtable" = { pattern = "48 81 EC B0 00 00 00 33 FF 48 8D 05 ?? ?? ?? ?? 48 89 01 48 8B D9", rel = 12 }
+"inventory.skip_entity" = { pattern = "48 85 D2 74 7B 8B 05 ?? ?? ?? ?? 4D 8B CF 4D 8B C4 89 44 24 ??", rel = 7 }
+"skill.airborne_architect_cell" = { pattern = "74 1E 4C 8B 85 ?? ?? ?? ?? 48 8B 55 ?? 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 04 B3 01", rel = 15 }
+"ui.context" = { pattern = "40 57 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 4C 8B 80 ?? ?? ?? ?? 49 8B 10 48 85 D2", rel = 9 }
+"bases.entity_hash" = { pattern = "48 85 C0 74 08 48 FF C0 48 89 44 24 ?? 44 8B 05 ?? ?? ?? ?? 48 8D 44 24 ?? 48 89 44 24 ?? 48 8D 4C 24 ?? 48 8D 05 ?? ?? ?? ?? 4C 89 6C 24 ??", rel = 16 }
+
+[client.constants]
+"server.permission_entry_size" = { value = 0xa0, pattern = "3D ?? ?? ?? ?? 77 1D 4C 8D 0C 80 49 C1 E1 05 43 39 14 01", fixed = true }
+"inventory.view_replication" = { value = 0xf8, pattern = "48 8B 5D ?? 4C 8B B5 ?? ?? ?? ?? 48 8B BD 98 00 00 00 83 7B ?? 00 74 0B", fixed = true }
+"save.path_parts" = { value = 0x4, pattern = "4C 8B 81 ?? ?? ?? ?? 48 8B D3 4C 03 81 48 08 00 00 0F 29 44 24 ?? E8 ?? ?? ?? ??", fixed = true }
+"attribute.health_max_slot" = { value = 0x7, attribute = "Health_Max" }
+"attribute.stamina_max_slot" = { value = 0x2, attribute = "Stamina_Max" }
+"attribute.mana_max_slot" = { value = 0x1, attribute = "Mana_Max" }
+"attribute.health_adder_slot" = { value = 0x3, attribute = "Health_Max_Adder" }
+"attribute.stamina_adder_slot" = { value = 0x7, attribute = "Stamina_Max_Adder" }
+"attribute.mana_adder_slot" = { value = 0x7, attribute = "Mana_Max_Adder" }
+"attribute.experience_needed_slot" = { value = 0x2, attribute = "Experience_Required" }
+"attribute.fuel_max_slot" = { value = 0x1, attribute = "Fuel_Max" }
+"attribute.shroud_max_slot" = { value = 0x1, attribute = "FogResistance_Max" }
+
+[server.symbols]
+"inventory.skip_entity" = { pattern = "48 85 D2 74 7B 8B 05 ?? ?? ?? ?? 4D 8B CF 4D 8B C4 89 44 24 ??", rel = 7 }
+"skill.airborne_architect_cell" = { pattern = "74 1E 4C 8B 85 ?? ?? ?? ?? 48 8B 55 ?? 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 04 B3 01", rel = 15 }
+"knowledge.set_values" = { pattern = "40 56 41 54 41 55 41 56 41 57 48 83 EC 40 41 0F B6 40 ??" }
+"knowledge.set_world" = { pattern = "40 53 48 83 EC 20 48 83 7A ?? 00 4C 8B C2 48 8B D9" }
+"bases.holder_at" = { pattern = "48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 8B 72 ?? 33 DB", body = { len = 0x1ac, open = [0x22, 0x4e, 0x5f, 0x70, 0x7f, 0x8e, 0x9d, 0xb9, 0x13c], hash = "74d814b25adf548a0779dbe956534b15" } }
+"bases.entity_hash" = { pattern = "48 85 C0 74 08 48 FF C0 48 89 44 24 ?? 44 8B 05 ?? ?? ?? ?? 48 8D 44 24 ?? 48 89 44 24 ?? 48 8D 4C 24 ?? 48 8D 05 ?? ?? ?? ?? 4C 89 6C 24 ??", rel = 16 }
+
+[server.constants]
+"server.permission_entry_size" = { value = 0xa0, pattern = "3D ?? ?? ?? ?? 77 1D 4C 8D 0C 80 49 C1 E1 05 43 39 14 01", fixed = true }
+"inventory.view_replication" = { value = 0xf8, pattern = "48 8B 5D ?? 4C 8B B5 ?? ?? ?? ?? 48 8B BD 98 00 00 00 83 7B ?? 00 74 0B", fixed = true }
+"save.path_parts" = { value = 0x4, pattern = "4C 8B 81 ?? ?? ?? ?? 48 8B D3 4C 03 81 48 08 00 00 0F 29 44 24 ?? E8 ?? ?? ?? ??", fixed = true }
+"attribute.health_max_slot" = { value = 0x7, attribute = "Health_Max" }
+"attribute.stamina_max_slot" = { value = 0x2, attribute = "Stamina_Max" }
+"attribute.mana_max_slot" = { value = 0x1, attribute = "Mana_Max" }
+"attribute.health_adder_slot" = { value = 0x3, attribute = "Health_Max_Adder" }
+"attribute.stamina_adder_slot" = { value = 0x7, attribute = "Stamina_Max_Adder" }
+"attribute.mana_adder_slot" = { value = 0x7, attribute = "Mana_Max_Adder" }
+"attribute.experience_needed_slot" = { value = 0x2, attribute = "Experience_Required" }
+"attribute.fuel_max_slot" = { value = 0x1, attribute = "Fuel_Max" }
+"attribute.shroud_max_slot" = { value = 0x1, attribute = "FogResistance_Max" }
+"knowledge.log_entry_id" = { value = 0x0, pattern = "49 8B 56 ?? 48 FF C2 89 5C 24 20 48 89 7C 24 24 C6 44 24 2C 00 49 3B 56 ??", fixed = true }
+"knowledge.log_entry_value" = { value = 0x4, pattern = "48 FF C2 89 5C 24 ?? 48 89 7C 24 ?? C6 44 24 ?? 00 49 3B 56 ??", at = 11, size = 1, plus = -32, witness = "C6 44 08 ?? 01 B1 03 8B 44 24 ?? 89 44 24 ?? 48 8D 44 24 ??", witness_at = 10, witness_size = 1 }
+"bases.answer_box" = { value = 0x10, via = "bases.holder_at", within = 0x1ac, pattern = "41 0F 11 42 ?? 0F 28 4C 01 10 41 0F 11 4A 20", at = 4, size = 1 }
+"bases.answer_size" = { value = 0x30, via = "bases.holder_at", within = 0x1ac, pattern = "0F 28 4C 01 10 41 0F 11 4A ?? 41 C6 02 00", at = 9, size = 1, plus = 16 }
