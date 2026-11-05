@@ -9,4 +9,6 @@ id = "tonic"
 like = "cd7c8239-51ad-4e08-a90d-642f8b8616a1"
 name = "tonic.name"
 description = "tonic.description"
+# The potion's own icon, recoloured green.
+icon = { tint = [90, 200, 120], amount = 60 }
 on = { consume = "drink_tonic", trash = "keep_tonic" }
