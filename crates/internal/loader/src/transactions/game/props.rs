@@ -137,12 +137,14 @@ pub(super) fn spawn(loader: &Loader, prop: &Prop, actor: u32) -> Result<u32, Sta
         reserved: 0,
         lifetime_ns: 0,
     };
-    crate::spawns::spawn_with(
+    let entity = crate::spawns::spawn_with(
         loader,
         &request,
         vec![(used_item, item), (no_loot, tag)],
         actor,
-    )
+    )?;
+    crate::entities::spawned(entity);
+    Ok(entity)
 }
 
 /// The reflected types and offsets the state reads need, resolved

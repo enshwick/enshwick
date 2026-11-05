@@ -155,7 +155,9 @@ fn bytes(size: usize, parts: &[(usize, &[u8])]) -> Vec<u8> {
 
 /// Asks the server to spawn an entity of a template; its id.
 pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Status> {
-    spawn_with(loader, request, Vec::new(), 0)
+    let entity = spawn_with(loader, request, Vec::new(), 0)?;
+    crate::entities::spawned(entity);
+    Ok(entity)
 }
 
 /// [`spawn`], the entity starting with `extra` components as well: each a
