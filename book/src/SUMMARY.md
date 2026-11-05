@@ -26,6 +26,7 @@
 - [Game settings](game-settings.md)
 - [Game rates](rates.md)
 - [Weather and chunks](weather.md)
+  - [Weather phenomena](weather-phenomena.md)
 - [Terrain](terrain.md)
 - [Altars and bases](altars.md)
 - [The map](map.md)

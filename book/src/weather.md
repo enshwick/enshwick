@@ -75,6 +75,11 @@ from the players. `lasting` is how long, in game time, or the game's own
 for `None`; then the game goes on as usual. Clients follow, and the next save
 keeps it.
 
+## Adding and changing phenomena
+
+With the `typed` feature, mods add weather phenomena of their own and change
+the game's: see [Weather phenomena](weather-phenomena.md).
+
 ## Chunks
 
 The server loads the world in square chunks of 256 metres around the

@@ -29,7 +29,13 @@
 //! }
 //! ```
 
+#[cfg(feature = "typed")]
+mod phenomena;
+
 use core::time::Duration;
+
+#[cfg(feature = "typed")]
+pub use phenomena::{NewPhenomenon, PhenomenonChange, PhenomenonId};
 
 use crate::WorldError;
 use crate::abi::{Header, Status, WeatherFront};

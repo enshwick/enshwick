@@ -1182,6 +1182,18 @@ export type NewItem = {
 	icon: Icon?,
 }
 
+--- A weather phenomenon of a mod's own: a copy of one of the game's, its clouds and look included, with values changed, in a weather layer. The game knows only clouds, rain and blizzards, so a phenomenon picks one of them; a new look needs client assets and is not offered. Every client draws weather from its own copy of the resource, so a mod that adds one runs on clients too.
+export type NewPhenomenon = {
+	--- Its content id, `mod:name`.
+	id: string,
+	--- The game's phenomenon it copies.
+	like: string,
+	--- The weather layer it joins, by its GUID; nil for the layer of `like`.
+	layer: string?,
+	--- The values it changes from `like`'s.
+	values: PhenomenonChange?,
+}
+
 --- A new recipe for `Load.add_recipe`.
 export type NewRecipe = {
 	--- The new recipe's id; its game id is `RecipeId.from_guid` of its GUID.
@@ -1255,6 +1267,24 @@ export type Outcome = {
 
 --- Who a message comes from or goes to.
 export type Peer = "Server" | { Player: string }
+
+--- Values a mod sets on a weather phenomenon; each nil keeps the value of the phenomenon it starts from.
+export type PhenomenonChange = {
+	--- How likely the game picks it in its layer, 0 to 1.
+	probability: number?,
+	--- The shortest it lasts, in game time.
+	duration_min: number?,
+	--- The longest it lasts, in game time.
+	duration_max: number?,
+	--- The smallest radius, in metres.
+	radius_min: number?,
+	--- The largest radius, in metres.
+	radius_max: number?,
+	--- How strong it is.
+	strength: number?,
+	--- What it brings: clouds alone, rain or a blizzard.
+	effect: WeatherPhenomenonEffect?,
+}
 
 --- Where an `Icon`'s pixels come from.
 export type Pixels = { Tint: Tint } | { Png: buffer }
@@ -2679,6 +2709,12 @@ declare enshwick: {
 		fronts: () -> {Front},
 		--- Starts new weather in every layer at once: fronts of the forecast where a layer has them and clear skies elsewhere, for `lasting` of game time or the game's own for nil; `Forecast.Any` lets the game pick anew. The game places the fronts itself, as for its own. Clients follow, and the next save keeps it. Moving the clock forward with `Clock.set_hours` uses up the time the fronts have, and the game picks new ones.
 		set: (forecast: Forecast, lasting: number?) -> (),
+		--- Adds the weather phenomenon `new` to the game's weather, where the game picks it in its layer as it picks its own; mods that add phenomena apply in load order, each on the one before's result.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_weather_phenomenon: (new: NewPhenomenon) -> string,
+		--- Changes the values of the game's weather phenomenon `phenomenon`, or of one a mod added before; changes apply in load order.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_weather_phenomenon: (phenomenon: string, values: PhenomenonChange) -> (),
 	},
 	--- The world's map on the server: its markers, its frame, waypoints and snapshots.
 	map: {
