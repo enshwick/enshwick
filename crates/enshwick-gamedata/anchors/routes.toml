@@ -10,10 +10,21 @@ take = "address"
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
+id = "~cs:ui.no_construct"
+sides = ["client"]
+callers = "ui.hud_visible"
+shape = ["mov ecx,0x456", "call {ui.hud_visible}"]
+
+[[route]]
 id = "access.base_stock"
 sides = ["server"]
 called_by = ["~c0:access.base_stock", "~c1:access.base_stock"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
+
+[[route]]
+id = "~cs1:voxel.finest_level"
+callers = "voxel.read_box"
+shape = ["call {voxel.read_box}", "and dil,al"]
 
 [[route]]
 id = "access.base_stock_ui_return"
@@ -22,10 +33,22 @@ system = "player_ui"
 shape = ["mov rax,[rbp+?]", "mov rdx,[rbp+?]"]
 
 [[route]]
+id = "~cs0:voxel.finest_level"
+callers = "~cs1:voxel.finest_level"
+shape = ["call {~cs1:voxel.finest_level}", "mov al,0x1"]
+
+[[route]]
 id = "access.consumed_deposit"
 system = "inventory_actions"
 shape = ["cmp [rax+*],ecx", "je ?", "mov ebx,[r12+?]"]
 take = "value"
+
+[[route]]
+id = "~cs:bases.heap_allocate"
+sides = ["server"]
+in = "~cs0:voxel.finest_level"
+shape = ["call *", "mov [rdi],rax"]
+take = "address"
 
 [[route]]
 id = "access.consumed_upgrade"
@@ -34,16 +57,34 @@ shape = ["cmp [rax+*],ecx", "je ?", "lea rdx,[rbp+?]"]
 take = "value"
 
 [[route]]
+id = "~cs:text.lookup_english"
+sides = ["client"]
+in = "text.lookup"
+shape = ["call *", "mov [rbx+0x4],edi"]
+take = "address"
+
+[[route]]
 id = "access.deposit_target"
 system = "inventory_actions"
 shape = ["mov ebx,[r12+*]", "mov rcx,r13"]
 take = "value"
 
 [[route]]
+id = "~cs:terrain.registry"
+callers = "bases.server_create"
+shape = ["call {bases.server_create}"]
+
+[[route]]
 id = "access.deposit_version"
 system = "inventory_actions"
 shape = ["mov ecx,[r12+*]", "cmp [rax+?],ecx", "je ?", "mov ebx,[r12+?]"]
 take = "value"
+
+[[route]]
+id = "~cs:terrain.dig"
+in = "bases.stock_advance"
+shape = ["call *"]
+take = "address"
 
 [[route]]
 id = "access.dismantle_method"
@@ -54,6 +95,11 @@ take = "address"
 check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x18],rbp"]
 
 [[route]]
+id = "~cs:terrain.add"
+callers = "item.info"
+shape = ["mov rdx,[r14+0x28]", "mov ecx,ebx", "call {item.info}"]
+
+[[route]]
 id = "access.dismantle_method"
 sides = ["server"]
 in = "~caller:access.dismantle_method"
@@ -62,10 +108,20 @@ take = "address"
 check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x18],rbp"]
 
 [[route]]
+id = "~cs1:inventory.skip_entity"
+callers = "ecs.component_read_raw"
+shape = ["call {ecs.component_read_raw}", "mov rax,rbx"]
+
+[[route]]
 id = "access.object_id"
 in = "access.dismantle_method"
 shape = ["mov rax,[rdx+*]", "test rax,rax"]
 take = "value"
+
+[[route]]
+id = "~cs0:inventory.skip_entity"
+callers = "~cs1:inventory.skip_entity"
+shape = ["lea rcx,[rsp+0x38]", "mov r9d,ebx", "mov r8,r12", "call {~cs1:inventory.skip_entity}", "mov rdx,[rax]"]
 
 [[route]]
 id = "access.object_kind"
@@ -74,16 +130,36 @@ shape = ["cmp [rdx+*],al", "je ?", "test r9l,?"]
 take = "value"
 
 [[route]]
+id = "~cs:building.corner_size"
+sides = ["client"]
+in = "bases.cursor"
+shape = ["mov rcx,[rsi+0x190]", "call *"]
+take = "address"
+
+[[route]]
 id = "access.offer_out_tail"
 in = "access.offer_test"
 shape = ["mov [r15+*],eax", "mov [r15+0x4],eax", "mov [r15],0x6"]
 take = "value"
 
 [[route]]
+id = "~cs:building.corner_size"
+sides = ["server"]
+in = "bases.cursor"
+shape = ["mov rcx,[rsi+0x180]", "call *"]
+take = "address"
+
+[[route]]
 id = "access.offer_out_u32"
 in = "access.offer_test"
 shape = ["mov [r15+*],eax", "mov [r15],0x6"]
 take = "value"
+
+[[route]]
+id = "~cs:knowledge.defs"
+sides = ["server"]
+callers = "knowledge.player_value"
+shape = ["test rax,rax", "je ?b", "mov r8d,ebx", "mov rdx,rsi", "mov rcx,r14", "call {knowledge.player_value}"]
 
 [[route]]
 id = "access.offer_out_u64"
@@ -97,11 +173,24 @@ shape = [
 take = "value"
 
 [[route]]
+id = "bases.client_destroy"
+sides = ["client"]
+callers = "bases.teardown"
+shape = ["mov [r15+0x1348],r12", "call {bases.teardown}"]
+check = ["push r15", "sub rsp,0x30", "mov r15,rcx"]
+
+[[route]]
 id = "access.offer_test"
 system = "interaction_query_new"
 shape = ["call *", "cmp [rbp+?],r15l"]
 take = "address"
 check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x18],r8"]
+
+[[route]]
+id = "bases.count"
+in = "bases.base_at"
+shape = ["mov edi,[rdx+*]", "xor r11d,r11d"]
+take = "value"
 
 [[route]]
 id = "access.sort"
@@ -111,15 +200,34 @@ loads = [
 check = ["mov [rsp+0x8],rcx", "push rbp", "push rbx", "push rdi"]
 
 [[route]]
+id = "bases.heap_allocate"
+sides = ["server"]
+in = "~cs:bases.heap_allocate"
+shape = ["mov r10,[r9+*]", "mov r9l,0x4"]
+take = "value"
+
+[[route]]
 id = "access.sort_target"
 in = "access.sort"
 shape = ["mov rdi,rcx", "mov ebx,[rbx+*]"]
 take = "value"
 
 [[route]]
+id = "bases.item_altar"
+in = "bases.cursor"
+shape = ["cmp byte [rdi+*],0x0", "movzx ebx,[rbp+0x1a0]"]
+take = "value"
+
+[[route]]
 id = "access.state_input"
 in = "access.transfer"
 shape = ["sub rsp,rax", "mov rsi,[rdx+*]"]
+take = "value"
+
+[[route]]
+id = "bases.max_altars_reached"
+in = "bases.cursor"
+shape = ["or dword [r15],*", "cmp byte [rdi+0x44],0x0"]
 take = "value"
 
 [[route]]
@@ -135,14 +243,32 @@ shape = [
 take = "value"
 
 [[route]]
+id = "bases.members"
+in = "bases.zones_at"
+shape = ["mov r15d,[rcx+rbp*1+*]", "mov rbp,[rbp+0x1338]"]
+take = "value"
+
+[[route]]
 id = "access.transfer"
 loads = ["Setting Target Slot Id & Target Entity id is not spupported"]
 check = ["push rbp", "push rbx", "push rsi", "push r12", "push r15"]
 
 [[route]]
+id = "bases.stride"
+in = "bases.base_at"
+shape = ["add r8,*", "cmp r11,rdi"]
+take = "value"
+
+[[route]]
 id = "access.transfer_source"
 in = "access.transfer"
 shape = ["xor eax,eax", "mov ebx,[rsi+*]"]
+take = "value"
+
+[[route]]
+id = "bases.zone_high"
+in = "bases.base_at"
+shape = ["movss xmm0,[rdx+rax*1+*]", "comiss xmm0,xmm3"]
 take = "value"
 
 [[route]]
@@ -159,6 +285,12 @@ shape = [
 take = "value"
 
 [[route]]
+id = "bases.zone_list"
+in = "bases.base_at"
+shape = ["mov rax,[rbx+*]", "comiss xmm3,[rdx+rax*1]"]
+take = "value"
+
+[[route]]
 id = "access.transfer_target"
 in = "access.transfer"
 shape = [
@@ -168,6 +300,12 @@ shape = [
   "mov r9d,[rsi+*]",
   "lea rcx,[rbp+?]",
 ]
+take = "value"
+
+[[route]]
+id = "bases.zone_list_len"
+in = "bases.zones_at"
+shape = ["mov rbp,[rbp+*]", "test ebp,ebp"]
 take = "value"
 
 [[route]]
@@ -183,9 +321,21 @@ shape = [
 take = "value"
 
 [[route]]
+id = "bases.zone_size"
+in = "bases.base_at"
+shape = ["add rdx,*", "cmp rdx,0x200"]
+take = "value"
+
+[[route]]
 id = "access.upgrade_target"
 system = "inventory_actions"
 shape = ["call ?", "mov ebx,[r12+*]"]
+take = "value"
+
+[[route]]
+id = "building.corner_size"
+in = "~cs:building.corner_size"
+shape = ["lea rdx,[rbp+*]", "add rcx,rbx"]
 take = "value"
 
 [[route]]
@@ -195,14 +345,36 @@ shape = ["mov ecx,[r12+*]", "cmp [rax+?],ecx", "je ?", "lea rdx,[rbp+?]"]
 take = "value"
 
 [[route]]
+id = "building.cursor_no_permission"
+in = "bases.cursor"
+shape = ["or dword [r15],*", "cmp byte [rdi+0x54],0x0", "jne ?b", "mov rcx,[rdi+0x60]"]
+take = "value"
+
+[[route]]
 id = "actor.state_in_shroud"
 system = "fog_resistance_update"
 shape = ["mov rax,[rsp+?]", "or [rax+?],*"]
 take = "value"
 
 [[route]]
+id = "building.seam_check"
+sides = ["client"]
+in = "bases.cursor"
+shape = ["mov rcx,[rsi+0x190]", "call *"]
+take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
+
+[[route]]
 id = "actor_instrument_song_playing"
 system = "actor_instrument_song_playing"
+
+[[route]]
+id = "building.seam_check"
+sides = ["server"]
+in = "bases.cursor"
+shape = ["mov rcx,[rsi+0x180]", "call *"]
+take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
 id = "altar.level_attribute"
@@ -211,9 +383,21 @@ shape = ["lea rcx,[rbp-?]", "mov edx,*"]
 take = "value"
 
 [[route]]
+id = "building.zone_entry_ignored"
+in = "~cs:building.corner_size"
+shape = ["cmp byte [rcx+*],0x0", "jne ?b"]
+take = "value"
+
+[[route]]
 id = "ambient_effects"
 sides = ["client"]
 system = "ambient_effects"
+
+[[route]]
+id = "building.zone_entry_size"
+in = "~cs:building.corner_size"
+shape = ["add rbx,*", "cmp rdi,[rsi+0x18]"]
+take = "value"
 
 [[route]]
 id = "animal_clear_ui"
@@ -221,9 +405,21 @@ sides = ["client"]
 system = "animal_clear_ui"
 
 [[route]]
+id = "building.zone_list_count"
+in = "~cs:building.corner_size"
+shape = ["cmp [rcx+*],rdi", "jbe ?b"]
+take = "value"
+
+[[route]]
 id = "area_deposit_effects"
 sides = ["client"]
 system = "area_deposit_effects"
+
+[[route]]
+id = "building.zone_list_entries"
+in = "~cs:building.corner_size"
+shape = ["mov rcx,[rsi+*]", "add rcx,rbx"]
+take = "value"
 
 [[route]]
 id = "attribute.experience"
@@ -239,9 +435,22 @@ shape = [
 take = "value"
 
 [[route]]
+id = "inventory.skip_entity"
+in = "~cs0:inventory.skip_entity"
+shape = ["mov eax,[rip+*]"]
+take = "address"
+
+[[route]]
 id = "attribute.fuel"
 system = "fuel_network"
 shape = ["mov edx,*", "call ?"]
+take = "value"
+
+[[route]]
+id = "knowledge.defs"
+sides = ["server"]
+in = "~cs:knowledge.defs"
+shape = ["mov rdi,[rcx+*]", "mov rsi,rdx"]
 take = "value"
 
 [[route]]
@@ -251,10 +460,25 @@ shape = ["mov edx,*", "call ?", "movzx r12d,[rsp+?]"]
 take = "value"
 
 [[route]]
+id = "knowledge.defs_blob"
+sides = ["server"]
+in = "~cs:knowledge.defs"
+shape = ["mov rdi,[rdi+*]", "mov rcx,rdi"]
+take = "value"
+
+[[route]]
 id = "attribute.level"
 system = "player_level"
 shape = ["lea rcx,[rbp]", "mov edx,*"]
 take = "value"
+
+[[route]]
+id = "knowledge.log_entry_id"
+sides = ["client"]
+in = "knowledge.set_values"
+shape = ["mov [rcx],rax", "dec dword [rsi+0x54]", "mov rdx,[r14+0x8]"]
+take = "spelled"
+value = 0x0
 
 [[route]]
 id = "attribute.mana"
@@ -263,10 +487,25 @@ shape = ["mov edx,*", "call ?", "movzx r15d,[rsp+?]", "mov [rbp+?],r15l"]
 take = "value"
 
 [[route]]
+id = "knowledge.set_world"
+sides = ["client"]
+callers = "knowledge.set_values"
+shape = ["call {knowledge.set_values}", "movzx edx,[rbx+0xc0]"]
+check = ["push rbx", "sub rsp,0x20", "cmp qword [rdx+0x8],0x0"]
+
+[[route]]
 id = "attribute.shroud"
 system = "debug_god_mode_fogresistance"
 shape = ["mov edx,*", "call ?", "mov r8,[rbp+?]"]
 take = "value"
+
+[[route]]
+id = "npc.lookup_cursor"
+sides = ["server"]
+in = "bases.cursor"
+shape = ["call *", "jmp ?b"]
+take = "address"
+check = ["push rbx", "sub rsp,0x20", "lea rbx,[rcx+0x1560]"]
 
 [[route]]
 id = "attribute.stamina"
@@ -275,10 +514,24 @@ shape = ["mov edx,*", "call ?", "movzx r14d,[rsp+?]"]
 take = "value"
 
 [[route]]
+id = "survivors.cursor_return"
+sides = ["client"]
+in = "bases.cursor"
+shape = ["jmp ?b", "mov rcx,[rsi+0x50]"]
+check = ["jmp ?b", "mov edx,eax", "mov rax,[rsi+0x118]"]
+
+[[route]]
 id = "balancing.zone_size"
 sides = ["client"]
 called_by = ["client_cursor_entity", "upgrade_building_range"]
 check = ["mov r9,[rdx+0x20]", "test r9,r9", "je ?b"]
+
+[[route]]
+id = "survivors.cursor_return_a"
+sides = ["client"]
+in = "bases.cursor"
+shape = ["jmp ?b", "mov rcx,[rsi+0x50]"]
+check = ["jmp ?b", "mov edx,eax", "mov rax,[rsi+0x118]"]
 
 [[route]]
 id = "balancing.zone_size"
@@ -289,22 +542,54 @@ take = "address"
 check = ["mov r9,[rdx+0x20]", "test r9,r9", "je ?b"]
 
 [[route]]
+id = "survivors.cursor_return_a"
+sides = ["server"]
+in = "bases.cursor"
+shape = ["jmp ?b", "mov rcx,[rsi+0x50]"]
+check = ["jmp ?b", "mov edx,eax", "mov rax,[rsi+0x108]"]
+
+[[route]]
 id = "balancing.zone_size_valid"
 in = "balancing.zone_size"
 shape = ["ret", "mov [rcx+*],?"]
 take = "value"
 
 [[route]]
+id = "survivors.cursor_return_b"
+sides = ["client"]
+in = "bases.cursor"
+shape = ["mov edx,eax", "mov rax,[rsi+0x118]"]
+
+[[route]]
 id = "base_bed_counts_cleanup_server"
 system = "base_bed_counts_cleanup_server"
+
+[[route]]
+id = "survivors.cursor_return_b"
+sides = ["server"]
+in = "bases.cursor"
+shape = ["mov edx,eax", "mov rax,[rsi+0x108]"]
 
 [[route]]
 id = "base_comfort_cleanup"
 system = "base_comfort_cleanup"
 
 [[route]]
+id = "terrain.add"
+in = "~cs:terrain.add"
+shape = ["movss [rsp+0x20],xmm1", "call *"]
+take = "address"
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x10],rsi"]
+
+[[route]]
 id = "base_crafting_props_cleanup"
 system = "base_crafting_props_cleanup"
+
+[[route]]
+id = "terrain.dig"
+callers = "~cs:terrain.dig"
+shape = ["mov rax,rsp", "mov [rax+0x10],rbx", "mov [rax+0x8],rcx"]
+check = ["mov rax,rsp", "mov [rax+0x10],rbx", "mov [rax+0x8],rcx"]
 
 [[route]]
 id = "bases.allocator"
@@ -314,11 +599,24 @@ take = "spelled"
 value = 0x0
 
 [[route]]
+id = "terrain.flatten"
+in = "~cs:terrain.add"
+shape = ["mov [rsp+0x20],rax", "call *"]
+take = "address"
+check = ["mov rax,rsp", "mov [rax+0x10],rbx", "mov [rax+0x18],rsi"]
+
+[[route]]
 id = "bases.animal_map"
 in = "bases.server_update"
 shape = ["nop [rax+rax*1]", "lea rcx,[rsi+*]"]
 take = "value"
 plus = -8
+
+[[route]]
+id = "terrain.registry"
+in = "~cs:terrain.registry"
+shape = ["movaps [rbp+0x5e0],xmm0", "mov rdx,[r14+0x38]", "call ?b", "mov [rdi+*],rax"]
+take = "value"
 
 [[route]]
 id = "bases.animals"
@@ -327,10 +625,24 @@ shape = ["mov r14,r13", "mov [rsi+*],r13d"]
 take = "value"
 
 [[route]]
+id = "text.lookup_english"
+sides = ["client"]
+callers = "~cs:text.lookup_english"
+shape = ["ret", "lea rcx,[rsp+0x20]", "call {~cs:text.lookup_english}"]
+check = ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,0x30"]
+
+[[route]]
 id = "bases.answer_box"
 sides = ["client"]
 in = "bases.holder_at"
 shape = ["movaps xmm0,[rcx+rax*1]", "movups [r10+*],xmm0"]
+take = "value"
+
+[[route]]
+id = "ui.hud_screen"
+sides = ["client"]
+in = "ui.hud_visible"
+shape = ["movzx eax,[rdi+*]", "mov [rsp+0x30],rbx"]
 take = "value"
 
 [[route]]
@@ -341,9 +653,24 @@ take = "spelled"
 value = 0x0
 
 [[route]]
+id = "ui.no_construct"
+sides = ["client"]
+in = "~cs:ui.no_construct"
+shape = ["lea r9,[rip+*]", "mov rdx,?i"]
+take = "address"
+check = ["ret 0x0"]
+
+[[route]]
 id = "bases.answer_index"
 in = "bases.base_at"
 shape = ["ret", "mov [r10+*],r11l"]
+take = "value"
+
+[[route]]
+id = "ui.scroll_state_size"
+sides = ["client"]
+in = "~cs:ui.no_construct"
+shape = ["mov r8d,*", "call ?b"]
 take = "value"
 
 [[route]]
@@ -355,9 +682,22 @@ take = "value"
 plus = 16
 
 [[route]]
+id = "ui.slider_bounded"
+sides = ["client"]
+in = "ui.slider_init"
+shape = ["movups [rcx+?],xmm1", "mov dword [rcx+*],0x1"]
+take = "value"
+
+[[route]]
 id = "bases.answer_zero"
 in = "bases.base_at"
 shape = ["mov rax,r10", "mov [r10+*],?"]
+take = "value"
+
+[[route]]
+id = "voxel.finest_level"
+in = "~cs0:voxel.finest_level"
+shape = ["mov eax,*", "sub eax,esi"]
 take = "value"
 
 [[route]]

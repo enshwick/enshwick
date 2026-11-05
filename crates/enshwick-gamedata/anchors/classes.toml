@@ -54,6 +54,7 @@ entries = [
   "bases.bed_cleanup",
   "bases.changes",
   "bases.client_create",
+  "bases.client_destroy",
   "bases.client_size",
   "bases.comfort_cleanup",
   "bases.container_box",
@@ -61,6 +62,7 @@ entries = [
   "bases.container_data",
   "bases.container_grow",
   "bases.container_len",
+  "bases.count",
   "bases.count_getter",
   "bases.ctor",
   "bases.cursor",
@@ -73,12 +75,15 @@ entries = [
   "bases.heap_free",
   "bases.holder_at",
   "bases.in_base",
+  "bases.item_altar",
   "bases.kind",
   "bases.map_bitmap",
   "bases.map_buckets",
   "bases.map_count",
   "bases.map_keys",
   "bases.map_values",
+  "bases.max_altars_reached",
+  "bases.members",
   "bases.new_base",
   "bases.npc_kind",
   "bases.npc_map",
@@ -124,8 +129,13 @@ entries = [
   "bases.stock_count",
   "bases.stock_entities",
   "bases.stock_find",
+  "bases.stride",
   "bases.teardown",
+  "bases.zone_high",
+  "bases.zone_list",
   "bases.zone_list_allocator",
+  "bases.zone_list_len",
+  "bases.zone_size",
   "bases.zones_at",
   "buffs.cleanse",
   "buffs.record_has_level",
@@ -142,10 +152,12 @@ entries = [
   "buffs.type_by_id",
   "building.block_box",
   "building.blueprint_lookup",
+  "building.corner_size",
   "building.ctx_player",
   "building.ctx_replay",
   "building.cursor_check",
   "building.cursor_item_info",
+  "building.cursor_no_permission",
   "building.in_building_area",
   "building.material_feedback",
   "building.max_altars",
@@ -153,8 +165,13 @@ entries = [
   "building.pickup",
   "building.pickup_entity",
   "building.pickup_mode",
+  "building.seam_check",
   "building.spawn_prop",
+  "building.zone_entry_ignored",
   "building.zone_entry_shape",
+  "building.zone_entry_size",
+  "building.zone_list_count",
+  "building.zone_list_entries",
   "building.zone_touches",
   "chat.client_send",
   "chat.handle_slot",
@@ -308,6 +325,7 @@ entries = [
   "inventory.move_amount",
   "inventory.move_slot",
   "inventory.resend",
+  "inventory.skip_entity",
   "inventory.take",
   "inventory.txn_commit",
   "inventory.txn_drop",
@@ -331,6 +349,7 @@ entries = [
   "knowledge.journal",
   "knowledge.journal_blob",
   "knowledge.journal_blob_get",
+  "knowledge.log_entry_id",
   "knowledge.log_entry_size",
   "knowledge.log_entry_value",
   "knowledge.object",
@@ -351,6 +370,7 @@ entries = [
   "knowledge.resend_player",
   "knowledge.resend_world",
   "knowledge.set_values",
+  "knowledge.set_world",
   "knowledge.state",
   "knowledge.step",
   "knowledge.world_log",
@@ -478,6 +498,9 @@ entries = [
   "survivors.bed_init_return",
   "survivors.bed_return",
   "survivors.bed_transform",
+  "survivors.cursor_return",
+  "survivors.cursor_return_a",
+  "survivors.cursor_return_b",
   "survivors.map_bits",
   "survivors.map_capacity",
   "survivors.map_count",
@@ -517,10 +540,15 @@ entries = [
   "survivors.unique_return_b",
   "survivors.unique_saved_state",
   "survivors.unique_transform",
+  "terrain.add",
+  "terrain.dig",
   "terrain.editor",
+  "terrain.flatten",
+  "terrain.registry",
   "terrain.registry_resource",
   "terrain.voxel_world",
   "text.lookup",
+  "text.lookup_english",
   "text.pool_language",
   "textures.key_size",
   "textures.keys",
@@ -587,6 +615,7 @@ entries = [
   "ui.host_answer",
   "ui.host_answered",
   "ui.hud",
+  "ui.hud_screen",
   "ui.hud_visible",
   "ui.label_align",
   "ui.label_draw",
@@ -620,6 +649,7 @@ entries = [
   "ui.nav_set",
   "ui.nav_sound",
   "ui.nav_wrap",
+  "ui.no_construct",
   "ui.node_align",
   "ui.node_height",
   "ui.node_id",
@@ -654,8 +684,10 @@ entries = [
   "ui.scroll_input",
   "ui.scroll_nav",
   "ui.scroll_set_focus",
+  "ui.scroll_state_size",
   "ui.scrollbar_look",
   "ui.slider",
+  "ui.slider_bounded",
   "ui.slider_discrete",
   "ui.slider_extent",
   "ui.slider_format",
@@ -698,6 +730,7 @@ entries = [
   "user.join_failed_kind",
   "user.start_interaction",
   "voxel.building_first",
+  "voxel.finest_level",
   "voxel.grid_depth",
   "voxel.grid_pages",
   "voxel.grids",
@@ -798,6 +831,7 @@ entries = [
   "ui.nav_input.bytes",
   "ui.nav_push.bytes",
   "ui.nav_set.bytes",
+  "ui.no_construct.bytes",
   "ui.node_align.bytes",
   "ui.node_height.bytes",
   "ui.node_min_height.bytes",
@@ -864,60 +898,14 @@ class = "pattern"
 reason = "no reflected type holds it and no one operand spells it: its fixed pattern holds it in the arithmetic of several instructions, such as a multiply and a scale"
 
 [[class]]
-entries = ["bases.client_destroy"]
+entries = ["ui.context_bundle"]
 class = "pattern"
-reason = "no direct call, jump, address load or relocated pointer reaches it, and it holds no unique string; shapes found on one build differ on the others"
+reason = "read in a function nothing but its own unwind entry references, whose two callees nothing references either, so no route reaches it"
 
 [[class]]
-entries = [
-  "bases.count",
-  "bases.item_altar",
-  "bases.max_altars_reached",
-  "bases.members",
-  "bases.stride",
-  "bases.zone_high",
-  "bases.zone_list",
-  "bases.zone_list_len",
-  "bases.zone_size",
-  "building.cursor_no_permission",
-  "ui.context_bundle",
-  "ui.scroll_state_size",
-  "voxel.finest_level",
-]
+entries = ["building.box_extent", "building.box_min", "building.box_size"]
 class = "pattern"
-reason = "read in an anonymous function no route reaches"
-
-[[class]]
-entries = [
-  "building.box_extent",
-  "building.box_min",
-  "building.box_size",
-  "terrain.registry",
-  "ui.slider_bounded",
-]
-class = "pattern"
-reason = "shapes found on one build differ on the others"
-
-[[class]]
-entries = [
-  "building.corner_size",
-  "building.zone_entry_ignored",
-  "building.zone_entry_size",
-  "building.zone_list_count",
-  "building.zone_list_entries",
-]
-class = "pattern"
-reason = "read in building.seam_check, which has no route"
-
-[[class]]
-entries = ["ui.hud_screen"]
-class = "pattern"
-reason = "read in ui.hud_visible after three loads no one-step route shape covers"
-
-[[class]]
-entries = ["building.seam_check"]
-class = "pattern"
-reason = "its 1 caller(s) are anonymous functions no route reaches, and it holds no unique string or type"
+reason = "read in building.block_box, which is routed, but no shape there picks it on every build"
 
 [[class]]
 entries = ["inventory.copy_100.view"]
@@ -930,7 +918,7 @@ class = "pattern"
 reason = "no shape of up to 8 instructions picks mov rax,[r15+150h] out of access.transfer"
 
 [[class]]
-entries = ["inventory.skip_entity", "net.provider_vtable"]
+entries = ["net.provider_vtable"]
 class = "pattern"
 reason = "a data address only functions no route reaches use"
 
@@ -949,12 +937,7 @@ class = "pattern"
 reason = "read in net.join_game, which has no route"
 
 [[class]]
-entries = ["knowledge.log_entry_id"]
-class = "pattern"
-reason = "read in knowledge.set_values, which has no route"
-
-[[class]]
-entries = ["knowledge.set_world", "net.join_game"]
+entries = ["net.join_game"]
 class = "pattern"
 reason = "no direct call, jump, address load or relocated pointer reaches it, and it holds no unique string"
 
@@ -962,32 +945,3 @@ reason = "no direct call, jump, address load or relocated pointer reaches it, an
 entries = ["net.join_game.bytes"]
 class = "pattern"
 reason = "checks the code of net.join_game, which stays a pattern"
-
-[[class]]
-entries = [
-  "survivors.cursor_return",
-  "survivors.cursor_return_a",
-  "survivors.cursor_return_b",
-]
-class = "pattern"
-reason = "a site in an anonymous function no route reaches"
-
-[[class]]
-entries = ["terrain.add", "terrain.dig", "terrain.flatten"]
-class = "pattern"
-reason = "its 2 caller(s) are anonymous functions no route reaches, and it holds no unique string or type"
-
-[[class]]
-entries = ["text.lookup_english"]
-class = "pattern"
-reason = "its 3 caller(s) are anonymous functions no route reaches, and it holds no unique string or type"
-
-[[class]]
-entries = ["ui.no_construct"]
-class = "pattern"
-reason = "only 1 function(s) load its address, and no route reaches them"
-
-[[class]]
-entries = ["ui.no_construct.bytes"]
-class = "pattern"
-reason = "checks the code of ui.no_construct, which stays a pattern"
