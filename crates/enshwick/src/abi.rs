@@ -313,6 +313,7 @@ pub unsafe fn write_headed<T: Headed>(out: *mut T, value: T) -> bool {
 mod actions;
 mod altars;
 mod buffs;
+mod chat;
 mod checks;
 mod content;
 mod controls;
@@ -339,6 +340,7 @@ mod world;
 pub use actions::*;
 pub use altars::*;
 pub use buffs::*;
+pub use chat::*;
 pub use checks::*;
 pub use content::*;
 pub use controls::*;

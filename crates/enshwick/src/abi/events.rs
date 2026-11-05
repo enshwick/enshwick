@@ -103,6 +103,12 @@ impl Event {
     /// Deaths the game keeps no record of, such as freezing or an
     /// administrator's kill, raise none. Server only.
     pub const PLAYER_DIED: Self = Self(20);
+    /// A line reached the server's chat: a player's line the chat filters
+    /// kept, as they left it, an emote or another line the server posted;
+    /// data is a [`ChatLine`](super::ChatLine). Lines the loader posts for
+    /// mods raise none, and a player's lines raise at most eight a second.
+    /// Raised on the game thread after the step. Server only. ABI 11.5.
+    pub const CHAT_SAID: Self = Self(21);
 }
 
 /// The data of the `PlayerDied` event.
