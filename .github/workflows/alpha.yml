@@ -131,3 +131,12 @@ jobs:
           gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --title "Enshwick $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
             --prerelease --latest=false
+
+      # The site's download links point at the newest alpha, read when it
+      # builds. It builds on Cloudflare Workers Builds, whose deploy hook
+      # builds its main again.
+      - name: Start the docs site build
+        if: inputs.publish
+        env:
+          DOCS_DEPLOY_HOOK: ${{ secrets.DOCS_DEPLOY_HOOK }}
+        run: curl --fail-with-body --silent --show-error --retry 3 -X POST "$DOCS_DEPLOY_HOOK"
