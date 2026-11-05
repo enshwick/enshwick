@@ -187,7 +187,9 @@ pub enum Error {
 }
 
 /// Checks that `start`, the pinned start of user interactions, lies in
-/// `code` and begins with the `expected` bytes, read by `read`.
+/// `code` and begins with the `expected` bytes, read by `read`; without
+/// them, that an engine route found it, its own match having checked the
+/// code (`routed`).
 ///
 /// # Errors
 ///
@@ -199,17 +201,20 @@ pub enum Error {
 /// use enshwick_loader::join::interaction::verify;
 ///
 /// let read = |va| (va == 0x4000).then_some(0x5540_u64);
-/// assert_eq!(verify(Some(0x4000), Some(0x5540), read, 0x1000..0x8000), Ok(0x4000));
-/// assert!(verify(Some(0x9000), Some(0x5540), read, 0x1000..0x8000).is_err());
+/// assert_eq!(verify(Some(0x4000), Some(0x5540), false, read, 0x1000..0x8000), Ok(0x4000));
+/// assert!(verify(Some(0x9000), Some(0x5540), false, read, 0x1000..0x8000).is_err());
 /// ```
 pub fn verify(
     start: Option<u64>,
     expected: Option<u64>,
+    routed: bool,
     read: impl Fn(u64) -> Option<u64>,
     code: Range<u64>,
 ) -> Result<u64, Error> {
     let start = start.ok_or(Error::Missing(pinned::user::START_INTERACTION.id()))?;
-    let expected = expected.ok_or(Error::Missing(BYTES_ID))?;
+    if expected.is_none() && !routed {
+        return Err(Error::Missing(BYTES_ID));
+    }
     let inside = start
         .checked_add(8)
         .is_some_and(|end| code.start <= start && end <= code.end);
@@ -217,7 +222,9 @@ pub fn verify(
         return Err(Error::OutsideCode { start });
     }
     let found = read(start).ok_or(Error::OutsideCode { start })?;
-    if found != expected {
+    if let Some(expected) = expected
+        && found != expected
+    {
         return Err(Error::Bytes {
             start,
             found,
@@ -389,11 +396,11 @@ mod tests {
         let code = 0x1000..0x8000;
         let read = |va| (va == 0x4000).then_some(0x5540_u64);
         assert_eq!(
-            verify(Some(0x4000), Some(0x5540), read, code.clone()),
+            verify(Some(0x4000), Some(0x5540), false, read, code.clone()),
             Ok(0x4000)
         );
         assert_eq!(
-            verify(Some(0x4000), Some(0x1111), read, code.clone()),
+            verify(Some(0x4000), Some(0x1111), false, read, code.clone()),
             Err(Error::Bytes {
                 start: 0x4000,
                 found: 0x5540,
@@ -401,16 +408,21 @@ mod tests {
             })
         );
         assert_eq!(
-            verify(Some(0x7ffc), Some(0x5540), read, code.clone()),
+            verify(Some(0x7ffc), Some(0x5540), false, read, code.clone()),
             Err(Error::OutsideCode { start: 0x7ffc })
         );
         assert_eq!(
-            verify(None, Some(0x5540), read, code.clone()),
+            verify(None, Some(0x5540), false, read, code.clone()),
             Err(Error::Missing(pinned::user::START_INTERACTION.id()))
         );
         assert_eq!(
-            verify(Some(0x4000), None, read, code),
+            verify(Some(0x4000), None, false, read, code.clone()),
             Err(Error::Missing(BYTES_ID))
+        );
+        assert_eq!(
+            verify(Some(0x4000), None, true, read, code),
+            Ok(0x4000),
+            "a route's checked match stands for the bytes"
         );
     }
 }

@@ -160,10 +160,19 @@ fn verified(loader: &Loader, id: Symbol) -> Option<u64> {
 fn division(loader: &Loader) -> Option<(u64, usize)> {
     let id = pinned::pacing::WAIT_DIVIDE;
     let at = loader.address(id)?;
-    let span = loader
-        .build
-        .head(id.id())
-        .and_then(|(pattern, start)| pattern.len().checked_sub(usize::try_from(start).ok()?));
+    let span = match loader.build.head(id.id()) {
+        Some((pattern, start)) => usize::try_from(start)
+            .ok()
+            .and_then(|start| pattern.len().checked_sub(start)),
+        // A routed division has no table pattern; the waits it leads to lie
+        // later in the same function, which the image's function table ends.
+        None if loader.build.routed(id.id()) => usize::try_from(at).ok().and_then(|start| {
+            crate::detour::function_around(start)?
+                .end
+                .checked_sub(start)
+        }),
+        None => None,
+    };
     let span = span.filter(|_| loader.code_holds(id));
     if span.is_none() {
         crate::log!(

@@ -81,6 +81,7 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
     let start = interaction::verify(
         loader.address(pinned::user::START_INTERACTION),
         loader.build.constant(BYTES_ID),
+        loader.build.routed(pinned::user::START_INTERACTION.id()),
         read,
         code,
     );
@@ -124,11 +125,14 @@ fn verified_join(
     loader: &Loader,
 ) -> Result<(u64, core::ops::Range<u64>), crate::join::provider::Error> {
     use crate::join::provider::{Error, Pins, verify_mapped};
-    let pins = Pins::from_table(
-        |id| loader.build.symbol(id),
-        |id| loader.build.constant(id),
-        loader.base,
-    )?;
+    let pins = Pins {
+        routed: loader.build.routed(pinned::net::JOIN_GAME.id()),
+        ..Pins::from_table(
+            |id| loader.build.symbol(id),
+            |id| loader.build.constant(id),
+            loader.base,
+        )?
+    };
     let range = |start: u64, len: usize| Some(start..start.checked_add(u64::try_from(len).ok()?)?);
     let (_, base, image_len) = identify().ok_or(Error::NoImage)?;
     let image = range(base, image_len).ok_or(Error::NoImage)?;
