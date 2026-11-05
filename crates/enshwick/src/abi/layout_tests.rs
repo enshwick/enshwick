@@ -216,7 +216,7 @@ shapes! {
         ActiveBuff { header, id, entity, slot, level, duration, remaining },
         BuffRequest { header, entity, id, level, reserved, duration },
         KnowledgeInfo { header, id, kind, scope, reserved, value, flags },
-        WeatherFront { header, layer, effect, position, radius, reserved, remaining },
+        WeatherFront { header, layer, effect, position, radius, reserved, remaining, phenomenon },
         TerrainMaterialInfo { header, id, flags, hardness, reserved, item, health },
         TerrainEdit { header, kind, shape, flags, material, position, radius, height, protect },
         Voxel { kind, material, fill, reserved },

@@ -993,7 +993,7 @@ VoxelWrite size 48 align 8 born 48
     size at 20 size 12 type [u32; 3]
     voxels at 32 size 8 type *const Voxel
     count at 40 size 8 type u64
-WeatherFront size 56 align 8 born 56
+WeatherFront size 72 align 8 born 56
     header at 0 size 8 type Header
     layer at 8 size 4 type u32
     effect at 12 size 4 type u32
@@ -1001,3 +1001,4 @@ WeatherFront size 56 align 8 born 56
     radius at 40 size 4 type f32
     reserved at 44 size 4 type u32
     remaining at 48 size 8 type i64
+    phenomenon at 56 size 16 type [u8; 16]

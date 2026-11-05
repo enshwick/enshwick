@@ -855,8 +855,8 @@ const _: () = {
     assert!(size_of::<QuestData>() == 8 + 8);
     assert!(core::mem::offset_of!(HostApi, weather_at) == 24 + 82 * 8);
     assert!(core::mem::offset_of!(HostApi, set_weather) == 24 + 84 * 8);
-    // Frozen: written as an array.
-    assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8);
+    // Written as an array at the stride of the mod's own header.
+    assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8 + 16);
     assert!(size_of::<ChunkData>() == 8 + 16);
     assert!(core::mem::offset_of!(HostApi, terrain_materials) == 24 + 85 * 8);
     // Frozen: written as an array.

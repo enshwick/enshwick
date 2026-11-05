@@ -423,8 +423,15 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<crate::i18n::I18nFns>(),
     Namespace::starting("i18n", "", &[crate::Load::SCRIPT_I18N]),
     Namespace::of::<crate::weather::Weather>(),
-    #[cfg(feature = "typed")]
-    Namespace::starting("weather", "", &[crate::Load::SCRIPT_WEATHER_PHENOMENA]),
+    Namespace::starting(
+        "weather",
+        "",
+        &[
+            crate::Load::SCRIPT_WEATHER_FRONTS,
+            #[cfg(feature = "typed")]
+            crate::Load::SCRIPT_WEATHER_PHENOMENA,
+        ],
+    ),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::map::Map>(),
     #[cfg(feature = "unstable")]

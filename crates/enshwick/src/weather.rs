@@ -150,6 +150,11 @@ pub struct Front {
     pub radius: f32,
     /// How long it has left, in game time.
     pub remaining: Duration,
+    /// The GUID of its phenomenon in the game's weather resource, which for
+    /// one a mod added is the GUID its `PhenomenonId` holds; `None` when the
+    /// loader does not tell.
+    #[script(default)]
+    pub phenomenon: Option<crate::content::Guid>,
 }
 
 /// The weather to start, for [`Weather::set`].
@@ -233,6 +238,7 @@ impl Weather {
             radius: 0.0,
             reserved: 0,
             remaining: 0,
+            phenomenon: [0; 16],
         };
         let mut fronts = vec![blank; 16];
         loop {
@@ -267,6 +273,11 @@ impl Weather {
                 position: crate::ecs::metres(front.position),
                 radius: front.radius,
                 remaining: Duration::from_nanos(u64::try_from(front.remaining).unwrap_or(0)),
+                phenomenon: (front
+                    .header
+                    .covers(core::mem::offset_of!(WeatherFront, phenomenon) + 16)
+                    && front.phenomenon != [0; 16])
+                    .then_some(crate::content::Guid(front.phenomenon)),
             })
             .collect()
     }
@@ -320,9 +331,154 @@ impl Load<'_> {
     }
 }
 
+/// A front that started or ended, for [`Load::on_front`].
+///
+/// # Examples
+///
+/// See [`Load::on_front`].
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
+pub struct FrontChanged {
+    /// The front as it started, or as it was last seen before it ended.
+    pub front: Front,
+    /// `true` when it started, `false` when it ended.
+    pub started: bool,
+}
+
+/// How often [`Load::on_front`] looks at the fronts; a front lasts minutes.
+const FRONT_POLL: Duration = Duration::from_secs(1);
+
+/// Whether `now` is the front `before` was, a poll later: the same
+/// phenomenon and effect, and no more time left than before.
+fn same_front(before: &Front, now: &Front) -> bool {
+    before.phenomenon == now.phenomenon
+        && before.kind == now.kind
+        && now.remaining <= before.remaining + FRONT_POLL
+}
+
+/// The fronts of `before` that ended by `now`, then those of `now` that
+/// started since `before`, one front per layer.
+fn front_changes(before: &[Front], now: &[Front]) -> Vec<FrontChanged> {
+    let in_layer = |list: &[Front], layer| list.iter().find(|f| f.layer == layer).copied();
+    let ended = before
+        .iter()
+        .filter(|b| in_layer(now, b.layer).is_none_or(|n| !same_front(b, &n)))
+        .map(|&front| FrontChanged {
+            front,
+            started: false,
+        });
+    let started = now
+        .iter()
+        .filter(|n| in_layer(before, n.layer).is_none_or(|b| !same_front(&b, n)))
+        .map(|&front| FrontChanged {
+            front,
+            started: true,
+        });
+    ended.chain(started).collect()
+}
+
+#[crate::script(weather_fronts)]
+impl Load<'_> {
+    /// Calls `handler` when a front of the server's world starts and when
+    /// it ends, about a second after, on the game thread; a mod gives the
+    /// players inside its own weather a buff here. A panic in `handler`
+    /// turns the mod off.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`](crate::Off) after init.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::weather::WeatherPhenomenonEffect;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_front(|change| {
+    ///         if change.started && change.front.kind == WeatherPhenomenonEffect::Blizzard {
+    ///             enshwick::info!("a blizzard of {} m starts", change.front.radius);
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[script]
+    pub fn on_front<F>(&mut self, handler: F) -> Result<(), crate::Off>
+    where
+        F: Fn(&FrontChanged) + Send + Sync + 'static,
+    {
+        let weather = self.weather();
+        let mut before = Vec::new();
+        self.scheduler()?.every(FRONT_POLL, move || {
+            let now = weather.fronts();
+            for change in front_changes(&before, &now) {
+                handler(&change);
+            }
+            before = now;
+            core::ops::ControlFlow::Continue(())
+        });
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn front(layer: u32, phenomenon: u8, remaining_secs: u64) -> Front {
+        Front {
+            layer,
+            kind: WeatherPhenomenonEffect::Rain,
+            position: [0.0; 3],
+            radius: 1.0,
+            remaining: Duration::from_secs(remaining_secs),
+            phenomenon: Some(crate::content::Guid([phenomenon; 16])),
+        }
+    }
+
+    #[test]
+    fn a_front_that_runs_on_raises_nothing_and_a_new_one_ends_the_old_first() {
+        let before = [front(0, 1, 60), front(1, 2, 30)];
+        assert!(front_changes(&before, &[front(0, 1, 59), front(1, 2, 29)]).is_empty());
+        let changes = front_changes(&before, &[front(0, 3, 90), front(1, 2, 29)]);
+        assert_eq!(
+            changes,
+            [
+                FrontChanged {
+                    front: front(0, 1, 60),
+                    started: false
+                },
+                FrontChanged {
+                    front: front(0, 3, 90),
+                    started: true
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn the_same_phenomenon_again_with_more_time_left_is_a_new_front() {
+        let changes = front_changes(&[front(0, 1, 5)], &[front(0, 1, 120)]);
+        assert_eq!(changes.len(), 2);
+        assert!(!changes[0].started && changes[1].started);
+    }
+
+    #[test]
+    fn a_layer_that_clears_ends_its_front_and_a_new_layer_starts_one() {
+        let changes = front_changes(&[front(0, 1, 5)], &[front(2, 4, 50)]);
+        assert_eq!(
+            changes,
+            [
+                FrontChanged {
+                    front: front(0, 1, 5),
+                    started: false
+                },
+                FrontChanged {
+                    front: front(2, 4, 50),
+                    started: true
+                },
+            ]
+        );
+    }
 
     #[test]
     fn the_strongest_weight_names_the_weather() {

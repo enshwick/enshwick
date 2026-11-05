@@ -62,7 +62,10 @@ the server's `weatherFrequency` game setting.
 going out, characters getting wet): a `WeatherAt` with weights for clear,
 rain, snow and blizzard that add up to 1, and `state()` names the strongest.
 `fronts()` lists the current fronts: layer, kind (`Clouds`, `Rain`,
-`Blizzard`), place, radius and the game time left.
+`Blizzard`), place, radius, the game time left and the GUID of the front's
+phenomenon. `load.on_front(handler)` calls `handler` about a second after a
+front starts and after it ends, with the front and whether it started, so a
+mod can give the players inside its weather a buff.
 
 ## Starting new weather
 

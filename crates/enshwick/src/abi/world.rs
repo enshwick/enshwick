@@ -463,6 +463,7 @@ impl KnowledgeInfo {
 ///     radius: 900.0,
 ///     reserved: 0,
 ///     remaining: 300_000_000_000,
+///     phenomenon: [0; 16],
 /// };
 /// assert_eq!(storm.effect, WeatherFront::RAIN);
 /// ```
@@ -484,9 +485,12 @@ pub struct WeatherFront {
     pub reserved: u32,
     /// How long it has left, in game nanoseconds.
     pub remaining: i64,
+    /// The GUID of its phenomenon in the weather resource, all zero when
+    /// the loader did not find it. ABI 11.5.
+    pub phenomenon: [u8; 16],
 }
 
-impl_headed!(WeatherFront);
+impl_headed!(WeatherFront, born = 56);
 
 impl WeatherFront {
     /// Clouds without rain, or nothing.

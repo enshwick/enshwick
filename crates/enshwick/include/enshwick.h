@@ -1923,6 +1923,9 @@ typedef struct EnshwickWeatherFront {
   uint32_t reserved;
   // How long it has left, in game nanoseconds.
   int64_t remaining;
+  // The GUID of its phenomenon in the weather resource, all zero when
+  // the loader did not find it. ABI 11.5.
+  uint8_t phenomenon[16];
 } EnshwickWeatherFront;
 // Clouds without rain, or nothing.
 #define EnshwickWeatherFront_NONE 0
