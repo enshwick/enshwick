@@ -61,8 +61,12 @@ fn client_tables() -> Vec<enshwick_gamedata::Table> {
         .collect()
 }
 
-/// A table's constant by id.
+/// A table's constant by id; the text field's kept-state key, which only
+/// its engine route finds, stands in as 1.
 fn constant(table: &enshwick_gamedata::Table, id: &str) -> Option<u64> {
+    if id == pinned::ui::TEXT_FIELD_STATE_KEY.id() {
+        return Some(1);
+    }
     table
         .constants()
         .iter()
@@ -111,10 +115,10 @@ fn each_optional_part_turns_off_alone() {
     assert!(checked > 0, "no client table pins every optional part");
 }
 
-/// Every client table that pins the text field gives its sizes and its
-/// kept state's key, the sizes fit the loader's buffer, a build whose field
-/// or kept state moved turns the text field off instead of letting the game
-/// write past the buffer, and one without the key turns it off too.
+/// Every client table that pins the text field gives its sizes, they fit
+/// the loader's buffer, a build whose field or kept state moved turns the
+/// text field off instead of letting the game write past the buffer, and
+/// one where the route finds no kept-state key turns it off too.
 #[test]
 fn the_text_field_s_sizes_come_from_the_table_and_fit_its_buffer() {
     let mut checked = 0;

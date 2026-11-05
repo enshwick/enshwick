@@ -103,6 +103,13 @@ mod tests {
             .collect()
     }
 
+    /// Every id a table pins or an engine route finds.
+    fn pinned_or_routed() -> BTreeSet<String> {
+        let mut found = pinned();
+        found.extend(tables::Routes::embedded().unwrap().ids().map(str::to_owned));
+        found
+    }
+
     fn listed() -> BTreeSet<&'static str> {
         TABLE_IDS
             .iter()
@@ -147,13 +154,16 @@ mod tests {
     }
 
     #[test]
-    fn every_listed_id_is_pinned() {
-        let pinned = pinned();
+    fn every_listed_id_is_pinned_or_routed() {
+        let found = pinned_or_routed();
         let stale: Vec<_> = listed()
             .into_iter()
-            .filter(|id| !pinned.contains(*id))
+            .filter(|id| !found.contains(*id))
             .collect();
-        assert!(stale.is_empty(), "listed but in no table: {stale:?}");
+        assert!(
+            stale.is_empty(),
+            "listed but in no table or route: {stale:?}"
+        );
     }
 
     #[test]
@@ -190,13 +200,16 @@ mod tests {
     }
 
     #[test]
-    fn every_catalogued_id_is_pinned() {
-        let pinned = pinned();
+    fn every_catalogued_id_is_pinned_or_routed() {
+        let found = pinned_or_routed();
         let stale: Vec<_> = catalogue()
             .into_values()
-            .filter(|id| !pinned.contains(id))
+            .filter(|id| !found.contains(id))
             .collect();
-        assert!(stale.is_empty(), "catalogued but in no table: {stale:?}");
+        assert!(
+            stale.is_empty(),
+            "catalogued but in no table or route: {stale:?}"
+        );
     }
 
     #[test]
