@@ -261,11 +261,11 @@ pub(crate) fn entry_rva(base: u64) -> Option<usize> {
     word(pe + 24 + 16)
 }
 
-/// The first [`BRANCH_BYTES`](crate::code_watch::BRANCH_BYTES) bytes at
-/// `at`, for following a jump; `None` unless all of them read, even while
-/// another program's thread changes the pages.
-fn code_at(at: usize) -> Option<[u8; crate::code_watch::BRANCH_BYTES]> {
-    crate::pages::read(at)
+/// Up to [`BRANCH_BYTES`](crate::code_watch::BRANCH_BYTES) bytes at `at`,
+/// for following a jump: as many as read before an unreadable page, even
+/// while another program's thread changes the pages.
+fn code_at(at: usize) -> Option<Vec<u8>> {
+    crate::pages::read_up_to(at, crate::code_watch::BRANCH_BYTES)
 }
 
 /// The game's `.text` as the executable on disk holds it, relocated to
