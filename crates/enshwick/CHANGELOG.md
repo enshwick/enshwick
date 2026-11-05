@@ -53,6 +53,10 @@ Each entry names the pull request that made the change.
 - `Spawn::do_not_save` spawns an entity the world's save leaves out, as the
   game's own passing animals. `SpawnRequest::flags` and
   `SpawnRequest::DO_NOT_SAVE`, ABI 11.6 (#936).
+- `items::Kind::Consumed`: every item filter hears a use once all of them
+  allowed it, the place to count uses or reward one. `ItemAction::CONSUMED`,
+  ABI 11.7; the fake host's `item_action` follows an allowed use with it
+  (#945).
 
 ### Changed
 
@@ -71,6 +75,22 @@ Each entry names the pull request that made the change.
   down goes up, and a modifier pressed or let go meanwhile fires nothing.
   The fake host's `keys` holds the modifiers of all the keys it is given
   together, as a keyboard does (#942).
+
+### Fixed
+
+- A use reward (`Action::Consume`, a pack's `consume` reward) follows only
+  a use every item filter allowed: a later filter's refusal no longer gives
+  it (#945).
+- Item filters and holds screen a player from the step after they join and
+  from the first steps after a world loads, not only every 30 steps (#945).
+- A craft reward pays each unit of a request to the player who asked, and
+  never another player or a station's own output (#945).
+- A pack recipe whose `like` names a recipe instead of the item it makes is
+  refused at its line by `cargo enshwick pack check` and at load; the line
+  that turns a mod off for a served resource names the resource (#945).
+- A crash report puts each hook a mod writes into the game's code down to
+  that mod, also when two hooks lie close together or a jump ends just
+  before an unreadable page (#945).
 
 ## [1.0.0-alpha.12] - 2026-11-05
 
