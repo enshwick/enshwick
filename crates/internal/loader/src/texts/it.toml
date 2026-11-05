@@ -36,6 +36,7 @@
 "mods.features.off" = "Disattivate in tutto o in parte in questa versione del gioco: {features}"
 "mods.discovery.off" = "Il rilevamento delle mod è disattivato: nelle partite ospitate da un giocatore, l'host e i giocatori che si uniscono non vedono le mod degli altri."
 "mods.settings.broken" = "enshwick.toml contiene errori. Le protezioni restano attive finché non vengono corretti. Vedi il log."
+"mods.newer" = "Enshwick {version} è disponibile: {address}"
 "mods.extends" = "Estende: {points}"
 "mods.settings" = "Impostazioni"
 "mods.settings.server-marked" = "Le impostazioni segnate \"impostato dal server\" vengono dal server a cui ti sei unito."

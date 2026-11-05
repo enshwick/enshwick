@@ -36,6 +36,7 @@
 "mods.features.off" = "このゲームバージョンでオフまたは一部オフ：{features}"
 "mods.discovery.off" = "Mod の検出はオフです。プレイヤーがホストするゲームでは、ホストと参加するプレイヤーがお互いの Mod を確認できません。"
 "mods.settings.broken" = "enshwick.toml にエラーがあります。修正されるまで保護はオンのままです。ログを確認してください。"
+"mods.newer" = "Enshwick {version} が公開されています：{address}"
 "mods.extends" = "拡張先：{points}"
 "mods.settings" = "設定"
 "mods.settings.server-marked" = "「サーバーが設定」と表示された設定は、参加中のサーバーから来ています。"

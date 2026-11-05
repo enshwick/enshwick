@@ -36,6 +36,7 @@
 "mods.features.off" = "在此遊戲版本上全部或部分關閉：{features}"
 "mods.discovery.off" = "模組偵測已關閉：在玩家主持的遊戲中，主機和加入的玩家看不到彼此的模組。"
 "mods.settings.broken" = "enshwick.toml 有錯誤。在修正之前，保護功能保持開啟。請查看記錄檔。"
+"mods.newer" = "Enshwick {version} 已發布：{address}"
 "mods.extends" = "擴充：{points}"
 "mods.settings" = "設定"
 "mods.settings.server-marked" = "標有「由伺服器設定」的設定來自你加入的伺服器。"

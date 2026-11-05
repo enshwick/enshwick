@@ -36,6 +36,7 @@
 "mods.features.off" = "Ganz oder teilweise aus in dieser Spielversion: {features}"
 "mods.discovery.off" = "Mod-Erkennung ist aus: In Spielen, die ein Spieler hostet, sehen der Host und die beitretenden Spieler die Mods der anderen nicht."
 "mods.settings.broken" = "enshwick.toml hat Fehler. Die Schutzfunktionen bleiben an, bis sie behoben sind. Siehe das Log."
+"mods.newer" = "Enshwick {version} ist verfügbar: {address}"
 "mods.extends" = "Erweitert: {points}"
 "mods.settings" = "Einstellungen"
 "mods.settings.server-marked" = "Einstellungen mit „vom Server gesetzt“ kommen von dem Server, dem du beigetreten bist."

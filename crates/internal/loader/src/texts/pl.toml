@@ -36,6 +36,7 @@
 "mods.features.off" = "Wyłączone w całości lub częściowo w tej wersji gry: {features}"
 "mods.discovery.off" = "Wykrywanie modów jest wyłączone: w grach hostowanych przez gracza host i dołączający gracze nie widzą nawzajem swoich modów."
 "mods.settings.broken" = "enshwick.toml zawiera błędy. Zabezpieczenia pozostają włączone, dopóki nie zostaną poprawione. Zobacz dziennik."
+"mods.newer" = "Dostępny jest Enshwick {version}: {address}"
 "mods.extends" = "Rozszerza: {points}"
 "mods.settings" = "Ustawienia"
 "mods.settings.server-marked" = "Ustawienia oznaczone „ustawione przez serwer” pochodzą z serwera, do którego dołączyłeś."
