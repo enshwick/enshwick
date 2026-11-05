@@ -532,6 +532,56 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
     assert!(!routes.checks("t.leaf", Side::Server));
 }
 
+/// In `sys_b`, `call; mov eax,7; mov eax,7; ret`: an ordinal takes the
+/// `nth` of the identical moves, counted after its anchor when it has one,
+/// and finds nothing past the last or where the anchor is not unique.
+#[test]
+fn an_ordinal_takes_the_nth_run_after_its_anchor() {
+    let fake = fake();
+    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+    let reflection = Reflection::scan(&image);
+    let row = |id: &str, keys: &str| {
+        format!("[[route]]\nid = \"{id}\"\nin = \"sys_b\"\nshape = [\"mov eax,0x7\"]\n{keys}\n")
+    };
+    let text = [
+        row("t.second", "nth = 2"),
+        row("t.after", "after = [\"call ?\"]\nnth = 1"),
+        row("t.past", "after = [\"call ?\"]\nnth = 3"),
+        row("t.anchors", "after = [\"mov eax,0x7\"]\nnth = 1"),
+    ]
+    .concat();
+    let routes = Routes::parse(&text).unwrap();
+    let found: Vec<(&str, Option<Routed>)> =
+        routes.find(&image, &reflection, Side::Server, &empty());
+    assert_eq!(
+        found,
+        [
+            ("t.after", Some(Routed::Reached(0x1015))),
+            ("t.anchors", None),
+            ("t.past", None),
+            ("t.second", Some(Routed::Reached(0x101a))),
+        ]
+    );
+    for bad in [
+        row("t.zero", "nth = 0"),
+        row("t.alone", "after = [\"call ?\"]"),
+        row("t.taking", "after = [\"call *\"]\nnth = 1"),
+        "[[route]]\nid = \"t.callers\"\ncallers = \"t.leaf\"\nshape = [\"ret\"]\nnth = 1\n"
+            .to_owned(),
+    ] {
+        assert!(Routes::parse(&bad).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn a_memory_operand_through_any_base_matches_every_register_but_rip() {
+    let none = |_: &str| None;
+    let any = first(&["lea rdx,[?-*]"], &none).unwrap();
+    assert_eq!((any.start, any.taken), (0x1006, Some(0x60)));
+    assert!(first(&["mov eax,[?+r10*4+0x10]"], &none).is_some());
+    assert!(first(&["mov ecx,[?+?]"], &none).is_none());
+}
+
 /// A slot route takes the function a vtable slot points at, only where the
 /// pointer starts a function and the route's check holds; a slot row names
 /// its vtable and slot and nothing else.
@@ -742,6 +792,9 @@ const UNPINNED_UNCHECKED: &[(&str, &[&str])] = &[
             "bases.entity_query",
             "bases.set_insert",
             "building.block_box",
+            "building.box_extent",
+            "building.box_min",
+            "building.box_size",
             "recipe.limit_stop",
             "ui.no_construct",
             "ui.scroll_focus",
@@ -758,6 +811,9 @@ const UNPINNED_UNCHECKED: &[(&str, &[&str])] = &[
             "bases.entity_query",
             "bases.set_insert",
             "building.block_box",
+            "building.box_extent",
+            "building.box_min",
+            "building.box_size",
             "recipe.limit_stop",
         ],
     ),

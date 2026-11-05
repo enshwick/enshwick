@@ -35,6 +35,12 @@
 //! a taken constant `v` into `1 << v`, and `plus` then adds to it. `sides`
 //! limits a route to some sides; it defaults to every side.
 //!
+//! `nth` lets a `system` or `in` shape match more than once and takes its
+//! `nth` run, from 1, in address order; with `after`, a shape that must
+//! match once in the function, it counts only the runs in the same part of
+//! the code that start after that match, such as the ninth of a run of
+//! identical copies.
+//!
 //! A shape's start checks the code of the symbol it finds
 //! ([`Routed::Symbol`]) when it has two steps or more over eight bytes, and so
 //! does `check`, a shape the code at any symbol the route finds must start
@@ -144,6 +150,11 @@ struct Route {
     plus: i64,
     /// The constant a `spelled` take finds.
     value: u64,
+    /// The shape that must match once before an ordinal's runs are counted.
+    after: Vec<Step>,
+    /// Which run of the shape a route takes, from 1, where it takes one
+    /// of several rather than the only one.
+    nth: Option<u32>,
 }
 
 impl Route {
@@ -190,6 +201,8 @@ struct RouteRow {
     callers: Option<String>,
     vtable: Option<String>,
     slot: Option<u32>,
+    after: Option<Vec<String>>,
+    nth: Option<u32>,
 }
 
 impl RouteRow {
@@ -251,6 +264,15 @@ impl RouteRow {
         {
             return Err(bad("`shift` and `plus` change a `value` or `cell` take"));
         }
+        let after = parse_steps(self.after, names).map_err(|e| bad(&e.to_string()))?;
+        let ordinal = matches!(how, How::Shape { .. }) && self.nth.is_some_and(|n| n > 0);
+        if (self.nth.is_some() || !after.is_empty()) && !ordinal
+            || after.iter().any(|s| s.takes() > 0)
+        {
+            return Err(bad(
+                "`nth` counts from 1 the runs of a `system` or `in` shape, after the one match of `after`, a shape without `*`, when it is given",
+            ));
+        }
         Ok(Route {
             sides: self
                 .sides
@@ -262,6 +284,8 @@ impl RouteRow {
             shift: self.shift.unwrap_or(false),
             plus: self.plus.unwrap_or(0),
             value,
+            after,
+            nth: self.nth,
         })
     }
 

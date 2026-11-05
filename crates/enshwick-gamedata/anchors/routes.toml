@@ -1517,6 +1517,25 @@ take = "address"
 check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov qword [rax+?],?r"]
 
 [[route]]
+id = "building.box_extent"
+in = "building.block_box"
+shape = ["movups [?+?],xmm8", "mov [?+*],rbx"]
+take = "value"
+plus = 8
+
+[[route]]
+id = "building.box_min"
+in = "building.block_box"
+shape = ["mov eax,[?+?]", "mov [?+?],eax", "mov [?+*],r10d"]
+take = "value"
+
+[[route]]
+id = "building.box_size"
+in = "building.block_box"
+shape = ["lea r11,[rsp+?]", "mov [?+?],?r", "mov [?+*],?r"]
+take = "value"
+
+[[route]]
 id = "building.blueprint_lookup"
 system = "server_cursor_no_prediction"
 shape = ["call *", "mov rbx,rax"]
@@ -2694,9 +2713,25 @@ shape = ["mov [rcx+0x40],rax", "mov rax,[rdx+*]"]
 take = "value"
 
 [[route]]
+id = "inventory.copy_100.view"
+in = "access.transfer"
+after = ["mov ebx,[rsi+0x10]", "xor eax,eax", "mov [rbp+0x30],rax"]
+shape = ["mov rax,[r15+*]", "mov ?m,rax"]
+nth = 9
+take = "value"
+
+[[route]]
 id = "inventory.copy_150.desc"
 in = "inventory.txn_init"
 shape = ["mov [rcx+0x48],rax", "mov rax,[rdx+*]"]
+take = "value"
+
+[[route]]
+id = "inventory.copy_150.view"
+in = "access.transfer"
+after = ["mov ebx,[rsi+0x10]", "xor eax,eax", "mov [rbp+0x30],rax"]
+shape = ["mov rax,[r15+*]", "mov ?m,rax"]
+nth = 10
 take = "value"
 
 [[route]]

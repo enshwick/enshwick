@@ -921,18 +921,13 @@ reason = "read in a function nothing but its own unwind entry references, whose 
 
 [[class]]
 entries = ["building.box_extent", "building.box_min", "building.box_size"]
-class = "pattern"
-reason = "read in building.block_box, which is routed, but no shape there picks it on every build"
+class = "engine"
+reason = "an engine route finds it in building.block_box through a store whose base register differs between builds (`[?+*]`)"
 
 [[class]]
-entries = ["inventory.copy_100.view"]
-class = "pattern"
-reason = "no shape of up to 8 instructions picks mov rax,[r15+100h] out of access.transfer"
-
-[[class]]
-entries = ["inventory.copy_150.view"]
-class = "pattern"
-reason = "no shape of up to 8 instructions picks mov rax,[r15+150h] out of access.transfer"
+entries = ["inventory.copy_100.view", "inventory.copy_150.view"]
+class = "engine"
+reason = "an engine route counts it among the identical copies in access.transfer after a fixed anchor (`after`, `nth`)"
 
 [[class]]
 entries = [

@@ -7,7 +7,8 @@
 //! (`r13`); memory through a base register, an optional index register with
 //! its scale and a displacement (`[rcx]`, `[rbp-*]`, `[rbp+?]`, `[rdx+0x78]`,
 //! `[rcx+r10*4+?]`) or RIP-relative (`[rip+*]`); an exact immediate
-//! (`0x1`); memory with its size first where the registers do not give it
+//! (`0x1`); `?` for the base of memory through any register but RIP
+//! (`[?+*]`); memory with its size first where the registers do not give it
 //! (`dword [rcx+0xb8]`); `?` for any operand; `?r`, `?i`, `?b` and `?m` for
 //! any register, immediate, branch target and memory operand; `*` for any operand whose value the route
 //! takes; and `{id}` for the address of another entry, as a branch target or
@@ -33,7 +34,8 @@ enum Disp {
 enum Op {
     Register(Register),
     Memory {
-        base: Register,
+        /// The base register; `None` for any but RIP.
+        base: Option<Register>,
         /// The index register and its scale; `Register::None` for none.
         index: (Register, u32),
         disp: Disp,
@@ -237,7 +239,7 @@ impl Step {
                 Op::Memory {
                     base, index, disp, ..
                 } => {
-                    value == 0 && *disp == Disp::None && *base != Register::RIP
+                    value == 0 && *disp == Disp::None && *base != Some(Register::RIP)
                         || index.0 != Register::None && u64::from(index.1) == value
                 }
                 Op::Immediate(v) => *v == value,
@@ -267,12 +269,15 @@ impl Step {
                     disp,
                     size,
                 } => {
+                    let have = ins.memory_base();
                     kind == OpKind::Memory
                         && size.is_none_or(|bytes| ins.memory_size().size() == bytes)
-                        && ins.memory_base() == *base
+                        && base.map_or(have != Register::RIP && have != Register::None, |b| {
+                            have == b
+                        })
                         && ins.memory_index() == index.0
                         && (index.0 == Register::None || ins.memory_index_scale() == index.1)
-                        && memory(ins, *base, *disp, taken)
+                        && memory(ins, have, *disp, taken)
                 }
                 Op::Immediate(want) => {
                     kind != OpKind::Memory
@@ -366,7 +371,10 @@ fn operand(text: &str, names: &ShapeNames) -> Result<Op, ShapeError> {
 fn memory_operand(inner: &str, size: Option<usize>, names: &ShapeNames) -> Result<Op, ShapeError> {
     let cut = |text: &str| text.find(['+', '-']).unwrap_or(text.len());
     let at = cut(inner);
-    let base = names.register(&inner[..at])?;
+    let base = match &inner[..at] {
+        "?" => None,
+        name => Some(names.register(name)?),
+    };
     let mut rest = &inner[at..];
     let mut index = (Register::None, 1);
     if let Some(after) = rest.strip_prefix('+')
@@ -408,12 +416,13 @@ fn memory_operand(inner: &str, size: Option<usize>, names: &ShapeNames) -> Resul
             }
         }
     };
-    if base == Register::RIP && !matches!(disp, Disp::Signed { .. }) {
+    let rip = base == Some(Register::RIP);
+    if rip && !matches!(disp, Disp::Signed { .. }) {
         return Err(ShapeError(
             "a RIP-relative operand is `[rip+*]` or `[rip+?]`".to_owned(),
         ));
     }
-    if base == Register::RIP && index.0 != Register::None {
+    if rip && index.0 != Register::None {
         return Err(ShapeError("a RIP-relative operand has no index".to_owned()));
     }
     Ok(Op::Memory {
