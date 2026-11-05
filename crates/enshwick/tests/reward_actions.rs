@@ -30,7 +30,15 @@ mod tests {
             ] {
                 load.add_reward(Reward::new(name, on).with(Give::Experience(amount)))?;
             }
-            let _set = REWARDS.set(load.rewards()?);
+            let rewards = load.rewards()?;
+            let _set = REWARDS.set(rewards);
+            // A filter may grant another reward while it decides.
+            load.on_reward(move |grant| {
+                if grant.reward == "looter" {
+                    let _also = rewards.grant(grant.player, "third");
+                }
+                true
+            })?;
             Ok(Self)
         }
     }
@@ -116,7 +124,11 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
+        assert_eq!(
+            loader.raise::<WorldLoaded>(&()),
+            2,
+            "the mod's and its rewards'"
+        );
 
         assert_eq!(
             loader.raise_game_event(LEVEL_UP, &event(&[(8, 2), (12, 2)])),
@@ -159,7 +171,11 @@ mod tests {
             loader.raise_game_event(LOOT, &event(&[(8, 4), (12, 50)])),
             1
         );
-        assert_eq!(gained(&loader, 4), 1000);
+        assert_eq!(
+            gained(&loader, 4),
+            1001,
+            "the loot and the reward its filter grants"
+        );
         assert_eq!(gained(&loader, 2), 0, "only the looter");
 
         let rewards = *REWARDS.get().unwrap();
@@ -172,7 +188,7 @@ mod tests {
         assert!(rewards.grant(Entity(4), "looter"));
         assert!(!rewards.grant(Entity(4), "unknown"));
         assert!(!rewards.grant(Entity(99), "looter"), "no such player");
-        assert_eq!(gained(&loader, 4), 1000);
+        assert_eq!(gained(&loader, 4), 1001);
         let _gone = std::fs::remove_dir_all(&data);
     }
 }

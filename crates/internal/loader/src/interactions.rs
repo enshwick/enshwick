@@ -823,6 +823,9 @@ unsafe extern "system" fn dismantle(
 }
 
 unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
+    // SAFETY: `ctx` is the game's argument to the `inventory_actions` system,
+    // at its entry on its thread, which is all `screen_uses` asks.
+    unsafe { crate::item_actions::screen_uses(ctx) };
     if !crate::transactions::holds().quiet() && LOADED.get().is_some() && !ctx.is_null() {
         // SAFETY: `ctx` is non-null by the check before it and is the system's
         // own context, at its entry on its thread.

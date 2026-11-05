@@ -38,7 +38,11 @@ mod tests {
             end)
             "#,
         );
-        assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
+        assert_eq!(
+            loader.raise::<WorldLoaded>(&()),
+            2,
+            "the mod's and its rewards'"
+        );
         let used = ItemAction {
             header: Header::of::<ItemAction>(),
             kind: ItemAction::CONSUME,
@@ -96,7 +100,11 @@ mod tests {
             end)
             "#,
         );
-        assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
+        assert_eq!(
+            loader.raise::<WorldLoaded>(&()),
+            2,
+            "the mod's and its rewards'"
+        );
         let _ran = loader.raise::<Ticked>(&TickData::new(1));
         let faults = loader.faults();
         assert_eq!(faults.len(), 1, "{faults:?}");

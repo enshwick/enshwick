@@ -130,7 +130,11 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        assert_eq!(loader.raise::<WorldLoaded>(&()), 2);
+        assert_eq!(
+            loader.raise::<WorldLoaded>(&()),
+            3,
+            "the settings', the script's and the rewards'"
+        );
         let _replaced = loader.raise::<SettingsReplaced>(&());
 
         assert!(loader.item_action(&action(ItemAction::CONSUME)));

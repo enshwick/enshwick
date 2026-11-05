@@ -38,6 +38,7 @@ use crate::content::icons::{Icon, Pixels};
 use crate::content::items::{FuelSetup, ImpactUiValue, NewItem};
 use crate::content::recipes::NewRecipe;
 use crate::content::workshops::{NewWorkshop, WorkshopId};
+use crate::locks::Relock as _;
 use crate::{Load, Off};
 
 /// The manifest file of a pack folder.
@@ -227,7 +228,10 @@ impl Load<'_> {
         }
         #[cfg(feature = "unstable")]
         for reward in &pack.rewards {
-            self.add_reward(reward.reward(&toml::Table::new()))?;
+            // A reward this build cannot follow turns off alone.
+            if let Err(off) = self.add_reward(reward.reward(&toml::Table::new())) {
+                crate::warn!("{REWARDS_FILE}: a reward is off: {off}");
+            }
         }
         #[cfg(not(feature = "unstable"))]
         if !pack.rewards.is_empty() {
@@ -247,7 +251,11 @@ impl Load<'_> {
         };
         let declared = self.table_config(schema)?;
         let settings = declared.0.clone();
-        let _first = DECLARED.set(declared);
+        let me = self.host().handle();
+        DECLARED
+            .get_or_init(|| std::sync::Mutex::new(Vec::new()))
+            .relock()
+            .push((me, declared));
         let drops: Vec<(crate::loot::Drop, values::Number<f64>)> = pack
             .drops
             .iter()
@@ -281,23 +289,33 @@ impl Load<'_> {
             }
             #[cfg(feature = "unstable")]
             for reward in &rewards {
-                crate::rewards::replace(reward.reward(&values));
+                crate::rewards::replace(me, reward.reward(&values));
             }
         })
     }
 }
 
-/// The settings a pack declared, and their defaults, for a script runtime
-/// of the same mod, which follows them instead of declaring them again.
-static DECLARED: std::sync::OnceLock<(crate::config::TableConfig, toml::Table)> =
-    std::sync::OnceLock::new();
+/// The settings each pack declared, and their defaults, by the pack's
+/// handle, for a script runtime of the same mod, which follows them instead
+/// of declaring them again.
+static DECLARED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, Declared)>>> =
+    crate::fresh::Fresh::new();
 
-/// The settings [`Load::add_pack`] declared for the mod's pack, and their
-/// defaults; `None` when it declared none.
+/// A pack's settings and their defaults, as `table_config` gives them.
+type Declared = (crate::config::TableConfig, toml::Table);
+
+/// The settings [`Load::add_pack`] declared for the pack `load` starts, and
+/// their defaults; `None` when it declared none.
 #[doc(hidden)]
 #[must_use]
-pub fn declared_settings() -> Option<(crate::config::TableConfig, toml::Table)> {
-    DECLARED.get().cloned()
+pub fn declared_settings(load: &Load<'_>) -> Option<(crate::config::TableConfig, toml::Table)> {
+    let me = load.host().handle();
+    DECLARED
+        .get_or_init(|| std::sync::Mutex::new(Vec::new()))
+        .relock()
+        .iter()
+        .find(|(handle, _)| *handle == me)
+        .map(|(_, declared)| declared.clone())
 }
 
 mod changes;

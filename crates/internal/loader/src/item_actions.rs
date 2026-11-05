@@ -24,8 +24,6 @@ use crate::host::{Loader, Registered, Target};
 use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 
-/// The system that runs the players' uses and the items they throw away.
-const INVENTORY_SYSTEM: &str = crate::interactions::ACTIONS_SYSTEM;
 /// The system that runs the players' equips and unequips.
 const EQUIPMENT_SYSTEM: &str = "equipment_actions";
 
@@ -35,10 +33,6 @@ static EVENTS: OnceLock<Events> = OnceLock::new();
 
 type ActionsFn = unsafe extern "system" fn(*mut u64) -> u64;
 
-// SAFETY: `ActionsFn` is the signature of a system entry, here the reflected
-// `inventory_actions` system's, and `link` uses this slot only as that
-// function's next.
-static INVENTORY_NEXT: Next<ActionsFn> = unsafe { Next::new() };
 // SAFETY: `ActionsFn` is the signature of a system entry, here the reflected
 // `equipment_actions` system's, and `link` uses this slot only as that
 // function's next.
@@ -68,6 +62,8 @@ struct Layout {
     consumed_input: u32,
     inventory: u32,
     stack: usize,
+    /// Where a stack holds its `u32` item id.
+    stack_item: usize,
     stack_count: usize,
     slots: usize,
     slot_entity: usize,
@@ -138,12 +134,22 @@ fn layout(loader: &Loader) -> Option<Layout> {
     let (action, equipment) = ("keen::ecs::ItemAction", "keen::ecs::ChangeEquipmentAction");
     let stack = crate::catalogue::size(loader, crate::catalogue::ids::ITEM_STACK)?;
     let inventory = crate::catalogue::size(loader, crate::catalogue::ids::INVENTORY)?;
+    let stack_item = field(
+        enshwick_gamedata::catalogue::type_name(crate::catalogue::ids::ITEM_STACK),
+        "id",
+    )?;
+    let stack_count = crate::catalogue::offset(loader, crate::catalogue::ids::ITEM_STACK_COUNT)?;
+    // Both u32 reads lie inside the reflected stack.
+    if stack_item.max(stack_count) + 4 > stack {
+        return None;
+    }
     Some(Layout {
+        stack_item,
         player_input: hash("keen::ecs::PlayerInput")?,
         consumed_input: hash(consumed)?,
         inventory: crate::catalogue::component_hash(loader, crate::catalogue::ids::INVENTORY)?,
         stack,
-        stack_count: crate::catalogue::offset(loader, crate::catalogue::ids::ITEM_STACK_COUNT)?,
+        stack_count,
         slots: inventory.checked_div(stack)?,
         slot_entity: field("keen::InventorySlotId", "entityId")?,
         slot_index: field("keen::InventorySlotId", "slotIndex")?,
@@ -252,13 +258,8 @@ pub(crate) fn link(loader: &'static Loader) {
             .ok()
             .map(enshwick_gamedata::reflect::System::entry)
     };
-    let uses = loader.link_feature(
-        "item uses",
-        Target::Found(INVENTORY_SYSTEM, entry(INVENTORY_SYSTEM)),
-        &INVENTORY_NEXT,
-        inventory_actions as ActionsFn,
-        HookFlags::NONE,
-    );
+    // The uses go through interactions' link on the same system: the
+    // loader links a target once.
     let equips = loader.link_feature(
         "item equips",
         Target::Found(EQUIPMENT_SYSTEM, entry(EQUIPMENT_SYSTEM)),
@@ -268,7 +269,7 @@ pub(crate) fn link(loader: &'static Loader) {
     );
     crate::log!(
         INFO,
-        "item filters on: {} (uses {uses}, equips {equips})",
+        "item filters on: {} (equips {equips}; uses with the inventory actions)",
         filters.len()
     );
 }
@@ -310,16 +311,20 @@ unsafe fn server_world(loader: &Loader, engine: &Engine, ctx: *mut u64) -> bool 
         || unsafe { engine.is_world(ctx, crate::world::server_world()) }
 }
 
-unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
-    if !ctx.is_null() {
-        // SAFETY: `ctx` is non-null by the check before it and is the system's
-        // own context, at its entry on its thread.
+/// Asks the filters about the players' pending uses and trashes, from
+/// interactions' link on the `inventory_actions` system.
+///
+/// # Safety
+///
+/// - `ctx` is null or the live context of the `inventory_actions` system,
+///   at its entry on its thread.
+pub(crate) unsafe fn screen_uses(ctx: *mut u64) {
+    if !ctx.is_null() && LOADED.get().is_some() {
+        // SAFETY: `ctx` is non-null by the check before it and, by the
+        // caller's contract, the system's own context at its entry on its
+        // thread.
         let _done = ITEMS_FUSE.run("the item uses", || unsafe { screen_pending(ctx, false) });
     }
-    // SAFETY: this detour runs only as the `inventory_actions` system's link,
-    // so the slot holds the next function of that signature; the game's
-    // context passes unchanged.
-    unsafe { INVENTORY_NEXT.get()(ctx) }
 }
 
 unsafe extern "system" fn equipment_actions(ctx: *mut u64) -> u64 {
@@ -443,9 +448,10 @@ unsafe fn stack(
     let slots = unsafe { components.component(ctx, inventory, layout.inventory) }?;
     let at = index * layout.stack;
     // SAFETY: `slots` is the live `Inventory` component, `layout.slots`
-    // stacks of the reflected `ItemStack` size, and `index` is below it; a
-    // stack starts with its u32 item id.
-    let item: u32 = unsafe { read_at(slots, at) };
+    // stacks of the reflected `ItemStack` size, and `index` is below it; the
+    // stack's u32 item id sits at the reflected `stack_item`, inside it
+    // (checked by `layout`).
+    let item: u32 = unsafe { read_at(slots, at + layout.stack_item) };
     // SAFETY: `slots` is the live `Inventory` component and `at` the start of
     // stack `index`, below `layout.slots`; the stack's u32 count sits at the
     // catalogue's `item_stack.count` offset within it.
@@ -453,14 +459,24 @@ unsafe fn stack(
     (item != 0 && count != 0).then_some((item, count))
 }
 
-/// Tells the filters of a pickup or a placement in one event record of the
-/// server's streams, on the game thread.
+/// Whether the filters hear events of `type_hash`, so the event link copies
+/// them for [`screen`].
+pub(crate) fn hears(type_hash: u32) -> bool {
+    EVENTS.get().is_some_and(|events| {
+        [events.pickup, events.place]
+            .into_iter()
+            .flatten()
+            .any(|h| h.hash == type_hash)
+    })
+}
+
+/// Tells the filters of a pickup or a placement in one event the server's
+/// streams held, on the game thread after the merge.
 ///
 /// # Safety
 ///
-/// - `payload` is a live event of `type_hash`, readable for `size` bytes.
-/// - Called on the game thread before the engine moves the streams, so
-///   nothing writes the event during the call.
+/// - `payload` is a copy of an event of `type_hash`, readable for `size`
+///   bytes, which nothing writes during the call.
 pub(crate) unsafe fn screen(type_hash: u32, payload: *const u8, size: usize) {
     let Some(events) = EVENTS.get() else {
         return;
@@ -512,6 +528,7 @@ mod tests {
         consumed_input: 2,
         inventory: 3,
         stack: 12,
+        stack_item: 0,
         stack_count: 4,
         slots: 8,
         slot_entity: 0,

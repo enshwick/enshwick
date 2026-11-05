@@ -86,7 +86,11 @@ mod tests {
             loader.config_schema("settings").is_some(),
             "the pack's settings are the mod's"
         );
-        assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
+        assert_eq!(
+            loader.raise::<WorldLoaded>(&()),
+            2,
+            "the settings' and the rewards'"
+        );
         assert_eq!(
             joined(&loader, 2),
             5,

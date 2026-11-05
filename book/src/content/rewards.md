@@ -107,3 +107,9 @@ world's file `rewards.toml` in the mod's data folder beside the save keeps
 who got a limited reward, by account, so a limit holds across restarts and
 moves with the save. Items and experience are given as the reward states
 them; the game's rates do not change them.
+
+A reward whose action this game build lacks turns off alone, with a
+warning in the log; the rest of the pack applies. `Rewards::grant` and
+`Rewards::give` run on the thread that calls them, so call them on the game
+thread; an item handler runs on its system's thread, so schedule the grant
+from there.

@@ -25,10 +25,10 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use crate::abi::{BuffTypeId, KnowledgeId, RecipeId};
+use crate::abi::{BuffTypeId, KnowledgeId, ModHandle, RecipeId};
 use crate::game_events::{
     CraftRecipeEvent, CraftRecipeSuccessEvent, LevelUpEvent, LootInteractionEvent,
 };
@@ -271,11 +271,12 @@ impl Given {
 const PENDING: usize = 32;
 
 /// A grant filter of the mod's.
-type Filter = Box<dyn Fn(&RewardGrant) -> bool + Send + Sync>;
+type Filter = Arc<dyn Fn(&RewardGrant) -> bool + Send + Sync>;
 
 /// The mod's rewards, the handles they give through and who got them.
 struct Shared {
     rewards: Mutex<Vec<Reward>>,
+    /// Cloned out before a grant calls them, so a filter may grant too.
     filters: Mutex<Vec<Filter>>,
     store: crate::state::WorldStore<Given>,
     world: crate::world::World,
@@ -323,6 +324,26 @@ impl Pending {
         false
     }
 
+    /// Drops what `player` still waits for, freeing their slot.
+    fn forget(&self, player: Entity) {
+        if player.is_none() {
+            return;
+        }
+        let entity = u64::from(player.0) << 32;
+        for slot in &self.0 {
+            let _gone = slot.try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                (current != 0 && current & !u64::from(u32::MAX) == entity).then_some(0)
+            });
+        }
+    }
+
+    /// Drops what every player waits for, as a new world starts.
+    fn clear(&self) {
+        for slot in &self.0 {
+            slot.store(0, Ordering::Release);
+        }
+    }
+
     /// Takes up to `room` of `player`'s experience.
     fn take(&self, player: Entity, room: u32) -> u32 {
         if room == 0 || player.is_none() {
@@ -350,12 +371,25 @@ impl Pending {
     }
 }
 
-/// The mod's one rewards state, made with its first reward.
-static SHARED: OnceLock<Shared> = OnceLock::new();
+/// Each mod's rewards state by its handle: a mod DLL holds one, the
+/// loader's own copy of this crate one per data pack or script it runs.
+static SHARED: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Shared)>>> =
+    crate::fresh::Fresh::new();
+
+/// The rewards state of mod `me`, `None` before its first reward.
+fn find(me: ModHandle) -> Option<&'static Shared> {
+    SHARED
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .relock()
+        .iter()
+        .find(|(handle, _)| *handle == me)
+        .map(|&(_, shared)| shared)
+}
 
 /// The mod's rewards state, made on the first call during init.
 fn shared(load: &mut Load<'_>) -> Result<&'static Shared, Off> {
-    if let Some(shared) = SHARED.get() {
+    let me = load.host().handle();
+    if let Some(shared) = find(me) {
         return Ok(shared);
     }
     let made = Shared {
@@ -369,21 +403,24 @@ fn shared(load: &mut Load<'_>) -> Result<&'static Shared, Off> {
         scheduler: load.scheduler()?,
         experience: Pending::new(),
     };
-    let _first = SHARED.set(made);
-    let shared = SHARED.get().ok_or_else(|| Off::new("rewards: no state"))?;
-    load.on_experience(|rows, _levels| {
-        if let Some(shared) = SHARED.get() {
-            for row in rows {
-                let room = row
-                    .need
-                    .saturating_sub(row.progress)
-                    .saturating_sub(row.gained);
-                row.gained = row
-                    .gained
-                    .saturating_add(shared.experience.take(row.entity, room));
-            }
+    let shared: &'static Shared = Box::leak(Box::new(made));
+    load.on_experience(move |rows, _levels| {
+        for row in rows {
+            let room = row
+                .need
+                .saturating_sub(row.progress)
+                .saturating_sub(row.gained);
+            row.gained = row
+                .gained
+                .saturating_add(shared.experience.take(row.entity, room));
         }
     })?;
+    load.on::<crate::events::PlayerLeft>(move |left| shared.experience.forget(left.entity))?;
+    load.on::<crate::events::WorldLoaded>(move |()| shared.experience.clear())?;
+    SHARED
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .relock()
+        .push((me, shared));
     Ok(shared)
 }
 
@@ -415,7 +452,8 @@ impl Shared {
             player,
             give: reward.give.clone(),
         };
-        if !self.filters.relock().iter().all(|filter| filter(&grant)) {
+        let filters = self.filters.relock().clone();
+        if !filters.iter().all(|filter| filter(&grant)) {
             return false;
         }
         let _noted = self.store.update(|given| given.note(reward, key, day));
@@ -462,10 +500,10 @@ impl Shared {
     }
 }
 
-/// Puts `reward` in place of the mod's declared reward of its name, for a
+/// Puts `reward` in place of mod `me`'s declared reward of its name, for a
 /// pack whose numbers follow the world's settings.
-pub(crate) fn replace(reward: Reward) {
-    if let Some(shared) = SHARED.get()
+pub(crate) fn replace(me: ModHandle, reward: Reward) {
+    if let Some(shared) = find(me)
         && let Some(old) = shared
             .rewards
             .relock()
@@ -511,7 +549,10 @@ fn grant_later(shared: &'static Shared, name: &str, player: Entity) {
 
 /// Gives the mod's declared rewards from code, on the server.
 ///
-/// Get it from [`Load::rewards`]. Copy it anywhere.
+/// Get it from [`Load::rewards`]. Copy it anywhere, and call it on the game
+/// thread: in an event handler or a [`Scheduler`](crate::schedule::Scheduler)
+/// task. An item handler runs on the thread of the game's system, so it
+/// schedules the grant.
 ///
 /// # Examples
 ///
@@ -527,7 +568,7 @@ fn grant_later(shared: &'static Shared, name: &str, player: Entity) {
 /// }
 /// ```
 #[derive(Clone, Copy)]
-pub struct Rewards(&'static Shared);
+pub struct Rewards(ModHandle);
 
 impl core::fmt::Debug for Rewards {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -540,17 +581,19 @@ impl crate::script::Bound for Rewards {
     const DOC: &'static str = "The mod's rewards for players' actions, given from code.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_GIVING];
 
+    /// Opened for every script, so it makes no state: a script that
+    /// declares no reward pays nothing.
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.rewards()
+        Ok(Self(load.host().handle()))
     }
 }
 
 #[crate::script(giving)]
 impl Rewards {
     /// Gives the declared reward named `reward` to `player` as its action
-    /// would: within its limit and chance, if the mod's filters allow. It
-    /// runs on the game thread; false for a reward the mod did not declare,
-    /// or one its limit, its chance or a filter holds back.
+    /// would: within its limit and chance, if the mod's filters allow; false
+    /// for a reward the mod did not declare, or one its limit, its chance or
+    /// a filter holds back.
     ///
     /// # Examples
     ///
@@ -558,18 +601,21 @@ impl Rewards {
     #[script]
     #[must_use]
     pub fn grant(self, player: Entity, reward: &str) -> bool {
-        let found = self
-            .0
+        let Some(shared) = find(self.0) else {
+            return false;
+        };
+        let found = shared
             .rewards
             .relock()
             .iter()
             .find(|r| r.name == reward)
             .cloned();
-        found.is_some_and(|reward| self.0.grant(&reward, player))
+        found.is_some_and(|reward| shared.grant(&reward, player))
     }
 
-    /// Gives `give` to `player` now, with no limit, chance or filter, on the
-    /// game thread.
+    /// Gives `give` to `player` now, with no limit, chance or filter; a mod
+    /// that declared no reward and no filter gives nothing, and the log
+    /// says so.
     ///
     /// # Examples
     ///
@@ -582,7 +628,10 @@ impl Rewards {
     /// ```
     #[script]
     pub fn give(self, player: Entity, give: &[Give]) {
-        self.0.give(player, give);
+        match find(self.0) {
+            Some(shared) => shared.give(player, give),
+            None => crate::warn!("rewards: {give:?} not given, the mod declared no reward"),
+        }
     }
 }
 
@@ -684,7 +733,7 @@ impl Load<'_> {
     where
         F: Fn(&RewardGrant) -> bool + Send + Sync + 'static,
     {
-        shared(self)?.filters.relock().push(Box::new(filter));
+        shared(self)?.filters.relock().push(Arc::new(filter));
         Ok(())
     }
 
@@ -698,7 +747,7 @@ impl Load<'_> {
     ///
     /// See [`Rewards`].
     pub fn rewards(&mut self) -> Result<Rewards, Off> {
-        shared(self).map(Rewards)
+        shared(self).map(|_| Rewards(self.host().handle()))
     }
 }
 
@@ -776,6 +825,22 @@ mod tests {
             0,
             "no other player's experience"
         );
+    }
+
+    #[test]
+    fn a_player_who_leaves_or_a_new_world_frees_the_slots() {
+        let pending = Pending::new();
+        for player in 1..=32 {
+            assert!(pending.add(Entity(player), 1));
+        }
+        pending.forget(Entity(7));
+        pending.forget(Entity(0));
+        assert!(pending.add(Entity(40), 1), "the leaver's slot is free");
+        assert!(!pending.add(Entity(41), 1));
+        assert_eq!(pending.take(Entity(7), 10), 0, "nothing kept for them");
+        pending.clear();
+        assert_eq!(pending.take(Entity(1), 10), 0);
+        assert!(pending.add(Entity(41), 1), "a new world starts empty");
     }
 
     #[test]

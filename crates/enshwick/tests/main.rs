@@ -86,6 +86,8 @@ mod no_ui;
 #[cfg(feature = "unstable")]
 mod notices;
 mod pacing;
+#[cfg(feature = "unstable")]
+mod pack_handles;
 #[cfg(feature = "schema")]
 mod pack_schemas;
 #[cfg(feature = "unstable")]

@@ -460,7 +460,7 @@ fn begin(
     });
     if let Some(schema) = settings {
         // A pack's settings are declared once, by `add_pack` when it ran.
-        let (settings, values) = match enshwick::packs::declared_settings() {
+        let (settings, values) = match enshwick::packs::declared_settings(load) {
             Some(declared) => declared,
             None => load.table_config(schema)?,
         };
