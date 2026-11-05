@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 6
+#define ENSHWICK_ABI_MINOR 7
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -3047,7 +3047,9 @@ typedef struct EnshwickUiExtension {
 // world.
 //
 // The name is the game's `ItemAction`; the kinds are its `ItemActionType`,
-// `ChangeEquipment` and the events that follow a pickup or a placement.
+// `ChangeEquipment` and the events that follow a pickup or a placement,
+// and `CONSUMED` the loader's word that a use goes
+// through.
 typedef struct EnshwickItemAction {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -3080,6 +3082,9 @@ typedef struct EnshwickItemAction {
 // The player placed the item as a building piece or a prop, after the
 // game placed it; the answer is ignored.
 #define EnshwickItemAction_PLACE 6
+// The player's use of the item goes through: every filter allowed the
+// `CONSUME` before it; the answer is ignored. ABI 11.7.
+#define EnshwickItemAction_CONSUMED 7
 
 // A mod's item filter: the action and the pointer given at registration;
 // returns 0 to refuse an action that can be refused.

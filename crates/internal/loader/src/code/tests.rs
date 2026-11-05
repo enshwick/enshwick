@@ -280,11 +280,11 @@ fn a_jump_just_before_an_unreadable_page_reads_up_to_it() {
     let last = start + PAGE - 6;
     let jump = [0xE9, 1, 2, 3, 4];
     // SAFETY: the six bytes at `last` lie in the first read-write page just
-    // committed; the second page, also the test's own, turns unreadable.
-    let old = unsafe {
-        crate::memory::write_bytes(last, 0, &jump);
-        crate::pages::protect(start + PAGE, PAGE, PAGE_NOACCESS)
-    };
+    // committed.
+    unsafe { crate::memory::write_bytes(last, 0, &jump) };
+    // SAFETY: the second page is the test's own, committed with the first;
+    // nothing reads it while it is unreadable.
+    let old = unsafe { crate::pages::protect(start + PAGE, PAGE, PAGE_NOACCESS) };
     assert_eq!(old, Some(PAGE_READWRITE));
     let read = code_at(last).expect("the page's last bytes read");
     assert_eq!(read, [0xE9, 1, 2, 3, 4, 0]);

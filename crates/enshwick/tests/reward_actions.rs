@@ -1,4 +1,5 @@
-//! Rewards that follow a craft, a level and a loot, and gifts given from code.
+//! Rewards that follow a craft, a level, a loot and a use, and gifts given
+//! from code.
 
 #[cfg(test)]
 mod tests {
@@ -103,10 +104,10 @@ mod tests {
         rows[0].gained
     }
 
-    #[test]
-    fn a_level_a_craft_and_a_loot_each_reward_only_their_own_action() {
-        let data = std::env::temp_dir().join(format!("enshwick-acting-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&data);
+    /// The mod started in a world with players 2 and 4 and the events its
+    /// rewards hear, its data in `data`.
+    fn installed(data: &std::path::Path) -> Installed {
+        let _gone = std::fs::remove_dir_all(data);
         let mut host = FakeHost::new()
             .world()
             .player(player(2, 7))
@@ -146,7 +147,13 @@ mod tests {
             2,
             "the mod's and its rewards'"
         );
+        loader
+    }
 
+    #[test]
+    fn a_level_a_craft_and_a_loot_each_reward_only_their_own_action() {
+        let data = std::env::temp_dir().join(format!("enshwick-acting-{}", std::process::id()));
+        let loader = installed(&data);
         assert_eq!(
             loader.raise_game_event(LEVEL_UP, &event(&[(8, 2), (12, 2)])),
             2
@@ -250,19 +257,7 @@ mod tests {
     #[test]
     fn a_use_a_later_filter_refuses_gives_no_use_reward() {
         let data = std::env::temp_dir().join(format!("enshwick-drinker-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&data);
-        let loader = FakeHost::new()
-            .world()
-            .player(player(2, 7))
-            .player(player(4, 9))
-            .data_dir(data.to_str().unwrap())
-            .world_key("world0")
-            .install();
-        // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
-        let status =
-            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        let _loaded = loader.raise::<WorldLoaded>(&());
+        let loader = installed(&data);
         let drink = |player: u32| ItemAction {
             header: Header::of::<ItemAction>(),
             kind: ItemAction::CONSUME,

@@ -372,10 +372,12 @@ fn pieces(old: &[u8], now: &[u8], start: usize, end: usize) -> Vec<(usize, usize
     pieces
 }
 
-/// Whether the change of `len` bytes at `offset` of `now`, the code mapped at
-/// `text`, jumps into `image` (its first byte and end) with a jump that starts
-/// within [`LEAD`] bytes of `offset`: directly, or through up to [`HOPS`] more
-/// jumps in the code `read` answers, up to [`BRANCH_BYTES`] bytes at a jump.
+/// Whether a changed piece of code jumps into `image`, its first byte and end.
+///
+/// The piece is `len` bytes at `offset` of `now`, the code mapped at `text`;
+/// its jump starts within [`LEAD`] bytes of `offset` and lands in `image`
+/// directly, or through up to [`HOPS`] more jumps in the code `read` answers,
+/// up to [`BRANCH_BYTES`] bytes at a jump.
 ///
 /// # Examples
 ///

@@ -175,15 +175,14 @@ fn with_unwinds<const N: usize>(codes: [&[u8]; N], info: [u8; 8]) -> [usize; N] 
     let rva = u32::try_from(UNWIND).unwrap();
     let word = |at: usize| u32::from_le_bytes(info[at..at + 4].try_into().unwrap());
     // SAFETY: the 4096 writable bytes `function` allocated, of which the
-    // codes took fewer than `UNWIND`; the table of `N` entries ends well
-    // inside the page, and each entry spans its code.
-    unsafe {
-        ((page + UNWIND) as *mut [u32; 2]).write([word(0), word(4)]);
-        for (at, code) in codes.iter().enumerate() {
-            let begin = u32::try_from(at * SLOT).unwrap();
-            let end = begin + u32::try_from(code.len()).unwrap();
-            ((page + TABLE + 12 * at) as *mut [u32; 3]).write([begin, end, rva]);
-        }
+    // codes took fewer than `UNWIND`.
+    unsafe { ((page + UNWIND) as *mut [u32; 2]).write([word(0), word(4)]) };
+    for (at, code) in codes.iter().enumerate() {
+        let begin = u32::try_from(at * SLOT).unwrap();
+        let end = begin + u32::try_from(code.len()).unwrap();
+        // SAFETY: the same page; the table of `N` entries after the unwind
+        // info ends well inside it, and each entry spans its code.
+        unsafe { ((page + TABLE + 12 * at) as *mut [u32; 3]).write([begin, end, rva]) };
     }
     // SAFETY: `N` entries naming the codes and unwind info in the page,
     // which is never freed.

@@ -1,7 +1,8 @@
 # What players do with items
 
 A mod hears each player's use, trash, equip, unequip, pickup and placement
-of an item, and may refuse the first four. The calls are
+of an item, and may refuse the first four. It also hears that a use goes
+through, once every mod allowed it. The calls are
 [unstable](../stability.md) until a person checks each action in the game.
 
 ## Give an item behaviour
@@ -84,6 +85,11 @@ the item and the key in the log.
 | `Unequip` | `unequip` | A player takes the item off                     | The item stays on                  |
 | `Pickup`  | `pickup`  | After a player picked the item up               | Nothing: the answer is ignored     |
 | `Place`   | `place`   | After a player placed the item as a piece       | Nothing: the answer is ignored     |
+| `Consumed` | none     | After every mod allowed a `Consume`             | Nothing: the answer is ignored     |
+
+A mod that counts uses or rewards one listens to `Consumed`: a `Consume`
+reaches the mods before they all decided, so another mod may still refuse
+it.
 
 A refusal takes the game's path for an action it already ran, so the item
 stays where it was and nothing is lost. `count` is 1 for a use and a
