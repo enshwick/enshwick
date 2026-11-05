@@ -157,8 +157,10 @@ number`. `pcall` catches it.
 Every public function of the Rust API has a Luau function of the same
 module and name, `enshwick.<module>.<name>`, or a Rust handle's method on the
 Luau object, `handle:<name>()`; a value, such as an item or a change, is a
-table with the struct's fields. A test of the repository fails for any
-function without one, unless this table names it and says why.
+table with the struct's fields, without the struct's methods, such as
+`Container::is_open`: a script reads the fields they read. A test of the
+repository fails for any other function without one, unless this table names
+it and says why.
 
 | Rust | Why |
 | --- | --- |
@@ -193,6 +195,7 @@ function without one, unless this table names it and says why.
 | `packs::*` | Reading a pack's folder and files. The loader reads a Luau mod's own folder as its pack, and a script adds content from code through `enshwick.content` and `enshwick.affixes`. |
 | `typed::ComponentType::read`, `typed::ComponentType::write` | The handle `enshwick.typed.component_type` returns holds the server's world from the start, so `read` and `write` take no world. A value is a table by the Rust item's field names, and a write names every field ([The game's own types](game-types.md#can-a-luau-mod-use-them)). |
 | `affixes::roll` | `enshwick.affixes.roll` rolls an item, as `Affixes::roll` does, since a namespace holds one function of a name. The roll from a pool is `enshwick.affixes.roll_pool`. |
+| `world::near` | `enshwick.world.near` is `World::near`, the entities near a point, since a namespace holds one function of a name. A script compares the offset itself, as the Luau example of [Loot containers](content/loot.md) does. |
 | `actions::clean`, `actions::decode`, `actions::decode_args`, `actions::encode`, `actions::encode_args` | The text form a sheet and its arguments take between the server and a client. The loader and the fake host speak it; a script's actions never see it. |
 | `ui::Response::from_raw`, `ui::Response::to_raw` | The binary interface's form of a dialog's answer. A script names an answer by its name. |
 | `controls::Tracker::*` | The key tracker the loader's key reader and the fake host share, so both fire a control alike. A script's control fires through the same loader. |
