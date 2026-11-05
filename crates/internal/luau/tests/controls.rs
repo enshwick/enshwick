@@ -39,6 +39,7 @@ mod tests {
         enshwick.log.info(`key {key} mouse {enshwick.controls.is_mouse("Mouse4")} {enshwick.controls.is_mouse("E")} plain {enshwick.controls.modifiers("E")} {enshwick.controls.modifiers(key) > 1} same {enshwick.controls.code(key) == enshwick.controls.code("F5")} {enshwick.controls.code("E") == enshwick.controls.code("F5")}`)
         ok = pcall(enshwick.controls.parse, "Escape")
         enshwick.log.info(`escape {ok}`)
+        enshwick.log.info(`bits {enshwick.controls.from_bits(enshwick.controls.bits(key))} {enshwick.controls.from_bits(0)}`)
     "#;
 
     fn key(name: &str) -> Key {
@@ -52,6 +53,7 @@ mod tests {
             "again false",
             "key Ctrl+F5 mouse true false plain 0 true same true false",
             "escape false",
+            "bits Ctrl+F5 nil",
         ] {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }

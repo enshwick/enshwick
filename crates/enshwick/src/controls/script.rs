@@ -126,6 +126,21 @@ impl ControlFns {
         Ok(Key::parse(text)?)
     }
 
+    /// The key `bits` hold, as [`Key::from_bits`] reads them; nil for bits no
+    /// key can be bound to.
+    #[script]
+    #[must_use]
+    pub fn from_bits(self, bits: u32) -> Option<Key> {
+        Key::from_bits(bits)
+    }
+
+    /// The key's scan code and modifiers together, as [`Key::bits`] gives them.
+    #[script]
+    #[must_use]
+    pub const fn bits(self, key: Key) -> u32 {
+        key.bits()
+    }
+
     /// The key's scan code without modifiers, as [`Key::code`] gives it.
     #[script]
     #[must_use]

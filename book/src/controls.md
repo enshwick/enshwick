@@ -69,8 +69,8 @@ Windows reports it as Enter.
 In Luau, a control is a table of the builder's fields: `name`, `label`,
 `key`, `second`, `fires` as a list of phase names, `hold_for` in seconds,
 and `link` as the game action's name. A key is its text, such as
-`"Shift+E"`; `enshwick.controls.parse(text)` returns its own spelling, and
-`code`, `modifiers` and `is_mouse` read it. The handler gets a table of
+`"Shift+E"`; `enshwick.controls.parse(text)` and `from_bits(bits)` return
+its own spelling, and `bits`, `code`, `modifiers` and `is_mouse` read it. The handler gets a table of
 `control`, `phase` and, on the server, `player`.
 
 `Phase::Press` fires once when the key goes down; `Phase::Hold` once when it

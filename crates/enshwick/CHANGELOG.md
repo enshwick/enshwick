@@ -77,8 +77,8 @@ Each entry names the pull request that made the change.
   `enshwick.controls.control(control, on)`, as `Load::control` does, in
   place of `controls.declare`: the control is a table of the builder's
   fields, a key its text, such as `"Shift+E"`, and the handler gets the
-  `Fired` fields as a table. `enshwick.controls.parse`, `code`, `modifiers`
-  and `is_mouse` read a key. `script::Controls` is gone, and the namespace
+  `Fired` fields as a table. `enshwick.controls.parse` and `from_bits` make
+  a key, and `bits`, `code`, `modifiers` and `is_mouse` read one. `script::Controls` is gone, and the namespace
   is `controls::ControlFns` (#947).
 - A Luau damage filter keeps one damage object from hit to hit, so a hit no
   longer copies the damage into a new object or makes a new Luau object.

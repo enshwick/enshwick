@@ -2765,6 +2765,10 @@ declare enshwick: {
 	controls: {
 		--- The key `text` names, in its own spelling, as `Key.parse` reads it.
 		parse: (text: string) -> string,
+		--- The key `bits` hold, as `Key.from_bits` reads them; nil for bits no key can be bound to.
+		from_bits: (bits: number) -> string?,
+		--- The key's scan code and modifiers together, as `Key.bits` gives them.
+		bits: (key: string) -> number,
 		--- The key's scan code without modifiers, as `Key.code` gives it.
 		code: (key: string) -> number,
 		--- The modifiers' bits, 0 for none, as `Key.modifiers` gives them.
