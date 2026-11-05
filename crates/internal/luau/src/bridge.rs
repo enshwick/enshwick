@@ -75,6 +75,7 @@ pub(crate) fn to_lua(
         (Value::Object(handle), _) => LuaValue::UserData(lua.create_userdata(Object {
             handle,
             scope: scope.clone(),
+            ended: false,
         })?),
         (Value::Map(fields), Ty::Union(union)) => {
             let table = lua.create_table_with_capacity(0, 1)?;
@@ -182,7 +183,16 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
             };
             let scope = scope.clone();
             let faulted = scope.clone();
-            let lent: Box<[Lent]> = signature.params().iter().map(|_| Lent::default()).collect();
+            let lends = signature
+                .params()
+                .iter()
+                .any(|p| matches!(p.ty(), Ty::Object(class) if class.is_lent()));
+            // An empty slice allocates nothing: only a function lent an object pays.
+            let lent: Box<[Lent]> = if lends {
+                signature.params().iter().map(|_| Lent::default()).collect()
+            } else {
+                Box::default()
+            };
             Ok(Value::Function(
                 Callback::new(move |args| scope.call_function(&function, args, signature, &lent))
                     .with_fault(move |error| faulted.fault(error)),
@@ -247,7 +257,7 @@ fn object_from_lua(value: &LuaValue, class: &'static Class) -> Result<Value, Err
     match object.borrow::<Object>() {
         // A class is a `const`, whose address differs between uses; the
         // name picks it, and `FromScript` checks the Rust type.
-        Ok(object) if object.handle.class().name() == class.name() => {
+        Ok(object) if !object.ended && object.handle.class().name() == class.name() => {
             Ok(Value::Object(object.handle.clone()))
         }
         _ => Err(expected(class.name(), value)),
@@ -278,18 +288,23 @@ impl Lent {
             let object = lua.create_userdata(Object {
                 handle,
                 scope: scope.clone(),
+                ended: false,
             })?;
             return Ok((LuaValue::UserData(object), false));
         }
         let kept = match self.object.get() {
             Some(kept) => kept
                 .borrow_mut::<Object>()
-                .map(|mut object| object.handle = handle)
+                .map(|mut object| {
+                    object.handle = handle;
+                    object.ended = false;
+                })
                 .map(|()| kept.clone()),
             None => lua
                 .create_userdata(Object {
                     handle,
                     scope: scope.clone(),
+                    ended: false,
                 })
                 .map(|made| self.object.get_or_init(|| made).clone()),
         };
@@ -297,8 +312,16 @@ impl Lent {
             .inspect_err(|_| self.give_back())
     }
 
-    /// Ends the call that holds the kept object.
+    /// Ends the call that holds the kept object, which refuses use until the
+    /// next call lends it again; run under the VM's lock, as `lend` is.
     pub(crate) fn give_back(&self) {
+        if let Some(mut object) = self
+            .object
+            .get()
+            .and_then(|o| o.borrow_mut::<Object>().ok())
+        {
+            object.ended = true;
+        }
         self.busy.store(false, Ordering::Release);
     }
 }
@@ -311,6 +334,9 @@ const METHODS: &str = "enshwick.methods";
 struct Object {
     handle: Handle,
     scope: Scope,
+    /// A kept [`Lent`] object between its calls: a script that kept it gets
+    /// an error, never the next call's value.
+    ended: bool,
 }
 
 impl mlua::UserData for Object {
@@ -349,7 +375,14 @@ impl mlua::UserData for Object {
                 let what = format!("{}:{key}", class.name());
                 let function = lua.create_function(
                     move |lua, (object, args): (mlua::AnyUserData, MultiValue)| {
-                        let handle = object.borrow::<Self>()?.handle.clone();
+                        let this = object.borrow::<Self>()?;
+                        if this.ended {
+                            return Err(mlua::Error::runtime(format!(
+                                "{what}: the object was lent to a call that ended"
+                            )));
+                        }
+                        let handle = this.handle.clone();
+                        drop(this);
                         // A method indexes its own class's list: `a.m(b)` must not
                         // run b's method at m's place.
                         if handle.class().name() != class.name() {

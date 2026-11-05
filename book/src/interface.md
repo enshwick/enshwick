@@ -71,7 +71,8 @@ In Luau, a widget is a table of its builder's fields, such as
 `max`. Lua has no `&mut`, so `toggle`, `slider` and `dropdown` take the
 value and return it, changed in the frame the player changes it; a
 dropdown's index counts from 0, as in Rust. The callback gets the same
-frame object on every frame, so a frame costs the script no new object.
+frame object on every frame and may use it only during that call. A
+window's `body` is a new function each frame, so its frame is a new object.
 
 A window is the game's popup panel over a dimmed screen; it takes the input
 while it shows, and it shows for as long as the mod draws it. `id` names it

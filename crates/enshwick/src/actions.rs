@@ -318,10 +318,10 @@ impl Actions {
         if declared.iter().any(|d| d.action.id == id) {
             return Err(Off::new(format!("action {id}: the id is taken")));
         }
-        declared.push(Declared {
+        declared.push(Arc::new(Declared {
             action,
             handler: Box::new(handler),
-        });
+        }));
         Ok(())
     }
 

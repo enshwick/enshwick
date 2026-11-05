@@ -449,10 +449,7 @@ fn begin(
             Ok(opened) => namespaces.push((namespace, opened)),
             Err(off) => host.log(
                 Level::INFO,
-                &format!(
-                    "enshwick.{} is not on this game build: {off}",
-                    namespace.name()
-                ),
+                &format!("enshwick.{} is off here: {off}", namespace.name()),
             ),
         }
     }

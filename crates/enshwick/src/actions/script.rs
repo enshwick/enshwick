@@ -35,7 +35,8 @@ pub(crate) struct ScriptAction {
     /// [`Action::admins`] sets it.
     #[script(default)]
     pub admins: bool,
-    /// Who sees and runs it, as [`Action::allow`] decides.
+    /// Who sees and runs it, as [`Action::allow`] decides; only `true`
+    /// allows, and with `admins` both must hold.
     pub allow: Option<AllowFn>,
     /// What it acts on for a player, as [`Action::at`] finds it.
     pub at: Option<AtFn>,
@@ -62,11 +63,14 @@ impl ScriptAction {
         for arg in self.args {
             action = action.arg(arg);
         }
-        if self.admins {
-            action = action.admins();
-        }
-        if let Some(allow) = self.allow {
-            action = action.allow(move |player| allow.allows(player));
+        let admins = self.admins;
+        match self.allow {
+            Some(allow) => {
+                action = action
+                    .allow(move |player| (!admins || player.is_admin()) && allow.allows(player));
+            }
+            None if admins => action = action.admins(),
+            None => {}
         }
         if let Some(at) = self.at {
             let registry = Arc::clone(registry);
@@ -81,8 +85,13 @@ impl ScriptAction {
 pub(crate) struct AllowFn(Callback);
 
 impl AllowFn {
+    /// Only `true` allows: nil, any other value or an error refuses, so a gate
+    /// fails closed.
     fn allows(&self, player: &Player) -> bool {
-        bool::from_answer(self.0.call(vec![player.clone().into_value()]))
+        matches!(
+            self.0.call(vec![player.clone().into_value()]),
+            Ok(script::Value::Bool(true))
+        )
     }
 }
 

@@ -198,6 +198,52 @@ mod tests {
     }
 
     #[test]
+    fn a_script_s_gate_holds_admins_and_allow_together_refuses_nil_and_a_handler_may_add() {
+        let ann = player(3, 7, "Ann", true);
+        let bob = player(4, 8, "Bob", false);
+        let loader = run(
+            FakeHost::new().player(ann).player(bob),
+            r#"
+            local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+            actions:add({
+                id = "wipe",
+                label = "Wipe",
+                admins = true,
+                allow = function(player) return player.name ~= "Ann" end,
+            }, function() return enshwick.actions.done("wiped") end)
+            actions:add({
+                id = "quiet",
+                label = "Quiet",
+                allow = function(player) if player.name == "Ann" then return true end end,
+            }, function() return enshwick.actions.done("quiet") end)
+            actions:add({ id = "grow", label = "Grow" }, function()
+                actions:add({ id = "grown", label = "Grown" }, function()
+                    return enshwick.actions.done("grown")
+                end)
+                return enshwick.actions.done("grew")
+            end)
+            "#,
+        );
+        let refused = Some("0You may not do that.");
+        let run = |who: &PlayerInfo, id: &str| loader.ask_actions(ActionCall::RUN, who, 0, id, "");
+        assert_eq!(
+            run(&ann, "wipe").as_deref(),
+            refused,
+            "allow refuses the admin"
+        );
+        assert_eq!(run(&bob, "wipe").as_deref(), refused, "admins refuses Bob");
+        assert_eq!(run(&ann, "quiet").as_deref(), Some("1quiet"));
+        assert_eq!(run(&bob, "quiet").as_deref(), refused, "nil refuses");
+        assert_eq!(
+            run(&bob, "grow").as_deref(),
+            Some("1grew"),
+            "{:?}",
+            loader.logs()
+        );
+        assert_eq!(run(&bob, "grown").as_deref(), Some("1grown"));
+    }
+
+    #[test]
     fn a_client_script_asks_the_server_to_run_its_action() {
         let loader = run(
             FakeHost::new().side(Side::CLIENT),

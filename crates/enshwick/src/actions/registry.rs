@@ -1,4 +1,4 @@
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use crate::Host;
 use crate::PlayerKey;
@@ -33,10 +33,16 @@ enum ReadArgsError {
 pub(super) struct Registry {
     pub(super) texts: Texts,
     pub(super) host: Host,
-    pub(super) declared: RwLock<Vec<Declared>>,
+    pub(super) declared: RwLock<Vec<Arc<Declared>>>,
 }
 
 impl Registry {
+    /// The declared actions, out of the lock, so a handler, `allow`, `at` or
+    /// `per_player` may add an action without deadlocking.
+    fn declared(&self) -> Vec<Arc<Declared>> {
+        self.declared.relock_read().clone()
+    }
+
     fn say(&self, key: &str, language: Language, values: &[(&str, &str)]) -> String {
         self.texts.fill(key, language, values)
     }
@@ -104,7 +110,7 @@ impl Registry {
     }
 
     fn help(&self, player: &Player, language: Language) -> String {
-        let declared = self.declared.relock_read();
+        let declared = self.declared();
         let mut lines = vec![self.say("actions.usage", language, &[])];
         for d in declared.iter().filter(|d| Self::allowed(d, player)) {
             lines.push(self.usage(&d.action, language));
@@ -127,7 +133,7 @@ impl Registry {
         if word == "help" {
             return Outcome::done(self.help(player, language));
         }
-        let declared = self.declared.relock_read();
+        let declared = self.declared();
         let Some(d) = declared.iter().find(|d| d.action.id == word) else {
             return Outcome::refused(self.say("actions.unknown", language, &[("word", &word)]));
         };
@@ -303,7 +309,7 @@ impl Registry {
 
     /// The sheet of `player`: every action they may use, in `language`.
     pub(super) fn sheet(&self, player: &Player, language: Language) -> String {
-        let declared = self.declared.relock_read();
+        let declared = self.declared();
         let online = self.online();
         let others: Vec<(PlayerKey, String)> = online
             .iter()
@@ -386,7 +392,7 @@ impl Registry {
         args: &str,
         language: Language,
     ) -> String {
-        let declared = self.declared.relock_read();
+        let declared = self.declared();
         let outcome = match declared.iter().find(|d| d.action.id == id) {
             None => Outcome::refused(self.say("actions.unknown", language, &[("word", id)])),
             Some(d) => match sheet::decode_args(args) {

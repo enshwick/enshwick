@@ -63,4 +63,21 @@ mod tests {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
     }
+
+    #[test]
+    fn a_damage_object_kept_past_its_filter_refuses_and_leaves_later_hits_alone() {
+        let loader = run(
+            FakeHost::new(),
+            r"
+            local kept = nil
+            enshwick.damage.on_damage(function(damage) kept = damage end)
+            enshwick.damage.on_damage(function()
+                local ok = pcall(function() kept:cancel() end)
+                enshwick.log.info(`stale {ok}`)
+            end)
+            ",
+        );
+        assert!((loader.damage(check(DamageCheck::IMPACT, 40.0)).total - 40.0).abs() < 1e-6);
+        assert!(logged(&loader, "stale false"), "{:?}", loader.logs());
+    }
 }

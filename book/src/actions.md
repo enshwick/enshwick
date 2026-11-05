@@ -96,7 +96,8 @@ language; a key without a text shows as it is, so plain English works too.
 In Luau, `enshwick.actions.actions(texts)` returns the `Actions`, and an
 action is a table of the builder's fields: `id`, `label`, `help`, `args`,
 `admins`, and the functions `allow(player)`, `at(ask)` and
-`per_player(ask, subject)`. `enshwick.actions.player`, `choice`, `number`
+`per_player(ask, subject)`. Only `true` from `allow` lets a player in, and
+with `admins` both must hold. `enshwick.actions.player`, `choice`, `number`
 and `toggle` make the arguments; `number` takes the range as `min` and
 `max`. `at` returns `{ Ok = enshwick.actions.subject(id, label) }` or
 `{ Err = reason }`, and `per_player` returns a list of `{ key, name }`. A

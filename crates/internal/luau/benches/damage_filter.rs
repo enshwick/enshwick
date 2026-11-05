@@ -103,13 +103,13 @@ fn filter(c: &mut Criterion) {
     for _ in 0..HITS {
         black_box(loader.damage(black_box(fall())));
     }
-    let per_hit = (ALLOCATIONS.load(Ordering::Relaxed) - before) / HITS;
+    let made = ALLOCATIONS.load(Ordering::Relaxed) - before;
     #[expect(
         clippy::print_stdout,
         reason = "the bench reports its count beside criterion's times"
     )]
     {
-        println!("luau_damage_filter: {per_hit} allocations per hit");
+        println!("luau_damage_filter: {made} allocations in {HITS} hits");
     }
 
     c.bench_function("luau_damage_filter", |b| {

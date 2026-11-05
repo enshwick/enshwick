@@ -204,7 +204,9 @@ mod tests {
             loader
                 .logs()
                 .iter()
-                .any(|(_, line)| line.contains("on clients only")),
+                .any(|(_, line)| line.contains("enshwick.ui is off here")
+                    && line.contains("on clients only")
+                    && !line.contains("game build")),
             "{:?}",
             loader.logs()
         );

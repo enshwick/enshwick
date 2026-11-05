@@ -69,7 +69,8 @@ Each entry names the pull request that made the change.
   `toggle`, `slider` and `dropdown` take their value and return it (#947).
 - `script::Class::lent` makes the class of an object a hook lends a script's
   function for one call, so a runtime hands the function the same script
-  object on every call (#947).
+  object on every call. A Luau script that keeps it past the call gets an
+  error from it, never the next call's value (#947).
 
 ### Changed
 
@@ -78,8 +79,9 @@ Each entry names the pull request that made the change.
   place of `controls.declare`: the control is a table of the builder's
   fields, a key its text, such as `"Shift+E"`, and the handler gets the
   `Fired` fields as a table. `enshwick.controls.parse` and `from_bits` make
-  a key, and `bits`, `code`, `modifiers` and `is_mouse` read one. `script::Controls` is gone, and the namespace
-  is `controls::ControlFns` (#947).
+  a key, and `bits`, `code`, `modifiers` and `is_mouse` read one.
+  `controls::Controls` is gone, and the namespace is `controls::ControlFns`
+  (#947).
 - A Luau damage filter keeps one damage object from hit to hit, so a hit no
   longer copies the damage into a new object or makes a new Luau object.
   That cuts a hit from 9 allocations to 7 (#947).
@@ -101,6 +103,8 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- An action's handler, `allow`, `at` or `per_player` may add an action with
+  `Actions::add`; before, the call deadlocked the thread (#947).
 - A use reward (`Action::Consume`, a pack's `consume` reward) follows only
   a use every item filter allowed: a later filter's refusal no longer gives
   it (#945).
