@@ -352,6 +352,24 @@ pub struct Constant {
 
 /// A second use of a constant's value elsewhere in the code, which a build
 /// without its own table must read the same value from before it takes it.
+///
+/// # Examples
+///
+/// ```
+/// let table = enshwick_gamedata::Table::parse(
+///     r#"name = "t (1)"
+/// side = "server"
+/// guid = "00000000000000000000000000000001"
+/// age = 2
+/// [constants]
+/// "c.off" = { value = 0x48, pattern = "48 8B 41 ?? C3", at = 3, size = 1, witness = "8B 51 ?? 90", witness_at = 2, witness_size = 1 }
+/// "#,
+/// )?;
+/// let witness = table.constants()[0].witness().ok_or("no witness")?;
+/// assert_eq!((witness.operand().at(), witness.operand().size()), (2, 1));
+/// assert_eq!(witness.pattern().len(), 4);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Witness {
     pub(crate) pattern: Pattern,
@@ -456,6 +474,24 @@ impl Constant {
 
     /// Why no second use of the value exists, for a value a carry takes on
     /// its one pattern alone.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let table = enshwick_gamedata::Table::parse(
+    ///     r#"name = "t (1)"
+    /// side = "server"
+    /// guid = "00000000000000000000000000000001"
+    /// age = 2
+    /// [constants]
+    /// "c.off" = { value = 0x48, pattern = "48 8B 41 ?? C3", at = 3, size = 1, one_witness = "no other code holds it" }
+    /// "#,
+    /// )?;
+    /// let constant = &table.constants()[0];
+    /// assert!(constant.witness().is_none());
+    /// assert_eq!(constant.one_witness(), Some("no other code holds it"));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[must_use]
     pub fn one_witness(&self) -> Option<&str> {
         self.one_witness.as_deref()
