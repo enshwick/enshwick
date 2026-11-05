@@ -199,6 +199,38 @@ impl KnownBuild {
         }
         count
     }
+
+    /// The start's line about this build, run as `fingerprint`, once the
+    /// engine routes ran: a build without its own table that misses nothing
+    /// runs as a known build, and only one that misses entries warns.
+    #[must_use]
+    pub fn start_line(&self, fingerprint: Fingerprint) -> (enshwick::abi::Level, String) {
+        use enshwick::abi::Level;
+        if self.kind == Kind::Exact {
+            return (Level::INFO, format!("game: {}", self.name));
+        }
+        if self.missing().is_empty() {
+            return (
+                Level::INFO,
+                format!(
+                    "game build {} runs without its own table: {} entries found by engine routes and the patterns of {}",
+                    fingerprint_name(fingerprint),
+                    self.entries(),
+                    self.table.name()
+                ),
+            );
+        }
+        (
+            Level::WARN,
+            format!(
+                "game build {} has no build table yet: {} entries found by engine routes or their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table ({})",
+                fingerprint_name(fingerprint),
+                self.entries(),
+                self.missing().len(),
+                crate::errors::FEATURES_OFF
+            ),
+        )
+    }
 }
 
 fn side(side: Side) -> Option<tables::Side> {

@@ -284,18 +284,11 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
     }
     route(&mut build, image, &reflection, side);
     let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
-    match build.kind {
-        builds::Kind::Exact => crate::log!(INFO, "game: {}", build.name),
-        builds::Kind::Fallback => crate::log!(
-            WARN,
-            "game build {} has no build table yet: {} entries found by engine routes or their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table ({})",
-            builds::fingerprint_name(fingerprint),
-            build.entries(),
-            build.missing().len(),
-            errors::FEATURES_OFF
-        ),
+    let (level, line) = build.start_line(fingerprint);
+    if log::enabled(level, crate::settings::LOADER_ID) {
+        log::write(level, crate::settings::LOADER_ID, &line);
     }
-    if build.kind == builds::Kind::Fallback {
+    if !build.missing().is_empty() {
         crate::log!(
             DEBUG,
             "missing on this build: {}",

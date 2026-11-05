@@ -1,7 +1,6 @@
 # How each build table entry is anchored to the game. `engine`: the loader
-# finds it in the game without a table row. `research`: no engine route is
-# known yet. `pattern`: research found no engine route, so it stays a
-# pattern. `entries` are ids, or prefixes ending in `*`; an id takes the row
+# finds it in the game without a table row. `pattern`: research found no
+# engine route, so it stays a pattern. `entries` are ids, or prefixes ending in `*`; an id takes the row
 # that names it, else the longest prefix.
 
 [[class]]

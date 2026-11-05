@@ -43,8 +43,7 @@ game update that moves a field changes this crate, not the mods.
   executable it is given.
 - [`anchors/classes.toml`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/anchors/classes.toml)
   says for every entry whether the engine gives it (`engine`) or why research
-  found no route (`pattern`); `research` marks an entry whose route is not
-  researched yet.
+  found no route (`pattern`).
 - On a build without a table, the loader takes the newest table of the same
   side, by Steam build id, and finds each entry by its `pattern`: a symbol at or through the
   code it matches, a constant read from the operand of the instruction that

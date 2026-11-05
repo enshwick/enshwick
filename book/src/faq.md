@@ -89,11 +89,15 @@ On an unknown build every mod's hold applies; see
 
 ### Some features are off after a game update
 
-The loader's log reads `game build <guid>/<age> has no build table yet: <n>
-entries found by engine routes or their code patterns, <m> missing; ...`, and at `debug` the
-missing entries. The game was updated, and
-the loader runs it on the code patterns of the newest build table it has.
-Whatever those patterns do not find stays off: a loader feature logs
+On a game build without its own table, Enshwick finds its entries through
+the engine routes and the code patterns of the newest table it has; when it
+finds them all, the log says so at info (`game build <guid>/<age> runs
+without its own table: ...`) and everything runs.
+
+When some entries are missing, the loader's log reads `game build
+<guid>/<age> has no build table yet: <n> entries found by engine routes or
+their code patterns, <m> missing; ...`, and at `debug` the missing entries.
+Whatever the routes and patterns do not find stays off: a loader feature logs
 `<feature> off on build <guid>/<age>, carried table <table>: <entry> is not
 found by the carried table's patterns`, `<entry> is not in the carried table`
 when that table has no row for it, or `<entry> does not read as the build
@@ -101,8 +105,8 @@ table says` when the code at the entry changed, and a mod
 that needs a missing entry turns off with
 `symbol <id>: missing on this game build`. The Mods screen lists the features
 that are off. A build whose reflection reads no types or systems runs vanilla,
-as a build the loader does not know. Everything else runs
-until a loader build with the new build's table replaces this one.
+as a build the loader does not know. Everything else runs. A later loader
+build with the new build's table turns the missing features back on.
 `cargo xtask compat <exe> --mods <dir>`, in a checkout of the
 [platform repository](https://github.com/enshwick/enshwick), shows the
 same verdicts without starting the game.

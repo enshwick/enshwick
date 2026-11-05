@@ -543,6 +543,44 @@ fn a_build_without_a_table_names_itself_and_the_carried_table() {
     assert_eq!(embedded(Side::SERVER).reason("npc.nope", &absent), absent);
 }
 
+/// A build without its own table logs at info when nothing is missing and
+/// names the carried table, and warns with its error code only when entries
+/// are missing.
+#[test]
+fn a_carried_build_warns_only_when_entries_are_missing() {
+    use enshwick::abi::Level;
+    let unknown = Fingerprint::new([0xee; 16], 1);
+    let mut complete = embedded(Side::SERVER);
+    complete.kind = Kind::Fallback;
+    let (level, line) = complete.start_line(unknown);
+    assert_eq!(level, Level::INFO);
+    assert!(
+        line.starts_with(
+            "game build eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/1 runs without its own table: "
+        ) && line.ends_with(&format!(
+            "entries found by engine routes and the patterns of {}",
+            complete.resolved().name()
+        )),
+        "{line}"
+    );
+    let code = [0u8; 64];
+    let lacking = select(
+        &load(),
+        Side::SERVER,
+        unknown,
+        Some((&code, 0x1000)),
+        |_| None,
+    )
+    .unwrap();
+    let (level, line) = lacking.start_line(unknown);
+    assert_eq!(level, Level::WARN);
+    assert!(
+        line.contains(crate::errors::FEATURES_OFF.as_str()),
+        "{line}"
+    );
+    assert_eq!(embedded(Side::SERVER).start_line(unknown).0, Level::INFO);
+}
+
 /// Every symbol with a `.bytes` constant reads those bytes in the client
 /// `ENSH_CLIENT_EXE` names; skipped without it.
 #[test]
