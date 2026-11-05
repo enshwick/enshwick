@@ -25,7 +25,8 @@
 //! takes), `cell` (the `u32` the game keeps at the address it takes) or
 //! `spelled` (the route's `value`, which a step of the shape spells in its
 //! own encoding: memory without a displacement spells 0, else an index
-//! scale or an immediate equal to it); the last three are constants, the
+//! scale or an immediate equal to it; a `nop` spells nothing); the last
+//! three are constants, the
 //! rest symbols. A taken constant needs a shape
 //! of two steps or one with an exact operand or an `{entry}`. `shift` turns
 //! a taken constant `v` into `1 << v`, and `plus` then adds to it. `sides`
@@ -213,7 +214,7 @@ impl RouteRow {
                 ));
             }
         }
-        if matches!(take, Take::Value | Take::Cell)
+        if matches!(take, Take::Value | Take::Cell | Take::Spelled)
             && steps.len() < 2
             && !steps.iter().any(Step::is_exact)
         {
@@ -271,7 +272,10 @@ impl RouteRow {
             self.size.is_some(),
             self.callers.is_some(),
         ];
-        let shape = listed(self.shape.take());
+        if self.shape.as_ref().is_some_and(Vec::is_empty) {
+            return Err(bad("a `shape` is not empty"));
+        }
+        let shape = self.shape.take();
         let shaped = shape.is_some();
         let within_given = self.within.is_some();
         let how = match (

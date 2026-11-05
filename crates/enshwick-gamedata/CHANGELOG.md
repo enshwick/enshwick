@@ -9,8 +9,9 @@ Each entry names the pull request that made the change.
 ### Added
 
 - Routes read a constant from the engine's reflection (`field`, the sum of
-  each listed field's offset; `size`, a type's size), take a `spelled`
-  value only where a step of the matched shape holds it, and find a
+  each listed field's offset, found only while each field holds the next
+  type inline; `size`, a type's size), take a `spelled` value only where
+  a step of a matched two-step or exact shape holds it, and find a
   function as the one direct caller of another whose code the shape
   matches (`callers`). Nineteen constants now come from the engine through
   them (#944).

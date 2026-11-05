@@ -15,6 +15,7 @@ fn the_embedded_routes_read() {
 /// each table build of its side that has a snapshot, and each field holds
 /// the type of the step after it.
 #[test]
+#[cfg_attr(miri, ignore = "reads the typed snapshots from disk")]
 fn every_reflected_name_a_route_takes_is_in_the_typed_catalogue() {
     let routes = Routes::embedded().unwrap();
     let mut checked = 0;
@@ -130,6 +131,9 @@ fn a_route_without_exactly_one_way_or_with_a_wrong_take_is_refused() {
            shape = ["ret"]"#,
         r#"id = "a"
            callers = "s""#,
+        r#"id = "a"
+           system = "s"
+           shape = []"#,
     ] {
         assert!(
             Routes::parse(&format!("[[route]]\n{bad}")).is_err(),
@@ -575,13 +579,16 @@ fn a_spelled_value_needs_a_step_that_spells_it_and_a_reflected_number_stands_alo
         "shape = [\"mov eax,[rcx]\"]\ntake = \"spelled\"",
         "shape = [\"mov eax,[rcx+*]\"]\ntake = \"spelled\"\nvalue = 0",
         "shape = [\"mov eax,[rip+?]\"]\ntake = \"spelled\"\nvalue = 0",
-        "shape = [\"mov eax,[rcx]\"]\ntake = \"spelled\"\nvalue = 0\ncheck = [\"ret\"]",
+        "shape = [\"mov eax,[rcx]\", \"ret\"]\ntake = \"spelled\"\nvalue = 0\ncheck = [\"ret\"]",
+        "shape = [\"mov eax,[rcx]\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"nop [rax]\", \"cmp [rdx+?],r8d\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = []\ntake = \"spelled\"\nvalue = 0",
     ] {
         assert!(Routes::parse(&spelled(bad)).is_err(), "{bad}");
     }
     for good in [
-        "shape = [\"mov eax,[rcx]\"]\ntake = \"spelled\"\nvalue = 0",
-        "shape = [\"lea eax,[rcx+rdx*4]\"]\ntake = \"spelled\"\nvalue = 4",
+        "shape = [\"mov eax,[rcx]\", \"ret\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"lea eax,[rcx+rdx*4]\", \"ret\"]\ntake = \"spelled\"\nvalue = 4",
         "shape = [\"mov eax,0x18\"]\ntake = \"spelled\"\nvalue = 0x18",
     ] {
         assert!(Routes::parse(&spelled(good)).is_ok(), "{good}");

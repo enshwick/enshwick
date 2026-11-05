@@ -229,18 +229,20 @@ impl Step {
 
     /// Whether an operand of the step holds `value` in its own encoding, so
     /// a match confirms it: memory without a displacement holds 0, else an
-    /// index scale or immediate equal to it.
+    /// index scale or immediate equal to it. A `nop`'s operand is padding
+    /// and spells nothing.
     pub(crate) fn spells(&self, value: u64) -> bool {
-        self.ops.iter().any(|op| match op {
-            Op::Memory {
-                base, index, disp, ..
-            } => {
-                value == 0 && *disp == Disp::None && *base != Register::RIP
-                    || index.0 != Register::None && u64::from(index.1) == value
-            }
-            Op::Immediate(v) => *v == value,
-            _ => false,
-        })
+        self.mnemonic != Mnemonic::Nop
+            && self.ops.iter().any(|op| match op {
+                Op::Memory {
+                    base, index, disp, ..
+                } => {
+                    value == 0 && *disp == Disp::None && *base != Register::RIP
+                        || index.0 != Register::None && u64::from(index.1) == value
+                }
+                Op::Immediate(v) => *v == value,
+                _ => false,
+            })
     }
 
     /// Whether `ins` is this step, with `entry` giving the address of a named

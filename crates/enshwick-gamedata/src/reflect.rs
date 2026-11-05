@@ -704,6 +704,28 @@ impl<'a> Reflection<'a> {
         }
     }
 
+    /// The offset of the last field of `path` from the start of the first
+    /// type, each step a type and its field; `None` when a field is missing
+    /// or ambiguous, or does not hold the next step's type inline, so a
+    /// changed layout finds nothing rather than a wrong sum.
+    pub(crate) fn field_path<S: AsRef<str>>(&self, path: &[(S, S)]) -> Option<u64> {
+        let mut sum = 0u64;
+        for (at, (ty, field)) in path.iter().enumerate() {
+            let info = self.type_info(ty.as_ref()).ok()?;
+            let mut found = info.fields.iter().filter(|f| f.name == field.as_ref());
+            let (Some(held), None) = (found.next(), found.next()) else {
+                return None;
+            };
+            if let Some((next, _)) = path.get(at + 1)
+                && held.type_name != Some(next.as_ref())
+            {
+                return None;
+            }
+            sum = sum.checked_add(held.offset)?;
+        }
+        Some(sum)
+    }
+
     /// Every type whose chain of bases reaches the type named `root`, in
     /// no set order: every event type for `keen::ecs::Event`. Names more
     /// than one type carries are left out, as lookups leave them.

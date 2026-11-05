@@ -103,14 +103,7 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             How::Loads(strings) => self.loading(strings)?,
             How::Shape { within, steps } => return self.shaped(within, steps, route),
             How::Callers { callee, steps } => return self.called_from(callee, steps, route),
-            How::Field(path) => {
-                return path
-                    .iter()
-                    .try_fold(0u64, |sum, (ty, field)| {
-                        sum.checked_add(self.reflection.field_offset(ty, field).ok()?)
-                    })
-                    .map(Routed::Constant);
-            }
+            How::Field(path) => return self.reflection.field_path(path).map(Routed::Constant),
             How::Size(ty) => {
                 let info = self.reflection.type_info(ty).ok()?;
                 return Some(Routed::Constant(u64::from(info.size())));
