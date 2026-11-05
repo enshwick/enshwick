@@ -350,13 +350,6 @@ impl Game {
         // SAFETY: `manager` is the live session's socket manager at the
         // table's `net.session_manager`, which the limit call reads.
         let limits = LIMIT_MODES.map(|mode| unsafe { (self.limit)(manager, mode) });
-        crate::log!(
-            INFO,
-            "own channel: the session takes {} bytes a packet, {} and {} for long messages",
-            limits[0],
-            limits[1],
-            limits[2]
-        );
         // A client hosting a world offline answered 0 on game 1285601 with
         // the right offsets, and destroying the socket made there faulted
         // the second time: so the size is asked before any socket.
@@ -364,8 +357,7 @@ impl Game {
         let Some(link) = Link::new(packet, epoch) else {
             crate::log!(
                 WARN,
-                "own channel off for this session: packets of {packet} bytes hold no message ({})",
-                crate::errors::FEATURES_OFF
+                "own channel off for this session: packets of {packet} bytes hold no message"
             );
             return Err(Unopened::Session);
         };
@@ -385,6 +377,13 @@ impl Game {
         // SAFETY: `socket` is the slot create just took, whose peer field it
         // wrote at the table's `net.socket_peer` before it answered.
         let slot: u32 = unsafe { memory::read(socket, self.socket_peer) };
+        crate::log!(
+            INFO,
+            "own channel: the session takes {} bytes a packet, {} and {} for long messages",
+            limits[0],
+            limits[1],
+            limits[2]
+        );
         Ok(Peer {
             machine,
             socket,

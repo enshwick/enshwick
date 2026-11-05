@@ -733,6 +733,10 @@ fn give_back(side: &Mutex<Option<State>>, session: usize, mut inbox: Inbox) {
 /// each other, when the client leaves its server or a hosted game ends.
 pub(crate) fn forget() {
     *CARRIER.client.relock() = None;
+    // The next session may reuse this one's address, which `fresh` keys on.
+    if let Some(server) = CARRIER.server.relock().as_mut() {
+        server.off = false;
+    }
     CARRIER.client_open.store(false, Ordering::Release);
     CARRIER.server_waiting.store(false, Ordering::Release);
     CARRIER.client_waiting.store(false, Ordering::Release);

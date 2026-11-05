@@ -198,9 +198,25 @@ fn a_session_whose_packets_hold_no_message_gets_no_socket_and_no_retry() {
 #[test]
 fn a_socket_the_session_did_not_make_is_tried_again_later() {
     let _alone = alone();
+    crate::log::capture();
     let state = members_twice(1200);
+    let sized = crate::log::captured()
+        .into_iter()
+        .filter(|(_, _, line)| line.contains("bytes a packet"))
+        .count();
+    crate::log::end_capture();
+    assert_eq!(sized, 0, "no packet size line for a socket never made");
     assert!(!state.off);
     assert_eq!(CREATES.load(Ordering::Relaxed), 2);
     assert_eq!(DESTROYS.load(Ordering::Relaxed), 0);
     assert!(state.peers.is_empty() && state.tried.contains_key(&7));
+}
+
+#[test]
+fn a_session_turned_off_is_on_again_after_the_game_ends() {
+    let _alone = alone();
+    *CARRIER.server.relock() = Some(members_twice(0));
+    forget();
+    let server = CARRIER.server.relock();
+    assert_eq!(server.as_ref().map(|s| s.off), Some(false));
 }
