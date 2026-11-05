@@ -63,7 +63,7 @@ jobs:
         run: |
           version=$(cargo pkgid --locked -p enshwick-loader)
           version=${version##*[#@]}
-          if gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/v$version" > /dev/null 2>&1; then
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$version" > /dev/null 2>&1; then
             echo "::error title=alpha::v$version is released already; move the crates to the next alpha first"
             exit 1
           fi
