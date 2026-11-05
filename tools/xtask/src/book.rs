@@ -352,6 +352,25 @@ mod tests {
     }
 
     #[test]
+    fn a_book_with_an_untyped_chapter_fails_the_check() {
+        let root = std::env::temp_dir().join(format!("xtask-book-{}", std::process::id()));
+        let source = root.join(SOURCE);
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(root.join("crates/enshwick/src")).unwrap();
+        for harness in HARNESSES {
+            std::fs::write(root.join(harness), r#""hooks.md""#).unwrap();
+        }
+        std::fs::write(source.join("SUMMARY.md"), "- [Hooks](hooks.md)\n").unwrap();
+        std::fs::write(source.join("hooks.md"), "# Hooks\n\nA hook runs first.\n").unwrap();
+        let found = check(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(
+            found,
+            ["book/src/hooks.md: opens with no <!-- type: … description: … --> comment"]
+        );
+    }
+
+    #[test]
     fn the_repository_book_passes() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let found = check(&root);
