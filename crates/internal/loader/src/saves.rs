@@ -406,6 +406,13 @@ static UNDER_WAY: AtomicBool = AtomicBool::new(false);
 /// so a step without holds takes no lock.
 static HOLDING: AtomicBool = AtomicBool::new(false);
 
+/// Whether a save got under way since the last step, the save phase now
+/// `phase`, keeping in `under_way` whether one is.
+fn began(under_way: &AtomicBool, phase: u8) -> bool {
+    let was = under_way.swap(phase != 0, Ordering::Relaxed);
+    phase != 0 && !was
+}
+
 /// What the game's block byte, now `byte`, needs while mods hold saves
 /// (`holding`), with the byte the game had before the hold (`held`): the
 /// byte to write, if any, and the game's byte to keep. A hold sets the byte
@@ -468,7 +475,7 @@ pub(crate) fn after_step(loader: &Loader) {
         // at the table's `save.phase`.
         unsafe { crate::memory::read(system, layout.phase) }
     };
-    let started = phase != 0 && !UNDER_WAY.swap(phase != 0, Ordering::Relaxed);
+    let started = began(&UNDER_WAY, phase);
     if HOLDING.load(Ordering::Acquire) {
         let mut saving = SAVING.relock();
         saving.holds.retain(|&m| !crate::host::is_off(m));
@@ -509,6 +516,14 @@ pub(crate) fn info(loader: &Loader) -> Result<Option<crate::world_folders::SaveI
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_save_begins_once_and_the_next_begins_again() {
+        let under_way = AtomicBool::new(false);
+        let steps = [0, 2, 3, 0, 0, 2, 0, 1];
+        let began: Vec<bool> = steps.iter().map(|&p| began(&under_way, p)).collect();
+        assert_eq!(began, [false, true, false, false, false, true, false, true]);
+    }
 
     #[test]
     fn a_hold_sets_the_block_on_every_step_and_the_last_release_gives_the_game_its_byte() {
