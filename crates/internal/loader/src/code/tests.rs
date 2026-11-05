@@ -231,6 +231,38 @@ fn a_stop_block_too_short_or_too_far_from_the_next_recipe_is_refused() {
     assert_eq!(stop_replacement(0x1_0000_1000, 0x1000, 27), None);
 }
 
+/// A routed stop block, which has no table body, ends with its unconditional
+/// jump to the next recipe; a conditional one or a jump elsewhere does not
+/// end it, and a block without that jump has no length.
+#[test]
+fn a_routed_stop_block_ends_with_its_jump_to_the_next_recipe() {
+    let (stop, next) = (0x1000u64, 0x0f00u64);
+    let mut code = vec![0x4c, 0x8d, 0x05, 0, 0, 0, 0, 0x33, 0xc9];
+    // je next, then jmp elsewhere, then jmp next.
+    let rel = |at: u64, len: u64| {
+        i32::try_from(i64::try_from(next).unwrap() - i64::try_from(at + len).unwrap()).unwrap()
+    };
+    code.extend([0x0f, 0x84]);
+    code.extend(rel(stop + 9, 6).to_le_bytes());
+    code.extend([0xe9, 0x10, 0, 0, 0]);
+    code.push(0xe9);
+    code.extend(rel(stop + 20, 5).to_le_bytes());
+    code.extend([0xcc; 8]);
+    assert_eq!(stop_len(&code, stop, next), Some(25));
+    assert_eq!(stop_len(&code[..20], stop, next), None);
+    assert_eq!(
+        stop_len(&code, stop, next + 1),
+        Some(25),
+        "up to the padding"
+    );
+    // lea r8,[rip+0]; xor ecx,ecx; call: a fatal block, padded with int3.
+    let fatal = [
+        0x4c, 0x8d, 0x05, 0, 0, 0, 0, 0x33, 0xc9, 0xe8, 0, 0, 0, 0, 0xcc, 0xcc,
+    ];
+    assert_eq!(stop_len(&fatal, stop, next), Some(14));
+    assert_eq!(stop_len(&fatal[..14], stop, next), None);
+}
+
 #[test]
 fn the_text_section_is_found_in_the_headers() {
     let mut headers = vec![0_u8; 0x400];

@@ -69,6 +69,11 @@ Each entry names the pull request that made the change.
 - Bases past 16 needs the client's create, destroy, size and base id list
   only on a client, so a server table needs no rows for them, and sizes a
   create an engine route found by the image's function table (#946).
+- The join check, the join dialog hold, the event loop's waits and the
+  workshop limit lift work on a symbol an engine route found and checked
+  when no table pins it: the route's match stands for the pinned bytes,
+  the division's span ends with its function, and the stop block ends at
+  its jump to the next recipe or its padding (#946).
 - **Breaking:** `script::Field::ty` is no longer `const`: a field gives its
   type when asked, so a game type may hold itself (#940).
 - A Luau mod's `u64` or `i64`, such as a key, takes a whole number up to

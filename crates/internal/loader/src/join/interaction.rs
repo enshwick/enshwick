@@ -187,9 +187,10 @@ pub enum Error {
 }
 
 /// Checks that `start`, the pinned start of user interactions, lies in
-/// `code` and begins with the `expected` bytes, read by `read`; without
-/// them, that an engine route found it, its own match having checked the
-/// code (`routed`).
+/// `code` and begins with the `expected` bytes, read by `read`.
+///
+/// Without `expected`, an engine route that found it stands for them
+/// (`routed`), its own match having checked the code.
 ///
 /// # Errors
 ///

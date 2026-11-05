@@ -534,21 +534,28 @@ fn stop_replacement(stop: usize, next: usize, len: usize) -> Option<Box<[u8]>> {
 /// The most bytes [`stop_len`] decodes before it gives up.
 const MOST_STOP: usize = 64; // bound, not a game offset: a stop block is a few instructions
 
-/// The length of the stop block whose `code` starts at `stop`: up to and
-/// with its unconditional jump to the next recipe at `next`, for a block an
-/// engine route found, which carries no table body; `None` without such a
-/// jump in its first [`MOST_STOP`] bytes.
-fn stop_len(code: &[u8], stop: u64, next: u64) -> Option<usize> {
-    use iced_x86::{Decoder, DecoderOptions, FlowControl};
+/// The length of the stop block whose `code` starts at `stop`, for a block an
+/// engine route found, which carries no table body: up to and with its
+/// unconditional jump to the next recipe at `next`, or up to the `int3`
+/// padding after its last call, which does not return on 1.0 builds;
+/// `None` without either in its first [`MOST_STOP`] bytes.
+pub(crate) fn stop_len(code: &[u8], stop: u64, next: u64) -> Option<usize> {
+    use iced_x86::{Code, Decoder, DecoderOptions, FlowControl};
     let code = code.get(..code.len().min(MOST_STOP))?;
     let mut decoder = Decoder::with_ip(64, code, stop, DecoderOptions::NONE);
     decoder
         .iter()
         .take_while(|i| !i.is_invalid())
-        .find(|i| {
-            i.flow_control() == FlowControl::UnconditionalBranch && i.near_branch_target() == next
+        .find_map(|i| match i.code() {
+            Code::Int3 => Some(i.ip()),
+            _ if i.flow_control() == FlowControl::UnconditionalBranch
+                && i.near_branch_target() == next =>
+            {
+                Some(i.next_ip())
+            }
+            _ => None,
         })
-        .and_then(|jump| usize::try_from(jump.next_ip() - stop).ok())
+        .and_then(|end| usize::try_from(end - stop).ok())
 }
 
 /// The lift of the workshop limit, as the log and the Mods screen name it.

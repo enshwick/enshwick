@@ -30,7 +30,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// Whether the wait at `wait` lies after the division at `divide`, inside
 /// the `span` bytes of code from the division on that its table pattern
 /// covers, so `rbx` holds the nanoseconds left at the hook (1.0 builds).
-fn after_division(divide: u64, span: usize, wait: u64) -> bool {
+pub(crate) fn after_division(divide: u64, span: usize, wait: u64) -> bool {
     u64::try_from(span).is_ok_and(|span| wait > divide && wait - divide < span)
 }
 
