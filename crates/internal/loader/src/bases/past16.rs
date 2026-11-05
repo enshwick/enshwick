@@ -135,23 +135,22 @@ impl Pins<'_> {
 pub(super) struct Sites {
     code: Code,
     server_create: u64,
-    client_create: u64,
     server_destroy: u64,
-    client_destroy: u64,
+    /// The client's create and destroy, on a client only: a dedicated
+    /// server holds their code but never runs it.
+    client_create: Option<u64>,
+    client_destroy: Option<u64>,
     patches: Vec<CodePatch>,
     pub(super) loops: loops::Sites,
 }
 
 impl Sites {
     fn targets(&self) -> impl Iterator<Item = u64> + '_ {
-        [
-            self.server_create,
-            self.client_create,
-            self.server_destroy,
-            self.client_destroy,
-        ]
-        .into_iter()
-        .chain(self.loops.targets())
+        [self.server_create, self.server_destroy]
+            .into_iter()
+            .chain(self.client_create)
+            .chain(self.client_destroy)
+            .chain(self.loops.targets())
     }
 
     /// The game's code the window needs.
@@ -242,8 +241,8 @@ fn size_patch(
 }
 
 /// Finds every site in `code`, which starts at `start`, from the build
-/// table's `pins`, for a base layout of `fields`; the client's base list
-/// only on a `client`.
+/// table's `pins`, for a base layout of `fields`; the client's create,
+/// destroy, size and base list only on a `client`.
 fn find(
     code: &[u8],
     start: usize,
@@ -263,23 +262,23 @@ fn find(
     }
     let grown = u32::try_from(geometry.block())
         .map_err(|_| SiteError::Window(window::GeometryError::Block))?;
-    let patches = vec![
-        size_patch(
-            code,
-            start,
-            pins.body(bases::SERVER_CREATE)?,
-            pins.size(bases::SERVER_SIZE)?,
-            grown,
-        )?,
-        size_patch(
+    let mut patches = vec![size_patch(
+        code,
+        start,
+        pins.body(bases::SERVER_CREATE)?,
+        pins.size(bases::SERVER_SIZE)?,
+        grown,
+    )?];
+    if client {
+        patches.push(size_patch(
             code,
             start,
             pins.body(bases::CLIENT_CREATE)?,
             pins.size(bases::CLIENT_SIZE)?,
             grown,
-        )?,
-    ];
-    let patches: Vec<CodePatch> = patches.into_iter().chain(loops.patches()).collect();
+        )?);
+    }
+    patches.extend(loops.patches());
     let at = |id: Symbol| pins.at(id).map(|offset| (start + offset) as u64);
     let address = |id: Symbol| pins.at(id).map(|offset| start + offset);
     let code_of = Code {
@@ -300,9 +299,9 @@ fn find(
     Ok(Sites {
         code: code_of,
         server_create: at(bases::SERVER_CREATE)?,
-        client_create: at(bases::CLIENT_CREATE)?,
         server_destroy: at(bases::SERVER_DESTROY)?,
-        client_destroy: at(bases::CLIENT_DESTROY)?,
+        client_create: client.then(|| at(bases::CLIENT_CREATE)).transpose()?,
+        client_destroy: client.then(|| at(bases::CLIENT_DESTROY)).transpose()?,
         patches,
         loops,
     })
@@ -323,14 +322,19 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
         table: loader.build.resolved(),
         code_rva: text.0 as u64 - loader.base,
     };
-    let sites = match find(code, text.0, loader.side == Side::CLIENT, fields, &pins) {
+    let client = loader.side == Side::CLIENT;
+    let sites = match find(code, text.0, client, fields, &pins) {
         Ok(sites) => sites,
         Err(why) => {
             loader.feature_off(PAST_16, why.entry(), &why.to_string());
             return;
         }
     };
-    if let Some(moved) = CALLED.into_iter().find(|&id| !loader.code_holds(id)) {
+    if let Some(moved) = CALLED
+        .into_iter()
+        .filter(|&id| client || id != bases::CLIENT_CREATE)
+        .find(|&id| !loader.code_holds(id))
+    {
         loader.feature_off(PAST_16, moved.id(), &Unhooked::Moved.to_string());
         return;
     }
@@ -354,13 +358,14 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
             create_server,
             none,
         ),
-        loader.link_feature(
-            PAST_16,
-            at(bases::CLIENT_CREATE),
-            &CLIENT_CREATE_NEXT,
-            create_client,
-            none,
-        ),
+        !client
+            || loader.link_feature(
+                PAST_16,
+                at(bases::CLIENT_CREATE),
+                &CLIENT_CREATE_NEXT,
+                create_client,
+                none,
+            ),
         loader.link_feature(
             PAST_16,
             at(bases::SERVER_DESTROY),
@@ -368,13 +373,14 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
             destroy_server,
             none,
         ),
-        loader.link_feature(
-            PAST_16,
-            at(bases::CLIENT_DESTROY),
-            &CLIENT_DESTROY_NEXT,
-            destroy_client,
-            none,
-        ),
+        !client
+            || loader.link_feature(
+                PAST_16,
+                at(bases::CLIENT_DESTROY),
+                &CLIENT_DESTROY_NEXT,
+                destroy_client,
+                none,
+            ),
     ]
     .into_iter()
     .chain(loops::link(loader, &sites.loops))
@@ -552,13 +558,75 @@ mod tests {
                 Ok(_) => panic!("{variable}: found on a table without the window's functions"),
                 Err(why) => panic!("{variable}: {} {why}", why.entry()),
             };
-            assert_eq!(sites.patches.len(), 2 + usize::from(client), "{variable}");
-            assert_eq!(sites.targets().count(), 14, "{variable}");
+            // The client's create, destroy and base id list, and its size and
+            // count getter patches, exist on a client only.
+            assert_eq!(
+                sites.patches.len(),
+                1 + 2 * usize::from(client),
+                "{variable}"
+            );
+            assert_eq!(
+                sites.targets().count(),
+                11 + 3 * usize::from(client),
+                "{variable}"
+            );
             assert!(
                 client || pins.at(bases::COUNT_GETTER).is_err(),
                 "{variable}"
             );
         }
+    }
+
+    /// On the server `ENSH_SERVER_EXE` names (skipped without it), its own
+    /// table without the client's create, destroy and size, its base id
+    /// list and the record's base id still finds every site of the window,
+    /// since a dedicated server never runs that code.
+    #[test]
+    fn a_server_table_without_the_client_s_rows_finds_the_window() {
+        let Some(path) = std::env::var_os("ENSH_SERVER_EXE") else {
+            return;
+        };
+        let bytes = std::fs::read(path).unwrap();
+        let image = Image::parse(&bytes, Layout::File, None).unwrap();
+        let tables = crate::builds::load();
+        let table = exact(&tables, TableSide::Server, image.fingerprint().unwrap()).unwrap();
+        let text = enshwick_gamedata::embedded()
+            .iter()
+            .find(|(file, _)| *file == table.file_name())
+            .unwrap()
+            .1;
+        let mut doc: toml_edit::DocumentMut = text.parse().unwrap();
+        for id in [
+            bases::CLIENT_CREATE.id(),
+            bases::CLIENT_DESTROY.id(),
+            bases::BASE_IDS.id(),
+            bases::CLIENT_SIZE.id(),
+            bases::RECORD_BASE_ID.id(),
+        ] {
+            for section in ["symbols", "constants"] {
+                doc[section].as_table_mut().unwrap().remove(id);
+                doc[section]
+                    .as_table_mut()
+                    .unwrap()
+                    .remove(&format!("{id}.bytes"));
+            }
+        }
+        let stripped = enshwick_gamedata::Table::parse(&doc.to_string())
+            .unwrap()
+            .resolve();
+        let range = image.range(image.section(".text").unwrap());
+        let code = image.read(range.start, range.end - range.start).unwrap();
+        let pins = Pins {
+            table: &stripped,
+            code_rva: range.start - image.base(),
+        };
+        let sites = find(code, 0, false, FIELDS, &pins)
+            .unwrap_or_else(|why| panic!("{} {why}", why.entry()));
+        assert_eq!(sites.targets().count(), 11);
+        assert!(
+            find(code, 0, true, FIELDS, &pins).is_err(),
+            "a client needs them"
+        );
     }
 
     #[test]

@@ -53,8 +53,44 @@ fn the_newest_tables_read_as_the_fake_object_s_layout() {
             ..fake::FIELDS
         };
         assert_eq!(Fields::read(&offset), Ok(fields), "{side:?}");
-        assert_eq!(loops::Layout::read(&offset), Ok(fake::LAYOUT), "{side:?}");
+        let client = side == TableSide::Client;
+        let layout = loops::Layout {
+            record: loops::RecordFields {
+                base_id: fake::LAYOUT.record.base_id.filter(|_| client),
+                ..fake::LAYOUT.record
+            },
+            ..fake::LAYOUT
+        };
+        assert_eq!(loops::Layout::read(&offset, client), Ok(layout), "{side:?}");
     }
+}
+
+/// A server table without the client's create, destroy and size, its base
+/// id list and the record's base id still reads the loops' layout, since a
+/// dedicated server never runs that code; a client needs them.
+#[test]
+fn a_server_table_without_the_client_s_rows_reads_the_layout() {
+    use enshwick_gamedata::{Side as TableSide, newest};
+
+    let tables = crate::builds::load();
+    let resolved = newest(&tables, TableSide::Server).unwrap().resolve();
+    let offset = |id: Constant| {
+        if id == pinned::bases::CLIENT_SIZE || id == pinned::bases::RECORD_BASE_ID {
+            return None;
+        }
+        resolved
+            .constant(id.id())
+            .and_then(|value| usize::try_from(value).ok())
+    };
+    let server = loops::Layout::read(&offset, false).unwrap();
+    assert_eq!(server.record.base_id, None);
+    assert_eq!(server.window, fake::LAYOUT.window);
+    assert_eq!(
+        loops::Layout::read(&offset, true),
+        Err(past16::SiteError::Missing(
+            pinned::bases::RECORD_BASE_ID.id()
+        ))
+    );
 }
 
 /// A table whose stock slots are too narrow to put index 93 behind the
@@ -73,7 +109,7 @@ fn a_table_that_puts_the_window_on_a_vanilla_field_keeps_16_bases() {
             .constant(id.id())
             .and_then(|value| usize::try_from(value).ok())
     };
-    let why = loops::Layout::read(&offset).unwrap_err();
+    let why = loops::Layout::read(&offset, false).unwrap_err();
     assert_eq!(
         why,
         past16::SiteError::Window(window::GeometryError::Overlap)

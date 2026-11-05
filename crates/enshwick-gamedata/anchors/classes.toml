@@ -49,12 +49,8 @@ entries = [
   "bases.answer_size",
   "bases.answer_zero",
   "bases.base_at",
-  "bases.base_ids",
   "bases.bed_cleanup",
   "bases.changes",
-  "bases.client_create",
-  "bases.client_destroy",
-  "bases.client_size",
   "bases.comfort_cleanup",
   "bases.container_box",
   "bases.container_cap",
@@ -95,7 +91,6 @@ entries = [
   "bases.rebuild",
   "bases.rebuilt",
   "bases.record_animals",
-  "bases.record_base_id",
   "bases.record_beds",
   "bases.record_comfort",
   "bases.record_comfort_len",
@@ -926,3 +921,14 @@ reason = "no shape of up to 8 instructions picks mov rax,[r15+100h] out of acces
 entries = ["inventory.copy_150.view"]
 class = "pattern"
 reason = "no shape of up to 8 instructions picks mov rax,[r15+150h] out of access.transfer"
+
+[[class]]
+entries = [
+  "bases.base_ids",
+  "bases.client_create",
+  "bases.client_destroy",
+  "bases.client_size",
+  "bases.record_base_id",
+]
+class = "engine"
+reason = "an engine route finds it on a client; a dedicated server keeps the code that uses it but never runs it, so a server needs no row"
