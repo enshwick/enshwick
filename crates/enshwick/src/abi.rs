@@ -730,7 +730,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 184 * 8);
+    assert!(size_of::<HostApi>() == 24 + 185 * 8);
+    assert!(core::mem::offset_of!(HostApi, chat_filter) == 24 + 184 * 8);
     assert!(size_of::<ChatLine>() == 8 + 8 + 4 + 4 + 8 + 16);
     assert!(size_of::<ChatRewrite>() == 8 + 8 + 4 + 4);
     assert!(core::mem::offset_of!(HostApi, ui_extension) == 24 + 182 * 8);

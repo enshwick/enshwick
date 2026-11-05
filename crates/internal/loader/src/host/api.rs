@@ -7,6 +7,7 @@ use super::entries::build::{
     system, type_hash, type_size,
 };
 use super::entries::calls::{call, find_call, serve_call};
+use super::entries::chat::chat_filter;
 use super::entries::content::{
     add_text, change_data, content_hashes, content_read, content_serve, declare_change,
     entity_data_open, game_text, game_version, icons_ready, item_data_get, item_data_open,
@@ -244,4 +245,5 @@ pub(crate) static API: HostApi = HostApi {
     run_action,
     ui_extension,
     item_filter,
+    chat_filter,
 };

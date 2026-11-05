@@ -7,19 +7,19 @@ use crate::abi::{
     AccountActionType, ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo,
     AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo,
     BuildCheckFn, BuildInfo, BuildRights, BuildingZoneCheckFn, CallFn, CallSpec, CallerFrame,
-    ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, ContentRename, ControlFn, ControlSpec,
-    CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemActionFn, ItemData, ItemLine,
-    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo,
-    MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
-    PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind,
-    RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec,
-    SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef,
-    StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
-    TeleportRequest, TerrainEdit, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp,
-    TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel,
-    WeatherFront,
+    ChangeId, ChangeOp, ChatFilterFn, ComfortFn, ConfigCheckFn, ContentRename, ControlFn,
+    ControlSpec, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
+    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn,
+    Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemActionFn, ItemData,
+    ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo,
+    MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn,
+    PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind,
+    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound,
+    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
+    StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
+    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, TickHandle,
+    TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn,
+    UiMarker, UiWidget, Voxel, WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -1644,4 +1644,17 @@ pub struct HostApi {
     /// panic in the loader returns [`Status::REFUSED`].
     pub item_filter:
         extern "system" fn(me: ModHandle, callback: ItemActionFn, user: *mut c_void) -> Status,
+    /// Adds `callback` with `user` to the chat filters, which run in load
+    /// order on the server's game thread, inside the game's chat post, on
+    /// every line a player typed that the chat mute let through; the first
+    /// [`ChatRewrite::DROP`](crate::abi::ChatRewrite::DROP) drops the line,
+    /// and a rewrite hands the new text to the filters after it. Lines the
+    /// loader posts for mods pass no filter. Server only: on a client it
+    /// runs while it hosts a game ([`Status::MISSING`] on a build without
+    /// the chat post). Allowed during `enshwick_mod_init` only
+    /// ([`Status::TOO_LATE`] after it); `callback` and `user` are kept for
+    /// the life of the process and never freed by the loader. A panic in
+    /// the loader returns [`Status::REFUSED`]. ABI 11.6.
+    pub chat_filter:
+        extern "system" fn(me: ModHandle, callback: ChatFilterFn, user: *mut c_void) -> Status,
 }
