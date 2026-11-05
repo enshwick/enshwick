@@ -255,6 +255,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_line_names_its_kind_and_no_sender_or_character_when_the_loader_gives_none() {
+        let line = |player, entity, kind| abi::ChatLine {
+            header: abi::Header::of::<abi::ChatLine>(),
+            player: PlayerKey::new(player),
+            entity: Entity(entity),
+            kind,
+            loca: [0; 2],
+            text: abi::Str::new("hi"),
+        };
+        let emote = ChatLine::of(&line(7, 9, abi::ChatLine::EMOTE));
+        assert_eq!(emote.player, Some(PlayerKey::new(7)));
+        assert_eq!(emote.entity, Some(Entity(9)));
+        assert_eq!(emote.kind, ChatKind::Emote);
+        assert_eq!(emote.text, "hi");
+        let notice = ChatLine::of(&line(0, 0, 4));
+        assert_eq!((notice.player, notice.entity), (None, None));
+        assert_eq!(notice.kind, ChatKind::Notice);
+        assert_eq!(
+            ChatLine::of(&line(7, 0, abi::ChatLine::PLAYER)).kind,
+            ChatKind::Player
+        );
+    }
+
+    #[test]
     fn a_rewrite_is_cut_at_a_character_boundary() {
         assert_eq!(cut("Привіт", 5), "Пр");
         assert_eq!(cut("hi", 1024), "hi");

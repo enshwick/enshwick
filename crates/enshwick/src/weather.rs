@@ -439,6 +439,10 @@ mod tests {
     fn a_front_that_runs_on_raises_nothing_and_a_new_one_ends_the_old_first() {
         let before = [front(0, 1, 60), front(1, 2, 30)];
         assert!(front_changes(&before, &[front(0, 1, 59), front(1, 2, 29)]).is_empty());
+        assert!(
+            front_changes(&before, &[front(0, 1, 60), front(1, 2, 30)]).is_empty(),
+            "a front whose time stood still between two looks runs on"
+        );
         let changes = front_changes(&before, &[front(0, 3, 90), front(1, 2, 29)]);
         assert_eq!(
             changes,

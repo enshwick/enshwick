@@ -553,4 +553,178 @@ mod tests {
         let other = PhenomenonChange::new().effect(WeatherPhenomenonEffect::Other(7));
         assert_eq!(other.check(), Err(PhenomenonError::Effect));
     }
+
+    #[test]
+    fn a_negative_value_and_a_place_inside_another_layer_are_refused() {
+        assert_eq!(
+            PhenomenonChange::new().strength(-1.0).check(),
+            Err(PhenomenonError::Values)
+        );
+        assert_eq!(
+            place(&mut [(0, 3), (1, 3)], 0, 4),
+            Err(PhenomenonError::Split)
+        );
+    }
+
+    fn guid(n: u8) -> Guid {
+        Guid([n; 16])
+    }
+
+    fn phenomenon(n: u8) -> WeatherSystemPhenomenonResource {
+        let float2 = crate::typed::Float2 { x: 0.0, y: 0.0 };
+        WeatherSystemPhenomenonResource {
+            guid: guid(n),
+            debug_name: format!("vanilla {n}"),
+            phenomenon: guid(100 + n),
+            probability: 0.25,
+            flags: crate::typed::Flags(Vec::new()),
+            duration_min: Time { value: 60 },
+            duration_max: Time { value: 120 },
+            position_y_min: 0.0,
+            position_y_max: 1.0,
+            radius_min: 10.0,
+            radius_max: f32::from(n) * 100.0,
+            move_speed_min: 0.0,
+            move_speed_max: 1.0,
+            spawn_fade_time: Time { value: 1 },
+            despawn_fade_time: Time { value: 1 },
+            strength: 0.5,
+            cloud_map_range: crate::typed::FloatRange {
+                min_value: 0.0,
+                max_value: 1.0,
+            },
+            height: 1.0,
+            rain_threshold: 0.5,
+            rain_mask_index: 0,
+            render_weather: guid(0),
+            fog_model: guid(0),
+            fog_model_half_size_xz: float2,
+            effect: GameEffect::None,
+        }
+    }
+
+    fn layer(n: u8, start: u8, count: u8) -> crate::typed::WeatherSystemLayerResource {
+        crate::typed::WeatherSystemLayerResource {
+            guid: guid(n),
+            restrict_mask_index: 0,
+            exclude_mask_index: 0,
+            phenomenon_index_range: crate::typed::Range8 { start, count },
+            nothing_phenomenon: phenomenon(0),
+        }
+    }
+
+    /// Layer 10 holds phenomena 1 and 2, layer 20 phenomenon 3; phenomenon
+    /// 4 is in no layer, as the game's debug ones.
+    fn system() -> WeatherSystemResource {
+        let mask = crate::typed::WeatherSystemMaskResource {
+            world_to_relative: crate::typed::Float2 { x: 0.0, y: 0.0 },
+            bbox_min: crate::typed::Float2 { x: 0.0, y: 0.0 },
+            bbox_max: crate::typed::Float2 { x: 0.0, y: 0.0 },
+            original_size: crate::typed::Uint2 { x: 0, y: 0 },
+            pixel_offset: crate::typed::Uint2 { x: 0, y: 0 },
+            pixel_count: crate::typed::Uint2 { x: 0, y: 0 },
+            pixel_data: Vec::new(),
+        };
+        WeatherSystemResource {
+            guid: guid(0),
+            data_hash: crate::typed::HashKey32 { value: 0 },
+            world_size: crate::typed::Uint2 { x: 0, y: 0 },
+            snow_border_range_mapping: crate::typed::Float2 { x: 0.0, y: 0.0 },
+            snow_border_mask: mask,
+            layers: vec![layer(10, 0, 2), layer(20, 2, 1)],
+            layer_masks: Vec::new(),
+            phenomenons: (1..=4).map(phenomenon).collect(),
+            rain_masks: Vec::new(),
+            state_configurations: Vec::new(),
+            layer_state_configurations: Vec::new(),
+            new_world_state_configuration: guid(0),
+        }
+    }
+
+    fn ranges(system: &WeatherSystemResource) -> Vec<(u8, u8)> {
+        let range = |l: &crate::typed::WeatherSystemLayerResource| {
+            (
+                l.phenomenon_index_range.start,
+                l.phenomenon_index_range.count,
+            )
+        };
+        system.layers.iter().map(range).collect()
+    }
+
+    #[test]
+    fn a_copy_joins_the_layer_of_its_original_with_its_own_values_and_moves_the_next_layer() {
+        let mut system = system();
+        let new = NewPhenomenon::new(Id::new("you.test:drizzle"), guid(2)).values(
+            PhenomenonChange::new()
+                .probability(1.0)
+                .effect(WeatherPhenomenonEffect::Rain),
+        );
+        assert_eq!(add(&mut system, guid(50), &new), Ok(()));
+        assert_eq!(ranges(&system), [(0, 3), (3, 1)]);
+        let copy = &system.phenomenons[2];
+        assert_eq!(copy.guid, guid(50));
+        assert_eq!(copy.debug_name, new.id.to_string());
+        assert_eq!((copy.probability, &copy.effect), (1.0, &GameEffect::Rain));
+        assert_eq!(copy.radius_max, 200.0, "the rest is the original's");
+        assert_eq!(copy.phenomenon, guid(102), "and so are its clouds");
+        assert_eq!(system.phenomenons[1], phenomenon(2), "the original stays");
+        assert_eq!(system.phenomenons[3].guid, guid(3));
+    }
+
+    #[test]
+    fn a_copy_goes_to_a_named_layer_and_a_taken_id_or_an_unknown_original_or_layer_is_refused() {
+        let mut system = system();
+        let new = |like| NewPhenomenon::new(Id::new("you.test:mist"), guid(like));
+        assert_eq!(
+            add(&mut system, guid(50), &new(1).in_layer(guid(20))),
+            Ok(())
+        );
+        assert_eq!(ranges(&system), [(0, 2), (2, 2)]);
+        assert_eq!(system.phenomenons[3].guid, guid(50));
+        let before = system.clone();
+        assert_eq!(
+            add(&mut system, guid(50), &new(1)),
+            Err(PhenomenonError::Taken)
+        );
+        assert_eq!(
+            add(&mut system, guid(51), &new(9)),
+            Err(PhenomenonError::Unknown)
+        );
+        assert_eq!(
+            add(&mut system, guid(51), &new(1).in_layer(guid(30))),
+            Err(PhenomenonError::Layer)
+        );
+        assert_eq!(
+            add(&mut system, guid(51), &new(4)),
+            Err(PhenomenonError::NoLayer)
+        );
+        assert_eq!(system, before, "a refusal changes nothing");
+    }
+
+    #[test]
+    fn a_change_writes_only_the_values_it_sets() {
+        let mut system = system();
+        let values = PhenomenonChange::new()
+            .probability(0.1)
+            .radius(5.0, 6.0)
+            .strength(2.0)
+            .duration(Duration::from_secs(1), Duration::from_secs(2))
+            .effect(WeatherPhenomenonEffect::Blizzard);
+        assert_eq!(change(&mut system, guid(3), &values), Ok(()));
+        let changed = &system.phenomenons[2];
+        assert_eq!(changed.probability, 0.1);
+        assert_eq!((changed.radius_min, changed.radius_max), (5.0, 6.0));
+        assert_eq!(changed.strength, 2.0);
+        assert_eq!(
+            (changed.duration_min.value, changed.duration_max.value),
+            (1_000_000_000, 2_000_000_000)
+        );
+        assert_eq!(changed.effect, GameEffect::Blizzard);
+        assert_eq!(changed.height, 1.0, "values it does not set stay");
+        assert_eq!(system.phenomenons[1], phenomenon(2), "other phenomena stay");
+        assert_eq!(
+            change(&mut system, guid(9), &values),
+            Err(PhenomenonError::Unknown)
+        );
+    }
 }
