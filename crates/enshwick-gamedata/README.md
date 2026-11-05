@@ -25,6 +25,11 @@ game update that moves a field changes this crate, not the mods.
   that loads a set of debug strings (`loads`), or a run of decoded
   instructions in a function another route finds (`in` and `shape`, such as
   `lea rdx,[rbp-*]`), which survives a changed encoding or displacement.
+  A constant is an operand the shape takes (`value`, `cell`), a reflected
+  field offset or type size (`field`, `size`), or a value the shape spells
+  in its own encoding (`spelled`: memory without a displacement for 0, else
+  an index scale or an immediate), which counts only where the shape
+  matches once.
   Routes build on each other through waypoints, anonymous functions no table
   pins. A route that finds nothing, or more than one answer, leaves its entry
   to the table; a route that disagrees with the table turns the entry off,

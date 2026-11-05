@@ -309,6 +309,17 @@ fn fake() -> Fake {
 /// Routes of every kind over [`fake`], each row before the ones it names.
 const FAKE_ROUTES: &str = r#"
 [[route]]
+id = "t.spelled"
+in = "t.leaf"
+shape = ["mov eax,[rcx+?]", "shl eax,0x3"]
+take = "spelled"
+value = 3
+
+[[route]]
+id = "t.field"
+field = ["keen::Missing.value"]
+
+[[route]]
 id = "t.disp"
 in = "t.leaf"
 shape = ["mov eax,[rcx+*]", "shl eax,?"]
@@ -417,12 +428,14 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
             ("t.caller", Some(Routed::Reached(0x1020))),
             ("t.checked", Some(Routed::Symbol(0x1040))),
             ("t.disp", Some(Routed::Constant(0x79))),
+            ("t.field", None),
             ("t.inside", None),
             ("t.leaf", Some(Routed::Reached(0x1040))),
             ("t.long", Some(Routed::Symbol(0x1010))),
             ("t.loop", None),
             ("t.once", Some(Routed::Reached(0x101a))),
             ("t.shift", Some(Routed::Constant(8))),
+            ("t.spelled", Some(Routed::Constant(3))),
             ("t.string", Some(Routed::Reached(0x2180))),
             ("t.tail", Some(Routed::Reached(0x1062))),
             ("t.twice", None),
@@ -469,6 +482,44 @@ fn a_loose_constant_a_fixed_value_or_a_taking_check_is_refused() {
         "shape = [\"lea rcx,{a.c}\", \"mov eax,[rcx+*]\"]\ntake = \"value\"",
     ] {
         assert!(Routes::parse(&row(good)).is_ok(), "{good}");
+    }
+}
+
+#[test]
+fn a_spelled_value_needs_a_step_that_spells_it_and_a_reflected_number_stands_alone() {
+    let spelled = |keys: &str| format!("[[route]]\nid = \"a.b\"\nin = \"s\"\n{keys}");
+    for bad in [
+        "shape = [\"mov eax,[rcx+?]\", \"ret\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"mov eax,[rcx+0x10]\"]\ntake = \"spelled\"\nvalue = 0x10",
+        "shape = [\"mov eax,[rcx]\"]\ntake = \"spelled\"",
+        "shape = [\"mov eax,[rcx+*]\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"mov eax,[rip+?]\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"mov eax,[rcx]\"]\ntake = \"spelled\"\nvalue = 0\ncheck = [\"ret\"]",
+    ] {
+        assert!(Routes::parse(&spelled(bad)).is_err(), "{bad}");
+    }
+    for good in [
+        "shape = [\"mov eax,[rcx]\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"lea eax,[rcx+rdx*4]\"]\ntake = \"spelled\"\nvalue = 4",
+        "shape = [\"mov eax,0x18\"]\ntake = \"spelled\"\nvalue = 0x18",
+    ] {
+        assert!(Routes::parse(&spelled(good)).is_ok(), "{good}");
+    }
+    let reflected = |keys: &str| format!("[[route]]\nid = \"a.b\"\n{keys}");
+    for bad in [
+        "field = [\"keen::A\"]",
+        "field = [\"keen::A.b\"]\ntake = \"value\"",
+        "field = [\"keen::A.b\"]\nshape = [\"ret\"]",
+        "size = \"keen::A\"\ncheck = [\"ret\"]",
+        "size = \"keen::A\"\nfield = [\"keen::A.b\"]",
+    ] {
+        assert!(Routes::parse(&reflected(bad)).is_err(), "{bad}");
+    }
+    for good in [
+        "field = [\"keen::A.b\", \"keen::B.c\"]",
+        "size = \"keen::A\"",
+    ] {
+        assert!(Routes::parse(&reflected(good)).is_ok(), "{good}");
     }
 }
 

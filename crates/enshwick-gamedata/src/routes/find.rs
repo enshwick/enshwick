@@ -102,6 +102,18 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             How::Calls(names) => self.calls(names)?,
             How::Loads(strings) => self.loading(strings)?,
             How::Shape { within, steps } => return self.shaped(within, steps, route),
+            How::Field(path) => {
+                return path
+                    .iter()
+                    .try_fold(0u64, |sum, (ty, field)| {
+                        sum.checked_add(self.reflection.field_offset(ty, field).ok()?)
+                    })
+                    .map(Routed::Constant);
+            }
+            How::Size(ty) => {
+                let info = self.reflection.type_info(ty).ok()?;
+                return Some(Routed::Constant(u64::from(info.size())));
+            }
         };
         self.code
             .is_function(rva)
@@ -235,6 +247,7 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             Take::Address => taken_address(one.taken?),
             Take::Value => constant(one.taken?),
             Take::Cell => constant(u64::from(code.image().u32(one.taken?)?)),
+            Take::Spelled => Some(Routed::Constant(route.value)),
         }
     }
 }

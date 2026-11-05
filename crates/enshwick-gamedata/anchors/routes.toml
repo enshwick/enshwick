@@ -307,6 +307,13 @@ id = "base_crafting_props_cleanup"
 system = "base_crafting_props_cleanup"
 
 [[route]]
+id = "bases.allocator"
+in = "bases.new_base"
+shape = ["mov rdi,[rsi]", "cmp [rbx+?],rdi"]
+take = "spelled"
+value = 0x0
+
+[[route]]
 id = "bases.animal_map"
 in = "bases.server_update"
 shape = ["nop [rax+rax*1]", "lea rcx,[rsi+*]"]
@@ -325,6 +332,13 @@ sides = ["client"]
 in = "bases.holder_at"
 shape = ["movaps xmm0,[rcx+rax*1]", "movups [r10+*],xmm0"]
 take = "value"
+
+[[route]]
+id = "bases.answer_error"
+in = "bases.base_at"
+shape = ["mov [r10],?", "mov rbx,[rsp+?]"]
+take = "spelled"
+value = 0x0
 
 [[route]]
 id = "bases.answer_index"
@@ -413,6 +427,13 @@ id = "bases.container_cap"
 in = "bases.zones_at"
 shape = ["shl rsi,?", "cmp rdx,[rdi+*]"]
 take = "value"
+
+[[route]]
+id = "bases.container_data"
+in = "bases.zones_at"
+shape = ["mov rax,[rdi]", "shl rcx,?"]
+take = "spelled"
+value = 0x0
 
 [[route]]
 id = "bases.container_grow"
@@ -998,6 +1019,13 @@ shape = ["mov rdx,[rbp+?]", "movss xmm0,[r14+*]"]
 take = "value"
 
 [[route]]
+id = "buffs.record_type"
+in = "buffs.restore"
+shape = ["mov ecx,[r14]", "mov rdx,rax"]
+take = "spelled"
+value = 0x0
+
+[[route]]
 id = "buffs.registry"
 in = "~fn:buffs.registry"
 shape = [
@@ -1135,6 +1163,13 @@ system = "player_building_dismantle"
 shape = ["lea rcx,[rbp+?]", "call *", "movzx r14d,al"]
 take = "address"
 check = ["push rbp", "push rbx", "push rsi", "push rdi", "push r13", "push r14"]
+
+[[route]]
+id = "building.pickup_entity"
+in = "building.pickup"
+shape = ["mov r14,rdx", "mov r8d,[rdx]"]
+take = "spelled"
+value = 0x0
 
 [[route]]
 id = "building.pickup_mode"
@@ -1977,6 +2012,13 @@ shape = ["mov rcx,rdi", "mov rdx,[rdx+*]"]
 take = "value"
 
 [[route]]
+id = "ecs.spawn_component_hash"
+in = "~fn:ecs.spawn_component_bytes"
+shape = ["add rdx,r12", "mov eax,[rdx]"]
+take = "spelled"
+value = 0x0
+
+[[route]]
 id = "ecs.spawn_component_size"
 in = "~fn:ecs.spawn_component_bytes"
 shape = ["inc rsi", "add r12,*"]
@@ -2007,6 +2049,13 @@ in = "~fn:ecs.spawn_component_bytes"
 shape = ["movups [rbp+?],xmm0", "movzx eax,[r14+*]"]
 take = "value"
 plus = 4
+
+[[route]]
+id = "ecs.spawn_requester"
+in = "~fn:ecs.spawn_component_bytes"
+shape = ["lea rdi,[rbp+?]", "mov eax,[r14]"]
+take = "spelled"
+value = 0x0
 
 [[route]]
 id = "ecs.spawn_template"
@@ -2818,6 +2867,18 @@ shape = ["mov [rdi+*],rax", "call ?", "mov [rdi+?],rax", "lea r8,[rbp+?]"]
 take = "value"
 
 [[route]]
+id = "knowledge.request_kind"
+field = ["keen::ecs::TriggerKnowledgeAction.knowledgeUnlockOperation", "keen::KnowledgeUnlockOperation.type"]
+
+[[route]]
+id = "knowledge.request_target"
+field = ["keen::ecs::TriggerKnowledgeAction.versionData"]
+
+[[route]]
+id = "knowledge.request_value"
+field = ["keen::ecs::TriggerKnowledgeAction.knowledgeUnlockOperation", "keen::KnowledgeUnlockOperation.value"]
+
+[[route]]
 id = "knowledge.resend_player"
 in = "~fn:knowledge.connection_size"
 shape = ["je ?", "mov [rbx+*],?"]
@@ -3003,6 +3064,13 @@ shape = ["je ?", "mov rcx,rbx", "call ?", "mov edx,[rdi+*]"]
 take = "value"
 
 [[route]]
+id = "loot.request_node"
+in = "~fn:loot.request_labels"
+shape = ["lea rcx,[rbp+?]", "mov eax,[rdi]"]
+take = "spelled"
+value = 0x0
+
+[[route]]
 id = "loot.roll"
 in = "random_loot_on_interaction"
 shape = ["call *", "lea rcx,[rbp+?]"]
@@ -3022,6 +3090,13 @@ in = "loot.roll_one"
 shape = ["mov rdx,rsi", "mov rcx,r13", "call *"]
 take = "address"
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
+
+[[route]]
+id = "loot.txn_context"
+in = "inventory.txn_init"
+shape = ["mov [rcx],rax", "mov rax,[rdx+?]"]
+take = "spelled"
+value = 0x0
 
 [[route]]
 id = "loot.txn_entity"
@@ -4727,6 +4802,14 @@ shape = [
 take = "value"
 
 [[route]]
+id = "ui.entry_value"
+sides = ["client"]
+in = "ui.toggle"
+shape = ["nop [rax]", "cmp [rdx],r8d"]
+take = "spelled"
+value = 0x0
+
+[[route]]
 id = "ui.first_use"
 sides = ["client"]
 in = "ui.slider"
@@ -4960,6 +5043,14 @@ sides = ["client"]
 in = "ui.main_entry"
 shape = ["mov sil,?", "movzx ecx,[rdi+*]"]
 take = "value"
+
+[[route]]
+id = "ui.menu_entry_text"
+sides = ["client"]
+in = "ui.main_entry"
+shape = ["movss xmm7,[r8+?]", "movups xmm0,[rdi]"]
+take = "spelled"
+value = 0x0
 
 [[route]]
 id = "ui.nav_axis"
@@ -5211,6 +5302,14 @@ in = "ui.panel"
 shape = ["mov r12,[rsp+?]", "cmp [rsi+*],dil"]
 take = "value"
 plus = 1
+
+[[route]]
+id = "ui.panel_kind"
+sides = ["client"]
+in = "ui.panel"
+shape = ["mov r8,[rax+?]", "movsxd rax,[rsi]"]
+take = "spelled"
+value = 0x0
 
 [[route]]
 id = "ui.pause_entry"
@@ -5700,6 +5799,14 @@ sides = ["client"]
 system = "ui_custom_name_debug"
 
 [[route]]
+id = "ui_image.content"
+sides = ["client"]
+in = "~fn:ui_image.content"
+shape = ["mov rdx,[r14+?]", "movups xmm0,[rsi]"]
+take = "spelled"
+value = 0x0
+
+[[route]]
 id = "ui_image.flags"
 sides = ["client"]
 in = "~fn:ui_image.content"
@@ -5950,6 +6057,22 @@ shape = ["lea rcx,[rdx+*]", "xor esi,esi"]
 take = "value"
 
 [[route]]
+id = "weather.entry_generation"
+sides = ["client"]
+in = "weather.free"
+shape = ["mov eax,[rdx]", "btr eax,?"]
+take = "spelled"
+value = 0x0
+
+[[route]]
+id = "weather.entry_generation"
+sides = ["server"]
+in = "weather.free"
+shape = ["mov ecx,ebx", "mov eax,[rdx]"]
+take = "spelled"
+value = 0x0
+
+[[route]]
 id = "weather.free"
 called_by = ["~fn:weather.layer_count"]
 check = ["test edx,edx", "je ?b"]
@@ -6035,6 +6158,22 @@ id = "weather.layers"
 in = "~fn:weather.layer_count"
 shape = ["nop [rax+rax*1]", "mov rdi,[rbx+*]"]
 take = "value"
+
+[[route]]
+id = "weather.manager"
+sides = ["client"]
+in = "weather.sample"
+shape = ["mov r12,rdx", "mov rdx,[rdx]"]
+take = "spelled"
+value = 0x0
+
+[[route]]
+id = "weather.manager"
+sides = ["server"]
+in = "weather.sample"
+shape = ["mov r13,rdx", "mov rdx,[rdx]"]
+take = "spelled"
+value = 0x0
 
 [[route]]
 id = "weather.page_count"
@@ -6210,6 +6349,13 @@ id = "weather.slot_size"
 in = "~fn:weather.layer_count"
 shape = ["inc rsi", "lea rbp,[rbp+*]"]
 take = "value"
+
+[[route]]
+id = "weather.slot_time"
+in = "~fn:weather.slot_phenomenon"
+shape = ["mov [rdi],rax", "xor eax,eax"]
+take = "spelled"
+value = 0x0
 
 [[route]]
 id = "weather.spawn"
