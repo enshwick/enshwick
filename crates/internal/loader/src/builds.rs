@@ -260,6 +260,10 @@ fn side(side: Side) -> Option<tables::Side> {
 }
 
 /// Every kept build's table, for tests that compare with what a build pins.
+///
+/// # Panics
+///
+/// When an embedded table does not read.
 #[cfg(test)]
 #[must_use]
 pub fn load() -> Vec<tables::Table> {
@@ -287,10 +291,11 @@ pub fn select(
     by_patterns(running, name, code?, cell)
 }
 
-/// The anchors of `running`'s side carried to the build by their patterns
-/// in `code` (the code section and its RVA), with `cell` reading the `u32`
-/// the game's image holds at an RVA for the constants the game keeps in
-/// data cells; `None` when the anchors do not read, which is logged.
+/// The anchors of `running`'s side carried to the build by their patterns.
+///
+/// `code` is the code section and its RVA, and `cell` reads the `u32` the
+/// game's image holds at an RVA for the constants the game keeps in data
+/// cells; `None` when the anchors do not read, which is logged.
 #[must_use]
 pub fn by_patterns(
     running: Side,
@@ -332,7 +337,7 @@ const APPS: [(Side, u32); 2] = [(Side::CLIENT, 1_203_620), (Side::SERVER, 2_278_
 
 /// The Steam build of the game in `game_dir` on `running`'s side, from the
 /// appmanifest Steam keeps beside its library (`steamapps/`, two folders
-/// up) or SteamCMD inside the install (`steamapps/` in it).
+/// up) or `SteamCMD` inside the install (`steamapps/` in it).
 #[must_use]
 pub fn steam_build(game_dir: &Path, running: Side) -> Option<SteamBuild> {
     let (_, app) = APPS.iter().find(|(side, _)| *side == running)?;
@@ -502,7 +507,7 @@ pub(crate) fn named_executables() -> Vec<&'static str> {
 #[cfg(test)]
 fn constants_on_executables_by(
     ids: &[&str],
-    keep: impl Fn(&Table) -> bool,
+    keep: impl Fn(&tables::Table) -> bool,
 ) -> Vec<(String, Vec<Option<u64>>)> {
     let tables = load();
     let mut rows = Vec::new();

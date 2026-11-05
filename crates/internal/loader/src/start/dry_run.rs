@@ -43,23 +43,24 @@ pub enum DryRunError {
     /// The executable has no fingerprint to pick a build table by.
     #[error("the executable has no fingerprint")]
     NoFingerprint,
-    /// No build table serves the build.
-    #[error("no build table serves this build")]
+    /// The loader does not run the build: its anchors do not read, or the
+    /// settings keep a build no report covers vanilla.
+    #[error("the loader does not run this build")]
     NoTable,
     /// The loader already started in this process.
     #[error("the loader already ran in this process")]
     AlreadyRan,
 }
 
-/// What the loader would do on a game build: its table and how each mod
-/// fared when it started.
+/// What the loader would do on a game build: what it finds there and how
+/// each mod fared when it started.
 #[derive(Debug, Clone)]
 pub struct DryRun {
-    /// The table's name for the log.
+    /// The build's name for the log.
     pub table: String,
-    /// Whether the table was made for the build.
+    /// Whether the build has every entry the loader knows.
     pub exact: bool,
-    /// The table's entries the build lacks.
+    /// The entries the build lacks.
     pub missing: Vec<String>,
     /// Every mod in `mods/`, in load order, then the skipped ones.
     pub mods: Vec<DryMod>,
@@ -84,17 +85,18 @@ pub struct DryMod {
 
 /// Starts the loader on the game executable `exe` without running the game.
 ///
-/// The executable's image is mapped at its preferred base, the build table
-/// taken as the loader takes it (only by patterns with `patterns`), and every
-/// mod in `game_dir/mods/` resolved and initialised as at a start.
+/// The executable's image is mapped at its preferred base, its entries
+/// found as the loader finds them (by the anchors' patterns alone with
+/// `patterns`, without the engine routes), and every mod in
+/// `game_dir/mods/` resolved and initialised as at a start.
 ///
 /// Nothing is hooked or patched, and no mod's `ready` runs. Once per process:
 /// the loader keeps its state for the process.
 ///
 /// # Errors
 ///
-/// When the executable is not the game, cannot be mapped, or no table
-/// serves it.
+/// When the executable is not the game, cannot be mapped, or the loader
+/// does not run it.
 pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, DryRunError> {
     let side = exe
         .file_name()
@@ -113,7 +115,6 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
     let fingerprint = image.fingerprint().ok_or(DryRunError::NoFingerprint)?;
     let reflection = Reflection::scan(image);
     let mods_dir = game_dir.join("mods");
-    let tables = builds::load();
     let code = image.section(".text").and_then(|text| {
         let range = image.range(text);
         image
@@ -121,14 +122,31 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
             .map(|bytes| (bytes, range.start - base))
     });
     let cell = |rva| image.u32(base + rva);
+    let exe_dir = exe.parent();
+    let name = builds::build_name(
+        side,
+        exe_dir.and_then(|dir| builds::steam_build(dir, side)),
+        exe_dir
+            .and_then(|dir| crate::archive::open_game(dir, side))
+            .and_then(crate::archive::Archive::version),
+        fingerprint,
+    );
     let mut build = if patterns {
-        code.and_then(|code| builds::by_patterns(&tables, side, code, cell))
+        code.and_then(|code| builds::by_patterns(side, name, code, cell))
     } else {
-        builds::select(&tables, side, fingerprint, code, cell)
+        builds::select(side, fingerprint, name, code, cell)
     }
     .ok_or(DryRunError::NoTable)?;
-    if let Some(exe_dir) = exe.parent() {
+    if let Some(exe_dir) = exe_dir {
         crate::attribute_slots::supply(&mut build, &reflection, exe_dir, side);
+    }
+    if !patterns {
+        match enshwick_gamedata::Routes::embedded() {
+            Ok(routes) => {
+                build.route(&routes, image, &reflection, side);
+            }
+            Err(e) => crate::log!(ERROR, "embedded engine routes: {e}"),
+        }
     }
     let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
     for dir in GAME_DIRS {
@@ -163,7 +181,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
     let mods = outcomes(loader, &order, &libraries, &candidates, &plan, &lines);
     Ok(DryRun {
         table: build.name.clone(),
-        exact: build.kind == builds::Kind::Exact,
+        exact: build.complete(),
         missing: build.missing().to_vec(),
         mods,
         lines,

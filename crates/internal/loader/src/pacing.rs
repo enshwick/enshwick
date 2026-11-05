@@ -445,13 +445,16 @@ mod tests {
             let text = image.section(".text").unwrap();
             let range = image.range(text);
             let code = image.read(range.start, range.end - range.start).unwrap();
-            let found = crate::builds::by_patterns(
-                &tables,
-                side,
-                (code, range.start - image.base()),
-                |rva| image.u32(image.base() + rva),
-            )
-            .unwrap();
+            let side_of = if side == Side::CLIENT {
+                enshwick_gamedata::Side::Client
+            } else {
+                enshwick_gamedata::Side::Server
+            };
+            let found = enshwick_gamedata::newest(&tables, side_of)
+                .unwrap()
+                .fall_back(code, range.start - image.base(), |rva| {
+                    image.u32(image.base() + rva)
+                });
             let divide = found
                 .symbol(pinned::pacing::WAIT_DIVIDE.id())
                 .unwrap_or_else(|| panic!("{variable}: no division"));
