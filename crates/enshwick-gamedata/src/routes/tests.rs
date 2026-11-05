@@ -320,6 +320,16 @@ id = "t.field"
 field = ["keen::Missing.value"]
 
 [[route]]
+id = "t.called"
+callers = "t.leaf"
+shape = ["mov eax,0x7", "mov eax,0x7"]
+
+[[route]]
+id = "t.called_twice"
+callers = "t.leaf"
+shape = ["ret"]
+
+[[route]]
 id = "t.disp"
 in = "t.leaf"
 shape = ["mov eax,[rcx+*]", "shl eax,?"]
@@ -425,6 +435,8 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
         found,
         [
             ("t.ambiguous", None),
+            ("t.called", Some(Routed::Reached(0x1010))),
+            ("t.called_twice", None),
             ("t.caller", Some(Routed::Reached(0x1020))),
             ("t.checked", Some(Routed::Symbol(0x1040))),
             ("t.disp", Some(Routed::Constant(0x79))),

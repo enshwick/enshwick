@@ -15,6 +15,7 @@
 //! | `calls` | the one function that calls every listed function directly |
 //! | `loads` | the one function whose code loads every listed string |
 //! | `system` or `in`, with `shape` | the one run of instructions of the [shape](shape) in the listed function's code |
+//! | `callers`, with `shape` | among the functions that call the listed function directly, the one whose code the shape matches; a call in a chained fragment counts for its function |
 //! | `field` | a constant: the sum of the reflected offsets of each `<type>.<field>` listed, each field holding the next type |
 //! | `size` | a constant: the reflected size of the type |
 //!
@@ -106,6 +107,12 @@ enum How {
         within: String,
         steps: Vec<Step>,
     },
+    /// The one function among the direct callers of `callee` whose code the
+    /// shape matches.
+    Callers {
+        callee: String,
+        steps: Vec<Step>,
+    },
     /// The sum of reflected field offsets, each a type and its field.
     Field(Vec<(String, String)>),
     /// A reflected type's size.
@@ -169,6 +176,7 @@ struct RouteRow {
     value: Option<u64>,
     field: Option<Vec<String>>,
     size: Option<String>,
+    callers: Option<String>,
 }
 
 impl RouteRow {
@@ -190,7 +198,7 @@ impl RouteRow {
         }
         let take = self.take.unwrap_or(Take::Start);
         let steps: &[Step] = match &how {
-            How::Shape { steps, .. } => steps,
+            How::Shape { steps, .. } | How::Callers { steps, .. } => steps,
             _ => &[],
         };
         let shaped = !steps.is_empty();
@@ -261,6 +269,7 @@ impl RouteRow {
             self.within.is_some(),
             self.field.is_some(),
             self.size.is_some(),
+            self.callers.is_some(),
         ];
         let shape = listed(self.shape.take());
         let shaped = shape.is_some();
@@ -272,6 +281,7 @@ impl RouteRow {
             self.system.take().or(self.within.take()),
             listed(self.field.take()),
             self.size.take(),
+            self.callers.take(),
         ) {
             _ if ways.iter().filter(|&&w| w).count() != 1 => None,
             (Some(names), ..) if !shaped => Some(How::CalledBy(names)),
@@ -282,7 +292,11 @@ impl RouteRow {
                 steps: parse_steps(shape, names)?,
             }),
             (_, _, _, Some(system), ..) if !within_given => Some(How::System(system)),
-            (.., Some(path), None) if !shaped => Some(How::Field(
+            (.., Some(callee)) if shaped => Some(How::Callers {
+                callee,
+                steps: parse_steps(shape, names)?,
+            }),
+            (.., Some(path), None, None) if !shaped => Some(How::Field(
                 path.iter()
                     .map(|step| {
                         step.rsplit_once('.')
@@ -291,11 +305,11 @@ impl RouteRow {
                     })
                     .collect::<Result<_, _>>()?,
             )),
-            (.., Some(ty)) if !shaped => Some(How::Size(ty)),
+            (.., Some(ty), None) if !shaped => Some(How::Size(ty)),
             _ => None,
         };
         how.ok_or_else(|| {
-            "a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, or `system` or `in` with `shape`, each not empty".to_owned()
+            "a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, or `system`, `in` or `callers` with `shape`, each not empty".to_owned()
         })
     }
 }

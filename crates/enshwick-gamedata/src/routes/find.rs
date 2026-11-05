@@ -102,6 +102,7 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             How::Calls(names) => self.calls(names)?,
             How::Loads(strings) => self.loading(strings)?,
             How::Shape { within, steps } => return self.shaped(within, steps, route),
+            How::Callers { callee, steps } => return self.called_from(callee, steps, route),
             How::Field(path) => {
                 return path
                     .iter()
@@ -203,8 +204,36 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
     }
 
     fn shaped(&mut self, within: &str, steps: &'f [Step], route: &Route) -> Option<Routed> {
-        let base = self.code.base();
         let function = self.address(within)?;
+        let (_, one) = self.only_match([function], steps)?;
+        self.take(route, steps, one)
+    }
+
+    /// Among the functions that call `callee` directly, the one whose code
+    /// the shape matches, as [`Self::shaped`] takes it; `start` is that
+    /// function.
+    fn called_from(&mut self, callee: &str, steps: &'f [Step], route: &Route) -> Option<Routed> {
+        let callee = self.address(callee)?;
+        let mut callers: Vec<u32> = self.code.callers(callee).into_iter().collect();
+        callers.sort_unstable();
+        let (function, one) = self.only_match(callers, steps)?;
+        match route.take {
+            Take::Start => self
+                .code
+                .is_function(function)
+                .then_some(Routed::Reached(u64::from(function))),
+            _ => self.take(route, steps, one),
+        }
+    }
+
+    /// The one run of `steps` in the code of all `functions`, with the
+    /// function it lies in; none for none or more than one.
+    fn only_match(
+        &mut self,
+        functions: impl IntoIterator<Item = u32>,
+        steps: &'f [Step],
+    ) -> Option<(u32, shape::Match)> {
+        let base = self.code.base();
         let mut entries: Vec<(&str, u64)> = Vec::new();
         for id in steps.iter().flat_map(Step::entries) {
             let rva = self.address(id)?;
@@ -212,17 +241,28 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         }
         let entry = |id: &str| entries.iter().find(|(e, _)| *e == id).map(|&(_, va)| va);
         let code = self.code;
-        let parts = self
-            .decoded
-            .entry(function)
-            .or_insert_with(|| code.parts_of(function).map(|p| code.decode(p)).collect());
-        let mut found = parts
-            .iter()
-            .flat_map(|part| shape::matches(steps, part, &entry));
-        let one = found.next()?;
-        if found.next().is_some() {
-            return None;
+        let mut found = None;
+        for function in functions {
+            let parts = self
+                .decoded
+                .entry(function)
+                .or_insert_with(|| code.parts_of(function).map(|p| code.decode(p)).collect());
+            for one in parts
+                .iter()
+                .flat_map(|part| shape::matches(steps, part, &entry))
+            {
+                if found.replace((function, one)).is_some() {
+                    return None;
+                }
+            }
         }
+        found
+    }
+
+    /// What a route takes from its shape's one match.
+    fn take(&self, route: &Route, steps: &[Step], one: shape::Match) -> Option<Routed> {
+        let code = self.code;
+        let base = code.base();
         let rva = |va: u64| va.checked_sub(base);
         // An address taken in the code must start a function there.
         let taken_address = |va: u64| {
