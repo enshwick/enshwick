@@ -193,9 +193,17 @@ pub fn add_recipe_to(
 ) -> Option<Vec<u8>> {
     let mut registry = Blob::new(registry);
     let (start, count) = registry.array(layout.recipes)?;
-    let like = (0..usize::try_from(count).ok()?)
+    let Some(like) = (0..usize::try_from(count).ok()?)
         .map(|i| start + i * layout.recipe)
-        .find(|&at| makes(layout, &registry, at, recipe.like))?;
+        .find(|&at| makes(layout, &registry, at, recipe.like))
+    else {
+        crate::warn!(
+            "recipe {}: no recipe of the game makes {}, the item it is like",
+            recipe.id,
+            recipe.like
+        );
+        return None;
+    };
     let workshop = match recipe.workshop {
         Some(target) => target.id(),
         None => registry.read_u32(like + layout.workshop)?,

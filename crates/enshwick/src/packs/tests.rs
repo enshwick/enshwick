@@ -337,6 +337,33 @@ fn a_recipe_change_picks_recipes_by_name_and_by_what_they_make() {
 }
 
 #[test]
+fn a_new_recipe_like_a_recipe_instead_of_an_item_is_refused_at_its_line() {
+    let (vanilla, torch, wood, recipe) = vanilla_torch();
+    let new = |like: Guid| {
+        format!("[[recipe]]\nid = \"bright\"\nlike = \"{like}\"\noutput = \"{torch}\"\n")
+    };
+    assert!(Pack::parse_with("you.torches", &recipes(&new(torch)), Some(&vanilla)).is_ok());
+    let by_name = "[[recipe]]\nid = \"bright\"\nlike = \"Material_T1_Wood_Logs\"\noutput = \"Tool_Torch01\"\n";
+    for text in [new(recipe), by_name.to_owned()] {
+        let errors = Pack::parse_with("you.torches", &recipes(&text), Some(&vanilla))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            errors.contains("recipes.toml:1") && errors.contains("no vanilla recipe makes"),
+            "{errors}"
+        );
+    }
+    assert!(
+        Pack::parse_with("you.torches", &recipes(&new(wood)), Some(&vanilla)).is_ok(),
+        "a GUID that is no vanilla recipe may be another mod's item"
+    );
+    assert!(
+        Pack::parse_with("you.torches", &recipes(&new(recipe)), None).is_ok(),
+        "without the game's data the recipe is not checked"
+    );
+}
+
+#[test]
 fn a_recipe_change_without_the_game_s_data_takes_guids_only() {
     let text = format!("[[change]]\nrecipes = [\"{CHEST}\"]\ncost = 2\n");
     let pack = Pack::parse("you.torches", &recipes(&text)).unwrap();
