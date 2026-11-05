@@ -338,10 +338,11 @@ pub fn type_names() -> impl Iterator<Item = &'static str> {
     named().into_keys()
 }
 
-/// The types of the typed API's values, a file of their own beside
-/// [`definitions`]: a type for each generated struct and enum, which a
-/// script names to check what `enshwick.typed` hands it, such as
-/// `local value: typed_ecs_Health = health:read(entity)`.
+/// The types of the values `enshwick.typed` hands a script, a file of their
+/// own beside [`definitions`].
+///
+/// A type for each generated struct and enum, which a script names where it
+/// helps: `local value: typed_ecs_Health = health:read(entity)`.
 ///
 /// # Examples
 ///
