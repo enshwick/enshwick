@@ -152,6 +152,7 @@ struct Layout {
     layer_range_count: usize,
     phenomenon_size: usize,
     phenomenon_effect: usize,
+    phenomenon_guid: Option<usize>,
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
@@ -243,6 +244,8 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     .checked_add(field(range, "count")?)?,
                 phenomenon_size: size(phenomenon)?,
                 phenomenon_effect: field(phenomenon, "effect")?,
+                // Fronts do without it, all zero.
+                phenomenon_guid: field(phenomenon, "guid"),
             })
         })
         .as_ref()
@@ -424,18 +427,21 @@ pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, Status> {
         // build table's `weather.instance_phenomenon` offset.
         let index: u8 = unsafe { read(data, layout.instance_phenomenon) };
         let index = usize::from(index);
-        let effect = if index < phenomenon_count {
+        let (effect, phenomenon) = if index < phenomenon_count {
+            let at = phenomena + index * layout.phenomenon_size;
             // SAFETY: `index` is below the resource's phenomenon count by the
-            // check before it, and the resource stays locked; the u8 effect sits
-            // at the reflected `effect` field of a phenomenon.
-            u32::from(unsafe {
-                read::<u8>(
-                    phenomena + index * layout.phenomenon_size,
-                    layout.phenomenon_effect,
-                )
-            })
+            // check before it, and the resource stays locked; the u8 effect
+            // sits at the reflected `effect` field of a phenomenon.
+            let effect = u32::from(unsafe { read::<u8>(at, layout.phenomenon_effect) });
+            // SAFETY: `index` is below the resource's phenomenon count by the
+            // check before it, and the resource stays locked; the 16-byte GUID
+            // sits at the reflected `guid` field of a phenomenon.
+            let guid = layout
+                .phenomenon_guid
+                .map_or([0; 16], |guid| unsafe { read::<[u8; 16]>(at, guid) });
+            (effect, guid)
         } else {
-            WeatherFront::NONE
+            (WeatherFront::NONE, [0; 16])
         };
         // SAFETY: `data` is a live instance, checked by `instance`; its i64
         // despawn time sits at the build table's `weather.instance_despawn`
@@ -455,6 +461,7 @@ pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, Status> {
             radius: unsafe { read(data, layout.instance_radius) },
             reserved: 0,
             remaining: despawn.saturating_sub(now).max(0),
+            phenomenon,
         });
     }
     Ok(out)

@@ -19,6 +19,7 @@ mod players;
 mod prop_state;
 mod props;
 mod rename;
+mod saves;
 mod stats;
 mod transactions;
 mod vitals;
@@ -41,6 +42,7 @@ pub use prop_state::{HeldState, PropState};
 pub(crate) use props::span;
 pub use props::{CapturedProp, Prop, WorldTransform};
 pub use rename::Rename;
+pub use saves::{SaveInfo, WorldGuid};
 pub use stats::{Meter, Progress, Skill, Vitals};
 pub use transactions::{Transaction, TransactionId, TransactionStatus};
 
@@ -327,6 +329,7 @@ impl crate::script::Bound for World {
         Self::SCRIPT_METERS,
         Self::SCRIPT_FIELDS,
         Self::SCRIPT_CAPTURE,
+        Self::SCRIPT_SAVES,
     ];
 
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {

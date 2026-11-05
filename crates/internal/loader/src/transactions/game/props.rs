@@ -136,6 +136,7 @@ pub(super) fn spawn(loader: &Loader, prop: &Prop, actor: u32) -> Result<u32, Sta
         level: 0,
         reserved: 0,
         lifetime_ns: 0,
+        flags: 0,
     };
     crate::spawns::spawn_with(
         loader,

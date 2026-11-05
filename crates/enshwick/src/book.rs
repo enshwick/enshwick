@@ -72,6 +72,7 @@ struct Extending;
 mod typed {
     chapters! {
         GameTypes => "game-types.md",
+        WeatherPhenomena => "weather-phenomena.md",
     }
 }
 

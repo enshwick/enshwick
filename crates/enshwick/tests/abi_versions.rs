@@ -73,6 +73,7 @@ mod tests {
             level: 12,
             reserved: 0,
             lifetime_ns: 0,
+            flags: 0,
         }
     }
 

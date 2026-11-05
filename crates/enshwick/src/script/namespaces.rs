@@ -386,6 +386,7 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<crate::state::StateFns>(),
     Namespace::of::<crate::files::FilesFns>(),
     Namespace::starting("vetoes", "", &[crate::Load::SCRIPT_VETOES]),
+    Namespace::starting("chat", "", &[crate::Load::SCRIPT_CHAT]),
     Namespace::starting("interactions", "", &[crate::Load::SCRIPT_INTERACTIONS]),
     #[cfg(feature = "unstable")]
     Namespace::starting("items", "", &[crate::Load::SCRIPT_ITEMS]),
@@ -423,6 +424,15 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<crate::i18n::I18nFns>(),
     Namespace::starting("i18n", "", &[crate::Load::SCRIPT_I18N]),
     Namespace::of::<crate::weather::Weather>(),
+    Namespace::starting(
+        "weather",
+        "",
+        &[
+            crate::Load::SCRIPT_WEATHER_FRONTS,
+            #[cfg(feature = "typed")]
+            crate::Load::SCRIPT_WEATHER_PHENOMENA,
+        ],
+    ),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::map::Map>(),
     #[cfg(feature = "unstable")]

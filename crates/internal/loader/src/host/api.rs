@@ -7,6 +7,7 @@ use super::entries::build::{
     system, type_hash, type_size,
 };
 use super::entries::calls::{call, find_call, serve_call};
+use super::entries::chat::chat_filter;
 use super::entries::content::{
     add_text, change_data, content_hashes, content_read, content_serve, declare_change,
     entity_data_open, game_text, game_version, icons_ready, item_data_get, item_data_open,
@@ -33,6 +34,7 @@ use super::entries::mods::{
     settings, texts,
 };
 use super::entries::net::{net_channel, net_ready, net_send};
+use super::entries::saves::{hold_saves, save_info};
 use super::entries::services::{
     attach_point, declare_content, define_event, define_point, publish, run_point, send_event,
     service, set_tick_every, subscribe, subscribe_event, subscribe_tick, use_content,
@@ -244,4 +246,7 @@ pub(crate) static API: HostApi = HostApi {
     run_action,
     ui_extension,
     item_filter,
+    chat_filter,
+    save_info,
+    hold_saves,
 };

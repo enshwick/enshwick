@@ -248,6 +248,8 @@ ids! {
     CURRENT_TRANSFORM_TRANSFORM = "current_transform.transform";
     /// The id of the component that names the item an entity was placed from.
     USED_ITEM = "used_item";
+    /// The id of the component that keeps an entity out of the world's save.
+    DO_NOT_SAVE = "do_not_save";
     LABEL = "label";
     /// The id of an entity's inventory setup and of its links (`u32`
     /// entities), their categories (bytes) and its initialized byte.

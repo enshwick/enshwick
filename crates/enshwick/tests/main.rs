@@ -20,6 +20,8 @@ mod build_rights;
 mod calls;
 #[cfg(feature = "unstable")]
 mod capture;
+#[cfg(feature = "unstable")]
+mod chat;
 mod config_check;
 mod config_errors;
 mod config_files;
@@ -124,6 +126,8 @@ mod resource_values;
 mod reward_actions;
 #[cfg(feature = "unstable")]
 mod rewards;
+#[cfg(feature = "unstable")]
+mod saves;
 mod schedule;
 #[cfg(feature = "unstable")]
 mod screen_extensions;
@@ -153,6 +157,8 @@ mod vanilla_items;
 mod vetoes;
 mod voxels;
 mod weather;
+#[cfg(feature = "typed")]
+mod weather_phenomena;
 #[cfg(feature = "unstable")]
 mod world_blocks;
 #[cfg(feature = "unstable")]

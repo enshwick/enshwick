@@ -7,19 +7,19 @@ use crate::abi::{
     AccountActionType, ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo,
     AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo,
     BuildCheckFn, BuildInfo, BuildRights, BuildingZoneCheckFn, CallFn, CallSpec, CallerFrame,
-    ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, ContentRename, ControlFn, ControlSpec,
-    CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemActionFn, ItemData, ItemLine,
-    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo,
-    MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
-    PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind,
-    RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec,
-    SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef,
-    StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
-    TeleportRequest, TerrainEdit, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp,
-    TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel,
-    WeatherFront,
+    ChangeId, ChangeOp, ChatFilterFn, ComfortFn, ConfigCheckFn, ContentRename, ControlFn,
+    ControlSpec, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
+    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn,
+    Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemActionFn, ItemData,
+    ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo,
+    MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn,
+    PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind,
+    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, SaveInfo, ServerWaitFn,
+    ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
+    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
+    TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn, UiDialog, UiExtension,
+    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -1644,4 +1644,32 @@ pub struct HostApi {
     /// panic in the loader returns [`Status::REFUSED`].
     pub item_filter:
         extern "system" fn(me: ModHandle, callback: ItemActionFn, user: *mut c_void) -> Status,
+    /// Adds `callback` with `user` to the chat filters, which run in load
+    /// order on the server's game thread, inside the game's chat post, on
+    /// every line a player typed that the chat mute let through; the first
+    /// [`ChatRewrite::DROP`](crate::abi::ChatRewrite::DROP) drops the line,
+    /// and a rewrite hands the new text to the filters after it. Lines the
+    /// loader posts for mods pass no filter. Server only: on a client it
+    /// runs while it hosts a game ([`Status::MISSING`] on a build without
+    /// the chat post). Allowed during `enshwick_mod_init` only
+    /// ([`Status::TOO_LATE`] after it); `callback` and `user` are kept for
+    /// the life of the process and never freed by the loader. A panic in
+    /// the loader returns [`Status::REFUSED`]. ABI 11.6.
+    pub chat_filter:
+        extern "system" fn(me: ModHandle, callback: ChatFilterFn, user: *mut c_void) -> Status,
+    /// Writes the save of the world the server runs to `out`, which the
+    /// mod starts with [`Header::of`]: [`Status::MISSING`] before its first
+    /// save, while no world runs or on a client that hosts none, and
+    /// [`Status::REFUSED`] when the file does not read. Any thread; `out` is
+    /// borrowed for the call. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.6.
+    pub save_info: extern "system" fn(me: ModHandle, out: *mut SaveInfo) -> Status,
+    /// Holds the world's saves while `held` is 1, or lets them go for 0:
+    /// the game saves only while no running mod holds them, the timed save
+    /// waiting and [`HostApi::save_world`] refused meanwhile, and the log names each
+    /// mod that holds or lets go. A mod that turns off lets go. Server only
+    /// ([`Status::MISSING`] on a build without the save layout); any thread,
+    /// taking effect after the next step; [`Status::BAD_ARGS`] for another
+    /// `held`. A panic in the loader returns [`Status::REFUSED`]. ABI 11.6.
+    pub hold_saves: extern "system" fn(me: ModHandle, held: u8) -> Status,
 }

@@ -62,7 +62,30 @@ the server's `weatherFrequency` game setting.
 going out, characters getting wet): a `WeatherAt` with weights for clear,
 rain, snow and blizzard that add up to 1, and `state()` names the strongest.
 `fronts()` lists the current fronts: layer, kind (`Clouds`, `Rain`,
-`Blizzard`), place, radius and the game time left.
+`Blizzard`), place, radius, the game time left and the GUID of the front's
+phenomenon. `load.on_front(handler)` calls `handler` about a second after a
+front starts and after it ends, with the front and whether it started, so a
+mod can give the players inside its weather a buff.
+
+```rust
+use enshwick::weather::WeatherPhenomenonEffect;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_front(|change| {
+        if change.started && change.front.kind == WeatherPhenomenonEffect::Blizzard {
+            enshwick::info!("a blizzard of {} m starts", change.front.radius);
+        }
+    })
+}
+```
+
+```luau
+enshwick.weather.on_front(function(change)
+    if change.started and change.front.kind == "Blizzard" then
+        enshwick.log.info(`a blizzard of {change.front.radius} m starts`)
+    end
+end)
+```
 
 ## Starting new weather
 
@@ -74,6 +97,11 @@ game pick anew. The game places the fronts itself, so a front may lie away
 from the players. `lasting` is how long, in game time, or the game's own
 for `None`; then the game goes on as usual. Clients follow, and the next save
 keeps it.
+
+## Adding and changing phenomena
+
+With the `typed` feature, mods add weather phenomena of their own and change
+the game's: see [Weather phenomena](weather-phenomena.md).
 
 ## Chunks
 

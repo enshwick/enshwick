@@ -15,13 +15,15 @@
 //! hosted game started to initialise, and none once that game ends.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{HookFlags, Side, Status};
+use enshwick::abi::{Event, HookFlags, Side, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::Constant;
 
@@ -303,9 +305,15 @@ pub(crate) fn hosting_begins() {
     *KEYS.relock() = Keys::OPEN;
 }
 
-/// Forgets the key, when a hosted game ends.
+/// Forgets the key and every mod's hold on saves, when a hosted game ends.
 pub(crate) fn forget() {
     *KEYS.relock() = Keys::CLOSED;
+    UNDER_WAY.store(false, Ordering::Relaxed);
+    let mut saving = SAVING.relock();
+    // A hold is on its world's saves; carried on, it would stop the next world's.
+    saving.holds.clear();
+    saving.held = None;
+    HOLDING.store(false, Ordering::Release);
 }
 
 /// The world key of a save file path: the path without `.ksd`, so the
@@ -378,9 +386,163 @@ pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
     Ok(())
 }
 
+/// The mods' holds on the world's saves.
+#[derive(Debug)]
+struct Saving {
+    /// The mods that hold saves now, in the order they asked.
+    holds: Vec<ModIndex>,
+    /// The game's save block byte from before the loader set it, while mods
+    /// hold saves.
+    held: Option<u8>,
+}
+
+static SAVING: Mutex<Saving> = Mutex::new(Saving {
+    holds: Vec::new(),
+    held: None,
+});
+/// Whether a save was under way at the last step.
+static UNDER_WAY: AtomicBool = AtomicBool::new(false);
+/// Set while a mod holds saves or the loader still has the block byte set,
+/// so a step without holds takes no lock.
+static HOLDING: AtomicBool = AtomicBool::new(false);
+
+/// Whether a save got under way since the last step, the save phase now
+/// `phase`, keeping in `under_way` whether one is.
+fn began(under_way: &AtomicBool, phase: u8) -> bool {
+    let was = under_way.swap(phase != 0, Ordering::Relaxed);
+    phase != 0 && !was
+}
+
+/// What the game's block byte, now `byte`, needs while mods hold saves
+/// (`holding`), with the byte the game had before the hold (`held`): the
+/// byte to write, if any, and the game's byte to keep. A hold sets the byte
+/// on every step, so the game clearing it does not end the hold; the last
+/// mod letting go gives the game its byte back.
+const fn block(holding: bool, held: Option<u8>, byte: u8) -> (Option<u8>, Option<u8>) {
+    match (holding, held) {
+        (true, None) => (Some(1), Some(byte)),
+        (true, Some(before)) => (if byte == 1 { None } else { Some(1) }, Some(before)),
+        (false, Some(before)) => (Some(before), None),
+        (false, None) => (None, None),
+    }
+}
+
+/// Mod `owner` holds the world's saves (`hold`) or lets them go: the game
+/// saves only while no mod holds them, and a save asked for meanwhile is
+/// refused.
+pub(crate) fn hold(loader: &Loader, owner: ModIndex, hold: bool) -> Status {
+    if layout(loader).is_none() {
+        return Status::MISSING;
+    }
+    let id = loader.mods.get(owner.get()).map_or("?", |m| m.id.as_str());
+    let mut saving = SAVING.relock();
+    let at = saving.holds.iter().position(|&m| m == owner);
+    match (hold, at) {
+        (true, None) => {
+            saving.holds.push(owner);
+            HOLDING.store(true, Ordering::Release);
+            crate::log!(INFO, "world saves held by {id}");
+        }
+        (false, Some(at)) => {
+            saving.holds.remove(at);
+            crate::log!(INFO, "world saves let go by {id}");
+        }
+        _ => {}
+    }
+    Status::OK
+}
+
+/// After each step on the server's game thread: raises
+/// `Event::WORLD_SAVING` when a save got under way, and sets the game's
+/// save block while a running mod holds saves, giving the byte back once
+/// none does.
+pub(crate) fn after_step(loader: &Loader) {
+    let Some(layout) = layout(loader) else {
+        return;
+    };
+    let Ok(server) = crate::world::server() else {
+        return;
+    };
+    // SAFETY: `world::server` returned the live server on its game thread
+    // between steps; the pointer to its save system sits at the table's
+    // `server.save_system`.
+    let system: usize = unsafe { crate::memory::read(server, layout.save_system) };
+    let phase: u8 = if system == 0 {
+        0
+    } else {
+        // SAFETY: `system` is non-zero, checked just before, and is the live
+        // server's save system, read on its game thread; its phase byte sits
+        // at the table's `save.phase`.
+        unsafe { crate::memory::read(system, layout.phase) }
+    };
+    let started = began(&UNDER_WAY, phase);
+    if HOLDING.load(Ordering::Acquire) {
+        let mut saving = SAVING.relock();
+        saving.holds.retain(|&m| !crate::host::is_off(m));
+        // SAFETY: `server` is the live server on its game thread between
+        // steps, where nothing else writes it; its byte that refuses saves
+        // sits at the table's `server.save_blocked`.
+        let byte: u8 = unsafe { crate::memory::read(server, layout.blocked) };
+        let (write, held) = block(!saving.holds.is_empty(), saving.held, byte);
+        if let Some(write) = write {
+            // SAFETY: the same byte, by the read just before.
+            unsafe { crate::memory::write(server, layout.blocked, write) };
+        }
+        saving.held = held;
+        if saving.holds.is_empty() && held.is_none() {
+            HOLDING.store(false, Ordering::Release);
+        }
+    }
+    if started {
+        loader.emit(Event::WORLD_SAVING, None, core::ptr::null());
+    }
+}
+
+/// The save of the world the server runs, for mods.
+pub(crate) fn info(loader: &Loader) -> Result<Option<crate::world_folders::SaveInfo>, Status> {
+    static UNREAD: crate::wire::Drops = crate::wire::Drops::new();
+    let key = world_key(loader).ok_or(Status::MISSING)?;
+    crate::world_folders::save_info(key).map_err(|e| {
+        if let Some(total) = UNREAD.add(1) {
+            crate::log!(
+                WARN,
+                "world {key}: its save was not read ({total} times): {e}"
+            );
+        }
+        Status::REFUSED
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_save_begins_once_and_the_next_begins_again() {
+        let under_way = AtomicBool::new(false);
+        let steps = [0, 2, 3, 0, 0, 2, 0, 1];
+        let began: Vec<bool> = steps.iter().map(|&p| began(&under_way, p)).collect();
+        assert_eq!(began, [false, true, false, false, false, true, false, true]);
+    }
+
+    #[test]
+    fn a_hold_sets_the_block_on_every_step_and_the_last_release_gives_the_game_its_byte() {
+        assert_eq!(block(true, None, 0), (Some(1), Some(0)));
+        assert_eq!(block(true, Some(0), 1), (None, Some(0)), "already set");
+        assert_eq!(
+            block(true, Some(0), 0),
+            (Some(1), Some(0)),
+            "the game cleared it, and the hold sets it again"
+        );
+        assert_eq!(block(false, Some(0), 1), (Some(0), None));
+        assert_eq!(
+            block(true, None, 1),
+            (Some(1), Some(1)),
+            "the game had it set"
+        );
+        assert_eq!(block(false, Some(1), 1), (Some(1), None));
+        assert_eq!(block(false, None, 0), (None, None), "no hold, no write");
+    }
 
     #[test]
     fn a_world_key_is_kept_once() {

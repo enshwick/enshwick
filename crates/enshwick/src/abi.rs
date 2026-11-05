@@ -313,6 +313,7 @@ pub unsafe fn write_headed<T: Headed>(out: *mut T, value: T) -> bool {
 mod actions;
 mod altars;
 mod buffs;
+mod chat;
 mod checks;
 mod content;
 mod controls;
@@ -339,6 +340,7 @@ mod world;
 pub use actions::*;
 pub use altars::*;
 pub use buffs::*;
+pub use chat::*;
 pub use checks::*;
 pub use content::*;
 pub use controls::*;
@@ -728,7 +730,13 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 184 * 8);
+    assert!(size_of::<HostApi>() == 24 + 187 * 8);
+    assert!(core::mem::offset_of!(HostApi, chat_filter) == 24 + 184 * 8);
+    assert!(core::mem::offset_of!(HostApi, save_info) == 24 + 185 * 8);
+    assert!(core::mem::offset_of!(HostApi, hold_saves) == 24 + 186 * 8);
+    assert!(size_of::<SaveInfo>() == 8 + 16 + 8 + 8 + 4 + 4);
+    assert!(size_of::<ChatLine>() == 8 + 8 + 4 + 4 + 8 + 16);
+    assert!(size_of::<ChatRewrite>() == 8 + 8 + 4 + 4);
     assert!(core::mem::offset_of!(HostApi, ui_extension) == 24 + 182 * 8);
     assert!(size_of::<UiExtension>() == 8 + 16 + 8);
     assert!(core::mem::offset_of!(HostApi, item_filter) == 24 + 183 * 8);
@@ -855,8 +863,8 @@ const _: () = {
     assert!(size_of::<QuestData>() == 8 + 8);
     assert!(core::mem::offset_of!(HostApi, weather_at) == 24 + 82 * 8);
     assert!(core::mem::offset_of!(HostApi, set_weather) == 24 + 84 * 8);
-    // Frozen: written as an array.
-    assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8);
+    // Written as an array at the stride of the mod's own header.
+    assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8 + 16);
     assert!(size_of::<ChunkData>() == 8 + 16);
     assert!(core::mem::offset_of!(HostApi, terrain_materials) == 24 + 85 * 8);
     // Frozen: written as an array.
@@ -894,7 +902,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, teleport) == 24 + 60 * 8);
     assert!(size_of::<TeleportRequest>() == 8 + 8 + 24 + 16);
     assert!(core::mem::offset_of!(HostApi, spawn) == 24 + 61 * 8);
-    assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8);
+    assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, build_filter) == 24 + 63 * 8);
     assert!(size_of::<CraftCheck>() == 8 + 16);
     assert!(size_of::<BuildCheck>() == 8 + 8 + 24);

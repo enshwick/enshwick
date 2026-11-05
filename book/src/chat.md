@@ -26,6 +26,60 @@ server posts it after the next step. Each line of `text` becomes a message of
 its own, and a message keeps at most 16 lines. The queue holds at most 256
 lines; more are dropped.
 
+## Hearing and filtering players' lines
+
+On the server, a mod hears every line that reaches the chat, and may drop or
+rewrite what players type before anyone reads it.
+
+`load.on_chat_said(handler)` calls `handler` after the step with a
+`ChatLine`: the sender's account and character, its kind (`Player`, `Emote`
+or `Notice`, such as a player joining) and its text. A player's line arrives
+as the filters left it, at most eight a second per player; lines that mods
+send never arrive.
+
+`load.on_chat(filter)` runs `filter` on each line a player types, inside the
+game's chat post, after the chat mute. It answers `ChatVerdict::Keep`,
+`Drop` or `Rewrite(text)`. Filters of all mods run in load order: a drop
+stops the filters after it, and a rewrite hands its text on. A muted
+player's line reaches no filter and no handler. A filter that panics turns
+off alone, and lines pass it.
+
+```rust
+use enshwick::chat::ChatVerdict;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_chat(|line| {
+        if line.text.contains("spoiler") {
+            ChatVerdict::Rewrite("[hidden]".to_owned())
+        } else {
+            ChatVerdict::Keep
+        }
+    })?;
+    load.on_chat_said(|line| enshwick::info!("{:?} line of {} bytes", line.kind, line.text.len()))
+}
+```
+
+From Luau, the same calls are `enshwick.chat.on_chat(fn)` and
+`enshwick.chat.on_chat_said(fn)`; a Luau filter returns `false` to drop the
+line, a string to rewrite it, and nil or `true` to keep it. An empty
+rewrite drops the line too.
+
+```luau
+enshwick.chat.on_chat(function(line)
+    if line.text:find("spoiler") then
+        return "[hidden]"
+    end
+    return nil
+end)
+enshwick.chat.on_chat_said(function(line)
+    enshwick.log.info(`{line.kind} line of {#line.text} bytes`)
+end)
+```
+
+Every server mod reads the full text of every line. The loader logs only
+counts and lengths. A mod that stores what players type says so on its
+player page.
+
 ## Notices on screen
 
 Unstable: needs the `unstable` feature and may change in any release

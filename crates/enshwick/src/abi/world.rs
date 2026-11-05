@@ -159,6 +159,7 @@ impl TeleportRequest {
 ///     level: 12,
 ///     reserved: 0,
 ///     lifetime_ns: 0,
+///     flags: 0,
 /// };
 /// assert_eq!(wolf.level, 12);
 /// ```
@@ -181,9 +182,17 @@ pub struct SpawnRequest {
     /// Game time in nanoseconds after which the game removes the entity; 0
     /// to keep it.
     pub lifetime_ns: u64,
+    /// [`SpawnRequest::DO_NOT_SAVE`], or 0. ABI 11.6.
+    pub flags: u64,
 }
 
-impl_headed!(SpawnRequest);
+impl_headed!(SpawnRequest, born = 80);
+
+impl SpawnRequest {
+    /// The entity stays out of the world's save, as the game's own passing
+    /// animals do: it is gone once the world loads again.
+    pub const DO_NOT_SAVE: u64 = 1;
+}
 
 /// A player's craft request, handed to the filters registered with
 /// [`HostApi::craft_filter`](super::HostApi::craft_filter) before the server crafts.
@@ -463,6 +472,7 @@ impl KnowledgeInfo {
 ///     radius: 900.0,
 ///     reserved: 0,
 ///     remaining: 300_000_000_000,
+///     phenomenon: [0; 16],
 /// };
 /// assert_eq!(storm.effect, WeatherFront::RAIN);
 /// ```
@@ -484,9 +494,55 @@ pub struct WeatherFront {
     pub reserved: u32,
     /// How long it has left, in game nanoseconds.
     pub remaining: i64,
+    /// The GUID of its phenomenon in the weather resource, all zero when
+    /// the loader did not find it. ABI 11.6.
+    pub phenomenon: [u8; 16],
 }
 
-impl_headed!(WeatherFront);
+impl_headed!(WeatherFront, born = 56);
+
+/// A world's save on disk, written by
+/// [`HostApi::save_info`](super::HostApi::save_info).
+///
+/// The mod owns it and passes it as `out`, its header set with
+/// [`Header::of`]; the loader writes it on the calling thread during the
+/// call, up to the size the header states, and keeps no pointer to it. It
+/// holds no pointers. Layout grows only by appending; read a later field
+/// after [`Header::covers`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, SaveInfo};
+///
+/// let info = SaveInfo {
+///     header: Header::of::<SaveInfo>(),
+///     world: [7; 16],
+///     saved_at: 1_762_300_000,
+///     size: 4_096,
+///     backups: 2,
+///     reserved: 0,
+/// };
+/// assert_eq!(info.backups, 2);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct SaveInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The world's GUID, which stays the same across its saves.
+    pub world: [u8; 16],
+    /// When the save was written, in seconds since the Unix epoch.
+    pub saved_at: u64,
+    /// The save file's size in bytes.
+    pub size: u64,
+    /// The backups the game keeps beside it, 0 to 10.
+    pub backups: u32,
+    /// Zero.
+    pub reserved: u32,
+}
+
+impl_headed!(SaveInfo);
 
 impl WeatherFront {
     /// Clouds without rain, or nothing.

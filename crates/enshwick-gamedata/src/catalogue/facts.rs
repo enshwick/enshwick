@@ -725,6 +725,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::ecs::CurrentTransform", "transform"),
     ),
     (ids::USED_ITEM, Fact::Type("keen::ecs::UsedItem")),
+    (ids::DO_NOT_SAVE, Fact::Type("keen::ecs::DoNotSave")),
     (ids::LABEL, Fact::Type("keen::ecs::CustomPlayerString")),
     (
         ids::INVENTORY_SETUP,

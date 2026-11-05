@@ -257,6 +257,9 @@ pub(crate) extern "system" fn destroy(_me: ModHandle, entity: crate::Entity) -> 
 
 pub(crate) extern "system" fn save_world(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
+        if s.save.held {
+            return Status::REFUSED;
+        }
         s.saves += 1;
         Status::OK
     })

@@ -52,6 +52,7 @@ mod tests {
             radius: 300.0,
             reserved: 0,
             remaining: 90_000_000_000,
+            phenomenon: [9; 16],
         };
         loader.set_weather([0.1, 0.2, 0.6, 0.1], &[front]);
         assert_eq!(
@@ -66,6 +67,7 @@ mod tests {
                 && (fronts[0].position[2] + 7.0).abs() < 1e-9
         );
         assert_eq!(fronts[0].remaining, Duration::from_secs(90));
+        assert_eq!(fronts[0].phenomenon, Some(enshwick::content::Guid([9; 16])));
 
         weather
             .set(Forecast::Clear, Some(Duration::from_mins(10)))

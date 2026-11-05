@@ -223,6 +223,10 @@ without_data! {
     WorldLoaded = WORLD_LOADED;
     /// [`Event::WORLD_SAVED`].
     WorldSaved = WORLD_SAVED;
+    /// [`Event::WORLD_SAVING`]; what the mod writes now beside the save, such
+    /// as [`crate::state::WorldStore`] and files in its world data folder,
+    /// belongs to this save.
+    WorldSaving = WORLD_SAVING;
     /// [`Event::SHUTDOWN_STARTED`].
     ShutdownStarted = SHUTDOWN_STARTED;
     /// [`Event::JOIN_REFUSED`]; [`crate::mods::join_missing`] lists the mods.

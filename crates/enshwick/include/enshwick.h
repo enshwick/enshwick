@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 5
+#define ENSHWICK_ABI_MINOR 6
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -667,6 +667,66 @@ typedef uint32_t EnshwickChangeOp;
 // takes it.
 #define EnshwickChangeOp_RESET 2
 
+// A chat line on the server, borrowed for the call that hands it over.
+//
+// Raised with `Event::CHAT_SAID` after the step
+// for every line that reached the chat, and handed to each
+// `ChatFilterFn` for a player's line before anyone reads it. `text` is
+// valid UTF-8 (bytes that are not are replaced), at most the game's own
+// limit of 1024 bytes, and lives only for the call. Layout grows only by
+// appending; read a later field after `Header::covers`.
+typedef struct EnshwickChatLine {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The sender's account key; zero when the game names none.
+  EnshwickPlayerKey player;
+  // The sender's character, `Entity(0)` when it has none in the world.
+  EnshwickEntity entity;
+  // `ChatLine::PLAYER`, `ChatLine::EMOTE` or `ChatLine::NOTICE`.
+  uint32_t kind;
+  // The two text tags the game posts with the line, zero when unused.
+  uint32_t loca[2];
+  // The text, UTF-8, borrowed for the call; empty for a notice made of
+  // text tags.
+  struct EnshwickStr text;
+} EnshwickChatLine;
+// A line a player typed: the game posted it for what their client
+// sent, whatever chat type the client named.
+#define EnshwickChatLine_PLAYER 0
+// An emote the server posted for a player.
+#define EnshwickChatLine_EMOTE 1
+// Any other line the server posted itself, such as a player joining
+// or leaving.
+#define EnshwickChatLine_NOTICE 2
+
+// The buffer a `ChatFilterFn` writes a rewritten line into.
+//
+// The loader owns `buffer`, writable for `capacity` bytes during the call
+// only; the filter writes UTF-8 into it, sets `len` and answers
+// `ChatRewrite::REWRITTEN`. A `len` over `capacity`, or bytes that are
+// not UTF-8, keep the line as it was. The loader owns the struct too and
+// hands it to one filter at a time on the game thread, never null; the
+// filter keeps no pointer past the call. Layout grows only by appending;
+// read a later field after `Header::covers`.
+typedef struct EnshwickChatRewrite {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // Where the filter writes the new text; never null.
+  uint8_t *buffer;
+  // Bytes `buffer` holds: the game's limit for a line.
+  uint32_t capacity;
+  // Bytes the filter wrote.
+  uint32_t len;
+} EnshwickChatRewrite;
+// The line goes on as it is.
+#define EnshwickChatRewrite_KEEP 0
+// The line is dropped as the chat mute drops it: nobody reads it, and
+// the filters after this one do not run.
+#define EnshwickChatRewrite_DROP 1
+// The line goes on as the text written into the buffer; an empty text
+// drops it as `ChatRewrite::DROP` does.
+#define EnshwickChatRewrite_REWRITTEN 2
+
 // The data of the `ChunkLoaded` and
 // `ChunkUnloaded` events.
 typedef struct EnshwickChunkData {
@@ -1078,6 +1138,17 @@ typedef uint32_t EnshwickEvent;
 // Deaths the game keeps no record of, such as freezing or an
 // administrator's kill, raise none. Server only.
 #define EnshwickEvent_PLAYER_DIED 20
+// A line reached the server's chat: a player's line the chat filters
+// kept, as they left it, an emote or another line the server posted;
+// data is a `ChatLine`. Lines the loader posts for
+// mods raise none, and a player's lines raise at most eight a second.
+// Raised on the game thread after the step. Server only. ABI 11.6.
+#define EnshwickEvent_CHAT_SAID 21
+// A save of the world got under way: what a mod writes now beside the
+// save belongs to it, and `Event::WORLD_SAVED` follows once it is on
+// disk; no data. Raised on the game thread after the step that started
+// it. Server only. ABI 11.6.
+#define EnshwickEvent_WORLD_SAVING 22
 
 // A mod event a mod defines, or the one it subscribes to.
 typedef struct EnshwickEventSpec {
@@ -1830,7 +1901,12 @@ typedef struct EnshwickSpawnRequest {
   // Game time in nanoseconds after which the game removes the entity; 0
   // to keep it.
   uint64_t lifetime_ns;
+  // `SpawnRequest::DO_NOT_SAVE`, or 0. ABI 11.6.
+  uint64_t flags;
 } EnshwickSpawnRequest;
+// The entity stays out of the world's save, as the game's own passing
+// animals do: it is gone once the world loads again.
+#define EnshwickSpawnRequest_DO_NOT_SAVE 1
 
 // A mod's craft filter: the request and the pointer given at registration;
 // returns 1 to let it through, 0 to refuse it.
@@ -1923,6 +1999,9 @@ typedef struct EnshwickWeatherFront {
   uint32_t reserved;
   // How long it has left, in game nanoseconds.
   int64_t remaining;
+  // The GUID of its phenomenon in the weather resource, all zero when
+  // the loader did not find it. ABI 11.6.
+  uint8_t phenomenon[16];
 } EnshwickWeatherFront;
 // Clouds without rain, or nothing.
 #define EnshwickWeatherFront_NONE 0
@@ -3008,6 +3087,42 @@ typedef struct EnshwickItemAction {
 // The game handles a refused action as one it already ran, so nothing
 // moves and nothing is lost.
 typedef uint8_t (*EnshwickItemActionFn)(const struct EnshwickItemAction *call, void *user);
+
+// A mod's chat filter, registered with
+// `HostApi::chat_filter`.
+//
+// It is called on the server's game thread, inside the game's chat post,
+// for a player's line after the chat mute; it answers `ChatRewrite::KEEP`,
+// `ChatRewrite::DROP` or `ChatRewrite::REWRITTEN`, any other answer
+// keeping the line. `line` and `rewrite` are borrowed for the call and
+// never null; `line.text` is the text after the filters before this one.
+// Never re-entered; it must not unwind.
+typedef uint8_t (*EnshwickChatFilterFn)(const struct EnshwickChatLine *line,
+                                        struct EnshwickChatRewrite *rewrite,
+                                        void *user);
+
+// A world's save on disk, written by
+// `HostApi::save_info`.
+//
+// The mod owns it and passes it as `out`, its header set with
+// `Header::of`; the loader writes it on the calling thread during the
+// call, up to the size the header states, and keeps no pointer to it. It
+// holds no pointers. Layout grows only by appending; read a later field
+// after `Header::covers`.
+typedef struct EnshwickSaveInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The world's GUID, which stays the same across its saves.
+  uint8_t world[16];
+  // When the save was written, in seconds since the Unix epoch.
+  uint64_t saved_at;
+  // The save file's size in bytes.
+  uint64_t size;
+  // The backups the game keeps beside it, 0 to 10.
+  uint32_t backups;
+  // Zero.
+  uint32_t reserved;
+} EnshwickSaveInfo;
 
 // The table of services the loader offers a mod.
 //
@@ -4534,6 +4649,33 @@ typedef struct EnshwickHostApi {
   // `Status::MISSING` on a build without the player input it reads. A
   // panic in the loader returns `Status::REFUSED`.
   EnshwickStatus (*item_filter)(EnshwickModHandle me, EnshwickItemActionFn callback, void *user);
+  // Adds `callback` with `user` to the chat filters, which run in load
+  // order on the server's game thread, inside the game's chat post, on
+  // every line a player typed that the chat mute let through; the first
+  // `ChatRewrite::DROP` drops the line,
+  // and a rewrite hands the new text to the filters after it. Lines the
+  // loader posts for mods pass no filter. Server only: on a client it
+  // runs while it hosts a game (`Status::MISSING` on a build without
+  // the chat post). Allowed during `enshwick_mod_init` only
+  // (`Status::TOO_LATE` after it); `callback` and `user` are kept for
+  // the life of the process and never freed by the loader. A panic in
+  // the loader returns `Status::REFUSED`. ABI 11.6.
+  EnshwickStatus (*chat_filter)(EnshwickModHandle me, EnshwickChatFilterFn callback, void *user);
+  // Writes the save of the world the server runs to `out`, which the
+  // mod starts with `Header::of`: `Status::MISSING` before its first
+  // save, while no world runs or on a client that hosts none, and
+  // `Status::REFUSED` when the file does not read. Any thread; `out` is
+  // borrowed for the call. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.6.
+  EnshwickStatus (*save_info)(EnshwickModHandle me, struct EnshwickSaveInfo *out);
+  // Holds the world's saves while `held` is 1, or lets them go for 0:
+  // the game saves only while no running mod holds them, the timed save
+  // waiting and `HostApi::save_world` refused meanwhile, and the log names each
+  // mod that holds or lets go. A mod that turns off lets go. Server only
+  // (`Status::MISSING` on a build without the save layout); any thread,
+  // taking effect after the next step; `Status::BAD_ARGS` for another
+  // `held`. A panic in the loader returns `Status::REFUSED`. ABI 11.6.
+  EnshwickStatus (*hold_saves)(EnshwickModHandle me, uint8_t held);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.
