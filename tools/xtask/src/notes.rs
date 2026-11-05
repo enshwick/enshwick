@@ -277,6 +277,53 @@ mod tests {
     }
 
     #[test]
+    fn the_notes_may_fill_a_github_release_body_but_not_overflow_it() -> Result<(), String> {
+        let pick = |issues: &str| {
+            notes(
+                "1.0.0-alpha.12",
+                &[],
+                &[("enshwick".to_owned(), "- a".to_owned())],
+                issues,
+            )
+        };
+        let base = pick("x")?.chars().count();
+        let fits = "x".repeat(MAX_BODY - base + 1);
+        assert_eq!(pick(&fits)?.chars().count(), MAX_BODY);
+        assert!(pick(&format!("{fits}x")).is_err());
+        Ok(())
+    }
+
+    fn package(name: &str, dir: &str) -> Package {
+        Package {
+            name: name.to_owned(),
+            version: String::new(),
+            dir: dir.to_owned(),
+            deps: Vec::new(),
+            windows_only: false,
+            windows_tests: false,
+        }
+    }
+
+    #[test]
+    fn the_changes_take_each_changelog_with_the_version_and_skip_the_rest() -> Result<(), String> {
+        let packages = [
+            package("enshwick", "crates/enshwick"),
+            package("xtask", "tools/xtask"),
+        ];
+        let changes = changes(&workspace_root(), &packages, "1.0.0-alpha.11")?;
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].0, "enshwick");
+        assert!(changes[0].1.starts_with("### "));
+        Ok(())
+    }
+
+    #[test]
+    fn a_version_no_changelog_has_is_refused() {
+        let packages = [package("enshwick", "crates/enshwick")];
+        assert!(changes(&workspace_root(), &packages, "1.0.0-alpha.0").is_err());
+    }
+
+    #[test]
     fn a_release_version_gets_no_alpha_notes() {
         assert!(notes("1.0.0", &[], &[], "").is_err());
     }
