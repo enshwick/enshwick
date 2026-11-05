@@ -54,15 +54,16 @@ rebuilds only for a new major. Pin `enshwick` with `=` in a mod's
 writes it; a caret requirement lets `cargo update` move the mod to a
 release of a newer minor, which older loaders refuse.
 
-CI builds the rolling `dev` loader from the newest commit of `main`. To load
-under it, build the mod against `main` from git, pinned to a commit:
+A loader built from a commit of `main` between two alphas, such as one from
+`cargo xtask dist`, loads a mod built against `main` from git, pinned to a
+commit:
 
 ```toml
 [dependencies]
 enshwick = { git = "https://github.com/enshwick/enshwick", rev = "<commit>" }
 ```
 
-The mod loads while the `dev` loader has that commit's major and its minor or
+The mod loads while that loader has the commit's major and its minor or
 a newer one.
 
 ## How does `enshwick` version its API?

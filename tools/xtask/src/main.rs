@@ -15,7 +15,8 @@
 //! or with `--all` every target ([`fuzz`]).
 //!
 //! `cargo xtask dist` writes `enshwick.zip`, the loader that players unpack
-//! into the game folder ([`dist`]). `cargo xtask header` rewrites the ABI's
+//! into the game folder ([`dist`]), and `cargo xtask notes` the notes of its
+//! alpha release ([`notes`]). `cargo xtask header` rewrites the ABI's
 //! C header, which the check holds to the ABI module and its golden layout
 //! ([`header`]).
 
@@ -30,6 +31,7 @@ mod crate_rules;
 mod dist;
 mod fuzz;
 mod header;
+mod notes;
 mod ranges;
 mod rules;
 mod wine;
@@ -42,7 +44,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -74,6 +76,7 @@ fn run(args: &[String]) -> Result<bool, String> {
     match task.as_str() {
         "check" => {}
         "dist" => return dist::run(rest),
+        "notes" => return notes::run(rest),
         "header" if rest.is_empty() => return header::run(&workspace_root()),
         _ => return Err(USAGE.to_owned()),
     }

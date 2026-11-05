@@ -1,10 +1,8 @@
-# A development build of the commit it runs on, until the first public
-# release, 1.0.0: `cargo xtask dist` on a fresh GitHub-hosted runner,
-# whose files replace those of the single prerelease `dev`. enshwick.zip
-# there holds the stub and the loader; each mod releases from its own
-# repository. Every push to main that changes what the archive builds from
-# runs it, so `dev` always carries main; a run by hand on main rebuilds it,
-# or only builds.
+# A development build of the commit it runs on: `cargo xtask dist` on a
+# fresh GitHub-hosted runner, its files kept as the run's artefact and its
+# archive scanned on VirusTotal. Every push to main that changes what the
+# archive builds from runs it, and so saves the Windows SDK cache the alpha
+# releases (alpha.yml) restore; players download the alphas.
 name: dev-build
 
 on:
@@ -20,23 +18,17 @@ on:
       - .github/workflows/dev-build.yml
       - ".github/actions/**"
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Replace the dev prerelease; off builds the archives only
-        type: boolean
-        default: true
 
 permissions: {}
 
-# One build at a time, never cut off half way through replacing the files;
-# of the pushes that wait, only the newest is built.
+# A newer push supersedes the build of an older one.
 concurrency:
   group: dev-build
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   dist:
-    # Players download `dev`, so it is built only from main.
+    # Only main saves the release cache of the Windows SDK.
     if: github.ref == 'refs/heads/main'
     # The release environment admits main only.
     environment: release
@@ -45,10 +37,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:
-      contents: write
-      # The build provenance attestations of the archives.
-      id-token: write
-      attestations: write
+      contents: read
     env:
       HAS_VIRUSTOTAL_KEY: ${{ secrets.VIRUSTOTAL_API_KEY != '' }}
     steps:
@@ -83,58 +72,11 @@ jobs:
           path: ${{ runner.tool_cache }}/xwin
           key: xwin-release-${{ runner.os }}-0.23.1-v1
 
-      - name: Build provenance
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          subject-path: ${{ runner.temp }}/dev/*
-
-      # GitHub refuses to point a tag at a commit whose workflows differ from
-      # main's head without the workflows permission, which the job token
-      # cannot have: a run that main has passed with a workflow change, or a
-      # rerun, moves `dev` with the app's token.
-      - name: Token for the dev tag
-        id: token
-        if: github.event_name == 'push' || inputs.publish
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          client-id: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
-          private-key: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
-          repositories: ${{ github.event.repository.name }}
-          permission-contents: write
-          permission-workflows: write
-
-      - name: Publish
-        if: github.event_name == 'push' || inputs.publish
-        env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-        working-directory: ${{ runner.temp }}/dev
-        run: |
-          short=$(git -C "$GITHUB_WORKSPACE" rev-parse --short=7 HEAD)
-          title="Enshwick dev $short"
-          notes="Development build of $GITHUB_SHA: $(git -C "$GITHUB_WORKSPACE" log -1 --format=%s).
-
-          Until the first public release, 1.0.0, this prerelease is the only build to download; every run replaces it. Extract enshwick.zip into the folder that holds enshrouded.exe or enshrouded_server.exe."
-          assets=(*.zip *.pdb *.cdx.json)
-          if gh release view dev --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
-            gh release edit dev --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes" --prerelease --latest=false
-            gh release upload dev "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
-            # Files of an earlier build that this one no longer has go.
-            gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' |
-              while read -r name; do
-                case " ${assets[*]} " in
-                  *" $name "*) ;;
-                  *) gh release delete-asset dev "$name" --yes --repo "$GITHUB_REPOSITORY" ;;
-                esac
-              done
-          else
-            # A tag left without its release moves too; gh would build on it as it is.
-            if gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" > /dev/null 2>&1; then
-              gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
-            fi
-            gh release create dev "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "$title" --notes "$notes" --prerelease --latest=false
-          fi
+          name: enshwick-${{ github.sha }}
+          path: ${{ runner.temp }}/dev/*
+          if-no-files-found: error
 
       # VirusTotal unpacks and scans each archive; the engines that flag it
       # go to the run's summary and a warning, so a false positive reaches

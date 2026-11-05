@@ -72,8 +72,8 @@ the crate too. The crate holds:
 - `README.md` and `.gitignore`.
 
 `--enshwick-rev <commit>` builds the mod on a commit of this repository's
-`main` branch from git instead of the release, as the rolling `dev` loader is
-built.
+`main` branch from git instead of the release, for a loader built from that
+commit.
 
 Inside a Cargo workspace the crate joins it: `new` adds its folder to the
 workspace's `members`, unless a pattern there already covers it. The release

@@ -1,5 +1,5 @@
-//! `cargo xtask dist`: `enshwick.zip`, the archive of the `dev` prerelease,
-//! in `target/dist`. A player unpacks it into the game folder: the stub, the
+//! `cargo xtask dist`: `enshwick.zip`, the archive of an alpha release, in
+//! `target/dist`. A player unpacks it into the game folder: the stub, the
 //! loader and the license. Each mod ships in its own archive from its own
 //! repository.
 
@@ -99,7 +99,7 @@ fn build() -> Result<PathBuf, String> {
     } else {
         vec!["xwin".to_owned(), "build".to_owned()]
     };
-    // CI's dev builds embed the dependency tree in each DLL, for
+    // CI's builds embed the dependency tree in each DLL, for
     // `cargo audit bin` and other scanners.
     if std::env::var_os("ENSHWICK_AUDITABLE").is_some_and(|value| value == "1") {
         args.insert(0, "auditable".to_owned());

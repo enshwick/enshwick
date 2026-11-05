@@ -45,17 +45,18 @@ unless the DLL has that version:
 cargo enshwick manifest target/x86_64-pc-windows-msvc/release/my_mod.dll --expect-version 0.3.0
 ```
 
-## The development build
+## Alpha releases
 
-Until the first public release, 1.0.0, Enshwick has no regular releases. Its
-crates carry prerelease versions, `1.0.0-alpha.N`, and a mod depends on
-`enshwick = "=1.0.0-alpha.N"`. The prerelease tagged `dev` always carries the
-newest `main`:
-[`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip)
-there holds the stub and the loader, and no mod. Two development builds of
-one commit join each other; builds of different commits carry the same
-versions, so the join check does not tell them apart. How the platform
-builds and releases its own crates is in
+Until the first public release, 1.0.0, Enshwick ships alphas. Its crates
+carry prerelease versions, `1.0.0-alpha.N`, and a mod depends on
+`enshwick = "=1.0.0-alpha.N"`. Each alpha is a GitHub prerelease tagged
+`v1.0.0-alpha.N` on the
+[releases page](https://github.com/enshwick/enshwick/releases): its
+`enshwick.zip` holds the stub and the loader, and no mod, and its notes list
+the game builds it supports and what changed. Before 1.0 any alpha may change
+the API, the ABI, file layouts, settings and mod ids, so a mod built for one
+alpha may need a rebuild for the next. How the platform builds and releases
+its own crates is in
 [CONTRIBUTING.md](https://github.com/enshwick/enshwick/blob/main/CONTRIBUTING.md#releases).
 
 The loader's build tables (see [Finding the game](finding-the-game.md)) are
