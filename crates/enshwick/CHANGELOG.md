@@ -73,7 +73,10 @@ Each entry names the pull request that made the change.
   workshop limit lift work on a symbol an engine route found and checked
   when no table pins it: the route's match stands for the pinned bytes,
   the division's span ends with its function, and the stop block ends at
-  its jump to the next recipe or its padding (#946).
+  its jump to the next recipe or its padding (#946). A wait is hooked only
+  where the code from the division multiplies by the time left and keeps
+  it up to the wait, so a moved register leaves the wait unhooked instead
+  of giving a wrong time left (#946).
 - **Breaking:** `script::Field::ty` is no longer `const`: a field gives its
   type when asked, so a game type may hold itself (#940).
 - A Luau mod's `u64` or `i64`, such as a key, takes a whole number up to

@@ -233,6 +233,11 @@ fn routed_symbols_without_table_checks_serve_their_features() {
                         crate::pacing::after_division(divide, span, at),
                         "{var}: {wait}"
                     );
+                    let between = image.read(base + divide, at - divide).unwrap();
+                    assert!(
+                        crate::pacing::keeps_left(between, base + divide),
+                        "{var}: {wait} reads the time left"
+                    );
                 }
             }
         }

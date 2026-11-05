@@ -34,6 +34,38 @@ pub(crate) fn after_division(divide: u64, span: usize, wait: u64) -> bool {
     u64::try_from(span).is_ok_and(|span| wait > divide && wait - divide < span)
 }
 
+/// Whether `code`, the bytes from the division at `divide` up to a wait,
+/// multiplies by `rbx`, never writes it after, and ends on an instruction
+/// boundary at the wait, so `rbx` still holds the nanoseconds left there: a
+/// routed division has no table pattern over that code to show it.
+pub(crate) fn keeps_left(code: &[u8], divide: u64) -> bool {
+    use iced_x86::{Code, Decoder, DecoderOptions, InstructionInfoFactory, OpAccess, Register};
+    let mut info = InstructionInfoFactory::new();
+    let mut multiplied = false;
+    let mut decoder = Decoder::with_ip(64, code, divide, DecoderOptions::NONE);
+    while decoder.can_decode() {
+        let insn = decoder.decode();
+        if insn.is_invalid() {
+            return false;
+        }
+        let writes = info.info(&insn).used_registers().iter().any(|used| {
+            used.register().full_register() == Register::RBX
+                && matches!(
+                    used.access(),
+                    OpAccess::Write
+                        | OpAccess::CondWrite
+                        | OpAccess::ReadWrite
+                        | OpAccess::ReadCondWrite
+                )
+        });
+        if multiplied && writes {
+            return false;
+        }
+        multiplied |= insn.code() == Code::Imul_rm64 && insn.op0_register() == Register::RBX;
+    }
+    multiplied
+}
+
 /// A mod's handler with its pointer, kept for the life of the process as a
 /// hook's user pointer.
 #[derive(Clone, Copy, Debug)]
@@ -184,12 +216,27 @@ fn division(loader: &Loader) -> Option<(u64, usize)> {
     Some((at, span?))
 }
 
-/// The address of the wait `id` on this build, when its code is the table's
-/// and it lies in the code `division`'s pattern spans, so the hook reads
-/// the time left.
+/// The address of the wait `id` on this build, when its code is the table's,
+/// it lies in the code `division` spans and that code keeps the time left in
+/// `rbx` up to it ([`keeps_left`]), so the hook reads the time left.
 fn checked_wait(loader: &Loader, id: Symbol, division: Option<(u64, usize)>) -> Option<u64> {
     let at = verified(loader, id)?;
-    let checked = division.is_some_and(|(divide, span)| after_division(divide, span, at));
+    let checked = division.is_some_and(|(divide, span)| {
+        let len = at
+            .checked_sub(divide)
+            .and_then(|len| usize::try_from(len).ok());
+        let (Ok(from), Some(len)) = (usize::try_from(divide), len) else {
+            return false;
+        };
+        after_division(divide, span, at) && {
+            let mut code = vec![0u8; len];
+            // SAFETY: `divide` and `at` are checked code of one function of
+            // the game's image (the span ends inside it), mapped and readable
+            // for the life of the process, `at` after `divide`.
+            unsafe { crate::memory::read_bytes(from, 0, &mut code) };
+            keeps_left(&code, divide)
+        }
+    });
     if !checked {
         crate::log!(
             WARN,
@@ -325,6 +372,33 @@ mod tests {
         assert!(!after_division(0x1000, 0x40, 0xff0), "before it");
     }
 
+    /// A wait reads the time left only where the code from the division
+    /// multiplies by `rbx` and leaves it alone up to the wait, which starts
+    /// an instruction: a routed division's function span shows neither.
+    #[test]
+    fn a_wait_reads_the_time_left_only_while_rbx_keeps_it() {
+        // mov rax,imm64; mov edi,-1; imul rbx; sar rdx,0x12; mov rax,rdx.
+        let division: &[u8] = &[
+            0x48, 0xb8, 0xdb, 0x34, 0xb6, 0xd7, 0x82, 0xde, 0x1b, 0x43, 0xbf, 0xff, 0xff, 0xff,
+            0xff, 0x48, 0xf7, 0xeb, 0x48, 0xc1, 0xfa, 0x12, 0x48, 0x8b, 0xc2,
+        ];
+        assert!(keeps_left(division, 0x1000));
+        let mut clobbered = division.to_vec();
+        clobbered.extend([0x48, 0x8b, 0xd8]); // mov rbx,rax
+        assert!(!keeps_left(&clobbered, 0x1000), "rbx written after");
+        let mut low = division.to_vec();
+        low.extend([0x31, 0xdb]); // xor ebx,ebx
+        assert!(!keeps_left(&low, 0x1000), "ebx is rbx");
+        assert!(!keeps_left(&division[..15], 0x1000), "no imul rbx");
+        assert!(
+            !keeps_left(&division[..division.len() - 1], 0x1000),
+            "the wait inside an instruction"
+        );
+        let mut before = vec![0x48, 0x8b, 0xd8];
+        before.extend(division);
+        assert!(keeps_left(&before, 0x1000), "rbx set before the imul");
+    }
+
     /// In every embedded table, the division's pattern starts at the
     /// division and spans each wait of the event loop the table has.
     #[test]
@@ -393,6 +467,9 @@ mod tests {
                     .symbol(wait.id())
                     .unwrap_or_else(|| panic!("{variable}: no {wait}"));
                 assert!(after_division(divide, span, address), "{variable}: {wait}");
+                let base = image.base();
+                let between = image.read(base + divide, address - divide).unwrap();
+                assert!(keeps_left(between, base + divide), "{variable}: {wait}");
             }
         }
     }
