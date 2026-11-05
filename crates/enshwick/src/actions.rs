@@ -17,9 +17,9 @@
 //!   `weather set storm 10` in a dedicated server's command file.
 //!
 //! The server decides everything: the client only sends what the player
-//! picked, and the server checks again on every run. Texts are keys of the mod's [`Texts`], shown in each player's
-//! language; a key without a text shows as it is, so plain English works
-//! too.
+//! picked, and the server checks again on every run. Texts are keys of the
+//! mod's [`Texts`], shown in each player's language; a key without a text
+//! shows as it is, so plain English works too.
 //!
 //! # Examples
 //!
@@ -325,9 +325,8 @@ impl Actions {
 
     /// On a client, asks the server to run this mod's action `action` with
     /// `args`: the server checks who may run it, runs the handler and shows
-    /// the reply as a notice. A
-    /// [control](crate::controls)'s handler uses it for what changes the
-    /// world.
+    /// the reply as a notice. A [control](crate::controls)'s handler uses it
+    /// for what changes the world.
     ///
     /// # Errors
     ///

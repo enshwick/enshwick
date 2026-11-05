@@ -219,6 +219,18 @@ fn snapshot() -> &'static ArcSwap<Sets> {
         .get_or_init(|| ArcSwap::from_pointee(Vec::new()))
 }
 
+/// The marker's label, [`escape`](super::escape)d as the map shows it.
+fn label(marker: &UiMarker) -> Box<[u8]> {
+    let mut label = Vec::new();
+    // SAFETY: the mod's label is borrowed for the `set` call this runs in
+    // and copied here before it returns, so it outlives every use.
+    super::escape(
+        &mut label,
+        unsafe { marker.label.as_str() }.unwrap_or("").as_bytes(),
+    );
+    label.into()
+}
+
 /// Replaces mod `owner`'s markers with `markers`.
 pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Status {
     if given.len() > MAX_MARKERS {
@@ -229,9 +241,7 @@ pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Status {
         .map(|m| Owned {
             owner,
             position: m.position,
-            // SAFETY: the mod's label is borrowed for this call and copied
-            // here before `set` returns, so it outlives every use.
-            label: unsafe { m.label.as_str() }.unwrap_or("").as_bytes().into(),
+            label: label(m),
             color: u8::try_from(m.color.min(UiMarker::BLACK)).unwrap_or(0),
             marker_type: NonZeroU32::new(m.marker_type),
         })
@@ -594,6 +604,18 @@ mod tests {
             ..client_426()
         };
         assert!(!overflowing.fits(), "a field whose end overflows");
+    }
+
+    #[test]
+    fn a_marker_label_shows_each_backslash_as_written() {
+        let marker = UiMarker {
+            header: enshwick::abi::Header::of::<UiMarker>(),
+            position: [0; 3],
+            label: enshwick::abi::Str::new(r"C:\new\owners"),
+            color: UiMarker::GREEN,
+            marker_type: 0,
+        };
+        assert_eq!(&*label(&marker), br"C:\\new\\owners");
     }
 
     #[test]
