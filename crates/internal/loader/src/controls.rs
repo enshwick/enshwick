@@ -384,9 +384,9 @@ fn fire(control: &Declared, kind: u32, player: Option<&PlayerInfo>) {
 }
 
 thread_local! {
-    /// The client's trackers, one per control, and whether each control is
-    /// down this frame, on the interface thread.
-    static LOOK: RefCell<(Vec<Tracker>, Vec<bool>)> = const { RefCell::new((Vec::new(), Vec::new())) };
+    /// The client's trackers, one per control, and the slots of each control
+    /// down at the last look, on the interface thread.
+    static LOOK: RefCell<(Vec<Tracker>, Vec<u8>)> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
 /// Looks at the keys once, in the interface frame of the live interface
@@ -411,7 +411,7 @@ pub(crate) fn frame(context: usize) {
             input::keys_down(
                 &keys,
                 window,
-                |c| trackers.get(c).is_some_and(Tracker::is_down),
+                |c| declared.get(c).is_some_and(|d| !control_off(d)),
                 down,
             );
             trackers.resize(declared.len(), Tracker::default());
@@ -419,7 +419,7 @@ pub(crate) fn frame(context: usize) {
                 if control_off(control) {
                     continue;
                 }
-                let kind = tracker.look(*down, now, control.hold_ms) & control.fires;
+                let kind = tracker.look(*down != 0, now, control.hold_ms) & control.fires;
                 for bit in phases(kind) {
                     fire(control, bit, None);
                 }

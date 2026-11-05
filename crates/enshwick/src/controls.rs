@@ -627,57 +627,76 @@ impl Tracker {
     }
 }
 
-/// Fills `out` with whether each control on `bound` is down, so the loader's
-/// key reader and the fake host fire alike. `held(control, slot, key)` gives
-/// the modifiers held while that key is down and `None` while it is up;
-/// `was(control)` is whether the control was down at the last look.
+/// Fills `out` with the slots of each control on `bound` that are down, a bit
+/// per slot, so the loader's key reader and the fake host fire alike. On
+/// entry `out` holds the last look's slots. `held(control, slot, key)` gives
+/// the modifiers held while that key is down, and `None` while it is up or
+/// the control's mod is off, so an off control neither fires nor takes a key.
 ///
 /// A control comes down when one of its keys does with at least its
 /// modifiers held, and of the controls on that key only those with the most
-/// modifiers do: G fires while Shift is held, and Shift+G beats G. A control
-/// stays down while its key does, whatever modifiers change meanwhile, and
-/// no other control on that key comes down until it is let go.
+/// modifiers do: G fires while Shift is held, Shift+G beats G, and Shift+G
+/// and Ctrl+G both fire with Shift and Ctrl held. A held combination that
+/// cannot be bound, such as Alt+F4, brings nothing down. A control stays down
+/// while the key that brought it down does, whatever modifiers change
+/// meanwhile, and no other control on that key comes down until it is let go.
 #[doc(hidden)]
 pub fn chords(
     bound: &[[u32; 2]],
-    was: impl Fn(usize) -> bool,
     mut held: impl FnMut(usize, usize, Key) -> Option<u32>,
-    out: &mut Vec<bool>,
+    out: &mut Vec<u8>,
 ) {
+    // Bits of `out` above the two slots, used only inside one look.
+    const WAS: u8 = 0x80;
+    const RISES: u8 = 0b1100;
     // Indexed by key code, which `Key` keeps under 1024.
     let mut taken = [false; 1024];
     let mut best = [0u32; 1024];
-    out.clear();
-    out.resize(bound.len(), false);
-    for (control, keys) in bound.iter().enumerate().filter(|(c, _)| was(*c)) {
+    out.resize(bound.len(), 0);
+    for (control, keys) in bound.iter().enumerate() {
+        let was = out[control];
+        let mut now = if was == 0 { 0 } else { WAS };
         for (slot, &bits) in keys.iter().enumerate() {
-            if let Some(key) = Key::from_bits(bits)
+            if was & 1 << slot != 0
+                && let Some(key) = Key::from_bits(bits)
                 && held(control, slot, key).is_some()
             {
-                out[control] = true;
+                now |= 1 << slot;
                 taken[key.code() as usize] = true;
             }
         }
+        out[control] = now;
     }
-    // The key code and the count of modifiers of `bits` if it may come down
-    // now.
-    let mut rise = |control: usize, slot: usize, bits: u32| {
-        let key = Key::from_bits(bits)?;
-        let mods = held(control, slot, key)?;
-        let code = key.code() as usize;
-        (key.modifiers() & !mods == 0 && !taken[code]).then(|| (code, key.modifiers().count_ones()))
-    };
-    for (control, keys) in bound.iter().enumerate().filter(|(c, _)| !was(*c)) {
+    for (control, keys) in bound.iter().enumerate() {
+        if out[control] & WAS != 0 {
+            continue;
+        }
         for (slot, &bits) in keys.iter().enumerate() {
-            if let Some((code, rank)) = rise(control, slot, bits) {
-                best[code] = best[code].max(rank);
+            let Some(key) = Key::from_bits(bits) else {
+                continue;
+            };
+            let code = key.code() as usize;
+            if !taken[code]
+                && let Some(mods) = held(control, slot, key)
+                && key.modifiers() & !mods == 0
+                && Key::from_bits(key.code() | mods).is_some()
+            {
+                out[control] |= 4 << slot;
+                best[code] = best[code].max(key.modifiers().count_ones());
             }
         }
     }
-    for (control, keys) in bound.iter().enumerate().filter(|(c, _)| !was(*c)) {
-        out[control] = (0..keys.len()).any(|slot| {
-            rise(control, slot, keys[slot]).is_some_and(|(code, rank)| rank == best[code])
-        });
+    for (control, keys) in bound.iter().enumerate() {
+        let rises = out[control] & RISES;
+        out[control] &= 0b11;
+        for (slot, &bits) in keys.iter().enumerate() {
+            if rises & 4 << slot != 0
+                && let Some(key) = Key::from_bits(bits)
+                && key.modifiers().count_ones() == best[key.code() as usize]
+            {
+                out[control] |= 1 << slot;
+            }
+        }
     }
 }
 
@@ -770,66 +789,104 @@ mod tests {
         keys
     }
 
-    /// The controls on `bound` that are down when `down` are held, each
-    /// with its modifiers, after a look that found `was`.
-    fn look(bound: &[&[&str]], was: &[bool], down: &[&str]) -> Vec<bool> {
+    /// The slots of the controls on `bound` that are down when `down` are
+    /// held, their modifiers held together as on a keyboard, after a look
+    /// that found `was`, with the controls `live` gives on.
+    fn look_with(
+        bound: &[&[&str]],
+        was: &[u8],
+        down: &[&str],
+        live: impl Fn(usize) -> bool,
+    ) -> Vec<u8> {
         let bound: Vec<[u32; 2]> = bound.iter().map(|names| bits(names)).collect();
-        let down: Vec<Key> = down.iter().map(|name| Key::parse(name).unwrap()).collect();
-        let mut out = Vec::new();
+        // Parsed apart, since a held combination such as Alt+F4 is no `Key`.
+        let (mut codes, mut mods) = (Vec::new(), 0);
+        for name in down {
+            let (with, key) = name.rsplit_once('+').unwrap_or(("", name));
+            codes.push(Key::parse(key).unwrap().code());
+            if !with.is_empty() {
+                mods |= Key::parse(&format!("{with}+G")).unwrap().modifiers();
+            }
+        }
+        let mut out = was.to_vec();
         chords(
             &bound,
-            |control| was[control],
-            |_, _, key| {
-                down.iter()
-                    .find(|k| k.code() == key.code())
-                    .map(|k| k.modifiers())
-            },
+            |control, _, key| (live(control) && codes.contains(&key.code())).then_some(mods),
             &mut out,
         );
         out
     }
 
+    fn look(bound: &[&[&str]], was: &[u8], down: &[&str]) -> Vec<u8> {
+        look_with(bound, was, down, |_| true)
+    }
+
     #[test]
     fn a_plain_key_fires_while_a_modifier_is_held() {
-        assert_eq!(look(&[&["G"]], &[false], &["Shift+G"]), [true]);
-        assert_eq!(look(&[&["G"]], &[false], &["Ctrl+Alt+G"]), [true]);
-        assert_eq!(look(&[&["Shift+G"]], &[false], &["G"]), [false]);
-        assert_eq!(look(&[&["G"]], &[false], &[]), [false]);
+        assert_eq!(look(&[&["G"]], &[0], &["Shift+G"]), [1]);
+        assert_eq!(look(&[&["G"]], &[0], &["Ctrl+Alt+G"]), [1]);
+        assert_eq!(look(&[&["Shift+G"]], &[0], &["G"]), [0]);
+        assert_eq!(look(&[&["G"]], &[0], &[]), [0]);
     }
 
     #[test]
     fn the_control_with_the_most_held_modifiers_wins_its_key() {
         let bound: &[&[&str]] = &[&["G"], &["Shift+G"], &["Shift+Ctrl+G"]];
-        let up = [false; 3];
-        assert_eq!(look(bound, &up, &["G"]), [true, false, false]);
-        assert_eq!(look(bound, &up, &["Shift+G"]), [false, true, false]);
-        assert_eq!(look(bound, &up, &["Shift+Ctrl+G"]), [false, false, true]);
-        assert_eq!(look(bound, &up, &["Ctrl+G"]), [true, false, false]);
+        let up = [0; 3];
+        assert_eq!(look(bound, &up, &["G"]), [1, 0, 0]);
+        assert_eq!(look(bound, &up, &["Shift+G"]), [0, 1, 0]);
+        assert_eq!(look(bound, &up, &["Shift+Ctrl+G"]), [0, 0, 1]);
+        assert_eq!(look(bound, &up, &["Ctrl+G"]), [1, 0, 0]);
     }
 
     #[test]
     fn controls_with_disjoint_modifiers_on_one_key_fire_apart_and_tie_together() {
         let bound: &[&[&str]] = &[&["Shift+G"], &["Ctrl+G"]];
-        let up = [false; 2];
-        assert_eq!(look(bound, &up, &["Shift+G"]), [true, false]);
-        assert_eq!(look(bound, &up, &["Ctrl+G"]), [false, true]);
-        assert_eq!(look(bound, &up, &["Shift+Ctrl+G"]), [true, true]);
-        assert_eq!(look(bound, &up, &["G"]), [false, false]);
+        let up = [0; 2];
+        assert_eq!(look(bound, &up, &["Shift+G"]), [1, 0]);
+        assert_eq!(look(bound, &up, &["Ctrl+G"]), [0, 1]);
+        assert_eq!(look(bound, &up, &["Shift+Ctrl+G"]), [1, 1]);
+        assert_eq!(look(bound, &up, &["G"]), [0, 0]);
     }
 
     #[test]
     fn a_modifier_change_while_the_key_is_held_keeps_the_same_control_down() {
         let bound: &[&[&str]] = &[&["G"], &["Shift+G"]];
-        assert_eq!(look(bound, &[true, false], &["Shift+G"]), [true, false]);
-        assert_eq!(look(bound, &[false, true], &["G"]), [false, true]);
-        assert_eq!(look(bound, &[true, false], &[]), [false, false]);
+        assert_eq!(look(bound, &[1, 0], &["Shift+G"]), [1, 0]);
+        assert_eq!(look(bound, &[0, 1], &["G"]), [0, 1]);
+        assert_eq!(look(bound, &[1, 0], &[]), [0, 0]);
     }
 
     #[test]
     fn either_key_of_a_control_brings_it_down() {
         let bound: &[&[&str]] = &[&["F", "G"], &["H"]];
-        assert_eq!(look(bound, &[false, false], &["Shift+G"]), [true, false]);
-        assert_eq!(look(bound, &[true, false], &["F", "H"]), [true, true]);
+        assert_eq!(look(bound, &[0, 0], &["Shift+G"]), [0b10, 0]);
+        assert_eq!(look(bound, &[0b10, 0], &["F", "H"]), [0, 1]);
+    }
+
+    #[test]
+    fn a_control_of_a_mod_that_is_off_neither_outranks_nor_holds_a_key() {
+        let bound: &[&[&str]] = &[&["Shift+G"], &["G"]];
+        let first_off = |control| control != 0;
+        assert_eq!(look_with(bound, &[0, 0], &["Shift+G"], first_off), [0, 1]);
+        assert_eq!(look_with(bound, &[1, 0], &["Shift+G"], first_off), [0, 1]);
+    }
+
+    #[test]
+    fn a_control_stays_down_only_through_the_key_that_brought_it_down() {
+        let bound: &[&[&str]] = &[&["F", "Shift+G"], &["G"]];
+        assert_eq!(look(bound, &[0b01, 0], &["F", "G"]), [0b01, 1]);
+        assert_eq!(look(bound, &[0b01, 1], &["G"]), [0, 1]);
+    }
+
+    #[test]
+    fn a_held_combination_that_cannot_be_bound_brings_nothing_down() {
+        let bound: &[&[&str]] = &[&["F4"], &["Tab"], &["Ctrl+F4"]];
+        let up = [0; 3];
+        assert_eq!(look(bound, &up, &["Alt+F4"]), [0, 0, 0]);
+        assert_eq!(look(bound, &up, &["F4", "Alt+Tab"]), [0, 0, 0]);
+        assert_eq!(look(bound, &up, &["Ctrl+Alt+F4"]), [0, 0, 0]);
+        assert_eq!(look(bound, &up, &["Ctrl+F4"]), [0, 0, 1]);
     }
 
     #[test]

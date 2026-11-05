@@ -131,19 +131,20 @@ fn modifiers() -> u32 {
         .fold(0, |bits, (bit, _)| bits | 1 << (16 + bit))
 }
 
-/// Fills `out` with whether each control on `bound` is down, `was` being
-/// whether it was at the last look, by the rule of [`chords`], in the layout
-/// of the game window's thread `window`. With no window, the game's window
-/// lacks the focus or a window is open, and nothing is down or read.
+/// Turns `out`, the slots of each control on `bound` down at the last look,
+/// into those down now by the rule of [`chords`], in the layout of the game
+/// window's thread `window`; a control `live` says is off has none. With no
+/// window, the game's window lacks the focus or a window is open, and
+/// nothing is down or read.
 pub(super) fn keys_down(
     bound: &[[u32; 2]],
     window: Option<u32>,
-    was: impl Fn(usize) -> bool,
-    out: &mut Vec<bool>,
+    live: impl Fn(usize) -> bool,
+    out: &mut Vec<u8>,
 ) {
-    out.clear();
     let Some(window) = window else {
-        out.resize(bound.len(), false);
+        out.clear();
+        out.resize(bound.len(), 0);
         return;
     };
     MAPPED.with_borrow_mut(|mapped| {
@@ -176,10 +177,9 @@ pub(super) fn keys_down(
         };
         chords(
             bound,
-            was,
             |control, slot, _| {
                 let vk = mapped.vks.get(control).map_or(0, |vks| vks[slot]);
-                (vk != 0 && is_down(vk)).then_some(held)
+                (vk != 0 && live(control) && is_down(vk)).then_some(held)
             },
             out,
         );

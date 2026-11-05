@@ -31,6 +31,8 @@ struct FakeControl {
 #[derive(Default)]
 pub(crate) struct FakeControls {
     controls: Vec<FakeControl>,
+    /// The slots of each control down at the last look at the keys.
+    slots: Vec<u8>,
     /// Milliseconds since the first look at the keys.
     now: u64,
     /// The action runs the mod sent the server: action and arguments.
@@ -188,8 +190,9 @@ fn deliver(calls: &[Call], server: Option<&PlayerInfo>) -> usize {
 )]
 impl Installed {
     /// Looks at the keys as the client's key reader does, `after` the last
-    /// look: `down` are the keys held now, each with the modifiers held
-    /// with it. Each control whose key matches fires what the look decides.
+    /// look: `down` are the keys held now, and the modifiers of all of them
+    /// are held together, as on a keyboard. Each control the rule of the
+    /// [controls](crate::controls) brings down fires what the look decides.
     /// As in the loader, only a client reads keys: on a server nothing
     /// fires. Returns how many calls the mod got.
     ///
@@ -210,25 +213,22 @@ impl Installed {
                 return Vec::new();
             }
             let now = advance(&mut s.controls, after);
-            let controls = &mut s.controls.controls;
+            let FakeControls {
+                controls, slots, ..
+            } = &mut s.controls;
             let bound: Vec<[u32; 2]> = controls
                 .iter()
                 .map(|c| c.keys.map(|key| key.map_or(0, Key::bits)))
                 .collect();
-            let mut held = Vec::new();
+            let mods = down.iter().fold(0, |mods, k| mods | k.modifiers());
             chords(
                 &bound,
-                |c| controls[c].tracker.is_down(),
-                |_, _, key| {
-                    down.iter()
-                        .find(|k| k.code() == key.code())
-                        .map(|k| k.modifiers())
-                },
-                &mut held,
+                |_, _, key| down.iter().any(|k| k.code() == key.code()).then_some(mods),
+                slots,
             );
             let mut calls = Vec::new();
-            for (control, held) in controls.iter_mut().zip(held) {
-                let kind = control.tracker.look(held, now, control.hold_ms) & control.fires;
+            for (control, slots) in controls.iter_mut().zip(slots.iter()) {
+                let kind = control.tracker.look(*slots != 0, now, control.hold_ms) & control.fires;
                 calls.extend(phases(kind).map(|kind| control.call(kind)));
             }
             calls

@@ -57,6 +57,14 @@ mod tests {
             )?;
             load.control(Control::new("lights", "Lights").key(Key::parse("B")?), note)?;
             load.control(Control::new("dim", "Dim").key(Key::parse("Ctrl+B")?), note)?;
+            load.control(
+                Control::new("map", "Map")
+                    .key(Key::parse("Tab")?)
+                    .second(Key::parse("Shift+N")?)
+                    .fires(&[Phase::Press, Phase::Release]),
+                note,
+            )?;
+            load.control(Control::new("nitro", "Nitro").key(Key::parse("N")?), note)?;
             assert!(
                 load.control(Control::new("horn", "Again"), note).is_err(),
                 "a name is declared once"
@@ -111,7 +119,12 @@ mod tests {
     fn a_key_fires_its_control_and_the_control_asks_the_server() {
         let loader = client();
         let listed: Vec<String> = loader.controls().into_iter().map(|c| c.0).collect();
-        assert_eq!(listed, ["horn", "boost", "enter", "brake", "lights", "dim"]);
+        assert_eq!(
+            listed,
+            [
+                "horn", "boost", "enter", "brake", "lights", "dim", "map", "nitro"
+            ]
+        );
         let tick = Duration::from_millis(16);
         assert_eq!(loader.keys(&[key("H")], tick), 1);
         assert_eq!(loader.keys(&[key("H")], tick), 0, "held, not repeated");
@@ -180,6 +193,41 @@ mod tests {
                 ("boost".to_owned(), Phase::Release, None)
             ]
         );
+    }
+
+    #[test]
+    fn a_control_stays_down_only_through_the_key_that_brought_it_down() {
+        let loader = client();
+        let tick = Duration::from_millis(16);
+        let looks: Vec<usize> = [&[key("Tab")][..], &[key("Tab"), key("N")], &[key("N")]]
+            .into_iter()
+            .map(|held| loader.keys(held, tick))
+            .collect();
+        assert_eq!(looks, [1, 1, 1]);
+        assert_eq!(
+            taken(),
+            [
+                ("map".to_owned(), Phase::Press, None),
+                ("nitro".to_owned(), Phase::Press, None),
+                ("map".to_owned(), Phase::Release, None)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_system_combination_fires_no_control_on_its_key() {
+        let loader = client();
+        let tick = Duration::from_millis(16);
+        assert_eq!(loader.keys(&[key("Tab"), key("Alt+G")], tick), 0, "Alt+Tab");
+        assert!(taken().is_empty());
+    }
+
+    #[test]
+    fn a_modifier_held_counts_for_every_key_held() {
+        let loader = client();
+        let tick = Duration::from_millis(16);
+        assert_eq!(loader.keys(&[key("Shift+G"), key("N")], tick), 1);
+        assert_eq!(taken(), [("map".to_owned(), Phase::Press, None)]);
     }
 
     #[test]
