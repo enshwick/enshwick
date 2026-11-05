@@ -75,7 +75,7 @@ Security issues go through [SECURITY.md](SECURITY.md), not public issues.
 
 Until the first public release, 1.0.0, the loader ships as alphas. The
 platform's crates carry prerelease versions, `1.0.0-alpha.N`, and a mod
-depends on `enshwick = "=1.0.0-alpha.N"`. An alpha follows a merged change
+depends on the alpha's tag from git (`tag = "v1.0.0-alpha.N"`). An alpha follows a merged change
 that players, admins or mod authors get, at most one a day:
 
 1. A pull request moves every crate to the next `1.0.0-alpha.N`, with the
@@ -87,8 +87,9 @@ that players, admins or mod authors get, at most one a day:
    provenance. `cargo xtask notes` writes its notes: a warning in English and
    Ukrainian that anything may change before 1.0, the game builds the
    loader's tables support, each crate's changelog section and the known
-   issues the run is given. A version released already is refused, and so
-   is one no changelog has a section for.
+   issues the run is given. A version on GitHub or crates.io already is
+   refused, and so is one whose changelogs lack its section or still hold
+   changes under Unreleased. The workflow scans the archive on VirusTotal.
 
 `enshwick.zip` holds the stub and the loader, and no mod: each mod ships in
 its own archive from its own repository. `cargo xtask dist` writes the same
