@@ -80,6 +80,11 @@ fn page_problems(chapter: &str, text: &str) -> Vec<String> {
             "{at}: opens with no <!-- type: … description: … --> comment on lines of their own"
         )];
     };
+    if block.contains('\r') {
+        return vec![format!(
+            "{at}: has CRLF line endings; the site reads LF only"
+        )];
+    }
     let mut found = Vec::new();
     let (mut kind, mut description) = (None, None);
     for line in block.lines() {
@@ -381,6 +386,14 @@ mod tests {
         let fitting = format!("type: how-to\ndescription: {}", "d".repeat(120));
         let closed_mid_line = format!("<!--\n{fitting}\n--> # Title\n");
         let crlf = format!("<!--\r\n{fitting}\r\n-->\r\n");
+        let one_crlf = format!(
+            "<!--\ntype: how-to\r\ndescription: {}\n-->\n",
+            "d".repeat(120)
+        );
+        assert_eq!(
+            page_problems("hooks.md", &one_crlf),
+            ["book/src/hooks.md: has CRLF line endings; the site reads LF only"]
+        );
         assert_eq!(
             page_problems("hooks.md", &closed_mid_line),
             [
