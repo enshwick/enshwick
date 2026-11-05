@@ -13,11 +13,11 @@ use arc_swap::{ArcSwap, ArcSwapOption};
 use enshwick::Relock as _;
 use enshwick::abi::{Event, Level, Relation};
 use enshwick::events::Ticked;
-use enshwick::script::{self, Opened, Signature, Value};
+use enshwick::script::{self, Opened, Signature, Ty, Value};
 use enshwick::{Host, Load, Off};
 use mlua::{Function, Lua, MultiValue, Table, Value as LuaValue};
 
-use crate::bridge::{from_lua, to_lua};
+use crate::bridge::{Lent, from_lua, to_lua};
 use enshwick::packs::SCRIPT_MAIN as MAIN;
 
 use crate::calls::{CallDesc, ServedCall};
@@ -304,6 +304,7 @@ impl Scope {
         function: &Function,
         args: Vec<Value>,
         signature: &'static Signature,
+        lent: &[Lent],
     ) -> Result<Value, script::Error> {
         let stale = || script::Error::new("the scripts stopped");
         let inner = self.inner.upgrade().ok_or_else(stale)?;
@@ -320,12 +321,33 @@ impl Scope {
             return Err(stale());
         }
         let answer = inner.call(&vm, &|| "a function passed to the API".to_owned(), |vm| {
+            // The lent slots this call holds, a bit each; a signature has few
+            // parameters, and one past the 64th gets an object of its own.
+            let mut held = 0_u64;
             let lua_args = args
                 .into_iter()
                 .zip(signature.params())
-                .map(|(value, param)| to_lua(&vm.lua, self, value, param.ty()))
-                .collect::<mlua::Result<MultiValue>>()?;
-            function.call::<LuaValue>(lua_args)
+                .enumerate()
+                .map(
+                    |(at, (value, param))| match (value, param.ty(), lent.get(at)) {
+                        (Value::Object(handle), Ty::Object(class), Some(slot))
+                            if class.is_lent() && at < 64 =>
+                        {
+                            let (object, kept) = slot.lend(&vm.lua, self, handle)?;
+                            held |= u64::from(kept) << at;
+                            Ok(object)
+                        }
+                        (value, ty, _) => to_lua(&vm.lua, self, value, ty),
+                    },
+                )
+                .collect::<mlua::Result<MultiValue>>();
+            let answer = lua_args.and_then(|lua_args| function.call::<LuaValue>(lua_args));
+            for (at, slot) in lent.iter().enumerate().take(64) {
+                if held & (1 << at) != 0 {
+                    slot.give_back();
+                }
+            }
+            answer
         });
         let answer = answer.ok_or_else(|| script::Error::new("the script failed"))?;
         from_lua(self, answer, signature.ret()).inspect_err(|error| {

@@ -17,7 +17,7 @@ pub const MAX_MARKERS: usize = super::MARKER_LIMIT;
 /// # Examples
 ///
 /// See [`Marker`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum MarkerColor {
     /// White.

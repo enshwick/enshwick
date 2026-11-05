@@ -47,6 +47,32 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local open, fast, volume, mode = true, false, 0.5, 0
+enshwick.ui.on_frame(function(frame)
+    if not open then
+        return
+    end
+    frame:window("options", "Options", function(w)
+        w:label({ text = "Changes apply at once.", style = "Secondary", wrap = true })
+        fast = w:toggle({ label = "Fast travel" }, fast)
+        volume = w:slider({ label = "Volume", min = 0, max = 1, steps = 11 }, volume)
+        mode = w:dropdown({ label = "Labels", options = { "Off", "Owner", "Everyone" } }, mode)
+        w:progress(volume)
+        if w:button({ text = "Close" }) then
+            open = false
+        end
+    end)
+end)
+```
+
+In Luau, a widget is a table of its builder's fields, such as
+`{ text = "Close", enabled = false }`, and a slider's range is its `min` and
+`max`. Lua has no `&mut`, so `toggle`, `slider` and `dropdown` take the
+value and return it, changed in the frame the player changes it; a
+dropdown's index counts from 0, as in Rust. The callback gets the same
+frame object on every frame, so a frame costs the script no new object.
+
 A window is the game's popup panel over a dimmed screen; it takes the input
 while it shows, and it shows for as long as the mod draws it. `id` names it
 among the mod's windows; one window is open at a time per callback, and
@@ -112,6 +138,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local seconds = 120
+enshwick.ui.on_hud(function(hud)
+    seconds = math.max(seconds - 1, 0)
+    hud:text("TopRight", { text = string.format("Raid in %d:%02d", seconds // 60, seconds % 60), style = "Warning" })
+    hud:progress("TopRight", seconds / 120)
+end)
+```
+
 [`examples/waypoints`](https://github.com/enshwick/enshwick/tree/main/examples/waypoints)
 draws on the HUD what its server half sent over a
 [channel](messages.md), and only on a client: it asks
@@ -142,6 +177,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         }
     })
 }
+```
+
+```luau
+enshwick.ui.extend_screen("StorageChest", "Right", function(panel)
+    panel:label({ text = "Shared with your guild", style = "Secondary" })
+    if panel:button({ text = "Sort by name" }) then
+        -- Send the server one of the mod's player actions.
+    end
+end)
 ```
 
 The game's screens have no place to add to, so the loader draws the panels
@@ -208,6 +252,16 @@ fn mark_lockers(ui: Ui, lockers: &[([f64; 3], String)]) {
 }
 ```
 
+```luau
+local function mark_lockers(lockers: { { at: vector, owner: string } })
+    local markers = {}
+    for _, locker in lockers do
+        table.insert(markers, { position = locker.at, label = locker.owner, color = "Green" })
+    end
+    enshwick.ui.set_markers(markers)
+end
+```
+
 A marker can also take one of the game's own marker types, for the game's
 icon and rules of that type. `ui.map_marker_types()` lists the client's
 marker type registry: each `MapMarkerType` has its key, its sorting group
@@ -262,6 +316,19 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     });
     Ok(())
 }
+```
+
+```luau
+enshwick.ui.dialog({
+    title = "Survivors",
+    message = "Move every survivor to this altar?",
+    detail = "Survivors with a bed elsewhere keep it.",
+    buttons = { "Ok", "Cancel" },
+}, function(answer)
+    if answer == "Ok" then
+        enshwick.log.info("moving survivors")
+    end
+end)
 ```
 
 `Ui::ask` shows a dialog and waits for the answer, for a thread of the mod's

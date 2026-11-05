@@ -49,6 +49,27 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.texts_from('[en]\n"set" = "Change the weather"\n'))
+local kinds = { { "clear", "Clear" }, { "rain", "Rain" }, { "storm", "Storm" } }
+actions:add({
+    id = "set",
+    label = "set",
+    admins = true,
+    args = {
+        enshwick.actions.choice("Weather", kinds),
+        enshwick.actions.number("Minutes", 1, 60, 1),
+    },
+}, function(request)
+    local args = request:args()
+    local kind, minutes = args[1].Choice, args[2].Number
+    if kind == nil or minutes == nil then
+        return enshwick.actions.refused("Pick a weather")
+    end
+    return enshwick.actions.done(`{kinds[kind + 1][2]} for {minutes} min`)
+end)
+```
+
 An administrator now finds "Change the weather" under Actions on the Mods
 screen, with a dropdown and a slider. With the mod's id `weather`, the
 console line `weather set storm 10` runs it too, and `weather help` lists
@@ -72,6 +93,39 @@ language; a key without a text shows as it is, so plain English works too.
 | `.allow(fn)`, `.admins()`           | who sees the action and may run it                                                               |
 | `.at(fn)`                           | what it acts on for a player, or why there is nothing, which the player reads beside it          |
 
+In Luau, `enshwick.actions.actions(texts)` returns the `Actions`, and an
+action is a table of the builder's fields: `id`, `label`, `help`, `args`,
+`admins`, and the functions `allow(player)`, `at(ask)` and
+`per_player(ask, subject)`. `enshwick.actions.player`, `choice`, `number`
+and `toggle` make the arguments; `number` takes the range as `min` and
+`max`. `at` returns `{ Ok = enshwick.actions.subject(id, label) }` or
+`{ Err = reason }`, and `per_player` returns a list of `{ key, name }`. A
+subject's `id` is a 64-bit key, so it crosses as its decimal digits.
+
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.texts_from('[en]\n"access" = "Who may use it"\n'))
+local allowed = {}
+actions:add({
+    id = "access",
+    label = "access",
+    at = function(ask)
+        if ask:player().entity == 0 then
+            return { Err = "No locker of yours here" }
+        end
+        return { Ok = enshwick.actions.subject("42", "Your locker") }
+    end,
+    per_player = function(ask, subject)
+        return allowed
+    end,
+}, function(request)
+    local args = request:args()
+    if args[2].Toggle then
+        table.insert(allowed, { key = args[1].Player.key, name = args[1].Player.name })
+    end
+    return enshwick.actions.done(args[1].Player.name)
+end)
+```
+
 Arguments are typed choices, never free text: a player online, picked from
 a list and named on the console; one of a few options; a number in a range
 with a step; on or off. A list shows the players online and the ones `on`
@@ -88,6 +142,15 @@ fills the mod's text in the player's language. It returns an `Outcome`,
 `Outcome::done(text)` or `Outcome::refused(text)`: from the interface the
 text shows as one of the game's notices and on the screen that sent it; from
 the console it is the console's answer.
+
+A Luau handler gets the request as an object whose methods read those
+fields: `request:player()`, `subject()`, `args()`, `language()`, `via()`
+and `say(key, values)`, with `values` a list of `{ name, value }`. Each
+value is a table of one variant, such as `{ Number = 10 }`, and a choice is
+its index from 0, as in Rust. The handler returns
+`enshwick.actions.done(text)` or `enshwick.actions.refused(text)`; nil is
+done without a text. A Luau client runs an action with
+`actions:run(id, values)`.
 
 The server decides everything. It checks `.allow` and runs `.at` again on
 every run, whatever the client showed, and refuses values outside their

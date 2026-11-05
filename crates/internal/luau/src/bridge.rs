@@ -1,5 +1,8 @@
 //! Values between Luau and the API, shaped by the script [`Ty`] of each.
 
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use enshwick::script::{Callback, Class, Error, Handle, Signature, Ty, Union, Value};
 use mlua::{Lua, MultiValue, Value as LuaValue};
 
@@ -179,8 +182,9 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
             };
             let scope = scope.clone();
             let faulted = scope.clone();
+            let lent: Box<[Lent]> = signature.params().iter().map(|_| Lent::default()).collect();
             Ok(Value::Function(
-                Callback::new(move |args| scope.call_function(&function, args, signature))
+                Callback::new(move |args| scope.call_function(&function, args, signature, &lent))
                     .with_fault(move |error| faulted.fault(error)),
             ))
         }
@@ -247,6 +251,55 @@ fn object_from_lua(value: &LuaValue, class: &'static Class) -> Result<Value, Err
             Ok(Value::Object(object.handle.clone()))
         }
         _ => Err(expected(class.name(), value)),
+    }
+}
+
+/// The script object one argument of a script's function gets when its class
+/// is [lent](Class::lent): kept from call to call, so a filter on a hot path
+/// makes no object per call.
+#[derive(Default)]
+pub(crate) struct Lent {
+    object: OnceLock<mlua::AnyUserData>,
+    /// Whether a call holds the kept object now.
+    busy: AtomicBool,
+}
+
+impl Lent {
+    /// The script object holding `handle`, and whether it is the kept one,
+    /// which [`Lent::give_back`] returns once the call ends; a call inside
+    /// the one that holds it gets an object of its own.
+    pub(crate) fn lend(
+        &self,
+        lua: &Lua,
+        scope: &Scope,
+        handle: Handle,
+    ) -> mlua::Result<(LuaValue, bool)> {
+        if self.busy.swap(true, Ordering::Acquire) {
+            let object = lua.create_userdata(Object {
+                handle,
+                scope: scope.clone(),
+            })?;
+            return Ok((LuaValue::UserData(object), false));
+        }
+        let kept = match self.object.get() {
+            Some(kept) => kept
+                .borrow_mut::<Object>()
+                .map(|mut object| object.handle = handle)
+                .map(|()| kept.clone()),
+            None => lua
+                .create_userdata(Object {
+                    handle,
+                    scope: scope.clone(),
+                })
+                .map(|made| self.object.get_or_init(|| made).clone()),
+        };
+        kept.map(|kept| (LuaValue::UserData(kept), true))
+            .inspect_err(|_| self.give_back())
+    }
+
+    /// Ends the call that holds the kept object.
+    pub(crate) fn give_back(&self) {
+        self.busy.store(false, Ordering::Release);
     }
 }
 

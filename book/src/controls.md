@@ -22,6 +22,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.controls.control({ name = "horn", label = "Sound the horn", key = "H" }, function(fired)
+    if fired.phase == "Press" then
+        -- Play the horn on this client.
+    end
+end)
+```
+
 The player presses H in the world, and the handler runs on their client.
 
 ## When a key fires
@@ -58,6 +66,13 @@ Windows reports it as Enter.
 | `.hold_for(duration)`         | how long a key stays down before `Phase::Hold`; 500 ms by default    |
 | `.link(GameAction)`           | fires on the server when the player's game action fires              |
 
+In Luau, a control is a table of the builder's fields: `name`, `label`,
+`key`, `second`, `fires` as a list of phase names, `hold_for` in seconds,
+and `link` as the game action's name. A key is its text, such as
+`"Shift+E"`; `enshwick.controls.parse(text)` returns its own spelling, and
+`code`, `modifiers` and `is_mouse` read it. The handler gets a table of
+`control`, `phase` and, on the server, `player`.
+
 `Phase::Press` fires once when the key goes down; `Phase::Hold` once when it
 stayed down for the hold time, never from key repeat; `Phase::Release` once
 when it comes up. A key pressed and let go between two frames may be missed.
@@ -84,6 +99,16 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+actions:add({ id = "honk", label = "Honk" }, function()
+    return enshwick.actions.done("Honk!")
+end)
+enshwick.controls.control({ name = "horn", label = "Horn", key = "H" }, function()
+    actions:run("honk", {})
+end)
+```
+
 ## Following a game action
 
 A control linked to a game action reads the game's own decision instead of
@@ -106,6 +131,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     })?;
     Ok(())
 }
+```
+
+```luau
+enshwick.controls.control({ name = "enter", label = "Enter the car", link = "ContextualAction" }, function(fired)
+    if fired.player ~= nil then
+        -- Seat `fired.player` if a car is at hand.
+    end
+end)
 ```
 
 `GameAction` names every member of the game's player input, such as `Jump`,
@@ -140,14 +173,6 @@ off. Linked controls run in the game server: the dedicated server, and a
 client while it hosts a game, single player included. There a control with a
 key and a game action may run its handler on the interface thread and the
 game thread at once.
-
-## Scripts
-
-A [Luau script](luau.md) declares a control with `controls.declare(name,
-label, key, link, phases, hold_ms, on)`: `key` and `link` by name or empty,
-`phases` a list of `press`, `release` and `hold`, and `on` gets the phase and,
-on the server, the player. A script runs no player actions, so its handler
-acts on the side the control fires on.
 
 ## Testing
 

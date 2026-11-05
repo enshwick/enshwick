@@ -548,6 +548,7 @@ name = "enshwick-luau"
 version = "1.0.0-alpha.12"
 dependencies = [
  "arc-swap",
+ "criterion",
  "enshwick",
  "enshwick-gamedata",
  "mlua",

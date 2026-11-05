@@ -10,7 +10,7 @@ use crate::abi::{Header, Str, UiDialog};
 /// # Examples
 ///
 /// See [`Dialog`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Response {
     /// "Retry".

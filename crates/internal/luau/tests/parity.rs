@@ -20,7 +20,7 @@ mod tests {
 
     /// Modules another change replaces, whose Luau calls arrive with that
     /// change; the change that lands second takes its module off this list.
-    const REWORKED: &[&str] = &["actions", "controls", "ui"];
+    const REWORKED: &[&str] = &[];
 
     /// Logs every name of the `enshwick` table, and of each table in it, as
     /// `api <name>` and `api <table>.<name>`.

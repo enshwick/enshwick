@@ -486,6 +486,9 @@ mod tests {
 
 mod registry;
 mod request;
+mod script;
 
 use registry::Registry;
 pub use request::*;
+#[doc(hidden)]
+pub use script::ActionFns;
