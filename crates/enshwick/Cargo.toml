@@ -126,6 +126,11 @@ name = "channel_encode"
 harness = false
 
 [[bench]]
+name = "chords"
+harness = false
+required-features = ["unstable"]
+
+[[bench]]
 name = "rates"
 harness = false
 required-features = ["unstable"]
