@@ -68,8 +68,14 @@ mod tests {
 
         world.hold_saves(true).unwrap();
         assert!(loader.saves_held());
+        assert_eq!(
+            world.save(),
+            Err(enshwick::WorldError::Refused),
+            "a save asked while held is refused, as the loader refuses it"
+        );
         world.hold_saves(false).unwrap();
         assert!(!loader.saves_held());
+        world.save().unwrap();
         world.hold_saves(true).unwrap();
         loader.end_game();
         assert!(!loader.saves_held(), "a hold ends with its hosted game");

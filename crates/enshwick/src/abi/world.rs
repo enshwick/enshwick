@@ -504,6 +504,12 @@ impl_headed!(WeatherFront, born = 56);
 /// A world's save on disk, written by
 /// [`HostApi::save_info`](super::HostApi::save_info).
 ///
+/// The mod owns it and passes it as `out`, its header set with
+/// [`Header::of`]; the loader writes it on the calling thread during the
+/// call, up to the size the header states, and keeps no pointer to it. It
+/// holds no pointers. Layout grows only by appending; read a later field
+/// after [`Header::covers`].
+///
 /// # Examples
 ///
 /// ```

@@ -1666,7 +1666,7 @@ pub struct HostApi {
     pub save_info: extern "system" fn(me: ModHandle, out: *mut SaveInfo) -> Status,
     /// Holds the world's saves while `held` is 1, or lets them go for 0:
     /// the game saves only while no running mod holds them, the timed save
-    /// and [`HostApi::save_world`] waiting meanwhile, and the log names each
+    /// waiting and [`HostApi::save_world`] refused meanwhile, and the log names each
     /// mod that holds or lets go. A mod that turns off lets go. Server only
     /// ([`Status::MISSING`] on a build without the save layout); any thread,
     /// taking effect after the next step; [`Status::BAD_ARGS`] for another

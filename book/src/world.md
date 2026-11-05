@@ -265,8 +265,8 @@ keeps beside it; it is `None` before the first save of a new world.
 
 `hold_saves(true)` holds the world's saves and `hold_saves(false)` lets
 them go, for a mod that saves only while players are in safe places. The
-game saves only while no running mod holds its saves: the timed saves and
-`save()` wait meanwhile. Each mod holds its own, the log names each mod that
+game saves only while no running mod holds its saves: the timed saves wait
+and `save()` is refused meanwhile. Each mod holds its own, the log names each mod that
 holds or lets go, a mod that turns off lets go, and every hold ends with its
 hosted game.
 
