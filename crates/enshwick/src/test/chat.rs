@@ -56,8 +56,10 @@ impl Installed {
                 ChatRewrite::DROP => return None,
                 ChatRewrite::REWRITTEN => {
                     let written = buffer.get(..rewrite.len as usize);
-                    if let Some(new) = written.and_then(|b| core::str::from_utf8(b).ok()) {
-                        new.clone_into(&mut text);
+                    match written.and_then(|b| core::str::from_utf8(b).ok()) {
+                        Some("") => return None,
+                        Some(new) => new.clone_into(&mut text),
+                        None => {}
                     }
                 }
                 _ => {}

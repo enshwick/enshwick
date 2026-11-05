@@ -65,7 +65,10 @@ impl ChatLine {
 /// The loader owns `buffer`, writable for `capacity` bytes during the call
 /// only; the filter writes UTF-8 into it, sets `len` and answers
 /// [`ChatRewrite::REWRITTEN`]. A `len` over `capacity`, or bytes that are
-/// not UTF-8, keep the line as it was.
+/// not UTF-8, keep the line as it was. The loader owns the struct too and
+/// hands it to one filter at a time on the game thread, never null; the
+/// filter keeps no pointer past the call. Layout grows only by appending;
+/// read a later field after [`Header::covers`].
 ///
 /// # Examples
 ///
@@ -102,7 +105,8 @@ impl ChatRewrite {
     /// The line is dropped as the chat mute drops it: nobody reads it, and
     /// the filters after this one do not run.
     pub const DROP: u8 = 1;
-    /// The line goes on as the text written into the buffer.
+    /// The line goes on as the text written into the buffer; an empty text
+    /// drops it as [`ChatRewrite::DROP`] does.
     pub const REWRITTEN: u8 = 2;
 }
 

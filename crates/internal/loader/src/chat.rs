@@ -306,6 +306,8 @@ pub(crate) fn link(loader: &'static Loader) {
 
 /// The switch of the chat lines and the chat mute.
 static CHAT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat lines");
+/// The switch of the chat lines mods filter and hear, apart from the mute.
+static MODS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat lines for mods");
 
 fn next() -> Option<PostFn> {
     POST_NEXT.wired()
@@ -364,7 +366,7 @@ unsafe extern "system" fn post(
             "chat: the client of {hash:016x} sent a line of chat type {kind}; it posts as typed text"
         );
     }
-    let heard = CHAT_FUSE
+    let heard = MODS_FUSE
         .run("the chat line for mods", || {
             // SAFETY: `text` is the game's own argument at the entry of
             // `chat.post`, by this function's `# Safety`.
@@ -475,7 +477,10 @@ unsafe fn read_text(text: *const [usize; 2], max: usize) -> String {
     // `bytes`' length, readable and unchanged for the call by this
     // function's `# Safety`.
     unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes) };
-    String::from_utf8_lossy(&bytes).into_owned()
+    let mut text = String::from_utf8_lossy(&bytes).into_owned();
+    // A replaced byte takes three, so a peer's line could pass the limit.
+    text.truncate(text.floor_char_boundary(max));
+    text
 }
 
 /// The start of the hidden lines an older loader's client sends its server.
@@ -739,6 +744,23 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_line_that_is_not_utf8_stays_within_the_limit_once_replaced() {
+        let bytes = [0xffu8; 16];
+        let span = [bytes.as_ptr().expose_provenance(), bytes.len()];
+        // SAFETY: `span` views `bytes`, readable and unchanged for the call.
+        let text = unsafe { read_text(&raw const span, 16) };
+        assert_eq!(text, "\u{fffd}".repeat(5));
+        assert!(text.len() <= 16);
+    }
+
+    #[test]
+    fn a_panic_in_the_part_for_mods_leaves_the_chat_mute_on() {
+        let panicked = MODS_FUSE.run("a test", || panic!("a test"));
+        assert_eq!(panicked, None::<()>);
+        assert!(MODS_FUSE.is_off());
+        assert!(!CHAT_FUSE.is_off(), "the mute and old frames keep working");
+    }
 
     #[test]
     fn a_line_to_one_player_needs_a_positive_byte_mask_and_overhead() {

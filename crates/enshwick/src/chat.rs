@@ -104,7 +104,8 @@ pub enum ChatVerdict {
     /// the filters after this one do not run.
     Drop,
     /// The line goes on as this text, cut at 1024 bytes on a character
-    /// boundary; the filters after this one see it.
+    /// boundary; the filters after this one see it. An empty text drops
+    /// the line.
     Rewrite(String),
 }
 

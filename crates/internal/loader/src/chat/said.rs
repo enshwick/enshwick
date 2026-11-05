@@ -136,11 +136,12 @@ pub(crate) fn filter(player: u64, loca: [u32; 2], text: String, max_text: usize)
         });
         match answer {
             ChatRewrite::DROP => return None,
-            ChatRewrite::REWRITTEN => {
-                if let Some(new) = rewritten(&buffer, rewrite.len) {
-                    new.clone_into(&mut text);
-                }
-            }
+            ChatRewrite::REWRITTEN => match rewritten(&buffer, rewrite.len) {
+                // The game would post an empty line.
+                Some("") => return None,
+                Some(new) => new.clone_into(&mut text),
+                None => {}
+            },
             _ => {}
         }
     }
@@ -170,7 +171,7 @@ pub(crate) fn heard(loader: &Loader, said: Said) {
     }
     let mut heard = HEARD.relock();
     let now = Instant::now();
-    let over = said.kind == ChatLine::PLAYER && !admit(&mut heard.rate, said.player, now);
+    let over = rated(said.kind) && !admit(&mut heard.rate, said.player, now);
     if over || heard.waiting.len() >= MAX_WAITING {
         drop(heard);
         skipped();
@@ -178,6 +179,12 @@ pub(crate) fn heard(loader: &Loader, said: Said) {
     }
     heard.waiting.push(said);
     WAITING.store(true, Ordering::Release);
+}
+
+/// Whether lines of `kind` count against their account's rate: those a
+/// player's client causes, typed lines and emotes.
+const fn rated(kind: u32) -> bool {
+    kind != ChatLine::NOTICE
 }
 
 /// Whether one more line of `player` fits its rate at `now`, counting it.
@@ -303,6 +310,13 @@ mod tests {
         assert_eq!(rewritten(&buffer, 5), Some("hi П"));
         assert_eq!(rewritten(&buffer, 4), None, "a cut character");
         assert_eq!(rewritten(&buffer, 99), None, "past the buffer");
+    }
+
+    #[test]
+    fn emotes_count_against_the_rate_as_typed_lines_do_and_notices_do_not() {
+        assert!(rated(ChatLine::PLAYER));
+        assert!(rated(ChatLine::EMOTE));
+        assert!(!rated(ChatLine::NOTICE));
     }
 
     #[test]

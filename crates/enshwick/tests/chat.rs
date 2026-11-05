@@ -23,6 +23,7 @@ mod tests {
             let _first = WORLD.set(load.world()?);
             load.on_chat(|line| match line.text.as_str() {
                 "drop me" => ChatVerdict::Drop,
+                "erase me" => ChatVerdict::Rewrite(String::new()),
                 "panic" => panic!("a broken filter"),
                 text => ChatVerdict::Rewrite(text.replace("bad", "good")),
             })?;
@@ -74,6 +75,9 @@ mod tests {
             "a drop stops the filters after it"
         );
         assert_eq!(HEARD.lock().unwrap().len(), 1, "and no handler hears it");
+        assert_eq!(loader.say(ann, "erase me"), None, "an empty rewrite drops");
+        assert_eq!(SEEN.lock().unwrap().len(), 1);
+        assert_eq!(HEARD.lock().unwrap().len(), 1);
 
         WORLD.get().unwrap().set_muted(ann, true).unwrap();
         assert_eq!(loader.say(ann, "a bad day"), None);
