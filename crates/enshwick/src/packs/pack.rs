@@ -35,6 +35,37 @@ pub(super) struct PackItem {
     pub(super) meter: Option<(u16, u16)>,
     pub(super) stats: Vec<(String, i32, StatFormat)>,
     pub(super) icon: Option<PackIcon>,
+    /// The kind of action and the `main.luau` function, per function.
+    pub(super) on: Vec<(&'static str, String)>,
+}
+
+/// An item's function in its pack's `main.luau` for one kind of action,
+/// from the `on` table of `items.toml`, which a script runtime binds once
+/// `main.luau` ran.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::packs::{Pack, PackFiles};
+///
+/// let items = "[[item]]\nid = \"tonic\"\nlike = \"6943053a-32c1-4718-ae22-e61427ddf54d\"\non = { consume = \"drink\" }\n";
+/// let files = PackFiles::new().with("items.toml", items).with("main.luau", "function drink() end");
+/// let pack = Pack::parse_with("you.tonics", &files, None).map_err(|e| e.to_string())?;
+/// let binding = &pack.item_bindings()[0];
+/// assert_eq!((binding.id.as_str(), binding.kind, binding.function.as_str()), ("you.tonics:tonic", "Consume", "drink"));
+/// # Ok::<(), String>(())
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ItemBinding {
+    /// The item's content id in full.
+    pub id: String,
+    /// The item.
+    pub item: crate::ItemId,
+    /// The kind of action, as `enshwick::items::Kind` names it.
+    pub kind: &'static str,
+    /// The name of the global function of `main.luau`.
+    pub function: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -75,6 +106,13 @@ pub struct Pack {
     pub(super) recipes: Vec<PackRecipe>,
     pub(super) workshops: Vec<PackWorkshop>,
     pub(super) drops: Vec<Drop>,
+    /// Each drop's chance, which may follow a setting.
+    pub(super) drop_chances: Vec<super::values::Number<f64>>,
+    pub(super) rewards: Vec<super::rewards::PackReward>,
+    /// The `[[setting]]` tables of `pack.toml`.
+    pub(super) settings: Vec<super::manifest::PackSetting>,
+    /// Their schema, the mod's settings.
+    pub(super) settings_schema: Option<crate::config::Schema>,
     pub(super) changes: Vec<(Change, String)>,
     pub(super) selections: Vec<(ItemsChange, String)>,
     pub(super) recipe_selections: Vec<(RecipesChange, String)>,
@@ -189,6 +227,10 @@ impl Pack {
             recipes: Vec::new(),
             workshops: Vec::new(),
             drops: Vec::new(),
+            drop_chances: Vec::new(),
+            rewards: Vec::new(),
+            settings: Vec::new(),
+            settings_schema: None,
             changes: Vec::new(),
             selections: Vec::new(),
             recipe_selections: Vec::new(),
@@ -205,7 +247,7 @@ impl Pack {
             texts.as_ref(),
         );
         pack.recipes = recipes(&mut reader, &recipes_file, &recipes_text);
-        pack.drops = drops(&mut reader, &loot_file, &loot_text, &pack.items);
+        pack.read_settings_and_rewards(&mut reader, files, &loot_file, &loot_text);
         (pack.changes, pack.selections) =
             super::changes::item_changes(&mut reader, &items_file, &items_text);
         pack.changes.extend(super::changes::loot_changes(
@@ -238,6 +280,50 @@ impl Pack {
             .map(|w| w.id.as_str())
             .chain(self.items.iter().map(|i| i.id.as_str()))
             .chain(self.recipes.iter().map(|r| r.id.as_str()))
+            .collect()
+    }
+
+    /// Reads the settings of `pack.toml`, then the drops of `loot` and the
+    /// rewards of `rewards`, whose numbers may follow them.
+    fn read_settings_and_rewards(
+        &mut self,
+        reader: &mut Reader<'_>,
+        files: &PackFiles,
+        loot: &LootFile,
+        loot_text: &str,
+    ) {
+        let (rewards, rewards_text): (super::rewards::RewardsFile, String) =
+            reader.file(super::REWARDS_FILE);
+        let rewards = &rewards;
+        let rewards_text = rewards_text.as_str();
+        let (settings, schema) = super::manifest::PackManifest::settings_of(files);
+        self.settings_schema = schema;
+        (self.drops, self.drop_chances) = drops(reader, loot, loot_text, &self.items, &settings)
+            .into_iter()
+            .unzip();
+        self.rewards = super::rewards::rewards(reader, rewards, rewards_text, &settings);
+        self.settings = settings;
+    }
+
+    /// Every item's function in the pack's `main.luau`, from the `on`
+    /// tables of `items.toml`, in the file's order.
+    ///
+    /// # Examples
+    ///
+    /// See [`ItemBinding`].
+    #[must_use]
+    pub fn item_bindings(&self) -> Vec<ItemBinding> {
+        self.items
+            .iter()
+            .filter_map(|item| Some((item, Guid::try_named(&item.id)?)))
+            .flat_map(|(item, guid)| {
+                item.on.iter().map(move |(kind, function)| ItemBinding {
+                    id: item.id.clone(),
+                    item: crate::ItemId::from_guid(guid),
+                    kind,
+                    function: function.clone(),
+                })
+            })
             .collect()
     }
 
@@ -403,6 +489,46 @@ impl Pack {
     }
 }
 
+fn is_luau_name(name: &str) -> bool {
+    const RESERVED: [&str; 21] = [
+        "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "if", "in",
+        "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
+    ];
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && !RESERVED.contains(&name)
+}
+
+/// The checked `main.luau` functions of the item `e`, read at `at` of
+/// `items.toml`'s `text`.
+fn item_functions(
+    reader: &mut Reader<'_>,
+    text: &str,
+    at: usize,
+    e: &super::entries::ItemEntry,
+) -> Vec<(&'static str, String)> {
+    let mut on = Vec::new();
+    for (kind, function) in e.on.iter().flat_map(super::entries::OnEntry::functions) {
+        let problem = if !is_luau_name(function) {
+            format!("item {}: {function:?} is no Luau function name", e.id)
+        } else if reader.files.get(super::SCRIPT_MAIN).is_none() {
+            format!(
+                "item {}: `on` names {function}, but the pack has no {}",
+                e.id,
+                super::SCRIPT_MAIN
+            )
+        } else {
+            on.push((kind, function.to_owned()));
+            continue;
+        };
+        reader.error(ITEMS_FILE, text, at, problem);
+    }
+    on
+}
+
 /// The checked items of `items_file`.
 pub(super) fn items(
     reader: &mut Reader<'_>,
@@ -491,6 +617,7 @@ pub(super) fn items(
                     None
                 }
             });
+        let on = item_functions(reader, text, at, e);
         if let Some((like, _)) = like {
             out.push(PackItem {
                 id: reader.own(&e.id),
@@ -501,6 +628,7 @@ pub(super) fn items(
                 meter,
                 stats,
                 icon,
+                on,
             });
         }
     }
@@ -588,13 +716,15 @@ pub(super) fn recipes(
     out
 }
 
-/// The checked drops of `loot`.
+/// The checked drops of `loot`, each with its chance, which may follow a
+/// setting of `settings`.
 pub(super) fn drops(
     reader: &mut Reader<'_>,
     loot: &LootFile,
     text: &str,
     items: &[PackItem],
-) -> Vec<Drop> {
+    settings: &[super::manifest::PackSetting],
+) -> Vec<(Drop, super::values::Number<f64>)> {
     let file = LOOT_FILE;
     let mut drops = Vec::new();
     for entry in &loot.drop {
@@ -614,12 +744,16 @@ pub(super) fn drops(
         if e.items.is_empty() {
             reader.error(file, text, at, "a drop names no item");
         }
-        if !(0.0..=1.0).contains(&e.chance) {
+        let Some(chance) = super::values::number(reader, file, text, at, &e.chance, settings)
+        else {
+            continue;
+        };
+        if !(0.0..=1.0).contains(&chance.default()) {
             reader.error(
                 file,
                 text,
                 at,
-                format!("chance {} is not between 0 and 1", e.chance),
+                format!("chance {} is not between 0 and 1", chance.default()),
             );
         }
         let from = match source_of(&e.from) {
@@ -633,7 +767,7 @@ pub(super) fn drops(
         if min == 0 || min > max {
             reader.error(file, text, at, format!("count {min}..{max} is empty"));
         }
-        let mut drop = Drop::one_of(&ids, e.chance, from).count(min, max);
+        let mut drop = Drop::one_of(&ids, chance.default(), from).count(min, max);
         if let Some([low, high]) = e.meter {
             match meter_of.first().copied().flatten() {
                 Some(of) if meter_of.iter().all(|m| *m == Some(of)) && low <= high && high <= of => {
@@ -648,7 +782,7 @@ pub(super) fn drops(
             }
         }
         if ids.len() == e.items.len() {
-            drops.push(drop);
+            drops.push((drop, chance));
         }
     }
     drops

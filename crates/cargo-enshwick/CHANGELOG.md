@@ -9,6 +9,9 @@ Each entry names the pull request that made the change.
 ### Added
 
 - `cargo enshwick luau` writes the `controls` namespace (#930).
+- `cargo enshwick luau` writes the `items` and `rewards` namespaces;
+  `pack schema` and `new --data` write `rewards.toml` and know the items'
+  `on` table and setting references (#935).
 - `cargo enshwick generate` writes the typed API from the newest server
   build's snapshot, snapshots an executable first with `--from`, and with
   `--check` fails when the committed files differ. `cargo enshwick pin`

@@ -366,6 +366,21 @@ impl PackManifest {
         ))
     }
 
+    /// The settings of the `pack.toml` among `files` and their schema; none
+    /// without one or when it does not read, whose problems the pack's
+    /// check reports.
+    pub(super) fn settings_of(
+        files: &super::PackFiles,
+    ) -> (Vec<PackSetting>, Option<crate::config::Schema>) {
+        files
+            .text(MANIFEST_FILE)
+            .ok()
+            .flatten()
+            .and_then(|text| Self::parse(text).ok())
+            .map(|manifest| (manifest.settings_schema(), manifest.setting))
+            .map_or_else(Default::default, |(schema, settings)| (settings, schema))
+    }
+
     /// The kinds a pack declares and so may export: its scripts' events and
     /// its content.
     const EXPORT_KINDS: [crate::schema_section::Kind; 2] = [

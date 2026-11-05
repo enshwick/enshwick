@@ -278,11 +278,10 @@ pub(crate) fn filter_off() -> bool {
     INTERACTIONS_FUSE.is_off()
 }
 
-/// Reads the players again now and then, and lets destroyed props go, on
-/// the game thread.
 pub(crate) fn after_step(loader: &Loader, step: u64) {
     crate::transactions::holds().after_step(step);
-    if LOADED.get().is_none() || !step.is_multiple_of(PLAYERS_EVERY) {
+    let wanted = LOADED.get().is_some() || crate::item_actions::wanted();
+    if !wanted || !step.is_multiple_of(PLAYERS_EVERY) {
         return;
     }
     if let Ok(entities) = crate::world::player_entities(loader)
@@ -290,6 +289,12 @@ pub(crate) fn after_step(loader: &Loader, step: u64) {
     {
         PLAYERS.store(Some(std::sync::Arc::new(entities.to_vec())));
     }
+}
+
+/// The players' character entities as last read on the game thread, for
+/// the systems that act on each player's input.
+pub(crate) fn players() -> arc_swap::Guard<Option<std::sync::Arc<Vec<u32>>>> {
+    PLAYERS.load()
 }
 
 pub(crate) fn forget() {
@@ -818,6 +823,9 @@ unsafe extern "system" fn dismantle(
 }
 
 unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
+    // SAFETY: `ctx` is the game's argument to the `inventory_actions` system,
+    // at its entry on its thread, which is all `screen_uses` asks.
+    unsafe { crate::item_actions::screen_uses(ctx) };
     if !crate::transactions::holds().quiet() && LOADED.get().is_some() && !ctx.is_null() {
         // SAFETY: `ctx` is non-null by the check before it and is the system's
         // own context, at its entry on its thread.

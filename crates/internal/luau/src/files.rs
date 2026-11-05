@@ -20,7 +20,7 @@ use enshwick::packs::SCRIPT_MAIN as MAIN;
 /// assert_eq!(scripts.len(), 2);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Scripts(BTreeMap<String, Arc<[u8]>>);
+pub struct Scripts(BTreeMap<String, Arc<[u8]>>, String);
 
 impl Scripts {
     /// No scripts.
@@ -76,6 +76,47 @@ impl Scripts {
     #[must_use]
     pub fn has_main(&self) -> bool {
         self.0.contains_key(MAIN)
+    }
+
+    /// The same with each of `bindings` bound once `main.luau` ran: the
+    /// global function it names runs on its item's actions of its kind, as
+    /// `enshwick.items.on_item` binds it. A binding to a name `main.luau`
+    /// leaves without a function stops the start with an error naming it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let items = "[[item]]\nid = \"tonic\"\nlike = \"6943053a-32c1-4718-ae22-e61427ddf54d\"\non = { consume = \"drink\" }\n";
+    /// let main = "function drink() end";
+    /// let files = PackFiles::new().with("items.toml", items).with("main.luau", main);
+    /// let pack = Pack::parse_with("you.tonics", &files, None).map_err(|e| e.to_string())?;
+    /// let scripts = enshwick_luau::Scripts::new().with("main.luau", main).with_items(&pack.item_bindings());
+    /// assert_eq!(scripts.len(), 1);
+    /// # Ok::<(), String>(())
+    /// ```
+    #[must_use]
+    pub fn with_items(mut self, bindings: &[enshwick::packs::ItemBinding]) -> Self {
+        use core::fmt::Write as _;
+
+        for b in bindings {
+            let key = b.kind.to_ascii_lowercase();
+            let _infallible = writeln!(
+                self.1,
+                "if type({f}) ~= \"function\" then error(\"item {id}: on.{key} names {f}, which main.luau does not define as a global function\", 0) end\nenshwick.items.on_item({item}, \"{kind}\", {f})",
+                f = b.function,
+                id = b.id,
+                item = b.item.get(),
+                kind = b.kind,
+            );
+        }
+        self
+    }
+
+    /// The Luau that binds the items' functions, empty for none.
+    pub(crate) fn bindings(&self) -> &str {
+        &self.1
     }
 
     pub(crate) fn get(&self, path: &str) -> Option<&Arc<[u8]>> {

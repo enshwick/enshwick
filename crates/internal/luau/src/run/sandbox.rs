@@ -87,6 +87,7 @@ impl Inner {
         scripts: Scripts,
     ) -> Result<Arc<Vm>, StartError> {
         let main = scripts.get(MAIN).cloned().ok_or(StartError::Missing)?;
+        let bindings = scripts.bindings().to_owned();
         let lua = sandbox(self.limits, &self.overruns).map_err(StartError::Sandbox)?;
         let vm = Arc::new(Vm {
             lua,
@@ -107,6 +108,14 @@ impl Inner {
                 vm.lua
                     .load(&main[..])
                     .set_name(format!("@{MAIN}"))
+                    .set_mode(ChunkMode::Text)
+                    .exec()?;
+                if bindings.is_empty() {
+                    return Ok(());
+                }
+                vm.lua
+                    .load(bindings.as_str())
+                    .set_name(format!("@{}", enshwick::packs::ITEMS_FILE))
                     .set_mode(ChunkMode::Text)
                     .exec()
             });

@@ -1,4 +1,4 @@
-abi 11.4
+abi 11.5
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 144 align 8 born 144
@@ -299,7 +299,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1488 align 8
+HostApi size 1496 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -485,6 +485,7 @@ HostApi size 1488 align 8
     control at 1464 size 8 type extern "system" fn(ModHandle, *const ControlSpec, unsafe extern "system" fn(*const ControlEvent, *mut c_void), *mut c_void) -> Status
     run_action at 1472 size 8 type extern "system" fn(ModHandle, Str, Str) -> Status
     ui_extension at 1480 size 8 type extern "system" fn(ModHandle, *const UiExtension, unsafe extern "system" fn(*const UiFrame, *mut c_void), *mut c_void) -> Status
+    item_filter at 1488 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const ItemAction, *mut c_void) -> u8, *mut c_void) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -516,6 +517,14 @@ InventoryResult size 24 align 8 born 24
     outcome at 8 size 4 type u32
     op_count at 12 size 4 type u32
     ops at 16 size 8 type *const InventoryOpResult
+ItemAction size 32 align 4 born 32
+    header at 0 size 8 type Header
+    kind at 8 size 4 type u32
+    player at 12 size 4 type Entity
+    item at 16 size 4 type ItemId
+    count at 20 size 4 type u32
+    inventory at 24 size 4 type Entity
+    slot at 28 size 4 type u32
 ItemData size 36 align 4 born 36
     header at 0 size 8 type Header
     id at 8 size 4 type ItemId

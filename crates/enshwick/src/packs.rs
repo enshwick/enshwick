@@ -38,6 +38,7 @@ use crate::content::icons::{Icon, Pixels};
 use crate::content::items::{FuelSetup, ImpactUiValue, NewItem};
 use crate::content::recipes::NewRecipe;
 use crate::content::workshops::{NewWorkshop, WorkshopId};
+use crate::locks::Relock as _;
 use crate::{Load, Off};
 
 /// The manifest file of a pack folder.
@@ -50,16 +51,19 @@ pub const RECIPES_FILE: &str = "recipes.toml";
 pub const WORKSHOPS_FILE: &str = "workshops.toml";
 /// The loot file.
 pub const LOOT_FILE: &str = "loot.toml";
+/// The rewards file, rewards for players' actions.
+pub const REWARDS_FILE: &str = "rewards.toml";
 /// The texts file, in the form of a mod's [texts](crate::i18n).
 pub const TEXTS_FILE: &str = "texts.toml";
 /// Every file a pack folder may hold besides its icons, in the order the
 /// loader reads them.
-pub const FILES: [&str; 6] = [
+pub const FILES: [&str; 7] = [
     MANIFEST_FILE,
     ITEMS_FILE,
     RECIPES_FILE,
     WORKSHOPS_FILE,
     LOOT_FILE,
+    REWARDS_FILE,
     TEXTS_FILE,
 ];
 /// The extension of a script, a Luau file the loader runs for a pack that
@@ -222,8 +226,100 @@ impl Load<'_> {
         for drop in &pack.drops {
             self.add_loot_in(group, drop.clone())?;
         }
-        Ok(())
+        #[cfg(feature = "unstable")]
+        for reward in &pack.rewards {
+            // A reward this build cannot follow turns off alone.
+            if let Err(off) = self.add_reward(reward.reward(&toml::Table::new())) {
+                crate::warn!("{REWARDS_FILE}: a reward is off: {off}");
+            }
+        }
+        #[cfg(not(feature = "unstable"))]
+        if !pack.rewards.is_empty() {
+            return Err(Off::new(format!(
+                "{REWARDS_FILE}: rewards need enshwick's `unstable` feature"
+            )));
+        }
+        self.follow_pack_settings(pack)
     }
+
+    /// Declares the settings of `pack.toml`, when it has some, as the mod's
+    /// settings, and sets the numbers of `loot.toml` and `rewards.toml`
+    /// that follow them as each world's settings arrive.
+    fn follow_pack_settings(&mut self, pack: &Pack) -> Result<(), Off> {
+        let Some(schema) = pack.settings_schema.clone() else {
+            return Ok(());
+        };
+        let declared = self.table_config(schema)?;
+        let settings = declared.0.clone();
+        let me = self.host().handle();
+        DECLARED
+            .get_or_init(std::sync::Mutex::default)
+            .relock()
+            .0
+            .push((me, declared));
+        let drops: Vec<(crate::loot::Drop, values::Number<f64>)> = pack
+            .drops
+            .iter()
+            .cloned()
+            .zip(pack.drop_chances.iter().cloned())
+            .collect();
+        let drops_follow = drops.iter().any(|(_, chance)| chance.follows());
+        #[cfg(feature = "unstable")]
+        let rewards: Vec<rewards::PackReward> = pack
+            .rewards
+            .iter()
+            .filter(|reward| reward.follows_settings())
+            .cloned()
+            .collect();
+        let group = group(&pack.namespace);
+        settings.on_change(self, move |values| {
+            if drops_follow {
+                let resolved = drops
+                    .iter()
+                    .map(|(drop, chance)| {
+                        let mut drop = drop.clone();
+                        drop.chance = chance.get(&values).clamp(0.0, 1.0);
+                        drop
+                    })
+                    .collect();
+                if let Err(error) = crate::loot::replace_group(group, resolved) {
+                    crate::warn!(
+                        "{LOOT_FILE}: the world's chances apply at the next start: {error}"
+                    );
+                }
+            }
+            #[cfg(feature = "unstable")]
+            for reward in &rewards {
+                crate::rewards::replace(me, reward.reward(&values));
+            }
+        })
+    }
+}
+
+/// The settings each pack declared, and their defaults, by the pack's
+/// handle, for a script runtime of the same mod, which follows them instead
+/// of declaring them again.
+#[derive(Default)]
+struct DeclaredByMod(Vec<(crate::abi::ModHandle, Declared)>);
+
+static DECLARED: crate::fresh::Fresh<std::sync::Mutex<DeclaredByMod>> = crate::fresh::Fresh::new();
+
+/// A pack's settings and their defaults, as `table_config` gives them.
+type Declared = (crate::config::TableConfig, toml::Table);
+
+/// The settings [`Load::add_pack`] declared for the pack `load` starts, and
+/// their defaults; `None` when it declared none.
+#[doc(hidden)]
+#[must_use]
+pub fn declared_settings(load: &Load<'_>) -> Option<(crate::config::TableConfig, toml::Table)> {
+    let me = load.host().handle();
+    DECLARED
+        .get_or_init(std::sync::Mutex::default)
+        .relock()
+        .0
+        .iter()
+        .find(|(handle, _)| *handle == me)
+        .map(|(_, declared)| declared.clone())
 }
 
 mod changes;
@@ -232,8 +328,10 @@ mod files;
 mod manifest;
 mod pack;
 mod reader;
+mod rewards;
 #[cfg(test)]
 mod tests;
+mod values;
 
 #[cfg(feature = "schema")]
 pub use entries::schemas;

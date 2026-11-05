@@ -1,0 +1,245 @@
+---
+source: crates/enshwick/tests/pack_schemas.rs
+expression: shape
+---
+{
+  "$defs": {
+    "BuffEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "buff": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "buff"
+      ],
+      "type": "object"
+    },
+    "ExperienceEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "experience": {
+          "$ref": "#/$defs/NumberEntry"
+        }
+      },
+      "required": [
+        "experience"
+      ],
+      "type": "object"
+    },
+    "GiveEntry": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ItemsEntry"
+        },
+        {
+          "$ref": "#/$defs/ExperienceEntry"
+        },
+        {
+          "$ref": "#/$defs/KnowledgeEntry"
+        },
+        {
+          "$ref": "#/$defs/BuffEntry"
+        }
+      ]
+    },
+    "ItemsEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumberEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "item": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "item"
+      ],
+      "type": "object"
+    },
+    "KnowledgeEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "knowledge": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "knowledge"
+      ],
+      "type": "object"
+    },
+    "LimitEntry": {
+      "oneOf": [
+        {
+          "const": "every",
+          "type": "string"
+        },
+        {
+          "const": "once",
+          "type": "string"
+        },
+        {
+          "const": "daily",
+          "type": "string"
+        },
+        {
+          "const": "world",
+          "type": "string"
+        }
+      ]
+    },
+    "NumberEntry": {
+      "anyOf": [
+        {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "$ref": "#/$defs/SettingEntry"
+        }
+      ]
+    },
+    "NumberEntry2": {
+      "anyOf": [
+        {
+          "format": "float",
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/SettingEntry"
+        }
+      ]
+    },
+    "OnEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "consume": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "craft": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "join": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "level_up": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "loot": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pickup": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quest": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RewardEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "chance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumberEntry2"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "give": {
+          "items": {
+            "$ref": "#/$defs/GiveEntry"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LimitEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "on": {
+          "$ref": "#/$defs/OnEntry"
+        }
+      },
+      "required": [
+        "id",
+        "on",
+        "give"
+      ],
+      "type": "object"
+    },
+    "SettingEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "setting": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "setting"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "reward": {
+      "items": {
+        "$ref": "#/$defs/RewardEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    }
+  },
+  "title": "Rewards",
+  "type": "object"
+}

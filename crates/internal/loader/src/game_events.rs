@@ -183,7 +183,10 @@ pub(crate) fn link(loader: &'static Loader) {
     // A client always links the move, to raise the loader's notices in its
     // own world.
     if SEALED.set(sealed).is_err()
-        || (count == 0 && !crate::vetoes::crafting() && loader.side != Side::CLIENT)
+        || (count == 0
+            && !crate::vetoes::crafting()
+            && !crate::item_actions::wanted()
+            && loader.side != Side::CLIENT)
     {
         return;
     }
@@ -334,7 +337,9 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
                     size,
                 );
             };
-            if sealed.wants(type_hash) {
+            // Item notices are after the fact: they go out with the batch,
+            // after the merge, so a filter may change the world.
+            if sealed.wants(type_hash) || crate::item_actions::hears(type_hash) {
                 batch.events.push(Copied {
                     type_hash,
                     size: u32::try_from(size).unwrap_or(0),
@@ -363,6 +368,16 @@ fn deliver(loader: &Loader) {
     for event in &batch.events {
         if sealed.equipment == Some(event.type_hash) {
             crate::stats::equipment_changed();
+        }
+        if let Some(payload) = usize::try_from(event.size)
+            .ok()
+            .and_then(|size| batch.bytes.get(event.start..event.start + size))
+        {
+            // SAFETY: `payload` is the event's copy in this batch, its `size`
+            // bytes, which nothing writes during the call.
+            unsafe {
+                crate::item_actions::screen(event.type_hash, payload.as_ptr(), payload.len());
+            }
         }
         let data = GameEventData {
             header: Header::of::<GameEventData>(),

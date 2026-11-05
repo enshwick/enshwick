@@ -15,6 +15,9 @@ export type AcceptOfferedInteractionEvent = {
 --- What the game does to an account, as its account actions name it.
 export type AccountAction = "Kick" | "Ban" | "UnBan"
 
+--- What a player does that a reward follows.
+export type Action = { Craft: number } | { LevelUp: number } | "Join" | "Loot" | "Quest" | { Consume: number } | { Pickup: number }
+
 --- Rolls on crafted items, for `Load.add_craft_affixes`.
 export type AffixCraft = {
 	--- The chance each fitting crafted item rolls at all, from 0 to 1.
@@ -619,6 +622,17 @@ export type GameSettingsPreset = "Default" | "Relaxed" | "Hard" | "Survival" | "
 --- A difficulty from very easy to very hard, such as fishing's. The loader reads the game's value of each variant by its constant's name.
 export type GenericDifficulty = "VeryEasy" | "Easy" | "Normal" | "Hard" | "VeryHard" | { Other: number }
 
+--- What a reward gives.
+export type Give = { Items: GiveItems } | { Experience: number } | { Knowledge: number } | { Buff: number }
+
+--- `count` of `item`, all or nothing: with a full inventory the player gets none and the log says so.
+export type GiveItems = {
+	--- The item.
+	item: number,
+	--- How many.
+	count: number,
+}
+
 --- What a grant does, by the kind of the knowledge. The name is enshwick's, not the game's.
 export type Grant = "Set" | { Add: number } | { Flag: number }
 
@@ -785,6 +799,20 @@ export type InventoryOpTake = {
 	count: number,
 }
 
+--- A player's action with an item, from `Load.on_item_action` and `Load.on_item`.
+export type ItemAction = {
+	--- What the player does.
+	kind: Kind,
+	--- The player's character.
+	player: number,
+	--- The item.
+	item: number,
+	--- How many: 1 for `Kind.Consume` and `Kind.Place`, the stack for the others.
+	count: number,
+	--- The slot the item is in before the action; nil for a pickup or a placement.
+	slot: string?,
+}
+
 --- A kind of item data with a game data value per item, from `item_data`.
 export type ItemData = {
 	--- The item's value, as `ItemData.get` reads it.
@@ -850,6 +878,9 @@ export type ItemsChange = {
 	--- How.
 	value: Value,
 }
+
+--- What a player does with an item; the names are the game's.
+export type Kind = "Consume" | "Trash" | "Equip" | "Unequip" | "Pickup" | "Place"
 
 --- The data of the `KnowledgeChanged` event.
 export type KnowledgeData = {
@@ -917,6 +948,9 @@ export type Levels = {
 	--- What `level` needs, 0 for level 0 or past the cap, as `Levels.need` answers.
 	need: (self: Levels, level: number) -> number,
 }
+
+--- How often one player gets a reward.
+export type Limit = "Every" | "Once" | "Daily" | "World"
 
 --- A line of what an item gives, from `Affixes.lines`.
 export type Line = {
@@ -1431,6 +1465,30 @@ export type RevivedPlayerEvent = {
 
 --- What a revoke takes back, by the kind of the knowledge. The name is enshwick's, not the game's. Unstable: needs the `unstable` feature and may change in any release.
 export type Revoke = "Clear" | { Sub: number } | { Unflag: number }
+
+--- A reward: what follows which action, how often and how likely.
+export type Reward = {
+	--- Its name in the mod, 1 to 64 of `a-z0-9_-`, which the world's data keeps who got it under.
+	name: string,
+	--- The action it follows.
+	on: Action,
+	--- What it gives, in order.
+	give: {Give},
+	--- How often one player gets it.
+	limit: Limit?,
+	--- How likely, from 0 to 1; none for always.
+	chance: number?,
+}
+
+--- A reward about to be given, from `Load.on_reward`.
+export type RewardGrant = {
+	--- The reward's name.
+	reward: string,
+	--- The player's character.
+	player: number,
+	--- What it gives.
+	give: {Give},
+}
 
 --- What a roll may give, for `roll` and `Affixes.roll`.
 export type RollRules = {
@@ -2430,6 +2488,27 @@ declare enshwick: {
 		--- Only while the mod starts, at the top level of main.luau.
 		on_interaction: (filter: (arg1: Interaction) -> boolean?) -> (),
 	},
+	items: {
+		--- Runs `filter` on each player's action with any item in the server's world; returning `false` refuses a `Kind.Consume`, `Kind.Trash`, `Kind.Equip` or `Kind.Unequip` the game's own way, and is ignored for the others. It runs on the thread of the system that runs the action, once per action: keep it quick and never block.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_item_action: (filter: (arg1: ItemAction) -> boolean?) -> (),
+		--- Runs `handler` when a player does `kind` with `item`, as `Load.on_item_action` runs its filter: returning `false` refuses the action where `Kind.can_refuse` says it can. Actions with other items or of other kinds never reach it.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_item: (item: number, kind: Kind, handler: (arg1: ItemAction) -> boolean?) -> (),
+	},
+	--- The mod's rewards for players' actions, given from code.
+	rewards: {
+		--- Gives the declared reward named `reward` to `player` as its action would: within its limit and chance, if the mod's filters allow; false for a reward the mod did not declare, or one its limit, its chance or a filter holds back.
+		grant: (player: number, reward: string) -> boolean,
+		--- Gives `give` to `player` now, with no limit, chance or filter; a mod that declared no reward and no filter gives nothing, and the log says so.
+		give: (player: number, give: {Give}) -> (),
+		--- Declares `reward`: the server gives it in the server's world when a player does its action, within its limit and chance, if the mod's filters allow.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_reward: (reward: Reward) -> (),
+		--- Runs `filter` before the mod gives any of its rewards, on the game thread; returning `false` holds the grant back, and the limit stays unused. To give something else instead, give it with `Rewards.give` and return `false`.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_reward: (filter: (arg1: RewardGrant) -> boolean?) -> (),
+	},
 	progress: {
 		--- Answers the game's checks of `skill`: `true` unlocks it for that check, `false` locks it, nil keeps the game's answer. It runs on both sides, on the checking thread, and only for `skill`.
 		--- Only while the mod starts, at the top level of main.luau.
@@ -2707,6 +2786,8 @@ declare enshwick: {
 	content: {
 		--- The vanilla item named `name`, as the game's data names it, such as `Chest_Wood`; an error names the nearest names.
 		item: (name: string) -> string,
+		--- The item id of the content id `id` in full (`<mod>:<name>`), as `ItemId.named` gives it in Rust, for a mod's own items in `enshwick.items`.
+		item_id: (id: string) -> number,
 		--- The vanilla recipe named `name`.
 		recipe: (name: string) -> string,
 		--- The vanilla loot table named `name` and how many containers roll it.

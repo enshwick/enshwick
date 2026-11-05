@@ -1,0 +1,22 @@
+#:schema ./pack.schema.json
+id = "you.shrine"
+version = "0.1.0"
+name = "Shrine"
+description = "A shrine tonic: brewed at the alchemist's station, found in chests, it rewards its drinker and counts each drink in the world's data."
+authors = ["Enshwick"]
+license = "MIT"
+side = "both"
+
+[[setting]]
+key = "tonic_chance"
+default = 0.05
+min = 0.0
+max = 1.0
+doc = "How likely a chest holds a shrine tonic, from 0 to 1."
+
+[[setting]]
+key = "first_drink_experience"
+default = 100
+min = 0
+max = 10000
+doc = "The experience a player gets for their first shrine tonic in this world."

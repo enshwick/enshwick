@@ -87,6 +87,7 @@ pub mod facts;
 mod gameplay;
 mod hooks;
 mod inventory;
+mod items;
 mod pacing;
 mod players;
 mod points;

@@ -370,3 +370,9 @@ end)
 follow the settings as `load.on_settings` and `load.on_settings_change` do:
 the handler gets the values now, as each world loads and stops, and for the
 second, on every change in game.
+
+## Settings of a data pack
+
+A data pack declares its settings in `pack.toml`, as a Luau mod does, and
+names them where a number stands in `loot.toml` and `rewards.toml`; see
+[Let an admin tune a pack per world](content/packs.md#let-an-admin-tune-a-pack-per-world).

@@ -19,6 +19,26 @@ Each entry names the pull request that made the change.
 - Luau links an interaction filter with
   `enshwick.interactions.on_interaction`, whose `Interaction` is a table
   and whose kind an `InteractionKind` name (#933).
+- `items` (unstable) lets a mod hear each player's use, trash, equip,
+  unequip, pickup and placement of an item in the server's world, with
+  `Load::on_item` for one item and kind and `Load::on_item_action` for all,
+  and refuse a use, trash, equip or unequip the game's own way.
+  `HostApi::item_filter` and `ItemAction`, ABI 11.5. Luau reaches them as
+  `items.on_item` and `items.on_item_action`, and `content.item_id` gives
+  the item id of a content id. An item's `on` table in `items.toml` binds
+  its actions to global functions of the pack's `main.luau`. The fake host
+  hands actions to the filters with `item_action` (#935).
+- `rewards` (unstable) declares rewards for actions, with `Load::add_reward`:
+  a craft, a level, a join, a loot, a quest, an item's use or pickup gives
+  items, experience, a knowledge entry or a buff, every time, once per
+  player, daily or once per world, at a chance; who got a limited reward is
+  kept in the world's data. `Load::on_reward` holds a grant back and
+  `Rewards` grants and gives from code. A pack declares them in
+  `rewards.toml` (#935).
+- A drop's chance in `loot.toml`, and a reward's chance, item count and
+  experience in `rewards.toml`, may name a setting of `pack.toml`, which
+  `Load::add_pack` declares as the mod's settings; each world's value takes
+  effect as its settings arrive (#935).
 
 - `controls` lets a mod declare controls: a name, a label, a default and a
   second `Key` (a scan code with exact modifiers, or a mouse button), the

@@ -1,0 +1,9 @@
+#:schema ./rewards.schema.json
+# Rewards for players' actions: on, what it gives, how often.
+# A number may follow a setting of pack.toml: { setting = "<key>" }.
+
+# [[reward]]
+# id = "first-level"
+# on = { level_up = 2 }
+# give = [{ item = "Tool_Torch01", count = 2 }, { experience = 50 }]
+# limit = "once"

@@ -1,0 +1,9 @@
+#:schema ./rewards.schema.json
+# A player's first tonic in a world gives the experience the world's
+# `first_drink_experience` sets, once.
+
+[[reward]]
+id = "first-drink"
+on = { consume = "tonic" }
+give = [{ experience = { setting = "first_drink_experience" } }]
+limit = "once"

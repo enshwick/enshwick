@@ -94,6 +94,8 @@ mod unstable {
         ItemAndEntityData => "item-and-entity-data.md",
         Survivors => "survivors.md",
         Vetoes => "vetoes.md",
+        ItemActions => "content/item-actions.md",
+        Rewards => "content/rewards.md",
         Actions => "actions.md",
         Controls => "controls.md",
         Chat => "chat.md",

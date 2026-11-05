@@ -65,6 +65,46 @@ pub(super) struct ItemEntry {
     #[serde(default)]
     pub(super) stats: Vec<StatEntry>,
     pub(super) icon: Option<IconEntry>,
+    /// The functions of the pack's `main.luau` that run on players' actions
+    /// with the item.
+    pub(super) on: Option<OnEntry>,
+}
+
+/// An item's functions in the pack's `main.luau`, one per kind of action,
+/// each the name of a global function.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub(super) struct OnEntry {
+    /// Runs when a player eats, drinks or uses the item; `false` refuses it.
+    pub(super) consume: Option<String>,
+    /// Runs when a player throws the item away; `false` refuses it.
+    pub(super) trash: Option<String>,
+    /// Runs when a player equips the item; `false` refuses it.
+    pub(super) equip: Option<String>,
+    /// Runs when a player takes the item off; `false` refuses it.
+    pub(super) unequip: Option<String>,
+    /// Runs after a player picked the item up.
+    pub(super) pickup: Option<String>,
+    /// Runs after a player placed the item.
+    pub(super) place: Option<String>,
+}
+
+impl OnEntry {
+    /// Each named function with its kind's name, as `enshwick::items::Kind`
+    /// spells it.
+    pub(super) fn functions(&self) -> impl Iterator<Item = (&'static str, &str)> {
+        [
+            ("Consume", &self.consume),
+            ("Trash", &self.trash),
+            ("Equip", &self.equip),
+            ("Unequip", &self.unequip),
+            ("Pickup", &self.pickup),
+            ("Place", &self.place),
+        ]
+        .into_iter()
+        .filter_map(|(kind, function)| Some((kind, function.as_deref()?)))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
@@ -249,8 +289,8 @@ pub(super) enum FromEntry {
 pub(super) struct DropEntry {
     /// The items, one picked per drop.
     pub(super) items: Vec<String>,
-    /// The chance per roll, from 0 to 1.
-    pub(super) chance: f64,
+    /// The chance per roll, from 0 to 1, or `{ setting = "<key>" }`.
+    pub(super) chance: super::values::NumberEntry<f64>,
     /// `bosses`, `locked-chests`, `corpses`, `chests`, `containers`,
     /// `destroyed`, or a list of the last four.
     pub(super) from: FromEntry,
@@ -328,6 +368,12 @@ pub fn schemas() -> Vec<(&'static str, String)> {
         drop: Option<Vec<DropEntry>>,
         change: Option<Vec<LootChangeEntry>>,
     }
+    #[derive(schemars::JsonSchema)]
+    #[schemars(deny_unknown_fields)]
+    #[expect(dead_code, reason = "only its schema is read")]
+    struct Rewards {
+        reward: Option<Vec<super::rewards::RewardEntry>>,
+    }
     let json = |schema: schemars::Schema| serde_json::to_string_pretty(&schema).unwrap_or_default();
     vec![
         (MANIFEST_FILE, json(schemars::schema_for!(PackManifest))),
@@ -335,5 +381,6 @@ pub fn schemas() -> Vec<(&'static str, String)> {
         (RECIPES_FILE, json(schemars::schema_for!(Recipes))),
         (WORKSHOPS_FILE, json(schemars::schema_for!(Workshops))),
         (LOOT_FILE, json(schemars::schema_for!(Loot))),
+        (super::REWARDS_FILE, json(schemars::schema_for!(Rewards))),
     ]
 }

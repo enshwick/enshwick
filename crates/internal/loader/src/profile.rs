@@ -60,10 +60,12 @@ pub enum Feature {
     Calls,
     /// Controls the mod declared.
     Controls,
+    /// Filters on players' actions with items.
+    Items,
 }
 
 /// How many features there are.
-pub const FEATURES: usize = 20;
+pub const FEATURES: usize = 21;
 
 impl Feature {
     /// The feature in the report.
@@ -90,6 +92,7 @@ impl Feature {
             Self::Points => "extension points",
             Self::Calls => "calls",
             Self::Controls => "controls",
+            Self::Items => "item filters",
         }
     }
 
@@ -114,6 +117,7 @@ impl Feature {
         Self::Points,
         Self::Calls,
         Self::Controls,
+        Self::Items,
     ];
 }
 
