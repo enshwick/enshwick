@@ -15,12 +15,19 @@
 //! | `calls` | the one function that calls every listed function directly |
 //! | `loads` | the one function whose code loads every listed string |
 //! | `system` or `in`, with `shape` | the one run of instructions of the [shape](shape) in the listed function's code |
+//! | `callers`, with `shape` | among the functions that call the listed function directly, the one whose code the shape matches; a call in a chained fragment counts for its function |
+//! | `field` | a constant: the sum of the reflected offsets of each `<type>.<field>` listed, each field holding the next type |
+//! | `size` | a constant: the reflected size of the type |
 //!
-//! `take` says what the entry is: `start` (the default; the function, or
-//! the shape's first instruction), `end` (the address after the shape),
+//! `take` says what a shaped entry is: `start` (the default; the function,
+//! or the shape's first instruction), `end` (the address after the shape),
 //! `address` (the address the shape's `*` takes), `value` (the number it
-//! takes) or `cell` (the `u32` the game keeps at the address it takes); the
-//! last two are constants, the rest symbols. A taken constant needs a shape
+//! takes), `cell` (the `u32` the game keeps at the address it takes) or
+//! `spelled` (the route's `value`, which a step of the shape spells in its
+//! own encoding: memory without a displacement spells 0, else an index
+//! scale or an immediate equal to it; a `nop` spells nothing); the last
+//! three are constants, the
+//! rest symbols. A taken constant needs a shape
 //! of two steps or one with an exact operand or an `{entry}`. `shift` turns
 //! a taken constant `v` into `1 << v`, and `plus` then adds to it. `sides`
 //! limits a route to some sides; it defaults to every side.
@@ -55,7 +62,7 @@ use crate::{Resolved, Side, TableError};
 pub use check::{check_holds, make_check, shape_checks};
 use code::Code;
 pub use shape::ShapeNames;
-use shape::Step;
+use shape::{ShapeError, Step};
 
 /// What an engine route found.
 ///
@@ -88,6 +95,7 @@ enum Take {
     Address,
     Value,
     Cell,
+    Spelled,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,7 +104,20 @@ enum How {
     CalledBy(Vec<String>),
     Calls(Vec<String>),
     Loads(Vec<String>),
-    Shape { within: String, steps: Vec<Step> },
+    Shape {
+        within: String,
+        steps: Vec<Step>,
+    },
+    /// The one function among the direct callers of `callee` whose code the
+    /// shape matches.
+    Callers {
+        callee: String,
+        steps: Vec<Step>,
+    },
+    /// The sum of reflected field offsets, each a type and its field.
+    Field(Vec<(String, String)>),
+    /// A reflected type's size.
+    Size(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -111,6 +132,8 @@ struct Route {
     shift: bool,
     /// What is added to a taken constant.
     plus: i64,
+    /// The constant a `spelled` take finds.
+    value: u64,
 }
 
 impl Route {
@@ -151,61 +174,47 @@ struct RouteRow {
     check: Option<Vec<String>>,
     shift: Option<bool>,
     plus: Option<i64>,
+    value: Option<u64>,
+    field: Option<Vec<String>>,
+    size: Option<String>,
+    callers: Option<String>,
 }
 
 impl RouteRow {
-    fn route(self, names: &ShapeNames) -> Result<Route, TableError> {
+    fn route(mut self, names: &ShapeNames) -> Result<Route, TableError> {
+        let how = self.how(names)?;
         let id = self.id;
         let bad = |why: &str| TableError::Toml(format!("{id}: {why}"));
-        let listed = |list: Option<Vec<String>>| list.filter(|l| !l.is_empty());
-        let how = match (
-            listed(self.called_by),
-            listed(self.calls),
-            listed(self.loads),
-            self.system,
-            self.within,
-            self.shape,
-        ) {
-            (Some(names), None, None, None, None, None) => How::CalledBy(names),
-            (None, Some(names), None, None, None, None) => How::Calls(names),
-            (None, None, Some(strings), None, None, None) => How::Loads(strings),
-            (None, None, None, Some(system), None, None) => How::System(system),
-            (None, None, None, Some(within), None, Some(shape))
-            | (None, None, None, None, Some(within), Some(shape))
-                if !shape.is_empty() =>
-            {
-                How::Shape {
-                    within,
-                    steps: shape
-                        .iter()
-                        .map(|step| Step::parse(step, names).map_err(|e| bad(&e.to_string())))
-                        .collect::<Result<_, _>>()?,
-                }
-            }
-            _ => {
-                return Err(bad(
-                    "a route is `called_by`, `calls`, `loads`, `system`, or `system` or `in` with `shape`, each not empty",
-                ));
-            }
-        };
+        let reflected = matches!(how, How::Field(_) | How::Size(_));
+        if reflected
+            && (self.take.is_some()
+                || self.check.is_some()
+                || self.shift.is_some()
+                || self.plus.is_some())
+        {
+            return Err(bad(
+                "a `field` or `size` route is the reflected number itself, without `take`, `check`, `shift` or `plus`",
+            ));
+        }
         let take = self.take.unwrap_or(Take::Start);
         let steps: &[Step] = match &how {
-            How::Shape { steps, .. } => steps,
+            How::Shape { steps, .. } | How::Callers { steps, .. } => steps,
             _ => &[],
         };
-        let takes: usize = steps.iter().map(Step::takes).sum();
         let shaped = !steps.is_empty();
+        let takes: usize = steps.iter().map(Step::takes).sum();
         match take {
+            _ if reflected => {}
             Take::Start if takes == 0 => {}
-            Take::End if shaped && takes == 0 => {}
+            Take::End | Take::Spelled if shaped && takes == 0 => {}
             Take::Address | Take::Value | Take::Cell if shaped && takes == 1 => {}
             _ => {
                 return Err(bad(
-                    "`end` takes a shape, `address`, `value` and `cell` a shape with one `*`, and `start` no `*`",
+                    "`end` and `spelled` take a shape without `*`, `address`, `value` and `cell` a shape with one `*`, and `start` no `*`",
                 ));
             }
         }
-        if matches!(take, Take::Value | Take::Cell)
+        if matches!(take, Take::Value | Take::Cell | Take::Spelled)
             && steps.len() < 2
             && !steps.iter().any(Step::is_exact)
         {
@@ -213,14 +222,20 @@ impl RouteRow {
                 "a taken constant needs a shape of two steps, an exact operand or an `{entry}`",
             ));
         }
-        let check: Vec<Step> = self
-            .check
-            .unwrap_or_default()
-            .iter()
-            .map(|step| Step::parse(step, names).map_err(|e| bad(&e.to_string())))
-            .collect::<Result<_, _>>()?;
+        let value = match (take, self.value) {
+            (Take::Spelled, Some(value)) if steps.iter().any(|s| s.spells(value)) => value,
+            (Take::Spelled, _) => {
+                return Err(bad(
+                    "a `spelled` take names its `value`, and a step of the shape spells it: memory without a displacement for 0, else an index scale or an immediate equal to it",
+                ));
+            }
+            (_, None) => 0,
+            (_, Some(_)) => return Err(bad("only a `spelled` take names a `value`")),
+        };
+        let check = parse_steps(self.check, names).map_err(|e| bad(&e.to_string()))?;
         if !check.is_empty()
-            && (matches!(take, Take::Value | Take::Cell) || check.iter().any(|s| s.takes() > 0))
+            && (matches!(take, Take::Value | Take::Cell | Take::Spelled)
+                || check.iter().any(|s| s.takes() > 0))
         {
             return Err(bad("`check` is a shape without `*` for a symbol"));
         }
@@ -239,8 +254,77 @@ impl RouteRow {
             check,
             shift: self.shift.unwrap_or(false),
             plus: self.plus.unwrap_or(0),
+            value,
         })
     }
+
+    /// The one way the row names, taken out of it.
+    fn how(&mut self, names: &ShapeNames) -> Result<How, TableError> {
+        let bad = |why: &str| TableError::Toml(format!("{}: {why}", self.id));
+        let listed = |list: Option<Vec<String>>| list.filter(|l| !l.is_empty());
+        let ways = [
+            self.called_by.is_some(),
+            self.calls.is_some(),
+            self.loads.is_some(),
+            self.system.is_some(),
+            self.within.is_some(),
+            self.field.is_some(),
+            self.size.is_some(),
+            self.callers.is_some(),
+        ];
+        if self.shape.as_ref().is_some_and(Vec::is_empty) {
+            return Err(bad("a `shape` is not empty"));
+        }
+        let shape = self.shape.take();
+        let shaped = shape.is_some();
+        let within_given = self.within.is_some();
+        let how = match (
+            listed(self.called_by.take()),
+            listed(self.calls.take()),
+            listed(self.loads.take()),
+            self.system.take().or(self.within.take()),
+            listed(self.field.take()),
+            self.size.take(),
+            self.callers.take(),
+        ) {
+            _ if ways.iter().filter(|&&w| w).count() != 1 => None,
+            (Some(names), ..) if !shaped => Some(How::CalledBy(names)),
+            (_, Some(names), ..) if !shaped => Some(How::Calls(names)),
+            (_, _, Some(strings), ..) if !shaped => Some(How::Loads(strings)),
+            (_, _, _, Some(within), ..) if shaped => Some(How::Shape {
+                within,
+                steps: parse_steps(shape, names).map_err(|e| bad(&e.to_string()))?,
+            }),
+            (_, _, _, Some(system), ..) if !within_given => Some(How::System(system)),
+            (.., Some(callee)) if shaped => Some(How::Callers {
+                callee,
+                steps: parse_steps(shape, names).map_err(|e| bad(&e.to_string()))?,
+            }),
+            (.., Some(path), None, None) if !shaped => Some(How::Field(
+                path.iter()
+                    .map(|step| {
+                        step.rsplit_once('.')
+                            .map(|(ty, field)| (ty.to_owned(), field.to_owned()))
+                            .ok_or_else(|| bad("a `field` step is `<type>.<field>`"))
+                    })
+                    .collect::<Result<_, _>>()?,
+            )),
+            (.., Some(ty), None) if !shaped => Some(How::Size(ty)),
+            _ => None,
+        };
+        how.ok_or_else(|| {
+            bad("a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, or `system`, `in` or `callers` with `shape`, each not empty")
+        })
+    }
+}
+
+/// The steps of a shape's text, none for none.
+fn parse_steps(texts: Option<Vec<String>>, names: &ShapeNames) -> Result<Vec<Step>, ShapeError> {
+    texts
+        .unwrap_or_default()
+        .iter()
+        .map(|step| Step::parse(step, names))
+        .collect()
 }
 
 /// The engine routes, read from their data.

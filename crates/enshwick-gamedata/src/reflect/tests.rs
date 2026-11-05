@@ -183,6 +183,54 @@ fn an_unreadable_field_record_drops_that_field_only() {
     assert_eq!(reflection.field_offset(name, "rangeZ"), Ok(12));
 }
 
+/// Writes a struct descriptor named `name` at `at`, its strings and field
+/// table from `strings` on, each field a name, an offset and the descriptor
+/// of its type.
+fn put_struct(fake: &mut Fake, at: u64, strings: u64, name: &str, fields: &[(&str, u64, u64)]) {
+    describe(fake, at, strings, name, KIND_STRUCT, None);
+    fake.put(at + DESCRIPTOR_SIZE_ALIGN, &0x20u32.to_le_bytes());
+    fake.put(at + DESCRIPTOR_SIZE_ALIGN + 4, &4u16.to_le_bytes());
+    let count = u32::try_from(fields.len()).unwrap();
+    fake.put(at + DESCRIPTOR_FIELD_COUNT, &count.to_le_bytes());
+    let table = strings + 0x80;
+    fake.put_u64(at + DESCRIPTOR_FIELDS, table);
+    for (i, &(field, offset, ty)) in (0u64..).zip(fields) {
+        let record = table + i * FIELD_RECORD;
+        fake.slice(record, strings + 0x200 + 0x20 * i, field);
+        fake.put_u64(record + FIELD_OFFSET, offset);
+        fake.put_u64(record + FIELD_TYPE, ty + DESCRIPTOR_SHORT_NAME);
+    }
+}
+
+#[test]
+fn a_field_path_sums_offsets_only_through_fields_that_hold_the_next_type() {
+    let mut fake = Fake::new();
+    let (inner, outer, other) = (rdata(0x100), rdata(0x200), rdata(0x300));
+    put_struct(
+        &mut fake,
+        inner,
+        rdata(0x400),
+        "demo::Inner",
+        &[("value", 8, other)],
+    );
+    put_struct(
+        &mut fake,
+        outer,
+        rdata(0x800),
+        "demo::Outer",
+        &[("inner", 4, inner), ("other", 0x10, other)],
+    );
+    put_struct(&mut fake, other, rdata(0xc00), "demo::Other", &[]);
+    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+    let reflection = Reflection::scan(&image);
+    let path = |steps: &[(&str, &str)]| reflection.field_path(steps);
+    let value = ("demo::Inner", "value");
+    assert_eq!(path(&[("demo::Outer", "inner"), value]), Some(12));
+    assert_eq!(path(&[("demo::Outer", "inner")]), Some(4));
+    assert_eq!(path(&[("demo::Outer", "other"), value]), None);
+    assert_eq!(path(&[("demo::Outer", "missing")]), None);
+}
+
 /// Writes a descriptor of `kind` named `name` at `at`, deriving from
 /// or holding the descriptor at `inner`, with its strings at `strings`.
 fn describe(fake: &mut Fake, at: u64, strings: u64, name: &str, kind: u8, inner: Option<u64>) {

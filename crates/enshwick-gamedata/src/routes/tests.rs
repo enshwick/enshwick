@@ -1,7 +1,7 @@
 use iced_x86::{Decoder, DecoderOptions, Instruction};
 
 use super::shape::{self, Step};
-use super::{Routed, Routes};
+use super::{How, Routed, Routes};
 use crate::reflect::{Image, Layout, Reflection};
 use crate::{Side, Table, embedded, exact};
 
@@ -9,6 +9,59 @@ use crate::{Side, Table, embedded, exact};
 fn the_embedded_routes_read() {
     let routes = Routes::embedded().unwrap();
     assert!(routes.ids().count() > 0);
+}
+
+/// Every type a `field` or `size` route names is in the typed catalogue of
+/// each table build of its side that has a snapshot, and each field holds
+/// the type of the step after it.
+#[test]
+#[cfg_attr(miri, ignore = "reads the typed snapshots from disk")]
+fn every_reflected_name_a_route_takes_is_in_the_typed_catalogue() {
+    let routes = Routes::embedded().unwrap();
+    let mut checked = 0;
+    for (_, text) in embedded() {
+        let table = Table::parse(text).unwrap();
+        let file = std::path::Path::new(&table.file_name()).with_extension("jsonl");
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("typed")
+            .join(&file);
+        let Ok(snapshot) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let catalogue = crate::typed::Catalogue::from_snapshot(&snapshot).unwrap();
+        for route in routes
+            .routes
+            .iter()
+            .filter(|r| r.sides.contains(&table.side()))
+        {
+            let ty = |name: &str| {
+                catalogue
+                    .types
+                    .get(name)
+                    .unwrap_or_else(|| panic!("{}: {name} is not in {file:?}", route.id))
+            };
+            match &route.how {
+                How::Field(steps) => {
+                    for (at, (owner, field)) in steps.iter().enumerate() {
+                        let held = ty(owner)
+                            .fields
+                            .iter()
+                            .find(|f| f.name == *field)
+                            .unwrap_or_else(|| panic!("{}: {owner}.{field} in {file:?}", route.id));
+                        if let Some((next, _)) = steps.get(at + 1) {
+                            assert_eq!(held.ty.as_ref(), Some(next), "{}", route.id);
+                        }
+                    }
+                }
+                How::Size(name) => {
+                    ty(name);
+                }
+                _ => continue,
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "no reflected route met a snapshot");
 }
 
 #[test]
@@ -64,6 +117,23 @@ fn a_route_without_exactly_one_way_or_with_a_wrong_take_is_refused() {
         r#"id = "a"
            in = "s"
            shape = ["mov eax,[rcx+0x0]"]"#,
+        r#"id = "a"
+           called_by = ["s"]
+           shape = ["ret"]"#,
+        r#"id = "a"
+           calls = ["s"]
+           shape = ["ret"]"#,
+        r#"id = "a"
+           loads = ["s"]
+           shape = ["ret"]"#,
+        r#"id = "a"
+           size = "keen::A"
+           shape = ["ret"]"#,
+        r#"id = "a"
+           callers = "s""#,
+        r#"id = "a"
+           system = "s"
+           shape = []"#,
     ] {
         assert!(
             Routes::parse(&format!("[[route]]\n{bad}")).is_err(),
@@ -72,6 +142,8 @@ fn a_route_without_exactly_one_way_or_with_a_wrong_take_is_refused() {
     }
     let twice = "[[route]]\nid = \"a\"\nloads = [\"t\"]\n[[route]]\nid = \"a\"\nloads = [\"u\"]";
     assert!(Routes::parse(twice).is_err());
+    let system = Routes::parse("[[route]]\nid = \"a\"\nsystem = \"s\"").unwrap();
+    assert_eq!(system.routes[0].how, How::System("s".to_owned()));
 }
 
 #[test]
@@ -309,6 +381,27 @@ fn fake() -> Fake {
 /// Routes of every kind over [`fake`], each row before the ones it names.
 const FAKE_ROUTES: &str = r#"
 [[route]]
+id = "t.spelled"
+in = "t.leaf"
+shape = ["mov eax,[rcx+?]", "shl eax,0x3"]
+take = "spelled"
+value = 3
+
+[[route]]
+id = "t.field"
+field = ["keen::Missing.value"]
+
+[[route]]
+id = "t.called"
+callers = "t.leaf"
+shape = ["mov eax,0x7", "mov eax,0x7"]
+
+[[route]]
+id = "t.called_twice"
+callers = "t.leaf"
+shape = ["ret"]
+
+[[route]]
 id = "t.disp"
 in = "t.leaf"
 shape = ["mov eax,[rcx+*]", "shl eax,?"]
@@ -414,15 +507,19 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
         found,
         [
             ("t.ambiguous", None),
+            ("t.called", Some(Routed::Reached(0x1010))),
+            ("t.called_twice", None),
             ("t.caller", Some(Routed::Reached(0x1020))),
             ("t.checked", Some(Routed::Symbol(0x1040))),
             ("t.disp", Some(Routed::Constant(0x79))),
+            ("t.field", None),
             ("t.inside", None),
             ("t.leaf", Some(Routed::Reached(0x1040))),
             ("t.long", Some(Routed::Symbol(0x1010))),
             ("t.loop", None),
             ("t.once", Some(Routed::Reached(0x101a))),
             ("t.shift", Some(Routed::Constant(8))),
+            ("t.spelled", Some(Routed::Constant(3))),
             ("t.string", Some(Routed::Reached(0x2180))),
             ("t.tail", Some(Routed::Reached(0x1062))),
             ("t.twice", None),
@@ -469,6 +566,48 @@ fn a_loose_constant_a_fixed_value_or_a_taking_check_is_refused() {
         "shape = [\"lea rcx,{a.c}\", \"mov eax,[rcx+*]\"]\ntake = \"value\"",
     ] {
         assert!(Routes::parse(&row(good)).is_ok(), "{good}");
+    }
+}
+
+#[test]
+fn a_spelled_value_needs_a_step_that_spells_it_and_a_reflected_number_stands_alone() {
+    let spelled = |keys: &str| format!("[[route]]\nid = \"a.b\"\nin = \"s\"\n{keys}");
+    for bad in [
+        "shape = [\"mov eax,[rcx+?]\", \"ret\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"mov eax,[rcx+0x10]\"]\ntake = \"spelled\"\nvalue = 0x10",
+        "shape = [\"mov eax,[rcx+0x10]\"]\ntake = \"spelled\"\nvalue = 1",
+        "shape = [\"mov eax,[rcx]\"]\ntake = \"spelled\"",
+        "shape = [\"mov eax,[rcx+*]\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"mov eax,[rip+?]\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"mov eax,[rcx]\", \"ret\"]\ntake = \"spelled\"\nvalue = 0\ncheck = [\"ret\"]",
+        "shape = [\"mov eax,[rcx]\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"nop [rax]\", \"cmp [rdx+?],r8d\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = []\ntake = \"spelled\"\nvalue = 0",
+    ] {
+        assert!(Routes::parse(&spelled(bad)).is_err(), "{bad}");
+    }
+    for good in [
+        "shape = [\"mov eax,[rcx]\", \"ret\"]\ntake = \"spelled\"\nvalue = 0",
+        "shape = [\"lea eax,[rcx+rdx*4]\", \"ret\"]\ntake = \"spelled\"\nvalue = 4",
+        "shape = [\"mov eax,0x18\"]\ntake = \"spelled\"\nvalue = 0x18",
+    ] {
+        assert!(Routes::parse(&spelled(good)).is_ok(), "{good}");
+    }
+    let reflected = |keys: &str| format!("[[route]]\nid = \"a.b\"\n{keys}");
+    for bad in [
+        "field = [\"keen::A\"]",
+        "field = [\"keen::A.b\"]\ntake = \"value\"",
+        "field = [\"keen::A.b\"]\nshape = [\"ret\"]",
+        "size = \"keen::A\"\ncheck = [\"ret\"]",
+        "size = \"keen::A\"\nfield = [\"keen::A.b\"]",
+    ] {
+        assert!(Routes::parse(&reflected(bad)).is_err(), "{bad}");
+    }
+    for good in [
+        "field = [\"keen::A.b\", \"keen::B.c\"]",
+        "size = \"keen::A\"",
+    ] {
+        assert!(Routes::parse(&reflected(good)).is_ok(), "{good}");
     }
 }
 
