@@ -22,9 +22,42 @@ Each entry names the pull request that made the change.
   per step; it downloads nothing, a dedicated server only logs it, and a
   prerelease counts only while the running loader is one. `release_check =
   false` in `enshwick.toml` turns the check off (#943).
+- `Load::add_weather_phenomenon` (behind `typed`) adds a copy of one of the
+  game's weather phenomena under the mod's content id, with its own
+  probability, duration, radius, strength and effect (`NewPhenomenon`,
+  `PhenomenonChange`), in its original's weather layer or another, and
+  `Load::change_weather_phenomenon` changes the game's own; mods apply in
+  load order. Clients draw weather from their own copy, so such a mod runs
+  on clients too. Luau reaches both through `enshwick.weather` (#936).
+- `Front::phenomenon` names the phenomenon of a weather front, and
+  `Load::on_front` tells a mod when a front starts and ends
+  (`FrontChanged`), also as `enshwick.weather.on_front`.
+  `WeatherFront::phenomenon`, ABI 11.6 (#936).
+- `chat`: `Load::on_chat` filters what players type on the server, after
+  the chat mute: a filter keeps, drops or rewrites a line (`ChatVerdict`),
+  filters chain in load order, and a filter that panics turns off alone.
+  `Load::on_chat_said` hears every line that reaches the chat as a
+  `ChatLine`, a player's lines at most eight a second. Luau reaches them as
+  `enshwick.chat.on_chat` and `enshwick.chat.on_chat_said`.
+  `HostApi::chat_filter`, `Event::CHAT_SAID`, `ChatLine` and `ChatRewrite`,
+  ABI 11.6. The fake host runs a player's line through the chat with `say`
+  (#936).
+- `WorldSaving` is raised when a save of the world begins, before
+  `WorldSaved`; `World::save_info` reads the save on disk as a `SaveInfo`
+  (its `WorldGuid`, time, size and backups); `World::hold_saves` holds the
+  world's saves while any running mod holds them, until the game a client
+  hosts ends. Luau reaches them through `enshwick.world`.
+  `Event::WORLD_SAVING`, `HostApi::save_info` and `hold_saves`, and
+  `SaveInfo`, ABI 11.6. The fake host sets the save with `set_save_info`
+  and reports holds with `saves_held` (#936).
+- `Spawn::do_not_save` spawns an entity the world's save leaves out, as the
+  game's own passing animals. `SpawnRequest::flags` and
+  `SpawnRequest::DO_NOT_SAVE`, ABI 11.6 (#936).
 
 ### Changed
 
+- The fake host refuses subscriptions to events the loader never raises, as
+  the loader does (#936).
 - **Breaking:** `script::Field::ty` is no longer `const`: a field gives its
   type when asked, so a game type may hold itself (#940).
 - A Luau mod's `u64` or `i64`, such as a key, takes a whole number up to
@@ -141,42 +174,8 @@ Each entry names the pull request that made the change.
 - Every loader error code and every question of "The game won't start" has
   its text in Ukrainian too, so the documentation site has its error pages at
   `/uk/errors/<code>/` (#927).
-- `Load::add_weather_phenomenon` (behind `typed`) adds a copy of one of the
-  game's weather phenomena under the mod's content id, with its own
-  probability, duration, radius, strength and effect (`NewPhenomenon`,
-  `PhenomenonChange`), in its original's weather layer or another, and
-  `Load::change_weather_phenomenon` changes the game's own; mods apply in
-  load order. Clients draw weather from their own copy, so such a mod runs
-  on clients too. Luau reaches both through `enshwick.weather` (#936).
-- `Front::phenomenon` names the phenomenon of a weather front, and
-  `Load::on_front` tells a mod when a front starts and ends
-  (`FrontChanged`), also as `enshwick.weather.on_front`.
-  `WeatherFront::phenomenon`, ABI 11.6 (#936).
-- `chat`: `Load::on_chat` filters what players type on the server, after
-  the chat mute: a filter keeps, drops or rewrites a line (`ChatVerdict`),
-  filters chain in load order, and a filter that panics turns off alone.
-  `Load::on_chat_said` hears every line that reaches the chat as a
-  `ChatLine`, a player's lines at most eight a second. Luau reaches them as
-  `enshwick.chat.on_chat` and `enshwick.chat.on_chat_said`.
-  `HostApi::chat_filter`, `Event::CHAT_SAID`, `ChatLine` and `ChatRewrite`,
-  ABI 11.6. The fake host runs a player's line through the chat with `say`
-  (#936).
-- `WorldSaving` is raised when a save of the world begins, before
-  `WorldSaved`; `World::save_info` reads the save on disk as a `SaveInfo`
-  (its `WorldGuid`, time, size and backups); `World::hold_saves` holds the
-  world's saves while any running mod holds them, until the game a client
-  hosts ends. Luau reaches them through `enshwick.world`.
-  `Event::WORLD_SAVING`, `HostApi::save_info` and `hold_saves`, and
-  `SaveInfo`, ABI 11.6. The fake host sets the save with `set_save_info`
-  and reports holds with `saves_held` (#936).
-- `Spawn::do_not_save` spawns an entity the world's save leaves out, as the
-  game's own passing animals. `SpawnRequest::flags` and
-  `SpawnRequest::DO_NOT_SAVE`, ABI 11.6 (#936).
 
 ### Changed
-
-- The fake host refuses subscriptions to events the loader never raises, as
-  the loader does (#936).
 
 - The loader ships as alphas, GitHub prereleases tagged `v1.0.0-alpha.N`
   whose notes list the supported game builds and what changed, in place of
