@@ -346,6 +346,30 @@ pub struct Constant {
     pub(crate) cell: Option<String>,
     pub(crate) carried: bool,
     pub(crate) fixed: bool,
+    pub(crate) witness: Option<Witness>,
+    pub(crate) one_witness: Option<String>,
+}
+
+/// A second use of a constant's value elsewhere in the code, which a build
+/// without its own table must read the same value from before it takes it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Witness {
+    pub(crate) pattern: Pattern,
+    pub(crate) operand: Operand,
+}
+
+impl Witness {
+    /// The code of the second use.
+    #[must_use]
+    pub const fn pattern(&self) -> &Pattern {
+        &self.pattern
+    }
+
+    /// Where the value lies in the pattern's match.
+    #[must_use]
+    pub const fn operand(&self) -> Operand {
+        self.operand
+    }
 }
 
 impl Constant {
@@ -421,6 +445,20 @@ impl Constant {
     #[must_use]
     pub const fn fixed(&self) -> bool {
         self.fixed
+    }
+
+    /// The second use of the value a carry checks it against; see
+    /// [`Witness`].
+    #[must_use]
+    pub const fn witness(&self) -> Option<&Witness> {
+        self.witness.as_ref()
+    }
+
+    /// Why no second use of the value exists, for a value a carry takes on
+    /// its one pattern alone.
+    #[must_use]
+    pub fn one_witness(&self) -> Option<&str> {
+        self.one_witness.as_deref()
     }
 
     /// The value as its pattern finds it in `code`: read from the operand,

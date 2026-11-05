@@ -34,7 +34,7 @@ mod version;
 
 pub use parts::{Part, PartState};
 
-pub use entries::{Body, Constant, Locate, Operand, Symbol};
+pub use entries::{Body, Constant, Locate, Operand, Symbol, Witness};
 pub use reflect::Fingerprint;
 pub use resolve::{Kind, Resolved, Routing, embedded, exact, newest};
 pub use routes::{Routed, Routes, ShapeNames, check_holds, make_check, shape_checks};
