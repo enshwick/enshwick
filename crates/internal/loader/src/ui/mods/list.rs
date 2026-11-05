@@ -157,6 +157,12 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             done = Listed::Settings(index);
         }
     }
+    for (id, name) in crate::actions::server_only(|id| mods.iter().any(|m| m.id == id)) {
+        paint.label(name.as_bytes(), UiWidget::STYLE_H3, false, false);
+        if paint.button(texts::text("actions").as_bytes(), true) {
+            done = Listed::Actions(id);
+        }
+    }
     let beside = crate::others::loaded(&loader.others);
     if !beside.is_empty() {
         let line = texts::fill("mods.others.beside", &[("files", &beside.join(", "))]);

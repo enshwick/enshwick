@@ -349,6 +349,19 @@ pub(crate) fn sheet_heard(first: bool, last: bool, id: String, label: String, te
     });
 }
 
+/// The server's mods with actions that `loaded` says the client does not
+/// run, by id and name: a server-only mod's actions have no other path.
+pub(crate) fn server_only(loaded: impl Fn(&str) -> bool) -> Vec<(String, String)> {
+    heard(|h| {
+        h.sheets
+            .iter()
+            .flatten()
+            .filter(|m| !m.entries.is_empty() && !loaded(&m.id))
+            .map(|m| (m.id.clone(), m.label.clone()))
+            .collect()
+    })
+}
+
 /// The answer to a run, on the client.
 pub(crate) fn result_heard(ok: bool, text: String) {
     hear(|heard| heard.result = Some((ok, text)));
@@ -415,5 +428,21 @@ mod tests {
         assert_eq!(ids, Some(vec!["a".to_owned(), "b".to_owned()]));
         sheet_heard(true, true, String::new(), String::new(), "");
         assert_eq!(heard(|h| h.sheets.as_ref().map(Vec::len)), Some(0));
+    }
+
+    #[test]
+    fn only_server_mods_with_actions_get_their_own_actions_entry() {
+        let entry = Entry {
+            id: "mute".into(),
+            label: "Muted".into(),
+            offered: true,
+            ..Entry::default()
+        };
+        let text = sheet::encode(&[entry]);
+        sheet_heard(true, false, "admin".into(), "Admin Tools".into(), &text);
+        sheet_heard(false, false, "safes".into(), "Safes".into(), &text);
+        sheet_heard(false, true, "quiet".into(), "Quiet".into(), "");
+        let only = server_only(|id| id == "safes");
+        assert_eq!(only, vec![("admin".to_owned(), "Admin Tools".to_owned())]);
     }
 }
