@@ -12,7 +12,11 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{HookFlags, Status};
+mod said;
+
+pub(crate) use said::register;
+
+use enshwick::abi::{ChatLine, HookFlags, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
@@ -241,6 +245,7 @@ fn replied(text: &str) -> impl Iterator<Item = &str> {
 /// Links the chat post on the server; without it mods' chat lines and the
 /// messages clients send stay off and the log says so.
 pub(crate) fn link(loader: &'static Loader) {
+    said::seal();
     let symbol = |name: Symbol| loader.build.symbol(name.id()).map(|rva| loader.base + rva);
     let constant = |name: Constant| {
         loader
@@ -329,7 +334,8 @@ unsafe extern "system" fn post(
 ) -> *mut u8 {
     // SAFETY: this is the entry of the loader's link on `chat.post`, on the
     // game's calling thread, by this function's `# Safety`.
-    let judged = match unsafe { typed_line(out) } {
+    let typed = unsafe { typed_line(out) };
+    let judged = match typed {
         None => Verdict::Pass(kind),
         // A check that panicked turns its fuse off: the mute is gone for the
         // process, but a player's line still posts as typed text.
@@ -358,13 +364,118 @@ unsafe extern "system" fn post(
             "chat: the client of {hash:016x} sent a line of chat type {kind}; it posts as typed text"
         );
     }
+    let heard = CHAT_FUSE
+        .run("the chat line for mods", || {
+            // SAFETY: `text` is the game's own argument at the entry of
+            // `chat.post`, by this function's `# Safety`.
+            unsafe { for_mods(typed.is_some(), kind, text, hash, [loca1, loca2]) }
+        })
+        .unwrap_or(Heard::Keep);
+    let rewritten = match heard {
+        Heard::Keep => None,
+        Heard::Drop => {
+            // SAFETY: a line is dropped only for a non-null `out` (a typed
+            // line), a result record of at least 8 writable bytes by this
+            // function's `# Safety`.
+            unsafe { enshwick::raw::write_at(out, 0, 0u64) };
+            return out;
+        }
+        Heard::Rewrite(new) => Some(new),
+    };
+    let span = rewritten
+        .as_ref()
+        .map(|new| [new.as_ptr().expose_provenance(), new.len()]);
+    let text = span.as_ref().map_or(text, |span| &raw const *span);
     match next() {
         // SAFETY: `next` is the rest of `chat.post`'s chain, wired while this
         // detour runs, and the arguments are the game's own, the chat type
-        // bounded to typed text for a line a player's client sent.
+        // bounded to typed text for a line a player's client sent; a text a
+        // filter rewrote is a span over `rewritten`, which lives past the
+        // call and holds at most the table's `chat.max_text` bytes.
         Some(next) => unsafe { next(out, store, posted, text, loca1, loca2, handle, hash, extra) },
         None => out,
     }
+}
+
+/// What mods made of a line the game posts.
+#[derive(Debug, PartialEq, Eq)]
+enum Heard {
+    /// It goes on as it is.
+    Keep,
+    /// A chat filter dropped it.
+    Drop,
+    /// The chat filters left this text instead.
+    Rewrite(String),
+}
+
+/// Hands a line the game posts to the mods: a player's line (`typed`) to
+/// the chat filters, then every line that goes on to the lines mods hear
+/// after the step. Nothing happens while no mod filters or hears the chat.
+///
+/// # Safety
+///
+/// - `text` is null or the game's span of pointer and byte length, its bytes
+///   readable and unchanged for the call.
+unsafe fn for_mods(
+    typed: bool,
+    kind: u8,
+    text: *const [usize; 2],
+    key: u64,
+    loca: [u32; 2],
+) -> Heard {
+    let Some(&(loader, layout)) = LOADED.get() else {
+        return Heard::Keep;
+    };
+    if said::idle(loader) {
+        return Heard::Keep;
+    }
+    // SAFETY: the caller guarantees `text` null or readable for the call.
+    let original = unsafe { read_text(text, layout.max_text) };
+    let (kind, line, heard) = if typed {
+        match said::filter(key, loca, original.clone(), layout.max_text) {
+            None => return Heard::Drop,
+            Some(line) if line == original => (ChatLine::PLAYER, line, Heard::Keep),
+            Some(line) => (ChatLine::PLAYER, line.clone(), Heard::Rewrite(line)),
+        }
+    } else {
+        (said::kind_of(kind), original, Heard::Keep)
+    };
+    said::heard(
+        loader,
+        said::Said {
+            player: key,
+            kind,
+            loca,
+            text: line,
+        },
+    );
+    heard
+}
+
+/// The text of the game's span `text`, at most `max` bytes, with bytes that
+/// are not UTF-8 replaced.
+///
+/// # Safety
+///
+/// - `text` is null or the game's span of pointer and byte length, its bytes
+///   readable and unchanged for the call.
+unsafe fn read_text(text: *const [usize; 2], max: usize) -> String {
+    if text.is_null() {
+        return String::new();
+    }
+    // SAFETY: `text` is non-null, checked by the guard before it, and is the
+    // game's span of two words, readable for the call by this function's
+    // `# Safety`.
+    let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
+    if ptr == 0 || len == 0 {
+        return String::new();
+    }
+    let mut bytes = vec![0u8; len.min(max)];
+    // SAFETY: `ptr` is non-null and the span holds `len` bytes, at least
+    // `bytes`' length, readable and unchanged for the call by this
+    // function's `# Safety`.
+    unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes) };
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 /// The start of the hidden lines an older loader's client sends its server.
@@ -461,10 +572,15 @@ fn verdict(typed: bool, kind: u8, muted: bool, old_frame: bool) -> Verdict {
 pub(crate) fn forget() {
     OUTBOX.relock().clear();
     WAITING.store(false, Ordering::Release);
+    said::forget();
 }
 
-/// Posts waiting lines; on the game thread, outside the game's systems.
+/// Raises the lines mods hear, then posts waiting lines; on the game
+/// thread, outside the game's systems.
 pub(crate) fn drain() {
+    if let Some(&(loader, _)) = LOADED.get() {
+        said::raise(loader);
+    }
     if !WAITING.load(Ordering::Acquire) {
         return;
     }

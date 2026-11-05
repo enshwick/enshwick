@@ -62,10 +62,12 @@ pub enum Feature {
     Controls,
     /// Filters on players' actions with items.
     Items,
+    /// Chat filters.
+    Chat,
 }
 
 /// How many features there are.
-pub const FEATURES: usize = 21;
+pub const FEATURES: usize = 22;
 
 impl Feature {
     /// The feature in the report.
@@ -93,6 +95,7 @@ impl Feature {
             Self::Calls => "calls",
             Self::Controls => "controls",
             Self::Items => "item filters",
+            Self::Chat => "chat filters",
         }
     }
 
@@ -118,6 +121,7 @@ impl Feature {
         Self::Calls,
         Self::Controls,
         Self::Items,
+        Self::Chat,
     ];
 }
 

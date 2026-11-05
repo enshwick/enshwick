@@ -107,7 +107,7 @@ impl Event {
     /// kept, as they left it, an emote or another line the server posted;
     /// data is a [`ChatLine`](super::ChatLine). Lines the loader posts for
     /// mods raise none, and a player's lines raise at most eight a second.
-    /// Raised on the game thread after the step. Server only. ABI 11.5.
+    /// Raised on the game thread after the step. Server only. ABI 11.6.
     pub const CHAT_SAID: Self = Self(21);
 }
 

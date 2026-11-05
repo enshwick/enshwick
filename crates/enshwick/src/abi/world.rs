@@ -486,7 +486,7 @@ pub struct WeatherFront {
     /// How long it has left, in game nanoseconds.
     pub remaining: i64,
     /// The GUID of its phenomenon in the weather resource, all zero when
-    /// the loader did not find it. ABI 11.5.
+    /// the loader did not find it. ABI 11.6.
     pub phenomenon: [u8; 16],
 }
 
