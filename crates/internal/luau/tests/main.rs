@@ -1,12 +1,15 @@
 //! The integration tests of the Luau runtime, one module per area, built
 //! into one binary.
 
+mod actions;
 mod affixes;
 mod altars;
 mod book;
 mod calls;
 mod chat;
 mod content;
+mod controls;
+mod damage;
 mod daytime;
 mod deps;
 mod every_call;
@@ -25,4 +28,5 @@ mod saves;
 mod scripts;
 mod shrine;
 mod typed;
+mod ui;
 mod weather;

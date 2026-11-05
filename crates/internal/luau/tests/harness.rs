@@ -11,15 +11,15 @@ use enshwick::test::{FakeHost, Installed};
 use enshwick::{Load, Mod, Off};
 use enshwick_luau::{Limits, Runtime, Scripts};
 
-static CASE: Mutex<Option<(Scripts, Option<Schema>)>> = Mutex::new(None);
+static CASE: Mutex<Option<(Scripts, Option<Schema>, Limits)>> = Mutex::new(None);
 static RUNTIME: Mutex<Option<Runtime>> = Mutex::new(None);
 
 struct Luau;
 
 impl Mod for Luau {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let (scripts, settings) = CASE.lock().unwrap().take().unwrap();
-        let runtime = enshwick_luau::start(load, "you.luau", scripts, settings, Limits::default())?;
+        let (scripts, settings, limits) = CASE.lock().unwrap().take().unwrap();
+        let runtime = enshwick_luau::start(load, "you.luau", scripts, settings, limits)?;
         *RUNTIME.lock().unwrap() = Some(runtime);
         Ok(Self)
     }
@@ -41,7 +41,18 @@ pub(crate) fn start_with(
     scripts: Scripts,
     settings: Option<Schema>,
 ) -> (Installed, Status) {
-    *CASE.lock().unwrap() = Some((scripts.with("main.luau", main), settings));
+    start_with_limits(host, main, scripts, settings, Limits::default())
+}
+
+/// Starts as [`start_with`] does, under `limits`.
+pub(crate) fn start_with_limits(
+    host: FakeHost,
+    main: &str,
+    scripts: Scripts,
+    settings: Option<Schema>,
+    limits: Limits,
+) -> (Installed, Status) {
+    *CASE.lock().unwrap() = Some((scripts.with("main.luau", main), settings, limits));
     let loader = host.install();
     // SAFETY: both functions are the exports of this file's `declare_mod!(Luau)`.
     let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };

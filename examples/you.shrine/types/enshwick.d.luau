@@ -18,6 +18,33 @@ export type AccountAction = "Kick" | "Ban" | "UnBan"
 --- What a player does that a reward follows.
 export type Action = { Craft: number } | { LevelUp: number } | "Join" | "Loot" | "Quest" | { Consume: number } | { Pickup: number }
 
+--- How a request went, as a script's handler answers it: `Outcome`'s parts as a table.
+export type ActionOutcome = {
+	--- Whether the action was done, as `Outcome.is_done` says.
+	done: boolean,
+	--- The text the player reads, as `Outcome.text` gives it.
+	text: string,
+}
+
+--- A value the player picked for an argument, in the order of `Action.arg`; a list hands the player and the switch.
+export type ActionValue = { Player: ActionValuePlayer } | { Choice: number } | { Number: number } | { Toggle: boolean }
+
+--- One of the server's players: the account key, and the name as the server knows it.
+export type ActionValuePlayer = {
+	--- The account key, as `Player.key`.
+	key: string,
+	--- The name, online or as the mod's list keeps it.
+	name: string,
+}
+
+--- A mod's player actions, declared once and offered in the game's interface.
+export type Actions = {
+	--- Declares `action` with its `handler`, which runs on the server's game thread, as `Actions.add` does.
+	add: (self: Actions, action: PlayerAction, handler: (arg1: Request) -> ActionOutcome?) -> (),
+	--- On a client, asks the server to run this mod's action `action` with `args`, as `Actions.run` does.
+	run: (self: Actions, action: string, args: {ActionValue}) -> (),
+}
+
 --- Rolls on crafted items, for `Load.add_craft_affixes`.
 export type AffixCraft = {
 	--- The chance each fitting crafted item rolls at all, from 0 to 1.
@@ -107,6 +134,9 @@ export type Altars = {
 	bases: (self: Altars) -> {Base},
 }
 
+--- Where on the HUD a line or bar shows; items at one anchor stack in the order drawn.
+export type Anchor = "TopLeft" | "TopCenter" | "TopRight" | "BottomLeft" | "BottomCenter" | "BottomRight"
+
 --- The answer to a `Lookup`. The name is enshwick's, not the game's.
 export type Answer = "Vanilla" | { Entity: number } | "Nobody"
 
@@ -116,6 +146,20 @@ export type Apply = {
 	duration: number?,
 	--- Its level, for a new buff; nil for none.
 	level: number?,
+}
+
+--- An argument of an action: a typed choice, never free text.
+export type Arg = {
+}
+
+--- Who asks about an action, for its `at` and a list's players.
+export type Ask = {
+	--- The player, as `Ask.player` holds it.
+	player: (self: Ask) -> Player,
+	--- The language they read, as `Ask.language` holds it.
+	language: (self: Ask) -> string,
+	--- The mod's text `key` in the player's language, filled with `values`, a list of `{ name, value }`, as `Ask.say` fills it.
+	say: (self: Ask, key: string, values: {{string}}) -> string,
 }
 
 --- A value with its maximum on an item's own entity, as the item's slot shows it: its durability, or its meter (see `FuelSetup`). The name is enshwick's: the game's durability or fuel value with its maximum.
@@ -288,6 +332,14 @@ export type BuildingZoneCheck = {
 	margin: number,
 }
 
+--- A button as a script draws it: the fields of `Button`'s builder.
+export type Button = {
+	--- The text on it.
+	text: string,
+	--- Whether it takes clicks, as `Button.enabled` sets it; nil is true.
+	enabled: boolean?,
+}
+
 --- One affix of the pool a roll draws from.
 export type Candidate = {
 	--- The affix's key.
@@ -438,6 +490,24 @@ export type ContentRename = {
 	to: string,
 }
 
+--- A control as a script declares it: the fields of `Control`'s builder.
+export type Control = {
+	--- The control's name, 1 to 32 of `a-z0-9-`, as `Control.new` takes it.
+	name: string,
+	--- What the controls page shows, a text key.
+	label: string,
+	--- The default key, as `Control.key` sets it.
+	key: string?,
+	--- A second default key, as `Control.second` sets it.
+	second: string?,
+	--- The game action it follows on the server, by its game name, as `Control.link` sets it.
+	link: string?,
+	--- The phases it fires on, as `Control.fires` sets them; empty is a press alone.
+	fires: {Phase}?,
+	--- Seconds the key stays down before a hold fires, as `Control.hold_for` sets it.
+	hold_for: number?,
+}
+
 --- A player asked a station to craft, before the server checks ingredients.
 export type CraftRecipeEvent = {
 	--- The crafting player's character.
@@ -501,6 +571,18 @@ export type Derived = {
 	workshop: string?,
 }
 
+--- A dialog as a script shows it: the fields of `Dialog`'s builder.
+export type Dialog = {
+	--- The title.
+	title: string,
+	--- The message.
+	message: string,
+	--- Smaller text under the message, as `Dialog.detail` sets it.
+	detail: string?,
+	--- The buttons, as `Dialog.buttons` sets them; none keeps OK.
+	buttons: {Response}?,
+}
+
 --- How a request ended.
 export type Done = "Committed" | "RolledBack" | "Unavailable" | "TimedOut" | "Refused"
 
@@ -517,6 +599,19 @@ export type Drop = {
 	--- Where it may drop.
 	from: LootSource,
 }
+
+--- A dropdown row as a script draws it: the fields of `Dropdown`'s builder.
+export type Dropdown = {
+	--- The row's label.
+	label: string,
+	--- The options, at most `MAX_OPTIONS` of them shown.
+	options: {string},
+	--- Whether it shows the choice without taking changes, as `Dropdown.read_only` sets it.
+	read_only: boolean?,
+}
+
+--- The edge of the screen an extension's panel sits at, centred along it.
+export type Edge = "Left" | "Right" | "Top" | "Bottom"
 
 --- A kind of entity data with a game data value per entity, from `entity_data`.
 export type EntityData = {
@@ -567,6 +662,16 @@ export type Field = {
 
 --- How a script reads and writes a component field: one of the scalar types `World.get` takes.
 export type FieldKind = "U8" | "I8" | "U16" | "I16" | "U32" | "I32" | "U64" | "I64" | "F32" | "F64" | "Bool" | "Entity"
+
+--- A control that fired, as a script's handler gets it: `Fired`'s fields.
+export type Fired = {
+	--- The control's name.
+	control: string,
+	--- What happened to it.
+	phase: Phase,
+	--- On the server, the player whose game action fired a linked control.
+	player: Player?,
+}
 
 --- A player acted at a Flame Altar.
 export type FlameAltarEvent = {
@@ -620,6 +725,31 @@ export type FogState = {
 
 --- The weather to start, for `Weather.set`. The name is enshwick's, not the game's.
 export type Forecast = "Clear" | "Rain" | "Blizzard" | "Any"
+
+--- What a script's `at` found, as the `Result` of `Action.at`: the subject, or the reason the player reads beside the dimmed action.
+export type FoundSubject = { Ok: Subject } | { Err: string }
+
+--- One frame of the interface: draw widgets in order through it, during its callback.
+export type Frame = {
+	--- Where the player is, as `Frame.screen` says.
+	screen: (self: Frame) -> Screen,
+	--- Draws a window titled `title` and its contents with `body`, which gets this frame, as `Frame.window` does; false when it could not be drawn, and `body` did not run.
+	window: (self: Frame, id: string, title: string, body: (arg1: Frame) -> ()) -> boolean,
+	--- Draws a line of text, as `Frame.label` does.
+	label: (self: Frame, label: Label) -> (),
+	--- Draws a button, as `Frame.button` does; true in the frame it is clicked.
+	button: (self: Frame, button: Button) -> boolean,
+	--- Draws a toggle row showing `on`, as `Frame.toggle` does, and returns the value, changed in the frame the player changes it.
+	toggle: (self: Frame, toggle: Toggle, on: boolean) -> boolean,
+	--- Draws a slider row showing `value`, as `Frame.slider` does, and returns the value, changed in the frame the player changes it.
+	slider: (self: Frame, slider: Slider, value: number) -> number,
+	--- Draws a dropdown row showing option `index`, from 0, as `Frame.dropdown` does, and returns the index, changed in the frame the player picks another.
+	dropdown: (self: Frame, dropdown: Dropdown, index: number) -> number,
+	--- Draws a bar filled to `fraction`, from 0 to 1, as `Frame.progress` does.
+	progress: (self: Frame, fraction: number) -> (),
+	--- Plays one of the game's interface sounds, as `Frame.sound` does.
+	sound: (self: Frame, sound: Sound) -> (),
+}
 
 --- A front of weather, from `Weather.fronts`.
 export type Front = {
@@ -731,6 +861,17 @@ export type Hold = {
 	--- Holds the saves for `reason`, with the text of the mod's texts key `key` and `args`, each a name and its value, for players, as `Hold.set_text` does.
 	set_text: (self: Hold, reason: string, key: string, args: {{string}}) -> (),
 }
+
+--- The HUD of one frame: what it draws shows this frame only, during its callback.
+export type Hud = {
+	--- Draws a line of text at `anchor`, as `Hud.text` does.
+	text: (self: Hud, anchor: Anchor, label: Label) -> (),
+	--- Draws a bar filled to `fraction`, from 0 to 1, at `anchor`, as `Hud.progress` does.
+	progress: (self: Hud, anchor: Anchor, fraction: number) -> (),
+}
+
+--- One of the game's screens, which `Load.extend_screen` adds a panel to. The members and their names are the game's `HudScreenType`, read from its reflection on client 520; a screen the running build lacks is refused at registration.
+export type HudScreenType = "InGame" | "SystemMenu" | "SettingsMenu" | "InGameMenu" | "Map" | "Journal" | "Character" | "PlayerCrafting" | "Backpack" | "SkillTree" | "SkillTreeRespec" | "FlameAltar" | "AltarUpgrade" | "FlameUpgrade" | "AltarDeactivate" | "AltarReskill" | "AltarItemPickup" | "LoreReading" | "Signpost" | "LogicEditor" | "ReadOnlyLootChest" | "StorageChest" | "Collection" | "FeedingStation" | "StationBasedCrafting" | "NpcDialog" | "NpcCrafting" | "FactoryCrafting" | "BlueprintMultiTool" | "BlueprintMultiToolMaterialCatalog" | "OvergrowthMultiTool" | "DecayMultiTool" | "ScrewdriverMultiToolBuildingMode" | "ScrewdriverMultiToolGraphManager" | "ScrewdriverMultiToolEntityConfig" | "TerraformingSideMenu" | "NpcSummonerMenu" | "UserFeedback" | "TwitchDrops" | "RedeemCommerceProducts" | "CommerceProductChest" | "ItemTinting" | "TextChat" | "Social" | "ShroudForge" | "CharacterCustomization" | "Rename" | "TakeScreenshot" | "InfoPopup" | "NewCommerceUnlock" | "NoUi" | "TechGallery" | "YcPlayground"
 
 --- An item's own icon, for `NewItem.icon`.
 export type Icon = {
@@ -966,6 +1107,18 @@ export type Known = {
 	expected_flags: number,
 }
 
+--- A line of text as a script draws it: the fields of `Label`'s builder.
+export type Label = {
+	--- The text.
+	text: string,
+	--- One of the game's text styles, as `Label.style` sets it.
+	style: Style?,
+	--- Whether it wraps at the width of its window, as `Label.wrap` sets it.
+	wrap: boolean?,
+	--- Whether it is centred, as `Label.center` sets it.
+	center: boolean?,
+}
+
 --- How long a modifier a mod sets on an entity lasts.
 export type Lasting = "UntilRemoved" | { For: number } | "Saved"
 
@@ -1001,6 +1154,14 @@ export type Line = {
 	value: number,
 	--- The affix it comes from, by index (see `Affixes.info`); nil for the item's own modifiers.
 	affix: number?,
+}
+
+--- A player a list shows, with the switch on.
+export type ListedPlayer = {
+	--- The account key, as `Player.key`.
+	key: string,
+	--- The name the list shows.
+	name: string,
 }
 
 --- A survivor lookup the game makes, for `on_survivor_lookup` to answer.
@@ -1095,6 +1256,24 @@ export type MapMarker = {
 	label: string?,
 }
 
+--- A marker type of the client's marker type registry, the game's `MapMarkerType`: what a marker of that type looks like on the map, for a mod's own markers to take one.
+export type MapMarkerType = {
+	--- Its key, `markerId`, which `MapMarker.marker_type` names and `Marker.marker_type` takes.
+	marker_type: number,
+	--- The text tag of its name, `typeName`; nil for most types, which have none.
+	type_name: string?,
+	--- The group the map sorts it into; nil for a group the game added that this API does not know yet.
+	sorting_category: MarkerTypeSorting?,
+	--- Whether players travel to markers of this type.
+	is_fast_travel_destination: boolean,
+	--- Whether it is a type of the markers players place themselves.
+	is_custom_marker_type: boolean,
+	--- Whether its markers show over the fog of war.
+	show_above_fog_of_war: boolean,
+	--- Whether its markers show their label.
+	show_label: boolean,
+}
+
 --- A player in a `MapSnapshot`.
 export type MapPlayer = {
 	--- The same for the same account in every session, as `Player.key`; a public map may leave it out.
@@ -1128,6 +1307,24 @@ export type MapSnapshot = {
 	--- The map's frame; nil for a scene without one.
 	frame: MapFrame?,
 }
+
+--- A marker as a script shows it: the fields of `Marker`'s builder.
+export type Marker = {
+	--- Where, in metres, y up.
+	position: vector,
+	--- The label beside its icon, as `Marker.label` sets it.
+	label: string?,
+	--- Its colour, as `Marker.color` sets it.
+	color: MarkerColor?,
+	--- The game's marker type, as `Marker.marker_type` sets it.
+	marker_type: number?,
+}
+
+--- One of the game's custom marker colours. Unstable: needs the `unstable` feature and may change in any release.
+export type MarkerColor = "White" | "Red" | "Green" | "Blue" | "Yellow" | "Purple" | "Turquoise" | "Black"
+
+--- The group the client's map sorts a marker type into, the game's `MarkerTypeSorting`.
+export type MarkerTypeSorting = "None" | "FlameRelated" | "Dungeons" | "Locations" | "CustomMarker"
 
 --- A value with its maximum, such as health. The name is enshwick's: one attribute's current and maximum value.
 export type Meter = {
@@ -1289,6 +1486,9 @@ export type Outcome = {
 --- Who a message comes from or goes to.
 export type Peer = "Server" | { Player: string }
 
+--- What happened to a control.
+export type Phase = "Press" | "Release" | "Hold"
+
 --- Values a mod sets on a weather phenomenon; each nil keeps the value of the phenomenon it starts from.
 export type PhenomenonChange = {
 	--- How likely the game picks it in its layer, 0 to 1.
@@ -1340,6 +1540,26 @@ export type Player = {
 	permissions: number,
 	--- The name the client sent; untrusted, may repeat between players.
 	name: string,
+}
+
+--- An action as a script declares it: the fields of `Action`'s builder.
+export type PlayerAction = {
+	--- The action's id, 1 to 32 of `a-z0-9-`, as `Action.new` takes it.
+	id: string,
+	--- The button's label, a text key.
+	label: string,
+	--- A line on what the action does, a text key, as `Action.help` sets it.
+	help: string?,
+	--- The arguments in order, as `Action.arg` adds them; a list takes none.
+	args: {Arg}?,
+	--- Whether only the server's administrators see and run it, as `Action.admins` sets it.
+	admins: boolean?,
+	--- Who sees and runs it, as `Action.allow` decides; only `true` allows, and with `admins` both must hold.
+	allow: ((player: Player) -> boolean?)?,
+	--- What it acts on for a player, as `Action.at` finds it.
+	at: ((ask: Ask) -> FoundSubject?)?,
+	--- The players of a list, as `Action.per_player` names them; such an action is a list of players with a switch each.
+	per_player: ((ask: Ask, subject: Subject?) -> {ListedPlayer}?)?,
 }
 
 --- The data of the `PlayerJoined` and `PlayerLeft` events.
@@ -1524,6 +1744,22 @@ export type Rename = {
 --- Who gets a kind's values.
 export type Replication = "Server" | "Clients"
 
+--- A player's request to run an action, handed to its handler on the server.
+export type Request = {
+	--- Who asks, as `Request.player` holds it.
+	player: (self: Request) -> Player,
+	--- What the action acts on, as `Request.subject` holds it.
+	subject: (self: Request) -> Subject?,
+	--- The values picked, in the order of the arguments, as `Request.args` holds them; a choice is its index from 0.
+	args: (self: Request) -> {ActionValue},
+	--- The language the player reads, as `Request.language` holds it.
+	language: (self: Request) -> string,
+	--- Where it came from, as `Request.via` holds it.
+	via: (self: Request) -> Via,
+	--- The mod's text `key` in the player's language, filled with `values`, a list of `{ name, value }`, as `Request.say` fills it.
+	say: (self: Request, key: string, values: {{string}}) -> string,
+}
+
 --- A generated resource type on the running build: its resources read and served as tables.
 export type ResourceType = {
 	--- The key of the resource of this type with GUID `guid`, part 0, as `{ guid, type, part }`.
@@ -1533,6 +1769,9 @@ export type ResourceType = {
 	--- Serves the resource `key`, made from the resource `base` the first time the game reads it: `change` gets the base's value as a table by the generated struct's field names and returns the value to serve, every field given, or nil to serve the base unchanged; the bytes of what the struct does not hold stay as the base has them. A change that fails or does not fit the type is logged, and the base is served unchanged. Allowed while the mod starts.
 	serve: (self: ResourceType, key: any, base: any, change: (arg1: any) -> any) -> (),
 }
+
+--- An answer the player gives a dialog; each has a button labelled by the game in the player's language.
+export type Response = "Retry" | "Disable" | "Erase" | "Reset" | "Overwrite" | "Cancel" | "Ok" | "Ignore"
 
 --- A downed player was revived.
 export type RevivedPlayerEvent = {
@@ -1604,6 +1843,9 @@ export type SaveInfo = {
 
 --- Whose a knowledge value is. The name is enshwick's, not the game's.
 export type Scope = "World" | "Player"
+
+--- Where the player is while a frame draws.
+export type Screen = "Menu" | "Loading" | "InGame"
 
 --- An op and its value, as `aggregate` takes them from a script.
 export type ScriptModifier = {
@@ -1721,6 +1963,20 @@ export type SkillCheck = {
 --- Which game check asks about a skill node. The name is enshwick's, not the game's.
 export type SkillGate = "FlyMode" | "Other"
 
+--- A slider row as a script draws it: the fields of `Slider`'s builder, its range as `min` and `max`.
+export type Slider = {
+	--- The row's label.
+	label: string,
+	--- One end of the range.
+	min: number,
+	--- The other end of the range.
+	max: number,
+	--- Evenly spaced stops, both ends included, as `Slider.steps` sets them; 0 is continuous.
+	steps: number?,
+	--- Whether it shows the value without taking changes, as `Slider.read_only` sets it.
+	read_only: boolean?,
+}
+
 --- One slot and what it holds.
 export type Slot = {
 	--- Where the slot is.
@@ -1734,6 +1990,9 @@ export type Slot = {
 	--- The item's own entity, for items with durability or a level.
 	pide: number?,
 }
+
+--- One of the game's interface sounds.
+export type Sound = "Click" | "Confirm" | "Back" | "Error"
 
 --- One modifier that counts toward a stat, with its origin.
 export type Source = {
@@ -1843,6 +2102,17 @@ export type Stats = {
 	name_key: (self: Stats, id: string) -> string?,
 	--- The value `def` gives with `modifiers`, each an op and its value, as `aggregate` gives it.
 	aggregate: (self: Stats, def: StatDef, modifiers: {ScriptModifier}) -> number,
+}
+
+--- One of the game's named text styles.
+export type Style = "Body" | "Secondary" | "H1" | "H2" | "H3" | "Warning" | "Positive" | "Negative"
+
+--- What an action acts on for a player, from `Action.at`: an id the handler gets back and a label the player reads.
+export type Subject = {
+	--- The mod's own id for it, such as a packed position.
+	id: string,
+	--- What the player reads, in their language.
+	label: string,
 }
 
 --- A summoning staff's use, from `Load.on_summon` and `Load.on_summoned`.
@@ -1986,6 +2256,14 @@ export type Tint = {
 	amount: number,
 }
 
+--- A toggle row as a script draws it: the fields of `Toggle`'s builder.
+export type Toggle = {
+	--- The row's label.
+	label: string,
+	--- Whether it shows the value without taking changes, as `Toggle.read_only` sets it.
+	read_only: boolean?,
+}
+
 --- What a dead character leaves behind. The loader reads the game's value of each variant by its constant's name.
 export type TombstoneMode = "AddBackpackMaterials" | "Everything" | "NoTombstone" | { Other: number }
 
@@ -2030,6 +2308,9 @@ export type UnlockedSkill = {
 
 --- How a `Change` changes its value.
 export type Value = { Set: number } | { Times: number }
+
+--- Where a request came from.
+export type Via = "Interface" | "Console"
 
 --- An entity's health, stamina and mana, from `World.vitals`. The name is enshwick's: read from the game's attribute sets.
 export type Vitals = {
@@ -2460,10 +2741,43 @@ declare enshwick: {
 		--- The names of the files and folders in `path`, relative to the mod's folder (`.` for the folder itself), sorted.
 		list: (path: string) -> {string},
 	},
+	--- Player actions: what a player asks a mod to do, declared once and offered in the game's interface.
+	actions: {
+		--- One of the server's players online now, as `Arg.player` makes it.
+		player: (label: string) -> Arg,
+		--- One of `choices`, each `{ word, label }`, as `Arg.choice` makes it.
+		choice: (label: string, choices: {{string}}) -> Arg,
+		--- A number from `min` to `max` in steps of `step`, 0 for any value, as `Arg.number` makes it from the range `min..=max`.
+		number: (label: string, min: number, max: number, step: number) -> Arg,
+		--- On or off, as `Arg.toggle` makes it.
+		toggle: (label: string) -> Arg,
+		--- What an action acts on, as `Subject.new` makes it.
+		subject: (id: string, label: string) -> Subject,
+		--- An action done, with the text the player reads, as `Outcome.done` makes it.
+		done: (text: string) -> ActionOutcome,
+		--- An action refused or failed, with the text the player reads, as `Outcome.refused` makes it.
+		refused: (text: string) -> ActionOutcome,
+		--- The mod's player actions, with the labels' texts `texts`, as `Load.actions` gives them.
+		--- Only while the mod starts, at the top level of main.luau.
+		actions: (texts: Texts) -> Actions,
+	},
 	--- Keys the mod declares for its players, and game actions they follow.
 	controls: {
-		--- Declares the control `name`, shown as `label`, on `key`, a key name such as `Shift+E` or empty for none, following the game action `link` by its game name, such as `ContextualAction`, or empty. It fires on `phases`, of `press`, `release` and `hold`, or on press when empty, and holds after `hold_ms`; `on` gets the phase and, on the server, the player whose game action fired. Allowed while the mod initialises.
-		declare: (name: string, label: string, key: string, link: string, phases: {string}, hold_ms: number, on: (arg1: string, arg2: Player?) -> ()) -> (),
+		--- The key `text` names, in its own spelling, as `Key.parse` reads it.
+		parse: (text: string) -> string,
+		--- The key `bits` hold, as `Key.from_bits` reads them; nil for bits no key can be bound to.
+		from_bits: (bits: number) -> string?,
+		--- The key's scan code and modifiers together, as `Key.bits` gives them.
+		bits: (key: string) -> number,
+		--- The key's scan code without modifiers, as `Key.code` gives it.
+		code: (key: string) -> number,
+		--- The modifiers' bits, 0 for none, as `Key.modifiers` gives them.
+		modifiers: (key: string) -> number,
+		--- Whether the key is a mouse button, as `Key.is_mouse` says.
+		is_mouse: (key: string) -> boolean,
+		--- Declares `control` with its handler `on`, as `Load.control` does.
+		--- Only while the mod starts, at the top level of main.luau.
+		control: (control: Control, on: (arg1: Fired) -> ()) -> (),
 	},
 	--- The server's console: lines a tool runs as an administrator with no character.
 	console: {
@@ -2584,6 +2898,26 @@ declare enshwick: {
 		write_atomically: (path: string, contents: buffer) -> (),
 		--- Where `write_atomically` keeps the file it replaced, as `backup_path` names it.
 		backup_path: (path: string) -> string,
+	},
+	--- The client's interface, drawn with the game's own widgets.
+	ui: {
+		--- Queues `dialog` and runs `on_answer` with the player's answer, nil when it closed without one, as `Ui.dialog` does.
+		dialog: (dialog: Dialog, on_answer: (arg1: Response?) -> ()) -> (),
+		--- Shows `markers` on the map in place of the mod's markers so far, as `Ui.set_markers` does.
+		set_markers: (markers: {Marker}) -> (),
+		--- Takes the mod's markers off the map, as `Ui.clear_markers` does.
+		clear_markers: () -> (),
+		--- Every marker type of the game's registry, as `Ui.map_marker_types` reads them.
+		map_marker_types: () -> {MapMarkerType},
+		--- Runs `draw` once per frame of the interface with the frame lent to it, as `Load.on_frame` does.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_frame: (draw: (arg1: Frame) -> ()) -> (),
+		--- Runs `draw` once per frame while the game draws its HUD, with the HUD lent to it, as `Load.on_hud` does.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_hud: (draw: (arg1: Hud) -> ()) -> (),
+		--- Adds a panel at `edge` of the game's screen `screen` and runs `draw` once per frame while it is open, with the frame lent to it, as `Load.extend_screen` does.
+		--- Only while the mod starts, at the top level of main.luau.
+		extend_screen: (screen: HudScreenType, edge: Edge, draw: (arg1: Frame) -> ()) -> (),
 	},
 	vetoes: {
 		--- Runs `filter` on each player's craft request in the server's world, before the crafting system reads it; returning `false` refuses it, and nothing is made or taken. It runs on the game thread, where `World` reads work, in the dedicated server or a hosting client.

@@ -21,6 +21,7 @@ mlua.workspace = true
 
 [dev-dependencies]
 enshwick = { workspace = true, features = ["test"] }
+criterion.workspace = true
 proptest.workspace = true
 enshwick-gamedata.workspace = true
 syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing"] }
@@ -31,3 +32,7 @@ workspace = true
 # One binary for every file in `tests/`, each a module of `tests/main.rs`.
 [[test]]
 name = "main"
+
+[[bench]]
+name = "damage_filter"
+harness = false

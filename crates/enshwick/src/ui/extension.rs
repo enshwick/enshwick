@@ -24,7 +24,7 @@ use super::screens::OPEN;
 ///
 /// assert_eq!(HudScreenType::StorageChest.name(), "StorageChest");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 #[expect(missing_docs, reason = "each member is the game's screen of that name")]
 pub enum HudScreenType {
@@ -101,7 +101,7 @@ impl HudScreenType {
 /// # Examples
 ///
 /// See [`Load::extend_screen`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Edge {
     /// The left edge.

@@ -450,7 +450,8 @@ impl Load<'_> {
 }
 
 /// The damage a script's filter sees and changes: a copy of the check,
-/// written back once the filter returns, with [`Damage`]'s methods.
+/// written back once the filter returns, with [`Damage`]'s methods; one
+/// per filter, filled again on every hit.
 #[cfg(feature = "unstable")]
 #[derive(Clone, Debug)]
 pub(crate) struct ScriptDamage(std::sync::Arc<std::sync::Mutex<DamageCheck>>);
@@ -467,7 +468,7 @@ impl ScriptDamage {
 
 #[cfg(feature = "unstable")]
 impl crate::script::Object for ScriptDamage {
-    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+    const CLASS: &'static crate::script::Class = &crate::script::Class::lent::<Self>(
         "Damage",
         "Damage about to reach an entity's health, for a filter to see and change.",
     );
@@ -556,10 +557,24 @@ impl Load<'_> {
         filter: impl Fn(ScriptDamage) + Send + Sync + 'static,
     ) -> Result<(), Off> {
         use crate::Relock as _;
+        use core::sync::atomic::{AtomicBool, Ordering};
+        let kept = std::sync::OnceLock::new();
+        let busy = AtomicBool::new(false);
         self.on_damage(move |damage| {
-            let copy = ScriptDamage(std::sync::Arc::new(std::sync::Mutex::new(*damage.check)));
+            let fresh = || ScriptDamage(std::sync::Arc::new(std::sync::Mutex::new(*damage.check)));
+            // A hit while the kept copy is out, on another thread or inside
+            // the filter, gets a copy of its own.
+            if busy.swap(true, Ordering::Acquire) {
+                let copy = fresh();
+                filter(copy.clone());
+                *damage.check = *copy.0.relock();
+                return;
+            }
+            let copy: &ScriptDamage = kept.get_or_init(fresh);
+            *copy.0.relock() = *damage.check;
             filter(copy.clone());
             *damage.check = *copy.0.relock();
+            busy.store(false, Ordering::Release);
         })
     }
 }

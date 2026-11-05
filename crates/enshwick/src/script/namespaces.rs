@@ -351,7 +351,13 @@ pub const NAMESPACES: &[Namespace] = &[
     ),
     Namespace::of::<crate::mods::Mods>(),
     #[cfg(feature = "unstable")]
-    Namespace::of::<crate::controls::Controls>(),
+    Namespace::of::<crate::actions::ActionFns>(),
+    #[cfg(feature = "unstable")]
+    Namespace::starting("actions", "", &[crate::Load::SCRIPT_ACTIONS]),
+    #[cfg(feature = "unstable")]
+    Namespace::of::<crate::controls::ControlFns>(),
+    #[cfg(feature = "unstable")]
+    Namespace::starting("controls", "", &[crate::Load::SCRIPT_CONTROLS]),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::console::ConsoleFns>(),
     Namespace::of::<crate::net::NetFns>(),
@@ -385,6 +391,16 @@ pub const NAMESPACES: &[Namespace] = &[
     ),
     Namespace::of::<crate::state::StateFns>(),
     Namespace::of::<crate::files::FilesFns>(),
+    Namespace::of::<crate::ui::Ui>(),
+    Namespace::starting(
+        "ui",
+        "",
+        &[
+            crate::Load::SCRIPT_UI,
+            #[cfg(feature = "unstable")]
+            crate::Load::SCRIPT_UI_EXTENSION,
+        ],
+    ),
     Namespace::starting("vetoes", "", &[crate::Load::SCRIPT_VETOES]),
     Namespace::starting("chat", "", &[crate::Load::SCRIPT_CHAT]),
     Namespace::starting("interactions", "", &[crate::Load::SCRIPT_INTERACTIONS]),

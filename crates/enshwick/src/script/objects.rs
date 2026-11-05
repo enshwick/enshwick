@@ -57,6 +57,7 @@ pub struct Class {
     doc: &'static str,
     describe: fn() -> Vec<Declared>,
     call: fn(&(dyn Any + Send + Sync), usize, Vec<Value>) -> Result<Value, Error>,
+    lent: bool,
 }
 
 impl Class {
@@ -73,7 +74,55 @@ impl Class {
             doc,
             describe: || declare(T::PARTS.iter().flat_map(|part| part.iter())),
             call: call::<T>,
+            lent: false,
         }
+    }
+
+    /// The class of a `T` a hook lends a script's function for one call,
+    /// such as the damage a filter changes: a runtime may hand the function
+    /// the same script object on every call, holding the call's handle.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,standalone_crate
+    /// use enshwick::script::{Class, Function, Object};
+    ///
+    /// #[derive(Clone, Copy, Debug)]
+    /// pub struct Hit(f32);
+    ///
+    /// #[enshwick::script(hits)]
+    /// impl Hit {
+    ///     /// The damage.
+    ///     #[script]
+    ///     pub fn amount(&self) -> f32 {
+    ///         self.0
+    ///     }
+    /// }
+    ///
+    /// impl Object for Hit {
+    ///     const CLASS: &'static Class = &Class::lent::<Self>("Hit", "A hit.");
+    ///     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_HITS];
+    /// }
+    ///
+    /// assert!(Hit::CLASS.is_lent());
+    /// ```
+    #[must_use]
+    pub const fn lent<T: Object>(name: &'static str, doc: &'static str) -> Self {
+        Self {
+            lent: true,
+            ..Self::of::<T>(name, doc)
+        }
+    }
+
+    /// Whether its objects are lent for one call, as [`Class::lent`] makes
+    /// them.
+    ///
+    /// # Examples
+    ///
+    /// See [`Class::lent`].
+    #[must_use]
+    pub const fn is_lent(&self) -> bool {
+        self.lent
     }
 
     /// The Rust type's name, the object's type in a script.

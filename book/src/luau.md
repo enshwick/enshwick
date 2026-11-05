@@ -189,8 +189,13 @@ function without one, unless this table names it and says why.
 | `typed::ComponentType::read`, `typed::ComponentType::write` | The handle `enshwick.typed.component_type` returns holds the server's world from the start, so `read` and `write` take no world. A value is a table by the Rust item's field names, and a write names every field ([The game's own types](game-types.md#can-a-luau-mod-use-them)). |
 | `affixes::roll` | `enshwick.affixes.roll` rolls an item, as `Affixes::roll` does, since a namespace holds one function of a name. The roll from a pool is `enshwick.affixes.roll_pool`. |
 | `actions::clean`, `actions::decode`, `actions::decode_args`, `actions::encode`, `actions::encode_args` | The text form a sheet and its arguments take between the server and a client. The loader and the fake host speak it; a script's actions never see it. |
-| `controls::Key::bits`, `controls::Key::from_bits`, `ui::Response::from_raw`, `ui::Response::to_raw` | The binary interface's form of a key and of a dialog's answer. A script names a key by its text, such as `Shift+E`, and an answer by its name. |
+| `ui::Response::from_raw`, `ui::Response::to_raw` | The binary interface's form of a dialog's answer. A script names an answer by its name. |
 | `controls::Tracker::*` | The key tracker the loader's key reader and the fake host share, so both fire a control alike. A script's control fires through the same loader. |
+| `actions::Action::*`, `controls::Control::*`, `ui::Label::*`, `ui::Button::*`, `ui::Toggle::*`, `ui::Slider::*`, `ui::Dropdown::*`, `ui::Dialog::*`, `ui::Marker::*` | Builders. A script writes the value as a table of the builder's fields, such as `{ text = "Saved", style = "Positive" }` for a label; a slider's range is its `min` and `max`, and an action's `allow`, `at` and `per_player` are functions in its table. |
+| `actions::FindSubjectError::reason` | An action's `at` answers as the Rust `Result` does, `{ Ok = subject }` or `{ Err = reason }`, so the reason is the text itself. |
+| `controls::Key::parse`, `controls::Key::from_bits`, `controls::Key::bits`, `controls::Key::code`, `controls::Key::modifiers`, `controls::Key::is_mouse` | A key crosses as its text, such as `Shift+E`. `enshwick.controls.parse` and `from_bits` return the key's own spelling, and `bits`, `code`, `modifiers` and `is_mouse` take the text. |
+| `ui::Frame::toggle`, `ui::Frame::slider`, `ui::Frame::dropdown` | Lua has no `&mut`. A script hands the value in and gets it back, changed in the frame the player changes it. |
+| `ui::HudScreenType::name` | A screen crosses as its name, such as `"StorageChest"`. |
 | `ui::Ui::ask` | It blocks a thread of the mod's own until the player answers. A script has no thread of its own, so it takes a dialog's answer in a callback, as `Ui::dialog` does. |
 | `affixes::lines_of` | The loader's own listing of an item's lines from the pool it keeps. A script reads them with `enshwick.affixes.lines`. |
 

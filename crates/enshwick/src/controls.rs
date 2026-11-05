@@ -44,8 +44,11 @@ use crate::world::Player;
 use crate::{Load, Off};
 
 mod key;
+mod script;
 
 pub use key::{Key, ParseKeyError};
+#[doc(hidden)]
+pub use script::ControlFns;
 
 /// The longest control name.
 pub const MAX_NAME: usize = 32;
@@ -59,7 +62,7 @@ pub const HOLD: Duration = Duration::from_millis(500);
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Phase {
     /// Its key went down.
@@ -475,111 +478,6 @@ where
     )
 }
 
-/// The mod's controls as a script declares them: the `controls` namespace.
-/// A script runs no player actions, so a script's control acts on the
-/// side it fires on.
-///
-/// # Examples
-///
-/// ```rust,standalone_crate
-/// let names: Vec<&str> = enshwick::script::NAMESPACES.iter().map(|n| n.name()).collect();
-/// assert!(names.contains(&"controls"));
-/// ```
-#[derive(Clone, Copy, Debug)]
-pub struct Controls {
-    host: crate::Host,
-}
-
-#[crate::script(declarations)]
-impl Controls {
-    /// Declares the control `name`, shown as `label`, on `key`, a key name
-    /// such as `Shift+E` or empty for none, following the game action
-    /// `link` by its game name, such as `ContextualAction`, or empty. It
-    /// fires on `phases`, of `press`, `release` and `hold`, or on press
-    /// when empty, and holds after `hold_ms`; `on` gets the phase and, on
-    /// the server, the player whose game action fired. Allowed while the
-    /// mod initialises.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a malformed name, key, game action or phase, a name
-    /// declared before, and when the loader refuses the control.
-    #[script]
-    #[expect(
-        clippy::too_many_arguments,
-        clippy::needless_pass_by_value,
-        reason = "a script declares a control in one call, as Lua takes no builders, and hands \
-                  its list over"
-    )]
-    pub fn declare(
-        self,
-        name: &str,
-        label: &str,
-        key: &str,
-        link: &str,
-        phases: Vec<String>,
-        hold_ms: u32,
-        on: impl Fn(String, Option<Player>) + Send + Sync + 'static,
-    ) -> Result<(), Off> {
-        let control = script_control(name, label, key, link, &phases, hold_ms)?;
-        declare(self.host, &control, move |fired| {
-            let phase = match fired.phase {
-                Phase::Press => "press",
-                Phase::Release => "release",
-                Phase::Hold => "hold",
-            };
-            on(phase.to_owned(), fired.player.clone());
-        })
-    }
-}
-
-/// The control a script's `controls.declare` names, its key, game action
-/// and phases read from their names.
-fn script_control(
-    name: &str,
-    label: &str,
-    key: &str,
-    link: &str,
-    phases: &[String],
-    hold_ms: u32,
-) -> Result<Control, Off> {
-    let mut control = Control::new(name, label).hold_for(Duration::from_millis(hold_ms.into()));
-    if !key.is_empty() {
-        control = control.key(Key::parse(key)?);
-    }
-    if !link.is_empty() {
-        let action = GameAction::ALL
-            .iter()
-            .find(|a| a.name() == link)
-            .ok_or_else(|| Off::new(format!("control {name}: no game action {link}")))?;
-        control = control.link(*action);
-    }
-    if !phases.is_empty() {
-        let mut picked = Vec::with_capacity(phases.len());
-        for phase in phases {
-            picked.push(match phase.as_str() {
-                "press" => Phase::Press,
-                "release" => Phase::Release,
-                "hold" => Phase::Hold,
-                other => return Err(Off::new(format!("control {name}: no phase {other}"))),
-            });
-        }
-        control = control.fires(&picked);
-    }
-    Ok(control)
-}
-
-impl crate::script::Bound for Controls {
-    const NAME: &'static str = "controls";
-    const DOC: &'static str =
-        "Keys the mod declares for its players, and game actions they follow.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_DECLARATIONS];
-
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self { host: load.host() })
-    }
-}
-
 /// One control's key over time: what each look at it fires. Shared by the
 /// loader's key reader and the fake host, so both fire alike.
 #[doc(hidden)]
@@ -887,40 +785,6 @@ mod tests {
         assert_eq!(look(bound, &up, &["F4", "Alt+Tab"]), [0, 0, 0]);
         assert_eq!(look(bound, &up, &["Ctrl+Alt+F4"]), [0, 0, 0]);
         assert_eq!(look(bound, &up, &["Ctrl+F4"]), [0, 0, 1]);
-    }
-
-    #[test]
-    fn a_script_names_its_key_game_action_and_phases() {
-        let phases = ["hold".to_owned(), "release".to_owned()];
-        let control = script_control(
-            "lights",
-            "Lights",
-            "Shift+L",
-            "ContextualAction_Tap",
-            &phases,
-            250,
-        )
-        .unwrap();
-        assert_eq!(control.keys, [Some(Key::parse("Shift+L").unwrap()), None]);
-        assert_eq!(control.link, Some(GameAction::ContextualActionTap));
-        assert_eq!(control.fires, ControlSpec::HOLD | ControlSpec::RELEASE);
-        assert_eq!(control.hold, Duration::from_millis(250));
-        let plain = script_control("x", "X", "", "", &[], 500).unwrap();
-        assert_eq!(
-            (plain.keys, plain.link, plain.fires),
-            ([None, None], None, ControlSpec::PRESS)
-        );
-        for (key, link, phase) in [
-            ("Hyper", "", "press"),
-            ("", "Fly", "press"),
-            ("", "", "tap"),
-        ] {
-            let phases = [phase.to_owned()];
-            assert!(
-                script_control("x", "X", key, link, &phases, 0).is_err(),
-                "{key} {link} {phase}"
-            );
-        }
     }
 
     #[test]

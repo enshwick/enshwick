@@ -20,7 +20,8 @@ use super::sheet::ArgView;
 /// }
 /// assert_eq!(minutes(&[Value::Toggle(true), Value::Number(5.0)]), Some(5.0));
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, crate::Script)]
+#[script(name = "ActionValue")]
 #[non_exhaustive]
 pub enum Value {
     /// One of the server's players: the account key, and the name as the
@@ -136,7 +137,7 @@ impl Arg {
 /// let locker = Subject::new(42, "Your locker at (2, 10, -4)");
 /// assert_eq!(locker.id, 42);
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 pub struct Subject {
     /// The mod's own id for it, such as a packed position.
     pub id: u64,
@@ -239,7 +240,7 @@ impl Ask<'_> {
 /// # Examples
 ///
 /// See [`Request`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Via {
     /// The game's interface: the reply shows as a notice.

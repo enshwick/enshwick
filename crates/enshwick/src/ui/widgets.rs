@@ -16,7 +16,7 @@ use crate::abi::UiWidget;
 ///     screen == Screen::InGame
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Screen {
     /// The title screen and the menus before a game.
@@ -32,7 +32,7 @@ pub enum Screen {
 /// # Examples
 ///
 /// See [`Label`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Style {
     /// Body text.
@@ -80,7 +80,7 @@ impl Style {
 ///     frame.sound(Sound::Error);
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Sound {
     /// A click.

@@ -16,7 +16,7 @@ use super::{Label, client_only};
 /// # Examples
 ///
 /// See [`Hud`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Anchor {
     /// The top left corner.
@@ -66,10 +66,10 @@ impl Anchor {
 /// ```
 #[derive(Debug)]
 pub struct Hud<'f> {
-    host: Host,
-    token: u64,
-    _life: PhantomData<&'f mut ()>,
-    _thread: PhantomData<*const ()>,
+    pub(super) host: Host,
+    pub(super) token: u64,
+    pub(super) _life: PhantomData<&'f mut ()>,
+    pub(super) _thread: PhantomData<*const ()>,
 }
 
 impl Hud<'_> {
