@@ -93,30 +93,33 @@ fn every_held_operand_value_has_a_witness_or_a_reason() {
 }
 
 /// On every executable `ENSH_SERVER_EXE`, `ENSH_CLIENT_EXE` and the opt-in
-/// `ENSH_EXES` path list name (a server when its file is
-/// `enshrouded_server.exe`), each other embedded table of its side carried
+/// `ENSH_EXES` path list name (each of its sides by its variable, in the
+/// list a server when its file is `enshrouded_server.exe`), each other embedded table of its side carried
 /// to it finds no entry at another value than its own table pins: what a
 /// carry cannot confirm is missing, never wrong.
 #[test]
 #[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
 fn a_carried_table_finds_no_wrong_value_on_any_kept_build() {
-    let mut paths: Vec<std::path::PathBuf> = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
-        .iter()
-        .filter_map(std::env::var_os)
-        .map(Into::into)
-        .collect();
+    let mut paths: Vec<(std::path::PathBuf, Side)> = [
+        ("ENSH_SERVER_EXE", Side::Server),
+        ("ENSH_CLIENT_EXE", Side::Client),
+    ]
+    .into_iter()
+    .filter_map(|(var, side)| Some((std::env::var_os(var)?.into(), side)))
+    .collect();
     if let Some(list) = std::env::var_os("ENSH_EXES") {
-        paths.extend(std::env::split_paths(&list));
+        paths.extend(std::env::split_paths(&list).map(|path| {
+            let server = path
+                .file_name()
+                .is_some_and(|name| name.eq_ignore_ascii_case("enshrouded_server.exe"));
+            (path, if server { Side::Server } else { Side::Client })
+        }));
     }
     let tables = tables();
     let mut wrong = Vec::new();
     let named = !paths.is_empty();
     let mut compared = 0;
-    for path in paths {
-        let server = path
-            .file_name()
-            .is_some_and(|name| name.eq_ignore_ascii_case("enshrouded_server.exe"));
-        let side = if server { Side::Server } else { Side::Client };
+    for (path, side) in paths {
         let bytes = std::fs::read(&path).unwrap();
         let image = reflect::Image::parse(&bytes, reflect::Layout::File, None).unwrap();
         let Some(own) = exact(&tables, side, image.fingerprint().unwrap()) else {
