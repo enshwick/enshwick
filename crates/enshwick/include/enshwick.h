@@ -704,7 +704,10 @@ typedef struct EnshwickChatLine {
 // The loader owns `buffer`, writable for `capacity` bytes during the call
 // only; the filter writes UTF-8 into it, sets `len` and answers
 // `ChatRewrite::REWRITTEN`. A `len` over `capacity`, or bytes that are
-// not UTF-8, keep the line as it was.
+// not UTF-8, keep the line as it was. The loader owns the struct too and
+// hands it to one filter at a time on the game thread, never null; the
+// filter keeps no pointer past the call. Layout grows only by appending;
+// read a later field after `Header::covers`.
 typedef struct EnshwickChatRewrite {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -720,7 +723,8 @@ typedef struct EnshwickChatRewrite {
 // The line is dropped as the chat mute drops it: nobody reads it, and
 // the filters after this one do not run.
 #define EnshwickChatRewrite_DROP 1
-// The line goes on as the text written into the buffer.
+// The line goes on as the text written into the buffer; an empty text
+// drops it as `ChatRewrite::DROP` does.
 #define EnshwickChatRewrite_REWRITTEN 2
 
 // The data of the `ChunkLoaded` and
@@ -3099,6 +3103,12 @@ typedef uint8_t (*EnshwickChatFilterFn)(const struct EnshwickChatLine *line,
 
 // A world's save on disk, written by
 // `HostApi::save_info`.
+//
+// The mod owns it and passes it as `out`, its header set with
+// `Header::of`; the loader writes it on the calling thread during the
+// call, up to the size the header states, and keeps no pointer to it. It
+// holds no pointers. Layout grows only by appending; read a later field
+// after `Header::covers`.
 typedef struct EnshwickSaveInfo {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -4660,7 +4670,7 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*save_info)(EnshwickModHandle me, struct EnshwickSaveInfo *out);
   // Holds the world's saves while `held` is 1, or lets them go for 0:
   // the game saves only while no running mod holds them, the timed save
-  // and `HostApi::save_world` waiting meanwhile, and the log names each
+  // waiting and `HostApi::save_world` refused meanwhile, and the log names each
   // mod that holds or lets go. A mod that turns off lets go. Server only
   // (`Status::MISSING` on a build without the save layout); any thread,
   // taking effect after the next step; `Status::BAD_ARGS` for another
