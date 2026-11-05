@@ -5,7 +5,7 @@
 
 use core::cell::RefCell;
 
-use enshwick::controls::{Key, chord_down};
+use enshwick::controls::{Key, chords};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyNameTextW, GetKeyboardLayout, MAPVK_VSC_TO_VK_EX, MapVirtualKeyExW,
     VK_CONTROL, VK_DECIMAL, VK_ESCAPE, VK_LBUTTON, VK_MBUTTON, VK_MENU, VK_NUMPAD0, VK_NUMPAD1,
@@ -131,14 +131,20 @@ fn modifiers() -> u32 {
         .fold(0, |bits, (bit, _)| bits | 1 << (16 + bit))
 }
 
-/// Fills `out` with whether each control on `bound` is down: one of its
-/// keys with exactly its modifiers, in the layout of the game window's
-/// thread `window`. With no window, the game's window lacks the focus or a
-/// window is open, and nothing is down or read.
-pub(super) fn chords(bound: &[[u32; 2]], window: Option<u32>, out: &mut Vec<bool>) {
-    out.clear();
+/// Turns `out`, the slots of each control on `bound` down at the last look,
+/// into those down now by the rule of [`chords`], in the layout of the game
+/// window's thread `window`; a control `live` says is off has none. With no
+/// window, the game's window lacks the focus or a window is open, and
+/// nothing is down or read.
+pub(super) fn keys_down(
+    bound: &[[u32; 2]],
+    window: Option<u32>,
+    live: impl Fn(usize) -> bool,
+    out: &mut Vec<u8>,
+) {
     let Some(window) = window else {
-        out.resize(bound.len(), false);
+        out.clear();
+        out.resize(bound.len(), 0);
         return;
     };
     MAPPED.with_borrow_mut(|mapped| {
@@ -169,12 +175,14 @@ pub(super) fn chords(bound: &[[u32; 2]], window: Option<u32>, out: &mut Vec<bool
             }
             *slot == 2
         };
-        out.extend(bound.iter().zip(&mapped.vks).map(|(keys, vks)| {
-            keys.iter().zip(vks).any(|(&bits, &vk)| {
-                vk != 0
-                    && Key::from_bits(bits).is_some_and(|key| chord_down(key, is_down(vk), held))
-            })
-        }));
+        chords(
+            bound,
+            |control, slot, _| {
+                let vk = mapped.vks.get(control).map_or(0, |vks| vks[slot]);
+                (vk != 0 && live(control) && is_down(vk)).then_some(held)
+            },
+            out,
+        );
     });
 }
 

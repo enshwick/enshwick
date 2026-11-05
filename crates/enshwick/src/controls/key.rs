@@ -219,7 +219,8 @@ impl Key {
     #[must_use]
     pub fn from_bits(bits: u32) -> Option<Self> {
         let modifiers: u32 = MODIFIERS.iter().map(|(_, bit)| bit).sum();
-        let known = bits & !(CODE | modifiers) == 0
+        let known = bits & CODE != 0
+            && bits & !(CODE | modifiers) == 0
             && NAMES.iter().any(|(_, code)| *code == bits & CODE)
             && !(bits & ALT != 0 && SYSTEM_WITH_ALT.contains(&(bits & CODE)));
         known.then_some(Self(bits))
