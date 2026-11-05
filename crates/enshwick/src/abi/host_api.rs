@@ -1660,7 +1660,7 @@ pub struct HostApi {
     /// Writes the save of the world the server runs to `out`, which the
     /// mod starts with [`Header::of`]: [`Status::MISSING`] before its first
     /// save, while no world runs or on a client that hosts none, and
-    /// [`Status::FAILED`] when the file does not read. Any thread; `out` is
+    /// [`Status::REFUSED`] when the file does not read. Any thread; `out` is
     /// borrowed for the call. A panic in the loader returns
     /// [`Status::REFUSED`]. ABI 11.6.
     pub save_info: extern "system" fn(me: ModHandle, out: *mut SaveInfo) -> Status,

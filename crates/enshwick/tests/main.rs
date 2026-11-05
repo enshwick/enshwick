@@ -126,6 +126,8 @@ mod resource_values;
 mod reward_actions;
 #[cfg(feature = "unstable")]
 mod rewards;
+#[cfg(feature = "unstable")]
+mod saves;
 mod schedule;
 #[cfg(feature = "unstable")]
 mod screen_extensions;

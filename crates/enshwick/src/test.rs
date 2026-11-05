@@ -95,6 +95,7 @@ mod points;
 mod presets;
 mod props;
 mod rates;
+mod saves;
 mod settings;
 mod stats;
 pub(crate) mod table;

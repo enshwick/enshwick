@@ -481,7 +481,7 @@ pub(crate) fn info(loader: &Loader) -> Result<Option<crate::world_folders::SaveI
     let key = world_key(loader).ok_or(Status::MISSING)?;
     crate::world_folders::save_info(key).map_err(|e| {
         crate::log!(WARN, "world {key}: its save was not read: {e}");
-        Status::FAILED
+        Status::REFUSED
     })
 }
 

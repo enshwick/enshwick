@@ -1,0 +1,72 @@
+//! A world's save for mods: the saving event, the save on disk, and
+//! holding saves.
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Duration;
+
+    use enshwick::abi::{Event, Header, SaveInfo, Status};
+    use enshwick::events::{WorldSaved, WorldSaving};
+    use enshwick::world::{World, WorldGuid};
+    use enshwick::{Load, Mod, Off};
+
+    static WORLD: OnceLock<World> = OnceLock::new();
+    static ORDER: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+
+    struct Keeper;
+
+    impl Mod for Keeper {
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            let _first = WORLD.set(load.world()?);
+            load.on::<WorldSaving>(|()| ORDER.lock().unwrap().push("saving"))?;
+            load.on::<WorldSaved>(|()| ORDER.lock().unwrap().push("saved"))?;
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        Keeper,
+        r#"
+        id = "you.keeper"
+        side = "server"
+        "#
+    );
+
+    #[test]
+    fn a_mod_hears_a_save_begin_reads_the_save_and_holds_saves() {
+        let loader = enshwick::test::FakeHost::new().install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = WORLD.get().unwrap();
+
+        // SAFETY: neither event carries data.
+        let ran = unsafe {
+            loader.raise_raw(Event::WORLD_SAVING, core::ptr::null())
+                + loader.raise_raw(Event::WORLD_SAVED, core::ptr::null())
+        };
+        assert_eq!(ran, 2);
+        assert_eq!(*ORDER.lock().unwrap(), ["saving", "saved"]);
+
+        assert_eq!(world.save_info(), None, "no save before the first");
+        loader.set_save_info(Some(SaveInfo {
+            header: Header::of::<SaveInfo>(),
+            world: [9; 16],
+            saved_at: 1_762_300_000,
+            size: 4_096,
+            backups: 3,
+            reserved: 0,
+        }));
+        let info = world.save_info().unwrap();
+        assert_eq!(info.world, WorldGuid([9; 16]));
+        assert_eq!(info.saved_at, Duration::from_secs(1_762_300_000));
+        assert_eq!((info.size, info.backups), (4_096, 3));
+
+        world.hold_saves(true).unwrap();
+        assert!(loader.saves_held());
+        world.hold_saves(false).unwrap();
+        assert!(!loader.saves_held());
+    }
+}

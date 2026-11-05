@@ -29,6 +29,7 @@ mod items;
 mod mods;
 mod net;
 mod pacing;
+mod saves;
 mod services;
 mod transactions;
 mod ui;
@@ -63,6 +64,7 @@ use mods::{
     settings, texts,
 };
 use net::{net_channel, net_ready, net_send};
+use saves::{Saves, hold_saves, save_info};
 pub(crate) use services::view;
 use services::{
     declare_content, define_event, publish, send_event, service, subscribe, subscribe_event,
@@ -276,6 +278,8 @@ pub(crate) struct State {
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) item_filters: Vec<(crate::abi::ItemActionFn, usize)>,
     pub(crate) chat_filters: Vec<(crate::abi::ChatFilterFn, usize)>,
+    /// The world's save on disk and the mod's hold on saves.
+    pub(crate) save: Saves,
     pub(crate) skills: Vec<(crate::abi::SkillNode, SkillCheckFn, usize)>,
     pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
     /// The rates the mod declared, with the factor it set for each.
@@ -670,6 +674,10 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         interaction_filters: Vec::new(),
         item_filters: Vec::new(),
         chat_filters: Vec::new(),
+        save: Saves {
+            info: None,
+            held: false,
+        },
         skills: Vec::new(),
         comfort_filters: Vec::new(),
         rates: Vec::new(),
@@ -1014,4 +1022,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     ui_extension,
     item_filter,
     chat_filter,
+    save_info,
+    hold_saves,
 };
