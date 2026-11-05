@@ -38,7 +38,9 @@ global `enshwick`.
 
 1. Run `cargo enshwick new --luau you.greeter`. It makes the folder with
    `pack.toml`, a `main.luau` that greets each player who joins, a README,
-   and `types/enshwick.d.luau`, the API's definitions for the editor.
+   `types/enshwick.d.luau`, the API's definitions for the editor, and
+   `types/enshwick.typed.d.luau`, the types of
+   [`enshwick.typed`](game-types.md#can-a-luau-mod-use-them)'s values.
    `--side` sets where it runs, the server when left out. With
    `--game <game folder>` it also writes `types/game.d.luau`, the
    [game's own types](game-types.md), such as the fields
@@ -50,7 +52,7 @@ global `enshwick`.
 3. Check the types without the game:
 
    ```text
-   luau-lsp analyze --definitions:@enshwick=types/enshwick.d.luau main.luau
+   luau-lsp analyze --definitions:@enshwick=types/enshwick.d.luau --definitions:@typed=types/enshwick.typed.d.luau main.luau
    ```
 
    With the game's types, add `--definitions:@game=types/game.d.luau`.

@@ -194,6 +194,14 @@ fn luau_definitions(
     out: Option<&std::path::Path>,
     typed: Option<&std::path::Path>,
 ) -> anyhow::Result<String> {
+    if let (Some(out), Some(typed)) = (out, typed)
+        && std::path::absolute(out)? == std::path::absolute(typed)?
+    {
+        anyhow::bail!(
+            "--out and --typed both name {}: each needs a file of its own",
+            out.display()
+        );
+    }
     let mut done = Vec::new();
     if let Some(path) = typed {
         std::fs::write(path, cargo_enshwick::luau::typed_definitions())
@@ -300,6 +308,14 @@ mod tests {
             )
         );
         assert!(ids(&["safe".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn one_file_for_both_definitions_is_refused() {
+        let path = std::path::Path::new("types/both.d.luau");
+        let error = luau_definitions(Some(path), Some(path)).unwrap_err();
+        assert!(error.to_string().contains("--out and --typed"), "{error}");
+        assert!(!path.exists());
     }
 
     #[test]

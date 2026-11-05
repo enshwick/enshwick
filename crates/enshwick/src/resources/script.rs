@@ -13,11 +13,9 @@
 use super::{Registry, Type, Value as Data};
 use crate::abi::ResourceKey;
 use crate::content::Guid;
+use crate::script::convert::EXACT;
 use crate::script::{Answer, Error, FromScript, IntoScript, Ty, Typed, Value};
 use crate::{Host, Off};
-
-/// The largest integer a script number holds exactly, 2^53.
-const EXACT: u64 = 1 << 53;
 
 fn integer(magnitude: u64, text: impl FnOnce() -> String, number: f64) -> Value {
     if magnitude <= EXACT {

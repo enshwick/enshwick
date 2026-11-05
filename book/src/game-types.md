@@ -114,17 +114,24 @@ died:on(function(event)
     end
 end)
 
-local key = loot:key("6943053a-32c1-4718-ae22-e61427ddf54d")
-loot:serve(key, key, function(value)
-    return value
+-- The GUID of the loot settings to change.
+local SETTINGS = "5afe5afe-0000-4000-8000-000000000002"
+
+local key = loot:key(SETTINGS)
+loot:serve(key, key, function(settings)
+    settings.modifier.level_offset_range_max += 1
+    return settings
 end)
 ```
 
 A value is a table with the Rust item's field names, `base` for the type it
 derives from. An enum constant is its variant's name, such as `"MagicalFog"`,
 and a constant the item does not name is `{ Other = <name or number> }`. A
-`u64` or `i64` is a string of its decimal digits, a GUID a string, and a
-bitmask a list of its flags' constants. An array is a list, its first item at
+`u64` or `i64` is a string of its decimal digits, and a write also takes a
+whole number up to 2^53; a GUID is a string, and a bitmask a list of its
+flags' constants. A field of a game variant, which may hold any type, is
+`{ type = <qualified name>, value = <data> }`, its data as
+[`enshwick.resources`](resource-values.md) gives it, by the game's own field names. An array is a list, its first item at
 index 1, and an optional is its value or nil; inside a list, an absent item
 is `enshwick.resources.none()`, since nil would end the list. A value read through `enshwick.typed`
 goes through the generated Rust item, so a Luau mod reads and writes what a

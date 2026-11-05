@@ -104,9 +104,12 @@ mod tests {
     }
 
     fn run(main: &str, faction: u8) -> Installed {
+        run_on(FakeHost::new().world(), main, faction)
+    }
+
+    fn run_on(host: FakeHost, main: &str, faction: u8) -> Installed {
         *CASE.lock().unwrap() = Some(Scripts::new().with("main.luau", main));
-        let loader = FakeHost::new()
-            .world()
+        let loader = host
             .types(types())
             .type_hash("ecs::Faction", hash(FACTION))
             .type_size("ecs::Faction", 1)
@@ -155,6 +158,28 @@ mod tests {
             loader.component_bytes(ENTITY, hash(FACTION)),
             Some(vec![9]),
             "a constant the enum does not name, written by its name"
+        );
+    }
+
+    #[test]
+    fn a_component_type_opens_on_a_build_without_the_world_reads_and_its_reads_say_why() {
+        let loader = run_on(
+            FakeHost::new(),
+            r#"
+            local faction = enshwick.typed.component_type("ecs.Faction")
+            local ok, why = pcall(faction.read, faction, 4096)
+            print(`read {ok} {why}`)
+        "#,
+            7,
+        );
+        let logs = loader.logs();
+        let read = logs
+            .iter()
+            .find_map(|(_, line)| line.split_once("read ").map(|(_, rest)| rest.to_owned()))
+            .unwrap_or_else(|| panic!("{logs:?}"));
+        assert!(
+            read.starts_with("false") && read.contains("typed ecs::Faction"),
+            "{read}"
         );
     }
 

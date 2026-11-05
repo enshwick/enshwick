@@ -134,6 +134,18 @@ impl Row {
             .and_then(self.from_script)
             .map_err(|e| Off::new(format!("typed {}: {e}", self.id)))
     }
+
+    /// `value` as a script gets it and back as the codec writes it, the
+    /// path the script handles take, for the tests that hold every
+    /// generated type to it.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when a step refuses the value.
+    #[doc(hidden)]
+    pub fn through_script(&self, value: &Data) -> Result<Data, Off> {
+        self.taken(self.shown(value)?)
+    }
 }
 
 /// A generated component type on the running build, as a script holds it.
@@ -141,7 +153,16 @@ impl Row {
 pub(crate) struct ComponentType {
     row: &'static Row,
     raw: RawComponent,
-    world: World,
+    /// The world, or why the build lacks it: only reads and writes need it.
+    world: Result<World, Off>,
+}
+
+impl ComponentType {
+    fn world(&self) -> Result<World, Off> {
+        self.world
+            .clone()
+            .map_err(|why| Off::new(format!("typed {}: {why}", self.row.id)))
+    }
 }
 
 #[crate::script(reads)]
@@ -153,11 +174,11 @@ impl ComponentType {
     /// # Errors
     ///
     /// [`Off`] when the component's bytes do not read as the generated
-    /// struct.
+    /// struct, or on a build that lacks the world's reads.
     #[script]
     pub(crate) fn read(&self, entity: Entity) -> Result<Option<Fields>, Off> {
         self.raw
-            .read(self.world, entity)?
+            .read(self.world()?, entity)?
             .map(|value| self.row.shown(&value))
             .transpose()
     }
@@ -169,10 +190,12 @@ impl ComponentType {
     /// # Errors
     ///
     /// [`Off`] for a type the loader does not let mods write, a value that
-    /// does not fit the type, or off the game thread.
+    /// does not fit the type, off the game thread, or on a build that lacks
+    /// the world's reads.
     #[script]
     pub(crate) fn write(&self, entity: Entity, value: Fields) -> Result<(), Off> {
-        self.raw.write(self.world, entity, &self.row.taken(value)?)
+        self.raw
+            .write(self.world()?, entity, &self.row.taken(value)?)
     }
 }
 
@@ -310,7 +333,7 @@ impl Load<'_> {
         Ok(ComponentType {
             row,
             raw: RawComponent::resolve(self, row.id, row.check)?,
-            world: self.world()?,
+            world: self.world(),
         })
     }
 
@@ -473,6 +496,31 @@ mod tests {
             <Mood as FromScript>::from_value(numbered).unwrap(),
             Mood::Other(crate::typed::Constant::Number(4))
         );
+    }
+
+    #[test]
+    fn an_other_that_names_a_variant_reads_as_that_variant() {
+        let named = Value::Map(vec![("Other".into(), Value::String("Calm".into()))]);
+        assert_eq!(<Mood as FromScript>::from_value(named).unwrap(), Mood::Calm);
+    }
+
+    #[test]
+    fn a_64_bit_field_takes_a_whole_number_a_script_computed() {
+        let Value::Map(mut fields) = by_name(outer().into_value(), Outer::TY) else {
+            unreachable!()
+        };
+        fields[3].1 = Value::Number(42.0);
+        let back =
+            <Outer as FromScript>::from_value(by_place(Value::Map(fields), Outer::TY).unwrap())
+                .unwrap();
+        assert_eq!(back.r#type, 42);
+        assert_eq!(i64::from_value(Value::Number(-7.0)).unwrap(), -7);
+        for refused in [-1.0, 0.5, 2f64.powi(54)] {
+            assert!(
+                u64::from_value(Value::Number(refused)).is_err(),
+                "{refused}"
+            );
+        }
     }
 
     #[test]

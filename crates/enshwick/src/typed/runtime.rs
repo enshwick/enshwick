@@ -221,7 +221,7 @@ impl Constant {
                 reason = "checked first: a whole number from 0 to 2^53"
             )]
             crate::script::Value::Number(n)
-                if n.fract() == 0.0 && (0.0..=9_007_199_254_740_992.0).contains(&n) =>
+                if n.fract() == 0.0 && (0.0..=EXACT_NUMBER).contains(&n) =>
             {
                 Ok(Self::Number(n as u64))
             }
@@ -230,11 +230,10 @@ impl Constant {
     }
 }
 
-/// The largest whole number a script number holds exactly, 2^53.
-const EXACT: u64 = 1 << 53;
+use crate::script::convert::{EXACT, EXACT_NUMBER};
 
 /// The variant of a generated enum that holds a constant it does not name.
-const OTHER: &str = "Other";
+pub(crate) const OTHER: &str = "Other";
 
 /// Why `text` names no variant of the generated enum `ty`.
 #[must_use]
@@ -587,7 +586,7 @@ macro_rules! reflected_enum {
                             ::core::option::Option::None,
                         ),)*
                         $crate::script::Variant::new(
-                            "Other",
+                            $crate::typed::runtime::OTHER,
                             $crate::typed::runtime::OTHER_DOC,
                             ::core::option::Option::Some(&$crate::script::Ty::Data),
                         ),
@@ -618,7 +617,14 @@ macro_rules! reflected_enum {
                             <Self as $crate::script::Typed>::TY,
                         )),
                     },
-                    other => $crate::typed::Constant::from_script(other).map(Self::Other),
+                    // A name the build gives a variant reads as that variant,
+                    // as from the game, so `Other` holds only unnamed ones.
+                    other => $crate::typed::Constant::from_script(other).map(|constant| {
+                        match <Self as $crate::typed::Reflected>::from_value(&constant.to_value()) {
+                            ::core::result::Result::Ok(read) => read,
+                            ::core::result::Result::Err(_) => Self::Other(constant),
+                        }
+                    }),
                 }
             }
         }

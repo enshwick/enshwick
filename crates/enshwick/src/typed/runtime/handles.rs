@@ -11,7 +11,8 @@ use crate::resources::{Registry, Type, Value};
 use crate::world::{World, WritableType};
 use crate::{Entity, Host, Load, Off};
 
-/// The running build's type for the id `id`, its shape checked: a
+/// The running build's type id and reflected type for the id `id`, its
+/// shape checked: a
 /// [`sample`] of the build's type must pass `check`, so a field the build
 /// renamed, removed, or retyped to a value the generated type cannot hold,
 /// such as a wider integer, at any depth, turns off only that type.
@@ -19,19 +20,18 @@ fn resolve(
     load: &Load<'_>,
     id: &'static str,
     check: fn(&Value) -> Result<(), ShapeError>,
-) -> Result<&'static Type<'static>, Off> {
+) -> Result<(crate::ecs::ComponentType, &'static Type<'static>), Off> {
     let host = load.host();
-    let hash = crate::ecs::ComponentType::resolve(load, id)
-        .map_err(|e| off(id, host, &e.to_string()))?
-        .hash();
+    let ecs =
+        crate::ecs::ComponentType::resolve(load, id).map_err(|e| off(id, host, &e.to_string()))?;
     let registry = Registry::game()?;
     let ty = registry
-        .hashed(hash)
+        .hashed(ecs.hash())
         .ok_or_else(|| off(id, host, "the type registry lacks it"))?;
     let value = sample(registry, ty.qualified_name())
         .ok_or_else(|| off(id, host, "its value does not read"))?;
     check(&value).map_err(|e| off(id, host, &e.to_string()))?;
-    Ok(ty)
+    Ok((ecs, ty))
 }
 
 /// Turns the type `id` off on the running build, naming the build and why.
@@ -61,10 +61,10 @@ impl RawComponent {
         id: &'static str,
         check: fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
-        let ty = resolve(load, id, check)?;
+        let (ecs, ty) = resolve(load, id, check)?;
         Ok(Self {
             id,
-            ty: crate::ecs::ComponentType::resolve(load, id)?,
+            ty: ecs,
             name: ty.qualified_name(),
             size: usize::try_from(ty.size()).unwrap_or(usize::MAX),
             writable: WritableType::resolve(load, id).ok(),
@@ -125,7 +125,7 @@ impl RawEvent {
         id: &'static str,
         check: fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
-        let ty = resolve(load, id, check)?;
+        let (_, ty) = resolve(load, id, check)?;
         Ok(Self {
             id,
             ty: load.game_event_type(id)?,
@@ -174,7 +174,7 @@ impl RawResource {
         id: &'static str,
         check: fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
-        let ty = resolve(load, id, check)?;
+        let (_, ty) = resolve(load, id, check)?;
         Ok(Self {
             id,
             hash: ty.qualified_hash(),

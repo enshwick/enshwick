@@ -434,9 +434,9 @@ fn every_covered_type_reads_as_its_generated_item() {
 }
 
 /// Every covered type has its script twin: a record named by its Rust
-/// path, and a sample of the build's type crosses into a script value and
-/// back to the same game value, so a Luau mod reads and writes what a Rust
-/// mod does.
+/// path, and a sample of the build's type crosses into a script table by
+/// the path the script handles take and back to a value that reads the
+/// same, so a Luau mod reads and writes what a Rust mod does.
 #[test]
 #[cfg_attr(miri, ignore = "converts thousands of types")]
 fn every_covered_type_crosses_into_a_script_and_back() {
@@ -461,10 +461,11 @@ fn every_covered_type_crosses_into_a_script_and_back() {
         }
         described += 1;
         let sample = enshwick::typed::sample(&registry, engine_name(row.id).unwrap()).unwrap();
-        let typed = (row.to_script)(&sample).map_err(|e| e.to_string());
-        let back = typed.and_then(|value| (row.from_script)(value).map_err(|e| e.to_string()));
-        match back {
-            Ok(back) if (row.check)(&back).is_ok() => {}
+        let shown = |value: &enshwick::resources::Value| {
+            (row.to_script)(value).map(|script| format!("{script:?}"))
+        };
+        match row.through_script(&sample) {
+            Ok(back) if shown(&back).ok() == shown(&sample).ok() => {}
             Ok(back) => wrong.push(format!("{}: came back as {back:?}", row.id)),
             Err(why) => wrong.push(format!("{}: {why}", row.id)),
         }
