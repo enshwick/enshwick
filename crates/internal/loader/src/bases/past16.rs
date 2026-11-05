@@ -113,7 +113,10 @@ impl Pins<'_> {
         let start = self.at(id)?;
         let end = match self.table.body(id.id()) {
             Some(body) => start + body.len(),
-            None => (self.extent)(start).ok_or(SiteError::Missing(id.id()))?,
+            None if self.table.routed(id.id()) => {
+                (self.extent)(start).ok_or(SiteError::Missing(id.id()))?
+            }
+            None => return Err(SiteError::Missing(id.id())),
         };
         Ok(start..end)
     }
@@ -649,13 +652,30 @@ mod tests {
             .as_inline_table_mut()
             .unwrap()
             .remove("body");
-        let stripped = enshwick_gamedata::Table::parse(&doc.to_string())
+        let mut stripped = enshwick_gamedata::Table::parse(&doc.to_string())
             .unwrap()
             .resolve();
         assert!(stripped.body(bases::SERVER_CREATE.id()).is_none());
         let range = image.range(image.section(".text").unwrap());
         let code = image.read(range.start, range.end - range.start).unwrap();
         let extent = extent_in(&image, range.start - image.base());
+        let unrouted = Pins {
+            table: &stripped,
+            code_rva: range.start - image.base(),
+            extent: &extent,
+        };
+        assert!(
+            matches!(
+                find(code, 0, false, FIELDS, &unrouted),
+                Err(SiteError::Missing(id)) if id == bases::SERVER_CREATE.id()
+            ),
+            "a create without a body that no route found has no size"
+        );
+        let create = stripped.symbol(bases::SERVER_CREATE.id()).unwrap();
+        stripped.route(
+            bases::SERVER_CREATE.id(),
+            Some(enshwick_gamedata::Routed::Symbol(create)),
+        );
         let pins = Pins {
             table: &stripped,
             code_rva: range.start - image.base(),
