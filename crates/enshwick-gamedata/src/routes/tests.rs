@@ -116,6 +116,20 @@ fn a_route_without_exactly_one_way_or_with_a_wrong_take_is_refused() {
         r#"id = "a"
            in = "s"
            shape = ["mov eax,[rcx+0x0]"]"#,
+        r#"id = "a"
+           called_by = ["s"]
+           shape = ["ret"]"#,
+        r#"id = "a"
+           calls = ["s"]
+           shape = ["ret"]"#,
+        r#"id = "a"
+           loads = ["s"]
+           shape = ["ret"]"#,
+        r#"id = "a"
+           size = "keen::A"
+           shape = ["ret"]"#,
+        r#"id = "a"
+           callers = "s""#,
     ] {
         assert!(
             Routes::parse(&format!("[[route]]\n{bad}")).is_err(),
@@ -124,6 +138,8 @@ fn a_route_without_exactly_one_way_or_with_a_wrong_take_is_refused() {
     }
     let twice = "[[route]]\nid = \"a\"\nloads = [\"t\"]\n[[route]]\nid = \"a\"\nloads = [\"u\"]";
     assert!(Routes::parse(twice).is_err());
+    let system = Routes::parse("[[route]]\nid = \"a\"\nsystem = \"s\"").unwrap();
+    assert_eq!(system.routes[0].how, How::System("s".to_owned()));
 }
 
 #[test]
@@ -555,6 +571,7 @@ fn a_spelled_value_needs_a_step_that_spells_it_and_a_reflected_number_stands_alo
     for bad in [
         "shape = [\"mov eax,[rcx+?]\", \"ret\"]\ntake = \"spelled\"\nvalue = 0",
         "shape = [\"mov eax,[rcx+0x10]\"]\ntake = \"spelled\"\nvalue = 0x10",
+        "shape = [\"mov eax,[rcx+0x10]\"]\ntake = \"spelled\"\nvalue = 1",
         "shape = [\"mov eax,[rcx]\"]\ntake = \"spelled\"",
         "shape = [\"mov eax,[rcx+*]\"]\ntake = \"spelled\"\nvalue = 0",
         "shape = [\"mov eax,[rip+?]\"]\ntake = \"spelled\"\nvalue = 0",
