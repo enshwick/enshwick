@@ -153,8 +153,16 @@ impl Record {
 pub struct Field {
     name: &'static str,
     doc: &'static str,
-    ty: &'static Ty,
+    ty: FieldTy,
     defaulted: bool,
+}
+
+/// A [`Field`]'s type, or the function that gives it, for a record that
+/// holds itself, whose description a constant cannot hold.
+#[derive(Clone, Copy, Debug)]
+enum FieldTy {
+    Known(&'static Ty),
+    Later(fn() -> &'static Ty),
 }
 
 impl Field {
@@ -164,7 +172,7 @@ impl Field {
         Self {
             name,
             doc,
-            ty,
+            ty: FieldTy::Known(ty),
             defaulted: false,
         }
     }
@@ -175,8 +183,21 @@ impl Field {
         Self {
             name,
             doc,
-            ty,
+            ty: FieldTy::Known(ty),
             defaulted: true,
+        }
+    }
+
+    /// A field whose type `ty` gives when asked, for a record that may
+    /// hold itself, as a generated game type may.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn later(name: &'static str, doc: &'static str, ty: fn() -> &'static Ty) -> Self {
+        Self {
+            name,
+            doc,
+            ty: FieldTy::Later(ty),
+            defaulted: false,
         }
     }
 
@@ -217,8 +238,11 @@ impl Field {
     ///
     /// See the [module](self).
     #[must_use]
-    pub const fn ty(&self) -> &'static Ty {
-        self.ty
+    pub fn ty(&self) -> &'static Ty {
+        match self.ty {
+            FieldTy::Known(ty) => ty,
+            FieldTy::Later(ty) => ty(),
+        }
     }
 }
 

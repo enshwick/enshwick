@@ -5,7 +5,7 @@
 use core::marker::PhantomData;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use super::{Component, Event, Named, Reflected, Resource, ShapeError, check, sample};
+use super::{Component, Event, Resource, ShapeError, check, sample};
 use crate::content::Guid;
 use crate::resources::{Registry, Type, Value};
 use crate::world::{World, WritableType};
@@ -87,7 +87,7 @@ impl RawComponent {
 
     /// Writes `value` to `entity`'s component, marked changed the game's
     /// way, keeping the bytes of what `value` leaves out.
-    pub(crate) fn write(&self, world: World, entity: Entity, value: Value) -> Result<(), Off> {
+    pub(crate) fn write(&self, world: World, entity: Entity, value: &Value) -> Result<(), Off> {
         let id = self.id;
         let writable = self
             .writable
@@ -95,7 +95,7 @@ impl RawComponent {
         let name = self.name;
         world
             .update(entity, writable, |bytes| {
-                let written = Registry::game()?.encode(name, &value, Some(bytes))?;
+                let written = Registry::game()?.encode(name, value, Some(bytes))?;
                 if written.len() != bytes.len() {
                     return Err(Off::new(format!(
                         "typed {id}: a value of {} bytes, not {}",
@@ -145,10 +145,10 @@ impl RawEvent {
         // event type.
         let warned = AtomicBool::new(false);
         crate::load::game_events_of(host, ty.hash(), ty.name(), move |raw| {
-            let handled = Registry::game()
+            let outcome = Registry::game()
                 .and_then(|registry| Ok(registry.decode(name, raw.bytes())?))
                 .and_then(|value| handler(&value));
-            if let Err(why) = handled
+            if let Err(why) = outcome
                 && !warned.swap(true, Ordering::Relaxed)
             {
                 crate::warn!("typed {id}: an event does not read: {why}");
@@ -185,11 +185,6 @@ impl RawResource {
     /// The key of the resource of this type with GUID `guid`, part 0.
     pub(crate) fn key(&self, guid: Guid) -> crate::abi::ResourceKey {
         guid.key_by_hash(self.hash)
-    }
-
-    /// The type's qualified name on the running build.
-    pub(crate) const fn name(&self) -> &'static str {
-        self.name
     }
 
     /// Refuses `key` when it is of another type.
@@ -349,7 +344,7 @@ impl<T: Component> ComponentType<T> {
     /// }
     /// ```
     pub fn write(&self, world: World, entity: Entity, value: &T) -> Result<(), Off> {
-        self.raw.write(world, entity, value.to_value())
+        self.raw.write(world, entity, &value.to_value())
     }
 }
 

@@ -59,7 +59,7 @@ pub use runtime::{
     ResourceType, ShapeError,
 };
 #[doc(hidden)]
-pub use runtime::{check, sample};
+pub use runtime::{Row, check, sample};
 
 runtime::named_table! {
     "AchievementDefinitionResource" => AchievementDefinitionResource,

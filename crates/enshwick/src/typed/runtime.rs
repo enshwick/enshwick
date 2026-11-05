@@ -177,18 +177,25 @@ impl Constant {
     }
 
     /// The constant as a generated enum's `Other` in a script:
-    /// `{ Other = <name or number> }`.
+    /// `{ Other = <name or number> }`, a number past 2^53 as its decimal
+    /// text, which a script number cannot hold exactly.
     #[doc(hidden)]
     #[must_use]
     pub fn into_script(self) -> crate::script::Value {
         let held = match self {
             Self::Name(name) => crate::script::Value::String(name),
-            Self::Number(number) => crate::script::IntoScript::into_value(number),
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "only a number a script number holds exactly becomes one"
+            )]
+            Self::Number(number) if number <= EXACT => crate::script::Value::Number(number as f64),
+            Self::Number(number) => crate::script::Value::String(number.to_string()),
         };
         crate::script::Value::Map(vec![(OTHER.to_owned(), held)])
     }
 
-    /// The constant a script's `{ Other = <name or number> }` names.
+    /// The constant a script's `{ Other = <name or number> }` names; text
+    /// of digits is a number, since no constant's name is.
     ///
     /// # Errors
     ///
@@ -205,21 +212,33 @@ impl Constant {
             return Err(malformed());
         }
         match entries.remove(0).1 {
-            crate::script::Value::String(name) => Ok(Self::Name(name)),
-            number => <u64 as crate::script::FromScript>::from_value(number)
-                .map(Self::Number)
-                .map_err(|e| e.within(OTHER)),
+            crate::script::Value::String(text) => {
+                Ok(text.parse().map_or_else(|_| Self::Name(text), Self::Number))
+            }
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "checked first: a whole number from 0 to 2^53"
+            )]
+            crate::script::Value::Number(n)
+                if n.fract() == 0.0 && (0.0..=9_007_199_254_740_992.0).contains(&n) =>
+            {
+                Ok(Self::Number(n as u64))
+            }
+            _ => Err(malformed()),
         }
     }
 }
+
+/// The largest whole number a script number holds exactly, 2^53.
+const EXACT: u64 = 1 << 53;
 
 /// The variant of a generated enum that holds a constant it does not name.
 const OTHER: &str = "Other";
 
 /// Why `text` names no variant of the generated enum `ty`.
-#[doc(hidden)]
 #[must_use]
-pub fn no_variant(text: &str, ty: &crate::script::Ty) -> crate::script::Error {
+pub(crate) fn no_variant(text: &str, ty: &crate::script::Ty) -> crate::script::Error {
     let name = match ty {
         crate::script::Ty::Union(union) => union.name(),
         _ => "",
@@ -399,9 +418,8 @@ macro_rules! named_table {
 pub(crate) use named_table;
 
 /// `name` without the `r#` of a raw identifier: a field's name in a script.
-#[doc(hidden)]
 #[must_use]
-pub const fn unraw(name: &'static str) -> &'static str {
+pub(crate) const fn unraw(name: &'static str) -> &'static str {
     match name.as_bytes() {
         [b'r', b'#', ..] => name.split_at(2).1,
         _ => name,
@@ -410,9 +428,8 @@ pub const fn unraw(name: &'static str) -> &'static str {
 
 /// The number of fields of the record `ty`, for a generated struct's
 /// script conversion.
-#[doc(hidden)]
 #[must_use]
-pub const fn field_count(ty: &crate::script::Ty) -> usize {
+pub(crate) const fn field_count(ty: &crate::script::Ty) -> usize {
     match ty {
         crate::script::Ty::Record(record) => record.fields().len(),
         _ => 0,
@@ -420,12 +437,10 @@ pub const fn field_count(ty: &crate::script::Ty) -> usize {
 }
 
 /// The doc of a derived type's field `base` in a script.
-#[doc(hidden)]
-pub const BASE_DOC: &str = "The fields of the type this one derives from.";
+pub(crate) const BASE_DOC: &str = "The fields of the type this one derives from.";
 
 /// The doc of a generated enum's variant `Other` in a script.
-#[doc(hidden)]
-pub const OTHER_DOC: &str =
+pub(crate) const OTHER_DOC: &str =
     "A constant this enum does not name: its name on the running build, or its number.";
 
 /// A generated struct: its fields by the game's names, read from and
@@ -452,20 +467,22 @@ macro_rules! reflected_struct {
         }
 
         impl $crate::script::Typed for $name {
+            // Each field's type is asked for later: a type may hold itself,
+            // such as in an optional, which a constant cannot describe.
             const TY: &'static $crate::script::Ty =
                 &$crate::script::Ty::Record(&$crate::script::Record::new(
                     ::core::concat!(::core::module_path!(), "::", ::core::stringify!($name)),
                     $doc,
                     &[
-                        $($crate::script::Field::new(
+                        $($crate::script::Field::later(
                             "base",
                             $crate::typed::runtime::BASE_DOC,
-                            <$base as $crate::script::Typed>::TY,
+                            || <$base as $crate::script::Typed>::TY,
                         ),)?
-                        $($crate::script::Field::new(
+                        $($crate::script::Field::later(
                             $crate::typed::runtime::unraw(::core::stringify!($field)),
                             ::core::concat!($($field_doc),*),
-                            <$ty as $crate::script::Typed>::TY,
+                            || <$ty as $crate::script::Typed>::TY,
                         ),)*
                     ],
                 ));

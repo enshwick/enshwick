@@ -187,7 +187,7 @@ impl ComponentType {
     /// does not fit the type, or off the game thread.
     #[script]
     pub(crate) fn write(&self, entity: Entity, value: Fields) -> Result<(), Off> {
-        self.raw.write(self.world, entity, self.row.taken(value)?)
+        self.raw.write(self.world, entity, &self.row.taken(value)?)
     }
 }
 

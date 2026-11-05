@@ -1,8 +1,3 @@
-#![expect(
-    unreachable_pub,
-    reason = "the macros give test items the generated items' visibility"
-)]
-
 use super::*;
 use crate::resources::{Field, Kind, Registry, Type};
 
