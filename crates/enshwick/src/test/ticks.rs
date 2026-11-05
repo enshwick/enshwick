@@ -176,6 +176,11 @@ impl FakeTicks {
     pub(crate) fn handlers(&self) -> impl Iterator<Item = (EventFn, usize)> + '_ {
         self.ticks.iter().map(|t| (t.callback, t.user))
     }
+
+    /// The fake server's time: of the last step, in nanoseconds from the first.
+    pub(crate) const fn nanos(&self) -> u64 {
+        self.nanos
+    }
 }
 
 #[cfg(test)]

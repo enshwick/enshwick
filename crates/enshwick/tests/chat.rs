@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
     use std::sync::{Mutex, OnceLock};
+    use std::time::Duration;
 
     use enshwick::abi::Status;
     use enshwick::chat::{ChatKind, ChatVerdict};
@@ -94,5 +95,46 @@ mod tests {
             "the panicking filter is off, and only it"
         );
         assert_eq!(SEEN.lock().unwrap().last().map(String::as_str), Some("bad"));
+    }
+
+    #[test]
+    fn lines_past_eight_a_second_reach_the_filters_but_no_handler_until_the_next_second() {
+        let loader = enshwick::test::FakeHost::new().world().install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Moderator)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let (ann, bob) = (PlayerKey::new(7), PlayerKey::new(8));
+        let (seen, heard) = (SEEN.lock().unwrap().len(), HEARD.lock().unwrap().len());
+
+        for _ in 0..9 {
+            assert_eq!(loader.say(ann, "hi").as_deref(), Some("hi"));
+        }
+        assert_eq!(
+            SEEN.lock().unwrap().len(),
+            seen + 9,
+            "every line is filtered"
+        );
+        assert_eq!(
+            HEARD.lock().unwrap().len(),
+            heard + 8,
+            "the ninth is not heard"
+        );
+
+        let _ran = loader.tick(Duration::from_millis(999));
+        let _said = loader.say(ann, "hi");
+        let _said = loader.say(bob, "hi");
+        assert_eq!(
+            HEARD.lock().unwrap().len(),
+            heard + 9,
+            "another account has a rate of its own"
+        );
+        let _ran = loader.tick(Duration::from_millis(1));
+        let _said = loader.say(ann, "hi");
+        assert_eq!(
+            HEARD.lock().unwrap().len(),
+            heard + 10,
+            "a new second starts afresh"
+        );
     }
 }

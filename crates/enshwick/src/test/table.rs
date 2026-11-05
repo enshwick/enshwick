@@ -278,6 +278,9 @@ pub(crate) struct State {
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) item_filters: Vec<(crate::abi::ItemActionFn, usize)>,
     pub(crate) chat_filters: Vec<(crate::abi::ChatFilterFn, usize)>,
+    /// Each account's chat rate: the start of its window in fake server
+    /// time and the lines heard in it.
+    pub(crate) chat_rate: Vec<(crate::PlayerKey, u64, u32)>,
     /// The world's save on disk and the mod's hold on saves.
     pub(crate) save: Saves,
     pub(crate) skills: Vec<(crate::abi::SkillNode, SkillCheckFn, usize)>,
@@ -674,6 +677,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         interaction_filters: Vec::new(),
         item_filters: Vec::new(),
         chat_filters: Vec::new(),
+        chat_rate: Vec::new(),
         save: Saves {
             info: None,
             held: false,
