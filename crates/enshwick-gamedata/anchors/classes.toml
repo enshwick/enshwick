@@ -893,14 +893,26 @@ entries = [
   "bases.npc_value",
   "chat.store_slot_size",
   "ecs.entity_record_size",
-  "inventory.view_replication",
-  "save.path_parts",
-  "server.permission_entry_size",
   "voxel.grid_stride",
   "weather.entry_size",
 ]
+class = "engine"
+reason = "an engine route folds it from the index arithmetic of a routed function (`take = \"scale\"`)"
+
+[[class]]
+entries = ["server.permission_entry_size"]
 class = "pattern"
-reason = "no reflected type holds it and no one operand spells it: its fixed pattern holds it in the arithmetic of several instructions, such as a multiply and a scale"
+reason = "its index arithmetic is in a leaf function without an unwind entry, which no route decodes"
+
+[[class]]
+entries = ["inventory.view_replication"]
+class = "pattern"
+reason = "an offset in an ECS system's view, the distance between two frame displacements, which no one operand spells"
+
+[[class]]
+entries = ["save.path_parts"]
+class = "pattern"
+reason = "the count of an engine path's parts, which no instruction near its read spells"
 
 [[class]]
 entries = ["ui.context_bundle"]

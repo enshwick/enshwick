@@ -14,7 +14,7 @@
 //! a RIP-relative operand. A `*` or `?` displacement is not zero and has the
 //! sign written.
 
-use iced_x86::{Instruction, Mnemonic, OpKind, Register};
+use iced_x86::{Instruction, InstructionInfoFactory, Mnemonic, OpAccess, OpKind, Register};
 use rustc_hash::FxHashMap;
 
 /// What a memory operand's displacement must be.
@@ -451,4 +451,126 @@ pub(crate) fn matches<'s>(
                 taken,
             })
     })
+}
+
+const READS: [OpAccess; 4] = [
+    OpAccess::Read,
+    OpAccess::ReadWrite,
+    OpAccess::CondRead,
+    OpAccess::ReadCondWrite,
+];
+
+/// The factor `run` multiplies one index by: the register the first
+/// instruction reads stands for the index `i`, each register holds `k · i`
+/// plus something that does not depend on `i`, and the answer is `k` of the
+/// last instruction's memory address, else of the register it writes.
+///
+/// `lea`, `mov`, `movzx`, `movsx`, `movsxd`, `add`, `sub`, `shl` and `sal`
+/// by an immediate, and `imul` by an immediate fold; a value read from
+/// memory or an immediate holds no `i`; an instruction that only reads
+/// registers changes nothing, and one that only writes them clears them.
+/// Any other instruction that reads a register holding `i` and writes a
+/// register, and a call, leaves no answer, and so do a first instruction reading
+/// no register or two, and a factor below 2, which multiplies nothing.
+pub(crate) fn scale(run: &[Instruction]) -> Option<u64> {
+    let last = run.len().checked_sub(1)?;
+    let mut info = InstructionInfoFactory::new();
+    let mut index = None;
+    for used in info.info(&run[0]).used_registers() {
+        let register = used.register().full_register();
+        if READS.contains(&used.access())
+            && register != Register::RIP
+            && index.replace(register).is_some_and(|r| r != register)
+        {
+            return None;
+        }
+    }
+    let mut factors: FxHashMap<Register, i64> = FxHashMap::default();
+    factors.insert(index?, 1);
+    let mut answer = None;
+    for (at, ins) in run.iter().enumerate() {
+        let memory = (0..ins.op_count()).any(|i| ins.op_kind(i) == OpKind::Memory);
+        if at == last && memory {
+            answer = Some(address_factor(ins, &factors));
+        }
+        fold(ins, &mut factors, &mut info)?;
+        if at == last && !memory && ins.op_count() > 0 && ins.op0_kind() == OpKind::Register {
+            answer = Some(factor(&factors, ins.op0_register()));
+        }
+    }
+    answer
+        .and_then(|k| u64::try_from(k).ok())
+        .filter(|&k| k >= 2)
+}
+
+/// The factor register `register` holds, 0 for one that holds no index.
+fn factor(factors: &FxHashMap<Register, i64>, register: Register) -> i64 {
+    factors.get(&register.full_register()).copied().unwrap_or(0)
+}
+
+/// The factor of the address of `ins`'s memory operand: its base's and its
+/// scaled index's; RIP holds none.
+fn address_factor(ins: &Instruction, factors: &FxHashMap<Register, i64>) -> i64 {
+    let scale = i64::from(ins.memory_index_scale());
+    factor(factors, ins.memory_base())
+        .saturating_add(factor(factors, ins.memory_index()).saturating_mul(scale))
+}
+
+/// Applies `ins` to `factors`; `None` for an instruction it cannot fold.
+fn fold(
+    ins: &Instruction,
+    factors: &mut FxHashMap<Register, i64>,
+    info: &mut InstructionInfoFactory,
+) -> Option<()> {
+    let operand = |i: u32| match ins.op_kind(i) {
+        OpKind::Register => factor(factors, ins.op_register(i)),
+        _ => 0,
+    };
+    let to_register = ins.op_count() > 0 && ins.op0_kind() == OpKind::Register;
+    let folded = match ins.mnemonic() {
+        _ if !to_register => None,
+        Mnemonic::Lea => Some(address_factor(ins, factors)),
+        Mnemonic::Mov | Mnemonic::Movzx | Mnemonic::Movsx | Mnemonic::Movsxd => Some(operand(1)),
+        Mnemonic::Add => operand(0).checked_add(operand(1)),
+        Mnemonic::Sub => operand(0).checked_sub(operand(1)),
+        Mnemonic::Shl | Mnemonic::Sal if is_immediate(ins.op1_kind()) => {
+            let by = u32::try_from(ins.immediate(1)).ok()?;
+            operand(0).checked_mul(1i64.checked_shl(by)?)
+        }
+        Mnemonic::Imul if ins.op_count() == 3 => {
+            operand(1).checked_mul(ins.immediate(2).cast_signed())
+        }
+        _ => None,
+    };
+    if let Some(k) = folded {
+        let register = ins.op0_register().full_register();
+        if k == 0 {
+            factors.remove(&register);
+        } else {
+            factors.insert(register, k);
+        }
+        return Some(());
+    }
+    let used = info.info(ins).used_registers();
+    let holding = |r: Register| factors.contains_key(&r.full_register());
+    let reads = used
+        .iter()
+        .any(|u| holding(u.register()) && READS.contains(&u.access()));
+    let written: Vec<Register> = used
+        .iter()
+        .filter(|u| {
+            !matches!(
+                u.access(),
+                OpAccess::Read | OpAccess::CondRead | OpAccess::None
+            )
+        })
+        .map(|u| u.register().full_register())
+        .collect();
+    if ins.mnemonic() == Mnemonic::Call || reads && !written.is_empty() {
+        return None;
+    }
+    for register in written {
+        factors.remove(&register);
+    }
+    Some(())
 }

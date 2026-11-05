@@ -26,10 +26,12 @@
 //! takes), `cell` (the `u32` the game keeps at the address it takes) or
 //! `spelled` (the route's `value`, which a step of the shape spells in its
 //! own encoding: memory without a displacement spells 0, else an index
-//! scale or an immediate equal to it; a `nop` spells nothing); the last
-//! three are constants, the
-//! rest symbols. A taken constant needs a shape
-//! of two steps or one with an exact operand or an `{entry}`. `shift` turns
+//! scale or an immediate equal to it; a `nop` spells nothing) or `scale`
+//! (the factor the shape's instructions multiply the register its first
+//! one reads by, such as a record size held only in `lea r9,[rax+rax*4];
+//! shl r9,5`); the last four are constants, the rest symbols. A taken
+//! constant needs a shape of two steps or one with an exact operand or an
+//! `{entry}`. `shift` turns
 //! a taken constant `v` into `1 << v`, and `plus` then adds to it. `sides`
 //! limits a route to some sides; it defaults to every side.
 //!
@@ -97,6 +99,7 @@ enum Take {
     Value,
     Cell,
     Spelled,
+    Scale,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -215,18 +218,16 @@ impl RouteRow {
         match take {
             _ if reflected => {}
             Take::Start if takes == 0 => {}
-            Take::End | Take::Spelled if shaped && takes == 0 => {}
+            Take::End | Take::Spelled | Take::Scale if shaped && takes == 0 => {}
             Take::Address | Take::Value | Take::Cell if shaped && takes == 1 => {}
             _ => {
                 return Err(bad(
-                    "`end` and `spelled` take a shape without `*`, `address`, `value` and `cell` a shape with one `*`, and `start` no `*`",
+                    "`end`, `spelled` and `scale` take a shape without `*`, `address`, `value` and `cell` a shape with one `*`, and `start` no `*`",
                 ));
             }
         }
-        if matches!(take, Take::Value | Take::Cell | Take::Spelled)
-            && steps.len() < 2
-            && !steps.iter().any(Step::is_exact)
-        {
+        let constant = matches!(take, Take::Value | Take::Cell | Take::Spelled | Take::Scale);
+        if constant && steps.len() < 2 && !steps.iter().any(Step::is_exact) {
             return Err(bad(
                 "a taken constant needs a shape of two steps, an exact operand or an `{entry}`",
             ));
@@ -242,10 +243,7 @@ impl RouteRow {
             (_, Some(_)) => return Err(bad("only a `spelled` take names a `value`")),
         };
         let check = parse_steps(self.check, names).map_err(|e| bad(&e.to_string()))?;
-        if !check.is_empty()
-            && (matches!(take, Take::Value | Take::Cell | Take::Spelled)
-                || check.iter().any(|s| s.takes() > 0))
-        {
+        if !check.is_empty() && (constant || check.iter().any(|s| s.takes() > 0)) {
             return Err(bad("`check` is a shape without `*` for a symbol"));
         }
         if (self.shift.is_some() || self.plus.is_some())

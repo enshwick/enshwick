@@ -702,6 +702,12 @@ shape = ["movaps [rbp+0x5e0],xmm0", "mov rdx,[r14+0x38]", "call ?b", "mov [rdi+*
 take = "value"
 
 [[route]]
+id = "bases.animal_value"
+in = "bases.server_update"
+shape = ["lea rbp,[rbx+rbx*2]", "add rbp,[rsi+0x15f8]", "movzx eax,[rbp]"]
+take = "scale"
+
+[[route]]
 id = "bases.animals"
 in = "bases.server_update"
 shape = ["mov r14,r13", "mov [rsi+*],r13d"]
@@ -1057,6 +1063,12 @@ in = "bases.server_update"
 shape = ["call *", "mov r14,r13"]
 take = "address"
 check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rsi"]
+
+[[route]]
+id = "bases.npc_value"
+in = "bases.npc_totals"
+shape = ["lea rdx,[rax+rax*2]", "lea r8,[rcx+rdx*4]"]
+take = "scale"
 
 [[route]]
 id = "bases.npcs"
@@ -1702,6 +1714,12 @@ shape = ["add rax,?", "cmp r10,*"]
 take = "value"
 
 [[route]]
+id = "chat.store_slot_size"
+in = "~fn:chat.store_slot_size"
+shape = ["mov eax,r8d", "mov rbx,rdx", "mov r11,rcx", "lea r10,[rax+rax*2]", "cmp byte [rcx+r10*4+0xc],0x0"]
+take = "scale"
+
+[[route]]
 id = "chat.store_slots"
 in = "~fn:chat.store_slot_size"
 shape = ["lea r10,[rax+rax*2]", "cmp [rcx+r10*4+*],?"]
@@ -2225,6 +2243,12 @@ id = "ecs.entity_map_capacity"
 in = "~fn:ecs.context_entity_world"
 shape = ["call {ecs.entity_slot}", "cmp rax,[rdi+*]"]
 take = "value"
+
+[[route]]
+id = "ecs.entity_record_size"
+in = "~fn:ecs.entity_record_size"
+shape = ["lea edx,[rax-0x1]", "mov rax,[rcx+?]", "add rdx,rdx", "mov eax,[rax+rdx*8]"]
+take = "scale"
 
 [[route]]
 id = "ecs.entity_records"
@@ -6405,6 +6429,12 @@ shape = ["lea r9,[r15+rcx*8]", "mov ecx,[r15+rcx*8+*]"]
 take = "value"
 
 [[route]]
+id = "voxel.grid_stride"
+in = "~fn:voxel.grid_stride"
+shape = ["lea rcx,[r12+r12*4]", "xor edx,edx", "mov byte [rdi+0x8],0x1", "mov rbp,[r15+rcx*8+0x40]"]
+take = "scale"
+
+[[route]]
 id = "voxel.grids"
 in = "~fn:voxel.grid_depth"
 shape = ["mov rbp,[r15+rcx*8+*]", "lea r9,[r15+rcx*8]"]
@@ -6494,6 +6524,20 @@ in = "weather.free"
 shape = ["mov ecx,ebx", "mov eax,[rdx]"]
 take = "spelled"
 value = 0x0
+
+[[route]]
+id = "weather.entry_size"
+sides = ["client"]
+in = "weather.free"
+shape = ["lea rcx,[rcx+rcx*4]", "shl rcx,0x4"]
+take = "scale"
+
+[[route]]
+id = "weather.entry_size"
+sides = ["server"]
+in = "weather.free"
+shape = ["lea rcx,[r8+r8*8]", "lea rdx,[rax+rcx*8]"]
+take = "scale"
 
 [[route]]
 id = "weather.free"
@@ -7663,6 +7707,11 @@ shape = ["call *", "movups xmm0,[rax]"]
 take = "address"
 
 [[route]]
+id = "~fn:ecs.entity_record_size"
+callers = "ecs.command_append"
+shape = ["mov rcx,r10", "call {ecs.command_append}"]
+
+[[route]]
 id = "~fn:ecs.registry_type_count"
 in = "~c0:~fn:ecs.type_record_static"
 shape = ["mov rdx,r14", "mov rcx,rbp", "call *"]
@@ -8010,6 +8059,12 @@ take = "address"
 id = "~fn:voxel.grid_depth"
 in = "~c1:~fn:voxel.grids"
 shape = ["lea rcx,[rbp]", "call *"]
+take = "address"
+
+[[route]]
+id = "~fn:voxel.grid_stride"
+in = "voxel.read_box"
+shape = ["call *", "and sil,[rbp+0xa0]"]
 take = "address"
 
 [[route]]

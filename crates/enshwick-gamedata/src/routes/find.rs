@@ -295,6 +295,13 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             Take::Value => constant(one.taken?),
             Take::Cell => constant(u64::from(code.image().u32(one.taken?)?)),
             Take::Spelled => Some(Routed::Constant(route.value)),
+            Take::Scale => {
+                let run = (
+                    u32::try_from(rva(one.start)?).ok()?,
+                    u32::try_from(rva(one.end)?).ok()?,
+                );
+                shape::scale(&code.decode(run)).map(Routed::Constant)
+            }
         }
     }
 }

@@ -672,6 +672,66 @@ fn a_spelled_value_needs_a_step_that_spells_it_and_a_reflected_number_stands_alo
     }
 }
 
+/// The record sizes of the game's code, each held only in index arithmetic,
+/// fold to their factor; what the fold cannot follow gives none.
+#[test]
+fn a_scale_folds_the_factors_of_one_index_and_refuses_what_it_cannot_follow() {
+    let scale = |bytes: &[u8]| {
+        let run: Vec<Instruction> = Decoder::with_ip(64, bytes, 0x1000, DecoderOptions::NONE)
+            .into_iter()
+            .collect();
+        shape::scale(&run)
+    };
+    // lea r9,[rax+rax*4]; shl r9,5; cmp [r9+r8],edx
+    assert_eq!(
+        scale(&[
+            0x4c, 0x8d, 0x0c, 0x80, 0x49, 0xc1, 0xe1, 0x05, 0x43, 0x39, 0x14, 0x01
+        ]),
+        Some(160)
+    );
+    // lea r10,[rax+rax*2]; cmp byte [rcx+r10*4+0x10],0
+    assert_eq!(
+        scale(&[0x4c, 0x8d, 0x14, 0x40, 0x42, 0x80, 0x7c, 0x91, 0x10, 0x00]),
+        Some(12)
+    );
+    // lea edx,[rax+8]; mov rax,[rcx+0x10]; add rdx,rdx; mov eax,[rax+rdx*8]
+    assert_eq!(
+        scale(&[
+            0x8d, 0x50, 0x08, 0x48, 0x8b, 0x41, 0x10, 0x48, 0x03, 0xd2, 0x8b, 0x04, 0xd0
+        ]),
+        Some(16)
+    );
+    // imul rax,rcx,0x48; mov eax,[rdx+rax]
+    assert_eq!(
+        scale(&[0x48, 0x6b, 0xc1, 0x48, 0x8b, 0x04, 0x02]),
+        Some(0x48)
+    );
+    // lea rax,[rcx+rdx]: the first instruction reads two registers
+    assert_eq!(scale(&[0x48, 0x8d, 0x04, 0x11]), None);
+    // mov eax,[rcx]: a factor of 1 multiplies nothing
+    assert_eq!(scale(&[0x8b, 0x01]), None);
+    // lea r9,[rax+rax*4]; imul r9,rcx: a product of two registers
+    assert_eq!(
+        scale(&[0x4c, 0x8d, 0x0c, 0x80, 0x4c, 0x0f, 0xaf, 0xc9]),
+        None
+    );
+    // lea r9,[rax+rax*4]; call; mov eax,[r9]: the call may change r9
+    assert_eq!(
+        scale(&[0x4c, 0x8d, 0x0c, 0x80, 0xe8, 0, 0, 0, 0, 0x41, 0x8b, 0x01]),
+        None
+    );
+    let route = |keys: &str| Routes::parse(&format!("[[route]]\nid = \"a.b\"\nin = \"s\"\n{keys}"));
+    assert!(route("shape = [\"lea r9,[rax+rax*4]\", \"shl r9,0x5\"]\ntake = \"scale\"").is_ok());
+    for bad in [
+        "shape = [\"lea r9,[rax+rax*4]\", \"shl r9,*\"]\ntake = \"scale\"",
+        "shape = [\"lea r9,[rax+rax*4]\"]\ntake = \"scale\"",
+        "shape = [\"lea r9,[rax+rax*4]\", \"shl r9,0x5\"]\ntake = \"scale\"\nplus = 1",
+        "shape = [\"lea r9,[rax+rax*4]\", \"shl r9,0x5\"]\ntake = \"scale\"\nvalue = 0xa0",
+    ] {
+        assert!(route(bad).is_err(), "{bad}");
+    }
+}
+
 /// Entries a route finds on a table build that its own table does not pin
 /// and no pattern of the newest table finds there either, by table name.
 const UNPINNED_UNCHECKED: &[(&str, &[&str])] = &[
