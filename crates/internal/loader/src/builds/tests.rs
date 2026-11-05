@@ -79,6 +79,7 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
         let mut build = KnownBuild {
             name: stripped.name().to_owned(),
             kind: Kind::Exact,
+            carried: None,
             table: stripped.resolve(),
             lacking: OnceLock::new(),
         };
@@ -552,15 +553,13 @@ fn a_carried_build_warns_only_when_entries_are_missing() {
     let unknown = Fingerprint::new([0xee; 16], 1);
     let mut complete = embedded(Side::SERVER);
     complete.kind = Kind::Fallback;
+    complete.carried = Some("1.0 server (1)".to_owned());
     let (level, line) = complete.start_line(unknown);
     assert_eq!(level, Level::INFO);
     assert!(
         line.starts_with(
             "game build eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/1 runs without its own table: "
-        ) && line.ends_with(&format!(
-            "entries found by engine routes and the patterns of {}",
-            complete.resolved().name()
-        )),
+        ) && line.ends_with("entries found by engine routes and the patterns of 1.0 server (1)"),
         "{line}"
     );
     let code = [0u8; 64];

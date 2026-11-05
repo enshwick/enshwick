@@ -33,6 +33,8 @@ pub struct KnownBuild {
     pub name: String,
     /// Whether the table was made for this build.
     pub kind: Kind,
+    /// The name of the table a build without its own carries.
+    carried: Option<String>,
     table: Resolved,
     /// The names of the parts [`Self::lacking`] found, once asked.
     lacking: OnceLock<String>,
@@ -216,7 +218,7 @@ impl KnownBuild {
                     "game build {} runs without its own table: {} entries found by engine routes and the patterns of {}",
                     fingerprint_name(fingerprint),
                     self.entries(),
-                    self.table.name()
+                    self.carried.as_deref().unwrap_or(self.table.name())
                 ),
             );
         }
@@ -276,6 +278,7 @@ pub fn select(
         return Some(KnownBuild {
             name: table.name().to_owned(),
             kind: Kind::Exact,
+            carried: None,
             table: table.resolve(),
             lacking: OnceLock::new(),
         });
@@ -293,6 +296,7 @@ pub fn select(
             base.name()
         ),
         kind: Kind::Fallback,
+        carried: Some(base.name().to_owned()),
         table,
         lacking: OnceLock::new(),
     })
@@ -329,6 +333,7 @@ pub fn by_patterns(
     Some(KnownBuild {
         name: table.name().to_owned(),
         kind: Kind::Fallback,
+        carried: Some(base.name().to_owned()),
         table,
         lacking: OnceLock::new(),
     })
@@ -412,6 +417,7 @@ pub fn embedded(running: Side) -> KnownBuild {
     KnownBuild {
         name: table.name().to_owned(),
         kind: Kind::Exact,
+        carried: None,
         table: table.resolve(),
         lacking: OnceLock::new(),
     }
