@@ -75,6 +75,7 @@ macro_rules! headed {
             PointSpec,
             QuestData,
             RenameCall,
+            SaveInfo,
             ServiceFound,
             ServiceSpec,
             SkillCheck,

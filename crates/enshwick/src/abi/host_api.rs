@@ -14,12 +14,12 @@ use crate::abi::{
     ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo,
     MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn,
     PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind,
-    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound,
-    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
-    StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, TickHandle,
-    TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn,
-    UiMarker, UiWidget, Voxel, WeatherFront,
+    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, SaveInfo, ServerWaitFn,
+    ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
+    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
+    TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn, UiDialog, UiExtension,
+    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -1657,4 +1657,19 @@ pub struct HostApi {
     /// the loader returns [`Status::REFUSED`]. ABI 11.6.
     pub chat_filter:
         extern "system" fn(me: ModHandle, callback: ChatFilterFn, user: *mut c_void) -> Status,
+    /// Writes the save of the world the server runs to `out`, which the
+    /// mod starts with [`Header::of`]: [`Status::MISSING`] before its first
+    /// save, while no world runs or on a client that hosts none, and
+    /// [`Status::FAILED`] when the file does not read. Any thread; `out` is
+    /// borrowed for the call. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.6.
+    pub save_info: extern "system" fn(me: ModHandle, out: *mut SaveInfo) -> Status,
+    /// Holds the world's saves while `held` is 1, or lets them go for 0:
+    /// the game saves only while no running mod holds them, the timed save
+    /// and [`HostApi::save_world`] waiting meanwhile, and the log names each
+    /// mod that holds or lets go. A mod that turns off lets go. Server only
+    /// ([`Status::MISSING`] on a build without the save layout); any thread,
+    /// taking effect after the next step; [`Status::BAD_ARGS`] for another
+    /// `held`. A panic in the loader returns [`Status::REFUSED`]. ABI 11.6.
+    pub hold_saves: extern "system" fn(me: ModHandle, held: u8) -> Status,
 }

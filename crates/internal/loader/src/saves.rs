@@ -17,11 +17,12 @@
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{HookFlags, Side, Status};
+use enshwick::abi::{Event, HookFlags, Side, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::Constant;
 
@@ -306,6 +307,9 @@ pub(crate) fn hosting_begins() {
 /// Forgets the key, when a hosted game ends.
 pub(crate) fn forget() {
     *KEYS.relock() = Keys::CLOSED;
+    let mut saving = SAVING.relock();
+    saving.under_way = false;
+    saving.held = None;
 }
 
 /// The world key of a save file path: the path without `.ksd`, so the
@@ -376,6 +380,109 @@ pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
     // (`world::server`), as the server's own loop asks for its timed saves.
     unsafe { (layout.request)(core::ptr::with_exposed_provenance_mut(server)) };
     Ok(())
+}
+
+/// What the loader keeps of the world's saves between steps.
+#[derive(Debug)]
+struct Saving {
+    /// Whether a save was under way at the last step.
+    under_way: bool,
+    /// The mods that hold saves now, in the order they asked.
+    holds: Vec<ModIndex>,
+    /// The game's save block byte from before the loader set it, while mods
+    /// hold saves.
+    held: Option<u8>,
+}
+
+static SAVING: Mutex<Saving> = Mutex::new(Saving {
+    under_way: false,
+    holds: Vec::new(),
+    held: None,
+});
+
+/// Mod `owner` holds the world's saves (`hold`) or lets them go: the game
+/// saves only while no mod holds them, and a save asked for meanwhile waits.
+pub(crate) fn hold(loader: &Loader, owner: ModIndex, hold: bool) -> Status {
+    if layout(loader).is_none() {
+        return Status::MISSING;
+    }
+    let id = loader.mods.get(owner.get()).map_or("?", |m| m.id.as_str());
+    let mut saving = SAVING.relock();
+    let at = saving.holds.iter().position(|&m| m == owner);
+    match (hold, at) {
+        (true, None) => {
+            saving.holds.push(owner);
+            crate::log!(INFO, "world saves held by {id}");
+        }
+        (false, Some(at)) => {
+            saving.holds.remove(at);
+            crate::log!(INFO, "world saves let go by {id}");
+        }
+        _ => {}
+    }
+    Status::OK
+}
+
+/// After each step on the server's game thread: raises
+/// `Event::WORLD_SAVING` when a save got under way, and sets the game's
+/// save block while a running mod holds saves, giving the byte back once
+/// none does.
+pub(crate) fn after_step(loader: &Loader) {
+    let Some(layout) = layout(loader) else {
+        return;
+    };
+    let Ok(server) = crate::world::server() else {
+        return;
+    };
+    // SAFETY: `world::server` returned the live server on its game thread
+    // between steps; the pointer to its save system sits at the table's
+    // `server.save_system`.
+    let system: usize = unsafe { crate::memory::read(server, layout.save_system) };
+    let phase: u8 = if system == 0 {
+        0
+    } else {
+        // SAFETY: `system` is non-zero, checked just before, and is the live
+        // server's save system, read on its game thread; its phase byte sits
+        // at the table's `save.phase`.
+        unsafe { crate::memory::read(system, layout.phase) }
+    };
+    let started = {
+        let mut saving = SAVING.relock();
+        let started = phase != 0 && !saving.under_way;
+        saving.under_way = phase != 0;
+        saving.holds.retain(|&m| !crate::host::is_off(m));
+        match (saving.holds.is_empty(), saving.held) {
+            (false, None) => {
+                // SAFETY: `server` is the live server on its game thread
+                // between steps, where nothing else writes it; its byte that
+                // refuses saves sits at the table's `server.save_blocked`.
+                let before: u8 = unsafe { crate::memory::read(server, layout.blocked) };
+                // SAFETY: the same byte, by the read just before.
+                unsafe { crate::memory::write(server, layout.blocked, 1u8) };
+                saving.held = Some(before);
+            }
+            (true, Some(before)) => {
+                // SAFETY: the byte that refuses saves of the live server on its
+                // game thread between steps, as when it was set.
+                unsafe { crate::memory::write(server, layout.blocked, before) };
+                saving.held = None;
+            }
+            _ => {}
+        }
+        started
+    };
+    if started {
+        loader.emit(Event::WORLD_SAVING, None, core::ptr::null());
+    }
+}
+
+/// The save of the world the server runs, for mods.
+pub(crate) fn info(loader: &Loader) -> Result<Option<crate::world_folders::SaveInfo>, Status> {
+    let key = world_key(loader).ok_or(Status::MISSING)?;
+    crate::world_folders::save_info(key).map_err(|e| {
+        crate::log!(WARN, "world {key}: its save was not read: {e}");
+        Status::FAILED
+    })
 }
 
 #[cfg(test)]

@@ -33,6 +33,62 @@ const MAGIC: &[u8; 4] = b"SV2C";
 const GUID_AT: usize = 0x0C; // bound, not a game offset: a byte of the save file's header
 /// The bytes of a save read for its GUID.
 const HEADER_READ: usize = GUID_AT + 16;
+/// Where a save's header holds the Unix time it was written, a u32 (server
+/// 25988414 and client 426).
+const SAVED_AT: usize = 0x20; // bound, not a game offset: a byte of the save file's header
+/// The backups the game keeps of a save, `backup/<stem>.ksd.backup-0` on.
+const BACKUPS: u8 = 10;
+
+/// What the loader reads of a world's save for mods.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SaveInfo {
+    /// The world's GUID, the same across saves.
+    pub world: Guid,
+    /// When it was written, in seconds since the Unix epoch.
+    pub saved_at: u32,
+    /// The save file's bytes.
+    pub size: u64,
+    /// The backups beside it.
+    pub backups: u8,
+}
+
+/// The save of the world `key`, `None` before its first save or for a file
+/// without the header.
+///
+/// # Errors
+///
+/// Reading the file or its metadata failed for another reason than its
+/// absence.
+pub fn save_info(key: &str) -> io::Result<Option<SaveInfo>> {
+    let path = PathBuf::from(format!("{key}.{SAVE_EXTENSION}"));
+    let mut header = Vec::with_capacity(SAVED_AT + 4);
+    match std::fs::File::open(&path) {
+        Ok(file) => file.take((SAVED_AT + 4) as u64).read_to_end(&mut header)?,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    if header.len() < SAVED_AT + 4 || !header.starts_with(MAGIC) {
+        return Ok(None);
+    }
+    let mut world = Guid::default();
+    world.copy_from_slice(&header[GUID_AT..HEADER_READ]);
+    let mut at = [0u8; 4];
+    at.copy_from_slice(&header[SAVED_AT..SAVED_AT + 4]);
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let folder = path.parent().map(|p| p.join("backup")).unwrap_or_default();
+    let backups = (0..BACKUPS)
+        .filter(|n| folder.join(format!("{name}.backup-{n}")).is_file())
+        .count();
+    Ok(Some(SaveInfo {
+        world,
+        saved_at: u32::from_le_bytes(at),
+        size: std::fs::metadata(&path)?.len(),
+        backups: u8::try_from(backups).unwrap_or(BACKUPS),
+    }))
+}
 
 /// A world's GUID, in the byte order of its save.
 pub type Guid = [u8; 16];
@@ -222,6 +278,28 @@ mod tests {
         assert_eq!(parse_hex(&"ab".repeat(16)), Some([0xab; 16]));
         assert_eq!(parse_hex("ab"), None);
         let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_info_reads_the_header_time_size_and_backups_and_is_none_before_a_save() {
+        let dir = scratch("info");
+        let key = dir.join("world0").to_string_lossy().into_owned();
+        assert_eq!(save_info(&key).unwrap(), None, "no save yet");
+        save(&key, 0xcd);
+        let path = dir.join("world0.ksd");
+        let mut bytes = std::fs::read(&path).unwrap();
+        bytes[SAVED_AT..SAVED_AT + 4].copy_from_slice(&1_762_300_000u32.to_le_bytes());
+        std::fs::write(&path, &bytes).unwrap();
+        for n in [0, 3] {
+            put(&dir.join("backup").join(format!("world0.ksd.backup-{n}")));
+        }
+        let info = save_info(&key).unwrap().unwrap();
+        assert_eq!(info.world, [0xcd; 16]);
+        assert_eq!(info.saved_at, 1_762_300_000);
+        assert_eq!(info.size, 0x30);
+        assert_eq!(info.backups, 2);
+        std::fs::write(&path, b"SV2C").unwrap();
+        assert_eq!(save_info(&key).unwrap(), None, "a header too short");
     }
 
     #[test]

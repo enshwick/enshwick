@@ -492,6 +492,43 @@ pub struct WeatherFront {
 
 impl_headed!(WeatherFront, born = 56);
 
+/// A world's save on disk, written by
+/// [`HostApi::save_info`](super::HostApi::save_info).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, SaveInfo};
+///
+/// let info = SaveInfo {
+///     header: Header::of::<SaveInfo>(),
+///     world: [7; 16],
+///     saved_at: 1_762_300_000,
+///     size: 4_096,
+///     backups: 2,
+///     reserved: 0,
+/// };
+/// assert_eq!(info.backups, 2);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct SaveInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The world's GUID, which stays the same across its saves.
+    pub world: [u8; 16],
+    /// When the save was written, in seconds since the Unix epoch.
+    pub saved_at: u64,
+    /// The save file's size in bytes.
+    pub size: u64,
+    /// The backups the game keeps beside it, 0 to 10.
+    pub backups: u32,
+    /// Zero.
+    pub reserved: u32,
+}
+
+impl_headed!(SaveInfo);
+
 impl WeatherFront {
     /// Clouds without rain, or nothing.
     pub const NONE: u32 = 0;

@@ -109,6 +109,11 @@ impl Event {
     /// mods raise none, and a player's lines raise at most eight a second.
     /// Raised on the game thread after the step. Server only. ABI 11.6.
     pub const CHAT_SAID: Self = Self(21);
+    /// A save of the world got under way: what a mod writes now beside the
+    /// save belongs to it, and [`Event::WORLD_SAVED`] follows once it is on
+    /// disk; no data. Raised on the game thread after the step that started
+    /// it. Server only. ABI 11.6.
+    pub const WORLD_SAVING: Self = Self(22);
 }
 
 /// The data of the `PlayerDied` event.
