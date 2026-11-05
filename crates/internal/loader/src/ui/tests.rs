@@ -32,9 +32,9 @@ fn the_arena_doubles_each_backslash_so_the_game_shows_a_windows_path_whole() {
     let bytes = unsafe { core::slice::from_raw_parts(path.ptr, want.len()) };
     assert_eq!(bytes, want);
     arena.next_frame();
-    let room = vec![b'x'; arena.buffers[arena.current].capacity() - 1];
-    let fills = arena.text(&[&room, br"\"]);
-    assert_eq!(fills.len, 0, "the doubled backslash does not fit");
+    let half = vec![b'\\'; arena.buffers[arena.current].capacity() / 2 + 1];
+    let fills = arena.text(&[&half]);
+    assert_eq!(fills.len, 0, "backslashes that fit only undoubled");
 }
 
 #[test]
