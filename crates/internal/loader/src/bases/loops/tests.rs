@@ -447,6 +447,22 @@ fn a_field_past_its_record_object_or_answer_is_named() {
         ..LAYOUT
     };
     assert_eq!(animals.misfit(), Some(bases::RECORD_ANIMALS.id()));
+    let base_id = Layout {
+        record: RecordFields {
+            base_id: Some(GEOMETRY.record() - 8),
+            ..RECORD
+        },
+        ..LAYOUT
+    };
+    assert_eq!(base_id.misfit(), Some(bases::RECORD_BASE_ID.id()));
+    let server = Layout {
+        record: RecordFields {
+            base_id: None,
+            ..RECORD
+        },
+        ..LAYOUT
+    };
+    assert_eq!(server.misfit(), None, "a server reads no base id");
     let staging = Layout {
         object: ObjectFields {
             staging: GEOMETRY.record_at(window::WINDOW),

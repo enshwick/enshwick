@@ -888,7 +888,17 @@ revision = 1
             .map(|(_, text)| (*text, enshwick_gamedata::Table::parse(text).unwrap()))
             .find(|(_, t)| t.side() == enshwick_gamedata::Side::Server && t.fingerprint() == fp)
             .unwrap();
-        let row = parse(src).unwrap();
+        // The table without its witnesses, so only the render can write them.
+        let mut bare: DocumentMut = src.parse().unwrap();
+        for (_, item) in bare["constants"].as_table_like_mut().unwrap().iter_mut() {
+            if let Some(row) = item.as_inline_table_mut() {
+                for key in ["witness", "witness_at", "witness_size", "one_witness"] {
+                    row.remove(key);
+                }
+            }
+        }
+        let src = bare.to_string();
+        let row = parse(&src).unwrap();
         let identity = Identity {
             guid: &row.guid,
             age: row.age,
@@ -897,8 +907,15 @@ revision = 1
             game_version: None,
             new_build: false,
         };
-        let (text, _) =
-            render(src, &row, &identity, &[], Some(&exe), &FxHashMap::default()).unwrap();
+        let (text, _) = render(
+            &src,
+            &row,
+            &identity,
+            &[],
+            Some(&exe),
+            &FxHashMap::default(),
+        )
+        .unwrap();
         let rendered = enshwick_gamedata::Table::parse(&text).unwrap();
         let witnessed: Vec<_> = committed
             .constants()
@@ -906,6 +923,18 @@ revision = 1
             .filter(|c| c.witness().is_some())
             .collect();
         assert!(!witnessed.is_empty());
+        let written = |table: &enshwick_gamedata::Table| {
+            table
+                .constants()
+                .iter()
+                .filter(|c| c.witness().is_some() || c.one_witness().is_some())
+                .count()
+        };
+        assert_eq!(
+            written(&rendered),
+            written(&committed),
+            "only held values take one"
+        );
         for constant in &witnessed {
             let made = rendered
                 .constants()
