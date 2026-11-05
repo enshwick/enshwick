@@ -6,6 +6,20 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- Routes read a constant from the engine's reflection (`field`, the sum of
+  each listed field's offset; `size`, a type's size), take a `spelled`
+  value only where a step of the matched shape holds it, and find a
+  function as the one direct caller of another whose code the shape
+  matches (`callers`). Nineteen constants now come from the engine through
+  them (#944).
+
+### Removed
+
+- The build-table entries no code reads: the ban list rows,
+  `server.ban_list_changed` and `server.config`, from every table (#944).
+
 ## [1.0.0-alpha.12] - 2026-11-05
 
 ### Added
