@@ -110,6 +110,7 @@ pub(crate) fn start(
         mods_dir,
         settings_problems,
         developer_tools,
+        release_check,
     }) = begin(stub_abi, missing_forwards)
     else {
         return;
@@ -156,11 +157,15 @@ pub(crate) fn start(
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
         settings_problems,
+        newer_release: OnceLock::new(),
         retry: crate::retry::Retry::default(),
     };
     let Some(loader) = host::install(loader) else {
         return;
     };
+    if release_check {
+        crate::releases::start(loader);
+    }
     if crate::diag::counting() {
         crate::profile::start(loader.mods.len());
     }

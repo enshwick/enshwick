@@ -527,6 +527,7 @@ dependencies = [
  "rustc-hash",
  "semver",
  "serde",
+ "serde_json",
  "sha2",
  "strsim",
  "thiserror",

@@ -218,6 +218,7 @@ mod rates;
 pub mod recipes;
 pub mod record;
 pub mod registry;
+pub mod releases;
 pub mod remote;
 pub mod resolve;
 #[cfg_attr(

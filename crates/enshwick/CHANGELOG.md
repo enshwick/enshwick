@@ -16,6 +16,12 @@ Each entry names the pull request that made the change.
   names, an enum constant its variant's name or `{ Other = <name or number> }`,
   read and written through the generated Rust item. Every generated struct
   and enum carries its script description (#940).
+- The Mods screen says when a newer Enshwick release exists: one dimmed
+  line with its version and the address of its release page. The loader
+  asks GitHub once per start on a thread of its own, with a 5-second limit
+  per step; it downloads nothing, a dedicated server only logs it, and a
+  prerelease counts only while the running loader is one. `release_check =
+  false` in `enshwick.toml` turns the check off (#943).
 
 ### Changed
 

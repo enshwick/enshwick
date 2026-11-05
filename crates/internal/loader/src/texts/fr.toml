@@ -36,6 +36,7 @@
 "mods.features.off" = "Désactivé en tout ou en partie dans cette version du jeu : {features}"
 "mods.discovery.off" = "La détection des mods est désactivée : dans les parties hébergées par un joueur, l'hôte et les joueurs qui rejoignent ne voient pas les mods des autres."
 "mods.settings.broken" = "enshwick.toml contient des erreurs. Les protections restent actives jusqu'à leur correction. Voir le journal."
+"mods.newer" = "Enshwick {version} est disponible : {address}"
 "mods.extends" = "Étend : {points}"
 "mods.settings" = "Paramètres"
 "mods.settings.server-marked" = "Les paramètres marqués « défini par le serveur » viennent du serveur que vous avez rejoint."

@@ -36,6 +36,7 @@
 "mods.features.off" = "在此游戏版本上全部或部分关闭：{features}"
 "mods.discovery.off" = "模组检测已关闭：在玩家主持的游戏中，主机和加入的玩家看不到彼此的模组。"
 "mods.settings.broken" = "enshwick.toml 有错误。在修正之前，保护功能保持开启。请查看日志。"
+"mods.newer" = "Enshwick {version} 已发布：{address}"
 "mods.extends" = "扩展：{points}"
 "mods.settings" = "设置"
 "mods.settings.server-marked" = "标有“由服务器设置”的设置来自你加入的服务器。"

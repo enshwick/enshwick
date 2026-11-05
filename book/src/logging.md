@@ -111,6 +111,15 @@ The keys of `enshwick.toml`:
 | `diagnostics`        | `false`  | count the calls of every hooked function; read at start       |
 | `diagnostics_timing` | `false`  | with `diagnostics`, also time every 256th call; read at start |
 | `build_patterns`     | `true`   | run a build without its table on patterns; read at start      |
+| `release_check`      | `true`   | ask GitHub once per start for a newer release; read at start  |
+
+With `release_check` on, the loader asks GitHub for the list of Enshwick
+releases once per start, on a thread of its own with a 5-second limit per
+step. A newer release shows as one dimmed line on the Mods screen with its
+version and the address of its page; the loader downloads and installs
+nothing. A dedicated server only logs it. A prerelease counts only while the
+running loader is one. No network, or any other failure, shows nothing and
+logs one line.
 
 A key whose value does not read keeps its default, and the log names it with
 error [E1007](https://enshwick.com/errors/E1007); every other key applies. A

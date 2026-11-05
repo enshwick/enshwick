@@ -36,6 +36,7 @@
 "mods.features.off" = "Off or partly off on this game version: {features}"
 "mods.discovery.off" = "Mod discovery is off: in games a player hosts, the host and the players who join do not see each other's mods."
 "mods.settings.broken" = "enshwick.toml has errors. Protections stay on until it is fixed. See the log."
+"mods.newer" = "Enshwick {version} is available: {address}"
 "mods.extends" = "Extends: {points}"
 "mods.settings" = "Settings" # text tag 0x4fd146ae
 "mods.settings.server-marked" = "Settings marked \"set by the server\" come from the server you joined."

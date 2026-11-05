@@ -26,6 +26,7 @@ postcard.workspace = true
 rustc-hash.workspace = true
 semver.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 strsim.workspace = true
 thiserror.workspace = true
@@ -38,6 +39,7 @@ enshwick-luau.workspace = true
 iced-x86.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_Networking_WinHttp",
     "Win32_Security",
     "Win32_Storage_FileSystem",
     "Win32_System_Diagnostics_Debug",

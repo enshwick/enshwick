@@ -96,6 +96,8 @@ pub(super) struct Begun {
     pub(super) settings_problems: Vec<String>,
     /// Whether developer tools are on, by the file read once at start.
     pub(super) developer_tools: bool,
+    /// Whether the settings ask GitHub for a newer release.
+    pub(super) release_check: bool,
 }
 
 /// Creates `mods/`, reads the loader settings and opens the log; `None`
@@ -123,6 +125,7 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     crate::status::mark_start();
     crate::diag::configure(&settings);
     let developer_tools = crate::developer_tools::marked(&game_dir);
+    let release_check = settings.release_check;
     builds::configure(settings.build_patterns);
     log::set_levels(settings);
     log::open(&game_dir.join(log::LOGS));
@@ -174,6 +177,7 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
         mods_dir,
         settings_problems: settings_problems.lines,
         developer_tools,
+        release_check,
     })
 }
 

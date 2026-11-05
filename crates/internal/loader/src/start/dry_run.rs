@@ -153,6 +153,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
         settings_problems: Vec::new(),
+        newer_release: OnceLock::new(),
         retry: crate::retry::Retry::default(),
     };
     let loader = host::install(loader).ok_or(DryRunError::AlreadyRan)?;

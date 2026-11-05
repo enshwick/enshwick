@@ -36,6 +36,7 @@
 "mods.features.off" = "Bu oyun sürümünde kapalı veya kısmen kapalı: {features}"
 "mods.discovery.off" = "Mod algılama kapalı: bir oyuncunun barındırdığı oyunlarda ev sahibi ve katılan oyuncular birbirlerinin modlarını göremez."
 "mods.settings.broken" = "enshwick.toml dosyasında hatalar var. Korumalar düzeltilene kadar açık kalır. Günlüğe bakın."
+"mods.newer" = "Enshwick {version} yayınlandı: {address}"
 "mods.extends" = "Genişlettikleri: {points}"
 "mods.settings" = "Ayarlar"
 "mods.settings.server-marked" = "\"Sunucu tarafından ayarlandı\" işaretli ayarlar, katıldığınız sunucudan gelir."

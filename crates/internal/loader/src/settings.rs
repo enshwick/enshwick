@@ -15,6 +15,10 @@ pub const FILE: &str = "enshwick.toml";
 /// Enshwick loader settings, read once at start.
 #[enshwick::config]
 #[derive(Debug, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each is a key of the settings file a person turns on or off"
+)]
 pub struct Settings {
     /// The most detailed lines kept in `logs/`: "error", "warn", "info" or "debug".
     pub log_level: Level,
@@ -31,6 +35,10 @@ pub struct Settings {
     /// by their code patterns and run what they cover; false leaves such a
     /// build vanilla until its table arrives.
     pub build_patterns: bool,
+    /// Ask GitHub once per start whether a newer Enshwick release exists, so
+    /// the Mods screen can say so; a dedicated server only logs it. false
+    /// never asks.
+    pub release_check: bool,
 }
 
 impl Default for Settings {
@@ -41,6 +49,7 @@ impl Default for Settings {
             diagnostics: false,
             diagnostics_timing: false,
             build_patterns: true,
+            release_check: true,
         }
     }
 }
@@ -214,6 +223,14 @@ mod tests {
         assert_eq!(settings.level("any-mod"), Level::INFO);
         assert!(!settings.diagnostics);
         assert!(settings.build_patterns);
+        assert!(settings.release_check);
+    }
+
+    #[test]
+    fn the_release_check_is_turned_off_in_the_file() {
+        let (settings, problems) = Settings::parse("release_check = false\n");
+        assert!(!settings.release_check);
+        assert!(problems.lines.is_empty(), "{problems:?}");
     }
 
     #[test]
@@ -230,6 +247,7 @@ mod tests {
             "diagnostics",
             "diagnostics_timing",
             "build_patterns",
+            "release_check",
         ] {
             assert!(file.contains(&format!("# {key} = ")), "{key}:\n{file}");
         }
