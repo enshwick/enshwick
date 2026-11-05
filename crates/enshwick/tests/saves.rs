@@ -6,11 +6,11 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
 
-    use enshwick::abi::{Event, Header, SaveInfo, Status};
+    use enshwick::abi::{Event, Header, SaveInfo, SpawnRequest, Status};
     use enshwick::effects::{Effects, Spawn};
     use enshwick::events::{WorldSaved, WorldSaving};
     use enshwick::world::{World, WorldGuid};
-    use enshwick::{Entity, Load, Mod, Off, WorldError};
+    use enshwick::{Entity, Load, Mod, Off};
 
     static WORLD: OnceLock<World> = OnceLock::new();
     static EFFECTS: OnceLock<Effects> = OnceLock::new();
@@ -70,5 +70,17 @@ mod tests {
         assert!(loader.saves_held());
         world.hold_saves(false).unwrap();
         assert!(!loader.saves_held());
+
+        let effects = EFFECTS.get().unwrap();
+        let kept = effects.spawn([3; 16], [0.0; 3], Spawn::new()).unwrap();
+        let passing = effects
+            .spawn([3; 16], [0.0; 3], Spawn::new().do_not_save())
+            .unwrap();
+        let flags: Vec<_> = loader
+            .spawns()
+            .into_iter()
+            .map(|(id, request)| (Entity(id), request.flags))
+            .collect();
+        assert_eq!(flags, [(kept, 0), (passing, SpawnRequest::DO_NOT_SAVE)]);
     }
 }

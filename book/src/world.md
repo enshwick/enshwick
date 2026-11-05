@@ -269,11 +269,8 @@ game saves only while no running mod holds its saves: the timed saves and
 `save()` wait meanwhile. Each mod holds its own, the log names each mod that
 holds or lets go, and a mod that turns off lets go.
 
-`set_saved(entity, false)` keeps an entity the mod spawned or placed out of
-the save, as the game does with its passing animals: the entity is gone once
-the world loads again. `set_saved(entity, true)` puts it back. It works on
-the server's game thread and shows from the next step; an entity no mod
-spawned is refused.
+An entity spawned with `Spawn::new().do_not_save()` stays out of the save,
+as the game's own passing animals do: it is gone once the world loads again.
 
 ```rust
 use enshwick::events::WorldSaving;
