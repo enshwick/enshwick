@@ -372,7 +372,7 @@ log says why.
 
 The screen shows mods and their settings, never their
 [player actions](actions.md): a mod offers those through its own
-[controls](controls.md), panels and prompts.
+[controls](controls.md) and panels.
 
 The screen says what is off and why. Under a mod, each of its features
 that is off has a line with the reason; a mod that is off says so in its

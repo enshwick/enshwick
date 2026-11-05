@@ -21,7 +21,7 @@ starts each of them. The crates under
 are parts of the loader, and a mod never depends on them.
 
 A mod names itself in a manifest. It reads its settings, reacts to events, adds
-items and recipes, and offers players actions in the game's interface. It can
+items and recipes, and offers players actions through its controls. It can
 carry its texts in every language the game offers ([Texts](content/texts.md)).
 Its unit tests run without the game against a fake host ([Testing](testing.md)).
 Where the API has no call, a Rust mod links hooks into game functions. When a

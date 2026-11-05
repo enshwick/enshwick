@@ -37,7 +37,7 @@ export type ActionValuePlayer = {
 	name: string,
 }
 
---- A mod's player actions, declared once and offered in the game's interface.
+--- A mod's player actions, declared once and run from its controls, panels or the console.
 export type Actions = {
 	--- Declares `action` with its `handler`, which runs on the server's game thread, as `Actions.add` does.
 	add: (self: Actions, action: PlayerAction, handler: (arg1: Request) -> ActionOutcome?) -> (),
@@ -2741,7 +2741,7 @@ declare enshwick: {
 		--- The names of the files and folders in `path`, relative to the mod's folder (`.` for the folder itself), sorted.
 		list: (path: string) -> {string},
 	},
-	--- Player actions: what a player asks a mod to do, declared once and offered in the game's interface.
+	--- Player actions: what a player asks a mod to do, declared once and run from its controls, panels or the console.
 	actions: {
 		--- One of the server's players online now, as `Arg.player` makes it.
 		player: (label: string) -> Arg,

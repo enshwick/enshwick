@@ -345,7 +345,7 @@ impl Object for Arg {
 impl Object for Actions {
     const CLASS: &'static Class = &Class::of::<Self>(
         "Actions",
-        "A mod's player actions, declared once and offered in the game's interface.",
+        "A mod's player actions, declared once and run from its controls, panels or the console.",
     );
     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_ACTIONS];
 }
@@ -469,7 +469,7 @@ impl ActionFns {
 
 impl Bound for ActionFns {
     const NAME: &'static str = "actions";
-    const DOC: &'static str = "Player actions: what a player asks a mod to do, declared once and offered in the game's interface.";
+    const DOC: &'static str = "Player actions: what a player asks a mod to do, declared once and run from its controls, panels or the console.";
     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_ACTION_FNS];
 
     fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {

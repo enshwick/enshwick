@@ -140,8 +140,9 @@ the values picked in the order of the arguments (a list hands
 came from, `Via::Interface` or `Via::Console`. `request.say(key, values)`
 fills the mod's text in the player's language. It returns an `Outcome`,
 `Outcome::done(text)` or `Outcome::refused(text)`: from a control or panel
-the text shows as one of the game's notices; from
-the console it is the console's answer.
+the text shows as one of the game's notices, its lines joined into one and
+cut to a notice's length, or as a chat line to a client that takes no
+notices; from the console it is the console's answer.
 
 A Luau handler gets the request as an object whose methods read those
 fields: `request:player()`, `subject()`, `args()`, `language()`, `via()`
@@ -175,7 +176,9 @@ English.
 
 Actions run in the game server: the dedicated server, and a client while it
 hosts a game, single player included. A control or panel that runs one
-needs Enshwick on the player's client.
+needs Enshwick on the player's client. A mod of side `server` has no part on
+the client to declare controls or panels, so its actions run only from the
+console.
 
 ## Worked example
 

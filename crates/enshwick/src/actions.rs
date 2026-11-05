@@ -1,5 +1,5 @@
 //! Player actions: what a player asks a mod to do, declared once and run
-//! from the mod's own controls, panels and prompts or the console.
+//! from the mod's own controls and panels or the console.
 //!
 //! Unstable: needs the `unstable` feature and may change in any release.
 //!

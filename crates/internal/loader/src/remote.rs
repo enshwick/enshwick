@@ -352,7 +352,8 @@ pub enum Gate {
     Pass,
     /// Send the player this answer instead of serving the message.
     Busy(Message),
-    /// Neither serve nor answer it: the client asks again on its own.
+    /// Neither serve nor answer it: a run still takes the language of the
+    /// client's hello.
     Drop,
 }
 

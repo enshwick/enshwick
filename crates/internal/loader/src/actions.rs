@@ -1,6 +1,6 @@
-//! Player actions across the wire: the server runs what a mod's control,
-//! panel or prompt sent, or what the console named, through the mod that
-//! declared the action.
+//! Player actions across the wire: the server runs what a mod's control or
+//! panel sent, or what the console named, through the mod that declared the
+//! action.
 //!
 //! The server decides everything. A client sends an action's id and
 //! arguments; the server runs the mod's own checks again on every run, and
@@ -144,7 +144,7 @@ fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
 }
 
 /// A client names the language its player reads replies in, on the
-/// server's game thread.
+/// server's game thread; a run takes its hello's language before this one.
 pub(crate) fn language(key: u64, language: u32) {
     server_state(|s| s.clients.entry(key).or_default().language = language);
 }
@@ -165,6 +165,7 @@ pub(crate) fn run(loader: &Loader, key: u64, id: &str, action: &str, args: &str)
     if !admitted {
         return;
     }
+    let language = crate::net::language_of(key).map_or(language, |l| l.0);
     let Some(player) = player(loader, key) else {
         return;
     };
@@ -188,18 +189,16 @@ pub(crate) fn run(loader: &Loader, key: u64, id: &str, action: &str, args: &str)
         if ok { "done" } else { "refused" }
     );
     if !text.is_empty() {
-        let shown = text.lines().next().unwrap_or("");
-        let _shown = crate::notices::send(loader, key, cut(shown, crate::notices::MAX_TEXT));
+        let shown = one_line(text);
+        if crate::notices::send(loader, key, &shown).is_err() {
+            let _queued = crate::chat::send(key, &shown);
+        }
     }
 }
 
-/// `text` cut to at most `max` bytes, at a character boundary.
-fn cut(text: &str, max: usize) -> &str {
-    let mut end = text.len().min(max);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
+/// A reply's lines joined into the one line a notice shows.
+fn one_line(text: &str) -> String {
+    text.lines().collect::<Vec<_>>().join(" ")
 }
 
 /// Forgets the clients, as when the server's world goes away.
@@ -229,8 +228,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_reply_is_cut_at_a_character_boundary() {
-        assert_eq!(cut("Сейф", 3), "С");
-        assert_eq!(cut("safe", 10), "safe");
+    fn a_reply_of_several_lines_shows_every_line_in_its_notice() {
+        assert_eq!(one_line("3 players\nAnn\r\nBob"), "3 players Ann Bob");
+        assert_eq!(one_line("Сейф"), "Сейф");
     }
 }

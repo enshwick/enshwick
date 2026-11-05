@@ -273,12 +273,18 @@ struct HudItem {
 /// markup reads `\` with the character after it, and shows `\\` as one
 /// backslash (client 26430625).
 fn escape(out: &mut Vec<u8>, text: &[u8]) {
-    for (i, piece) in text.split(|&b| b == b'\\').enumerate() {
-        if i > 0 {
-            out.extend_from_slice(br"\\");
-        }
-        out.extend_from_slice(piece);
+    let mut from = 0;
+    for at in memchr::memchr_iter(b'\\', text) {
+        out.extend_from_slice(&text[from..=at]);
+        out.push(b'\\');
+        from = at + 1;
     }
+    out.extend_from_slice(&text[from..]);
+}
+
+/// The bytes [`escape`] adds to `text`.
+fn escaped_extra(text: &[u8]) -> usize {
+    memchr::memchr_iter(b'\\', text).count()
 }
 
 /// Mod texts of the last frames, each frame's in its own buffer.
@@ -313,11 +319,7 @@ impl Arena {
         let Some(buffer) = self.buffers.get_mut(self.current) else {
             return UiText::EMPTY;
         };
-        let len: usize = parts
-            .iter()
-            .flat_map(|p| p.iter())
-            .map(|&b| 1 + usize::from(b == b'\\'))
-            .sum();
+        let len: usize = parts.iter().map(|p| p.len() + escaped_extra(p)).sum();
         if buffer.len() + len > buffer.capacity() {
             return UiText::EMPTY;
         }
