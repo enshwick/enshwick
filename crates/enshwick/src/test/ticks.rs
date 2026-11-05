@@ -154,7 +154,7 @@ impl Installed {
 
     /// Ends the game a client hosts, as the loader does when the player
     /// leaves it: the next [`tick`](Self::tick) is the first step of the next
-    /// game, with [`TickData::game`] one more.
+    /// game, with [`TickData::game`] one more, and no mod holds saves.
     ///
     /// # Examples
     ///
@@ -166,7 +166,10 @@ impl Installed {
     /// assert_eq!(loader.tick(Duration::from_millis(50)), 0);
     /// ```
     pub fn end_game(&self) {
-        with((), |s| s.ticks.games_ended += 1);
+        with((), |s| {
+            s.ticks.games_ended += 1;
+            s.save.held = false;
+        });
     }
 }
 

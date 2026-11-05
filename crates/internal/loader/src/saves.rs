@@ -304,11 +304,13 @@ pub(crate) fn hosting_begins() {
     *KEYS.relock() = Keys::OPEN;
 }
 
-/// Forgets the key, when a hosted game ends.
+/// Forgets the key and every mod's hold on saves, when a hosted game ends.
 pub(crate) fn forget() {
     *KEYS.relock() = Keys::CLOSED;
     let mut saving = SAVING.relock();
     saving.under_way = false;
+    // A hold is on its world's saves; carried on, it would stop the next world's.
+    saving.holds.clear();
     saving.held = None;
 }
 

@@ -72,7 +72,8 @@ impl World {
     /// Holds the world's saves while `held`, or lets them go: the game
     /// saves only while no running mod holds them, so its timed saves and
     /// [`World::save`] wait meanwhile, for example while players are outside
-    /// a safe room. Each mod holds its own; a mod that turns off lets go.
+    /// a safe room. Each mod holds its own; a mod that turns off lets go,
+    /// and every hold ends with its hosted game.
     /// The log names each mod that holds or lets go. Takes effect after the
     /// next step; any thread.
     ///

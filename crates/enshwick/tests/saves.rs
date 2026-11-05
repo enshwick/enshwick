@@ -70,6 +70,9 @@ mod tests {
         assert!(loader.saves_held());
         world.hold_saves(false).unwrap();
         assert!(!loader.saves_held());
+        world.hold_saves(true).unwrap();
+        loader.end_game();
+        assert!(!loader.saves_held(), "a hold ends with its hosted game");
 
         let effects = EFFECTS.get().unwrap();
         let kept = effects.spawn([3; 16], [0.0; 3], Spawn::new()).unwrap();

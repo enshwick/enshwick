@@ -267,7 +267,8 @@ keeps beside it; it is `None` before the first save of a new world.
 them go, for a mod that saves only while players are in safe places. The
 game saves only while no running mod holds its saves: the timed saves and
 `save()` wait meanwhile. Each mod holds its own, the log names each mod that
-holds or lets go, and a mod that turns off lets go.
+holds or lets go, a mod that turns off lets go, and every hold ends with its
+hosted game.
 
 An entity spawned with `Spawn::new().do_not_save()` stays out of the save,
 as the game's own passing animals do: it is gone once the world loads again.
