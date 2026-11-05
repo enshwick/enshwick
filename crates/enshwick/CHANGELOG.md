@@ -110,12 +110,12 @@ Each entry names the pull request that made the change.
   `/uk/errors/<code>/` (#927).
 
 ### Changed
+
 - A control fires when its key goes down with at least its modifiers held,
   so a control on `G` fires while the player sprints with Shift; of the
   controls on one key, only those with the most of the held modifiers fire,
   so `Shift+G` still beats `G`. A control stays down until its key goes up,
   and a modifier pressed or let go meanwhile fires nothing (#942).
-
 - The loader ships as alphas, GitHub prereleases tagged `v1.0.0-alpha.N`
   whose notes list the supported game builds and what changed, in place of
   the rolling `dev` prerelease, which no longer follows `main` (#937).
