@@ -391,6 +391,14 @@ export type Comfort = {
 	position: vector,
 }
 
+--- A generated component type on the running build: entities' components read and written as tables.
+export type ComponentType = {
+	--- `entity`'s component as a table by the generated struct's field names, on the game thread; nil when the entity has none, or off the game thread.
+	read: (self: ComponentType, entity: number) -> any?,
+	--- Writes `value`, a table with every field of the generated struct, to `entity`'s component, marked changed the game's way, keeping the bytes of what the struct does not hold. On the game thread only.
+	write: (self: ComponentType, entity: number, value: any) -> (),
+}
+
 --- What a loot container is and holds, read in one go. The name is enshwick's: several of the game's components read together.
 export type Container = {
 	--- The container.
@@ -513,6 +521,12 @@ export type EntityDiedEvent = {
 	killer: number?,
 	--- The last player character that hit it, from its kill credit: the one the game credits with the experience; the name is enshwick's, not the game's. Unstable: needs the `unstable` feature and may change in any release.
 	killer_player: number?,
+}
+
+--- A generated game event type on the running build: its events handled as tables.
+export type EventType = {
+	--- Calls `handler` with each event of the type the game raises, as a table by the generated struct's field names, on the server's game thread; an event that does not read is logged once and skipped. Subscribe at the top level of main.luau.
+	on: (self: EventType, handler: (arg1: any) -> ()) -> (),
 }
 
 --- One character's experience before the server applies it, from `Load.on_experience`: a filter may change `gained`.
@@ -1455,6 +1469,16 @@ export type Rename = {
 --- Who gets a kind's values.
 export type Replication = "Server" | "Clients"
 
+--- A generated resource type on the running build: its resources read and served as tables.
+export type ResourceType = {
+	--- The key of the resource of this type with GUID `guid`, part 0, as `{ guid, type, part }`.
+	key: (self: ResourceType, guid: string) -> any,
+	--- The game's own resource `key`, `{ guid, type, part }`, as a table by the generated struct's field names, read from its archive.
+	game_value: (self: ResourceType, key: any) -> any,
+	--- Serves the resource `key`, made from the resource `base` the first time the game reads it: `change` gets the base's value as a table by the generated struct's field names and returns the value to serve, every field given, or nil to serve the base unchanged; the bytes of what the struct does not hold stay as the base has them. A change that fails or does not fit the type is logged, and the base is served unchanged. Allowed while the mod starts.
+	serve: (self: ResourceType, key: any, base: any, change: (arg1: any) -> any) -> (),
+}
+
 --- A downed player was revived.
 export type RevivedPlayerEvent = {
 	--- The revived player's character.
@@ -2332,6 +2356,18 @@ declare enshwick: {
 		game_value: (key: any) -> any,
 		--- Serves the resource `key`, built from the resource `base` the first time the game reads it: `patch` gets the base's value and returns the value to serve, which may name only the fields it changes; nil serves the base unchanged. A patch that fails, returns what is not game data or does not fit the type is logged, and the base is served unchanged. Allowed while the mod initialises.
 		serve: (key: any, base: any, patch: (arg1: any) -> any) -> (),
+	},
+	--- The game's components, events and resources as the typed API generates them from its reflection.
+	typed: {
+		--- The generated component type `id`, its path in the typed API joined by dots, such as `ecs.Health`, on the running build, its shape checked.
+		--- Only while the mod starts, at the top level of main.luau.
+		component_type: (id: string) -> ComponentType,
+		--- The generated game event type `id`, its path in the typed API joined by dots, such as `ecs.EntityDiedEvent`, on the running build, its shape checked.
+		--- Only while the mod starts, at the top level of main.luau.
+		event_type: (id: string) -> EventType,
+		--- The generated resource type `id`, its path in the typed API joined by dots, such as `ItemCollectionResource`, on the running build, its shape checked.
+		--- Only while the mod starts, at the top level of main.luau.
+		resource_type: (id: string) -> ResourceType,
 	},
 	--- The loaded mods, the side the mod runs on, and its own folder, read-only.
 	mods: {

@@ -1,6 +1,5 @@
 ---
 source: crates/enshwick-gamedata/src/typed/tests.rs
-assertion_line: 46
 expression: text
 ---
 // Long file: generated, a row per covered type in the table at its end.

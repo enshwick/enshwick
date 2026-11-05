@@ -317,7 +317,7 @@ impl crate::script::Object for ResourceType {
 impl Load<'_> {
     /// The generated component type `id`, its path in the typed API joined
     /// by dots, such as `ecs.Health`, on the running build, its shape
-    /// checked. Ask at the top level of main.luau.
+    /// checked.
     ///
     /// # Errors
     ///
@@ -336,7 +336,7 @@ impl Load<'_> {
 
     /// The generated game event type `id`, its path in the typed API
     /// joined by dots, such as `ecs.EntityDiedEvent`, on the running build,
-    /// its shape checked. Ask at the top level of main.luau.
+    /// its shape checked.
     ///
     /// # Errors
     ///
@@ -355,7 +355,7 @@ impl Load<'_> {
 
     /// The generated resource type `id`, its path in the typed API joined
     /// by dots, such as `ItemCollectionResource`, on the running build, its
-    /// shape checked. Ask at the top level of main.luau.
+    /// shape checked.
     ///
     /// # Errors
     ///

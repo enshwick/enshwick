@@ -119,6 +119,11 @@ enum Command {
         /// The file to write; the definitions are printed when omitted.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Also writes the types of the typed API's values to this file,
+        /// such as `enshwick.typed.d.luau`, for editors to load beside the
+        /// definitions.
+        #[arg(long)]
+        typed: Option<PathBuf>,
     },
     /// Writes Rust and Luau definitions of the game's own types, read from
     /// the reflection data of a game executable: for structs the API does
@@ -183,16 +188,27 @@ fn ids(names: &[String]) -> anyhow::Result<String> {
     Ok(lines?.join("\n"))
 }
 
-/// Writes the Luau definitions to `out`, or returns them to print.
-fn luau_definitions(out: Option<&std::path::Path>) -> anyhow::Result<String> {
+/// Writes the Luau definitions to `out`, or returns them to print, and the
+/// typed API's types to `typed`.
+fn luau_definitions(
+    out: Option<&std::path::Path>,
+    typed: Option<&std::path::Path>,
+) -> anyhow::Result<String> {
+    let mut done = Vec::new();
+    if let Some(path) = typed {
+        std::fs::write(path, cargo_enshwick::luau::typed_definitions())
+            .with_context(|| path.display().to_string())?;
+        done.push(format!("wrote {}", path.display()));
+    }
     let text = cargo_enshwick::luau::definitions();
     match out {
         Some(path) => {
             std::fs::write(path, text).with_context(|| path.display().to_string())?;
-            Ok(format!("wrote {}", path.display()))
+            done.push(format!("wrote {}", path.display()));
         }
-        None => Ok(text),
+        None => done.push(text),
     }
+    Ok(done.join("\n"))
 }
 
 fn main() -> ExitCode {
@@ -248,7 +264,7 @@ fn main() -> ExitCode {
             luau,
         } => deps::run(alias.as_deref(), &from, manifest_path.as_deref(), luau),
         Command::Pack(command) => pack::run(&command),
-        Command::Luau { out } => luau_definitions(out.as_deref()),
+        Command::Luau { out, typed } => luau_definitions(out.as_deref(), typed.as_deref()),
         Command::Types {
             names,
             from,
