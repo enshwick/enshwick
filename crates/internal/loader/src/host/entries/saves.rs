@@ -28,22 +28,6 @@ pub(crate) extern "system" fn save_info(me: ModHandle, out: *mut SaveInfo) -> St
     })
 }
 
-pub(crate) extern "system" fn set_saved(
-    me: ModHandle,
-    entity: enshwick::Entity,
-    saved: u8,
-) -> Status {
-    entry("set_saved", || {
-        if saved > 1 {
-            return Status::BAD_ARGS;
-        }
-        match caller(me).and_then(|loader| crate::entities::set_saved(loader, entity, saved == 1)) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
-}
-
 pub(crate) extern "system" fn hold_saves(me: ModHandle, held: u8) -> Status {
     entry("hold_saves", || {
         if held > 1 {

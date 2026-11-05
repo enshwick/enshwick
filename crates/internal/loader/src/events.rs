@@ -557,7 +557,6 @@ fn end_session() {
     crate::controls::forget();
     crate::bases::forget();
     crate::saves::forget();
-    crate::entities::forget();
     crate::daytime::forget();
     crate::knowledge::forget();
     crate::weather::forget();

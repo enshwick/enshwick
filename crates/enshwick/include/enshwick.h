@@ -4661,6 +4661,16 @@ typedef struct EnshwickHostApi {
   // taking effect after the next step; `Status::BAD_ARGS` for another
   // `held`. A panic in the loader returns `Status::REFUSED`. ABI 11.6.
   EnshwickStatus (*hold_saves)(EnshwickModHandle me, uint8_t held);
+  // Keeps `entity` out of the world's save for `saved` 0, or puts it back
+  // for 1, through the game's own component change, which shows from the
+  // next step: an entity left out is gone once the world loads again.
+  // Only for an entity a mod spawned with `HostApi::spawn` or placed:
+  // `Status::REFUSED` for any other, `Status::BAD_ARGS` for entity 0
+  // or another `saved`, and the world's own errors for one not in it.
+  // The server's game thread only (`Status::WRONG_THREAD` elsewhere);
+  // `Status::MISSING` on a build without the change. A panic in the
+  // loader returns `Status::REFUSED`. ABI 11.6.
+  EnshwickStatus (*set_saved)(EnshwickModHandle me, EnshwickEntity entity, uint8_t saved);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

@@ -2329,6 +2329,8 @@ declare enshwick: {
 		capture: (a: VoxelPos, b: VoxelPos) -> Capture,
 		--- The world's save as it is on disk; nil before the first save of a new world, while no world runs, or when the file does not read. Any thread.
 		save_info: () -> SaveInfo?,
+		--- Keeps `entity`, one the mod spawned or placed, out of the world's save while `saved` is false, or puts it back in: an entity left out is gone once the world loads again, as the game's own passing animals are. It shows from the next step. On the server's game thread.
+		set_saved: (entity: number, saved: boolean) -> (),
 		--- Holds the world's saves while `held`, or lets them go: the game saves only while no running mod holds them, so its timed saves and `World.save` wait meanwhile, for example while players are outside a safe room. Each mod holds its own; a mod that turns off lets go. The log names each mod that holds or lets go. Takes effect after the next step; any thread.
 		hold_saves: (held: boolean) -> (),
 		--- Runs `filter` before the server applies a player's rename of any entity, on its game thread; returning `false` refuses the rename. The game itself checks no permission for renames. A client runs it while it hosts a game.

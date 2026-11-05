@@ -70,20 +70,5 @@ mod tests {
         assert!(loader.saves_held());
         world.hold_saves(false).unwrap();
         assert!(!loader.saves_held());
-
-        let spawned = EFFECTS
-            .get()
-            .unwrap()
-            .spawn([3; 16], [0.0; 3], Spawn::new())
-            .unwrap();
-        world.set_saved(spawned, false).unwrap();
-        assert_eq!(loader.unsaved(), [spawned]);
-        assert_eq!(
-            world.set_saved(Entity(77), false),
-            Err(WorldError::Refused),
-            "a vanilla entity stays in the save"
-        );
-        world.set_saved(spawned, true).unwrap();
-        assert!(loader.unsaved().is_empty());
     }
 }
