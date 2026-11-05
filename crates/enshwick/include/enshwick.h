@@ -3048,8 +3048,8 @@ typedef struct EnshwickUiExtension {
 //
 // The name is the game's `ItemAction`; the kinds are its `ItemActionType`,
 // `ChangeEquipment` and the events that follow a pickup or a placement,
-// and `CONSUMED` the loader's word that a use goes
-// through.
+// and `CONSUMED` the loader's word that every filter
+// allowed a use.
 typedef struct EnshwickItemAction {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -3082,8 +3082,8 @@ typedef struct EnshwickItemAction {
 // The player placed the item as a building piece or a prop, after the
 // game placed it; the answer is ignored.
 #define EnshwickItemAction_PLACE 6
-// The player's use of the item goes through: every filter allowed the
-// `CONSUME` before it; the answer is ignored. ABI 11.7.
+// Every filter allowed the `CONSUME` before it, which
+// the game runs next and may still drop; the answer is ignored. ABI 11.7.
 #define EnshwickItemAction_CONSUMED 7
 
 // A mod's item filter: the action and the pointer given at registration;
@@ -4648,8 +4648,11 @@ typedef struct EnshwickHostApi {
   // Calls `callback` with `user` for each player's action with an item
   // in the server's world, on the thread of the system that runs it:
   // before the game uses, throws away, equips or takes off an item, where
-  // 0 refuses it as an action already run, and after a pickup or a
-  // placement, whose answer is ignored. Allowed during
+  // 0 refuses it as an action already run, after a pickup or a
+  // placement, and after a use every filter allowed
+  // (`ItemAction::CONSUMED`, from ABI
+  // 11.7, so a use reaches a filter twice), whose answers are ignored. A
+  // filter ignores a kind it does not know. Allowed during
   // `enshwick_mod_init` only: `Status::TOO_LATE` after,
   // `Status::MISSING` on a build without the player input it reads. A
   // panic in the loader returns `Status::REFUSED`.

@@ -83,8 +83,9 @@ Each entry names the pull request that made the change.
   it (#945).
 - Item filters and holds screen a player from the step after they join and
   from the first steps after a world loads, not only every 30 steps (#945).
-- A craft reward pays each unit of a request to the player who asked, and
-  never another player or a station's own output (#945).
+- A craft reward pays each unit of a request to the player who asked,
+  within two server steps of the request, instead of any request of the
+  last 30 seconds (#945).
 - A pack recipe whose `like` names a recipe instead of the item it makes is
   refused at its line by `cargo enshwick pack check` and at load; the line
   that turns a mod off for a served resource names the resource (#945).

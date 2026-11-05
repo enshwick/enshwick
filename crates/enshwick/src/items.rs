@@ -56,9 +56,10 @@ pub enum Kind {
     /// Placed it as a building piece or a prop, after the game placed it;
     /// the answer is ignored.
     Place,
-    /// Its use goes through: every filter allowed the [`Kind::Consume`]
-    /// before it; the answer is ignored. A reward or a count of uses
-    /// listens here, since a later filter may still refuse a `Consume`.
+    /// Every filter allowed the [`Kind::Consume`] before it, which the game
+    /// runs next and may still drop; the answer is ignored. A reward or a
+    /// count of uses listens here, since a later filter may still refuse a
+    /// `Consume`.
     Consumed,
 }
 

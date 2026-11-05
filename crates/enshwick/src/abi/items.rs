@@ -10,8 +10,8 @@ use crate::abi::{Entity, Header, ItemId};
 ///
 /// The name is the game's `ItemAction`; the kinds are its `ItemActionType`,
 /// `ChangeEquipment` and the events that follow a pickup or a placement,
-/// and [`CONSUMED`](Self::CONSUMED) the loader's word that a use goes
-/// through.
+/// and [`CONSUMED`](Self::CONSUMED) the loader's word that every filter
+/// allowed a use.
 ///
 /// # Examples
 ///
@@ -67,8 +67,8 @@ impl ItemAction {
     /// The player placed the item as a building piece or a prop, after the
     /// game placed it; the answer is ignored.
     pub const PLACE: u32 = 6;
-    /// The player's use of the item goes through: every filter allowed the
-    /// [`CONSUME`](Self::CONSUME) before it; the answer is ignored. ABI 11.7.
+    /// Every filter allowed the [`CONSUME`](Self::CONSUME) before it, which
+    /// the game runs next and may still drop; the answer is ignored. ABI 11.7.
     pub const CONSUMED: u32 = 7;
 }
 
