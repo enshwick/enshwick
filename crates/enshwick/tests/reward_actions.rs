@@ -3,12 +3,17 @@
 #[cfg(test)]
 mod tests {
     use enshwick::__private::ids;
-    use enshwick::abi::{Header, PlayerInfo, Status, TickData};
+    use enshwick::abi::{Header, ItemAction, PlayerInfo, Status, TickData};
     use enshwick::events::{Ticked, WorldLoaded};
+    use enshwick::items::Kind;
     use enshwick::progress::Experience;
     use enshwick::rewards::{Action, Give, Reward, Rewards};
     use enshwick::test::{FakeHost, Installed};
-    use enshwick::{Entity, Load, Mod, Off, PlayerKey, RecipeId};
+    use enshwick::{Entity, ItemId, Load, Mod, Off, PlayerKey, RecipeId};
+
+    fn tonic() -> ItemId {
+        ItemId::new(0x5e01)
+    }
 
     const LEVEL_UP: u32 = 0x51;
     const CRAFT: u32 = 0x52;
@@ -27,9 +32,12 @@ mod tests {
                 ("any-level", Action::LevelUp(0), 10),
                 ("smith", Action::Craft(RecipeId::new(RECIPE)), 100),
                 ("looter", Action::Loot, 1000),
+                ("drinker", Action::Consume(tonic()), 3),
             ] {
                 load.add_reward(Reward::new(name, on).with(Give::Experience(amount)))?;
             }
+            // A filter after the reward's own refuses player 4's drinks.
+            load.on_item(tonic(), Kind::Consume, |used| used.player != Entity(4))?;
             let rewards = load.rewards()?;
             let _set = REWARDS.set(rewards);
             // A filter may grant another reward while it decides.
@@ -236,6 +244,38 @@ mod tests {
         assert!(!rewards.grant(Entity(4), "unknown"));
         assert!(!rewards.grant(Entity(99), "looter"), "no such player");
         assert_eq!(gained(&loader, 4), 1001);
+        let _gone = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_use_a_later_filter_refuses_gives_no_use_reward() {
+        let data = std::env::temp_dir().join(format!("enshwick-drinker-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&data);
+        let loader = FakeHost::new()
+            .world()
+            .player(player(2, 7))
+            .player(player(4, 9))
+            .data_dir(data.to_str().unwrap())
+            .world_key("world0")
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let _loaded = loader.raise::<WorldLoaded>(&());
+        let drink = |player: u32| ItemAction {
+            header: Header::of::<ItemAction>(),
+            kind: ItemAction::CONSUME,
+            player: Entity(player),
+            item: tonic(),
+            count: 1,
+            inventory: Entity(100),
+            slot: 0,
+        };
+        assert!(loader.item_action(&drink(2)));
+        assert_eq!(gained(&loader, 2), 3, "a use that goes through rewards");
+        assert!(!loader.item_action(&drink(4)), "the later filter refuses");
+        assert_eq!(gained(&loader, 4), 0, "a refused use rewards nothing");
         let _gone = std::fs::remove_dir_all(&data);
     }
 }

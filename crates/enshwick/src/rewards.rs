@@ -691,7 +691,7 @@ impl Load<'_> {
             Action::Craft(recipe) => {
                 if !shared.stepping.swap(true, Ordering::Relaxed) {
                     self.on_every_step(move |tick| {
-                        shared.step.store(tick.step, Ordering::Relaxed)
+                        shared.step.store(tick.step, Ordering::Relaxed);
                     })?;
                 }
                 let asked: Arc<Mutex<Asked>> = Arc::default();
@@ -733,10 +733,12 @@ impl Load<'_> {
             Action::Quest => self.on::<crate::events::QuestCompleted>(move |quest| {
                 grant_later(shared, &name, quest.entity);
             }),
-            Action::Consume(item) => self.on_item(item, crate::items::Kind::Consume, move |used| {
-                grant_later(shared, &name, used.player);
-                true
-            }),
+            Action::Consume(item) => {
+                self.on_item(item, crate::items::Kind::Consumed, move |used| {
+                    grant_later(shared, &name, used.player);
+                    true
+                })
+            }
             Action::Pickup(item) => self.on_item(item, crate::items::Kind::Pickup, move |picked| {
                 grant_later(shared, &name, picked.player);
                 true

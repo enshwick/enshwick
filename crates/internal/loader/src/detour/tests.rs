@@ -163,7 +163,7 @@ fn with_unwind(code: &[u8], info: [u8; 8]) -> usize {
 fn with_unwinds<const N: usize>(codes: [&[u8]; N], info: [u8; 8]) -> [usize; N] {
     /// Where each function starts, the unwind info, the table after it.
     const SLOT: usize = 0x40; // bound, not a game offset: the test's own page
-    const UNWIND: usize = 0x800;
+    const UNWIND: usize = 0x800; // bound, not a game offset: the test's own page
     const TABLE: usize = UNWIND + 8;
     assert!(N > 0 && SLOT * N <= UNWIND);
     let mut bytes = vec![0xcc; SLOT * (N - 1) + codes[N - 1].len()];

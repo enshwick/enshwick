@@ -8,7 +8,8 @@
 //! player's `ServerConsumedPlayerInput` last handled. At each system's
 //! entry the loader asks the filters about every pending action and refuses
 //! one by writing its version as handled, the game's own path for an action
-//! it already ran: the item stays where it was. Pickups and placements reach
+//! it already ran: the item stays where it was. A use every filter allowed
+//! then reaches them all again as `CONSUMED`. Pickups and placements reach
 //! the filters from the server's event streams, after the game made them.
 //! Reflection of dedicated server build 26319703 names all of it.
 
@@ -422,6 +423,14 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
                 DEBUG,
                 "item action {kind} of {} by player {player} refused",
                 crate::recipes::item_words(loader, item)
+            );
+        } else if kind == ItemAction::CONSUME {
+            let _heard = ask(
+                &ItemAction {
+                    kind: ItemAction::CONSUMED,
+                    ..call
+                },
+                false,
             );
         }
     }
