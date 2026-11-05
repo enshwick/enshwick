@@ -650,6 +650,63 @@ mod tests {
     }
 
     #[test]
+    fn a_piece_runs_to_its_jump_s_end_or_to_a_gap_wider_than_the_lead() {
+        let old = vec![0u8; 128];
+        let mut now = old.clone();
+        // Two bytes two apart join; one seven further on is its own piece.
+        now[10] = 1;
+        now[12] = 1;
+        now[19] = 1;
+        assert_eq!(pieces(&old, &now, 10, 20), [(10, 3), (19, 1)]);
+        // A jump and the bytes it pads are one piece, up to the jump's end.
+        jump_at(&mut now, 0, 40, 0x50);
+        now[45..48].fill(0xCC);
+        assert_eq!(pieces(&old, &now, 40, 48), [(40, 8)]);
+        // A jump that starts within the lead of a run takes the run.
+        now[60] = 0x90;
+        jump_at(&mut now, 0, 61, 0x50);
+        assert_eq!(pieces(&old, &now, 60, 66), [(60, 6)]);
+        // A jump past the lead starts its own piece, as does a second jump.
+        now[80] = 0x90;
+        jump_at(&mut now, 0, 84, 0x50);
+        jump_at(&mut now, 0, 89, 0x50);
+        assert_eq!(pieces(&old, &now, 80, 94), [(80, 1), (84, 5), (89, 5)]);
+    }
+
+    #[test]
+    fn close_hooks_of_one_maker_stay_one_change() {
+        let mut now = code(CHUNK);
+        let mut watch = Watch::new(&now, &[]);
+        let (text, image) = (0x1000, (0x9000, 0xa000));
+        jump_at(&mut now, text, 100, 0x9100);
+        jump_at(&mut now, text, 110, 0x9200);
+        let made = |offset, len| reaches(&now, text, (offset, len), image, |_| None);
+        assert_eq!(watch.check(&now, "sockel.dll", Stage::Load, made), 1);
+        let found: Vec<(usize, usize, &str)> = watch
+            .changes()
+            .iter()
+            .map(|c| (c.offset, c.len, c.who()))
+            .collect();
+        assert_eq!(found, [(100, 15, "sockel.dll")]);
+    }
+
+    #[test]
+    fn a_jump_counts_only_within_the_lead_and_the_piece() {
+        let (text, image) = (0x1000, (0x9000, 0xa000));
+        let into = |at: usize| {
+            let mut now = vec![0x90; 128];
+            jump_at(&mut now, text, at, 0x9100);
+            now
+        };
+        let reached = |at, piece| reaches(&into(at), text, piece, image, |_| None);
+        assert!(reached(102, (100, 8)), "two bytes in");
+        assert!(!reached(103, (100, 8)), "three bytes in");
+        assert!(reached(98, (100, 8)), "two bytes before");
+        assert!(reached(101, (100, 2)));
+        assert!(!reached(102, (100, 2)), "past a two-byte piece");
+    }
+
+    #[test]
     fn each_jump_form_leads_where_it_says() {
         let at = 0x1000;
         assert_eq!(
