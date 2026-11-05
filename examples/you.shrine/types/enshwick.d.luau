@@ -2498,9 +2498,9 @@ declare enshwick: {
 	},
 	--- The mod's rewards for players' actions, given from code.
 	rewards: {
-		--- Gives the declared reward named `reward` to `player` as its action would: within its limit and chance, if the mod's filters allow. It runs on the game thread; false for a reward the mod did not declare, or one its limit, its chance or a filter holds back.
+		--- Gives the declared reward named `reward` to `player` as its action would: within its limit and chance, if the mod's filters allow; false for a reward the mod did not declare, or one its limit, its chance or a filter holds back.
 		grant: (player: number, reward: string) -> boolean,
-		--- Gives `give` to `player` now, with no limit, chance or filter, on the game thread.
+		--- Gives `give` to `player` now, with no limit, chance or filter; a mod that declared no reward and no filter gives nothing, and the log says so.
 		give: (player: number, give: {Give}) -> (),
 		--- Declares `reward`: the server gives it in the server's world when a player does its action, within its limit and chance, if the mod's filters allow.
 		--- Only while the mod starts, at the top level of main.luau.
