@@ -20,8 +20,12 @@ name the mod, before the game's own crash handling. Its settings, written on
 first start with every key commented out, are `enshwick.toml` in the game's
 folder: `log_level` keeps lines up to `error`, `warn`, `info` (the default)
 or `debug`, `log_levels` sets it per mod id, `enshwick` being the loader
-itself, and `diagnostics`, `diagnostics_timing` and `build_patterns` are read
-at start. The log levels apply at once when the file changes.
+itself, and `diagnostics`, `diagnostics_timing`, `build_patterns` and
+`release_check` are read at start. The log levels apply at once when the file
+changes. With `release_check` on (the default), the loader asks GitHub once
+per start, on a thread of its own, whether a newer release exists; the Mods
+screen shows it as one line with the release page's address, and a dedicated
+server only logs it.
 
 `enshwick status` on the server's console writes the status summary into the
 loader's log: the loader features this game build lacks table entries for,
