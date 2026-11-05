@@ -131,3 +131,16 @@ jobs:
           gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --title "Enshwick $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
             --prerelease --latest=false
+
+      # The site's download links point at the newest alpha, read when it
+      # builds. It builds on Cloudflare Workers Builds, whose deploy hook
+      # builds its main again. The alpha is out by now and a rerun refuses its
+      # version, so a failed start only warns, within two minutes.
+      - name: Start the docs site build
+        if: inputs.publish
+        env:
+          DOCS_DEPLOY_HOOK: ${{ secrets.DOCS_DEPLOY_HOOK }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 30 --retry 3 --retry-connrefused \
+            -X POST "$DOCS_DEPLOY_HOOK" ||
+            echo "::warning title=docs::the docs site build did not start; start it from Cloudflare or with any docs merge"
