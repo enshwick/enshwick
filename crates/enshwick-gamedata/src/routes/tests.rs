@@ -532,6 +532,67 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
     assert!(!routes.checks("t.leaf", Side::Server));
 }
 
+/// A slot route takes the function a vtable slot points at, only where the
+/// pointer starts a function and the route's check holds; a slot row names
+/// its vtable and slot and nothing else.
+#[test]
+fn a_slot_route_takes_the_function_a_vtable_slot_points_at() {
+    let mut fake = fake();
+    let vtable = RDATA + 0x300;
+    fake.put(vtable, &(BASE + 0x1010).to_le_bytes());
+    fake.put(vtable + 8, &(BASE + 0x1005).to_le_bytes());
+    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+    let reflection = Reflection::scan(&image);
+    let known = Table::parse(&format!("{EMPTY}\n[symbols]\n\"t.vtable\" = {vtable:#x}\n"))
+        .unwrap()
+        .resolve();
+    let routes = Routes::parse(
+        r#"
+        [[route]]
+        id = "t.first"
+        vtable = "t.vtable"
+        slot = 0
+
+        [[route]]
+        id = "t.checked"
+        vtable = "t.vtable"
+        slot = 0
+        check = ["call ?", "mov eax,0x7"]
+
+        [[route]]
+        id = "t.inside"
+        vtable = "t.vtable"
+        slot = 1
+
+        [[route]]
+        id = "t.wrong"
+        vtable = "t.vtable"
+        slot = 0
+        check = ["ret"]
+        "#,
+    )
+    .unwrap();
+    assert_eq!(
+        routes.find(&image, &reflection, Side::Server, &known),
+        [
+            ("t.checked", Some(Routed::Symbol(0x1010))),
+            ("t.first", Some(Routed::Reached(0x1010))),
+            ("t.inside", None),
+            ("t.wrong", None),
+        ]
+    );
+    assert!(routes.checks("t.checked", Side::Server));
+    for row in [
+        "vtable = \"t.vtable\"",
+        "slot = 1",
+        "vtable = \"t.vtable\"\nslot = 1\nshape = [\"ret\"]",
+        "vtable = \"t.vtable\"\nslot = 1\nloads = [\"x\"]",
+    ] {
+        let error = Routes::parse(&format!("[[route]]\nid = \"t.x\"\n{row}\n")).unwrap_err();
+        assert!(error.to_string().contains("slot"), "{row}: {error}");
+    }
+}
+
 #[test]
 fn nothing_builds_on_a_route_the_table_contradicts() {
     let fake = fake();

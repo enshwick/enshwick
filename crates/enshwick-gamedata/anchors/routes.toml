@@ -10,16 +10,42 @@ take = "address"
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
 
 [[route]]
+id = "~provider_factory"
+sides = ["client"]
+loads = ["[online] Could not allocate OnlineProvider, because of out of memory."]
+
+[[route]]
 id = "~cs:ui.no_construct"
 sides = ["client"]
 callers = "ui.hud_visible"
 shape = ["mov ecx,0x456", "call {ui.hud_visible}"]
 
 [[route]]
+id = "~provider_ctor"
+sides = ["client"]
+in = "~provider_factory"
+shape = ["mov rcx,rax", "call *", "mov r15,rax"]
+take = "address"
+
+[[route]]
 id = "access.base_stock"
 sides = ["server"]
 called_by = ["~c0:access.base_stock", "~c1:access.base_stock"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rbp"]
+
+[[route]]
+id = "join.target_copy"
+sides = ["client"]
+in = "net.join_game"
+shape = ["movups [rsp+*],xmm0", "mov rbx,[rsp+0x58]"]
+take = "value"
+
+[[route]]
+id = "join.target_game_port_read"
+sides = ["client"]
+in = "net.join_game"
+shape = ["movzx ebp,[rsp+*]", "mov [rsp+0x30],eax"]
+take = "value"
 
 [[route]]
 id = "~cs1:voxel.finest_level"
@@ -33,6 +59,21 @@ system = "player_ui"
 shape = ["mov rax,[rbp+?]", "mov rdx,[rbp+?]"]
 
 [[route]]
+id = "join.target_has_address"
+sides = ["client"]
+in = "net.join_game"
+shape = ["cmp byte [rdx+*],0x1", "mov rsi,rcx"]
+take = "value"
+
+[[route]]
+id = "join.target_host"
+sides = ["client"]
+in = "net.join_game"
+shape = ["je ?b", "mov rbx,[rip+?]", "jmp ?b", "movups xmm0,[rdx]"]
+take = "spelled"
+value = 0x0
+
+[[route]]
 id = "~cs0:voxel.finest_level"
 callers = "~cs1:voxel.finest_level"
 shape = ["call {~cs1:voxel.finest_level}", "mov al,0x1"]
@@ -41,6 +82,20 @@ shape = ["call {~cs1:voxel.finest_level}", "mov al,0x1"]
 id = "access.consumed_deposit"
 system = "inventory_actions"
 shape = ["cmp [rax+*],ecx", "je ?", "mov ebx,[r12+?]"]
+take = "value"
+
+[[route]]
+id = "join.target_ip_read"
+sides = ["client"]
+in = "net.join_game"
+shape = ["mov rbx,[rsp+*]", "mov rbp,rbx"]
+take = "value"
+
+[[route]]
+id = "join.target_password"
+sides = ["client"]
+in = "net.join_game"
+shape = ["add rdx,*", "mov [rcx+?],al"]
 take = "value"
 
 [[route]]
@@ -57,6 +112,20 @@ shape = ["cmp [rax+*],ecx", "je ?", "lea rdx,[rbp+?]"]
 take = "value"
 
 [[route]]
+id = "join.target_query_port_read"
+sides = ["client"]
+in = "net.join_game"
+shape = ["movzx eax,[rsp+*]", "mov rdx,[rcx]"]
+take = "value"
+
+[[route]]
+id = "join.target_word_copy"
+sides = ["client"]
+in = "net.join_game"
+shape = ["mov [rsp+*],rbx", "shr rbp,0x20"]
+take = "value"
+
+[[route]]
 id = "~cs:text.lookup_english"
 sides = ["client"]
 in = "text.lookup"
@@ -68,6 +137,20 @@ id = "access.deposit_target"
 system = "inventory_actions"
 shape = ["mov ebx,[r12+*]", "mov rcx,r13"]
 take = "value"
+
+[[route]]
+id = "net.join_game"
+sides = ["client"]
+vtable = "net.provider_vtable"
+slot = 16
+check = ["push rbx", "push rbp", "push rsi", "push rdi", "sub rsp,0x78"]
+
+[[route]]
+id = "net.provider_vtable"
+sides = ["client"]
+in = "~provider_ctor"
+shape = ["xor edi,edi", "lea rax,[rip+*]", "mov [rcx],rax"]
+take = "address"
 
 [[route]]
 id = "~cs:terrain.registry"

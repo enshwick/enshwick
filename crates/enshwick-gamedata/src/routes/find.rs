@@ -101,6 +101,7 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             How::CalledBy(names) => self.called_by(names)?,
             How::Calls(names) => self.calls(names)?,
             How::Loads(strings) => self.loading(strings)?,
+            How::Slot { vtable, slot } => self.slot(vtable, *slot)?,
             How::Shape { within, steps } => return self.shaped(within, steps, route),
             How::Callers { callee, steps } => return self.called_from(callee, steps, route),
             How::Field(path) => return self.reflection.field_path(path).map(Routed::Constant),
@@ -194,6 +195,19 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             common.retain(|f| set.contains(f));
         }
         one(common.into_iter())
+    }
+
+    /// The RVA the 64-bit pointer in slot `slot` of the vtable `vtable`
+    /// holds, whether the image is mapped (relocated against its base) or a
+    /// file (against the base it was linked for).
+    fn slot(&mut self, vtable: &str, slot: u32) -> Option<u32> {
+        let table = self.address(vtable)?;
+        let base = self.code.base();
+        let at = base
+            .checked_add(u64::from(table))?
+            .checked_add(u64::from(slot).checked_mul(8)?)?;
+        let target = self.code.image().u64(at)?;
+        u32::try_from(target.checked_sub(base)?).ok()
     }
 
     fn shaped(&mut self, within: &str, steps: &'f [Step], route: &Route) -> Option<Routed> {

@@ -16,6 +16,7 @@
 //! | `loads` | the one function whose code loads every listed string |
 //! | `system` or `in`, with `shape` | the one run of instructions of the [shape](shape) in the listed function's code |
 //! | `callers`, with `shape` | among the functions that call the listed function directly, the one whose code the shape matches; a call in a chained fragment counts for its function |
+//! | `vtable`, with `slot` | the function the 64-bit pointer at the listed vtable + 8 · `slot` points at, which must start a function |
 //! | `field` | a constant: the sum of the reflected offsets of each `<type>.<field>` listed, each field holding the next type |
 //! | `size` | a constant: the reflected size of the type |
 //!
@@ -114,6 +115,12 @@ enum How {
         callee: String,
         steps: Vec<Step>,
     },
+    /// The function a slot of a vtable points at: the 64-bit pointer at
+    /// `vtable` + 8 · `slot`.
+    Slot {
+        vtable: String,
+        slot: u32,
+    },
     /// The sum of reflected field offsets, each a type and its field.
     Field(Vec<(String, String)>),
     /// A reflected type's size.
@@ -178,6 +185,8 @@ struct RouteRow {
     field: Option<Vec<String>>,
     size: Option<String>,
     callers: Option<String>,
+    vtable: Option<String>,
+    slot: Option<u32>,
 }
 
 impl RouteRow {
@@ -271,12 +280,27 @@ impl RouteRow {
             self.field.is_some(),
             self.size.is_some(),
             self.callers.is_some(),
+            self.vtable.is_some(),
         ];
         if self.shape.as_ref().is_some_and(Vec::is_empty) {
             return Err(bad("a `shape` is not empty"));
         }
         let shape = self.shape.take();
         let shaped = shape.is_some();
+        let slot = self.slot.take();
+        if let Some(vtable) = self.vtable.take() {
+            return match slot {
+                Some(slot) if !shaped && ways.iter().filter(|&&w| w).count() == 1 => {
+                    Ok(How::Slot { vtable, slot })
+                }
+                _ => Err(bad(
+                    "a `vtable` route names its `slot` and no `shape` or other way",
+                )),
+            };
+        }
+        if slot.is_some() {
+            return Err(bad("`slot` goes with `vtable`"));
+        }
         let within_given = self.within.is_some();
         let how = match (
             listed(self.called_by.take()),
@@ -313,7 +337,7 @@ impl RouteRow {
             _ => None,
         };
         how.ok_or_else(|| {
-            bad("a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, or `system`, `in` or `callers` with `shape`, each not empty")
+            bad("a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, `vtable` with `slot`, or `system`, `in` or `callers` with `shape`, each not empty")
         })
     }
 }

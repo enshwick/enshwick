@@ -338,6 +338,14 @@ entries = [
   "inventory.view_item_registry",
   "inventory.view_owners",
   "item.info",
+  "join.target_copy",
+  "join.target_game_port_read",
+  "join.target_has_address",
+  "join.target_host",
+  "join.target_ip_read",
+  "join.target_password",
+  "join.target_query_port_read",
+  "join.target_word_copy",
   "knowledge.connection_created",
   "knowledge.connection_loaded",
   "knowledge.connection_size",
@@ -411,11 +419,13 @@ entries = [
   "map.state_play_data",
   "net.channel_base",
   "net.client",
+  "net.join_game",
   "net.message_abort",
   "net.message_commit",
   "net.message_open",
   "net.message_receive",
   "net.message_release",
+  "net.provider_vtable",
   "net.session_limit",
   "net.session_manager",
   "net.socket_channel",
@@ -784,6 +794,7 @@ entries = [
   "inventory.actions_row.bytes",
   "inventory.view_fill.bytes",
   "map.fog_destroy.bytes",
+  "net.join_game.bytes",
   "npc.lookup.bytes",
   "npc.lookup_cursor.bytes",
   "npc.update.bytes",
@@ -915,32 +926,3 @@ reason = "no shape of up to 8 instructions picks mov rax,[r15+100h] out of acces
 entries = ["inventory.copy_150.view"]
 class = "pattern"
 reason = "no shape of up to 8 instructions picks mov rax,[r15+150h] out of access.transfer"
-
-[[class]]
-entries = ["net.provider_vtable"]
-class = "pattern"
-reason = "a data address only functions no route reaches use"
-
-[[class]]
-entries = [
-  "join.target_copy",
-  "join.target_game_port_read",
-  "join.target_has_address",
-  "join.target_host",
-  "join.target_ip_read",
-  "join.target_password",
-  "join.target_query_port_read",
-  "join.target_word_copy",
-]
-class = "pattern"
-reason = "read in net.join_game, which has no route"
-
-[[class]]
-entries = ["net.join_game"]
-class = "pattern"
-reason = "no direct call, jump, address load or relocated pointer reaches it, and it holds no unique string"
-
-[[class]]
-entries = ["net.join_game.bytes"]
-class = "pattern"
-reason = "checks the code of net.join_game, which stays a pattern"
