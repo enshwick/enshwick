@@ -1,0 +1,133 @@
+# An alpha release of the loader, run by hand on main until 1.0.0: the
+# version the workspace carries, `1.0.0-alpha.N`, becomes the GitHub
+# prerelease `v1.0.0-alpha.N` with `enshwick.zip`, its PDBs, SBOMs and build
+# provenance, and notes from `cargo xtask notes`. The pull request before it
+# moves the crates to that version and closes their Unreleased changelog
+# sections as it; a version already released is refused. Nothing goes to
+# crates.io.
+name: alpha
+
+on:
+  workflow_dispatch:
+    inputs:
+      known_issues:
+        description: Known issues, as Markdown; empty says none are reported
+        type: string
+        default: ""
+      publish:
+        description: Make the prerelease; off builds and shows the notes in the run's summary only
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: alpha
+  cancel-in-progress: false
+
+jobs:
+  alpha:
+    # Players download alphas, so they come only from main.
+    if: github.ref == 'refs/heads/main'
+    # The release environment admits main only.
+    environment: release
+    # A fresh machine: what ships is built and published without the
+    # caches that branch builds write to.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    # The release itself is made with the app's token.
+    permissions:
+      contents: read
+      # The build provenance attestations of the archives.
+      id-token: write
+      attestations: write
+    env:
+      HAS_VIRUSTOTAL_KEY: ${{ secrets.VIRUSTOTAL_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The Windows SDK and CRT that cargo-xwin downloads, saved only by a
+      # release build of main (dev-build.yml).
+      - name: Restore the Windows SDK
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/xwin
+          key: xwin-release-${{ runner.os }}-0.23.1-v1
+      - uses: ./.github/actions/setup-rust
+        with:
+          gh: true
+          tools: cargo-cyclonedx@0.5.9,cargo-auditable@0.7.7
+
+      # Before the build: a version released already, or one whose
+      # changelogs are not closed, stops the run in seconds.
+      - name: Version and notes
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KNOWN_ISSUES: ${{ inputs.known_issues }}
+        run: |
+          version=$(cargo pkgid --locked -p enshwick-loader)
+          version=${version##*[#@]}
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$version" > /dev/null 2>&1; then
+            echo "::error title=alpha::v$version is released already; move the crates to the next alpha first"
+            exit 1
+          fi
+          # The alphas before these releases went to crates.io.
+          crate=$(curl -sS --proto '=https' --retry 3 -A 'enshwick (https://github.com/enshwick)' \
+            -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/enshwick/$version")
+          if [ "$crate" != 404 ]; then
+            echo "::error title=alpha::crates.io answers $crate for enshwick $version; only a version it does not know is new"
+            exit 1
+          fi
+          cargo xtask notes --out "$RUNNER_TEMP/notes.md" --known-issues "$KNOWN_ISSUES"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # The archive, and the PDB and SBOM of every DLL.
+      - uses: ./.github/actions/release-files
+        with:
+          out: ${{ runner.temp }}/alpha
+
+      - name: VirusTotal
+        if: env.HAS_VIRUSTOTAL_KEY == 'true'
+        continue-on-error: true
+        timeout-minutes: 17
+        uses: ./.github/actions/virustotal
+        with:
+          dir: ${{ runner.temp }}/alpha
+          api-key: ${{ secrets.VIRUSTOTAL_API_KEY }}
+
+      - name: Build provenance
+        if: inputs.publish
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/alpha/*
+
+      # GitHub refuses to point a new tag at a commit whose workflows differ
+      # from main's head without the workflows permission, which the job
+      # token cannot have: a run that main has passed with a workflow change
+      # tags with the app's token.
+      - name: Token for the tag
+        id: token
+        if: inputs.publish
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+          private-key: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-workflows: write
+
+      - name: Publish
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        working-directory: ${{ runner.temp }}/alpha
+        run: |
+          assets=(*.zip *.pdb *.cdx.json)
+          gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "Enshwick $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
+            --prerelease --latest=false

@@ -35,10 +35,10 @@ loads every mod from the `mods/` folder beside it.
 
 ### Install
 
-1. Download
-   [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip).
-   It holds the loader and no mod. It is a development build of the newest
-   commit. Until the first release, 1.0.0, there are no other builds.
+1. Download `enshwick.zip` from the newest alpha on the
+   [releases page](https://github.com/enshwick/enshwick/releases). It holds
+   the loader and no mod. Until the first release, 1.0.0, every release is an
+   alpha: anything may change between alphas, so back up your saves.
 2. Extract it into the folder with `enshrouded.exe` (players) or
    `enshrouded_server.exe` (servers). You get `powrprof.dll` and a `mods`
    folder.

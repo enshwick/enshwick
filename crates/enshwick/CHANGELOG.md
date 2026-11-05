@@ -89,6 +89,9 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- The loader ships as alphas, GitHub prereleases tagged `v1.0.0-alpha.N`
+  whose notes list the supported game builds and what changed, in place of
+  the rolling `dev` prerelease, which no longer follows `main` (#937).
 - A Luau mod's runtime lives for the mod's life, so a function it hands the
   API, such as a resource patch, runs after start; `HostApi::serve_resource`
   says that several mods' patches on one key chain in load order (#925).

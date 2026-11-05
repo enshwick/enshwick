@@ -1,10 +1,8 @@
-# A development build of the commit it runs on, until the first public
-# release, 1.0.0: `cargo xtask dist` on a fresh GitHub-hosted runner,
-# whose files replace those of the single prerelease `dev`. enshwick.zip
-# there holds the stub and the loader; each mod releases from its own
-# repository. Every push to main that changes what the archive builds from
-# runs it, so `dev` always carries main; a run by hand on main rebuilds it,
-# or only builds.
+# A development build of the commit it runs on: `cargo xtask dist` on a
+# fresh GitHub-hosted runner, its files kept as the run's artefact and its
+# archive scanned on VirusTotal. Every push to main that changes what the
+# archive builds from runs it, and so saves the Windows SDK cache the alpha
+# releases (alpha.yml) restore; players download the alphas.
 name: dev-build
 
 on:
@@ -20,23 +18,17 @@ on:
       - .github/workflows/dev-build.yml
       - ".github/actions/**"
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Replace the dev prerelease; off builds the archives only
-        type: boolean
-        default: true
 
 permissions: {}
 
-# One build at a time, never cut off half way through replacing the files;
-# of the pushes that wait, only the newest is built.
+# A newer push supersedes the build of an older one.
 concurrency:
   group: dev-build
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   dist:
-    # Players download `dev`, so it is built only from main.
+    # Only main saves the release cache of the Windows SDK.
     if: github.ref == 'refs/heads/main'
     # The release environment admits main only.
     environment: release
@@ -45,10 +37,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:
-      contents: write
-      # The build provenance attestations of the archives.
-      id-token: write
-      attestations: write
+      contents: read
     env:
       HAS_VIRUSTOTAL_KEY: ${{ secrets.VIRUSTOTAL_API_KEY != '' }}
     steps:
@@ -68,7 +57,6 @@ jobs:
           key: xwin-release-${{ runner.os }}-0.23.1-v1
       - uses: ./.github/actions/setup-rust
         with:
-          gh: true
           tools: cargo-cyclonedx@0.5.9,cargo-auditable@0.7.7
 
       # The archive, and the PDB and SBOM of every DLL.
@@ -83,116 +71,17 @@ jobs:
           path: ${{ runner.tool_cache }}/xwin
           key: xwin-release-${{ runner.os }}-0.23.1-v1
 
-      - name: Build provenance
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          subject-path: ${{ runner.temp }}/dev/*
+          name: enshwick-${{ github.sha }}
+          path: ${{ runner.temp }}/dev/*
+          if-no-files-found: error
 
-      # GitHub refuses to point a tag at a commit whose workflows differ from
-      # main's head without the workflows permission, which the job token
-      # cannot have: a run that main has passed with a workflow change, or a
-      # rerun, moves `dev` with the app's token.
-      - name: Token for the dev tag
-        id: token
-        if: github.event_name == 'push' || inputs.publish
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          client-id: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
-          private-key: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
-          repositories: ${{ github.event.repository.name }}
-          permission-contents: write
-          permission-workflows: write
-
-      - name: Publish
-        if: github.event_name == 'push' || inputs.publish
-        env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-        working-directory: ${{ runner.temp }}/dev
-        run: |
-          short=$(git -C "$GITHUB_WORKSPACE" rev-parse --short=7 HEAD)
-          title="Enshwick dev $short"
-          notes="Development build of $GITHUB_SHA: $(git -C "$GITHUB_WORKSPACE" log -1 --format=%s).
-
-          Until the first public release, 1.0.0, this prerelease is the only build to download; every run replaces it. Extract enshwick.zip into the folder that holds enshrouded.exe or enshrouded_server.exe."
-          assets=(*.zip *.pdb *.cdx.json)
-          if gh release view dev --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
-            gh release edit dev --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes" --prerelease --latest=false
-            gh release upload dev "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
-            # Files of an earlier build that this one no longer has go.
-            gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' |
-              while read -r name; do
-                case " ${assets[*]} " in
-                  *" $name "*) ;;
-                  *) gh release delete-asset dev "$name" --yes --repo "$GITHUB_REPOSITORY" ;;
-                esac
-              done
-          else
-            # A tag left without its release moves too; gh would build on it as it is.
-            if gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" > /dev/null 2>&1; then
-              gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
-            fi
-            gh release create dev "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "$title" --notes "$notes" --prerelease --latest=false
-          fi
-
-      # VirusTotal unpacks and scans each archive; the engines that flag it
-      # go to the run's summary and a warning, so a false positive reaches
-      # its vendor before a release. A flag or an outage never turns the
-      # build red. The public API takes four requests a minute.
       - name: VirusTotal
         if: env.HAS_VIRUSTOTAL_KEY == 'true'
         continue-on-error: true
         timeout-minutes: 17
-        env:
-          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
-        working-directory: ${{ runner.temp }}/dev
-        run: |
-          api=https://www.virustotal.com/api/v3
-          # Twenty seconds between retries outlast the per-minute limit.
-          vt() { curl -fsS --proto '=https' --retry 3 --retry-delay 20 -H "x-apikey: $VT_API_KEY" "$@"; }
-          for archive in *.zip; do
-            sha=$(sha256sum "$archive" | cut -d' ' -f1)
-            link="https://www.virustotal.com/gui/file/$sha"
-            # The archive is reproducible: one VirusTotal knows keeps its last analysis.
-            if known=$(vt "$api/files/$sha" 2> /dev/null) &&
-              jq -e '.data.attributes.last_analysis_results | length > 0' <<< "$known" > /dev/null; then
-              verdict=$(jq -c '.data.attributes | {stats: .last_analysis_stats, results: .last_analysis_results}' <<< "$known")
-            else
-              if ! id=$(vt -F "file=@$archive" "$api/files" | jq -er .data.id); then
-                echo "::warning title=VirusTotal::the upload of $archive failed"
-                continue
-              fi
-              status=queued
-              # Fifteen minutes at most; a failed poll counts as not done yet.
-              for _ in $(seq 45); do
-                sleep 20
-                analysis=$(vt "$api/analyses/$id") || continue
-                status=$(jq -r .data.attributes.status <<< "$analysis")
-                [ "$status" = completed ] && break
-              done
-              if [ "$status" != completed ]; then
-                echo "::warning title=VirusTotal::$archive is still $status: $link"
-                continue
-              fi
-              verdict=$(jq -c '.data.attributes | {stats, results}' <<< "$analysis")
-            fi
-            stats=$(jq -r '.stats | "\(.malicious) malicious, \(.suspicious) suspicious, \(.undetected) undetected"' <<< "$verdict")
-            flagged=$(jq -r 'def cell: tostring | gsub("[|]"; "&#124;");
-              .results[] | select(.category == "malicious" or .category == "suspicious")
-              | "| \(.engine_name | cell) | \(.category) | \(.result // "" | cell) |"' <<< "$verdict")
-            {
-              echo "### VirusTotal: $archive"
-              echo
-              echo "$stats: [report]($link)"
-              if [ -n "$flagged" ]; then
-                echo
-                echo "| Engine | Category | Result |"
-                echo "| --- | --- | --- |"
-                echo "$flagged"
-              fi
-            } >> "$GITHUB_STEP_SUMMARY"
-            if [ -n "$flagged" ]; then
-              echo "::warning title=VirusTotal::$archive: $stats, $link"
-            fi
-          done
+        uses: ./.github/actions/virustotal
+        with:
+          dir: ${{ runner.temp }}/dev
+          api-key: ${{ secrets.VIRUSTOTAL_API_KEY }}
