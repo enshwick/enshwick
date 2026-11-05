@@ -1,14 +1,20 @@
-//! Rewards that follow a craft, a level and a loot, and gifts given from code.
+//! Rewards that follow a craft, a level, a loot and a use, and gifts given
+//! from code.
 
 #[cfg(test)]
 mod tests {
     use enshwick::__private::ids;
-    use enshwick::abi::{Header, PlayerInfo, Status, TickData};
+    use enshwick::abi::{Header, ItemAction, PlayerInfo, Status, TickData};
     use enshwick::events::{Ticked, WorldLoaded};
+    use enshwick::items::Kind;
     use enshwick::progress::Experience;
     use enshwick::rewards::{Action, Give, Reward, Rewards};
     use enshwick::test::{FakeHost, Installed};
-    use enshwick::{Entity, Load, Mod, Off, PlayerKey, RecipeId};
+    use enshwick::{Entity, ItemId, Load, Mod, Off, PlayerKey, RecipeId};
+
+    fn tonic() -> ItemId {
+        ItemId::new(0x5e01)
+    }
 
     const LEVEL_UP: u32 = 0x51;
     const CRAFT: u32 = 0x52;
@@ -27,9 +33,12 @@ mod tests {
                 ("any-level", Action::LevelUp(0), 10),
                 ("smith", Action::Craft(RecipeId::new(RECIPE)), 100),
                 ("looter", Action::Loot, 1000),
+                ("drinker", Action::Consume(tonic()), 3),
             ] {
                 load.add_reward(Reward::new(name, on).with(Give::Experience(amount)))?;
             }
+            // A filter after the reward's own refuses player 4's drinks.
+            load.on_item(tonic(), Kind::Consume, |used| used.player != Entity(4))?;
             let rewards = load.rewards()?;
             let _set = REWARDS.set(rewards);
             // A filter may grant another reward while it decides.
@@ -72,9 +81,18 @@ mod tests {
         bytes
     }
 
+    static STEP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    /// Ends a server step: the game events raised after it come in the
+    /// next step's delivery.
+    fn step(loader: &Installed) {
+        let step = STEP.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        let _ran = loader.raise::<Ticked>(&TickData::new(step));
+    }
+
     /// The experience the next pass adds for `entity`, with room for 10000.
     fn gained(loader: &Installed, entity: u32) -> u32 {
-        let _ran = loader.raise::<Ticked>(&TickData::new(1));
+        step(loader);
         let mut rows = [Experience {
             entity: Entity(entity),
             level: 1,
@@ -86,10 +104,10 @@ mod tests {
         rows[0].gained
     }
 
-    #[test]
-    fn a_level_a_craft_and_a_loot_each_reward_only_their_own_action() {
-        let data = std::env::temp_dir().join(format!("enshwick-acting-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&data);
+    /// The mod started in a world with players 2 and 4 and the events its
+    /// rewards hear, its data in `data`.
+    fn installed(data: &std::path::Path) -> Installed {
+        let _gone = std::fs::remove_dir_all(data);
         let mut host = FakeHost::new()
             .world()
             .player(player(2, 7))
@@ -129,7 +147,13 @@ mod tests {
             2,
             "the mod's and its rewards'"
         );
+        loader
+    }
 
+    #[test]
+    fn a_level_a_craft_and_a_loot_each_reward_only_their_own_action() {
+        let data = std::env::temp_dir().join(format!("enshwick-acting-{}", std::process::id()));
+        let loader = installed(&data);
         assert_eq!(
             loader.raise_game_event(LEVEL_UP, &event(&[(8, 2), (12, 2)])),
             2
@@ -145,27 +169,65 @@ mod tests {
         );
         assert_eq!(gained(&loader, 2), 11, "level 3 gives both");
 
-        let other = event(&[(8, 4), (16, RECIPE + 1)]);
-        assert_eq!(loader.raise_game_event(CRAFT, &other), 1);
-        assert_eq!(
-            loader.raise_game_event(CRAFTED, &event(&[(12, RECIPE + 1)])),
-            1
-        );
+        let ask = |player: u32, recipe: u32, amount: u32| {
+            assert_eq!(
+                loader.raise_game_event(CRAFT, &event(&[(8, player), (16, recipe), (20, amount)])),
+                1
+            );
+        };
+        let made = |recipe: u32, times: usize| {
+            for _ in 0..times {
+                assert_eq!(loader.raise_game_event(CRAFTED, &event(&[(12, recipe)])), 1);
+            }
+        };
+        ask(4, RECIPE + 1, 1);
+        step(&loader);
+        made(RECIPE + 1, 1);
         assert_eq!(gained(&loader, 4), 0, "another recipe gives nothing");
-        assert_eq!(loader.raise_game_event(CRAFTED, &event(&[(12, RECIPE)])), 1);
+        made(RECIPE, 1);
         assert_eq!(
             gained(&loader, 4),
             0,
             "a success nobody asked for gives nothing"
         );
+
+        ask(4, RECIPE, 2);
+        made(RECIPE, 1);
+        step(&loader);
+        made(RECIPE, 3);
         assert_eq!(
-            loader.raise_game_event(CRAFT, &event(&[(8, 4), (16, RECIPE)])),
-            1
+            gained(&loader, 4),
+            200,
+            "each unit of the request in the delivery after it, never one more"
         );
-        assert_eq!(loader.raise_game_event(CRAFTED, &event(&[(12, RECIPE)])), 1);
-        assert_eq!(gained(&loader, 4), 100, "the player who asked gets it");
-        assert_eq!(loader.raise_game_event(CRAFTED, &event(&[(12, RECIPE)])), 1);
-        assert_eq!(gained(&loader, 4), 0, "one request pairs with one success");
+        made(RECIPE, 1);
+        assert_eq!(
+            gained(&loader, 4),
+            0,
+            "a station's own production pays nobody"
+        );
+
+        ask(2, RECIPE, 1);
+        ask(4, RECIPE, 1);
+        step(&loader);
+        made(RECIPE, 2);
+        assert_eq!(
+            (gained(&loader, 2), gained(&loader, 4)),
+            (100, 100),
+            "two players asking in one step get one unit each"
+        );
+
+        ask(2, RECIPE, 1);
+        step(&loader);
+        step(&loader);
+        ask(4, RECIPE, 1);
+        step(&loader);
+        made(RECIPE, 1);
+        assert_eq!(
+            (gained(&loader, 2), gained(&loader, 4)),
+            (0, 100),
+            "a refused request takes no later success"
+        );
 
         assert_eq!(
             loader.raise_game_event(LOOT, &event(&[(8, 4), (12, 50)])),
@@ -189,6 +251,26 @@ mod tests {
         assert!(!rewards.grant(Entity(4), "unknown"));
         assert!(!rewards.grant(Entity(99), "looter"), "no such player");
         assert_eq!(gained(&loader, 4), 1001);
+        let _gone = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_use_a_later_filter_refuses_gives_no_use_reward() {
+        let data = std::env::temp_dir().join(format!("enshwick-drinker-{}", std::process::id()));
+        let loader = installed(&data);
+        let drink = |player: u32| ItemAction {
+            header: Header::of::<ItemAction>(),
+            kind: ItemAction::CONSUME,
+            player: Entity(player),
+            item: tonic(),
+            count: 1,
+            inventory: Entity(100),
+            slot: 0,
+        };
+        assert!(loader.item_action(&drink(2)));
+        assert_eq!(gained(&loader, 2), 3, "a use that goes through rewards");
+        assert!(!loader.item_action(&drink(4)), "the later filter refuses");
+        assert_eq!(gained(&loader, 4), 0, "a refused use rewards nothing");
         let _gone = std::fs::remove_dir_all(&data);
     }
 }

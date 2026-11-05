@@ -111,25 +111,47 @@ pub(crate) fn read<const N: usize>(address: usize) -> Option<[u8; N]> {
 /// that does not read where a plain read would fault.
 fn copy<const N: usize>(address: usize) -> Option<[u8; N]> {
     let mut bytes = [0u8; N];
+    copy_into(address, &mut bytes).then_some(bytes)
+}
+
+/// Fills `bytes` from `address` like [`copy`]; whether all of them read.
+fn copy_into(address: usize, bytes: &mut [u8]) -> bool {
     let mut copied = 0;
     // SAFETY: `GetCurrentProcess` takes no arguments and returns a
     // pseudo-handle that needs no closing.
     let process = unsafe { GetCurrentProcess() };
-    // SAFETY: `ReadProcessMemory` reads this process's `address..address + N`
-    // through the kernel and fails rather than faults when any of it is not
-    // accessible ("the entire area to be read must be accessible, or the
-    // operation fails", Win32 docs); it writes at most `N` bytes into
-    // `bytes`, a local of that size, and their count into `copied`.
+    // SAFETY: `ReadProcessMemory` reads this process's
+    // `address..address + bytes.len()` through the kernel and fails rather
+    // than faults when any of it is not accessible ("the entire area to be
+    // read must be accessible, or the operation fails", Win32 docs); it
+    // writes at most `bytes.len()` bytes into `bytes` and their count into
+    // `copied`.
     let done = unsafe {
         ReadProcessMemory(
             process,
             core::ptr::with_exposed_provenance(address),
             bytes.as_mut_ptr().cast(),
-            N,
+            bytes.len(),
             &raw mut copied,
         )
     };
-    (done != 0 && copied == N).then_some(bytes)
+    done != 0 && copied == bytes.len()
+}
+
+/// Up to `max` bytes at `address`: as many as the regions from there that
+/// [`Region::reads`] hold, so code just before an unreadable page still
+/// reads; `None` when not one byte does.
+pub(crate) fn read_up_to(address: usize, max: usize) -> Option<Vec<u8>> {
+    let wanted = address.checked_add(max)?;
+    let mut end = address;
+    while end < wanted {
+        match query(end) {
+            Some(next) if next.reads() && next.end > end => end = next.end,
+            _ => break,
+        }
+    }
+    let mut bytes = vec![0; end.min(wanted) - address];
+    (!bytes.is_empty() && copy_into(address, &mut bytes)).then_some(bytes)
 }
 
 /// Reserves and commits `len` bytes of fresh read-write pages, at `address`

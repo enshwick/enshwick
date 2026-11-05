@@ -226,7 +226,7 @@ impl Watch {
         made: impl Fn(usize, usize) -> bool,
     ) {
         for &(offset, len) in ranges {
-            let parts: Vec<(usize, usize)> = outside(offset, len, &self.ignored)
+            let parts: Vec<Vec<(usize, usize)>> = outside(offset, len, &self.ignored)
                 .into_iter()
                 .filter_map(|(at, n)| {
                     let (mut start, mut end) = (at, at + n);
@@ -236,21 +236,24 @@ impl Watch {
                     while end > start && self.copy[end - 1] == now[end - 1] {
                         end -= 1;
                     }
-                    (start < end).then_some((start, end - start))
+                    (start < end).then(|| pieces(&self.copy, now, start, end))
                 })
                 .collect();
             self.copy[offset..offset + len].copy_from_slice(&now[offset..offset + len]);
-            for (offset, len) in parts {
-                self.changes.push(CodeChange {
-                    offset,
-                    len,
-                    by: if made(offset, len) {
-                        by.to_owned()
-                    } else {
-                        String::new()
-                    },
-                    stage,
-                });
+            for part in parts {
+                let first = self.changes.len();
+                for (offset, len) in part {
+                    let by = if made(offset, len) { by } else { "" };
+                    match self.changes[first..].last_mut() {
+                        Some(last) if last.by == by => last.len = offset + len - last.offset,
+                        _ => self.changes.push(CodeChange {
+                            offset,
+                            len,
+                            by: by.to_owned(),
+                            stage,
+                        }),
+                    }
+                }
             }
         }
     }
@@ -299,28 +302,84 @@ pub const BRANCH_BYTES: usize = 16;
 /// ```
 #[must_use]
 pub fn branch(code: &[u8], address: usize, cell: impl Fn(usize) -> Option<usize>) -> Option<usize> {
-    let relative = |at: usize, len: usize| {
+    let len = jump_len(code)?;
+    let relative = |at: usize, next: usize| {
         let bytes: [u8; 4] = code.get(at..at + 4)?.try_into().ok()?;
         let delta = isize::try_from(i32::from_le_bytes(bytes)).ok()?;
-        address.checked_add(len)?.checked_add_signed(delta)
-    };
-    let absolute = |tail: &[u8]| {
-        (code.get(10..10 + tail.len())? == tail).then_some(())?;
-        let bytes: [u8; 8] = code.get(2..10)?.try_into().ok()?;
-        usize::try_from(u64::from_le_bytes(bytes)).ok()
+        address.checked_add(next)?.checked_add_signed(delta)
     };
     match code {
-        [0xE8 | 0xE9, ..] => relative(1, 5),
+        [0xE8 | 0xE9, ..] => relative(1, len),
         [0xFF, 0x25, ..] => cell(relative(2, 6)?),
-        [0x48, 0xB8, ..] => absolute(&[0xFF, 0xE0]),
-        [0x49, 0xBB, ..] => absolute(&[0x41, 0xFF, 0xE3]),
-        _ => None,
+        _ => {
+            let bytes: [u8; 8] = code.get(2..10)?.try_into().ok()?;
+            usize::try_from(u64::from_le_bytes(bytes)).ok()
+        }
     }
 }
 
-/// Whether the change of `len` bytes at `offset` of `now`, the code mapped at
-/// `text`, jumps into `image` (its first byte and end): directly, or through
-/// up to [`HOPS`] more jumps in code `read` answers [`BRANCH_BYTES`] of.
+/// How many bytes the jump at the start of `code` takes, of the forms
+/// [`branch`] follows; `None` when it is no jump or is cut short.
+fn jump_len(code: &[u8]) -> Option<usize> {
+    let ends = |tail: &[u8], len: usize| (code.get(10..len)? == tail).then_some(len);
+    let len = match code {
+        [0xE8 | 0xE9, ..] => 5,
+        // `jmp [rip+0]` with its address after it, as hook libraries write it.
+        [0xFF, 0x25, 0, 0, 0, 0, ..] if code.len() >= 14 => 14,
+        [0xFF, 0x25, ..] => 6,
+        [0x48, 0xB8, ..] => ends(&[0xFF, 0xE0], 12)?,
+        [0x49, 0xBB, ..] => ends(&[0x41, 0xFF, 0xE3], 13)?,
+        _ => return None,
+    };
+    (code.len() >= len).then_some(len)
+}
+
+/// The pieces of the changed bytes from `start` to `end`, the first and last
+/// of them changed, each its own change: from a run's first changed byte to
+/// the end of a jump that starts within [`LEAD`] bytes of it, where
+/// [`reaches`] looks, else to before more than [`LEAD`] unchanged bytes; a
+/// run without a jump that close to the piece before joins it. So a
+/// second hook close to another is put down to whoever made it, and the
+/// search stays near the start of each piece.
+fn pieces(old: &[u8], now: &[u8], start: usize, end: usize) -> Vec<(usize, usize)> {
+    let changed = |at: usize| old[at] != now[at];
+    let mut pieces = Vec::new();
+    let mut from = 0;
+    let mut at = start;
+    while at < end {
+        let jump = (at.saturating_sub(LEAD).max(from)..=(at + LEAD).min(end - 1))
+            .find_map(|first| Some(first + jump_len(&now[first..])?));
+        let stop = jump.map_or_else(
+            || {
+                let mut last = at;
+                let mut next = at + 1;
+                while next < end && next - last <= LEAD {
+                    if changed(next) {
+                        last = next;
+                    }
+                    next += 1;
+                }
+                last + 1
+            },
+            |stop| stop.clamp(at + 1, end),
+        );
+        match pieces.last_mut() {
+            // Bytes a jump pads or a run continues join it.
+            Some((first, len)) if jump.is_none() && at - from <= LEAD => *len = stop - *first,
+            _ => pieces.push((at, stop - at)),
+        }
+        from = stop;
+        at = (stop..end).find(|&next| changed(next)).unwrap_or(end);
+    }
+    pieces
+}
+
+/// Whether a changed piece of code jumps into `image`, its first byte and end.
+///
+/// The piece is `len` bytes at `offset` of `now`, the code mapped at `text`;
+/// its jump starts within [`LEAD`] bytes of `offset` and lands in `image`
+/// directly, or through up to [`HOPS`] more jumps in the code `read` answers,
+/// up to [`BRANCH_BYTES`] bytes at a jump.
 ///
 /// # Examples
 ///
@@ -338,7 +397,7 @@ pub fn reaches(
     text: usize,
     (offset, len): (usize, usize),
     image: (usize, usize),
-    read: impl Fn(usize) -> Option<[u8; BRANCH_BYTES]>,
+    read: impl Fn(usize) -> Option<Vec<u8>>,
 ) -> bool {
     let inside = |at: usize| (image.0..image.1).contains(&at);
     let cell = |at: usize| {
@@ -357,7 +416,7 @@ pub fn reaches(
         }
         inside(to)
     };
-    (offset.saturating_sub(LEAD)..offset + len).any(|at| {
+    (offset.saturating_sub(LEAD)..(offset + LEAD + 1).min(offset + len)).any(|at| {
         now.get(at..)
             .zip(text.checked_add(at))
             .and_then(|(code, address)| branch(code, address, cell))
@@ -517,13 +576,155 @@ mod tests {
             } else {
                 return None;
             }
-            Some(code)
+            Some(code.to_vec())
         };
         assert!(reaches(&now, text, (100, 5), image, read));
         let made = |offset, len| reaches(&now, text, (offset, len), image, read);
         assert_eq!(watch.check(&now, "sockel.dll", Stage::Load, made), 2);
         let who: Vec<&str> = watch.changes().iter().map(CodeChange::who).collect();
         assert_eq!(who, ["sockel.dll", "another program"]);
+    }
+
+    /// `jmp rel32` at `offset` of the code mapped at `text`, to `to`.
+    fn jump_at(now: &mut [u8], text: usize, offset: usize, to: usize) {
+        let rel = i32::try_from(to.cast_signed() - (text + offset + 5).cast_signed()).unwrap();
+        now[offset] = 0xE9;
+        now[offset + 1..offset + 5].copy_from_slice(&rel.to_le_bytes());
+    }
+
+    #[test]
+    fn two_hooks_closer_than_the_join_gap_go_each_to_its_maker() {
+        let mut now = code(CHUNK);
+        let mut watch = Watch::new(&now, &[]);
+        let (text, image) = (0x1000, (0x9000, 0xa000));
+        jump_at(&mut now, text, 100, 0x5000);
+        jump_at(&mut now, text, 110, 0x9100);
+        let made = |offset, len| reaches(&now, text, (offset, len), image, |_| None);
+        assert_eq!(watch.check(&now, "sockel.dll", Stage::Load, made), 2);
+        let found: Vec<(usize, usize, &str)> = watch
+            .changes()
+            .iter()
+            .map(|c| (c.offset, c.len, c.who()))
+            .collect();
+        assert_eq!(found, [(100, 5, "another program"), (110, 5, "sockel.dll")]);
+    }
+
+    #[test]
+    fn a_jump_deep_inside_a_large_unrelated_change_is_not_followed() {
+        let mut now = code(CHUNK);
+        let mut watch = Watch::new(&now, &[]);
+        let (text, image) = (0x1000, (0x9000, 0xa000));
+        now[100..1100].fill(0x90);
+        jump_at(&mut now, text, 600, 0x9100);
+        let reads = core::cell::Cell::new(0);
+        let read = |_| {
+            reads.set(reads.get() + 1);
+            None
+        };
+        let made = |offset, len| reaches(&now, text, (offset, len), image, read);
+        assert_eq!(watch.check(&now, "sockel.dll", Stage::Load, made), 1);
+        assert_eq!(watch.changes()[0].who(), "another program");
+        assert_eq!(
+            (watch.changes()[0].offset, watch.changes()[0].len),
+            (100, 1000)
+        );
+        assert_eq!(reads.get(), 0, "no jump near the start to follow");
+    }
+
+    #[test]
+    fn a_hook_and_the_bytes_it_pads_stay_one_change() {
+        let mut now = code(CHUNK);
+        let mut watch = Watch::new(&now, &[]);
+        let (text, image) = (0x1000, (0x9000, 0xa000));
+        jump_at(&mut now, text, 100, 0x9100);
+        now[105..108].fill(0xCC);
+        let made = |offset, len| reaches(&now, text, (offset, len), image, |_| None);
+        assert_eq!(watch.check(&now, "sockel.dll", Stage::Load, made), 1);
+        assert_eq!(
+            watch.changes(),
+            [CodeChange {
+                offset: 100,
+                len: 8,
+                by: "sockel.dll".into(),
+                stage: Stage::Load
+            }]
+        );
+    }
+
+    #[test]
+    fn a_piece_runs_to_its_jump_s_end_or_to_a_gap_wider_than_the_lead() {
+        let old = vec![0u8; 128];
+        let mut now = old.clone();
+        // Two bytes two apart join; one seven further on is its own piece.
+        now[10] = 1;
+        now[12] = 1;
+        now[19] = 1;
+        assert_eq!(pieces(&old, &now, 10, 20), [(10, 3), (19, 1)]);
+        // A jump and the bytes it pads are one piece, up to the jump's end.
+        jump_at(&mut now, 0, 40, 0x50);
+        now[45..48].fill(0xCC);
+        assert_eq!(pieces(&old, &now, 40, 48), [(40, 8)]);
+        // A jump that starts within the lead of a run takes the run.
+        now[60] = 0x90;
+        jump_at(&mut now, 0, 61, 0x50);
+        assert_eq!(pieces(&old, &now, 60, 66), [(60, 6)]);
+        // A jump past the lead starts its own piece, as does a second jump.
+        now[80] = 0x90;
+        jump_at(&mut now, 0, 84, 0x50);
+        jump_at(&mut now, 0, 89, 0x50);
+        assert_eq!(pieces(&old, &now, 80, 94), [(80, 1), (84, 5), (89, 5)]);
+    }
+
+    #[test]
+    fn a_far_jump_with_its_address_inline_is_one_piece_whatever_the_address() {
+        let old = vec![0u8; 64];
+        let mut now = old.clone();
+        // `jmp [rip+0]` and the address after it, whose bytes hold a `jmp`
+        // opcode.
+        now[10..16].copy_from_slice(&[0xFF, 0x25, 0, 0, 0, 0]);
+        now[16..24].copy_from_slice(&0x7FFE_E900_9100u64.to_le_bytes());
+        assert_eq!(pieces(&old, &now, 10, 24), [(10, 14)]);
+        let read = |at: usize| (at == 16).then(|| now[16..24].to_vec());
+        assert_eq!(
+            branch(&now[10..], 10, |cell| {
+                let bytes: [u8; 8] = read(cell)?.try_into().ok()?;
+                usize::try_from(u64::from_le_bytes(bytes)).ok()
+            }),
+            Some(0x7FFE_E900_9100)
+        );
+    }
+
+    #[test]
+    fn close_hooks_of_one_maker_stay_one_change() {
+        let mut now = code(CHUNK);
+        let mut watch = Watch::new(&now, &[]);
+        let (text, image) = (0x1000, (0x9000, 0xa000));
+        jump_at(&mut now, text, 100, 0x9100);
+        jump_at(&mut now, text, 110, 0x9200);
+        let made = |offset, len| reaches(&now, text, (offset, len), image, |_| None);
+        assert_eq!(watch.check(&now, "sockel.dll", Stage::Load, made), 1);
+        let found: Vec<(usize, usize, &str)> = watch
+            .changes()
+            .iter()
+            .map(|c| (c.offset, c.len, c.who()))
+            .collect();
+        assert_eq!(found, [(100, 15, "sockel.dll")]);
+    }
+
+    #[test]
+    fn a_jump_counts_only_within_the_lead_and_the_piece() {
+        let (text, image) = (0x1000, (0x9000, 0xa000));
+        let into = |at: usize| {
+            let mut now = vec![0x90; 128];
+            jump_at(&mut now, text, at, 0x9100);
+            now
+        };
+        let reached = |at, piece| reaches(&into(at), text, piece, image, |_| None);
+        assert!(reached(102, (100, 8)), "two bytes in");
+        assert!(!reached(103, (100, 8)), "three bytes in");
+        assert!(reached(98, (100, 8)), "two bytes before");
+        assert!(reached(101, (100, 2)));
+        assert!(!reached(102, (100, 2)), "past a two-byte piece");
     }
 
     #[test]
@@ -547,6 +748,10 @@ mod tests {
             None,
             "jmp rcx is no jump to rax"
         );
+        let mut r11 = vec![0x49, 0xBB];
+        r11.extend(0x8888u64.to_le_bytes());
+        r11.extend([0x41, 0xFF, 0xE3]);
+        assert_eq!(branch(&r11, at, |_| None), Some(0x8888));
         assert_eq!(branch(&[0xE9, 0, 0], at, |_| None), None, "cut short");
     }
 

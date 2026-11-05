@@ -1,8 +1,8 @@
 # What players do with items
 
-A mod hears each player's use, trash, equip, unequip, pickup and placement
-of an item, and may refuse the first four. The calls are
-[unstable](../stability.md) until a person checks each action in the game.
+A mod hears a player use, trash, equip, unequip, pick up or place an item,
+may refuse the first four, and hears that every mod allowed a use. The calls are
+[unstable](../stability.md) until a person checks them in game.
 
 ## Give an item behaviour
 
@@ -69,7 +69,7 @@ function keep_tonic()
 end
 ```
 
-`pack check` reports a key other than the six kinds, a value that is no
+`pack check` reports a key other than the seven kinds, a value that is no
 Luau name, and an `on` table in a pack without a `main.luau`. A name that
 `main.luau` leaves without a global function stops the mod at start, with
 the item and the key in the log.
@@ -84,6 +84,12 @@ the item and the key in the log.
 | `Unequip` | `unequip` | A player takes the item off                     | The item stays on                  |
 | `Pickup`  | `pickup`  | After a player picked the item up               | Nothing: the answer is ignored     |
 | `Place`   | `place`   | After a player placed the item as a piece       | Nothing: the answer is ignored     |
+| `Consumed` | `consumed` | After every mod allowed a `Consume`           | Nothing: the answer is ignored     |
+
+A mod that counts uses or rewards one listens to `Consumed`: a `Consume`
+reaches the mods before they all decided, so another mod may still refuse
+it. `Consumed` comes before the game runs the use, so a use the game
+itself then drops still counts.
 
 A refusal takes the game's path for an action it already ran, so the item
 stays where it was and nothing is lost. `count` is 1 for a use and a

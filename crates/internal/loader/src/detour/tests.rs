@@ -152,30 +152,49 @@ fn with_entry(code: &[u8]) -> usize {
     with_unwind(code, [1, 0, 0, 0, 0, 0, 0, 0])
 }
 
-/// Writes `code` like [`function`] and registers a function entry for it
-/// with `info`, an unwind info of at most two code slots.
 fn with_unwind(code: &[u8], info: [u8; 8]) -> usize {
-    /// Where the unwind info goes in the page, the one-entry table after it.
+    let [page] = with_unwinds([code], info);
+    page
+}
+
+/// Writes each of `codes` like [`function`], `SLOT` bytes apart in one page,
+/// and registers a function entry for each with `info`, an unwind info of at
+/// most two code slots; their addresses.
+fn with_unwinds<const N: usize>(codes: [&[u8]; N], info: [u8; 8]) -> [usize; N] {
+    /// Where each function starts, the unwind info, the table after it.
+    const SLOT: usize = 0x40; // bound, not a game offset: the test's own page
     const UNWIND: usize = 0x800; // bound, not a game offset: the test's own page
     const TABLE: usize = UNWIND + 8;
-    let page = function(code);
-    let len = u32::try_from(code.len()).unwrap();
+    assert!(N > 0 && SLOT * N <= UNWIND);
+    let mut bytes = vec![0xcc; SLOT * (N - 1) + codes[N - 1].len()];
+    for (at, code) in codes.iter().enumerate() {
+        assert!(code.len() <= SLOT);
+        bytes[at * SLOT..][..code.len()].copy_from_slice(code);
+    }
+    let page = function(&bytes);
     let rva = u32::try_from(UNWIND).unwrap();
     let word = |at: usize| u32::from_le_bytes(info[at..at + 4].try_into().unwrap());
-    // SAFETY: the 4096 writable bytes `function` allocated, of which `code`
-    // took fewer than `UNWIND`; the entry spans the code.
-    unsafe { ((page + UNWIND) as *mut [u32; 5]).write([word(0), word(4), 0, len, rva]) };
-    // SAFETY: one entry naming the code and unwind info in the page, which
-    // is never freed.
+    // SAFETY: the 4096 writable bytes `function` allocated, of which the
+    // codes took fewer than `UNWIND`.
+    unsafe { ((page + UNWIND) as *mut [u32; 2]).write([word(0), word(4)]) };
+    for (at, code) in codes.iter().enumerate() {
+        let begin = u32::try_from(at * SLOT).unwrap();
+        let end = begin + u32::try_from(code.len()).unwrap();
+        // SAFETY: the same page; the table of `N` entries after the unwind
+        // info ends well inside it, and each entry spans its code.
+        unsafe { ((page + TABLE + 12 * at) as *mut [u32; 3]).write([begin, end, rva]) };
+    }
+    // SAFETY: `N` entries naming the codes and unwind info in the page,
+    // which is never freed.
     let added = unsafe {
         windows_sys::Win32::System::Diagnostics::Debug::RtlAddFunctionTable(
             (page + TABLE) as *const _,
-            1,
+            u32::try_from(N).unwrap(),
             page as u64,
         )
     };
     assert!(added);
-    page
+    core::array::from_fn(|at| page + at * SLOT)
 }
 
 #[test]
@@ -314,44 +333,56 @@ fn scrub() {
 
 #[test]
 fn a_moved_call_out_of_reach_returns_onto_the_jump_back_not_its_data() {
-    // `push rbx`, then a call about 2 GiB ahead or behind: one is past the
-    // reach of a trampoline near the target, whichever side it lands, so
-    // that one moves in its far form, `call [rip + x]` with the target as
-    // data.
-    let far = [0x7fff_fff0_i32, -0x7fff_fff0].into_iter().find_map(|rel| {
+    // `push rbx`, then a call about 2 GiB ahead in one function and behind in
+    // the other. Both sit in one page and share the batch's trampoline
+    // block, which lies outside the page and so on one side of both: the
+    // call pointing away from it is past its reach and moves in its far
+    // form, `call [rip + x]` with the target as data.
+    let code = |rel: i32| {
         let mut code = vec![0x53, 0xe8];
         code.extend_from_slice(&rel.to_le_bytes());
         code.extend_from_slice(&[0xc3, 0xcc, 0xcc, 0xcc]);
-        let target = with_entry(&code);
-        let pending = prepare(&[Request {
-            target,
-            detour: (plus_hundred as Unary as *const ()).addr(),
-            inside: false,
-        }])
-        .remove(0)
-        .unwrap();
-        let trampoline = pending.original;
-        // SAFETY: the trampoline's bytes are readable in its sealed block.
-        let bytes =
-            unsafe { core::slice::from_raw_parts(trampoline as *const u8, CODE - FAR_JUMP) };
-        let mut decoder = Decoder::with_ip(64, bytes, trampoline as u64, DecoderOptions::NONE);
-        let call = decoder.iter().find(|i| {
-            matches!(
-                i.flow_control(),
-                FlowControl::Call | FlowControl::IndirectCall
-            )
-        })?;
-        (call.flow_control() == FlowControl::IndirectCall).then(|| {
-            // The call returns here: it must be the jump back to target + 6,
-            // not the 8-byte target data iced lays after the whole block.
-            let returns = usize::try_from(call.next_ip()).unwrap();
-            let at = returns - trampoline;
-            let next =
-                Decoder::with_ip(64, &bytes[at..], returns as u64, DecoderOptions::NONE).decode();
-            (next, bytes[..at + 16].to_vec(), pending.moved)
-        })
+        code
+    };
+    let (ahead, behind) = (code(0x7fff_fff0), code(-0x7fff_fff0));
+    let targets = with_unwinds([&ahead, &behind], [1, 0, 0, 0, 0, 0, 0, 0]);
+    let requests = targets.map(|target| Request {
+        target,
+        detour: (plus_hundred as Unary as *const ()).addr(),
+        inside: false,
     });
-    let (next, around, moved) = far.expect("one of the calls moves in its far form");
+    let far: Vec<_> = prepare(&requests)
+        .into_iter()
+        .filter_map(|pending| {
+            let pending = pending.unwrap();
+            let trampoline = pending.original;
+            // SAFETY: the trampoline's bytes are readable in its sealed block.
+            let bytes =
+                unsafe { core::slice::from_raw_parts(trampoline as *const u8, CODE - FAR_JUMP) };
+            let mut decoder = Decoder::with_ip(64, bytes, trampoline as u64, DecoderOptions::NONE);
+            let call = decoder.iter().find(|i| {
+                matches!(
+                    i.flow_control(),
+                    FlowControl::Call | FlowControl::IndirectCall
+                )
+            })?;
+            (call.flow_control() == FlowControl::IndirectCall).then(|| {
+                // The call returns here: it must be the jump back to target + 6,
+                // not the 8-byte target data iced lays after the whole block.
+                let returns = usize::try_from(call.next_ip()).unwrap();
+                let at = returns - trampoline;
+                let next = Decoder::with_ip(64, &bytes[at..], returns as u64, DecoderOptions::NONE)
+                    .decode();
+                (next, bytes[..at + 16].to_vec(), pending.moved)
+            })
+        })
+        .collect();
+    let [(next, around, moved)] = far.as_slice() else {
+        panic!(
+            "exactly one of the calls moves in its far form, not {}",
+            far.len()
+        );
+    };
     assert_eq!(
         next.flow_control(),
         FlowControl::UnconditionalBranch,
@@ -359,7 +390,7 @@ fn a_moved_call_out_of_reach_returns_onto_the_jump_back_not_its_data() {
     );
     // The far call still starts right after the push, not at the
     // `u32::MAX` the encoder reports for an instruction it rewrote.
-    assert_eq!(moved, [(0, 0), (1, 1)]);
+    assert_eq!(moved, &[(0, 0), (1, 1)]);
 }
 
 /// Prepares a hook on `target` without writing it; its trampoline.

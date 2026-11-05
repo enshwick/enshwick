@@ -24,9 +24,8 @@
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
 use crate::abi::{BuffTypeId, KnowledgeId, ModHandle, RecipeId};
 use crate::game_events::{
@@ -43,7 +42,13 @@ use crate::{Entity, ItemId, Load, Off};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub enum Action {
-    /// Crafts the recipe: the server's craft of a request the player made.
+    /// Crafts the recipe: once for each unit the server makes of a request
+    /// the player made, so a request for three gives it three times; what a
+    /// station makes on its own gives nothing unless it lands within two
+    /// server steps of a request that got fewer units than it asked. When
+    /// two players ask for the same recipe within those steps and the first
+    /// runs short of ingredients, the second player's units may go to the
+    /// first.
     Craft(RecipeId),
     /// Reaches the level; 0 for every level.
     LevelUp(u32),
@@ -53,7 +58,8 @@ pub enum Action {
     Loot,
     /// Completes a quest.
     Quest,
-    /// Eats, drinks or uses the item.
+    /// Eats, drinks or uses the item, once every item filter allowed the use
+    /// ([`Kind::Consumed`](crate::items::Kind::Consumed)).
     Consume(ItemId),
     /// Picks the item up.
     Pickup(ItemId),
@@ -286,6 +292,11 @@ struct Shared {
     knowledge: crate::knowledge::Knowledge,
     scheduler: crate::schedule::Scheduler,
     experience: Pending,
+    /// The last server step, which numbers the game events delivered at the
+    /// start of the next one; kept once a craft reward needs it.
+    step: AtomicU64,
+    /// Whether a handler keeps [`step`](Self::step).
+    stepping: AtomicBool,
 }
 
 /// Each player's experience still to add, in slots a worker thread takes
@@ -405,6 +416,8 @@ fn shared(load: &mut Load<'_>) -> Result<&'static Shared, Off> {
         knowledge: load.knowledge(),
         scheduler: load.scheduler()?,
         experience: Pending::new(),
+        step: AtomicU64::new(0),
+        stepping: AtomicBool::new(false),
     };
     let shared: &'static Shared = Box::leak(Box::new(made));
     load.on_experience(move |rows, _levels| {
@@ -518,20 +531,34 @@ pub(crate) fn replace(me: ModHandle, reward: Reward) {
     }
 }
 
-/// How long a craft request waits for its success; a request the crafting
-/// system refused or never made leaves no success, and expires.
-const CRAFT_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+/// Craft requests of one recipe still waiting for their successes, oldest
+/// first: the player, the step that numbers the delivery the request came in
+/// and how many successes it may still take.
+type Asked = VecDeque<(Entity, u64, u16)>;
 
-/// The player of the oldest request in `asked` still waiting at `now`, for a
-/// success of its recipe; expired requests go first.
-fn crafted_by(asked: &mut VecDeque<(Entity, Instant)>, now: Instant) -> Option<Entity> {
-    while let Some(&(player, at)) = asked.front() {
+/// How many deliveries after its own a request still takes successes. The
+/// game crafts a request in the step after its delivery and its successes
+/// come with the next delivery (server 26430253, read statically from its
+/// craft code, not yet seen live), so one would do; the request's own
+/// delivery and one more stay open in case that reading is a step off.
+const CRAFT_STEPS: u64 = 2;
+
+/// The player whose request a success of its recipe delivered after `step`
+/// answers: the oldest request in `asked` from that delivery or the
+/// [`CRAFT_STEPS`] before it, while it has units left. Older requests go,
+/// and a success with no such request is a station's own production.
+fn crafted_by(asked: &mut Asked, step: u64) -> Option<Entity> {
+    while asked
+        .front()
+        .is_some_and(|&(_, at, _)| at.saturating_add(CRAFT_STEPS) < step)
+    {
         asked.pop_front();
-        if now.saturating_duration_since(at) <= CRAFT_WAIT {
-            return Some(player);
-        }
     }
-    None
+    let (player, _, left) = asked
+        .iter_mut()
+        .find(|(_, at, left)| *at <= step && *left > 0)?;
+    *left -= 1;
+    Some(*player)
 }
 
 /// Gives the reward named `name` to `player` on the game thread's next
@@ -670,7 +697,13 @@ impl Load<'_> {
         let name = reward.name;
         match reward.on {
             Action::Craft(recipe) => {
-                let asked: Arc<Mutex<VecDeque<(Entity, Instant)>>> = Arc::default();
+                if !shared.stepping.load(Ordering::Relaxed) {
+                    self.on_every_step(move |tick| {
+                        shared.step.store(tick.step, Ordering::Relaxed);
+                    })?;
+                    shared.stepping.store(true, Ordering::Relaxed);
+                }
+                let asked: Arc<Mutex<Asked>> = Arc::default();
                 let pending = Arc::clone(&asked);
                 self.on::<CraftRecipeEvent>(move |request| {
                     if request.recipe_id == recipe && !request.crafting_operator_id.is_none() {
@@ -678,13 +711,18 @@ impl Load<'_> {
                         if pending.len() >= 64 {
                             pending.pop_front();
                         }
-                        pending.push_back((request.crafting_operator_id, Instant::now()));
+                        pending.push_back((
+                            request.crafting_operator_id,
+                            shared.step.load(Ordering::Relaxed),
+                            request.recipe_amount.max(1),
+                        ));
                     }
                 })?;
                 let reward = name.clone();
                 self.on::<CraftRecipeSuccessEvent>(move |made| {
+                    let step = shared.step.load(Ordering::Relaxed);
                     if made.recipe_id == recipe
-                        && let Some(player) = crafted_by(&mut asked.relock(), Instant::now())
+                        && let Some(player) = crafted_by(&mut asked.relock(), step)
                     {
                         grant_later(shared, &reward, player);
                     }
@@ -704,10 +742,12 @@ impl Load<'_> {
             Action::Quest => self.on::<crate::events::QuestCompleted>(move |quest| {
                 grant_later(shared, &name, quest.entity);
             }),
-            Action::Consume(item) => self.on_item(item, crate::items::Kind::Consume, move |used| {
-                grant_later(shared, &name, used.player);
-                true
-            }),
+            Action::Consume(item) => {
+                self.on_item(item, crate::items::Kind::Consumed, move |used| {
+                    grant_later(shared, &name, used.player);
+                    true
+                })
+            }
             Action::Pickup(item) => self.on_item(item, crate::items::Kind::Pickup, move |picked| {
                 grant_later(shared, &name, picked.player);
                 true
@@ -799,16 +839,56 @@ mod tests {
     }
 
     #[test]
-    fn a_craft_pairs_with_a_recent_request_and_never_a_stale_one() {
-        let start = Instant::now();
-        let later = start + CRAFT_WAIT + std::time::Duration::from_secs(1);
-        let mut asked = VecDeque::from([(Entity(1), start), (Entity(2), later)]);
+    fn a_success_pays_the_oldest_open_request_up_to_its_amount() {
+        let (one, two) = (Entity(1), Entity(2));
+        // Player 1 asks for three in the delivery after step 4, player 2 for
+        // one in the one after step 5.
+        let mut asked = VecDeque::from([(one, 4, 3), (two, 5, 1)]);
+        assert_eq!(crafted_by(&mut asked, 5), Some(one));
+        assert_eq!(crafted_by(&mut asked, 5), Some(one));
+        assert_eq!(crafted_by(&mut asked, 5), Some(one));
         assert_eq!(
-            crafted_by(&mut asked, later),
-            Some(Entity(2)),
-            "player 1's request expired"
+            crafted_by(&mut asked, 6),
+            Some(two),
+            "player 1 had all three"
         );
-        assert_eq!(crafted_by(&mut asked, later), None);
+        assert_eq!(
+            crafted_by(&mut asked, 6),
+            None,
+            "a fifth is a station's own"
+        );
+        assert_eq!(crafted_by(&mut asked, 9), None);
+        assert!(asked.is_empty(), "a request without successes goes");
+    }
+
+    #[test]
+    fn a_success_a_step_off_the_static_reading_still_pays_its_request() {
+        let mut own_delivery = VecDeque::from([(Entity(1), 7, 1)]);
+        assert_eq!(crafted_by(&mut own_delivery, 7), Some(Entity(1)));
+        let mut a_step_late = VecDeque::from([(Entity(1), 7, 1)]);
+        assert_eq!(crafted_by(&mut a_step_late, 9), Some(Entity(1)));
+        let mut too_late = VecDeque::from([(Entity(1), 7, 1)]);
+        assert_eq!(crafted_by(&mut too_late, 10), None);
+    }
+
+    #[test]
+    fn a_refused_request_never_takes_another_players_success() {
+        // Player 1's request was refused: no success came for it.
+        let mut asked = VecDeque::from([(Entity(1), 2, 1), (Entity(2), 3, 1)]);
+        assert_eq!(crafted_by(&mut asked, 5), Some(Entity(2)));
+        assert!(asked.iter().all(|&(player, _, _)| player != Entity(1)));
+    }
+
+    #[test]
+    fn a_success_before_any_request_pays_nobody() {
+        let mut asked = Asked::new();
+        assert_eq!(crafted_by(&mut asked, 1), None);
+        let mut later = VecDeque::from([(Entity(1), 8, 1)]);
+        assert_eq!(
+            crafted_by(&mut later, 7),
+            None,
+            "a success before the request's delivery is not its"
+        );
     }
 
     #[test]

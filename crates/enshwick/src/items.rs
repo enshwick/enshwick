@@ -56,6 +56,11 @@ pub enum Kind {
     /// Placed it as a building piece or a prop, after the game placed it;
     /// the answer is ignored.
     Place,
+    /// Every filter allowed the [`Kind::Consume`] before it, which the game
+    /// runs next and may still drop; the answer is ignored. A reward or a
+    /// count of uses listens here, since a later filter may still refuse a
+    /// `Consume`.
+    Consumed,
 }
 
 impl Kind {
@@ -88,6 +93,7 @@ impl Kind {
             RawItemAction::UNEQUIP => Some(Self::Unequip),
             RawItemAction::PICKUP => Some(Self::Pickup),
             RawItemAction::PLACE => Some(Self::Place),
+            RawItemAction::CONSUMED => Some(Self::Consumed),
             _ => None,
         }
     }
@@ -108,7 +114,7 @@ pub struct ItemAction {
     pub player: Entity,
     /// The item.
     pub item: ItemId,
-    /// How many: 1 for [`Kind::Consume`] and [`Kind::Place`], the stack
+    /// How many: 1 for a use and [`Kind::Place`], the stack
     /// for the others.
     pub count: u32,
     /// The slot the item is in before the action; `None` for a pickup or a
@@ -255,6 +261,7 @@ mod tests {
             (RawItemAction::UNEQUIP, Kind::Unequip, true),
             (RawItemAction::PICKUP, Kind::Pickup, false),
             (RawItemAction::PLACE, Kind::Place, false),
+            (RawItemAction::CONSUMED, Kind::Consumed, false),
         ];
         for (raw, kind, refuses) in kinds {
             assert_eq!(Kind::from_raw(raw), Some(kind));

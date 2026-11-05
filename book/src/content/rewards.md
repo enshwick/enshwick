@@ -48,12 +48,12 @@ knowledge entry or a buff is its GUID.
 
 | Action             | `on` in `rewards.toml`  | When                                       |
 | ------------------ | ----------------------- | ------------------------------------------ |
-| `Craft(recipe)`    | `craft = "<recipe>"`    | The server crafts a request of the player  |
+| `Craft(recipe)`    | `craft = "<recipe>"`    | Each unit the server crafts for the player |
 | `LevelUp(level)`   | `level_up = <level>`    | The player reaches the level; 0 for any    |
 | `Join`             | `join = true`           | The player joins the world                 |
 | `Loot`             | `loot = true`           | The player loots a container               |
 | `Quest`            | `quest = true`          | The player completes a quest               |
-| `Consume(item)`    | `consume = "<item>"`    | The player eats, drinks or uses the item   |
+| `Consume(item)`    | `consume = "<item>"`    | Every item filter allowed the player's use |
 | `Pickup(item)`     | `pickup = "<item>"`     | The player picks the item up               |
 
 | Gift                       | In `rewards.toml`                 | What the player gets                                     |
@@ -100,9 +100,17 @@ end)
 ## Where rewards run and what they keep
 
 Rewards run in the server's world, on the game thread, a step after their
-action. A craft counts when the crafting system made the player's request:
-the server pairs each made recipe with the oldest request for it of the
-last 30 seconds, and a request older than that gives no reward. The
+action. A craft counts for each unit the crafting system made of the
+player's request, so a request for three gives the reward three times. The
+game crafts a request in the step after it and reports the units in the
+step after that; the server pairs each unit with the oldest request of its
+recipe from the same step or the two before it, up to the amount asked. A
+unit with no such request, such as what a station makes on its own, gives
+nothing, and a request the game refused gives nothing later. A station's
+own unit in those steps may count for a request that got fewer units than
+it asked, and when two players ask for the same recipe in those steps and
+the first runs short of ingredients, units of the second player's request
+may count for the first. The
 world's file `rewards.toml` in the mod's data folder beside the save keeps
 who got a limited reward, by account, so a limit holds across restarts and
 moves with the save. Items and experience are given as the reward states

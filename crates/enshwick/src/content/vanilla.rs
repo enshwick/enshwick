@@ -566,6 +566,19 @@ impl Vanilla {
             .collect())
     }
 
+    /// Whether `guid` is a vanilla item's GUID; `false` without the registry.
+    pub(crate) fn is_item(&self, guid: Guid) -> bool {
+        self.names()
+            .is_ok_and(|names| names.values().flatten().any(|item| *item == guid))
+    }
+
+    /// Whether `guid` is a vanilla recipe's own GUID; `false` without the
+    /// registry.
+    pub(crate) fn is_recipe(&self, guid: Guid) -> bool {
+        self.recipe_list()
+            .is_ok_and(|list| list.made.iter().any(|(recipe, _)| *recipe == guid))
+    }
+
     /// The running game's vanilla content, read from its archive through
     /// [`super::game_resource`]; `None` outside the game or when the build
     /// lacks a layout.

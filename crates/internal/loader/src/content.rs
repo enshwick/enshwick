@@ -891,7 +891,11 @@ fn run_patches(
             } else if let Some(loader) = LOADED.get() {
                 loader.turn_off(
                     patch.owner,
-                    &format!("a served resource failed to build ({})", status.0),
+                    &format!(
+                        "served {} failed to build ({})",
+                        key_name(&entry.key),
+                        status.0
+                    ),
                 );
             }
             continue;

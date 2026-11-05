@@ -846,7 +846,7 @@ export type ItemAction = {
 	player: number,
 	--- The item.
 	item: number,
-	--- How many: 1 for `Kind.Consume` and `Kind.Place`, the stack for the others.
+	--- How many: 1 for a use and `Kind.Place`, the stack for the others.
 	count: number,
 	--- The slot the item is in before the action; nil for a pickup or a placement.
 	slot: string?,
@@ -919,7 +919,7 @@ export type ItemsChange = {
 }
 
 --- What a player does with an item; the names are the game's.
-export type Kind = "Consume" | "Trash" | "Equip" | "Unequip" | "Pickup" | "Place"
+export type Kind = "Consume" | "Trash" | "Equip" | "Unequip" | "Pickup" | "Place" | "Consumed"
 
 --- The data of the `KnowledgeChanged` event.
 export type KnowledgeData = {

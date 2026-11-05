@@ -684,6 +684,28 @@ pub(super) fn recipes(
         let at = entry.span().start;
         let e = entry.get_ref();
         let like = reader.reference(file, text, at, &e.like, "item", "");
+        // A vanilla `like` needs a recipe of the game that makes it, else
+        // the recipe registry does not build and the pack turns off. A GUID
+        // the game does not know may be another mod's item.
+        if let (Some((item, Ref::Elsewhere)), false, Some(vanilla)) =
+            (like, e.like.contains(':'), reader.vanilla)
+            && (vanilla.is_recipe(item)
+                || vanilla.is_item(item)
+                || Guid::try_parse(&e.like).is_none())
+            && vanilla
+                .recipes_making(item)
+                .is_ok_and(|made| made.is_empty())
+        {
+            reader.error(
+                file,
+                text,
+                at,
+                format!(
+                    "recipe {}: no vanilla recipe makes {}; `like` names the item whose recipe is copied, not a recipe",
+                    e.id, e.like
+                ),
+            );
+        }
         let output = reader.reference(file, text, at, &e.output, "item", "");
         let workshop = e
             .workshop

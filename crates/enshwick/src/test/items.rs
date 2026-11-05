@@ -12,8 +12,10 @@ use super::table;
 impl Installed {
     /// Hands `call` to the mod's item filters as the loader would: an
     /// action the filters can refuse stops at the first refusal, and one
-    /// after the fact ([`ItemAction::PICKUP`], [`ItemAction::PLACE`])
-    /// reaches every filter. Whether every filter allowed it.
+    /// after the fact ([`ItemAction::PICKUP`], [`ItemAction::PLACE`],
+    /// [`ItemAction::CONSUMED`]) reaches every filter, and a
+    /// [`ItemAction::CONSUME`] every filter allowed is followed by its
+    /// `CONSUMED`. Whether every filter allowed it.
     ///
     /// # Examples
     ///
@@ -35,16 +37,29 @@ impl Installed {
     #[must_use]
     pub fn item_action(&self, call: &ItemAction) -> bool {
         let filters = table::with(Vec::new(), |s| s.item_filters.clone());
-        let refusable = !matches!(call.kind, ItemAction::PICKUP | ItemAction::PLACE);
-        let mut allowed = true;
-        for &(callback, user) in &filters {
-            if refusable && !allowed {
-                break;
+        let ask = |call: &ItemAction| {
+            let refusable = !matches!(
+                call.kind,
+                ItemAction::PICKUP | ItemAction::PLACE | ItemAction::CONSUMED
+            );
+            let mut allowed = true;
+            for &(callback, user) in &filters {
+                if refusable && !allowed {
+                    break;
+                }
+                let user = core::ptr::with_exposed_provenance_mut(user);
+                // SAFETY: a valid call; `user` is the mod's pointer.
+                allowed &= unsafe { callback(call, user) != 0 };
             }
-            let user = core::ptr::with_exposed_provenance_mut(user);
-            // SAFETY: a valid call; `user` is the mod's pointer.
-            allowed &= unsafe { callback(call, user) != 0 };
+            allowed || !refusable
+        };
+        let allowed = ask(call);
+        if allowed && call.kind == ItemAction::CONSUME {
+            let _heard = ask(&ItemAction {
+                kind: ItemAction::CONSUMED,
+                ..*call
+            });
         }
-        allowed || !refusable
+        allowed
     }
 }

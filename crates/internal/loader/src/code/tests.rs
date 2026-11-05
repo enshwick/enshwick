@@ -270,27 +270,32 @@ fn only_workshops_past_the_limit_get_full_lists() {
 }
 
 #[test]
-fn a_jump_is_read_only_where_all_its_bytes_read() {
-    use crate::code_watch::BRANCH_BYTES;
-    const PAGE: usize = 4096;
-    let page = crate::pages::allocate(None, PAGE).expect("a fresh page");
-    let last = page.as_ptr().expose_provenance() + PAGE - BRANCH_BYTES;
-    let jump = [0xE9, 1, 2, 3, 4];
-    // SAFETY: `last` and the `BRANCH_BYTES` after it lie in the read-write
-    // page just committed.
-    unsafe { crate::memory::write_bytes(last, 0, &jump) };
-    let read = code_at(last).expect("the page's last bytes read");
-    assert_eq!(read[..jump.len()], jump);
-    assert_eq!(code_at(last + 1), None, "past the page");
-    assert_eq!(code_at(0), None);
-    // SAFETY: `page` is the test's own allocation, released once.
-    let released = unsafe {
-        windows_sys::Win32::System::Memory::VirtualFree(
-            page.as_ptr().cast(),
-            0,
-            windows_sys::Win32::System::Memory::MEM_RELEASE,
-        )
+fn a_jump_just_before_an_unreadable_page_reads_up_to_it() {
+    use windows_sys::Win32::System::Memory::{
+        MEM_RELEASE, PAGE_NOACCESS, PAGE_READWRITE, VirtualFree,
     };
+    const PAGE: usize = 4096;
+    let pages = crate::pages::allocate(None, 2 * PAGE).expect("two fresh pages");
+    let start = pages.as_ptr().expose_provenance();
+    let last = start + PAGE - 6;
+    let jump = [0xE9, 1, 2, 3, 4];
+    // SAFETY: the six bytes at `last` lie in the first read-write page just
+    // committed.
+    unsafe { crate::memory::write_bytes(last, 0, &jump) };
+    // SAFETY: the second page is the test's own, committed with the first;
+    // nothing reads it while it is unreadable.
+    let old = unsafe { crate::pages::protect(start + PAGE, PAGE, PAGE_NOACCESS) };
+    assert_eq!(old, Some(PAGE_READWRITE));
+    let read = code_at(last).expect("the page's last bytes read");
+    assert_eq!(read, [0xE9, 1, 2, 3, 4, 0]);
+    assert_eq!(
+        crate::code_watch::branch(&read, last, |_| None),
+        Some(last + 5 + 0x0403_0201)
+    );
+    assert_eq!(code_at(start + PAGE), None, "the unreadable page");
+    assert_eq!(code_at(0), None);
+    // SAFETY: `pages` is the test's own allocation, released once.
+    let released = unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
     assert_ne!(released, 0);
     assert_eq!(code_at(last), None, "released");
 }
