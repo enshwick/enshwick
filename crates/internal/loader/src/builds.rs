@@ -371,7 +371,10 @@ pub fn build_name(
 ) -> String {
     let side = side(running).map_or("game", tables::Side::as_str);
     let steam = steam.map(|b| format!("Steam build {b}, "));
-    let version = version.map(|v| format!("game {v}, "));
+    // The archive's version string goes on after `|` with its branch and date.
+    let version = version
+        .and_then(|v| v.split('|').next())
+        .map(|v| format!("game {v}, "));
     format!(
         "{side}, {}{}executable {}",
         steam.unwrap_or_default(),

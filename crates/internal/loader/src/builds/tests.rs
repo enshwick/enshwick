@@ -622,7 +622,7 @@ fn a_build_is_named_by_the_game_and_tells_why_an_entry_is_absent() {
         build_name(
             Side::SERVER,
             Some(SteamBuild::new(26_430_253)),
-            Some("1287369"),
+            Some("1287369|^/game38/branches/release_1.0|2026-11-03T10:00:00Z"),
             fingerprint
         ),
         format!("server, Steam build 26430253, game 1287369, {executable}")
