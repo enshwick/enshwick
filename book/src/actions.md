@@ -4,22 +4,22 @@ Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
 A mod declares what players and administrators can do as actions; the
-platform offers them in the game's own interface.
+server checks and runs them wherever they come from.
 
-## Where actions show
+## Where actions run from
 
 A mod that lets players or administrators do something, such as letting a
 friend open a chest or picking a reward, declares it once as an action, and
-the platform offers it in the game's own interface:
+offers it through means of its own:
 
-- on the mod's page of the [Mods screen](interface.md#the-mods-screen), in
-  the game's settings rows and buttons;
 - from the mod's own [controls](controls.md) and
   [panels on the game's screens](interface.md#panels-on-the-games-screens),
   which send one with `Actions::run`;
 - on the server's [console](chat.md#the-console), as the mod's id, the
   action and its values, such as a line typed in a dedicated server's
   console window.
+
+The Mods screen shows a mod and its settings, not its actions.
 
 Actions are the only way players and administrators act in game: the client
 keeps typed `/` lines to itself, and single player has no chat.
@@ -70,10 +70,9 @@ actions:add({
 end)
 ```
 
-An administrator now finds "Change the weather" under Actions on the Mods
-screen, with a dropdown and a slider. With the mod's id `weather`, the
-console line `weather set storm 10` runs it too, and `weather help` lists
-the actions.
+With the mod's id `weather`, the console line `weather set storm 10` runs
+it, `weather help` lists the actions, and a control of the mod runs it with
+`actions.run("set", &[Value::Choice(2), Value::Number(10.0)])`.
 
 ## Declaring
 
@@ -127,10 +126,10 @@ actions:add({
 end)
 ```
 
-Arguments are typed choices, never free text: a player online, picked from
-a list and named on the console; one of a few options; a number in a range
-with a step; on or off. A list shows the players online and the ones `on`
-names, so a player switched on can be switched off while away.
+Arguments are typed choices, never free text: a player online, named on
+the console; one of a few options; a number in a range with a step; on or
+off. A list takes the players online and the ones `on` names, so a player
+switched on can be switched off while away.
 
 ## Handling
 
@@ -140,8 +139,8 @@ the values picked in the order of the arguments (a list hands
 `Value::Player` and `Value::Toggle`), the player's language and where it
 came from, `Via::Interface` or `Via::Console`. `request.say(key, values)`
 fills the mod's text in the player's language. It returns an `Outcome`,
-`Outcome::done(text)` or `Outcome::refused(text)`: from the interface the
-text shows as one of the game's notices and on the screen that sent it; from
+`Outcome::done(text)` or `Outcome::refused(text)`: from a control or panel
+the text shows as one of the game's notices; from
 the console it is the console's answer.
 
 A Luau handler gets the request as an object whose methods read those
@@ -154,10 +153,10 @@ done without a text. A Luau client runs an action with
 `actions:run(id, values)`.
 
 The server decides everything. It checks `.allow` and runs `.at` again on
-every run, whatever the client showed, and refuses values outside their
+every run, whatever the client sent, and refuses values outside their
 types and ranges before the handler sees them. A mod's own permission rules,
 [extension points](extending.md) included, belong in `.at`, so the
-Mods screen, the mod's controls and panels, and the console all follow them.
+mod's controls and panels and the console all follow them.
 
 The platform's replies, such as "No player named Bob.", are under
 `actions.*` keys and take the mod's texts over them.
@@ -175,8 +174,8 @@ English.
 ## Where it works
 
 Actions run in the game server: the dedicated server, and a client while it
-hosts a game, single player included. The interface needs Enshwick on the
-player's client. The Mods screen page asks the server each time it opens.
+hosts a game, single player included. A control or panel that runs one
+needs Enshwick on the player's client.
 
 ## Worked example
 
@@ -189,9 +188,9 @@ extension point; `on` names the players allowed there; a second action,
 ## Testing
 
 With the `test` feature, the [fake loader](testing.md) asks the actions as
-the loader does: `ask_actions(ActionCall::SHEET, &player, language, "", "")`
-returns the sheet, which `actions::sheet::decode` reads,
-`ask_actions(ActionCall::RUN, ...)` runs one from the interface, and
+the loader does: `ask_actions(ActionCall::RUN, ...)` runs one as a control
+sends it, `ask_actions(ActionCall::SHEET, &player, language, "", "")`
+returns the mod's sheet, which `actions::sheet::decode` reads, and
 `console::run("<mod id> <action> ...")` runs the console form: the fake
 hands a line to the mod's own actions unless `console_answer` gave its first
 word an answer.

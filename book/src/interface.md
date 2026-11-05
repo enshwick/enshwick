@@ -370,11 +370,9 @@ On a game build where the loader cannot draw that scroll area, the screen
 shows a few at a time with "Next Page" and "Previous Page" buttons, and the
 log says why.
 
-In a game, the screen also shows the [player actions](actions.md) the
-server offers the player: an Actions button under each mod that has
-actions. They show one action at a time, a list of players
-as toggle rows, five to a page, and an action with arguments as rows above
-its button.
+The screen shows mods and their settings, never their
+[player actions](actions.md): a mod offers those through its own
+[controls](controls.md), panels and prompts.
 
 The screen says what is off and why. Under a mod, each of its features
 that is off has a line with the reason; a mod that is off says so in its

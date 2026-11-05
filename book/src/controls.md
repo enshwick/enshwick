@@ -81,8 +81,9 @@ when it comes up. A key pressed and let go between two frames may be missed.
 
 A control fires on the client, and the server decides what changes. The
 handler sends the server one of the mod's [player actions](actions.md) with
-`actions.run(id, args)`: the server checks it as it checks a pick from the
-interface, runs its handler and shows the reply as a notice.
+`actions.run(id, args)`: the server checks who may run it, runs its handler
+and shows the reply as a notice. A control is how a player runs a mod's
+action in game; the Mods screen shows no actions.
 
 ```rust
 use enshwick::actions::{Action, Outcome};
