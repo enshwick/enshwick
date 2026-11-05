@@ -136,6 +136,10 @@ pub struct Spawn {
     /// The orientation, a quaternion `x, y, z, w`; `None` for none turned.
     #[script(default)]
     pub orientation: Option<[f32; 4]>,
+    /// Whether the entity stays out of the world's save, as the game's own
+    /// passing animals do: it is gone once the world loads again.
+    #[script(default)]
+    pub do_not_save: bool,
 }
 
 impl Spawn {
@@ -150,7 +154,23 @@ impl Spawn {
             level: None,
             despawn_after: None,
             orientation: None,
+            do_not_save: false,
         }
+    }
+
+    /// Keep the entity out of the world's save.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::effects::Spawn;
+    ///
+    /// assert!(Spawn::new().do_not_save().do_not_save);
+    /// ```
+    #[must_use]
+    pub const fn do_not_save(mut self) -> Self {
+        self.do_not_save = true;
+        self
     }
 
     /// Spawn at `level`.
@@ -583,6 +603,11 @@ impl Effects {
             level: how.level.unwrap_or(0),
             reserved: 0,
             lifetime_ns: lifetime,
+            flags: if how.do_not_save {
+                SpawnRequest::DO_NOT_SAVE
+            } else {
+                0
+            },
         };
         let mut entity = Entity::NONE;
         WorldError::from_status((api.spawn)(

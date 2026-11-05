@@ -155,7 +155,15 @@ fn bytes(size: usize, parts: &[(usize, &[u8])]) -> Vec<u8> {
 
 /// Asks the server to spawn an entity of a template; its id.
 pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Status> {
-    spawn_with(loader, request, Vec::new(), 0)
+    let mut extra = Vec::new();
+    if request.flags & SpawnRequest::DO_NOT_SAVE != 0 {
+        // The game's own spawns of passing creatures add DoNotSave so too.
+        let ids = crate::catalogue::ids::DO_NOT_SAVE;
+        let hash = crate::catalogue::component_hash(loader, ids).ok_or(Status::MISSING)?;
+        let size = crate::catalogue::size(loader, ids).ok_or(Status::MISSING)?;
+        extra.push((hash, vec![0u8; size]));
+    }
+    spawn_with(loader, request, extra, 0)
 }
 
 /// [`spawn`], the entity starting with `extra` components as well: each a

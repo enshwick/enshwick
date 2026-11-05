@@ -902,7 +902,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, teleport) == 24 + 60 * 8);
     assert!(size_of::<TeleportRequest>() == 8 + 8 + 24 + 16);
     assert!(core::mem::offset_of!(HostApi, spawn) == 24 + 61 * 8);
-    assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8);
+    assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, build_filter) == 24 + 63 * 8);
     assert!(size_of::<CraftCheck>() == 8 + 16);
     assert!(size_of::<BuildCheck>() == 8 + 8 + 24);

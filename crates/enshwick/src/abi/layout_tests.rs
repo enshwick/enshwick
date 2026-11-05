@@ -196,7 +196,7 @@ shapes! {
         GameEventData { header, type_hash, size, data },
         EntityPlace { entity, reserved, position },
         TeleportRequest { header, entity, flags, position, orientation },
-        SpawnRequest { header, template, position, orientation, level, reserved, lifetime_ns },
+        SpawnRequest { header, template, position, orientation, level, reserved, lifetime_ns, flags },
         CraftCheck { header, crafting_operator_id, crafting_station_id, recipe_id, recipe_amount, reserved },
         BuildCheck { header, player, item, position },
         NetMessage { header, channel, reserved, peer, data, size, reserved_tail },

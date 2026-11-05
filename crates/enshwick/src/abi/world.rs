@@ -159,6 +159,7 @@ impl TeleportRequest {
 ///     level: 12,
 ///     reserved: 0,
 ///     lifetime_ns: 0,
+///     flags: 0,
 /// };
 /// assert_eq!(wolf.level, 12);
 /// ```
@@ -181,9 +182,17 @@ pub struct SpawnRequest {
     /// Game time in nanoseconds after which the game removes the entity; 0
     /// to keep it.
     pub lifetime_ns: u64,
+    /// [`SpawnRequest::DO_NOT_SAVE`], or 0. ABI 11.6.
+    pub flags: u64,
 }
 
-impl_headed!(SpawnRequest);
+impl_headed!(SpawnRequest, born = 80);
+
+impl SpawnRequest {
+    /// The entity stays out of the world's save, as the game's own passing
+    /// animals do: it is gone once the world loads again.
+    pub const DO_NOT_SAVE: u64 = 1;
+}
 
 /// A player's craft request, handed to the filters registered with
 /// [`HostApi::craft_filter`](super::HostApi::craft_filter) before the server crafts.
