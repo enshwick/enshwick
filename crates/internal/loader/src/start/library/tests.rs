@@ -309,9 +309,21 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         ..crate::settings::Settings::default()
     });
     crate::log::capture();
-    let (found, candidates, others) = libraries(&mods, Run::Dry, &mut |_| {});
+    let mut mapped = Vec::new();
+    let (found, candidates, others) = libraries(&mods, Run::Dry, &mut |file, range| {
+        mapped.push((file.to_owned(), range));
+    });
     let lines = loader_lines();
     crate::log::end_capture();
+
+    // A DLL freed for its exports or ABI still ran while it loaded, so the
+    // code watch needs where it was mapped; only a file that never mapped
+    // has no range.
+    let unmapped: Vec<&str> = mapped
+        .iter()
+        .filter_map(|(file, range)| range.is_none().then_some(file.as_str()))
+        .collect();
+    assert_eq!(unmapped, ["not-pe/not-pe.dll"], "{mapped:?}");
 
     let ids: Vec<&str> = candidates.iter().map(|c| c.id.as_str()).collect();
     assert_eq!(ids, ["fixture.lanterns", "fixture.lockers"], "{lines:#?}");
@@ -463,6 +475,7 @@ fn a_mods_import_never_resolves_from_the_current_directory() {
 
     std::fs::rename(current.join(&dependency), folder.join(&dependency)).unwrap();
     let library = super::load(&imports, "imports", "imports/imports.dll")
+        .0
         .expect("an import beside the mod resolves");
     super::unload(&library);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -476,6 +489,6 @@ fn imports_load_in_this_process() {
     let Some(path) = std::env::var_os(IMPORTS_MOD) else {
         return;
     };
-    let library = super::load(Path::new(&path), "imports", "imports/imports.dll");
+    let (library, _) = super::load(Path::new(&path), "imports", "imports/imports.dll");
     println!("{LOADED}{}", library.is_some());
 }

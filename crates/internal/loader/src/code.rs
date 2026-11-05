@@ -197,11 +197,22 @@ impl Watching {
         unsafe { core::slice::from_raw_parts(self.start as *const u8, self.len) }
     }
 
-    /// Compares the code now and puts what changed down to `by` at `stage`.
-    pub(crate) fn check(&mut self, by: &str, stage: crate::code_watch::Stage) {
+    /// Compares the code now and puts what changed at `stage` down to `by`
+    /// where the change jumps into `image`, `by`'s first byte and end, and
+    /// to another program elsewhere.
+    pub(crate) fn check(
+        &mut self,
+        by: &str,
+        image: Option<(usize, usize)>,
+        stage: crate::code_watch::Stage,
+    ) {
+        use crate::code_watch::reaches;
         let before = self.watch.changes().len();
         let now = self.now();
-        if self.watch.check(now, by, stage) > 0 {
+        let made = |offset, len| {
+            image.is_some_and(|image| reaches(now, self.start, (offset, len), image, code_at))
+        };
+        if self.watch.check(now, by, stage, made) > 0 {
             self.log_from(before);
         }
     }
@@ -222,11 +233,12 @@ impl Watching {
         for change in &self.watch.changes()[first..] {
             crate::log!(
                 WARN,
-                "{} changed game code at game+{:#x}, {} bytes, outside the API {}",
+                "{} changed game code at game+{:#x}, {} bytes, outside the API{}{}",
                 change.who(),
                 self.rva + change.offset,
                 change.len,
-                change.stage.describe()
+                if change.when().is_some() { " " } else { "" },
+                change.when().map_or("", crate::code_watch::Stage::describe)
             );
         }
     }
@@ -247,6 +259,13 @@ pub(crate) fn entry_rva(base: u64) -> Option<usize> {
     let pe = word(0x3c)?;
     // `AddressOfEntryPoint`, 16 bytes into the optional header.
     word(pe + 24 + 16)
+}
+
+/// The first [`BRANCH_BYTES`](crate::code_watch::BRANCH_BYTES) bytes at
+/// `at`, for following a jump; `None` unless all of them read, even while
+/// another program's thread changes the pages.
+fn code_at(at: usize) -> Option<[u8; crate::code_watch::BRANCH_BYTES]> {
+    crate::pages::read(at)
 }
 
 /// The game's `.text` as the executable on disk holds it, relocated to

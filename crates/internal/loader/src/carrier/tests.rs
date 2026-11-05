@@ -145,3 +145,78 @@ fn an_inbox_goes_back_emptied_only_to_its_own_session() {
         .map(|s| (s.inbox.bytes.len(), s.inbox.bytes.capacity() >= 100));
     assert_eq!(kept, Some((0, true)));
 }
+
+/// The packet size the fake session answers, and how often the fake game
+/// was asked for limits, sockets and their end.
+static PACKET: AtomicU32 = AtomicU32::new(0);
+static LIMITS: AtomicU32 = AtomicU32::new(0);
+static CREATES: AtomicU32 = AtomicU32::new(0);
+static DESTROYS: AtomicU32 = AtomicU32::new(0);
+
+unsafe extern "system" fn fake_limit(_: usize, _: u8) -> u32 {
+    LIMITS.fetch_add(1, Ordering::Relaxed);
+    PACKET.load(Ordering::Relaxed)
+}
+
+unsafe extern "system" fn fake_create(_: usize, _: *const game::Descriptor) -> usize {
+    CREATES.fetch_add(1, Ordering::Relaxed);
+    0
+}
+
+unsafe extern "system" fn fake_destroy(_: usize, _: usize) {
+    DESTROYS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Runs `members` for one player's machine 2, hosted by machine 1, at
+/// `now` and again well past [`OPEN_AGAIN`].
+fn members_twice(packet: u32) -> State {
+    PACKET.store(packet, Ordering::Relaxed);
+    for counter in [&LIMITS, &CREATES, &DESTROYS] {
+        counter.store(0, Ordering::Relaxed);
+    }
+    let game = Game::for_test(fake_create, fake_destroy, fake_limit);
+    let host: [u32; 2] = [1, 0];
+    let session = host.as_ptr().expose_provenance();
+    let mut slot = None;
+    let state = fresh(&mut slot, session);
+    let now = Instant::now();
+    members(&game, session, state, &[(7, 2)], now);
+    members(&game, session, state, &[(7, 2)], now + 2 * OPEN_AGAIN);
+    slot.expect("members keeps the state")
+}
+
+#[test]
+fn a_session_whose_packets_hold_no_message_gets_no_socket_and_no_retry() {
+    let _alone = alone();
+    let state = members_twice(0);
+    assert!(state.off);
+    assert_eq!(LIMITS.load(Ordering::Relaxed), 3, "asked once, each mode");
+    assert_eq!(CREATES.load(Ordering::Relaxed), 0);
+    assert_eq!(DESTROYS.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn a_socket_the_session_did_not_make_is_tried_again_later() {
+    let _alone = alone();
+    crate::log::capture();
+    let state = members_twice(1200);
+    let sized = crate::log::captured()
+        .into_iter()
+        .filter(|(_, _, line)| line.contains("bytes a packet"))
+        .count();
+    crate::log::end_capture();
+    assert_eq!(sized, 0, "no packet size line for a socket never made");
+    assert!(!state.off);
+    assert_eq!(CREATES.load(Ordering::Relaxed), 2);
+    assert_eq!(DESTROYS.load(Ordering::Relaxed), 0);
+    assert!(state.peers.is_empty() && state.tried.contains_key(&7));
+}
+
+#[test]
+fn a_session_turned_off_is_on_again_after_the_game_ends() {
+    let _alone = alone();
+    *CARRIER.server.relock() = Some(members_twice(0));
+    forget();
+    let server = CARRIER.server.relock();
+    assert_eq!(server.as_ref().map(|s| s.off), Some(false));
+}

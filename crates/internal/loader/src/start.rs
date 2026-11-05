@@ -117,9 +117,9 @@ pub(crate) fn start(
         return;
     };
     let mut watching = Watching::start(game.base);
-    let (libraries, candidates, others) = libraries(&mods_dir, Run::Game, &mut |file| {
+    let (libraries, candidates, others) = libraries(&mods_dir, Run::Game, &mut |file, image| {
         if let Some(w) = watching.as_mut() {
-            w.check(file, Stage::Load);
+            w.check(file, image, Stage::Load);
         }
     });
     let folders: Vec<(String, String, String)> = libraries
@@ -136,7 +136,7 @@ pub(crate) fn start(
     let plan = resolve::resolve(&candidates);
     skip(&libraries, &plan);
     if let Some(w) = watching.as_mut() {
-        w.check("", Stage::Skip);
+        w.check("", None, Stage::Skip);
     }
     let side = game.side;
     let loader = Loader {
@@ -317,7 +317,7 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
 fn arm_watched(loader: &Loader, frame: Option<FrameSlot>, watching: Option<&mut Watching>) {
     match watching {
         Some(w) => {
-            w.check("", Stage::BeforeArming);
+            w.check("", None, Stage::BeforeArming);
             arm(loader, frame);
             w.absorb();
         }
@@ -342,7 +342,7 @@ fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Wat
             (library.init)(&raw const host::API, host::handle(ModIndex::new(index)))
         });
         if let Some(w) = watching.as_deref_mut() {
-            w.check(&record.id, Stage::Init);
+            w.check(&record.id, library.range, Stage::Init);
         }
         if status.is_ok() {
             crate::log!(INFO, "{} {} initialised", record.id, record.version);
@@ -362,7 +362,7 @@ fn ready(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching
             // static host table after the mod's init succeeded.
             unsafe { (library.ready)(&raw const host::API, host::handle(ModIndex::new(index))) };
             if let Some(w) = watching.as_deref_mut() {
-                w.check(&loader.mods[index].id, Stage::Ready);
+                w.check(&loader.mods[index].id, library.range, Stage::Ready);
             }
         }
     }

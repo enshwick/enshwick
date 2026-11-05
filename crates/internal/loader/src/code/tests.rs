@@ -268,3 +268,29 @@ fn only_workshops_past_the_limit_get_full_lists() {
     assert_eq!(lists[&7], [0x10, 0x30, 0x40]);
     assert!(full_lists(&registry[..0x30], layout, 2).is_none());
 }
+
+#[test]
+fn a_jump_is_read_only_where_all_its_bytes_read() {
+    use crate::code_watch::BRANCH_BYTES;
+    const PAGE: usize = 4096;
+    let page = crate::pages::allocate(None, PAGE).expect("a fresh page");
+    let last = page.as_ptr().expose_provenance() + PAGE - BRANCH_BYTES;
+    let jump = [0xE9, 1, 2, 3, 4];
+    // SAFETY: `last` and the `BRANCH_BYTES` after it lie in the read-write
+    // page just committed.
+    unsafe { crate::memory::write_bytes(last, 0, &jump) };
+    let read = code_at(last).expect("the page's last bytes read");
+    assert_eq!(read[..jump.len()], jump);
+    assert_eq!(code_at(last + 1), None, "past the page");
+    assert_eq!(code_at(0), None);
+    // SAFETY: `page` is the test's own allocation, released once.
+    let released = unsafe {
+        windows_sys::Win32::System::Memory::VirtualFree(
+            page.as_ptr().cast(),
+            0,
+            windows_sys::Win32::System::Memory::MEM_RELEASE,
+        )
+    };
+    assert_ne!(released, 0);
+    assert_eq!(code_at(last), None, "released");
+}

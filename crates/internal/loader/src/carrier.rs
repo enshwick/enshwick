@@ -36,7 +36,7 @@ mod game;
 #[cfg(test)]
 mod tests;
 
-use game::{Game, Taken};
+use game::{Game, Taken, Unopened};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -153,6 +153,8 @@ struct State {
     peers: FxHashMap<u64, Peer>,
     /// Peers whose socket did not open, with when it was last tried.
     tried: FxHashMap<u64, Instant>,
+    /// The session's packets hold no message: no socket opens on it.
+    off: bool,
     steps: u32,
     inbox: Inbox,
 }
@@ -540,6 +542,9 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
     state
         .tried
         .retain(|key, _| machines.iter().any(|&(k, _)| k == *key));
+    if state.off {
+        return;
+    }
     for &(key, machine) in machines {
         let due = state
             .tried
@@ -549,13 +554,17 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
             continue;
         }
         match game.open_peer(session, game.machine_kind(), machine, next_epoch(), now) {
-            Some(peer) => {
+            Ok(peer) => {
                 crate::log!(INFO, "own channel: socket open for {key:016x}");
                 state.tried.remove(&key);
                 state.peers.insert(key, peer);
             }
-            None => {
+            Err(Unopened::Socket) => {
                 state.tried.insert(key, now);
+            }
+            Err(Unopened::Session) => {
+                state.off = true;
+                return;
             }
         }
     }
@@ -668,15 +677,19 @@ fn pump_client(
         .tried
         .get(&SERVER)
         .is_none_or(|&at| now.saturating_duration_since(at) >= OPEN_AGAIN);
-    if !state.peers.contains_key(&SERVER) && due {
+    if !state.off && !state.peers.contains_key(&SERVER) && due {
         state.tried.insert(SERVER, now);
-        if let Some(kind) = game.local_machine_kind()
-            && let Some(peer) = game.open_peer(session, kind, 0, next_epoch(), now)
-        {
-            crate::log!(INFO, "own channel: socket open to the server");
-            state.peers.insert(SERVER, peer);
-            CARRIER.client_open.store(true, Ordering::Release);
-            change = Some(Change::Opened);
+        if let Some(kind) = game.local_machine_kind() {
+            match game.open_peer(session, kind, 0, next_epoch(), now) {
+                Ok(peer) => {
+                    crate::log!(INFO, "own channel: socket open to the server");
+                    state.peers.insert(SERVER, peer);
+                    CARRIER.client_open.store(true, Ordering::Release);
+                    change = Some(Change::Opened);
+                }
+                Err(Unopened::Session) => state.off = true,
+                Err(Unopened::Socket) => {}
+            }
         }
     }
     let State { peers, inbox, .. } = state;
@@ -720,6 +733,10 @@ fn give_back(side: &Mutex<Option<State>>, session: usize, mut inbox: Inbox) {
 /// each other, when the client leaves its server or a hosted game ends.
 pub(crate) fn forget() {
     *CARRIER.client.relock() = None;
+    // The next session may reuse this one's address, which `fresh` keys on.
+    if let Some(server) = CARRIER.server.relock().as_mut() {
+        server.off = false;
+    }
     CARRIER.client_open.store(false, Ordering::Release);
     CARRIER.server_waiting.store(false, Ordering::Release);
     CARRIER.client_waiting.store(false, Ordering::Release);
@@ -751,6 +768,7 @@ fn fresh(guard: &mut Option<State>, session: usize) -> &mut State {
         session,
         peers: FxHashMap::default(),
         tried: FxHashMap::default(),
+        off: false,
         steps: 0,
         inbox: Inbox::default(),
     })

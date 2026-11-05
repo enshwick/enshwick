@@ -111,10 +111,15 @@ pub(crate) enum Blame {
     Callback(Option<usize>, usize, &'static str),
     /// A mod's code was on the stack: the range and the frame.
     Stack(usize, usize),
+    /// It faulted in the game under the loader's code, with no mod's on the
+    /// stack: the loader's range, the frame and its return address. Not
+    /// blamed on the loader, since its pass-through detours sit under most
+    /// game code.
+    Under(usize, usize, usize),
     /// It faulted in the loader, with no mod's callback running or code on
     /// the stack.
     Loader(usize),
-    /// No mod's code anywhere near it.
+    /// Neither a mod's code nor the loader's anywhere near it.
     Game,
 }
 
@@ -150,10 +155,14 @@ pub(crate) fn blame(
     if let Some((index, frame)) = on_stack {
         return Blame::Stack(index, frame);
     }
-    match at_range {
-        Some(index) => Blame::Loader(index),
-        None => Blame::Game,
+    if let Some(index) = at_range {
+        return Blame::Loader(index);
     }
+    frames
+        .iter()
+        .enumerate()
+        .find_map(|(frame, &address)| range_of(address).map(|i| Blame::Under(i, frame, address)))
+        .unwrap_or(Blame::Game)
 }
 
 /// A line built without allocation.
@@ -286,12 +295,20 @@ pub(crate) fn describe(
                 .text(b": its code is on the stack, frame ")
                 .dec(frame as u64, 1);
         }
+        Blame::Under(index, frame, address) => {
+            let range = &ranges[index];
+            line.text(b", in the game, called from ")
+                .text(range.name())
+                .text(b": frame ")
+                .dec(frame as u64, 1);
+            offset(line, range, address);
+        }
         Blame::Loader(index) => {
             line.text(b", in the loader");
             offset(line, &ranges[index], at);
         }
         Blame::Game => {
-            line.text(b", in the game: no mod's code on the stack");
+            line.text(b", in the game: no mod's or loader's code on the stack");
         }
     }
     if let Some((kind, address)) = access {

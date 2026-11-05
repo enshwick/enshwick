@@ -87,6 +87,17 @@ impl CodeChange {
             &self.by
         }
     }
+
+    /// When, in words fit for [`who`](Self::who); `None` for another
+    /// program's change in a mod's own stage, which would read as that
+    /// program's own load, init or ready.
+    #[must_use]
+    pub fn when(&self) -> Option<Stage> {
+        match self.stage {
+            Stage::Load | Stage::Init | Stage::Ready if self.by.is_empty() => None,
+            stage => Some(stage),
+        }
+    }
 }
 
 /// The ranges where `old` and `new` differ, as offset and length; ranges
@@ -165,16 +176,24 @@ impl Watch {
             ignored: ignored.to_vec(),
             changes: Vec::new(),
         };
-        watch.note(now, &ranges, "", Stage::BeforeStart);
+        watch.note(now, &ranges, "", Stage::BeforeStart, |_, _| false);
         Some(watch)
     }
 
-    /// Compares the code `now` with the copy and puts each new change down to
-    /// `by` at `stage`; the number of changes noted.
-    pub fn check(&mut self, now: &[u8], by: &str, stage: Stage) -> usize {
+    /// Compares the code `now` with the copy and notes each new change at
+    /// `stage`: put down to `by` when `made` says `by` made the change at that
+    /// offset and length, else to another program, since another program's
+    /// thread may write at any time; the number of changes noted.
+    pub fn check(
+        &mut self,
+        now: &[u8],
+        by: &str,
+        stage: Stage,
+        made: impl Fn(usize, usize) -> bool,
+    ) -> usize {
         let before = self.changes.len();
         let ranges = diff(&self.copy, now);
-        self.note(now, &ranges, by, stage);
+        self.note(now, &ranges, by, stage, made);
         self.changes.len() - before
     }
 
@@ -198,7 +217,14 @@ impl Watch {
         self.changes
     }
 
-    fn note(&mut self, now: &[u8], ranges: &[(usize, usize)], by: &str, stage: Stage) {
+    fn note(
+        &mut self,
+        now: &[u8],
+        ranges: &[(usize, usize)],
+        by: &str,
+        stage: Stage,
+        made: impl Fn(usize, usize) -> bool,
+    ) {
         for &(offset, len) in ranges {
             let parts: Vec<(usize, usize)> = outside(offset, len, &self.ignored)
                 .into_iter()
@@ -218,7 +244,11 @@ impl Watch {
                 self.changes.push(CodeChange {
                     offset,
                     len,
-                    by: by.to_owned(),
+                    by: if made(offset, len) {
+                        by.to_owned()
+                    } else {
+                        String::new()
+                    },
                     stage,
                 });
             }
@@ -242,6 +272,97 @@ fn outside(offset: usize, len: usize, ignored: &[(usize, usize)]) -> Vec<(usize,
             .collect();
     }
     parts.into_iter().map(|(a, b)| (a, b - a)).collect()
+}
+
+/// Jumps followed from a change towards the code of whoever made it.
+const HOPS: usize = 3;
+/// Bytes a jump may start before the first changed byte, when its opcode
+/// equals the byte it replaced.
+const LEAD: usize = 2;
+/// The bytes [`branch`] looks at, at most.
+pub const BRANCH_BYTES: usize = 16;
+
+/// Where the jump at the start of `code`, which lies at `address`, sends
+/// control; `None` when it is no jump.
+///
+/// The jumps are `jmp` or `call` rel32, `jmp [rip+rel32]` to the address
+/// `cell` reads in its cell, and `mov rax` or `mov r11` of an address then
+/// a jump to that register.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::code_watch::branch;
+///
+/// assert_eq!(branch(&[0xE9, 0x10, 0, 0, 0], 0x1000, |_| None), Some(0x1015));
+/// assert_eq!(branch(&[0x90], 0x1000, |_| None), None);
+/// ```
+#[must_use]
+pub fn branch(code: &[u8], address: usize, cell: impl Fn(usize) -> Option<usize>) -> Option<usize> {
+    let relative = |at: usize, len: usize| {
+        let bytes: [u8; 4] = code.get(at..at + 4)?.try_into().ok()?;
+        let delta = isize::try_from(i32::from_le_bytes(bytes)).ok()?;
+        address.checked_add(len)?.checked_add_signed(delta)
+    };
+    let absolute = |tail: &[u8]| {
+        (code.get(10..10 + tail.len())? == tail).then_some(())?;
+        let bytes: [u8; 8] = code.get(2..10)?.try_into().ok()?;
+        usize::try_from(u64::from_le_bytes(bytes)).ok()
+    };
+    match code {
+        [0xE8 | 0xE9, ..] => relative(1, 5),
+        [0xFF, 0x25, ..] => cell(relative(2, 6)?),
+        [0x48, 0xB8, ..] => absolute(&[0xFF, 0xE0]),
+        [0x49, 0xBB, ..] => absolute(&[0x41, 0xFF, 0xE3]),
+        _ => None,
+    }
+}
+
+/// Whether the change of `len` bytes at `offset` of `now`, the code mapped at
+/// `text`, jumps into `image` (its first byte and end): directly, or through
+/// up to [`HOPS`] more jumps in code `read` answers [`BRANCH_BYTES`] of.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::code_watch::reaches;
+///
+/// let mut now = vec![0x90; 32];
+/// now[8..13].copy_from_slice(&[0xE9, 0x00, 0x10, 0, 0]);
+/// assert!(reaches(&now, 0x1000, (8, 5), (0x2000, 0x3000), |_| None));
+/// assert!(!reaches(&now, 0x1000, (8, 5), (0x4000, 0x5000), |_| None));
+/// ```
+#[must_use]
+pub fn reaches(
+    now: &[u8],
+    text: usize,
+    (offset, len): (usize, usize),
+    image: (usize, usize),
+    read: impl Fn(usize) -> Option<[u8; BRANCH_BYTES]>,
+) -> bool {
+    let inside = |at: usize| (image.0..image.1).contains(&at);
+    let cell = |at: usize| {
+        let bytes: [u8; 8] = read(at)?.get(..8)?.try_into().ok()?;
+        usize::try_from(u64::from_le_bytes(bytes)).ok()
+    };
+    let follow = |mut to: usize| {
+        for _ in 0..HOPS {
+            if inside(to) {
+                return true;
+            }
+            match read(to).and_then(|code| branch(&code, to, cell)) {
+                Some(next) => to = next,
+                None => return false,
+            }
+        }
+        inside(to)
+    };
+    (offset.saturating_sub(LEAD)..offset + len).any(|at| {
+        now.get(at..)
+            .zip(text.checked_add(at))
+            .and_then(|(code, address)| branch(code, address, cell))
+            .is_some_and(follow)
+    })
 }
 
 /// Moves the 64-bit addresses in a section's bytes as Windows does for an
@@ -315,13 +436,16 @@ pub fn report(changes: &[CodeChange], place: impl Fn(usize) -> String) -> Vec<St
                     } else {
                         change.by.clone()
                     };
-                    crate::texts::fill(
-                        "watch.change",
-                        &[
-                            ("who", &who),
-                            ("when", &crate::texts::fill(change.stage.key(), &[])),
-                        ],
-                    )
+                    match change.when() {
+                        Some(stage) => crate::texts::fill(
+                            "watch.change",
+                            &[
+                                ("who", &who),
+                                ("when", &crate::texts::fill(stage.key(), &[])),
+                            ],
+                        ),
+                        None => who,
+                    }
                 })
                 .collect();
             crate::texts::fill(
@@ -349,10 +473,10 @@ mod tests {
         let mut now = code(3 * CHUNK);
         let mut watch = Watch::new(&now, &[]);
         now[100..105].copy_from_slice(&[0xE9; 5]);
-        assert_eq!(watch.check(&now, "speed.dll", Stage::Load), 1);
-        assert_eq!(watch.check(&now, "other.dll", Stage::Load), 0);
+        assert_eq!(watch.check(&now, "speed.dll", Stage::Load, |_, _| true), 1);
+        assert_eq!(watch.check(&now, "other.dll", Stage::Load, |_, _| true), 0);
         now[2 * CHUNK + 7] ^= 0xFF;
-        assert_eq!(watch.check(&now, "you.mod", Stage::Init), 1);
+        assert_eq!(watch.check(&now, "you.mod", Stage::Init, |_, _| true), 1);
         assert_eq!(
             watch.changes(),
             [
@@ -373,12 +497,66 @@ mod tests {
     }
 
     #[test]
+    fn a_change_that_leads_nowhere_near_the_loading_mod_is_another_programs() {
+        let mut now = code(CHUNK);
+        let mut watch = Watch::new(&now, &[]);
+        let text = 0x1000;
+        let image = (0x9000, 0xa000);
+        // Into the mod through a relay outside the game's code, as a hook
+        // library writes it: `jmp rel32` to `jmp [rip+0]` and the address.
+        let relay = 0x5000;
+        now[100..105].copy_from_slice(&[0xE9, 0x97, 0x3F, 0, 0]);
+        // A byte another program flipped at the same time.
+        now[600] ^= 0xFF;
+        let read = |at: usize| {
+            let mut code = [0xCC; BRANCH_BYTES];
+            if at == relay {
+                code[..6].copy_from_slice(&[0xFF, 0x25, 0, 0, 0, 0]);
+            } else if at == relay + 6 {
+                code[..8].copy_from_slice(&0x9100u64.to_le_bytes());
+            } else {
+                return None;
+            }
+            Some(code)
+        };
+        assert!(reaches(&now, text, (100, 5), image, read));
+        let made = |offset, len| reaches(&now, text, (offset, len), image, read);
+        assert_eq!(watch.check(&now, "sockel.dll", Stage::Load, made), 2);
+        let who: Vec<&str> = watch.changes().iter().map(CodeChange::who).collect();
+        assert_eq!(who, ["sockel.dll", "another program"]);
+    }
+
+    #[test]
+    fn each_jump_form_leads_where_it_says() {
+        let at = 0x1000;
+        assert_eq!(
+            branch(&[0xE8, 0xFB, 0xFF, 0xFF, 0xFF], at, |_| None),
+            Some(at)
+        );
+        assert_eq!(
+            branch(&[0xFF, 0x25, 0, 0, 0, 0], at, |cell| Some(cell + 1)),
+            Some(at + 7)
+        );
+        let mut mov = vec![0x48, 0xB8];
+        mov.extend(0x7777u64.to_le_bytes());
+        mov.extend([0xFF, 0xE0]);
+        assert_eq!(branch(&mov, at, |_| None), Some(0x7777));
+        mov[11] = 0xE1;
+        assert_eq!(
+            branch(&mov, at, |_| None),
+            None,
+            "jmp rcx is no jump to rax"
+        );
+        assert_eq!(branch(&[0xE9, 0, 0], at, |_| None), None, "cut short");
+    }
+
+    #[test]
     fn absorbed_changes_are_never_put_down_to_a_mod() {
         let mut now = code(CHUNK);
         let mut watch = Watch::new(&now, &[]);
         now[10] = 0xCC;
         watch.absorb(&now);
-        assert_eq!(watch.check(&now, "you.mod", Stage::Ready), 0);
+        assert_eq!(watch.check(&now, "you.mod", Stage::Ready, |_, _| true), 0);
         assert!(watch.into_changes().is_empty());
     }
 
@@ -438,7 +616,7 @@ mod tests {
         assert!(watch.changes().is_empty());
         now[100..114].copy_from_slice(&disk[100..114]);
         now[120] ^= 1;
-        assert_eq!(watch.check(&now, "you.mod", Stage::Ready), 1);
+        assert_eq!(watch.check(&now, "you.mod", Stage::Ready, |_, _| true), 1);
         assert_eq!(
             watch.changes(),
             [CodeChange {
@@ -494,5 +672,31 @@ mod tests {
                 "game code at game+0x40, 14 bytes: changed outside the API by b.dll while it loaded, then by you.mod in its init",
             ]
         );
+    }
+
+    #[test]
+    fn another_programs_change_never_borrows_the_running_mods_stage() {
+        let change = |stage| CodeChange {
+            offset: 0x10,
+            len: 5,
+            by: String::new(),
+            stage,
+        };
+        for stage in [Stage::Load, Stage::Init, Stage::Ready] {
+            assert_eq!(change(stage).when(), None, "{stage:?}");
+        }
+        assert_eq!(
+            report(&[change(Stage::Init)], |at| format!("game+{at:#x}")),
+            ["game code at game+0x10, 5 bytes: changed outside the API by another program"]
+        );
+        assert_eq!(
+            change(Stage::BeforeArming).when(),
+            Some(Stage::BeforeArming)
+        );
+        let by_mod = CodeChange {
+            by: "you.mod".into(),
+            ..change(Stage::Init)
+        };
+        assert_eq!(by_mod.when(), Some(Stage::Init));
     }
 }
