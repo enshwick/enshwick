@@ -63,9 +63,10 @@ Each entry names the pull request that made the change.
 - The fake host refuses subscriptions to events the loader never raises, as
   the loader does (#936).
 - A game build without its own table where the engine routes and the
-  newest table's patterns find every entry runs as a known build: the log
+  newest table's patterns find every entry runs without a warning: the log
   says so at info, with no E1005 and no player message; E1005 stays for a
-  build where entries are missing (#946).
+  build where entries are missing. Mods still see such a build's table as
+  carried by patterns (#946).
 - Bases past 16 needs the client's create, destroy, size and base id list
   only on a client, so a server table needs no rows for them, and sizes a
   create an engine route found by the image's function table (#946).

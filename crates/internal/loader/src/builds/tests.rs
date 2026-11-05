@@ -679,6 +679,31 @@ fn a_build_without_a_table_names_itself_and_the_carried_table() {
     assert_eq!(embedded(Side::SERVER).reason("npc.nope", &absent), absent);
 }
 
+/// No server table holds a row bases past 16 reads only on a client, so a
+/// server build carried from one never goes missing on an entry no server
+/// feature reads.
+#[test]
+fn no_server_table_holds_a_client_only_bases_row() {
+    use crate::pinned::bases;
+    let client_only = [
+        bases::BASE_IDS.id(),
+        bases::CLIENT_CREATE.id(),
+        bases::CLIENT_DESTROY.id(),
+        bases::CLIENT_SIZE.id(),
+        bases::RECORD_BASE_ID.id(),
+    ];
+    for table in load().iter().filter(|t| t.side() == tables::Side::Server) {
+        let resolved = table.resolve();
+        for id in client_only {
+            assert!(
+                resolved.symbol(id).is_none() && resolved.constant(id).is_none(),
+                "{}: {id}",
+                table.name()
+            );
+        }
+    }
+}
+
 /// A build without its own table logs at info when nothing is missing and
 /// names the carried table, and warns with its error code only when entries
 /// are missing.
@@ -713,6 +738,23 @@ fn a_carried_build_warns_only_when_entries_are_missing() {
         "{line}"
     );
     assert_eq!(embedded(Side::SERVER).start_line(unknown).0, Level::INFO);
+    let kept = Table::parse(
+        "name = \"1.0 server (1)\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n[constants]\n\"g.slot\" = { value = 16, carried = false }\n",
+    )
+    .unwrap();
+    let uncarried = KnownBuild {
+        name: kept.name().to_owned(),
+        kind: Kind::Fallback,
+        carried: Some(kept.name().to_owned()),
+        table: kept.fall_back(&code, 0x1000, |_| None),
+        lacking: OnceLock::new(),
+    };
+    assert!(uncarried.missing().is_empty());
+    assert_eq!(
+        uncarried.start_line(unknown).0,
+        Level::WARN,
+        "a row kept from carrying is off too"
+    );
 }
 
 /// Every symbol with a `.bytes` constant reads those bytes in the client

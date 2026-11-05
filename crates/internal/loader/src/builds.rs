@@ -204,14 +204,32 @@ impl KnownBuild {
 
     /// The start's line about this build, run as `fingerprint`, once the
     /// engine routes ran: a build without its own table that misses nothing
-    /// runs as a known build, and only one that misses entries warns.
+    /// and keeps no row from carrying logs at info, and only one that lacks
+    /// entries warns.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Level, Side};
+    /// use enshwick_gamedata::Fingerprint;
+    ///
+    /// use enshwick_loader::builds::{load, select};
+    ///
+    /// let unknown = Fingerprint::new([0xee; 16], 1);
+    /// let code = [0u8; 64];
+    /// let build = select(&load(), Side::SERVER, unknown, Some((&code, 0x1000)), |_| None)
+    ///     .ok_or("no server table")?;
+    /// let (level, line) = build.start_line(unknown);
+    /// assert_eq!(level, Level::WARN, "{line}");
+    /// # Ok::<(), &str>(())
+    /// ```
     #[must_use]
     pub fn start_line(&self, fingerprint: Fingerprint) -> (enshwick::abi::Level, String) {
         use enshwick::abi::Level;
         if self.kind == Kind::Exact {
             return (Level::INFO, format!("game: {}", self.name));
         }
-        if self.missing().is_empty() {
+        if self.missing().is_empty() && self.table.uncarried().is_empty() {
             return (
                 Level::INFO,
                 format!(

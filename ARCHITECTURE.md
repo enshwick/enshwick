@@ -75,7 +75,7 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
   the cross-check of a routed entry. On a build without a table, the newest
   table of the same side carries over by its patterns, and only what neither a
   route nor a pattern finds turns off; a build where nothing is missing runs
-  as a known build.
+  without a warning.
 - `crates/enshwick-gamedata/anchors/classes.toml` classes every table entry:
   found from the engine, or a pattern because research found no route, each
   with its reason; a test fails on an entry without one.
