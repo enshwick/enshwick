@@ -158,6 +158,21 @@ fn a_number_may_name_a_setting_of_pack_toml_of_its_type_and_no_other() {
 }
 
 #[test]
+fn an_item_s_consumed_key_binds_the_kind_that_follows_an_allowed_use() {
+    let items =
+        format!("[[item]]\nid = \"tonic\"\nlike = \"{CHEST}\"\non = {{ consumed = \"count\" }}\n");
+    let files = PackFiles::new()
+        .with(ITEMS_FILE, items)
+        .with(SCRIPT_MAIN, "function count() end");
+    let pack = Pack::parse_with("you.tonics", &files, None).unwrap();
+    let binding = &pack.item_bindings()[0];
+    assert_eq!(
+        (binding.kind, binding.function.as_str()),
+        ("Consumed", "count")
+    );
+}
+
+#[test]
 fn an_item_s_on_table_needs_luau_names_and_a_main_luau() {
     let items = format!(
         "[[item]]\nid = \"tonic\"\nlike = \"{CHEST}\"\non = {{ consume = \"2drink\", equip = \"wear\" }}\n"

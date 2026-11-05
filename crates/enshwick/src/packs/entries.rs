@@ -88,6 +88,8 @@ pub(super) struct OnEntry {
     pub(super) pickup: Option<String>,
     /// Runs after a player placed the item.
     pub(super) place: Option<String>,
+    /// Runs once every filter allowed a player's use of the item.
+    pub(super) consumed: Option<String>,
 }
 
 impl OnEntry {
@@ -101,6 +103,7 @@ impl OnEntry {
             ("Unequip", &self.unequip),
             ("Pickup", &self.pickup),
             ("Place", &self.place),
+            ("Consumed", &self.consumed),
         ]
         .into_iter()
         .filter_map(|(kind, function)| Some((kind, function.as_deref()?)))

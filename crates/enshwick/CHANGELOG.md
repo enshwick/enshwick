@@ -55,8 +55,8 @@ Each entry names the pull request that made the change.
   `SpawnRequest::DO_NOT_SAVE`, ABI 11.6 (#936).
 - `items::Kind::Consumed`: every item filter hears a use once all of them
   allowed it, the place to count uses or reward one. `ItemAction::CONSUMED`,
-  ABI 11.7; the fake host's `item_action` follows an allowed use with it
-  (#945).
+  ABI 11.7; the fake host's `item_action` follows an allowed use with it;
+  a pack binds it with the `consumed` key of an item's `on` table (#945).
 
 ### Changed
 

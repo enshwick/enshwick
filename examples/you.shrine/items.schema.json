@@ -323,6 +323,13 @@
             "null"
           ]
         },
+        "consumed": {
+          "description": "Runs once every filter allowed a player's use of the item.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "equip": {
           "description": "Runs when a player equips the item; `false` refuses it.",
           "type": [

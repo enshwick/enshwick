@@ -69,7 +69,7 @@ function keep_tonic()
 end
 ```
 
-`pack check` reports a key other than the six kinds, a value that is no
+`pack check` reports a key other than the seven kinds, a value that is no
 Luau name, and an `on` table in a pack without a `main.luau`. A name that
 `main.luau` leaves without a global function stops the mod at start, with
 the item and the key in the log.
@@ -84,7 +84,7 @@ the item and the key in the log.
 | `Unequip` | `unequip` | A player takes the item off                     | The item stays on                  |
 | `Pickup`  | `pickup`  | After a player picked the item up               | Nothing: the answer is ignored     |
 | `Place`   | `place`   | After a player placed the item as a piece       | Nothing: the answer is ignored     |
-| `Consumed` | none     | After every mod allowed a `Consume`             | Nothing: the answer is ignored     |
+| `Consumed` | `consumed` | After every mod allowed a `Consume`           | Nothing: the answer is ignored     |
 
 A mod that counts uses or rewards one listens to `Consumed`: a `Consume`
 reaches the mods before they all decided, so another mod may still refuse
