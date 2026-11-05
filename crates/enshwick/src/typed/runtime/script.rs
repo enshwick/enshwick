@@ -98,6 +98,11 @@ fn by_place(value: Value, ty: &Ty) -> Result<Value, Error> {
             }
             Ok(Value::Record(fields))
         }
+        // An empty table reads as a list: a record without fields, such as
+        // a base, written `{}`.
+        (Value::List(items), Ty::Record(_)) if items.is_empty() => {
+            by_place(Value::Map(Vec::new()), ty)
+        }
         (Value::List(items), Ty::List(inner)) => items
             .into_iter()
             .enumerate()
@@ -443,6 +448,19 @@ mod tests {
             error.to_string().contains("\"rank\" is no field"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn an_empty_table_reads_as_a_record_without_fields() {
+        assert!(matches!(
+            by_place(Value::List(Vec::new()), Empty::TY),
+            Ok(Value::Record(fields)) if fields.is_empty()
+        ));
+    }
+
+    reflected_struct! {
+        /// A test struct without fields.
+        Empty {}
     }
 
     #[test]

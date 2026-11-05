@@ -380,6 +380,7 @@ pub struct Row {
 
 impl Row {
     /// The row of `T`.
+    #[doc(hidden)]
     #[must_use]
     pub const fn of<T: Named + crate::script::IntoScript + crate::script::FromScript>() -> Self {
         Self {

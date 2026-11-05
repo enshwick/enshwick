@@ -1,5 +1,6 @@
 ---
 source: crates/enshwick-gamedata/src/typed/tests.rs
+assertion_line: 46
 expression: text
 ---
 // Long file: generated, a row per covered type in the table at its end.
@@ -45,7 +46,7 @@ pub use runtime::{
     ResourceType, ShapeError,
 };
 #[doc(hidden)]
-pub use runtime::{check, sample};
+pub use runtime::{Row, check, sample};
 
 runtime::named_table! {
     "LootResource" => LootResource,
