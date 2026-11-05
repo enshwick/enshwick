@@ -124,7 +124,9 @@ A value is a table with the Rust item's field names, `base` for the type it
 derives from. An enum constant is its variant's name, such as `"MagicalFog"`,
 and a constant the item does not name is `{ Other = <name or number> }`. A
 `u64` or `i64` is a string of its decimal digits, a GUID a string, and a
-bitmask a list of its flags' constants. A value read through `enshwick.typed`
+bitmask a list of its flags' constants. An array is a list, its first item at
+index 1, and an optional is its value or nil; inside a list, an absent item
+is `enshwick.resources.none()`, since nil would end the list. A value read through `enshwick.typed`
 goes through the generated Rust item, so a Luau mod reads and writes what a
 Rust mod does, and a type whose shape a game update changed is refused the
 same way.
