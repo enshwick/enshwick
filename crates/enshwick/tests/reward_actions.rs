@@ -72,9 +72,18 @@ mod tests {
         bytes
     }
 
+    static STEP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    /// Ends a server step: the game events raised after it come in the
+    /// next step's delivery.
+    fn step(loader: &Installed) {
+        let step = STEP.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        let _ran = loader.raise::<Ticked>(&TickData::new(step));
+    }
+
     /// The experience the next pass adds for `entity`, with room for 10000.
     fn gained(loader: &Installed, entity: u32) -> u32 {
-        let _ran = loader.raise::<Ticked>(&TickData::new(1));
+        step(loader);
         let mut rows = [Experience {
             entity: Entity(entity),
             level: 1,
@@ -145,27 +154,65 @@ mod tests {
         );
         assert_eq!(gained(&loader, 2), 11, "level 3 gives both");
 
-        let other = event(&[(8, 4), (16, RECIPE + 1)]);
-        assert_eq!(loader.raise_game_event(CRAFT, &other), 1);
-        assert_eq!(
-            loader.raise_game_event(CRAFTED, &event(&[(12, RECIPE + 1)])),
-            1
-        );
+        let ask = |player: u32, recipe: u32, amount: u32| {
+            assert_eq!(
+                loader.raise_game_event(CRAFT, &event(&[(8, player), (16, recipe), (20, amount)])),
+                1
+            );
+        };
+        let made = |recipe: u32, times: usize| {
+            for _ in 0..times {
+                assert_eq!(loader.raise_game_event(CRAFTED, &event(&[(12, recipe)])), 1);
+            }
+        };
+        ask(4, RECIPE + 1, 1);
+        step(&loader);
+        made(RECIPE + 1, 1);
         assert_eq!(gained(&loader, 4), 0, "another recipe gives nothing");
-        assert_eq!(loader.raise_game_event(CRAFTED, &event(&[(12, RECIPE)])), 1);
+        made(RECIPE, 1);
         assert_eq!(
             gained(&loader, 4),
             0,
             "a success nobody asked for gives nothing"
         );
+
+        ask(4, RECIPE, 2);
+        made(RECIPE, 1);
+        step(&loader);
+        made(RECIPE, 3);
         assert_eq!(
-            loader.raise_game_event(CRAFT, &event(&[(8, 4), (16, RECIPE)])),
-            1
+            gained(&loader, 4),
+            200,
+            "each unit of the request in the delivery after it, never one more"
         );
-        assert_eq!(loader.raise_game_event(CRAFTED, &event(&[(12, RECIPE)])), 1);
-        assert_eq!(gained(&loader, 4), 100, "the player who asked gets it");
-        assert_eq!(loader.raise_game_event(CRAFTED, &event(&[(12, RECIPE)])), 1);
-        assert_eq!(gained(&loader, 4), 0, "one request pairs with one success");
+        made(RECIPE, 1);
+        assert_eq!(
+            gained(&loader, 4),
+            0,
+            "a station's own production pays nobody"
+        );
+
+        ask(2, RECIPE, 1);
+        ask(4, RECIPE, 1);
+        step(&loader);
+        made(RECIPE, 2);
+        assert_eq!(
+            (gained(&loader, 2), gained(&loader, 4)),
+            (100, 100),
+            "two players asking in one step get one unit each"
+        );
+
+        ask(2, RECIPE, 1);
+        step(&loader);
+        step(&loader);
+        ask(4, RECIPE, 1);
+        step(&loader);
+        made(RECIPE, 1);
+        assert_eq!(
+            (gained(&loader, 2), gained(&loader, 4)),
+            (0, 100),
+            "a refused request takes no later success"
+        );
 
         assert_eq!(
             loader.raise_game_event(LOOT, &event(&[(8, 4), (12, 50)])),
