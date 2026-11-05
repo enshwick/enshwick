@@ -157,6 +157,8 @@ mod vanilla_items;
 mod vetoes;
 mod voxels;
 mod weather;
+#[cfg(feature = "typed")]
+mod weather_phenomena;
 #[cfg(feature = "unstable")]
 mod world_blocks;
 #[cfg(feature = "unstable")]

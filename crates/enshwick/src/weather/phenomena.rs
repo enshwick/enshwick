@@ -408,7 +408,8 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] after init, without the weather resource on this build, and
-    /// for a phenomenon or layer the game's weather lacks, an id taken, a
+    /// for a phenomenon or layer the game's own weather lacks (a copy of
+    /// another mod's phenomenon is refused), an id taken, a
     /// layer full, a value out of bounds or an effect the game does not
     /// know. A collision with another mod's phenomenon is logged and that
     /// mod's is kept.

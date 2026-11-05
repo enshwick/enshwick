@@ -152,7 +152,7 @@ struct Layout {
     layer_range_count: usize,
     phenomenon_size: usize,
     phenomenon_effect: usize,
-    phenomenon_guid: usize,
+    phenomenon_guid: Option<usize>,
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
@@ -244,7 +244,8 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     .checked_add(field(range, "count")?)?,
                 phenomenon_size: size(phenomenon)?,
                 phenomenon_effect: field(phenomenon, "effect")?,
-                phenomenon_guid: field(phenomenon, "guid")?,
+                // Fronts do without it, all zero.
+                phenomenon_guid: field(phenomenon, "guid"),
             })
         })
         .as_ref()
@@ -435,9 +436,10 @@ pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, Status> {
             // SAFETY: `index` is below the resource's phenomenon count by the
             // check before it, and the resource stays locked; the 16-byte GUID
             // sits at the reflected `guid` field of a phenomenon.
-            (effect, unsafe {
-                read::<[u8; 16]>(at, layout.phenomenon_guid)
-            })
+            let guid = layout
+                .phenomenon_guid
+                .map_or([0; 16], |guid| unsafe { read::<[u8; 16]>(at, guid) });
+            (effect, guid)
         } else {
             (WeatherFront::NONE, [0; 16])
         };
