@@ -35,11 +35,14 @@ jobs:
     # caches that branch builds write to.
     runs-on: ubuntu-26.04
     timeout-minutes: 45
+    # The release itself is made with the app's token.
     permissions:
-      contents: write
+      contents: read
       # The build provenance attestations of the archives.
       id-token: write
       attestations: write
+    env:
+      HAS_VIRUSTOTAL_KEY: ${{ secrets.VIRUSTOTAL_API_KEY != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,6 +74,13 @@ jobs:
             echo "::error title=alpha::v$version is released already; move the crates to the next alpha first"
             exit 1
           fi
+          # The alphas before these releases went to crates.io.
+          crate=$(curl -sS --proto '=https' --retry 3 -A 'enshwick (https://github.com/enshwick)' \
+            -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/enshwick/$version")
+          if [ "$crate" != 404 ]; then
+            echo "::error title=alpha::crates.io answers $crate for enshwick $version; only a version it does not know is new"
+            exit 1
+          fi
           cargo xtask notes --out "$RUNNER_TEMP/notes.md" --known-issues "$KNOWN_ISSUES"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
@@ -80,7 +90,17 @@ jobs:
         with:
           out: ${{ runner.temp }}/alpha
 
+      - name: VirusTotal
+        if: env.HAS_VIRUSTOTAL_KEY == 'true'
+        continue-on-error: true
+        timeout-minutes: 17
+        uses: ./.github/actions/virustotal
+        with:
+          dir: ${{ runner.temp }}/alpha
+          api-key: ${{ secrets.VIRUSTOTAL_API_KEY }}
+
       - name: Build provenance
+        if: inputs.publish
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ runner.temp }}/alpha/*

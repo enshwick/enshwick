@@ -1,0 +1,72 @@
+name: VirusTotal
+description: >-
+  VirusTotal unpacks and scans each archive in a directory; the engines that
+  flag it go to the run's summary and a warning, so a false positive reaches
+  its vendor early. The calling step sets `continue-on-error`: a flag or an
+  outage never turns the run red. The public API takes four requests a minute.
+
+inputs:
+  dir:
+    description: The directory whose `*.zip` archives are scanned.
+    required: true
+  api-key:
+    description: The VirusTotal API key.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Scan
+      shell: bash
+      env:
+        VT_API_KEY: ${{ inputs.api-key }}
+      working-directory: ${{ inputs.dir }}
+      run: |
+        api=https://www.virustotal.com/api/v3
+        # Twenty seconds between retries outlast the per-minute limit.
+        vt() { curl -fsS --proto '=https' --retry 3 --retry-delay 20 -H "x-apikey: $VT_API_KEY" "$@"; }
+        for archive in *.zip; do
+          sha=$(sha256sum "$archive" | cut -d' ' -f1)
+          link="https://www.virustotal.com/gui/file/$sha"
+          # The archive is reproducible: one VirusTotal knows keeps its last analysis.
+          if known=$(vt "$api/files/$sha" 2> /dev/null) &&
+            jq -e '.data.attributes.last_analysis_results | length > 0' <<< "$known" > /dev/null; then
+            verdict=$(jq -c '.data.attributes | {stats: .last_analysis_stats, results: .last_analysis_results}' <<< "$known")
+          else
+            if ! id=$(vt -F "file=@$archive" "$api/files" | jq -er .data.id); then
+              echo "::warning title=VirusTotal::the upload of $archive failed"
+              continue
+            fi
+            status=queued
+            # Fifteen minutes at most; a failed poll counts as not done yet.
+            for _ in $(seq 45); do
+              sleep 20
+              analysis=$(vt "$api/analyses/$id") || continue
+              status=$(jq -r .data.attributes.status <<< "$analysis")
+              [ "$status" = completed ] && break
+            done
+            if [ "$status" != completed ]; then
+              echo "::warning title=VirusTotal::$archive is still $status: $link"
+              continue
+            fi
+            verdict=$(jq -c '.data.attributes | {stats, results}' <<< "$analysis")
+          fi
+          stats=$(jq -r '.stats | "\(.malicious) malicious, \(.suspicious) suspicious, \(.undetected) undetected"' <<< "$verdict")
+          flagged=$(jq -r 'def cell: tostring | gsub("[|]"; "&#124;");
+            .results[] | select(.category == "malicious" or .category == "suspicious")
+            | "| \(.engine_name | cell) | \(.category) | \(.result // "" | cell) |"' <<< "$verdict")
+          {
+            echo "### VirusTotal: $archive"
+            echo
+            echo "$stats: [report]($link)"
+            if [ -n "$flagged" ]; then
+              echo
+              echo "| Engine | Category | Result |"
+              echo "| --- | --- | --- |"
+              echo "$flagged"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$flagged" ]; then
+            echo "::warning title=VirusTotal::$archive: $stats, $link"
+          fi
+        done
