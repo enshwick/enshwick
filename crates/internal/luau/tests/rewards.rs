@@ -66,4 +66,41 @@ mod tests {
         assert_eq!(rows[0].gained, 23, "{:?}", loader.logs());
         let _gone = std::fs::remove_dir_all(&data);
     }
+
+    #[test]
+    fn an_error_in_a_reward_filter_turns_the_mod_off_naming_the_error() {
+        let player = PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot: 0,
+            entity: Entity(2),
+            key: PlayerKey::new(7),
+            permissions: 0,
+            name_len: 0,
+            name: [0; 64],
+        };
+        let data =
+            std::env::temp_dir().join(format!("enshwick-luau-reward-error-{}", std::process::id()));
+        let loader = run(
+            FakeHost::new()
+                .world()
+                .player(player)
+                .data_dir(data.to_str().unwrap())
+                .world_key("world0"),
+            r#"
+            enshwick.rewards.add_reward({ name = "bonus", on = "Join", give = { { Experience = 20 } } })
+            enshwick.rewards.on_reward(function(grant)
+                error(`no reward {grant.reward}`)
+            end)
+            enshwick.on("Ticked", function()
+                enshwick.log.info(`granted {enshwick.rewards.grant(2, "bonus")}`)
+            end)
+            "#,
+        );
+        assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
+        let _ran = loader.raise::<Ticked>(&TickData::new(1));
+        let faults = loader.faults();
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert!(faults[0].contains("no reward bonus"), "{faults:?}");
+        let _gone = std::fs::remove_dir_all(&data);
+    }
 }

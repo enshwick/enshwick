@@ -119,6 +119,8 @@ mod required_names;
 mod resource_types;
 mod resource_values;
 #[cfg(feature = "unstable")]
+mod reward_actions;
+#[cfg(feature = "unstable")]
 mod rewards;
 mod schedule;
 #[cfg(feature = "unstable")]
