@@ -7,11 +7,13 @@ mod tests {
     use std::time::Duration;
 
     use enshwick::abi::{Event, Header, SaveInfo, Status};
+    use enshwick::effects::{Effects, Spawn};
     use enshwick::events::{WorldSaved, WorldSaving};
     use enshwick::world::{World, WorldGuid};
-    use enshwick::{Load, Mod, Off};
+    use enshwick::{Entity, Load, Mod, Off, WorldError};
 
     static WORLD: OnceLock<World> = OnceLock::new();
+    static EFFECTS: OnceLock<Effects> = OnceLock::new();
     static ORDER: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
 
     struct Keeper;
@@ -19,6 +21,7 @@ mod tests {
     impl Mod for Keeper {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLD.set(load.world()?);
+            let _first = EFFECTS.set(load.effects());
             load.on::<WorldSaving>(|()| ORDER.lock().unwrap().push("saving"))?;
             load.on::<WorldSaved>(|()| ORDER.lock().unwrap().push("saved"))?;
             Ok(Self)
@@ -67,5 +70,20 @@ mod tests {
         assert!(loader.saves_held());
         world.hold_saves(false).unwrap();
         assert!(!loader.saves_held());
+
+        let spawned = EFFECTS
+            .get()
+            .unwrap()
+            .spawn([3; 16], [0.0; 3], Spawn::new())
+            .unwrap();
+        world.set_saved(spawned, false).unwrap();
+        assert_eq!(loader.unsaved(), [spawned]);
+        assert_eq!(
+            world.set_saved(Entity(77), false),
+            Err(WorldError::Refused),
+            "a vanilla entity stays in the save"
+        );
+        world.set_saved(spawned, true).unwrap();
+        assert!(loader.unsaved().is_empty());
     }
 }
