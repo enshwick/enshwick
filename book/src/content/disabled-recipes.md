@@ -141,6 +141,19 @@ fn init(_load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+-- Torches come from the mod's own loot, not from crafting.
+enshwick.content.disable({ Output = "Tool_Torch01_T0" })
+enshwick.content.disable({ Workshop = "Craftingstation_Workbench" })
+if not enshwick.content.is_disabled(enshwick.content.guid("you.lockers:locker.recipe")) then
+    enshwick.log.info("lockers are craftable")
+end
+```
+
+A Luau rule is a table, `{ Recipe = name }`, `{ Output = name }` or
+`{ Workshop = name }`, or the text `"Hand"`. A name is a GUID, a content id or
+a debug name, and `is_disabled` takes the recipe's GUID.
+
 The file wins: mods' rules apply first, so a world's `[enable]` takes back
 any recipe a mod disables, and a mod's `enable` takes back only its own
 rules. A name the loader cannot resolve is logged in the mod's log and the

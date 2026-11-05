@@ -89,6 +89,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+if not enshwick.pacing.cap_task_workers({ default = 4, background = 4 }) then
+    enshwick.log.info("the task workers stay as the game sizes them")
+end
+```
+
+A Luau mod names both caps; `TaskWorkers::at_most(4)` is the Rust way to
+give both the same value.
+
 [`SERVER_IDLE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
 [`SERVER_ONLINE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
 [`SERVER_SLOW_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs

@@ -83,7 +83,7 @@ unchanged. A patch that fails, or returns a value that does not fit the type,
 is logged. A game resource patched under its own key is then served
 unchanged; a new resource turns the mod off.
 
-```lua
+```luau
 for _, key in enshwick.resources.resource_keys("keen::BalancingTable") do
     enshwick.resources.serve(key, key, function(table)
         return { damageMod2Handed = table.damageMod2Handed * 2 }

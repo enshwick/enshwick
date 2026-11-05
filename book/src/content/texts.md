@@ -67,6 +67,18 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local texts = enshwick.i18n.texts()
+enshwick.i18n.add_texts(texts, {
+    { "locker.name", "you.lockers:locker.name" },
+    { "locker.label", "you.lockers:locker.label" },
+})
+```
+
+A Luau mod keeps the file as `texts.toml` in its folder, beside
+`main.luau`, and `enshwick.i18n.texts()` reads it. A script names a key by
+its text, since it has no `texts!` constants.
+
 A key's constant is the key in upper case with `.` and `-` as `_`:
 `texts::LOCKER_NAME` for `"locker.name"`. `texts::value` has a constant per
 value name the texts fill in, such as `value::OWNER` for `{owner}`.

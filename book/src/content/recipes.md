@@ -104,6 +104,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+enshwick.content.derive_recipes("my-mod", function(recipe)
+    if string.sub(recipe.debug_name, 1, 6) == "Block_" then
+        return { output = 2, cost = 1 }
+    end
+    return nil
+end)
+```
+
 Each copy has the original's workshop and unlock, unless `workshop` moves
 it; its output count is the original's times `output`, and its ingredient
 counts are the original's times `cost`. The original stays as it is. The
