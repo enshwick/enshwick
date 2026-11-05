@@ -39,9 +39,6 @@ type HitFn = unsafe extern "system" fn(frame: Ptr, out: *mut [u8; 8], mode: u32,
 /// The loader's room for the field object, a label with the field's parts
 /// after it; the build's `ui.text_field_extent` must fit in it.
 pub(super) const FIELD_SIZE: usize = 0x280; // bound, not a game offset: the loader's room
-/// The game's key for a field's kept state among its node's states.
-const STATE_KEY: u64 = 0x64d2_7908_60d9_c7f6;
-
 /// Where the field's kept state holds what the loader reads and writes,
 /// from the build's table, once the field object is known to fit.
 #[derive(Debug, Clone, Copy)]
@@ -49,6 +46,9 @@ pub(super) struct TextLayout {
     /// The kept state's byte that is set while the field has the caret;
     /// the rename dialog clears it on Back to end the typing.
     editing: usize,
+    /// The game's key for the field's kept state among its node's states,
+    /// which changes with each build.
+    key: u64,
 }
 
 impl TextLayout {
@@ -73,7 +73,9 @@ impl TextLayout {
         if editing >= state {
             return Err(Missing::Room(pinned::ui::TEXT_FIELD_EDITING.id()));
         }
-        Ok(Self { editing })
+        let key = pinned::ui::TEXT_FIELD_STATE_KEY.id();
+        let key = lookup(key).ok_or(Missing::Entry(key))?;
+        Ok(Self { editing, key })
     }
 }
 /// The input's answer for Enter.
@@ -245,9 +247,9 @@ impl Engine {
         // `# Safety`.
         unsafe { (fns.input)(field.ptr(), &raw mut answer, hint, 0) };
         // SAFETY: `fns.state` is the game's `ui.text_field_state`, checked in
-        // `TextFields::resolve`, on the field built above, with the game's
-        // own key for the field's state.
-        let state = unsafe { (fns.state)(field.ptr(), STATE_KEY, 1) };
+        // `TextFields::resolve`, on the field built above, with the build's
+        // own key for the field's state, `ui.text_field_state_key`.
+        let state = unsafe { (fns.state)(field.ptr(), fns.layout.key, 1) };
         let state = state.expose_provenance();
         let at = fns.layout.editing;
         let mut editing = state != 0

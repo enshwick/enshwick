@@ -111,9 +111,10 @@ fn each_optional_part_turns_off_alone() {
     assert!(checked > 0, "no client table pins every optional part");
 }
 
-/// Every client table that pins the text field gives its sizes, they fit
-/// the loader's buffer, and a build whose field or kept state moved turns
-/// the text field off instead of letting the game write past the buffer.
+/// Every client table that pins the text field gives its sizes and its
+/// kept state's key, the sizes fit the loader's buffer, a build whose field
+/// or kept state moved turns the text field off instead of letting the game
+/// write past the buffer, and one without the key turns it off too.
 #[test]
 fn the_text_field_s_sizes_come_from_the_table_and_fit_its_buffer() {
     let mut checked = 0;
@@ -135,11 +136,13 @@ fn the_text_field_s_sizes_come_from_the_table_and_fit_its_buffer() {
         let text = pinned::ui::TEXT_FIELD_TEXT.id();
         let state = pinned::ui::TEXT_FIELD_STATE_SIZE.id();
         let editing = pinned::ui::TEXT_FIELD_EDITING.id();
+        let key = pinned::ui::TEXT_FIELD_STATE_KEY.id();
         for (id, value, room, blamed) in [
             (extent, Some(0x1000), true, extent),
             (text, Some(0x1000), true, text),
             (state, Some(0x10), true, editing),
             (extent, None, false, extent),
+            (key, None, false, key),
         ] {
             let read = text_field::TextLayout::read(&changed(id, value));
             let got = match read {

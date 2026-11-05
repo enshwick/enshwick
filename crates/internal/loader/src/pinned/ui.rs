@@ -138,6 +138,7 @@ pub(crate) const TEXT_FIELD_EDITING: Constant = Constant::new("ui.text_field_edi
 pub(crate) const TEXT_FIELD_EXTENT: Constant = Constant::new("ui.text_field_extent");
 pub(crate) const TEXT_FIELD_INPUT: Symbol = Symbol::new("ui.text_field_input");
 pub(crate) const TEXT_FIELD_STATE: Symbol = Symbol::new("ui.text_field_state");
+pub(crate) const TEXT_FIELD_STATE_KEY: Constant = Constant::new("ui.text_field_state_key");
 pub(crate) const TEXT_FIELD_STATE_SIZE: Constant = Constant::new("ui.text_field_state_size");
 pub(crate) const TEXT_FIELD_TEXT: Constant = Constant::new("ui.text_field_text");
 pub(crate) const TOGGLE: Symbol = Symbol::new("ui.toggle");

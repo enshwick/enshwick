@@ -891,6 +891,7 @@ revision = 1
 # so both are read in `ui.text_field`'s body.
 "ui.text_field_extent" = { value = 0x272, via = "ui.text_field", within = 0x100, pattern = "C6 83 ?? ?? ?? ?? 00 41 B8 01 00 00 00 66 C7 83 ?? ?? ?? ?? 01 00 48 8B CB 48 8B 46 10 48 89 B3 ?? ?? ?? ?? 48 BE", at = 16, size = 4, plus = 2 }
 "ui.text_field_text" = { value = 0x150, via = "ui.text_field", within = 0x100, pattern = "C6 83 ?? ?? ?? ?? 00 41 B8 01 00 00 00 66 C7 83 ?? ?? ?? ?? 01 00 48 8B CB 48 8B 46 10 48 89 B3 ?? ?? ?? ?? 48 BE", at = 32, size = 4 }
+"ui.text_field_state_key" = { value = 0x7261_5e88_968a_8b89, pattern = "49 BD ?? ?? ?? ?? ?? ?? ?? ?? 66 44 89 A5", at = 2, size = 8 }
 "ui.text_field_state_size" = { value = 0x1990, via = "ui.text_field_state", pattern = "40 53 48 83 EC 30 48 8B 49 08 4C 8D 0D ?? ?? ?? ?? 44 89 44 24 ?? 41 B8 ?? ?? ?? ?? E8", at = 24, size = 4 }
 # The rename dialog's Back: it reads the kept state's caret byte and clears it.
 "ui.text_field_editing" = { value = 0x1988, pattern = "49 8B D5 E8 ?? ?? ?? ?? 80 B8 ?? ?? ?? ?? 00 74 1E 41 B8 01 00 00 00 48 8D 8D ?? ?? ?? ??", at = 10, size = 4 }

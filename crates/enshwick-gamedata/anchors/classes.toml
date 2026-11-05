@@ -711,6 +711,7 @@ entries = [
   "ui.text_field_extent",
   "ui.text_field_input",
   "ui.text_field_state",
+  "ui.text_field_state_key",
   "ui.text_field_state_size",
   "ui.text_field_text",
   "ui.toggle",

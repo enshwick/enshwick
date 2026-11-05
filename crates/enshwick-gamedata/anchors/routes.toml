@@ -6169,6 +6169,13 @@ take = "address"
 check = ["push rbx", "sub rsp,0x30", "mov rcx,[rcx+0x8]"]
 
 [[route]]
+id = "ui.text_field_state_key"
+sides = ["client"]
+in = "~fn:ui.text_field_editing"
+shape = ["mov r13,*", "mov [rbp+?],r12w"]
+take = "value"
+
+[[route]]
 id = "ui.text_field_state_size"
 sides = ["client"]
 in = "ui.text_field_state"
