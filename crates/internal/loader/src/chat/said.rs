@@ -12,8 +12,9 @@ use enshwick::abi::{
     ChatFilterFn, ChatLine, ChatRewrite, Entity, Event, Header, PlayerKey, Status, Str,
 };
 
-use crate::host::{Loader, ModIndex, Registered};
+use crate::host::{Loader, Registered};
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 use crate::wire::Drops;
 
@@ -158,7 +159,7 @@ fn character(player: u64) -> Entity {
     crate::host::loader()
         .and_then(|loader| crate::world::players(loader).ok())
         .and_then(|players| players.into_iter().find(|p| p.key.0 == player))
-        .map_or(Entity::NONE, |p| p.entity)
+        .map_or(Entity(0), |p| p.entity)
 }
 
 /// Keeps a line that reached the chat for the end of the step, when a mod
@@ -231,7 +232,7 @@ pub(crate) fn raise(loader: &Loader) {
         let entity = players
             .iter()
             .find(|p| p.key.0 == said.player)
-            .map_or(Entity::NONE, |p| p.entity);
+            .map_or(Entity(0), |p| p.entity);
         let line = ChatLine {
             header: Header::of::<ChatLine>(),
             player: PlayerKey::new(said.player),

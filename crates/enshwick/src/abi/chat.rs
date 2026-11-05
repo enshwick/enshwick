@@ -36,8 +36,7 @@ pub struct ChatLine {
     pub header: Header,
     /// The sender's account key; zero when the game names none.
     pub player: PlayerKey,
-    /// The sender's character, [`Entity::NONE`] when it has none in the
-    /// world.
+    /// The sender's character, `Entity(0)` when it has none in the world.
     pub entity: Entity,
     /// [`ChatLine::PLAYER`], [`ChatLine::EMOTE`] or [`ChatLine::NOTICE`].
     pub kind: u32,
