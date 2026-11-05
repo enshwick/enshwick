@@ -65,7 +65,7 @@ pub(super) const LAYOUT: Layout = Layout {
         comfort: 0x90,
         comfort_len: 0x44,
         props: 0xd8,
-        base_id: 0xe0,
+        base_id: Some(0xe0),
         beds: 0x114,
         npcs_home: 0x120,
         animals: 0x122,
