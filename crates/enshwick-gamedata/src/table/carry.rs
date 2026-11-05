@@ -54,6 +54,8 @@ fn a_witnessed_value_counts_only_where_its_second_use_agrees() {
     );
     for refused in [
         r#""c.off" = { value = 0x30, pattern = "48 8B 41 ?? C3", at = 3, size = 1, witness = "8B 51 ?? 90", witness_at = 2 }"#,
+        r#""c.off" = { value = 0x30, pattern = "48 8B 41 ?? C3", at = 3, size = 1, witness_at = 2 }"#,
+        r#""c.off" = { value = 0x30, pattern = "48 8B 41 ?? C3", at = 3, size = 1, witness_size = 1 }"#,
         r#""c.off" = { value = 0x30, pattern = "48 8B 41 ?? C3", at = 3, size = 1, witness = "8B 51 ?? 90", witness_at = 2, witness_size = 1, one_witness = "x" }"#,
         r#""c.off" = { value = 0x30, pattern = "48 8B 41 ?? C3", fixed = true, one_witness = "x" }"#,
         r#""c.off" = { value = 0x30, pattern = "48 8B 41 ?? C3", at = 3, size = 1, via = "f.s", witness = "8B 51 ?? 90", witness_at = 2, witness_size = 1 }"#,

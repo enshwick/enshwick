@@ -480,7 +480,7 @@ pub(crate) fn branch_into(code: &[u8], begin: u64, target: u64, stolen: u64) -> 
 
 /// The function whose entry in its image's function table holds `address`;
 /// `None` without one.
-fn function_around(address: usize) -> Option<Function> {
+pub(super) fn function_around(address: usize) -> Option<Function> {
     let mut image = 0;
     // SAFETY: `RtlLookupFunctionEntry` takes any address, `image` is a
     // writable `u64` and the history table may be null.

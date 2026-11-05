@@ -91,6 +91,9 @@ impl SiteError {
 pub(super) struct Pins<'a> {
     pub(super) table: &'a Resolved,
     pub(super) code_rva: u64,
+    /// Where the function that starts at an offset in the code ends, as the
+    /// image's function table records it.
+    pub(super) extent: &'a dyn Fn(usize) -> Option<usize>,
 }
 
 impl Pins<'_> {
@@ -103,14 +106,16 @@ impl Pins<'_> {
             .ok_or(SiteError::Missing(id.id()))
     }
 
-    /// The whole code of symbol `id`'s function, as its table body spans it.
+    /// The whole code of symbol `id`'s function, as its table body spans it,
+    /// else, for a symbol an engine route found, as the image's function
+    /// table does.
     fn body(&self, id: Symbol) -> Result<Range<usize>, SiteError> {
-        let body = self
-            .table
-            .body(id.id())
-            .ok_or(SiteError::Missing(id.id()))?;
         let start = self.at(id)?;
-        Ok(start..start + body.len())
+        let end = match self.table.body(id.id()) {
+            Some(body) => start + body.len(),
+            None => (self.extent)(start).ok_or(SiteError::Missing(id.id()))?,
+        };
+        Ok(start..end)
     }
 
     /// Constant `id` as an offset.
@@ -318,9 +323,15 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
     ) else {
         return;
     };
+    let extent = |offset: usize| {
+        let start = text.0.checked_add(offset)?;
+        let function = crate::detour::function_around(start)?;
+        (function.begin == start).then(|| function.end - text.0)
+    };
     let pins = Pins {
         table: loader.build.resolved(),
         code_rva: text.0 as u64 - loader.base,
+        extent: &extent,
     };
     let client = loader.side == Side::CLIENT;
     let sites = match find(code, text.0, client, fields, &pins) {
@@ -540,9 +551,11 @@ mod tests {
             let range = image.range(text);
             let code = image.read(range.start, range.end - range.start).unwrap();
             let resolved = table.resolve();
+            let extent = extent_in(&image, range.start - image.base());
             let pins = Pins {
                 table: &resolved,
                 code_rva: range.start - image.base(),
+                extent: &extent,
             };
             let pinned = window.iter().any(|id| resolved.symbol(id.id()).is_some());
             let client = side == TableSide::Client;
@@ -574,6 +587,26 @@ mod tests {
                 client || pins.at(bases::COUNT_GETTER).is_err(),
                 "{variable}"
             );
+        }
+    }
+
+    /// Where the function that starts at an offset into the code at
+    /// `code_rva` ends, from the `.pdata` of `image`, as an offset too.
+    fn extent_in(image: &Image<'_>, code_rva: u64) -> impl Fn(usize) -> Option<usize> {
+        let pdata = image.range(image.section(".pdata").unwrap());
+        let rows = image
+            .read(pdata.start, pdata.end - pdata.start)
+            .unwrap()
+            .to_vec();
+        move |offset| {
+            let start = code_rva + u64::try_from(offset).ok()?;
+            rows.as_chunks::<12>().0.iter().find_map(|row| {
+                let begin = u32::from_le_bytes(row[0..4].try_into().ok()?);
+                let end = u32::from_le_bytes(row[4..8].try_into().ok()?);
+                (u64::from(begin) == start)
+                    .then(|| usize::try_from(u64::from(end) - code_rva).ok())
+                    .flatten()
+            })
         }
     }
 
@@ -611,14 +644,22 @@ mod tests {
                     .remove(&format!("{id}.bytes"));
             }
         }
+        // As when an engine route found it: the address without the body.
+        doc["symbols"][bases::SERVER_CREATE.id()]
+            .as_inline_table_mut()
+            .unwrap()
+            .remove("body");
         let stripped = enshwick_gamedata::Table::parse(&doc.to_string())
             .unwrap()
             .resolve();
+        assert!(stripped.body(bases::SERVER_CREATE.id()).is_none());
         let range = image.range(image.section(".text").unwrap());
         let code = image.read(range.start, range.end - range.start).unwrap();
+        let extent = extent_in(&image, range.start - image.base());
         let pins = Pins {
             table: &stripped,
             code_rva: range.start - image.base(),
+            extent: &extent,
         };
         let sites = find(code, 0, false, FIELDS, &pins)
             .unwrap_or_else(|why| panic!("{} {why}", why.entry()));

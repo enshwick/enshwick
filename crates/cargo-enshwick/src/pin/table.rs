@@ -869,4 +869,60 @@ revision = 1
         let row = body_text(0x1000, &through);
         assert!(row.contains("\", rel = 4, body = {"), "{row}");
     }
+
+    /// On the server `ENSH_SERVER_EXE` names (skipped without it), its own
+    /// table rendered from the executable gives every held operand value the
+    /// witness the committed table has, and carried to the same executable
+    /// each witnessed value reads where the table pins it.
+    #[test]
+    fn a_table_rendered_from_its_build_writes_the_witnesses_it_carries() {
+        let Some(path) = std::env::var_os("ENSH_SERVER_EXE") else {
+            return;
+        };
+        let bytes = std::fs::read(path).unwrap();
+        let exe = Exe::parse(&bytes).unwrap();
+        let fp = exe.fingerprint().unwrap();
+        let tables = enshwick_gamedata::embedded();
+        let (src, committed) = tables
+            .iter()
+            .map(|(_, text)| (*text, enshwick_gamedata::Table::parse(text).unwrap()))
+            .find(|(_, t)| t.side() == enshwick_gamedata::Side::Server && t.fingerprint() == fp)
+            .unwrap();
+        let row = parse(src).unwrap();
+        let identity = Identity {
+            guid: &row.guid,
+            age: row.age,
+            name: row.name.as_deref().unwrap_or_default(),
+            steam_build: None,
+            game_version: None,
+            new_build: false,
+        };
+        let (text, _) =
+            render(src, &row, &identity, &[], Some(&exe), &FxHashMap::default()).unwrap();
+        let rendered = enshwick_gamedata::Table::parse(&text).unwrap();
+        let witnessed: Vec<_> = committed
+            .constants()
+            .iter()
+            .filter(|c| c.witness().is_some())
+            .collect();
+        assert!(!witnessed.is_empty());
+        for constant in &witnessed {
+            let made = rendered
+                .constants()
+                .iter()
+                .find(|c| c.id() == constant.id())
+                .unwrap();
+            assert_eq!(made.witness(), constant.witness(), "{}", constant.id());
+        }
+        let (code, code_rva) = exe.text();
+        let carried = rendered.fall_back(code, code_rva, |_| None);
+        for constant in witnessed {
+            assert_eq!(
+                carried.constant(constant.id()),
+                Some(constant.value()),
+                "{}",
+                constant.id()
+            );
+        }
+    }
 }
