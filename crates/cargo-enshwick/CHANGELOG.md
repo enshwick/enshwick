@@ -12,6 +12,16 @@ Each entry names the pull request that made the change.
   Luau type per generated item named by its path, such as
   `typed_ecs_Health`; `new --luau` writes it into `types/` and points the
   editor at it (#940).
+- `cargo enshwick pin` writes a witness for each value a pattern's operand
+  reads that no engine route finds: the nearest other instruction holding
+  the value, in another function where one exists, or `one_witness` with
+  the reason when none has a unique window (#946).
+
+### Fixed
+
+- `cargo enshwick pin` keeps the check of a `callers` route whose shape
+  holds where the function starts, which the loader does not count as a
+  check (#946).
 
 ## [1.0.0-alpha.12] - 2026-11-05
 

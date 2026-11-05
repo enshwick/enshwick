@@ -15,11 +15,29 @@ Each entry names the pull request that made the change.
   function as the one direct caller of another whose code the shape
   matches (`callers`). Nineteen constants now come from the engine through
   them (#944).
+- Routes find a function through a slot of a routed vtable (`vtable` with
+  `slot`), the function the slot's pointer starts, checked by the row's
+  `check`. Forty-four more entries now come from the engine: 34 through
+  call sites and the functions they reach, among them the client's UI
+  state size and no-op constructor, and `net.join_game` with the online
+  provider's vtable and the eight join target offsets (#946).
+- A table row may name a witness of its value, a second instruction that
+  holds the same value (`witness`, `witness_at`, `witness_size`), or say
+  why it has none (`one_witness`). A build without its own table takes such
+  a value only where the witness is found once and reads the same value.
+  Every embedded table has a witness for each value a pattern's operand
+  reads and no route finds (#946).
+
+### Fixed
+
+- The client table of build 26082781 pins the no-op UI constructor and the
+  UI state size at the call site the engine route reaches (#946).
 
 ### Removed
 
 - The build-table entries no code reads: the ban list rows,
   `server.ban_list_changed` and `server.config`, from every table (#944).
+- The `research` anchor class, which no entry has any more (#946).
 
 ## [1.0.0-alpha.12] - 2026-11-05
 

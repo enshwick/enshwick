@@ -62,6 +62,13 @@ Each entry names the pull request that made the change.
 
 - The fake host refuses subscriptions to events the loader never raises, as
   the loader does (#936).
+- A game build without its own table where the engine routes and the
+  newest table's patterns find every entry runs as a known build: the log
+  says so at info, with no E1005 and no player message; E1005 stays for a
+  build where entries are missing (#946).
+- Bases past 16 needs the client's create, destroy, size and base id list
+  only on a client, so a server table needs no rows for them, and sizes a
+  create an engine route found by the image's function table (#946).
 - **Breaking:** `script::Field::ty` is no longer `const`: a field gives its
   type when asked, so a game type may hold itself (#940).
 - A Luau mod's `u64` or `i64`, such as a key, takes a whole number up to
