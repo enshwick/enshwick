@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.12] - 2026-11-05
+
 ### Added
 
 - `cargo enshwick luau` writes the `controls` namespace (#930).

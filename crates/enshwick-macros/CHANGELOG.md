@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.12] - 2026-11-05
+
 ### Changed
 
 - `#[enshwick::script]` describes init calls on `Load`, objects, contexts and
