@@ -119,6 +119,11 @@ enum Command {
         /// The file to write; the definitions are printed when omitted.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Also writes the types of the typed API's values to this file,
+        /// such as `enshwick.typed.d.luau`, for editors to load beside the
+        /// definitions.
+        #[arg(long)]
+        typed: Option<PathBuf>,
     },
     /// Writes Rust and Luau definitions of the game's own types, read from
     /// the reflection data of a game executable: for structs the API does
@@ -183,16 +188,34 @@ fn ids(names: &[String]) -> anyhow::Result<String> {
     Ok(lines?.join("\n"))
 }
 
-/// Writes the Luau definitions to `out`, or returns them to print.
-fn luau_definitions(out: Option<&std::path::Path>) -> anyhow::Result<String> {
-    let text = cargo_enshwick::luau::definitions();
-    match out {
-        Some(path) => {
-            std::fs::write(path, text).with_context(|| path.display().to_string())?;
-            Ok(format!("wrote {}", path.display()))
-        }
-        None => Ok(text),
+/// Writes the Luau definitions to `out`, or returns them to print, and the
+/// typed API's types to `typed`.
+fn luau_definitions(
+    out: Option<&std::path::Path>,
+    typed: Option<&std::path::Path>,
+) -> anyhow::Result<String> {
+    if let (Some(out), Some(typed)) = (out, typed)
+        && std::path::absolute(out)? == std::path::absolute(typed)?
+    {
+        anyhow::bail!(
+            "--out and --typed both name {}: each needs a file of its own",
+            out.display()
+        );
     }
+    let mut done = Vec::new();
+    if let Some(path) = typed {
+        std::fs::write(path, cargo_enshwick::luau::typed_definitions())
+            .with_context(|| path.display().to_string())?;
+        done.push(format!("wrote {}", path.display()));
+    }
+    let text = cargo_enshwick::luau::definitions();
+    let Some(path) = out else {
+        // Printed definitions stay a file luau-lsp reads: no status line.
+        return Ok(text);
+    };
+    std::fs::write(path, text).with_context(|| path.display().to_string())?;
+    done.push(format!("wrote {}", path.display()));
+    Ok(done.join("\n"))
 }
 
 fn main() -> ExitCode {
@@ -248,7 +271,7 @@ fn main() -> ExitCode {
             luau,
         } => deps::run(alias.as_deref(), &from, manifest_path.as_deref(), luau),
         Command::Pack(command) => pack::run(&command),
-        Command::Luau { out } => luau_definitions(out.as_deref()),
+        Command::Luau { out, typed } => luau_definitions(out.as_deref(), typed.as_deref()),
         Command::Types {
             names,
             from,
@@ -285,6 +308,28 @@ mod tests {
             )
         );
         assert!(ids(&["safe".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn one_file_for_both_definitions_is_refused() {
+        let path = std::path::Path::new("types/both.d.luau");
+        let error = luau_definitions(Some(path), Some(path)).unwrap_err();
+        assert!(error.to_string().contains("--out and --typed"), "{error}");
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn printed_definitions_hold_only_luau_when_the_typed_file_is_written() {
+        let typed =
+            std::env::temp_dir().join(format!("enshwick-typed-{}.d.luau", std::process::id()));
+        let printed = luau_definitions(None, Some(&typed)).unwrap();
+        assert!(printed.starts_with("--!strict"), "{}", &printed[..40]);
+        assert!(
+            std::fs::read_to_string(&typed)
+                .unwrap()
+                .contains("export type typed_")
+        );
+        std::fs::remove_file(&typed).unwrap();
     }
 
     #[test]

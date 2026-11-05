@@ -4,7 +4,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, bail};
-use cargo_enshwick::luau::{DEFINITIONS_FILE, definitions};
+use cargo_enshwick::luau::{
+    DEFINITIONS_FILE, TYPED_DEFINITIONS_FILE, definitions, typed_definitions,
+};
 use enshwick::packs::{MANIFEST_FILE, SCRIPT_MAIN as MAIN_FILE};
 
 use crate::Side;
@@ -77,6 +79,7 @@ pub(crate) fn files(id: &str, side: Side, game: Option<String>) -> Vec<(PathBuf,
             .replace("{name}", &name)
             .replace("{side}", side)
             .replace("{definitions}", &definitions_path())
+            .replace("{typed_definitions}", &typed_definitions_path())
     };
     let mut files = vec![
         (MANIFEST_FILE.into(), fill(PACK_TOML)),
@@ -84,6 +87,7 @@ pub(crate) fn files(id: &str, side: Side, game: Option<String>) -> Vec<(PathBuf,
         (".luaurc".into(), LUAURC.to_owned()),
         (".vscode/settings.json".into(), fill(VSCODE_SETTINGS)),
         (definitions_path().into(), definitions()),
+        (typed_definitions_path().into(), typed_definitions()),
         ("README.md".into(), fill(README)),
     ];
     if let Some(game) = game {
@@ -100,6 +104,11 @@ pub(crate) fn game_definitions_path() -> String {
 /// Where the definitions sit in a new mod, with `/` between folders.
 pub(crate) fn definitions_path() -> String {
     format!("{DEFINITIONS_DIR}/{DEFINITIONS_FILE}")
+}
+
+/// Where the typed API's types sit in a new mod, with `/` between folders.
+pub(crate) fn typed_definitions_path() -> String {
+    format!("{DEFINITIONS_DIR}/{TYPED_DEFINITIONS_FILE}")
 }
 
 const PACK_TOML: &str = r#"id = "{id}"
@@ -144,7 +153,8 @@ const LUAURC: &str = r#"{
 const VSCODE_SETTINGS: &str = r#"{
 	"luau-lsp.platform.type": "standard",
 	"luau-lsp.types.definitionFiles": {
-		"@enshwick": "{definitions}"{game_setting}
+		"@enshwick": "{definitions}",
+		"@typed": "{typed_definitions}"{game_setting}
 	}
 }
 "#;
@@ -154,10 +164,11 @@ const README: &str = "# {name}
 A Luau mod for Enshrouded, built on [Enshwick](https://github.com/enshwick/enshwick).
 
 1. Edit `main.luau`. `{definitions}` declares the API for
-   [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp); `.vscode/settings.json`
-   points the editor at it.
+   [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) and
+   `{typed_definitions}` the values of `enshwick.typed`;
+   `.vscode/settings.json` points the editor at both.
 2. {game_step}
-3. Run `luau-lsp analyze --definitions:@enshwick={definitions}{game_analyze} main.luau`
+3. Run `luau-lsp analyze --definitions:@enshwick={definitions} --definitions:@typed={typed_definitions}{game_analyze} main.luau`
    to check the types without the game.
 4. Copy this folder into the game's `mods/` folder as `mods/{id}/`.
 5. Run `cargo enshwick pack zip .` for the archive players install.
@@ -216,11 +227,14 @@ mod tests {
             .unwrap()
             .1;
         assert!(settings.contains(&format!("\"@enshwick\": \"{}\"", definitions_path())));
-        assert!(
+        assert!(settings.contains(&format!("\"@typed\": \"{}\"", typed_definitions_path())));
+        let carries = |path: String, wanted: String| {
             files
                 .iter()
-                .any(|(p, text)| *p == Path::new(&definitions_path()) && *text == definitions())
-        );
+                .any(|(p, text)| *p == Path::new(&path) && *text == wanted)
+        };
+        assert!(carries(definitions_path(), definitions()));
+        assert!(carries(typed_definitions_path(), typed_definitions()));
     }
 
     #[test]
@@ -275,7 +289,9 @@ mod tests {
         for dir in examples {
             let at = dir.display();
             for (path, _) in files("you.example", Side::Server, None) {
-                if !path.starts_with(".vscode") {
+                // The typed API's types are large and change with each game
+                // build: an example leaves them to `cargo enshwick luau --typed`.
+                if !path.starts_with(".vscode") && path != Path::new(&typed_definitions_path()) {
                     assert!(dir.join(&path).is_file(), "{at}: {}", path.display());
                 }
             }

@@ -38,7 +38,9 @@ global `enshwick`.
 
 1. Run `cargo enshwick new --luau you.greeter`. It makes the folder with
    `pack.toml`, a `main.luau` that greets each player who joins, a README,
-   and `types/enshwick.d.luau`, the API's definitions for the editor.
+   `types/enshwick.d.luau`, the API's definitions for the editor, and
+   `types/enshwick.typed.d.luau`, the types of
+   [`enshwick.typed`](game-types.md#can-a-luau-mod-use-them)'s values.
    `--side` sets where it runs, the server when left out. With
    `--game <game folder>` it also writes `types/game.d.luau`, the
    [game's own types](game-types.md), such as the fields
@@ -50,7 +52,7 @@ global `enshwick`.
 3. Check the types without the game:
 
    ```text
-   luau-lsp analyze --definitions:@enshwick=types/enshwick.d.luau main.luau
+   luau-lsp analyze --definitions:@enshwick=types/enshwick.d.luau --definitions:@typed=types/enshwick.typed.d.luau main.luau
    ```
 
    With the game's types, add `--definitions:@game=types/game.d.luau`.
@@ -184,7 +186,7 @@ function without one, unless this table names it and says why.
 | `points::Load::define_point`, `points::OwnedPoint::*`, `points::Decision::*` | A point's owner declares it from a Rust type with `#[point]`, and its manifest carries the schema other mods link against. A pack declares no points, so a Luau mod links into points but owns none. |
 | `config::*` | Settings from a Rust type or a schema built in code. A Luau mod declares its settings in `pack.toml`, which the loader reads into the same schema; `enshwick.settings()` returns the values in force, and `SettingsChanged` says when they change. |
 | `packs::*` | Reading a pack's folder and files. The loader reads a Luau mod's own folder as its pack, and a script adds content from code through `enshwick.content` and `enshwick.affixes`. |
-| `typed::EventType::*`, `typed::ResourceType::*` | Rust types generated from the game's reflection, which a Rust mod compiles in. Luau reaches the same events with `enshwick.on_game_type` and the same resources as values with `enshwick.resources.game_value` and `serve`; `cargo enshwick types --luau` writes their types for the editor. |
+| `typed::ComponentType::read`, `typed::ComponentType::write` | The handle `enshwick.typed.component_type` returns holds the server's world from the start, so `read` and `write` take no world. A value is a table by the Rust item's field names, and a write names every field ([The game's own types](game-types.md#can-a-luau-mod-use-them)). |
 | `affixes::roll` | `enshwick.affixes.roll` rolls an item, as `Affixes::roll` does, since a namespace holds one function of a name. The roll from a pool is `enshwick.affixes.roll_pool`. |
 | `actions::clean`, `actions::decode`, `actions::decode_args`, `actions::encode`, `actions::encode_args` | The text form a sheet and its arguments take between the server and a client. The loader and the fake host speak it; a script's actions never see it. |
 | `controls::Key::bits`, `controls::Key::from_bits`, `ui::Response::from_raw`, `ui::Response::to_raw` | The binary interface's form of a key and of a dialog's answer. A script names a key by its text, such as `Shift+E`, and an answer by its name. |

@@ -419,17 +419,58 @@ fn every_covered_type_reads_as_its_generated_item() {
         .filter(|t| !t.roles.is_empty() && t.kind != Kind::Typedef)
         .count();
     assert_eq!(named.len(), covered);
-    assert!(named.iter().all(|(id, _)| engine_name(id).is_some()));
+    assert!(named.iter().all(|row| engine_name(row.id).is_some()));
     let mut wrong = Vec::new();
-    for (id, check) in named {
-        let name = engine_name(id).unwrap();
+    for row in named {
+        let name = engine_name(row.id).unwrap();
         let read = enshwick::typed::sample(&registry, name)
             .ok_or_else(|| "no sample".to_owned())
-            .and_then(|value| check(&value).map_err(|e| e.to_string()));
+            .and_then(|value| (row.check)(&value).map_err(|e| e.to_string()));
         if let Err(why) = read {
-            wrong.push(format!("{id}: {why}"));
+            wrong.push(format!("{}: {why}", row.id));
         }
     }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// Every covered type has its script twin: a record named by its Rust
+/// path, and a sample of the build's type crosses into a script table by
+/// the path the script handles take and back to a value that reads the
+/// same, so a Luau mod reads and writes what a Rust mod does.
+#[test]
+#[cfg_attr(miri, ignore = "converts thousands of types")]
+fn every_covered_type_crosses_into_a_script_and_back() {
+    let catalogue = committed();
+    let registry = catalogue.registry();
+    let covered = catalogue
+        .types
+        .values()
+        .filter(|t| !t.roles.is_empty() && t.kind != Kind::Typedef)
+        .count();
+    let mut described = 0;
+    let mut wrong = Vec::new();
+    for row in enshwick::typed::NAMED {
+        let enshwick::script::Ty::Record(record) = row.script else {
+            wrong.push(format!("{}: not a record", row.id));
+            continue;
+        };
+        let path = format!("enshwick::typed::{}", row.id);
+        let root = format!("enshwick::typed::root::{}", row.id);
+        if record.name() != path && record.name() != root {
+            wrong.push(format!("{}: named {}", row.id, record.name()));
+        }
+        described += 1;
+        let sample = enshwick::typed::sample(&registry, engine_name(row.id).unwrap()).unwrap();
+        let shown = |value: &enshwick::resources::Value| {
+            (row.to_script)(value).map(|script| format!("{script:?}"))
+        };
+        match row.through_script(&sample) {
+            Ok(back) if shown(&back).ok() == shown(&sample).ok() => {}
+            Ok(back) => wrong.push(format!("{}: came back as {back:?}", row.id)),
+            Err(why) => wrong.push(format!("{}: {why}", row.id)),
+        }
+    }
+    assert_eq!(described, covered, "a script twin for every covered type");
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 

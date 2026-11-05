@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `cargo enshwick luau --typed <file>` writes `enshwick.typed.d.luau`, a
+  Luau type per generated item named by its path, such as
+  `typed_ecs_Health`; `new --luau` writes it into `types/` and points the
+  editor at it (#940).
+
 ## [1.0.0-alpha.12] - 2026-11-05
 
 ### Added

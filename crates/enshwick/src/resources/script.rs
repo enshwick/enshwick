@@ -13,11 +13,9 @@
 use super::{Registry, Type, Value as Data};
 use crate::abi::ResourceKey;
 use crate::content::Guid;
+use crate::script::convert::EXACT;
 use crate::script::{Answer, Error, FromScript, IntoScript, Ty, Typed, Value};
 use crate::{Host, Off};
-
-/// The largest integer a script number holds exactly, 2^53.
-const EXACT: u64 = 1 << 53;
 
 fn integer(magnitude: u64, text: impl FnOnce() -> String, number: f64) -> Value {
     if magnitude <= EXACT {
@@ -133,6 +131,31 @@ impl FromScript for Data {
                 ));
             }
         })
+    }
+}
+
+/// A variant as game data: `{ type = <qualified name>, value = ... }`.
+impl Typed for super::Variant {
+    const TY: &'static Ty = &Ty::Data;
+}
+
+impl IntoScript for super::Variant {
+    fn into_value(self) -> Value {
+        Data::Variant(Box::new(self)).into_value()
+    }
+}
+
+impl FromScript for super::Variant {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        let data = Data::from_value(value)?;
+        match (data.field("type"), data.field("value")) {
+            (Some(Data::Text(name)), held) => {
+                Ok(Self::new(name.clone(), held.cloned().unwrap_or(Data::Nil)))
+            }
+            _ => Err(Error::new(
+                "expected a variant: { type = <qualified name>, value = ... }",
+            )),
+        }
     }
 }
 
@@ -271,7 +294,7 @@ pub struct Resources {
 impl Resources {
     /// `key` as script data: `{ guid, type, part }`, the type by its
     /// qualified name when the build has it.
-    fn key_data(registry: &Registry<'_>, key: ResourceKey) -> Data {
+    pub(crate) fn key_data(registry: &Registry<'_>, key: ResourceKey) -> Data {
         let ty = registry
             .hashed(key.type_hash)
             .map_or(Data::Uint(key.type_hash.into()), |ty| {
@@ -286,7 +309,7 @@ impl Resources {
 
     /// The key `data` names: a GUID as text, a type by qualified name or
     /// hash, a part (0 when left out).
-    fn key_of(data: &Data) -> Result<ResourceKey, Off> {
+    pub(crate) fn key_of(data: &Data) -> Result<ResourceKey, Off> {
         let guid = match data.field("guid") {
             Some(Data::Text(text)) => Guid::try_parse(text),
             Some(Data::Guid(guid)) => Some(*guid),
@@ -703,6 +726,15 @@ mod tests {
         );
         assert_eq!(back.field("raw"), Some(&Data::Bytes(vec![1, 2])));
         assert!(Data::from_value(Value::Vector([0.0; 3])).is_err());
+    }
+
+    #[test]
+    fn a_variant_crosses_as_its_type_and_value_and_comes_back() {
+        let variant = Variant::new("demo::Sphere", Data::Float(2.5));
+        let back = Variant::from_value(variant.clone().into_value()).unwrap();
+        assert_eq!(back, variant);
+        let untyped = Data::Struct(vec![("value".into(), Data::Int(1))]).into_value();
+        assert!(Variant::from_value(untyped).is_err());
     }
 
     #[test]

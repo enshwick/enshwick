@@ -343,6 +343,12 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<crate::schedule::Scheduler>(),
     Namespace::of::<crate::inventory::Inventories>(),
     Namespace::of::<crate::resources::Resources>(),
+    #[cfg(feature = "typed")]
+    Namespace::starting(
+        "typed",
+        "The game's components, events and resources as the typed API generates them from its reflection.",
+        &[crate::Load::SCRIPT_TYPED],
+    ),
     Namespace::of::<crate::mods::Mods>(),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::controls::Controls>(),

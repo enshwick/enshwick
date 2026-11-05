@@ -108,7 +108,7 @@ impl FromScript for usize {
         let Value::Number(n) = value else {
             return Err(expected("a number", &value));
         };
-        if n.fract() != 0.0 || !(0.0..=9_007_199_254_740_992.0).contains(&n) {
+        if n.fract() != 0.0 || !(0.0..=EXACT_NUMBER).contains(&n) {
             return Err(Error::new(format!(
                 "{n} is not a whole number from 0 to 2^53"
             )));
@@ -354,15 +354,33 @@ macro_rules! keys {
 
         impl FromScript for $t {
             fn from_value(value: Value) -> Result<Self, Error> {
-                let Value::String(text) = value else {
-                    return Err(expected("a string of digits", &value));
+                let bad = |shown: &dyn core::fmt::Debug| {
+                    Error::new(format!("{shown:?} is not a {}-bit key", <$t>::BITS))
                 };
-                text.parse()
-                    .map_err(|_| Error::new(format!("{text:?} is not a {}-bit key", <$t>::BITS)))
+                match value {
+                    Value::String(text) => text.parse().map_err(|_| bad(&text)),
+                    // A whole number a script number holds exactly, as a
+                    // script computes it, is taken as well.
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "a whole number within 2^53 converts exactly"
+                    )]
+                    Value::Number(n) if n.fract() == 0.0 && n.abs() <= EXACT_NUMBER => {
+                        <$t>::try_from(n as i128).map_err(|_| bad(&n))
+                    }
+                    other => Err(expected("a string of digits or a whole number", &other)),
+                }
             }
         }
     )*};
 }
+
+/// The largest whole number a script number holds exactly, 2^53.
+pub(crate) const EXACT: u64 = 1 << 53;
+
+/// [`EXACT`] as a script number.
+#[expect(clippy::cast_precision_loss, reason = "2^53 converts exactly")]
+pub(crate) const EXACT_NUMBER: f64 = EXACT as f64;
 
 keys!(u64, i64);
 

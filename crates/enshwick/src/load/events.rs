@@ -206,13 +206,7 @@ impl Load<'_> {
     where
         F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
     {
-        let api = self.api();
-        let host = self.host.handle();
-        hand_over(
-            handler,
-            |user| (api.game_event)(host, type_hash, deliver_game::<F>, user),
-            &format!("game events of {what}"),
-        )
+        game_events_of(self.host, type_hash, what, handler)
     }
 
     /// Defines the mod event `E` for other mods to subscribe to, and returns
@@ -270,6 +264,27 @@ impl Load<'_> {
     ) -> Result<(), Off> {
         subscribe_mod_event(self.host, handler)
     }
+}
+
+/// [`Load::on_raw_game_event`] for a runtime that holds the mod's host
+/// during its init, such as a script's: `handler` on every game event of the
+/// type hashed `type_hash`, `what` naming it in a refusal.
+pub(crate) fn game_events_of<F>(
+    host: Host,
+    type_hash: u32,
+    what: &str,
+    handler: F,
+) -> Result<(), Off>
+where
+    F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
+{
+    let api = host.api();
+    let handle = host.handle();
+    hand_over(
+        handler,
+        |user| (api.game_event)(handle, type_hash, deliver_game::<F>, user),
+        &format!("game events of {what}"),
+    )
 }
 
 /// A tick handler on the raw data, which reads it as a [`TickData`].

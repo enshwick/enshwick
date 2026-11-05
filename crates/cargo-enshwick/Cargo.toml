@@ -15,7 +15,7 @@ publish = true
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true }
-enshwick = { workspace = true, features = ["schema", "unstable"] }
+enshwick = { workspace = true, features = ["schema", "typed"] }
 enshwick-gamedata.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true

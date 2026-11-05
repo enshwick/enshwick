@@ -22,3 +22,4 @@ mod resources;
 mod rewards;
 mod scripts;
 mod shrine;
+mod typed;

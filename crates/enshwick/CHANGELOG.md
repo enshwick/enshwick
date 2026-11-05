@@ -6,8 +6,23 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- Luau mods reach the typed API (`typed`): `enshwick.typed.component_type`,
+  `event_type` and `resource_type` open a generated component, event or
+  resource by its id, such as `ecs.Health`, at start, with
+  `ComponentType:read` and `write`, `EventType:on`, and `ResourceType:key`,
+  `game_value` and `serve`. A value is a table by the generated item's Rust
+  names, an enum constant its variant's name or `{ Other = <name or number> }`,
+  read and written through the generated Rust item. Every generated struct
+  and enum carries its script description (#940).
+
 ### Changed
 
+- **Breaking:** `script::Field::ty` is no longer `const`: a field gives its
+  type when asked, so a game type may hold itself (#940).
+- A Luau mod's `u64` or `i64`, such as a key, takes a whole number up to
+  2^53 as well as its decimal digits (#940).
 - A control fires when its key goes down with at least its modifiers held,
   so a control on `G` fires while the player sprints with Shift; of the
   controls on one key, only those with the most of the held modifiers fire,
