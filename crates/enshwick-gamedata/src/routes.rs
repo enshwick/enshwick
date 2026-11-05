@@ -61,7 +61,7 @@ use crate::{Resolved, Side, TableError};
 pub use check::{check_holds, make_check, shape_checks};
 use code::Code;
 pub use shape::ShapeNames;
-use shape::Step;
+use shape::{ShapeError, Step};
 
 /// What an engine route found.
 ///
@@ -181,10 +181,9 @@ struct RouteRow {
 
 impl RouteRow {
     fn route(mut self, names: &ShapeNames) -> Result<Route, TableError> {
-        let how = self.how(names);
+        let how = self.how(names)?;
         let id = self.id;
         let bad = |why: &str| TableError::Toml(format!("{id}: {why}"));
-        let how = how.map_err(|why| bad(&why))?;
         let reflected = matches!(how, How::Field(_) | How::Size(_));
         if reflected
             && (self.take.is_some()
@@ -232,7 +231,7 @@ impl RouteRow {
             (_, None) => 0,
             (_, Some(_)) => return Err(bad("only a `spelled` take names a `value`")),
         };
-        let check = parse_steps(self.check, names).map_err(|why| bad(&why))?;
+        let check = parse_steps(self.check, names).map_err(|e| bad(&e.to_string()))?;
         if !check.is_empty()
             && (matches!(take, Take::Value | Take::Cell | Take::Spelled)
                 || check.iter().any(|s| s.takes() > 0))
@@ -259,7 +258,8 @@ impl RouteRow {
     }
 
     /// The one way the row names, taken out of it.
-    fn how(&mut self, names: &ShapeNames) -> Result<How, String> {
+    fn how(&mut self, names: &ShapeNames) -> Result<How, TableError> {
+        let bad = |why: &str| TableError::Toml(format!("{}: {why}", self.id));
         let listed = |list: Option<Vec<String>>| list.filter(|l| !l.is_empty());
         let ways = [
             self.called_by.is_some(),
@@ -289,19 +289,19 @@ impl RouteRow {
             (_, _, Some(strings), ..) if !shaped => Some(How::Loads(strings)),
             (_, _, _, Some(within), ..) if shaped => Some(How::Shape {
                 within,
-                steps: parse_steps(shape, names)?,
+                steps: parse_steps(shape, names).map_err(|e| bad(&e.to_string()))?,
             }),
             (_, _, _, Some(system), ..) if !within_given => Some(How::System(system)),
             (.., Some(callee)) if shaped => Some(How::Callers {
                 callee,
-                steps: parse_steps(shape, names)?,
+                steps: parse_steps(shape, names).map_err(|e| bad(&e.to_string()))?,
             }),
             (.., Some(path), None, None) if !shaped => Some(How::Field(
                 path.iter()
                     .map(|step| {
                         step.rsplit_once('.')
                             .map(|(ty, field)| (ty.to_owned(), field.to_owned()))
-                            .ok_or_else(|| "a `field` step is `<type>.<field>`".to_owned())
+                            .ok_or_else(|| bad("a `field` step is `<type>.<field>`"))
                     })
                     .collect::<Result<_, _>>()?,
             )),
@@ -309,17 +309,17 @@ impl RouteRow {
             _ => None,
         };
         how.ok_or_else(|| {
-            "a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, or `system`, `in` or `callers` with `shape`, each not empty".to_owned()
+            bad("a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, or `system`, `in` or `callers` with `shape`, each not empty")
         })
     }
 }
 
 /// The steps of a shape's text, none for none.
-fn parse_steps(texts: Option<Vec<String>>, names: &ShapeNames) -> Result<Vec<Step>, String> {
+fn parse_steps(texts: Option<Vec<String>>, names: &ShapeNames) -> Result<Vec<Step>, ShapeError> {
     texts
         .unwrap_or_default()
         .iter()
-        .map(|step| Step::parse(step, names).map_err(|e| e.to_string()))
+        .map(|step| Step::parse(step, names))
         .collect()
 }
 
