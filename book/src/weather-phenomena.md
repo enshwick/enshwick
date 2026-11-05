@@ -41,4 +41,15 @@ fn init(load: &mut enshwick::Load<'_>, rain: Guid) -> Result<(), enshwick::Off> 
 
 The same calls are `enshwick.weather.add_weather_phenomenon{...}` and
 `enshwick.weather.change_weather_phenomenon(guid, {...})`, at the top level
-of `main.luau`, with the fields of `NewPhenomenon` and `PhenomenonChange`.
+of `main.luau`, with the fields of `NewPhenomenon` and `PhenomenonChange`;
+a duration is in seconds of game time.
+
+```luau
+local rain = "<the GUID of one of the game's rain phenomena>"
+enshwick.weather.add_weather_phenomenon({
+    id = "you.drizzle:drizzle",
+    like = rain,
+    values = { probability = 0.5, duration_min = 120, duration_max = 300, effect = "Rain" },
+})
+enshwick.weather.change_weather_phenomenon(rain, { probability = 0.1 })
+```

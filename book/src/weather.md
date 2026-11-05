@@ -67,6 +67,26 @@ phenomenon. `load.on_front(handler)` calls `handler` about a second after a
 front starts and after it ends, with the front and whether it started, so a
 mod can give the players inside its weather a buff.
 
+```rust
+use enshwick::weather::WeatherPhenomenonEffect;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_front(|change| {
+        if change.started && change.front.kind == WeatherPhenomenonEffect::Blizzard {
+            enshwick::info!("a blizzard of {} m starts", change.front.radius);
+        }
+    })
+}
+```
+
+```luau
+enshwick.weather.on_front(function(change)
+    if change.started and change.front.kind == "Blizzard" then
+        enshwick.log.info(`a blizzard of {change.front.radius} m starts`)
+    end
+end)
+```
+
 ## Starting new weather
 
 `set(forecast, lasting)` starts new weather in every layer at once, as the

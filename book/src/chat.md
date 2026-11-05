@@ -61,7 +61,20 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 From Luau, the same calls are `enshwick.chat.on_chat(fn)` and
 `enshwick.chat.on_chat_said(fn)`; a Luau filter returns `false` to drop the
-line, a string to rewrite it, and nil or `true` to keep it.
+line, a string to rewrite it, and nil or `true` to keep it. An empty
+rewrite drops the line too.
+
+```luau
+enshwick.chat.on_chat(function(line)
+    if line.text:find("spoiler") then
+        return "[hidden]"
+    end
+    return nil
+end)
+enshwick.chat.on_chat_said(function(line)
+    enshwick.log.info(`{line.kind} line of {#line.text} bytes`)
+end)
+```
 
 Every server mod reads the full text of every line. The loader logs only
 counts and lengths. A mod that stores what players type says so on its

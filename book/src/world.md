@@ -282,9 +282,27 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         if let Some(info) = world.save_info() {
             enshwick::info!("saving over a save of {} bytes", info.size);
         }
-    })
+    })?;
+    // Hold saves while a boss fight runs, and let them go after it.
+    world.hold_saves(true)?;
+    Ok(world.hold_saves(false)?)
 }
 ```
+
+```luau
+enshwick.on("WorldSaving", function()
+    local info = enshwick.world.save_info()
+    if info then
+        enshwick.log.info(`saving over a save of {info.size} bytes`)
+    end
+end)
+-- Hold saves while a boss fight runs, and let them go after it.
+enshwick.world.hold_saves(true)
+enshwick.world.hold_saves(false)
+```
+
+From Luau, a spawn the save leaves out is
+`enshwick.effects.spawn(template, position, { do_not_save = true })`.
 
 ## Players
 

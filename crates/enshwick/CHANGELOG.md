@@ -34,8 +34,8 @@ Each entry names the pull request that made the change.
   (`FrontChanged`), also as `enshwick.weather.on_front`.
   `WeatherFront::phenomenon`, ABI 11.6 (#936).
 - `chat`: `Load::on_chat` filters what players type on the server, after
-  the chat mute: a filter keeps, drops or rewrites a line (`ChatVerdict`),
-  filters chain in load order, and a filter that panics turns off alone.
+  the chat mute: a filter keeps, drops or rewrites a line (`ChatVerdict`,
+  an empty rewrite drops it), filters chain in load order, and a filter that panics turns off alone.
   `Load::on_chat_said` hears every line that reaches the chat as a
   `ChatLine`, a player's lines at most eight a second. Luau reaches them as
   `enshwick.chat.on_chat` and `enshwick.chat.on_chat_said`.
@@ -46,7 +46,7 @@ Each entry names the pull request that made the change.
   `WorldSaved`; `World::save_info` reads the save on disk as a `SaveInfo`
   (its `WorldGuid`, time, size and backups); `World::hold_saves` holds the
   world's saves while any running mod holds them, until the game a client
-  hosts ends. Luau reaches them through `enshwick.world`.
+  hosts ends; `World::save` is refused meanwhile. Luau reaches them through `enshwick.world`.
   `Event::WORLD_SAVING`, `HostApi::save_info` and `hold_saves`, and
   `SaveInfo`, ABI 11.6. The fake host sets the save with `set_save_info`
   and reports holds with `saves_held` (#936).
