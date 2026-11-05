@@ -44,9 +44,11 @@ use crate::{Entity, ItemId, Load, Off};
 pub enum Action {
     /// Crafts the recipe: once for each unit the server makes of a request
     /// the player made, so a request for three gives it three times; what a
-    /// station makes on its own gives nothing. When two players ask for the
-    /// same recipe in one server step and the first runs short of
-    /// ingredients, the second player's units may go to the first.
+    /// station makes on its own gives nothing unless it lands within two
+    /// server steps of a request that got fewer units than it asked. When
+    /// two players ask for the same recipe within those steps and the first
+    /// runs short of ingredients, the second player's units may go to the
+    /// first.
     Craft(RecipeId),
     /// Reaches the level; 0 for every level.
     LevelUp(u32),
@@ -534,22 +536,27 @@ pub(crate) fn replace(me: ModHandle, reward: Reward) {
 /// and how many successes it may still take.
 type Asked = VecDeque<(Entity, u64, u16)>;
 
+/// How many deliveries after its own a request still takes successes. The
+/// game crafts a request in the step after its delivery and its successes
+/// come with the next delivery (server 26430253, read statically from its
+/// craft code, not yet seen live), so one would do; the request's own
+/// delivery and one more stay open in case that reading is a step off.
+const CRAFT_STEPS: u64 = 2;
+
 /// The player whose request a success of its recipe delivered after `step`
-/// answers: the oldest request in `asked` delivered the step before, while
-/// it has units left. The game crafts a request in the step after its
-/// delivery and its successes come with the next delivery (server 26430253,
-/// read statically from its craft code), so older requests had all theirs
-/// and go, and a success with no such request is a station's own production.
+/// answers: the oldest request in `asked` from that delivery or the
+/// [`CRAFT_STEPS`] before it, while it has units left. Older requests go,
+/// and a success with no such request is a station's own production.
 fn crafted_by(asked: &mut Asked, step: u64) -> Option<Entity> {
     while asked
         .front()
-        .is_some_and(|&(_, at, _)| at.saturating_add(1) < step)
+        .is_some_and(|&(_, at, _)| at.saturating_add(CRAFT_STEPS) < step)
     {
         asked.pop_front();
     }
     let (player, _, left) = asked
         .iter_mut()
-        .find(|(_, at, left)| at.saturating_add(1) == step && *left > 0)?;
+        .find(|(_, at, left)| *at <= step && *left > 0)?;
     *left -= 1;
     Some(*player)
 }
@@ -690,10 +697,11 @@ impl Load<'_> {
         let name = reward.name;
         match reward.on {
             Action::Craft(recipe) => {
-                if !shared.stepping.swap(true, Ordering::Relaxed) {
+                if !shared.stepping.load(Ordering::Relaxed) {
                     self.on_every_step(move |tick| {
                         shared.step.store(tick.step, Ordering::Relaxed);
                     })?;
+                    shared.stepping.store(true, Ordering::Relaxed);
                 }
                 let asked: Arc<Mutex<Asked>> = Arc::default();
                 let pending = Arc::clone(&asked);
@@ -831,7 +839,7 @@ mod tests {
     }
 
     #[test]
-    fn a_success_pays_the_request_of_the_delivery_before_up_to_its_amount() {
+    fn a_success_pays_the_oldest_open_request_up_to_its_amount() {
         let (one, two) = (Entity(1), Entity(2));
         // Player 1 asks for three in the delivery after step 4, player 2 for
         // one in the one after step 5.
@@ -840,22 +848,34 @@ mod tests {
         assert_eq!(crafted_by(&mut asked, 5), Some(one));
         assert_eq!(crafted_by(&mut asked, 5), Some(one));
         assert_eq!(
-            crafted_by(&mut asked, 5),
-            None,
-            "a fourth is a station's own"
+            crafted_by(&mut asked, 6),
+            Some(two),
+            "player 1 had all three"
         );
-        assert_eq!(crafted_by(&mut asked, 6), Some(two), "player 1's went");
-        assert_eq!(asked.len(), 1);
-        assert_eq!(crafted_by(&mut asked, 6), None);
+        assert_eq!(
+            crafted_by(&mut asked, 6),
+            None,
+            "a fifth is a station's own"
+        );
         assert_eq!(crafted_by(&mut asked, 9), None);
         assert!(asked.is_empty(), "a request without successes goes");
     }
 
     #[test]
+    fn a_success_a_step_off_the_static_reading_still_pays_its_request() {
+        let mut own_delivery = VecDeque::from([(Entity(1), 7, 1)]);
+        assert_eq!(crafted_by(&mut own_delivery, 7), Some(Entity(1)));
+        let mut a_step_late = VecDeque::from([(Entity(1), 7, 1)]);
+        assert_eq!(crafted_by(&mut a_step_late, 9), Some(Entity(1)));
+        let mut too_late = VecDeque::from([(Entity(1), 7, 1)]);
+        assert_eq!(crafted_by(&mut too_late, 10), None);
+    }
+
+    #[test]
     fn a_refused_request_never_takes_another_players_success() {
-        // Player 1's request was refused: no success came after step 3.
+        // Player 1's request was refused: no success came for it.
         let mut asked = VecDeque::from([(Entity(1), 2, 1), (Entity(2), 3, 1)]);
-        assert_eq!(crafted_by(&mut asked, 4), Some(Entity(2)));
+        assert_eq!(crafted_by(&mut asked, 5), Some(Entity(2)));
         assert!(asked.iter().all(|&(player, _, _)| player != Entity(1)));
     }
 
@@ -863,11 +883,11 @@ mod tests {
     fn a_success_before_any_request_pays_nobody() {
         let mut asked = Asked::new();
         assert_eq!(crafted_by(&mut asked, 1), None);
-        let mut same_delivery = VecDeque::from([(Entity(1), 7, 1)]);
+        let mut later = VecDeque::from([(Entity(1), 8, 1)]);
         assert_eq!(
-            crafted_by(&mut same_delivery, 7),
+            crafted_by(&mut later, 7),
             None,
-            "a success in the request's own delivery is not its"
+            "a success before the request's delivery is not its"
         );
     }
 
