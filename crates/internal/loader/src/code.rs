@@ -538,7 +538,9 @@ const MOST_STOP: usize = 64; // bound, not a game offset: a stop block is a few 
 /// engine route found, which carries no table body: up to and with its
 /// unconditional jump to the next recipe at `next`, or up to the `int3`
 /// padding after its last call, which does not return on 1.0 builds;
-/// `None` without either in its first [`MOST_STOP`] bytes.
+/// `None` without either in its first [`MOST_STOP`] bytes, or when the block
+/// leaves first by another jump or a return, so the patch never covers code
+/// past the block.
 pub(crate) fn stop_len(code: &[u8], stop: u64, next: u64) -> Option<usize> {
     use iced_x86::{Code, Decoder, DecoderOptions, FlowControl};
     let code = code.get(..code.len().min(MOST_STOP))?;
@@ -546,15 +548,15 @@ pub(crate) fn stop_len(code: &[u8], stop: u64, next: u64) -> Option<usize> {
     decoder
         .iter()
         .take_while(|i| !i.is_invalid())
-        .find_map(|i| match i.code() {
-            Code::Int3 => Some(i.ip()),
-            _ if i.flow_control() == FlowControl::UnconditionalBranch
-                && i.near_branch_target() == next =>
-            {
-                Some(i.next_ip())
+        .find_map(|i| match (i.code(), i.flow_control()) {
+            (Code::Int3, _) => Some(Some(i.ip())),
+            (_, FlowControl::UnconditionalBranch) => {
+                Some((i.near_branch_target() == next).then(|| i.next_ip()))
             }
+            (_, FlowControl::IndirectBranch | FlowControl::Return) => Some(None),
             _ => None,
         })
+        .flatten()
         .and_then(|end| usize::try_from(end - stop).ok())
 }
 
