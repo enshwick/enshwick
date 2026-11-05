@@ -63,6 +63,33 @@ fn a_witnessed_value_counts_only_where_its_second_use_agrees() {
     }
 }
 
+/// Every value a carried pattern's operand reads alone and no route of its
+/// side finds has a witness, or says why it has none.
+#[test]
+fn every_held_operand_value_has_a_witness_or_a_reason() {
+    let routes = crate::Routes::embedded().unwrap();
+    let bare: Vec<String> = tables()
+        .iter()
+        .flat_map(|table| {
+            table
+                .constants()
+                .iter()
+                .filter(|c| {
+                    c.carried()
+                        && c.operand().is_some()
+                        && c.via().is_none()
+                        && c.cell().is_none()
+                        && !routes.routes(c.id(), table.side())
+                        && c.witness().is_none()
+                        && c.one_witness().is_none_or(|why| why.trim().is_empty())
+                })
+                .map(|c| format!("{}: {}", table.name(), c.id()))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert!(bare.is_empty(), "{bare:#?}");
+}
+
 /// On every executable `ENSH_SERVER_EXE`, `ENSH_CLIENT_EXE` and the opt-in
 /// `ENSH_EXES` path list name (a server when its file is
 /// `enshrouded_server.exe`), each other embedded table of its side carried
