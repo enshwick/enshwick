@@ -183,6 +183,13 @@ struct Carrier {
     /// Set while the client side holds a socket, so a client frame on a
     /// server without Enshwick takes no lock.
     client_open: AtomicBool,
+    /// The client's sockets [`forget`] let go of, as session, socket and
+    /// slot: the client keeps one session for the whole game, so a socket
+    /// left open there blocks every later one on the channel, and only the
+    /// client's chat thread may close it.
+    retired: Mutex<Vec<(usize, usize, u32)>>,
+    /// Set while `retired` may hold anything.
+    client_retired: AtomicBool,
     /// The epoch the next link starts at.
     epochs: AtomicU32,
     /// Packets dropped: unreadable, over a bound or a rate.
@@ -211,6 +218,8 @@ static CARRIER: Carrier = Carrier {
     hosted_hello: AtomicBool::new(false),
     host_key: AtomicU64::new(0),
     client_open: AtomicBool::new(false),
+    retired: Mutex::new(Vec::new()),
+    client_retired: AtomicBool::new(false),
     epochs: AtomicU32::new(EPOCH_STEP),
     dropped: AtomicU64::new(0),
     // SAFETY: `ClientSendFn` is the signature of the game's
@@ -590,7 +599,8 @@ unsafe fn client_frame(client: *mut u8, now: Instant) {
         return;
     }
     let modded = crate::net::server_runs_enshwick();
-    if !modded && !CARRIER.client_open.load(Ordering::Acquire) {
+    let retired = CARRIER.client_retired.load(Ordering::Acquire);
+    if !modded && !retired && !CARRIER.client_open.load(Ordering::Acquire) {
         return;
     }
     let (Some(game), Some(loader)) = (CARRIER.game.get(), crate::host::loader()) else {
@@ -604,6 +614,12 @@ unsafe fn client_frame(client: *mut u8, now: Instant) {
     let Some(session) = (unsafe { game.client_session(client) }) else {
         return;
     };
+    if retired {
+        close_retired(game, session);
+    }
+    if !modded && !CARRIER.client_open.load(Ordering::Acquire) {
+        return;
+    }
     let (inbox, change) = {
         let Some(mut guard) = CARRIER.client.try_relock() else {
             return;
@@ -729,10 +745,19 @@ fn give_back(side: &Mutex<Option<State>>, session: usize, mut inbox: Inbox) {
     }
 }
 
-/// Forgets the client's link and what a hosted game's halves held for
-/// each other, when the client leaves its server or a hosted game ends.
 pub(crate) fn forget() {
-    *CARRIER.client.relock() = None;
+    if let Some(state) = CARRIER.client.relock().take()
+        && !state.peers.is_empty()
+    {
+        let mut retired = CARRIER.retired.relock();
+        retired.extend(
+            state
+                .peers
+                .values()
+                .map(|peer| (state.session, peer.socket, peer.slot)),
+        );
+        CARRIER.client_retired.store(true, Ordering::Release);
+    }
     // The next session may reuse this one's address, which `fresh` keys on.
     if let Some(server) = CARRIER.server.relock().as_mut() {
         server.off = false;
@@ -744,6 +769,19 @@ pub(crate) fn forget() {
     CARRIER.to_client.relock().clear();
     CARRIER.host_key.store(0, Ordering::Release);
     CARRIER.hosted_hello.store(false, Ordering::Release);
+}
+
+/// Closes the sockets [`forget`] let go of that `session`, the client's
+/// live one, still holds; those of another session went with it.
+fn close_retired(game: &Game, session: usize) {
+    CARRIER.client_retired.store(false, Ordering::Release);
+    let retired = core::mem::take(&mut *CARRIER.retired.relock());
+    for (opened_in, socket, slot) in retired {
+        if opened_in == session && game.holds(socket, slot) {
+            crate::log!(INFO, "own channel: closed the socket of the last game");
+            game.close(session, socket);
+        }
+    }
 }
 /// Packets and messages the carrier dropped so far.
 pub(crate) fn dropped() -> u64 {
