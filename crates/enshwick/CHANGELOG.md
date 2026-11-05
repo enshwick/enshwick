@@ -131,6 +131,8 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** `script::Field::ty` is no longer `const`: a field gives its
+  type when asked, so a game type may hold itself (#940).
 - The loader ships as alphas, GitHub prereleases tagged `v1.0.0-alpha.N`
   whose notes list the supported game builds and what changed, in place of
   the rolling `dev` prerelease, which no longer follows `main` (#937).

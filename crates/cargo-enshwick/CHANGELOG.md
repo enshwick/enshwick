@@ -11,6 +11,9 @@ Each entry names the pull request that made the change.
 ### Added
 
 - `cargo enshwick luau` writes the `controls` namespace (#930).
+- `cargo enshwick luau --typed <file>` writes `enshwick.typed.d.luau`, a
+  Luau type per generated item named by its path, such as
+  `typed_ecs_Health` (#940).
 - `cargo enshwick luau` writes the `items` and `rewards` namespaces;
   `pack schema` and `new --data` write `rewards.toml` and know the items'
   `on` table and setting references (#935).
