@@ -6,6 +6,18 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- A control fires when its key goes down with at least its modifiers held,
+  so a control on `G` fires while the player sprints with Shift; of the
+  controls on one key, only those with the most of the held modifiers fire,
+  so `Shift+G` still beats `G`, and `Shift+G` and `Ctrl+G` both fire with
+  Shift and Ctrl held. A held combination that cannot be bound, such as
+  Alt+F4, fires nothing. A control stays down until the key that brought it
+  down goes up, and a modifier pressed or let go meanwhile fires nothing.
+  The fake host's `keys` holds the modifiers of all the keys it is given
+  together, as a keyboard does (#942).
+
 ## [1.0.0-alpha.12] - 2026-11-05
 
 ### Added
@@ -111,11 +123,6 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
-- A control fires when its key goes down with at least its modifiers held,
-  so a control on `G` fires while the player sprints with Shift; of the
-  controls on one key, only those with the most of the held modifiers fire,
-  so `Shift+G` still beats `G`. A control stays down until its key goes up,
-  and a modifier pressed or let go meanwhile fires nothing (#942).
 - The loader ships as alphas, GitHub prereleases tagged `v1.0.0-alpha.N`
   whose notes list the supported game builds and what changed, in place of
   the rolling `dev` prerelease, which no longer follows `main` (#937).
