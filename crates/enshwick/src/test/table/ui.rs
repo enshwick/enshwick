@@ -3,10 +3,11 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
-    UiWidget,
+    FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
+    UiFrameFn, UiMarker, UiWidget,
 };
 use crate::test::table::{State, text, with};
+use crate::ui::screens;
 
 /// table it sees for the process, so it is one static.
 pub(crate) extern "system" fn ui_frame(
@@ -128,7 +129,7 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
                 id: label,
                 title: text(w.detail),
             },
-            UiWidget::END if open => Drawn::End,
+            UiWidget::END if open && s.extending != Some(frame) => Drawn::End,
             UiWidget::SOUND => Drawn::Sound(w.style),
             UiWidget::WINDOW | UiWidget::END => return Status::REFUSED,
             _ if !open => return Status::REFUSED,
@@ -202,6 +203,35 @@ pub(crate) extern "system" fn ui_hud(
             return Status::MISSING;
         }
         s.huds.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+/// Records an extension of a game screen, refusing what the loader
+/// refuses, in its order: a server, an unknown edge or a screen where the
+/// player is in the world with no window open, a screen the game lacks.
+pub(crate) extern "system" fn ui_extension(
+    _me: ModHandle,
+    spec: *const UiExtension,
+    callback: UiFrameFn,
+    user: *mut c_void,
+) -> Status {
+    let Some(spec) = super::get_headed(spec) else {
+        return Status::BAD_ARGS;
+    };
+    let screen = text(spec.screen);
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::MISSING;
+        }
+        if spec.edge > UiExtension::BOTTOM || screens::OPEN.contains(&screen.as_str()) {
+            return Status::BAD_ARGS;
+        }
+        if !screens::NAMES.contains(&screen.as_str()) {
+            return Status::MISSING;
+        }
+        s.extensions
+            .push((screen, spec.edge, callback, user.expose_provenance()));
         Status::OK
     })
 }

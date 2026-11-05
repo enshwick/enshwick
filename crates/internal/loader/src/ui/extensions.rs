@@ -1,0 +1,291 @@
+//! Panels mods add to the game's own screens. The game's interface keeps no
+//! window to append to and a game window has no position, so each edge of
+//! the screen gets one full-screen window of its own on a layer above the
+//! game's screens, shared by every panel at that edge, drawn while the
+//! player has its screen open and only once a panel draws a widget there.
+
+use core::cell::{Cell, RefCell};
+use core::ffi::c_void;
+use std::sync::OnceLock;
+use std::sync::atomic::Ordering;
+
+use enshwick::abi::{Header, Side, Status, UiExtension, UiFrame, UiFrameFn};
+use enshwick_gamedata::catalogue;
+
+use crate::host::{Loader, Registered};
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::registry::Registry;
+
+use super::engine::{Engine, UiText, Window};
+use super::{DRAWING, Drawing, NEXT_TOKEN, copy};
+
+/// The feature's name in the log and on the Mods screen.
+const FEATURE: &str = "screen extensions";
+
+/// Each edge's window name, by edge, outside the `enshwick/<mod id>/` names
+/// of mods' own windows.
+const NAMES: [&[u8]; 4] = [
+    b"enshwick:screen/left",
+    b"enshwick:screen/right",
+    b"enshwick:screen/top",
+    b"enshwick:screen/bottom",
+];
+
+/// A mod's panel on one of the game's screens.
+#[derive(Clone, Copy, Debug)]
+struct Extension {
+    registered: Registered<UiFrameFn>,
+    /// The screen's value among the game's `HudScreenType`.
+    screen: u8,
+    /// [`UiExtension::LEFT`] to [`UiExtension::BOTTOM`].
+    edge: u32,
+}
+
+/// Where the open screen is read; set at link on a build that has it.
+#[derive(Debug)]
+struct Linked {
+    context_state: usize,
+    state_play_data: usize,
+    hud_screen: usize,
+}
+
+/// The extensions: open while mods initialise, sealed after.
+static EXTENSIONS: Registry<Extension> = Registry::new();
+static LINKED: OnceLock<Linked> = OnceLock::new();
+
+thread_local! {
+    /// One window per edge, built once and kept in place across frames.
+    static WINDOWS: RefCell<[Window; 4]> = const {
+        RefCell::new([
+            Window::extension(UiExtension::LEFT),
+            Window::extension(UiExtension::RIGHT),
+            Window::extension(UiExtension::TOP),
+            Window::extension(UiExtension::BOTTOM),
+        ])
+    };
+    /// The edge whose window is open in this frame.
+    static OPEN: Cell<Option<u32>> = const { Cell::new(None) };
+}
+
+/// Registers mod `owner`'s panel at `edge` of the game's screen named
+/// `screen`; client only, during init. A screen on which the player is in
+/// the world with no window open is refused: a full-screen window there
+/// would cover play while the mods' keys still fire.
+pub(crate) fn register(
+    loader: &Loader,
+    owner: ModIndex,
+    screen: &str,
+    edge: u32,
+    callback: UiFrameFn,
+    user: *mut c_void,
+) -> Status {
+    if loader.side != Side::CLIENT {
+        return Status::MISSING;
+    }
+    if edge > UiExtension::BOTTOM || crate::controls::OPEN_SCREENS.contains(&screen) {
+        return Status::BAD_ARGS;
+    }
+    let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
+    let Some(screen) = loader
+        .reflection
+        .enum_value(screens, screen)
+        .ok()
+        .and_then(|value| u8::try_from(value).ok())
+    else {
+        return Status::MISSING;
+    };
+    let in_game = catalogue::constant(catalogue::ids::HUD_SCREEN_IN_GAME, &loader.reflection)
+        .and_then(|value| u8::try_from(value).ok());
+    if in_game == Some(screen) {
+        return Status::BAD_ARGS;
+    }
+    EXTENSIONS
+        .add(Extension {
+            registered: Registered::new(owner, callback, user),
+            screen,
+            edge,
+        })
+        .map_or(Status::TOO_LATE, |()| Status::OK)
+}
+
+/// Seals the extensions, so a registration after init is too late on every
+/// side.
+pub(super) fn seal() {
+    let _sealed = EXTENSIONS.seal();
+}
+
+/// Reads where the open screen lies, once the interface is on; without the
+/// table's entries for it, only the extensions turn off.
+pub(super) fn link(loader: &Loader) {
+    let extensions = EXTENSIONS.seal();
+    if extensions.is_empty() {
+        return;
+    }
+    let table = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
+    let found = (|| {
+        Ok::<_, &str>(Linked {
+            context_state: table(pinned::map::CONTEXT_STATE)?,
+            state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
+            hud_screen: table(pinned::ui::HUD_SCREEN)?,
+        })
+    })();
+    match found {
+        Ok(linked) => {
+            let _first = LINKED.set(linked);
+            crate::log!(
+                INFO,
+                "interface: {} screen extensions from mods",
+                extensions.len()
+            );
+        }
+        Err(id) => {
+            loader.feature_off(FEATURE, id, "this build's table lacks it");
+        }
+    }
+}
+
+/// The panels of `screen`, edge by edge and in registration order within
+/// an edge, so each edge's window opens at most once a frame.
+fn by_edge<T>(
+    panels: &[T],
+    screen: u8,
+    place: impl Fn(&T) -> (u8, u32) + Copy,
+) -> impl Iterator<Item = &T> {
+    (UiExtension::LEFT..=UiExtension::BOTTOM)
+        .flat_map(move |edge| panels.iter().filter(move |p| place(p) == (screen, edge)))
+}
+
+/// Draws the panels of the screen the player has open, each edge's in one
+/// window.
+///
+/// # Safety
+///
+/// - Called inside a frame of the game's interface update, on its thread.
+/// - `context` is the non-zero context `Engine::context` read in this frame.
+/// - No other window of the loader's or a mod's is open.
+pub(super) unsafe fn draw(engine: &Engine, context: usize) {
+    let (Some(extensions), Some(linked)) = (EXTENSIONS.sealed(), LINKED.get()) else {
+        return;
+    };
+    // SAFETY: the caller passes the frame's live interface context on the
+    // interface thread; the offsets are the table's `map.context_state` and
+    // `map.state_play_data`.
+    let data = unsafe { super::play_data(context, linked.context_state, linked.state_play_data) };
+    if data == 0 {
+        return;
+    }
+    // SAFETY: `data` is the non-null play data (checked before it), whose
+    // HUD screen byte sits at `ui.hud_screen` (clients 410, 426 and 520).
+    let screen = unsafe { crate::memory::read::<u8>(data, linked.hud_screen) };
+    for extension in by_edge(extensions, screen, |e| (e.screen, e.edge)) {
+        if extension.registered.live() {
+            // SAFETY: this function's `# Safety` gives the frame, its thread
+            // and its `context`; the only window open is the extensions' own,
+            // which `open` and `close` keep one at a time.
+            unsafe { run(extension.registered, context, extension.edge) };
+        }
+    }
+    // SAFETY: this function's `# Safety` gives the frame, its thread and its
+    // `context`, in which `open` began any window still open.
+    unsafe { close(engine, context) };
+}
+
+/// Opens `edge`'s window for a panel's first widget that needs one, ending
+/// another edge's window first; an already open one stays.
+///
+/// # Safety
+///
+/// - Called inside a frame of the game's interface update, on its thread,
+///   with that frame's non-zero `context`, from a panel's callback that
+///   [`draw`] runs, so no window but the extensions' own is open.
+pub(super) unsafe fn open(engine: &Engine, context: usize, edge: u32) {
+    if OPEN.get() == Some(edge) {
+        return;
+    }
+    // SAFETY: the caller's frame, thread and `context`.
+    unsafe { close(engine, context) };
+    let Some(index) = usize::try_from(edge).ok().filter(|&i| i < NAMES.len()) else {
+        return;
+    };
+    let name = copy(&[NAMES[index]]);
+    WINDOWS.with_borrow_mut(|windows| {
+        // SAFETY: the caller's frame, thread and `context`; no other window
+        // is open (`close` ended the last one), the window stays in the
+        // thread-local `WINDOWS` until `close` ends it, and `name` lives in
+        // the frame's text arena.
+        unsafe { engine.window_begin(context, &mut windows[index], &name, &UiText::EMPTY) };
+    });
+    OPEN.set(Some(edge));
+}
+
+/// Ends the open edge's window, if any.
+///
+/// # Safety
+///
+/// - Called inside the frame of the game's interface update in which
+///   [`open`] began the window, on its thread, with that frame's `context`.
+unsafe fn close(engine: &Engine, context: usize) {
+    let Some(index) = OPEN.take().and_then(|edge| usize::try_from(edge).ok()) else {
+        return;
+    };
+    WINDOWS.with_borrow_mut(|windows| {
+        if let Some(window) = windows.get_mut(index) {
+            // SAFETY: `open` began `window` in this frame, on this thread,
+            // with this `context`; it did not move, and the painter's widgets
+            // close every frame they open.
+            unsafe { engine.window_end(context, window) };
+        }
+    });
+}
+
+/// Runs an extension's callback; its first widget that needs a window
+/// opens `edge`'s through [`open`].
+///
+/// # Safety
+///
+/// - Called inside a frame of the game's interface update, on its thread,
+///   with that frame's non-zero `context`, while no window but the
+///   extensions' own is open.
+unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32) {
+    let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
+    DRAWING.set(Some(Drawing {
+        token,
+        owner: registered.owner,
+        context,
+        window_open: false,
+        hud: false,
+        extension: Some(edge),
+    }));
+    let frame = UiFrame {
+        header: Header::of::<UiFrame>(),
+        token,
+        screen: UiFrame::IN_GAME,
+        reserved: 0,
+    };
+    // SAFETY: the callback lives in a mod DLL that stays loaded, and it gets
+    // a live `UiFrame` and the pointer its mod registered with it; an
+    // `extern "system"` function aborts rather than unwinds.
+    crate::profile::call(
+        registered.owner,
+        crate::profile::Feature::Interface,
+        || unsafe { (registered.callback)(&raw const frame, registered.user()) },
+    );
+    DRAWING.set(None);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panels_of_the_open_screen_draw_edge_by_edge_in_registration_order() {
+        let (left, right, top) = (UiExtension::LEFT, UiExtension::RIGHT, UiExtension::TOP);
+        let panels = [(5, right), (5, left), (7, left), (5, right), (5, top)];
+        let order: Vec<_> = by_edge(&panels, 5, |p| *p)
+            .map(core::ptr::from_ref)
+            .collect();
+        let expected = [1, 0, 3, 4].map(|i| core::ptr::from_ref(&panels[i]));
+        assert_eq!(order, expected);
+    }
+}

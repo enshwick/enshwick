@@ -8,9 +8,8 @@
 //! server. The platform does the rest:
 //!
 //! - it draws the action in the game's style, on the mod's page of the Mods
-//!   screen, and, for an action with a [hint](Action::hint), as a line on
-//!   the HUD while its subject is at hand, with a key that opens a window of
-//!   the mod's actions;
+//!   screen, and runs it when the mod's own control or panel asks with
+//!   [`Actions::run`];
 //! - it sends the player's pick to the server over the loader's own
 //!   messages, checks there who may use the action, runs the handler and
 //!   shows the reply as one of the game's notices;
@@ -116,7 +115,6 @@ pub struct Action {
     label: String,
     help: String,
     args: Vec<Arg>,
-    hint: bool,
     allow: Option<Allow>,
     at: Option<At>,
     on: Option<On>,
@@ -128,7 +126,6 @@ impl core::fmt::Debug for Action {
             .field("id", &self.id)
             .field("label", &self.label)
             .field("args", &self.args)
-            .field("hint", &self.hint)
             .field("per_player", &self.on.is_some())
             .finish_non_exhaustive()
     }
@@ -148,7 +145,6 @@ impl Action {
             label: label.to_owned(),
             help: String::new(),
             args: Vec::new(),
-            hint: false,
             allow: None,
             at: None,
             on: None,
@@ -273,24 +269,6 @@ impl Action {
         self.at = Some(Box::new(at));
         self
     }
-
-    /// Shows a line on the HUD while the action's subject is at hand, with
-    /// the key that opens a window of the mod's actions. Needs
-    /// [`Action::at`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::actions::{Action, Subject};
-    ///
-    /// let action = Action::new("rest", "Rest here").at(|_| Ok(Subject::new(0, "Bed"))).hint();
-    /// assert_eq!(action.id(), "rest");
-    /// ```
-    #[must_use]
-    pub fn hint(mut self) -> Self {
-        self.hint = true;
-        self
-    }
 }
 
 /// A mod's player actions, from [`Load::actions`]; `Clone`, so handlers and
@@ -317,8 +295,8 @@ impl Actions {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed id, one declared before, arguments on a list,
-    /// or a hint without [`Action::at`].
+    /// [`Off`] for a malformed id, one declared before, or arguments on a
+    /// list.
     ///
     /// # Examples
     ///
@@ -335,9 +313,6 @@ impl Actions {
         }
         if action.on.is_some() && !action.args.is_empty() {
             return Err(Off::new(format!("action {id}: a list takes no arguments")));
-        }
-        if action.hint && action.at.is_none() {
-            return Err(Off::new(format!("action {id}: a hint needs a subject")));
         }
         let mut declared = self.registry.declared.relock_write();
         if declared.iter().any(|d| d.action.id == id) {
@@ -423,7 +398,6 @@ unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out
     let reply = crate::host::guard("panic in an action", String::new, || match call.kind {
         ActionCall::SHEET => registry.sheet(&player, language),
         ActionCall::RUN => registry.run_from_interface(&player, action, args, language),
-        ActionCall::HINTS => registry.hints(&player, language),
         ActionCall::CONSOLE => {
             let outcome = registry.run_from_console(&player, action);
             format!("{}{}", u8::from(outcome.done), outcome.text)

@@ -84,7 +84,7 @@ struct State {
 /// The HUD screens on which the player is in the world with no window
 /// open: those the game's own HUD test counts as no menu (client 520), less
 /// the read-only loot chest and the summoner menu, which are windows.
-const OPEN_SCREENS: [&str; 6] = [
+pub(crate) const OPEN_SCREENS: [&str; 6] = [
     "BlueprintMultiTool",
     "OvergrowthMultiTool",
     "DecayMultiTool",

@@ -115,6 +115,8 @@ mod required_names;
 mod resource_types;
 mod resource_values;
 mod schedule;
+#[cfg(feature = "unstable")]
+mod screen_extensions;
 mod services;
 mod shapes;
 mod sides;

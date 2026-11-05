@@ -41,7 +41,8 @@ use super::entries::transactions::{
     transaction_undo,
 };
 use super::entries::ui::{
-    fog_open, fog_read, map_marker_types, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget,
+    fog_open, fog_read, map_marker_types, ui_dialog, ui_extension, ui_frame, ui_hud, ui_markers,
+    ui_widget,
 };
 use super::entries::world::{
     account_action, actions, build_rights, chat, chat_mute_has, chat_mute_set, component,
@@ -240,4 +241,5 @@ pub(crate) static API: HostApi = HostApi {
     game_version,
     control,
     run_action,
+    ui_extension,
 };

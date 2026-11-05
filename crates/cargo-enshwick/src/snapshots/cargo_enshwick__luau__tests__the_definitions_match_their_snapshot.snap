@@ -703,6 +703,23 @@ export type ImpactUiValue = {
 	value_format: StatFormat,
 }
 
+--- An interaction the game is about to allow, from `Load.on_interaction`. The name is enshwick's: the loader hooks the game functions behind it.
+export type Interaction = {
+	--- What the player does.
+	kind: InteractionKind,
+	--- The player's character.
+	player: number,
+	--- The entity acted on.
+	target: number,
+	--- The item the target was placed from, when the platform could read it.
+	item: number?,
+	--- Where the target stands, in metres, when the platform could read it.
+	position: vector?,
+}
+
+--- What a player does with the target.
+export type InteractionKind = "Open" | "Move" | "Sort" | "Stock" | "Dismantle" | "QuickStash" | "Upgrade"
+
 --- The last interaction a player started with a container.
 export type InteractionOfferRuntime = {
 	--- The entity that last opened or looted the container; nil before anyone did.
@@ -2411,6 +2428,11 @@ declare enshwick: {
 		--- Runs `filter` after the game's cursor check allows a placement; returning `false` refuses it as the game refuses a placement without building permission. It runs on both sides, on the cursor systems' worker threads: the server's answer decides, and a client running the mod shows the cursor as not allowed. The cursor check runs on every frame a player aims to build, so `filter` must not allocate, lock or log, and gives the same answer on both sides.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_build: (filter: (arg1: Placement) -> boolean?) -> (),
+	},
+	interactions: {
+		--- Runs `filter` before the game allows a player's interaction with an entity; returning `false` refuses it the game's own way. It runs in the server's world only, in the dedicated server or a hosting client, on the thread of the system that checks the interaction: keep it quick and never block. The game asks whether to offer an interaction for every entity in each player's reach on every frame, so `filter` runs many times a frame: it must not allocate, lock or log. Moves, sorts, stock draws, dismantling and upgrades ask once per action. An interaction without a player's character or without a target is allowed unasked.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_interaction: (filter: (arg1: Interaction) -> boolean?) -> (),
 	},
 	progress: {
 		--- Answers the game's checks of `skill`: `true` unlocks it for that check, `false` locks it, nil keeps the game's answer. It runs on both sides, on the checking thread, and only for `skill`.

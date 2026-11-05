@@ -19,6 +19,7 @@ mod actions;
 mod demo;
 mod dialog;
 mod engine;
+mod extensions;
 mod map;
 mod menu_line;
 mod mods;
@@ -34,6 +35,7 @@ use enshwick::abi::{
 pub(crate) use demo::open as open_demo;
 pub(crate) use dialog::show;
 use engine::{Engine, HudWindow, PopupFn, UiText, Window};
+pub(crate) use extensions::register as register_extension;
 pub(crate) use map::play_data;
 pub(crate) use map::set as set_markers;
 pub(crate) use mods::mismatch_screen_on;
@@ -230,8 +232,8 @@ static UI_THREAD: AtomicU32 = AtomicU32::new(0);
 // between a window's begin and end would leave the game's window stack
 // unbalanced every frame.
 static FRAMES_FUSE: Fuse = Fuse::new("mods' windows");
+static EXTENSIONS_FUSE: Fuse = Fuse::new("screen extensions");
 static DEMO_FUSE: Fuse = Fuse::new("interface demo");
-static ACTIONS_FUSE: Fuse = Fuse::new("player actions window");
 static MODS_SCREEN_FUSE: Fuse = Fuse::new("Mods screen");
 static DIALOGS_FUSE: Fuse = Fuse::new("dialogs");
 /// Turns the mods' HUD items off at their first panic.
@@ -251,6 +253,10 @@ struct Drawing {
     window_open: bool,
     /// Drawing the HUD: items gather for their anchors.
     hud: bool,
+    /// The edge of the game screen whose extension draws now: its widgets
+    /// go into that edge's window, which the loader opens and the callback
+    /// may not end or nest.
+    extension: Option<u32>,
 }
 
 /// A HUD item a callback drew: anchor, then a label or a bar.
@@ -415,6 +421,7 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
 pub(crate) fn link(loader: &'static Loader) {
     let count = FRAMES.seal().len();
     let hud_count = HUDS.seal().len();
+    extensions::seal();
     if loader.side != Side::CLIENT {
         return;
     }
@@ -451,6 +458,7 @@ pub(crate) fn link(loader: &'static Loader) {
             INFO,
             "interface: {count} frame and {hud_count} HUD callbacks from mods"
         );
+        extensions::link(loader);
     }
 }
 
@@ -525,18 +533,18 @@ unsafe extern "system" fn detour(state: *mut u8) {
         // SAFETY: the game draws its popup inside the frame on the interface
         // thread, `context` is non-zero (checked by the guard before it), and
         // `frames` closed every window a mod's callback left open.
-        && drew(&DEMO_FUSE, "the demo's draw", || unsafe { demo::draw(engine, context) })
+        && drew(&EXTENSIONS_FUSE, "the screen extensions' draw", || unsafe {
+            extensions::draw(engine, context);
+        })
         // SAFETY: the game draws its popup inside the frame on the interface
         // thread, `context` is non-zero (checked by the guard before it), and
-        // `demo::draw` ends its window before it returns.
-        && drew(&ACTIONS_FUSE, "the actions' draw", || unsafe {
-            actions::draw(engine, context);
-        })
+        // `extensions::draw` ends each window before it returns.
+        && drew(&DEMO_FUSE, "the demo's draw", || unsafe { demo::draw(engine, context) })
         && drew(&MODS_SCREEN_FUSE, "the Mods screen's draw", || {
             if let Some(loader) = crate::host::loader() {
                 // SAFETY: the game draws its popup inside the frame on the
                 // interface thread, `context` is non-zero (checked by the
-                // guard before it), `actions::draw` ends its window before it
+                // guard before it), `demo::draw` ends its window before it
                 // returns, and `frame` is the count `mods::next_frame` gave
                 // this frame.
                 unsafe { mods::draw(loader, engine, context, frame) };
@@ -613,6 +621,7 @@ fn hud(engine: &Engine, context: usize) {
             context,
             window_open: false,
             hud: true,
+            extension: None,
         }));
         let frame = UiFrame {
             header: enshwick::abi::Header::of::<UiFrame>(),
@@ -631,7 +640,6 @@ fn hud(engine: &Engine, context: usize) {
         DRAWING.set(None);
     }
     HUD_ITEMS.with_borrow_mut(demo::hud_samples);
-    HUD_ITEMS.with_borrow_mut(actions::hud);
     HUD_ITEMS.with_borrow(|items| {
         if items.is_empty() {
             return;
@@ -745,6 +753,7 @@ fn frames(engine: &Engine, context: usize) {
             context,
             window_open: false,
             hud: false,
+            extension: None,
         }));
         let frame = UiFrame {
             header: enshwick::abi::Header::of::<UiFrame>(),

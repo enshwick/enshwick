@@ -299,8 +299,7 @@ impl FakeHost {
 impl Installed {
     /// Asks the mod's player actions as the loader does: `kind` is one of
     /// [`ActionCall::SHEET`](crate::abi::ActionCall::SHEET),
-    /// [`ActionCall::RUN`](crate::abi::ActionCall::RUN),
-    /// [`ActionCall::HINTS`](crate::abi::ActionCall::HINTS) or
+    /// [`ActionCall::RUN`](crate::abi::ActionCall::RUN) or
     /// [`ActionCall::CONSOLE`](crate::abi::ActionCall::CONSOLE), for
     /// `player` reading `language`; `action` and `args` for a run. `None` when the
     /// mod has no actions.

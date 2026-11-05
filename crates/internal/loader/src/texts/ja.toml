@@ -11,7 +11,6 @@
 "actions.players.previous" = "前のプレイヤー"
 "actions.no-players" = "ほかにオンラインのプレイヤーはいません。"
 "actions.close" = "閉じる"
-"actions.hint" = "[{key}] {label}：{subject}"
 "controls" = "操作"
 "controls.key" = "キー: {key}"
 "controls.second" = "第2キー: {key}"

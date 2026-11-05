@@ -6,6 +6,7 @@ members = [
     "crates/enshwick-gamedata",
     "crates/enshwick-macros",
     "crates/internal/*",
+    "examples/chest-panel",
     "examples/haggling",
     "examples/horn",
     "examples/trading-post",

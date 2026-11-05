@@ -15,14 +15,24 @@ pub const fn order(kind: u32, window_open: bool) -> Status {
         UiWidget::END if !window_open => Status::REFUSED,
         UiWidget::WINDOW | UiWidget::END | UiWidget::SOUND => Status::OK,
         _ if !window_open => Status::REFUSED,
-        UiWidget::LABEL
-        | UiWidget::BUTTON
-        | UiWidget::TOGGLE
-        | UiWidget::SLIDER
-        | UiWidget::DROPDOWN
-        | UiWidget::PROGRESS => Status::OK,
+        kind if needs_window(kind) => Status::OK,
         _ => Status::MISSING,
     }
+}
+
+/// Whether a widget of `kind` draws inside a window, so a screen
+/// extension's first such widget opens its edge's window.
+#[must_use]
+pub const fn needs_window(kind: u32) -> bool {
+    matches!(
+        kind,
+        UiWidget::LABEL
+            | UiWidget::BUTTON
+            | UiWidget::TOGGLE
+            | UiWidget::SLIDER
+            | UiWidget::DROPDOWN
+            | UiWidget::PROGRESS
+    )
 }
 
 /// A progress bar's value, kept between `min` and `max`; `None` when a
@@ -82,6 +92,16 @@ mod tests {
         }
         assert_eq!(order(UiWidget::SOUND, false), Status::OK);
         assert_eq!(order(UiWidget::SOUND, true), Status::OK);
+    }
+
+    #[test]
+    fn only_widgets_drawn_inside_a_window_need_one() {
+        for kind in [UiWidget::LABEL, UiWidget::BUTTON, UiWidget::PROGRESS] {
+            assert!(needs_window(kind), "{kind}");
+        }
+        for kind in [UiWidget::WINDOW, UiWidget::END, UiWidget::SOUND, u32::MAX] {
+            assert!(!needs_window(kind), "{kind}");
+        }
     }
 
     #[test]

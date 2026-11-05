@@ -11,7 +11,6 @@
 "actions.players.previous" = "Предыдущие игроки"
 "actions.no-players" = "Других игроков сейчас нет."
 "actions.close" = "Закрыть"
-"actions.hint" = "[{key}] {label}: {subject}"
 "controls" = "Управление"
 "controls.key" = "Клавиша: {key}"
 "controls.second" = "Вторая клавиша: {key}"

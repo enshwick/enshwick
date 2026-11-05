@@ -31,7 +31,8 @@ use crate::{Load, Off};
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[script(name = "InteractionKind")]
 #[non_exhaustive]
 pub enum Kind {
     /// The game offers to open it.
@@ -58,7 +59,7 @@ pub enum Kind {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct Interaction {
     /// What the player does.
     pub kind: Kind,
@@ -110,6 +111,7 @@ where
     ))
 }
 
+#[crate::script(interactions)]
 impl Load<'_> {
     /// Runs `filter` before the game allows a player's interaction with an
     /// entity; returning `false` refuses it the game's own way. It runs in
@@ -130,6 +132,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[script]
     pub fn on_interaction<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&Interaction) -> bool + Send + Sync + 'static,

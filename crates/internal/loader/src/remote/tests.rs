@@ -83,9 +83,6 @@ fn messages_round_trip() {
             ok: true,
             text: "Ann may use it".into(),
         },
-        Message::ActionHints {
-            text: "you.trading-post\taccess\tWho\tYour stall\n".into(),
-        },
     ] {
         assert_eq!(
             Message::read(message.kind(), &message.body()),

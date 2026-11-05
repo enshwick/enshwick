@@ -85,6 +85,60 @@ impl Installed {
         drawn
     }
 
+    /// Runs the callbacks of the mod's extensions of the game screen
+    /// `screen` once, as when the player has that screen open, and returns
+    /// what each drew, with its edge (`UiExtension::LEFT` and on), edge by
+    /// edge and in registration order within an edge. The loader opens each
+    /// edge's window for its panels, so a window widget is refused there,
+    /// and a panel that drew nothing is left out, as it shows no window.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Side;
+    /// use enshwick::ui::HudScreenType;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// assert!(loader.draw_screen(HudScreenType::StorageChest).is_empty());
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn draw_screen(&self, screen: crate::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
+        let mut extensions = table::with(Vec::new(), |s| s.extensions.clone());
+        extensions.sort_by_key(|&(_, edge, _, _)| edge);
+        let mut drawn = Vec::new();
+        for (token, (name, edge, callback, user)) in (1u64..).zip(extensions) {
+            if name != screen.name() {
+                continue;
+            }
+            table::with((), |s| {
+                s.frame = Some((token, true, Vec::new()));
+                s.extending = Some(token);
+            });
+            let frame = crate::abi::UiFrame {
+                header: Header::of::<crate::abi::UiFrame>(),
+                token,
+                screen: crate::abi::UiFrame::IN_GAME,
+                reserved: 0,
+            };
+            // SAFETY: a callback the mod registered with its own pointer.
+            unsafe {
+                callback(
+                    &raw const frame,
+                    core::ptr::with_exposed_provenance_mut(user),
+                );
+            }
+            let list = table::with(None, |s| {
+                s.extending = None;
+                s.frame.take()
+            });
+            if let Some((_, _, list)) = list.filter(|(_, _, list)| !list.is_empty()) {
+                drawn.push((edge, list));
+            }
+        }
+        drawn
+    }
+
     /// The mod's markers on the map, as it set them last.
     ///
     /// # Examples

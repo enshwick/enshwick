@@ -7,7 +7,8 @@ settings rows, sounds and button labels in the player's language.
 ## Clients only
 
 Everything
-here is client only; on a server, `load.ui()` and `load.on_frame` return
+here is client only; on a server, `load.ui()`, `load.on_frame`,
+`load.on_hud` and `load.extend_screen` return
 [`Off`](concepts/lifecycle.md) with "on clients only".
 
 ## Frames
@@ -116,6 +117,70 @@ draws on the HUD what its server half sent over a
 [channel](messages.md), and only on a client: it asks
 `load.host().build().side` before it calls `on_hud`, since a dedicated server
 refuses it. Its test draws the HUD through the fake host with `draw_hud`.
+
+## Panels on the game's screens
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
+[`load.extend_screen(screen, edge, draw)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui/extension.rs)
+adds a panel to one of the game's own screens, such as a storage chest's.
+`screen` is a `HudScreenType`, the game's own list of screens, and `edge`
+is the `Left`, `Right`, `Top` or `Bottom` edge of the screen; the panel sits
+there, centred along it. `draw` runs once per frame while the player has that
+screen open, and fills the panel with the widgets of the `Frame` it is
+handed, as a window's body does. The panel shows and hides with the screen.
+
+```rust
+use enshwick::ui::{Edge, HudScreenType, Label, Style};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.extend_screen(HudScreenType::StorageChest, Edge::Right, |panel| {
+        panel.label(Label::new("Shared with your guild").style(Style::Secondary));
+        if panel.button("Sort by name") {
+            // Send the server one of the mod's player actions.
+        }
+    })
+}
+```
+
+The game's screens have no place to add to, so the loader draws the panels
+at each edge in one window of its own, on a layer above the game's screen and
+below the game's tooltips and the item being dragged. That window shows only
+once a panel draws a widget in it, so a panel that draws nothing shows
+nothing. The panel never moves or changes the game's screen. `frame.window`
+is refused inside a panel, which is already one. A panel cannot go on the
+screens of play with no window open (`InGame`, `NoUi`, `TakeScreenshot` and
+the multitools' building screens), where it would cover the world:
+`extend_screen` returns `Off` for them. The game's buttons stay the game's: a panel's buttons are the mod's own,
+and a press that changes the world goes to the server as a
+[player action](actions.md), which the server checks again.
+
+A panel draws for every storage chest, the mod's own and the game's alike.
+To show it only at the mod's own objects, the client part tracks which object
+the player opened, for example from a message its server half sends when the
+player opens one.
+[`examples/chest-panel`](https://github.com/enshwick/enshwick/tree/main/examples/chest-panel)
+adds a panel whose button runs a player action, and tests it with
+`draw_screen`. On a game build without a screen of that name,
+`extend_screen` returns `Off`; when the build lacks the place where the open
+screen is read, the panels stay off, and the log and the Mods screen say why.
+
+## A prompt on the mod's object
+
+A mod's object gets the game's own prompt when it is placed from a template
+the game offers an interaction for, such as a chest's. The mod shapes that
+prompt with parts that work on every client, with or without Enshwick:
+
+| What                              | How                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| The prompt's title                | the object's label, [`world.set_label`](world.md#labels)                  |
+| No prompt for a player            | refuse `Kind::Open` in [`load.on_interaction`](vetoes.md#interactions)    |
+| The mod's own action on the press | the game event `AcceptOfferedInteractionEvent` ([Game events](game-events.md)), its `host_entity_id` the object |
+
+The game's data shows the object's own action, such as opening the chest,
+running on the press as well, with the mod's action beside it on the server.
+This is not yet checked in the running game.
 
 ## Map markers
 
@@ -238,8 +303,8 @@ shows a few at a time with "Next Page" and "Previous Page" buttons, and the
 log says why.
 
 In a game, the screen also shows the [player actions](actions.md) the
-server offers the player: an Actions button above the list, and one under
-each mod that has actions. They show one action at a time, a list of players
+server offers the player: an Actions button under each mod that has
+actions. They show one action at a time, a list of players
 as toggle rows, five to a page, and an action with arguments as rows above
 its button.
 
@@ -284,7 +349,8 @@ With the `test` feature, the [fake loader](testing.md) runs frame callbacks
 with `draw_frame`, which returns what they drew as `Drawn` values, and takes
 the player's inputs for the next frame with `input`, such as `Input::Click`
 for the button labelled "Close". `draw_hud` runs the HUD callbacks and
-returns their items with their anchors, `markers` lists the mod's markers,
+returns their items with their anchors, `draw_screen` runs the panels of one
+game screen and returns what each drew with its edge, `markers` lists the mod's markers,
 `dialogs` lists the dialogs waiting and `answer` answers the oldest. A fake
 built with `.side(Side::CLIENT)` serves the interface; the default server
 side turns it away, as a real server does.

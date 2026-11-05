@@ -186,7 +186,17 @@ function without one, unless this table names it and says why.
 | `packs::*` | Reading a pack's folder and files. The loader reads a Luau mod's own folder as its pack, and a script adds content from code through `enshwick.content` and `enshwick.affixes`. |
 | `typed::EventType::*`, `typed::ResourceType::*` | Rust types generated from the game's reflection, which a Rust mod compiles in. Luau reaches the same events with `enshwick.on_game_type` and the same resources as values with `enshwick.resources.game_value` and `serve`; `cargo enshwick types --luau` writes their types for the editor. |
 | `affixes::roll` | `enshwick.affixes.roll` rolls an item, as `Affixes::roll` does, since a namespace holds one function of a name. The roll from a pool is `enshwick.affixes.roll_pool`. |
+| `actions::clean`, `actions::decode`, `actions::decode_args`, `actions::encode`, `actions::encode_args` | The text form a sheet and its arguments take between the server and a client. The loader and the fake host speak it; a script's actions never see it. |
+| `controls::Key::bits`, `controls::Key::from_bits`, `ui::Response::from_raw`, `ui::Response::to_raw` | The binary interface's form of a key and of a dialog's answer. A script names a key by its text, such as `Shift+E`, and an answer by its name. |
+| `controls::Tracker::*` | The key tracker the loader's key reader and the fake host share, so both fire a control alike. A script's control fires through the same loader. |
+| `ui::Ui::ask` | It blocks a thread of the mod's own until the player answers. A script has no thread of its own, so it takes a dialog's answer in a callback, as `Ui::dialog` does. |
 | `affixes::lines_of` | The loader's own listing of an item's lines from the pool it keeps. A script reads them with `enshwick.affixes.lines`. |
+
+A few calls cost more in Luau than in Rust. The filter of
+`enshwick.interactions.on_interaction` runs for every entity in each
+player's reach on every frame; where a Rust filter allocates nothing, the
+runtime builds the interaction's table and enters the script each time. Keep
+that filter short, or write it in Rust for a mod that checks many entities.
 
 ## The sandbox
 

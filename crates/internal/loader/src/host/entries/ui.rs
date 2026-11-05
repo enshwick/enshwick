@@ -56,6 +56,38 @@ pub(crate) extern "system" fn ui_hud(
     })
 }
 
+pub(crate) extern "system" fn ui_extension(
+    me: ModHandle,
+    spec: *const api_frame::UiExtension,
+    callback: api_frame::UiFrameFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("ui_extension", || {
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        // SAFETY: `HostApi::ui_extension` has the mod pass `spec` null or
+        // readable for the size its header gives, with no other writer
+        // during the call, and all of it is required.
+        let Some(spec) = (unsafe {
+            get_headed(
+                spec,
+                <api_frame::UiExtension as enshwick::abi::Headed>::BORN,
+            )
+        }) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the mod's screen name stays alive and unchanged for this
+        // call by the ABI's borrow rule; `register_extension` resolves it
+        // before it returns.
+        let Some(screen) = (unsafe { spec.screen.as_str() }) else {
+            return Status::BAD_ARGS;
+        };
+        crate::ui::register_extension(loader, index, screen, spec.edge, callback, user)
+    })
+}
+
 pub(crate) extern "system" fn ui_markers(
     me: ModHandle,
     markers: *const api_frame::UiMarker,

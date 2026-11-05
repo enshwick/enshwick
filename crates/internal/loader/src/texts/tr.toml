@@ -11,7 +11,6 @@
 "actions.players.previous" = "Önceki oyuncular"
 "actions.no-players" = "Çevrimiçi başka oyuncu yok."
 "actions.close" = "Kapat"
-"actions.hint" = "[{key}] {label}: {subject}"
 "controls" = "Kontroller"
 "controls.key" = "Tuş: {key}"
 "controls.second" = "İkinci tuş: {key}"
