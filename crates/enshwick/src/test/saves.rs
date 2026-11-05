@@ -44,4 +44,17 @@ impl Installed {
     pub fn saves_held(&self) -> bool {
         table::with(false, |s| s.save.held)
     }
+
+    /// The entities the mod left out of the world's save.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.unsaved().is_empty());
+    /// ```
+    #[must_use]
+    pub fn unsaved(&self) -> Vec<crate::Entity> {
+        table::with(Vec::new(), |s| s.save.unsaved.clone())
+    }
 }

@@ -1672,4 +1672,14 @@ pub struct HostApi {
     /// taking effect after the next step; [`Status::BAD_ARGS`] for another
     /// `held`. A panic in the loader returns [`Status::REFUSED`]. ABI 11.6.
     pub hold_saves: extern "system" fn(me: ModHandle, held: u8) -> Status,
+    /// Keeps `entity` out of the world's save for `saved` 0, or puts it back
+    /// for 1, through the game's own component change, which shows from the
+    /// next step: an entity left out is gone once the world loads again.
+    /// Only for an entity a mod spawned with [`HostApi::spawn`] or placed:
+    /// [`Status::REFUSED`] for any other, [`Status::BAD_ARGS`] for entity 0
+    /// or another `saved`, and the world's own errors for one not in it.
+    /// The server's game thread only ([`Status::WRONG_THREAD`] elsewhere);
+    /// [`Status::MISSING`] on a build without the change. A panic in the
+    /// loader returns [`Status::REFUSED`]. ABI 11.6.
+    pub set_saved: extern "system" fn(me: ModHandle, entity: Entity, saved: u8) -> Status,
 }

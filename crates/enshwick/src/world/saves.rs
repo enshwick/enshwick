@@ -69,6 +69,37 @@ impl World {
         })
     }
 
+    /// Keeps `entity`, one the mod spawned or placed, out of the world's
+    /// save while `saved` is false, or puts it back in: an entity left out
+    /// is gone once the world loads again, as the game's own passing
+    /// animals are. It shows from the next step. On the server's game
+    /// thread.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for an entity no mod spawned or placed, the
+    /// world's own errors for one not in it, [`WorldError::WrongThread`] off
+    /// the game thread and [`WorldError::Missing`] on a build without the
+    /// change.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn passing(world: &enshwick::world::World, spawned: enshwick::Entity) {
+    ///     if let Err(why) = world.set_saved(spawned, false) {
+    ///         enshwick::warn!("kept in the save: {why}");
+    ///     }
+    /// }
+    /// ```
+    #[script]
+    pub fn set_saved(self, entity: crate::Entity, saved: bool) -> Result<(), WorldError> {
+        WorldError::from_status((self.0.host.api().set_saved)(
+            self.0.host.handle(),
+            entity,
+            u8::from(saved),
+        ))
+    }
+
     /// Holds the world's saves while `held`, or lets them go: the game
     /// saves only while no running mod holds them, so its timed saves and
     /// [`World::save`] wait meanwhile, for example while players are outside
