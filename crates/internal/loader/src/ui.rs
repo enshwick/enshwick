@@ -297,18 +297,26 @@ impl Arena {
     }
 
     /// `parts` joined, as a text the game may read for the next frames;
-    /// empty once the frame's buffer is full.
+    /// empty once the frame's buffer is full. Each backslash is doubled:
+    /// the game's label markup reads `\` with the character after it, and
+    /// shows `\\` as one backslash (client 26430625).
     fn text(&mut self, parts: &[&[u8]]) -> UiText {
         let Some(buffer) = self.buffers.get_mut(self.current) else {
             return UiText::EMPTY;
         };
-        let len: usize = parts.iter().map(|p| p.len()).sum();
+        let backslashes = |p: &[u8]| p.iter().filter(|&&b| b == b'\\').count();
+        let len: usize = parts.iter().map(|p| p.len() + backslashes(p)).sum();
         if buffer.len() + len > buffer.capacity() {
             return UiText::EMPTY;
         }
         let start = buffer.len();
         for part in parts {
-            buffer.extend_from_slice(part);
+            for (i, piece) in part.split(|&b| b == b'\\').enumerate() {
+                if i > 0 {
+                    buffer.extend_from_slice(br"\\");
+                }
+                buffer.extend_from_slice(piece);
+            }
         }
         // Within capacity, the buffer never moves; it is cleared only
         // `ARENA_FRAMES` frames later.
