@@ -14,6 +14,10 @@ on:
         description: Known issues, as Markdown; empty says none are reported
         type: string
         default: ""
+      publish:
+        description: Make the prerelease; off builds and shows the notes in the run's summary only
+        type: boolean
+        default: true
 
 permissions: {}
 
@@ -69,6 +73,7 @@ jobs:
           fi
           cargo xtask notes --out "$RUNNER_TEMP/notes.md" --known-issues "$KNOWN_ISSUES"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
 
       # The archive, and the PDB and SBOM of every DLL.
       - uses: ./.github/actions/release-files
@@ -86,6 +91,7 @@ jobs:
       # tags with the app's token.
       - name: Token for the tag
         id: token
+        if: inputs.publish
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
@@ -95,6 +101,7 @@ jobs:
           permission-workflows: write
 
       - name: Publish
+        if: inputs.publish
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           VERSION: ${{ steps.version.outputs.version }}

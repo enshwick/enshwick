@@ -27,9 +27,9 @@ A mod is a Windows DLL. You need:
 - on Windows, the MSVC build tools; on Linux or macOS,
   [cargo-xwin](https://github.com/rust-cross/cargo-xwin)
   (`cargo install --locked cargo-xwin`), which fetches the Windows SDK;
-- the Enshwick loader in the game's folder: extract
-  [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip),
-  the development build until the first release, 1.0.0, next to
+- the Enshwick loader in the game's folder: extract `enshwick.zip` of the
+  newest alpha on the
+  [releases page](https://github.com/enshwick/enshwick/releases) next to
   `enshrouded.exe` or `enshrouded_server.exe`.
 
 ```bash
