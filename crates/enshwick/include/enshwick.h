@@ -1140,6 +1140,11 @@ typedef uint32_t EnshwickEvent;
 // mods raise none, and a player's lines raise at most eight a second.
 // Raised on the game thread after the step. Server only. ABI 11.6.
 #define EnshwickEvent_CHAT_SAID 21
+// A save of the world got under way: what a mod writes now beside the
+// save belongs to it, and `Event::WORLD_SAVED` follows once it is on
+// disk; no data. Raised on the game thread after the step that started
+// it. Server only. ABI 11.6.
+#define EnshwickEvent_WORLD_SAVING 22
 
 // A mod event a mod defines, or the one it subscribes to.
 typedef struct EnshwickEventSpec {
@@ -3087,6 +3092,23 @@ typedef uint8_t (*EnshwickChatFilterFn)(const struct EnshwickChatLine *line,
                                         struct EnshwickChatRewrite *rewrite,
                                         void *user);
 
+// A world's save on disk, written by
+// `HostApi::save_info`.
+typedef struct EnshwickSaveInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The world's GUID, which stays the same across its saves.
+  uint8_t world[16];
+  // When the save was written, in seconds since the Unix epoch.
+  uint64_t saved_at;
+  // The save file's size in bytes.
+  uint64_t size;
+  // The backups the game keeps beside it, 0 to 10.
+  uint32_t backups;
+  // Zero.
+  uint32_t reserved;
+} EnshwickSaveInfo;
+
 // The table of services the loader offers a mod.
 //
 // A function appended at its end is a new
@@ -4624,6 +4646,21 @@ typedef struct EnshwickHostApi {
   // the life of the process and never freed by the loader. A panic in
   // the loader returns `Status::REFUSED`. ABI 11.6.
   EnshwickStatus (*chat_filter)(EnshwickModHandle me, EnshwickChatFilterFn callback, void *user);
+  // Writes the save of the world the server runs to `out`, which the
+  // mod starts with `Header::of`: `Status::MISSING` before its first
+  // save, while no world runs or on a client that hosts none, and
+  // `Status::REFUSED` when the file does not read. Any thread; `out` is
+  // borrowed for the call. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.6.
+  EnshwickStatus (*save_info)(EnshwickModHandle me, struct EnshwickSaveInfo *out);
+  // Holds the world's saves while `held` is 1, or lets them go for 0:
+  // the game saves only while no running mod holds them, the timed save
+  // and `HostApi::save_world` waiting meanwhile, and the log names each
+  // mod that holds or lets go. A mod that turns off lets go. Server only
+  // (`Status::MISSING` on a build without the save layout); any thread,
+  // taking effect after the next step; `Status::BAD_ARGS` for another
+  // `held`. A panic in the loader returns `Status::REFUSED`. ABI 11.6.
+  EnshwickStatus (*hold_saves)(EnshwickModHandle me, uint8_t held);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

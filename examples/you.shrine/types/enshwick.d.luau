@@ -1590,6 +1590,18 @@ export type Rolled = {
 --- A `RecipeRule` a script gives, owning its names.
 export type Rule = { Recipe: string } | { Output: string } | { Workshop: string } | "Hand"
 
+--- The save of the world the server runs, from `World.save_info`.
+export type SaveInfo = {
+	--- The world's GUID.
+	world: string,
+	--- When the save was written, as time since the Unix epoch.
+	saved_at: number,
+	--- The save file's size in bytes.
+	size: string,
+	--- The backups the game keeps beside it, 0 to 10.
+	backups: number,
+}
+
 --- Whose a knowledge value is. The name is enshwick's, not the game's.
 export type Scope = "World" | "Player"
 
@@ -2151,6 +2163,7 @@ declare enshwick: {
 		& ((event: "LoaderSettingsChanged", handler: () -> ()) -> ())
 		& ((event: "WorldLoaded", handler: () -> ()) -> ())
 		& ((event: "WorldSaved", handler: () -> ()) -> ())
+		& ((event: "WorldSaving", handler: () -> ()) -> ())
 		& ((event: "ShutdownStarted", handler: () -> ()) -> ())
 		& ((event: "JoinRefused", handler: () -> ()) -> ())
 		& ((event: "AltarsChanged", handler: () -> ()) -> ())
@@ -2314,6 +2327,10 @@ declare enshwick: {
 		update: (entity: number, ty: WritableType, write: (arg1: buffer) -> buffer?) -> (),
 		--- The voxels and props of the region between voxels `a` and `b`, both included, as plain data counted from the region's lowest corner. It reads the voxels in tiles of up to `READ_MAX`, 32 metres a side, at most `CAPTURE_TILES` of them, and takes a prop whose position lies in the region. Each tile read took 2.4 to 3.1 milliseconds on a server copy under Rosetta and Wine, so a capture holds the game thread for at most about 50 milliseconds. A mod captures a bigger region in parts over several steps itself. Every voxel read can pull a part of the world into memory: a region not loaded yet fails with `WorldError.NotLoaded` after every tile has started loading, so the next try a second or so later finds more of it.
 		capture: (a: VoxelPos, b: VoxelPos) -> Capture,
+		--- The world's save as it is on disk; nil before the first save of a new world, while no world runs, or when the file does not read. Any thread.
+		save_info: () -> SaveInfo?,
+		--- Holds the world's saves while `held`, or lets them go: the game saves only while no running mod holds them, so its timed saves and `World.save` wait meanwhile, for example while players are outside a safe room. Each mod holds its own; a mod that turns off lets go. The log names each mod that holds or lets go. Takes effect after the next step; any thread.
+		hold_saves: (held: boolean) -> (),
 		--- Runs `filter` before the server applies a player's rename of any entity, on its game thread; returning `false` refuses the rename. The game itself checks no permission for renames. A client runs it while it hosts a game.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_rename: (filter: (arg1: Rename) -> boolean?) -> (),

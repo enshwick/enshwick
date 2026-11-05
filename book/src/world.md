@@ -256,6 +256,32 @@ mod's state; the loader sets it aside when a new world takes the name
 Like the reads, all three need the game thread; `key()` and `data_dir()`
 work from any thread.
 
+[`WorldSaving`](events.md) is raised after the step in which a save got
+under way, before [`WorldSaved`](events.md): what the mod writes then, its
+world store and files in its data folder, belongs to that save.
+`save_info()` reads the save on disk: the world's GUID, which stays the same
+across saves, when it was written, its size and how many backups the game
+keeps beside it; it is `None` before the first save of a new world.
+
+`hold_saves(true)` holds the world's saves and `hold_saves(false)` lets
+them go, for a mod that saves only while players are in safe places. The
+game saves only while no running mod holds its saves: the timed saves and
+`save()` wait meanwhile. Each mod holds its own, the log names each mod that
+holds or lets go, and a mod that turns off lets go.
+
+```rust
+use enshwick::events::WorldSaving;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let world = load.world()?;
+    load.on::<WorldSaving>(move |()| {
+        if let Some(info) = world.save_info() {
+            enshwick::info!("saving over a save of {} bytes", info.size);
+        }
+    })
+}
+```
+
 ## Players
 
 `player(entity)` returns the connected player whose character is `entity`;

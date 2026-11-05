@@ -35,19 +35,18 @@ mod tests {
 
     #[test]
     fn a_mod_hears_a_save_begin_reads_the_save_and_holds_saves() {
-        let loader = enshwick::test::FakeHost::new().install();
+        let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = WORLD.get().unwrap();
 
-        // SAFETY: neither event carries data.
-        let ran = unsafe {
-            loader.raise_raw(Event::WORLD_SAVING, core::ptr::null())
-                + loader.raise_raw(Event::WORLD_SAVED, core::ptr::null())
-        };
-        assert_eq!(ran, 2);
+        // SAFETY: the event carries no data.
+        let saving = unsafe { loader.raise_raw(Event::WORLD_SAVING, core::ptr::null()) };
+        // SAFETY: the event carries no data.
+        let saved = unsafe { loader.raise_raw(Event::WORLD_SAVED, core::ptr::null()) };
+        assert_eq!((saving, saved), (1, 1));
         assert_eq!(*ORDER.lock().unwrap(), ["saving", "saved"]);
 
         assert_eq!(world.save_info(), None, "no save before the first");
