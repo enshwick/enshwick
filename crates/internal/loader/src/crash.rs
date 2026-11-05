@@ -109,9 +109,13 @@ pub(crate) enum Blame {
     /// The loader was running a mod's callback: the mod's range, if known,
     /// the mod's index and the feature.
     Callback(Option<usize>, usize, &'static str),
-    /// A mod's code was on the stack, or with none the loader's: the range
-    /// and the frame.
+    /// A mod's code was on the stack: the range and the frame.
     Stack(usize, usize),
+    /// It faulted in the game under the loader's code, with no mod's on the
+    /// stack: the loader's range, the frame and its return address. Not
+    /// blamed on the loader, since its pass-through detours sit under most
+    /// game code.
+    Under(usize, usize, usize),
     /// It faulted in the loader, with no mod's callback running or code on
     /// the stack.
     Loader(usize),
@@ -157,7 +161,7 @@ pub(crate) fn blame(
     frames
         .iter()
         .enumerate()
-        .find_map(|(frame, &address)| range_of(address).map(|i| Blame::Stack(i, frame)))
+        .find_map(|(frame, &address)| range_of(address).map(|i| Blame::Under(i, frame, address)))
         .unwrap_or(Blame::Game)
 }
 
@@ -290,6 +294,14 @@ pub(crate) fn describe(
                 .text(range.name())
                 .text(b": its code is on the stack, frame ")
                 .dec(frame as u64, 1);
+        }
+        Blame::Under(index, frame, address) => {
+            let range = &ranges[index];
+            line.text(b", in the game, called from ")
+                .text(range.name())
+                .text(b": frame ")
+                .dec(frame as u64, 1);
+            offset(line, range, address);
         }
         Blame::Loader(index) => {
             line.text(b", in the loader");

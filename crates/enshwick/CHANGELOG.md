@@ -551,11 +551,11 @@ Each entry names the pull request that made the change.
 - Hosting a world no longer crashes about 5 seconds after the character
   loads: the own channel asks the session for its packet size before it
   makes a socket, and a session whose packets hold no message keeps the
-  channel off with one warning (E1005), without a socket or a retry every
-  5 seconds (#932).
+  channel off with one warning, without a socket or a retry every 5 seconds,
+  until the game ends (#932).
 - A crash in game code the loader called, with no mod's code on the stack,
-  reads `blamed on enshwick: its code is on the stack`, not that Enshwick
-  was not involved (#932).
+  reads `in the game, called from enshwick` with the frame and its offset
+  in the loader, not that Enshwick was not involved (#932).
 - Game code changed while a mod loaded, ran `init` or ran `ready` is put
   down to that mod only when the change jumps into its DLL, directly or
   through up to three more jumps; any other change reads `by another

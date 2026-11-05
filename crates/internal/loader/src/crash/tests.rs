@@ -90,13 +90,16 @@ fn the_loader_and_the_game_are_named_when_no_mod_is_near() {
 }
 
 #[test]
-fn a_fault_in_game_code_the_loader_called_is_put_down_to_the_loader() {
+fn a_fault_in_game_code_the_loader_called_names_the_loader_without_blaming_it() {
     let r = ranges();
     let blamed = blame(&r, 0x77_0000, None, &[0x77_1000, 0x9100, 0x3000]);
-    assert_eq!(blamed, Blame::Stack(2, 1));
+    assert_eq!(blamed, Blame::Under(2, 1, 0x9100));
+    // A pass-through detour has the loader on the stack of every game
+    // crash beneath it, so the game keeps the fault and the line points
+    // into the loader.
     assert_eq!(
         text(blamed, 0x77_0000, Some((0, 8))),
-        "2026-10-21 09:05:07Z fault 0xc0000005 at 0x770000, blamed on enshwick: its code is on the stack, frame 1; reading 0x8\r\n"
+        "2026-10-21 09:05:07Z fault 0xc0000005 at 0x770000, in the game, called from enshwick: frame 1 (+0x100 in enshwick); reading 0x8\r\n"
     );
     assert_eq!(
         blame(&r, 0x77_0000, None, &[0x9100, 0x5100]),

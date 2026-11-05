@@ -38,7 +38,7 @@ is blamed on:
 | `blamed on <mod>: in its <feature> callback`           | the loader was running one of the mod's callbacks, such as an action      |
 | `blamed on <mod>: its code is on the stack`            | the fault is in game code a mod's hook or call led to, found by unwinding |
 | `in the loader`                                        | the fault is in the loader with no mod's callback running or code near it |
-| `blamed on enshwick: its code is on the stack`         | the fault is in game code the loader called, with no mod's code near it   |
+| `in the game, called from enshwick`                    | the fault is in game code under the loader's code, with no mod's near it  |
 | `in the game: no mod's or loader's code on the stack`  | Enshwick and its mods are not involved                                    |
 
 The offset in brackets is the address inside the DLL that holds it, and the
