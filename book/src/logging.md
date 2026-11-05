@@ -110,7 +110,7 @@ The keys of `enshwick.toml`:
 | `log_levels`         | empty    | `log_level` per mod id                                        |
 | `diagnostics`        | `false`  | count the calls of every hooked function; read at start       |
 | `diagnostics_timing` | `false`  | with `diagnostics`, also time every 256th call; read at start |
-| `build_patterns`     | `true`   | run a build without its table on patterns; read at start      |
+| `build_patterns`     | `true`   | run a build no compatibility report covers; read at start     |
 | `release_check`      | `true`   | ask GitHub once per start for a newer release; read at start  |
 
 With `release_check` on, the loader asks GitHub for the list of Enshwick

@@ -409,7 +409,7 @@ impl core::fmt::Display for Unhooked {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(match self {
             Self::Absent => ABSENT,
-            Self::Moved => "does not read as the build table says",
+            Self::Moved => "does not read as its anchor says",
         })
     }
 }

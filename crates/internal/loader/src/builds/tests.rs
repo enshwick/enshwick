@@ -501,7 +501,7 @@ fn an_off_line_names_the_feature_the_build_the_entry_and_why() {
             "map.fog_reveal",
             &Unhooked::Moved.to_string()
         ),
-        "fog of war off on 1.0 client (26082781): map.fog_reveal does not read as the build table says"
+        "fog of war off on 1.0 client (26082781): map.fog_reveal does not read as its anchor says"
     );
     assert_eq!(
         off_line(

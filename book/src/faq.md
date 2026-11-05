@@ -70,7 +70,6 @@ when the mod itself returned `Err(Off)` from `init`, the line before it, at
 | Message in the loader's log                                                                         | What it means                                                                         |
 | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `unknown game build <guid>/<age>; the game runs vanilla until an Enshwick release reports it`   | The game was updated and `build_patterns = false` in `enshwick.toml`                  |
-| `<name> is not where the build table says; nothing loads`                                       | The build looks known but does not match; treat it as unknown                         |
 | `this is not Enshrouded or its dedicated server; nothing loads`                                 | `powrprof.dll` was loaded by another program                                          |
 
 When the loader's log is missing or empty, read `logs/start.log`. The stub
@@ -89,24 +88,24 @@ On an unknown build every mod's hold applies; see
 
 ### Some features are off after a game update
 
-On a game build without its own table, Enshwick finds its entries through
-the engine routes and the code patterns of the newest table it has; when it
-finds them all, the log says so at info (`game build <guid>/<age> runs
-without its own table: ...`) and everything runs.
+Enshwick finds its entries on every game build the same way: through the
+engine routes and the code patterns of its anchors. When it finds them all,
+the log says so at info (`game: <build>, <n> entries found by engine routes
+and anchors`) and everything runs. `<build>` names the side, the Steam
+build, the game version and the executable.
 
-When some entries are missing, the loader's log reads `game build
-<guid>/<age> has no build table yet: <n> entries found by engine routes or
-their code patterns, <m> missing; ...`, and at `debug` the missing entries.
-Whatever the routes and patterns do not find stays off: a loader feature logs
-`<feature> off on build <guid>/<age>, carried table <table>: <entry> is not
-found by the carried table's patterns`, `<entry> is not in the carried table`
-when that table has no row for it, or `<entry> does not read as the build
-table says` when the code at the entry changed, and a mod
-that needs a missing entry turns off with
-`symbol <id>: missing on this game build`. The Mods screen lists the features
-that are off. A build whose reflection reads no types or systems runs vanilla,
-as a build the loader does not know. Everything else runs. A later loader
-build with the new build's table turns the missing features back on.
+When some entries are missing, the loader's log reads `game: <build>, <n>
+entries found by engine routes and anchors, <m> missing; ...`, and at
+`debug` the missing entries. Whatever the routes and anchors do not find
+stays off: a loader feature logs `<feature> off on <build>: <entry> is not
+found by its anchor's pattern`, `<entry> is found by no engine route or
+anchor`, or `<entry> does not read as its anchor says` when nothing checks
+the code at the entry, and a mod that needs a missing entry turns off with
+`symbol <id>: missing on this game build`. The Mods screen lists the
+features that are off. A build whose reflection reads no types or systems
+runs vanilla, as a build the loader does not know. Everything else runs. A
+later loader release that finds the missing entries turns those features
+back on.
 `cargo xtask compat <exe> --mods <dir>`, in a checkout of the
 [platform repository](https://github.com/enshwick/enshwick), shows the
 same verdicts without starting the game.

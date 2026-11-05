@@ -30,7 +30,7 @@ impl Missing {
     pub(crate) fn reason(&self) -> String {
         match self {
             Self::Entry(_) => crate::builds::ABSENT.to_owned(),
-            Self::Bytes(_) => "does not read as the build table says".to_owned(),
+            Self::Bytes(_) => "does not read as its anchor says".to_owned(),
             Self::Room(_) => "runs past the loader's buffer".to_owned(),
             Self::Looks => "lacks a reflected field".to_owned(),
             Self::Reflected(ty, _) => format!("of {ty} is not reflected on this build"),
@@ -213,10 +213,7 @@ mod tests {
     fn a_missing_entry_names_itself_then_why() {
         let why = Missing::Bytes(pinned::ui::HUD.id());
         assert_eq!(why.id(), "ui.hud");
-        assert_eq!(
-            why.to_string(),
-            "ui.hud does not read as the build table says"
-        );
+        assert_eq!(why.to_string(), "ui.hud does not read as its anchor says");
         let reflected = Missing::Reflected("keen::GameUiScrollbarParameterData", "sliderTexture");
         assert_eq!(
             reflected.to_string(),

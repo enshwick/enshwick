@@ -13,9 +13,10 @@ by hand or through a mod manager. A release archive holds that folder. How serve
 
 The platform's crates carry versions of their own: the loader
 (`enshwick-loader`), the `powrprof.dll` stub (`enshwick-loader-stub`),
-`enshwick` with its test fake, `enshwick-macros`, the build tables with the
-reflection reader (`enshwick-gamedata`) and `cargo-enshwick`. A new build table is
-a loader patch release and leaves the API's version alone. Mods have versions
+`enshwick` with its test fake, `enshwick-macros`, the engine routes and
+anchors with the reflection reader (`enshwick-gamedata`) and `cargo-enshwick`.
+A changed route or anchor is a loader patch release and leaves the API's
+version alone. Mods have versions
 of their own too, released apart from the platform and from each other.
 
 Which loader a mod runs under is not read from that version but from the ABI
@@ -68,9 +69,11 @@ from that alpha. How the platform builds and releases
 its own crates is in
 [CONTRIBUTING.md](https://github.com/enshwick/enshwick/blob/main/CONTRIBUTING.md#releases).
 
-The loader's build tables (see [Finding the game](finding-the-game.md)) are
-compiled into the loader, so a table for a new game build ships with the next
-loader build.
+The loader's engine routes and anchors (see
+[Finding the game](finding-the-game.md)) are compiled into the loader and
+serve every game build, a new one too; a route or anchor fixed for a new
+build ships with the next loader release, with that build's compatibility
+report.
 
 ## The list of loaded mods
 

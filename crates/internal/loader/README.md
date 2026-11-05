@@ -6,10 +6,11 @@ depend on [`enshwick`](../../enshwick) only.
 The Enshwick loader, installed as `mods/enshwick/enshwick.dll` next to the game.
 The `powrprof.dll` stub starts it; it identifies the game build, loads every mod
 DLL in `mods/`, resolves their dependencies, initialises them, arms their hook
-chains and answers their calls. On a game build without a build table it finds
-the table's entries by their code patterns, and only the features and mods
-that need a missing one turn off; `build_patterns = false` keeps such a build
-vanilla.
+chains and answers their calls. On every game build it finds the engine
+entries it needs by the engine routes and the anchors' code patterns, with no
+file made for the build, and only the features and mods that need a missing
+one turn off; `build_patterns = false` keeps a build that no compatibility
+report covers vanilla.
 
 Its logs are in `logs/`, one file per source and run:
 `logs/enshwick_<date>_<time>.log` for the loader and
