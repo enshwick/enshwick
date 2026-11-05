@@ -539,3 +539,6 @@ mod services;
 mod settings;
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "typed")]
+pub(crate) use events::game_events_of;

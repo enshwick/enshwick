@@ -2,14 +2,15 @@
 //! and the codec's [`Value`], and the handles that resolve a component,
 //! event or resource on the running build and check its shape.
 
-use core::marker::PhantomData;
-
+use crate::Off;
 use crate::content::Guid;
-use crate::resources::{Registry, Type, Value, Variant};
-use crate::world::{World, WritableType};
-use crate::{Entity, Host, Load, Off};
+use crate::resources::{Value, Variant};
 
+mod handles;
 mod sample;
+pub(crate) mod script;
+pub use handles::{ComponentType, EventType, ResourceType};
+pub(crate) use handles::{RawComponent, RawEvent, RawResource};
 pub use sample::sample;
 
 /// Why a [`Value`] is not the shape a generated type expects: a field the
@@ -103,6 +104,9 @@ pub trait Named: Reflected + sealed::Sealed + 'static {
     /// Enshwick's id for the type, which the loader maps to the running
     /// build's type.
     const ID: &'static str;
+    /// Its roles by their traits' names: `Component`, `Event`, `Resource`.
+    #[doc(hidden)]
+    const ROLES: &'static [&'static str];
 }
 
 /// A generated ECS component, read and written through [`ComponentType`].
@@ -171,6 +175,58 @@ impl Constant {
             Self::Number(number) => Value::Uint(*number),
         }
     }
+
+    /// The constant as a generated enum's `Other` in a script:
+    /// `{ Other = <name or number> }`.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn into_script(self) -> crate::script::Value {
+        let held = match self {
+            Self::Name(name) => crate::script::Value::String(name),
+            Self::Number(number) => crate::script::IntoScript::into_value(number),
+        };
+        crate::script::Value::Map(vec![(OTHER.to_owned(), held)])
+    }
+
+    /// The constant a script's `{ Other = <name or number> }` names.
+    ///
+    /// # Errors
+    ///
+    /// [`Error`](crate::script::Error) for any other value.
+    #[doc(hidden)]
+    pub fn from_script(value: crate::script::Value) -> Result<Self, crate::script::Error> {
+        let malformed = || {
+            crate::script::Error::new("expected a constant's name, or { Other = <name or number> }")
+        };
+        let crate::script::Value::Map(mut entries) = value else {
+            return Err(malformed());
+        };
+        if entries.len() != 1 || entries[0].0 != OTHER {
+            return Err(malformed());
+        }
+        match entries.remove(0).1 {
+            crate::script::Value::String(name) => Ok(Self::Name(name)),
+            number => <u64 as crate::script::FromScript>::from_value(number)
+                .map(Self::Number)
+                .map_err(|e| e.within(OTHER)),
+        }
+    }
+}
+
+/// The variant of a generated enum that holds a constant it does not name.
+const OTHER: &str = "Other";
+
+/// Why `text` names no variant of the generated enum `ty`.
+#[doc(hidden)]
+#[must_use]
+pub fn no_variant(text: &str, ty: &crate::script::Ty) -> crate::script::Error {
+    let name = match ty {
+        crate::script::Ty::Union(union) => union.name(),
+        _ => "",
+    };
+    crate::script::Error::new(format!(
+        "{text:?} is no constant of {name}; a constant it does not name is {{ Other = <name or number> }}"
+    ))
 }
 
 /// The set flags of a bitmask, each a constant of its generated flag enum
@@ -234,6 +290,23 @@ impl<E: Reflected> Reflected for Flags<E> {
     }
 }
 
+/// A script's flags: the list of each set flag's constant.
+impl<E: crate::script::Typed> crate::script::Typed for Flags<E> {
+    const TY: &'static crate::script::Ty = <Vec<E> as crate::script::Typed>::TY;
+}
+
+impl<E: crate::script::IntoScript> crate::script::IntoScript for Flags<E> {
+    fn into_value(self) -> crate::script::Value {
+        crate::script::IntoScript::into_value(self.0)
+    }
+}
+
+impl<E: crate::script::FromScript> crate::script::FromScript for Flags<E> {
+    fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
+        <Vec<E> as crate::script::FromScript>::from_value(value).map(Self)
+    }
+}
+
 /// The field `name` of the struct `value`, as `T`.
 ///
 /// # Errors
@@ -266,32 +339,108 @@ pub fn check<T: Reflected>(value: &Value) -> Result<(), ShapeError> {
     T::from_value(value).map(drop)
 }
 
-/// The table of every generated type with a role: its id and a check that a
-/// value reads as it, for tests that hold the generated items against a
-/// build's types.
+/// A generated type with a role, its Rust type erased: its id, roles and
+/// script type, and its conversions, for a script runtime and for the tests
+/// that hold the generated items against a build's types.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct Row {
+    /// Enshwick's id for the type, its [`Named::ID`].
+    pub id: &'static str,
+    /// Its roles, as [`Named::ROLES`] names them.
+    pub roles: &'static [&'static str],
+    /// Whether a value reads as the type.
+    pub check: fn(&Value) -> Result<(), ShapeError>,
+    /// Its type in a script.
+    pub script: &'static crate::script::Ty,
+    /// A value of the codec read as the type, as a script gets it.
+    pub to_script: fn(&Value) -> Result<crate::script::Value, ShapeError>,
+    /// A script's value read as the type, as the codec writes it.
+    pub from_script: fn(crate::script::Value) -> Result<Value, crate::script::Error>,
+}
+
+impl Row {
+    /// The row of `T`.
+    #[must_use]
+    pub const fn of<T: Named + crate::script::IntoScript + crate::script::FromScript>() -> Self {
+        Self {
+            id: T::ID,
+            roles: T::ROLES,
+            check: check::<T>,
+            script: <T as crate::script::Typed>::TY,
+            to_script: to_script::<T>,
+            from_script: from_script::<T>,
+        }
+    }
+}
+
+fn to_script<T: Reflected + crate::script::IntoScript>(
+    value: &Value,
+) -> Result<crate::script::Value, ShapeError> {
+    T::from_value(value).map(crate::script::IntoScript::into_value)
+}
+
+fn from_script<T: Reflected + crate::script::FromScript>(
+    value: crate::script::Value,
+) -> Result<Value, crate::script::Error> {
+    <T as crate::script::FromScript>::from_value(value).map(|typed| typed.to_value())
+}
+
+/// The table of every generated type with a role, a [`Row`] each.
 macro_rules! named_table {
     ($($id:literal => $ty:ty,)*) => {
-        /// Every generated type with a role, by id, with a check that a
-        /// value reads as it.
+        /// Every generated type with a role, by id, with its script type
+        /// and a check that a value reads as it.
         #[doc(hidden)]
-        pub const NAMED: &[(
-            &str,
-            fn(&$crate::resources::Value) -> ::core::result::Result<(), $crate::typed::ShapeError>,
-        )] = &[$(($id, $crate::typed::runtime::check::<$ty>)),*];
+        pub const NAMED: &[$crate::typed::runtime::Row] =
+            &[$($crate::typed::runtime::Row::of::<$ty>()),*];
     };
 }
 pub(crate) use named_table;
 
+/// `name` without the `r#` of a raw identifier: a field's name in a script.
+#[doc(hidden)]
+#[must_use]
+pub const fn unraw(name: &'static str) -> &'static str {
+    match name.as_bytes() {
+        [b'r', b'#', ..] => name.split_at(2).1,
+        _ => name,
+    }
+}
+
+/// The number of fields of the record `ty`, for a generated struct's
+/// script conversion.
+#[doc(hidden)]
+#[must_use]
+pub const fn field_count(ty: &crate::script::Ty) -> usize {
+    match ty {
+        crate::script::Ty::Record(record) => record.fields().len(),
+        _ => 0,
+    }
+}
+
+/// The doc of a derived type's field `base` in a script.
+#[doc(hidden)]
+pub const BASE_DOC: &str = "The fields of the type this one derives from.";
+
+/// The doc of a generated enum's variant `Other` in a script.
+#[doc(hidden)]
+pub const OTHER_DOC: &str =
+    "A constant this enum does not name: its name on the running build, or its number.";
+
 /// A generated struct: its fields by the game's names, read from and
-/// written to a [`Value`]; a derived type holds its base first.
+/// written to a [`Value`], and by its Rust names in a script, as a record
+/// named by its Rust path; a derived type holds its base first.
 macro_rules! reflected_struct {
     (
-        $(#[$meta:meta])*
+        #[doc = $doc:literal]
+        $(#[doc = $more:literal])*
         $name:ident $(: $base:ty)? {
-            $($(#[$field_meta:meta])* $field:ident: $ty:ty = $game:literal,)*
+            $($(#[doc = $field_doc:literal])* $field:ident: $ty:ty = $game:literal,)*
         }
     ) => {
-        $(#[$meta])*
+        #[doc = $doc]
+        $(#[doc = $more])*
         #[derive(Clone, Debug, PartialEq)]
         #[non_exhaustive]
         pub struct $name {
@@ -299,7 +448,76 @@ macro_rules! reflected_struct {
                 /// The fields of the type this one derives from.
                 pub base: $base,
             )?
-            $($(#[$field_meta])* pub $field: $ty,)*
+            $($(#[doc = $field_doc])* pub $field: $ty,)*
+        }
+
+        impl $crate::script::Typed for $name {
+            const TY: &'static $crate::script::Ty =
+                &$crate::script::Ty::Record(&$crate::script::Record::new(
+                    ::core::concat!(::core::module_path!(), "::", ::core::stringify!($name)),
+                    $doc,
+                    &[
+                        $($crate::script::Field::new(
+                            "base",
+                            $crate::typed::runtime::BASE_DOC,
+                            <$base as $crate::script::Typed>::TY,
+                        ),)?
+                        $($crate::script::Field::new(
+                            $crate::typed::runtime::unraw(::core::stringify!($field)),
+                            ::core::concat!($($field_doc),*),
+                            <$ty as $crate::script::Typed>::TY,
+                        ),)*
+                    ],
+                ));
+        }
+
+        impl $crate::script::IntoScript for $name {
+            fn into_value(self) -> $crate::script::Value {
+                $crate::script::Value::Record(::std::vec![
+                    $(<$base as $crate::script::IntoScript>::into_value(self.base),)?
+                    $($crate::script::IntoScript::into_value(self.$field),)*
+                ])
+            }
+        }
+
+        impl $crate::script::FromScript for $name {
+            fn from_value(
+                value: $crate::script::Value,
+            ) -> ::core::result::Result<Self, $crate::script::Error> {
+                let mut fields = $crate::__private::record_fields(
+                    value,
+                    $crate::typed::runtime::field_count(<Self as $crate::script::Typed>::TY),
+                )?;
+                // A type without fields takes none of them.
+                let _ = &mut fields;
+                ::core::result::Result::Ok(Self {
+                    $(base: $crate::__private::argument::<$base>(&mut fields, "base")?,)?
+                    $($field: $crate::__private::argument(
+                        &mut fields,
+                        $crate::typed::runtime::unraw(::core::stringify!($field)),
+                    )?,)*
+                })
+            }
+        }
+
+        // An optional struct is boxed; one impl per type, since a generic
+        // one for `Box` would overlap the impls for every `Object`.
+        impl $crate::script::Typed for ::std::boxed::Box<$name> {
+            const TY: &'static $crate::script::Ty = <$name as $crate::script::Typed>::TY;
+        }
+
+        impl $crate::script::IntoScript for ::std::boxed::Box<$name> {
+            fn into_value(self) -> $crate::script::Value {
+                $crate::script::IntoScript::into_value(*self)
+            }
+        }
+
+        impl $crate::script::FromScript for ::std::boxed::Box<$name> {
+            fn from_value(
+                value: $crate::script::Value,
+            ) -> ::core::result::Result<Self, $crate::script::Error> {
+                <$name as $crate::script::FromScript>::from_value(value).map(::std::boxed::Box::new)
+            }
         }
 
         impl $crate::typed::Reflected for $name {
@@ -329,19 +547,70 @@ macro_rules! reflected_struct {
 pub(crate) use reflected_struct;
 
 /// A generated enum: a variant per constant the build names, and `Other`
-/// for a constant it does not.
+/// for a constant it does not; in a script, a variant's Rust name, or
+/// `{ Other = <name or number> }`.
 macro_rules! reflected_enum {
     (
-        $(#[$meta:meta])*
+        #[doc = $doc:literal]
+        $(#[doc = $more:literal])*
         $name:ident {
-            $($(#[$variant_meta:meta])* $variant:ident = $game:literal,)*
+            $($(#[doc = $variant_doc:literal])* $variant:ident = $game:literal,)*
         }
     ) => {
-        $(#[$meta])*
+        impl $crate::script::Typed for $name {
+            const TY: &'static $crate::script::Ty =
+                &$crate::script::Ty::Union(&$crate::script::Union::new(
+                    ::core::concat!(::core::module_path!(), "::", ::core::stringify!($name)),
+                    $doc,
+                    &[
+                        $($crate::script::Variant::new(
+                            ::core::stringify!($variant),
+                            ::core::concat!($($variant_doc),*),
+                            ::core::option::Option::None,
+                        ),)*
+                        $crate::script::Variant::new(
+                            "Other",
+                            $crate::typed::runtime::OTHER_DOC,
+                            ::core::option::Option::Some(&$crate::script::Ty::Data),
+                        ),
+                    ],
+                ));
+        }
+
+        impl $crate::script::IntoScript for $name {
+            fn into_value(self) -> $crate::script::Value {
+                match self {
+                    $(Self::$variant => $crate::script::Value::String(
+                        ::std::string::String::from(::core::stringify!($variant)),
+                    ),)*
+                    Self::Other(constant) => constant.into_script(),
+                }
+            }
+        }
+
+        impl $crate::script::FromScript for $name {
+            fn from_value(
+                value: $crate::script::Value,
+            ) -> ::core::result::Result<Self, $crate::script::Error> {
+                match value {
+                    $crate::script::Value::String(text) => match text.as_str() {
+                        $(::core::stringify!($variant) => ::core::result::Result::Ok(Self::$variant),)*
+                        _ => ::core::result::Result::Err($crate::typed::runtime::no_variant(
+                            &text,
+                            <Self as $crate::script::Typed>::TY,
+                        )),
+                    },
+                    other => $crate::typed::Constant::from_script(other).map(Self::Other),
+                }
+            }
+        }
+
+        #[doc = $doc]
+        $(#[doc = $more])*
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         #[non_exhaustive]
         pub enum $name {
-            $($(#[$variant_meta])* $variant,)*
+            $($(#[doc = $variant_doc])* $variant,)*
             /// A constant this enum does not name: a newer build's, or a
             /// number the game leaves without a name.
             Other($crate::typed::Constant),
@@ -375,6 +644,7 @@ macro_rules! named {
         impl $crate::typed::runtime::sealed::Sealed for $name {}
         impl $crate::typed::Named for $name {
             const ID: &'static str = $id;
+            const ROLES: &'static [&'static str] = &[$(::core::stringify!($role)),+];
         }
         $(impl $crate::typed::$role for $name {})+
     };
@@ -532,409 +802,6 @@ impl<T: Reflected> Reflected for Vec<T> {
 
     fn to_value(&self) -> Value {
         Value::List(self.iter().map(T::to_value).collect())
-    }
-}
-
-/// The running build's type for `T`, its shape checked: a [`sample`] of the
-/// build's type must read as `T`, so a field the build renamed, removed, or
-/// retyped to a value `T` cannot hold, such as a wider integer, at any
-/// depth, turns off only `T`.
-fn resolve<T: Named>(load: &Load<'_>) -> Result<&'static Type<'static>, Off> {
-    let host = load.host();
-    let hash = crate::ecs::ComponentType::resolve(load, T::ID)
-        .map_err(|e| off::<T>(host, &e.to_string()))?
-        .hash();
-    let registry = Registry::game()?;
-    let ty = registry
-        .hashed(hash)
-        .ok_or_else(|| off::<T>(host, "the type registry lacks it"))?;
-    let value = sample(registry, ty.qualified_name())
-        .ok_or_else(|| off::<T>(host, "its value does not read"))?;
-    T::from_value(&value).map_err(|e| off::<T>(host, &e.to_string()))?;
-    Ok(ty)
-}
-
-/// Turns `T` off on the running build, naming the build and why.
-fn off<T: Named>(host: Host, why: &str) -> Off {
-    Off::new(format!(
-        "typed {}: on game build {}, {why}",
-        T::ID,
-        host.build().fingerprint.age
-    ))
-}
-
-/// A generated component type resolved on the running build: reads and
-/// writes of an entity's component as its generated struct.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::typed::{Component, ComponentType};
-///
-/// fn watch<T: Component + std::fmt::Debug>(
-///     load: &mut enshwick::Load<'_>,
-///     entity: enshwick::Entity,
-/// ) -> Result<(), enshwick::Off> {
-///     let ty = ComponentType::<T>::resolve(load)?;
-///     let world = load.world()?;
-///     enshwick::info!("{:?}", ty.read(world, entity)?);
-///     Ok(())
-/// }
-/// ```
-pub struct ComponentType<T> {
-    ty: crate::ecs::ComponentType,
-    name: &'static str,
-    size: usize,
-    writable: Option<WritableType>,
-    of: PhantomData<fn() -> T>,
-}
-
-impl<T> Clone for ComponentType<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> Copy for ComponentType<T> {}
-
-impl<T> core::fmt::Debug for ComponentType<T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ComponentType")
-            .field("name", &self.name)
-            .field("writable", &self.writable.is_some())
-            .finish_non_exhaustive()
-    }
-}
-
-impl<T: Component> ComponentType<T> {
-    /// `T` on the running build, its shape checked.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the build lacks the type or its shape differs from
-    /// `T`, naming the build.
-    ///
-    /// # Examples
-    ///
-    /// See [`ComponentType`].
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        let ty = resolve::<T>(load)?;
-        Ok(Self {
-            ty: crate::ecs::ComponentType::resolve(load, T::ID)?,
-            name: ty.qualified_name(),
-            size: usize::try_from(ty.size()).unwrap_or(usize::MAX),
-            writable: WritableType::resolve(load, T::ID).ok(),
-            of: PhantomData,
-        })
-    }
-
-    /// `entity`'s component on the game thread; `None` when the entity has
-    /// none or off the game thread.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the component's bytes do not read as `T`.
-    ///
-    /// # Examples
-    ///
-    /// See [`ComponentType`].
-    pub fn read(&self, world: World, entity: Entity) -> Result<Option<T>, Off> {
-        let Some(data) = world.component(entity, self.ty) else {
-            return Ok(None);
-        };
-        let mut bytes = vec![0; self.size];
-        // SAFETY: `World::component` returned the entity's live component,
-        // valid until the game thread moves on and read at once; `size` is
-        // the reflected size of its type on the running build.
-        unsafe { crate::raw::read_bytes_at(data.cast(), 0, &mut bytes) };
-        let value = Registry::game()?.decode(self.name, &bytes)?;
-        Ok(Some(T::from_value(&value)?))
-    }
-
-    /// Writes `value` to `entity`'s component, marked changed the game's
-    /// way, keeping the bytes of what `T` does not hold. On the game thread
-    /// only.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a type the loader does not let mods write, a value that
-    /// does not fit the type, or as [`World::update`] fails.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::typed::{Component, ComponentType};
-    ///
-    /// fn copy<T: Component>(
-    ///     ty: ComponentType<T>,
-    ///     world: enshwick::world::World,
-    ///     from: enshwick::Entity,
-    ///     to: enshwick::Entity,
-    /// ) -> Result<(), enshwick::Off> {
-    ///     match ty.read(world, from)? {
-    ///         Some(value) => ty.write(world, to, &value),
-    ///         None => Ok(()),
-    ///     }
-    /// }
-    /// ```
-    pub fn write(&self, world: World, entity: Entity, value: &T) -> Result<(), Off> {
-        let writable = self
-            .writable
-            .ok_or_else(|| Off::new(format!("typed {}: mods may not write it", T::ID)))?;
-        let value = value.to_value();
-        let name = self.name;
-        world
-            .update(entity, writable, |bytes| {
-                let written = Registry::game()?.encode(name, &value, Some(bytes))?;
-                if written.len() != bytes.len() {
-                    return Err(Off::new(format!(
-                        "typed {}: a value of {} bytes, not {}",
-                        T::ID,
-                        written.len(),
-                        bytes.len()
-                    )));
-                }
-                bytes.copy_from_slice(&written);
-                Ok(())
-            })
-            .map_err(|why| Off::new(format!("typed {}: {why}", T::ID)))?
-    }
-}
-
-/// A generated game event type resolved on the running build, to handle
-/// its events as the generated struct.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::typed::{Event, EventType};
-///
-/// fn log<T: Event + std::fmt::Debug>(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     EventType::<T>::resolve(load)?.on(load, |event| enshwick::info!("{event:?}"))
-/// }
-/// ```
-pub struct EventType<T> {
-    ty: crate::game_events::EventType,
-    name: &'static str,
-    of: PhantomData<fn() -> T>,
-}
-
-impl<T> Clone for EventType<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> Copy for EventType<T> {}
-
-impl<T> core::fmt::Debug for EventType<T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("EventType")
-            .field("name", &self.name)
-            .finish_non_exhaustive()
-    }
-}
-
-impl<T: Event> EventType<T> {
-    /// `T` on the running build, its shape checked.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the build lacks the type or its shape differs from
-    /// `T`, naming the build.
-    ///
-    /// # Examples
-    ///
-    /// See [`EventType`].
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        let ty = resolve::<T>(load)?;
-        Ok(Self {
-            ty: load.game_event_type(T::ID)?,
-            name: ty.qualified_name(),
-            of: PhantomData,
-        })
-    }
-
-    /// Calls `handler` with each event of the type the game raises, read
-    /// as `T`; an event whose bytes do not read as `T` is logged once and
-    /// skipped.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the loader refuses the handler, such as after init.
-    ///
-    /// # Examples
-    ///
-    /// See [`EventType`].
-    pub fn on<F>(self, load: &mut Load<'_>, handler: F) -> Result<(), Off>
-    where
-        F: Fn(&T) + Send + Sync + 'static,
-    {
-        let name = self.name;
-        // One warning per handler: a `static` in this generic function would
-        // be shared by every event type.
-        let warned = core::sync::atomic::AtomicBool::new(false);
-        load.on_raw_game_event(self.ty, move |raw| {
-            let read = Registry::game()
-                .and_then(|registry| Ok(registry.decode(name, raw.bytes())?))
-                .and_then(|value| Ok(T::from_value(&value)?));
-            match read {
-                Ok(event) => handler(&event),
-                Err(why) => {
-                    if !warned.swap(true, core::sync::atomic::Ordering::Relaxed) {
-                        crate::warn!("typed {}: an event does not read: {why}", T::ID);
-                    }
-                }
-            }
-        })
-    }
-}
-
-/// A generated resource type resolved on the running build: the keys of
-/// its resources, their game values and changes served in load order.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::content::Guid;
-/// use enshwick::typed::{Resource, ResourceType};
-///
-/// fn keep<T: Resource>(load: &mut enshwick::Load<'_>, guid: Guid) -> Result<(), enshwick::Off> {
-///     let ty = ResourceType::<T>::resolve(load)?;
-///     let key = ty.key(guid);
-///     ty.serve(load, key, key, |_value| {})
-/// }
-/// ```
-pub struct ResourceType<T> {
-    hash: u32,
-    name: &'static str,
-    of: PhantomData<fn() -> T>,
-}
-
-impl<T> Clone for ResourceType<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> Copy for ResourceType<T> {}
-
-impl<T> core::fmt::Debug for ResourceType<T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ResourceType")
-            .field("name", &self.name)
-            .finish_non_exhaustive()
-    }
-}
-
-impl<T: Resource> ResourceType<T> {
-    /// `T` on the running build, its shape checked.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the build lacks the type or its shape differs from
-    /// `T`, naming the build.
-    ///
-    /// # Examples
-    ///
-    /// See [`ResourceType`].
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        let ty = resolve::<T>(load)?;
-        Ok(Self {
-            hash: ty.qualified_hash(),
-            name: ty.qualified_name(),
-            of: PhantomData,
-        })
-    }
-
-    /// The key of the resource of this type with GUID `guid`, part 0.
-    ///
-    /// # Examples
-    ///
-    /// See [`ResourceType`].
-    #[must_use]
-    pub fn key(&self, guid: Guid) -> crate::abi::ResourceKey {
-        guid.key_by_hash(self.hash)
-    }
-
-    /// The game's own resource `key`, as the archive holds it.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a key of another type, outside the game, for a key the
-    /// archive lacks, and when its bytes do not read as `T`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::content::Guid;
-    /// use enshwick::typed::{Resource, ResourceType};
-    ///
-    /// fn read<T: Resource>(ty: ResourceType<T>, guid: Guid) -> Result<T, enshwick::Off> {
-    ///     ty.game_value(ty.key(guid))
-    /// }
-    /// ```
-    pub fn game_value(&self, key: crate::abi::ResourceKey) -> Result<T, Off> {
-        if key.type_hash != self.hash {
-            return Err(Off::new(format!(
-                "typed {}: a key of type {:#010x}",
-                T::ID,
-                key.type_hash
-            )));
-        }
-        let host = crate::host().ok_or_else(|| Off::new("typed resources: outside the game"))?;
-        Ok(T::from_value(&host.game_value(key)?)?)
-    }
-
-    /// Serves the resource `key`, made from the resource `base` read as
-    /// `T` and changed by `change`, the first time the game reads it; the
-    /// bytes of what `T` does not hold stay as `base` has them. Mods that
-    /// serve one key change it in load order, each on the one before's
-    /// result, as [`Load::serve`] does. A base that does not read as `T`,
-    /// or a change that does not fit the type, is logged and the base is
-    /// served unchanged.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a key or base of another type, and when the loader
-    /// refuses it, such as after init.
-    ///
-    /// # Examples
-    ///
-    /// See [`ResourceType`].
-    pub fn serve<F>(
-        &self,
-        load: &mut Load<'_>,
-        key: crate::abi::ResourceKey,
-        base: crate::abi::ResourceKey,
-        change: F,
-    ) -> Result<(), Off>
-    where
-        F: Fn(&mut T) + Send + Sync + 'static,
-    {
-        if let Some(other) = [key, base].iter().find(|k| k.type_hash != self.hash) {
-            return Err(Off::new(format!(
-                "typed {}: a key of type {:#010x}",
-                T::ID,
-                other.type_hash
-            )));
-        }
-        let name = self.name;
-        let host = load.host();
-        load.serve(key, base, move |bytes| {
-            let changed = Registry::game().and_then(|registry| {
-                let mut value = T::from_value(&registry.decode(name, bytes)?)?;
-                change(&mut value);
-                Ok(registry.encode(name, &value.to_value(), Some(bytes))?)
-            });
-            Some(changed.unwrap_or_else(|why| {
-                host.log(
-                    crate::abi::Level::WARN,
-                    &format!("typed {}: served unchanged: {why}", T::ID),
-                );
-                bytes.to_vec()
-            }))
-        })
     }
 }
 
