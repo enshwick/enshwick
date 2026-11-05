@@ -1554,7 +1554,7 @@ export type PlayerAction = {
 	args: {Arg}?,
 	--- Whether only the server's administrators see and run it, as `Action.admins` sets it.
 	admins: boolean?,
-	--- Who sees and runs it, as `Action.allow` decides.
+	--- Who sees and runs it, as `Action.allow` decides; only `true` allows, and with `admins` both must hold.
 	allow: ((player: Player) -> boolean?)?,
 	--- What it acts on for a player, as `Action.at` finds it.
 	at: ((ask: Ask) -> FoundSubject?)?,
