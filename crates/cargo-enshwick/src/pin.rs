@@ -53,16 +53,16 @@ pub(crate) struct Args {
     /// The repository whose rows to port.
     #[arg(long, default_value = ".")]
     repo: PathBuf,
-    /// The new build's Steam build id, for the loader table's name and
-    /// `steam_build`; needed with `--write`.
+    /// The new build's Steam build id, for the report's name of the ported
+    /// table.
     #[arg(long)]
     steam_build: Option<u64>,
-    /// The game's own version number on the new build, for the loader
-    /// table's `game_version`; left out when not given.
+    /// The game's own version number on the new build, for the report's
+    /// ported table; left out when not given.
     #[arg(long)]
     game_version: Option<u32>,
-    /// Writes the new table file and inserts each new mod row after its old
-    /// one in the sources.
+    /// Inserts each new mod row after its old one in the sources and writes
+    /// the refreshed check shapes; no loader table is written.
     #[arg(long)]
     write: bool,
     /// Writes the report here instead of to standard output.
