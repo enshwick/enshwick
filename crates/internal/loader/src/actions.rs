@@ -417,6 +417,7 @@ mod tests {
 
     #[test]
     fn sheets_arrive_in_parts_and_replace_the_last_answer() {
+        *HEARD.relock() = None;
         sheet_heard(true, false, "a".into(), "A".into(), "A\tx\t4\tX\t\t\n");
         assert!(heard(|h| h.sheets.is_none()));
         sheet_heard(false, true, "b".into(), "B".into(), "");
@@ -432,6 +433,7 @@ mod tests {
 
     #[test]
     fn only_server_mods_with_actions_get_their_own_actions_entry() {
+        *HEARD.relock() = None;
         let entry = Entry {
             id: "mute".into(),
             label: "Muted".into(),
