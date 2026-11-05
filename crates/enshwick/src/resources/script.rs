@@ -731,6 +731,15 @@ mod tests {
     }
 
     #[test]
+    fn a_variant_crosses_as_its_type_and_value_and_comes_back() {
+        let variant = Variant::new("demo::Sphere", Data::Float(2.5));
+        let back = Variant::from_value(variant.clone().into_value()).unwrap();
+        assert_eq!(back, variant);
+        let untyped = Data::Struct(vec![("value".into(), Data::Int(1))]).into_value();
+        assert!(Variant::from_value(untyped).is_err());
+    }
+
+    #[test]
     fn negative_zero_from_a_script_stays_a_float_with_its_sign() {
         let Ok(Data::Float(zero)) = Data::from_value(Value::Number(-0.0)) else {
             panic!("-0.0 became an integer");

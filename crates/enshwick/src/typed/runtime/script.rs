@@ -55,19 +55,7 @@ fn by_name(value: Value, ty: &Ty) -> Value {
             Value::List(items.into_iter().map(|item| by_name(item, inner)).collect())
         }
         (value, Ty::Optional(inner)) => by_name(value, inner),
-        (Value::Map(entries), Ty::Union(union)) => Value::Map(
-            entries
-                .into_iter()
-                .map(|(name, value)| {
-                    let held = union.variant(&name).and_then(crate::script::Variant::ty);
-                    let value = match held {
-                        Some(ty) => by_name(value, ty),
-                        None => value,
-                    };
-                    (name, value)
-                })
-                .collect(),
-        ),
+        // A generated enum's `Other` holds plain game data, nothing to rename.
         (value, _) => value,
     }
 }
@@ -111,14 +99,6 @@ fn by_place(value: Value, ty: &Ty) -> Result<Value, Error> {
             .map(Value::List),
         (Value::Nil, Ty::Optional(_)) => Ok(Value::Nil),
         (value, Ty::Optional(inner)) => by_place(value, inner),
-        (Value::Map(mut entries), Ty::Union(union)) if entries.len() == 1 => {
-            let (name, value) = entries.remove(0);
-            let value = match union.variant(&name).and_then(crate::script::Variant::ty) {
-                Some(ty) => by_place(value, ty)?,
-                None => value,
-            };
-            Ok(Value::Map(vec![(name, value)]))
-        }
         (value, _) => Ok(value),
     }
 }
@@ -448,6 +428,19 @@ mod tests {
             error.to_string().contains("\"rank\" is no field"),
             "{error}"
         );
+        let inner = |extra: bool| {
+            let mut fields = vec![("level".to_owned(), Value::Number(1.0))];
+            if extra {
+                fields.push(("rank".to_owned(), Value::Number(2.0)));
+            }
+            Value::Map(fields)
+        };
+        let list = Value::List(vec![inner(false), inner(true)]);
+        let error = by_place(list, <Vec<Inner> as Typed>::TY).unwrap_err();
+        assert!(
+            error.to_string().starts_with("2: "),
+            "counted from 1: {error}"
+        );
     }
 
     #[test]
@@ -471,6 +464,10 @@ mod tests {
         );
         let error = <Mood as FromScript>::from_value(Value::String("Angry".into())).unwrap_err();
         assert!(error.to_string().contains("Other"), "{error}");
+        assert!(
+            error.to_string().contains("tests::Mood"),
+            "names the enum: {error}"
+        );
         let numbered = Value::Map(vec![("Other".into(), Value::Number(4.0))]);
         assert_eq!(
             <Mood as FromScript>::from_value(numbered).unwrap(),

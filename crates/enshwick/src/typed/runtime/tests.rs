@@ -68,6 +68,49 @@ fn a_constant_the_enum_does_not_name_stays_as_the_game_gave_it() {
 }
 
 #[test]
+fn an_unnamed_constant_crosses_into_a_script_by_name_or_exact_number() {
+    use crate::script::Value as Script;
+    let other = |held: Script| Script::Map(vec![("Other".to_owned(), held)]);
+    let cases = [
+        (
+            Constant::Name("Dusk".into()),
+            other(Script::String("Dusk".into())),
+        ),
+        (
+            Constant::Number(1 << 53),
+            other(Script::Number(9_007_199_254_740_992.0)),
+        ),
+        (
+            Constant::Number((1 << 53) + 1),
+            other(Script::String("9007199254740993".into())),
+        ),
+    ];
+    for (constant, shown) in cases {
+        assert_eq!(
+            format!("{:?}", constant.clone().into_script()),
+            format!("{shown:?}")
+        );
+        assert_eq!(Constant::from_script(shown).unwrap(), constant);
+    }
+    for refused in [
+        other(Script::Number(1.5)),
+        other(Script::Number(-1.0)),
+        other(Script::Bool(true)),
+        Script::Map(vec![("Others".to_owned(), Script::Number(1.0))]),
+        Script::Map(vec![
+            ("Other".to_owned(), Script::Number(1.0)),
+            ("Other".to_owned(), Script::Number(2.0)),
+        ]),
+        Script::Number(1.0),
+    ] {
+        assert!(
+            Constant::from_script(refused.clone()).is_err(),
+            "{refused:?}"
+        );
+    }
+}
+
+#[test]
 fn a_bool_reads_from_the_game_s_bool_or_byte() {
     assert!(bool::from_value(&Value::Bool(true)).unwrap());
     assert!(!bool::from_value(&Value::Bool(false)).unwrap());
