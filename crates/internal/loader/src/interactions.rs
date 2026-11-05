@@ -280,8 +280,25 @@ pub(crate) fn filter_off() -> bool {
 
 pub(crate) fn after_step(loader: &Loader, step: u64) {
     crate::transactions::holds().after_step(step);
-    let wanted = LOADED.get().is_some() || crate::item_actions::wanted();
-    if !wanted || !step.is_multiple_of(PLAYERS_EVERY) {
+    if read_due(step, PLAYERS.load().is_some()) {
+        read_players(loader);
+    }
+}
+
+/// Reads the players again once one reached the game, so the screens hold
+/// for them from the next step; on the game thread after the step.
+pub(crate) fn player_joined(loader: &Loader) {
+    read_players(loader);
+}
+
+/// Whether the players are read after `step`: every [`PLAYERS_EVERY`]
+/// steps, and on each step while no list is `listed`, as after a world loads.
+const fn read_due(step: u64, listed: bool) -> bool {
+    !listed || step.is_multiple_of(PLAYERS_EVERY)
+}
+
+fn read_players(loader: &Loader) {
+    if LOADED.get().is_none() && !crate::item_actions::wanted() {
         return;
     }
     if let Ok(entities) = crate::world::player_entities(loader)
@@ -951,6 +968,15 @@ mod tests {
         // SAFETY: `at` and `len` come from `kept_in_step` in the same step on
         // this thread, so the copy is in this thread's cache, unchanged.
         unsafe { core::slice::from_raw_parts(at, len) }.to_vec()
+    }
+
+    #[test]
+    fn the_players_are_read_on_every_step_without_a_list_and_every_thirty_with_one() {
+        assert!(read_due(1, false), "the first step after a world loads");
+        assert!(read_due(7, false));
+        assert!(!read_due(7, true));
+        assert!(read_due(PLAYERS_EVERY, true));
+        assert!(read_due(2 * PLAYERS_EVERY, true));
     }
 
     #[test]

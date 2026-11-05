@@ -491,6 +491,10 @@ unsafe fn joins(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
             let data = unsafe { player(index, slot, offsets) };
             crate::admission::joined(data.key.get());
             part!(
+                "the players' screens at join",
+                crate::interactions::player_joined(loader)
+            );
+            part!(
                 "the greeting at join",
                 crate::greeting::joined(loader, data.key.get())
             );

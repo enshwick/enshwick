@@ -1,9 +1,8 @@
 # What players do with items
 
-A mod hears each player's use, trash, equip, unequip, pickup and placement
-of an item, and may refuse the first four. It also hears that a use goes
-through, once every mod allowed it. The calls are
-[unstable](../stability.md) until a person checks each action in the game.
+A mod hears a player use, trash, equip, unequip, pick up or place an item,
+may refuse the first four, and hears that a use went through. The calls are
+[unstable](../stability.md) until a person checks each action in game.
 
 ## Give an item behaviour
 
