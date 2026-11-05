@@ -635,11 +635,12 @@ fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftLimitError> {
     let next = checked(loader, pinned::recipe::LIMIT_NEXT)?;
     let entry = || pinned::recipe::LIMIT_STOP.id().to_owned();
     let routed_len = || {
-        let mut code = [0u8; MOST_STOP];
-        // SAFETY: `stop` is the routed `recipe.limit_stop`, code inside the
-        // game's image, which stays mapped and readable; a stop block lies
-        // well before the end of the code section, so the bytes after it are
-        // code too.
+        let (start, size) = text(loader.base)?;
+        let end = start.checked_add(size)?;
+        let mut code = vec![0u8; end.checked_sub(stop)?.min(MOST_STOP)];
+        // SAFETY: `stop` is the routed `recipe.limit_stop` inside the game's
+        // code section, which starts at `start`, holds `size` bytes and stays
+        // mapped and readable; the read ends at that section's end.
         unsafe { crate::memory::read_bytes(stop, 0, &mut code) };
         stop_len(&code, stop as u64, next as u64)
     };
@@ -656,9 +657,10 @@ fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftLimitError> {
             next,
         })?;
     let mut expected = vec![0u8; len];
-    // SAFETY: `stop` is the table's `recipe.limit_stop`, whose whole `len`
-    // bytes of code `checked` compared against the table's body, inside the
-    // game's image, which stays mapped and readable.
+    // SAFETY: `stop` is `recipe.limit_stop` in the game's image, which stays
+    // mapped and readable, and its `len` bytes are code: `checked` compared
+    // them against the table's body, or, for a routed block without one,
+    // `stop_len` decoded them inside the code section.
     unsafe { crate::memory::read_bytes(stop, 0, &mut expected) };
     Ok(CodePatch {
         owner: ModIndex::LOADER,
