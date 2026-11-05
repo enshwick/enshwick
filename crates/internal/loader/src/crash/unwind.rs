@@ -18,13 +18,7 @@ pub(super) fn readable(address: usize) -> Option<(usize, usize)> {
 
 /// The word at `address`, `None` unless all its bytes read without a fault.
 pub(super) fn read_word(address: usize) -> Option<u64> {
-    let (_, end) = readable(address)?;
-    if address.checked_add(8)? > end {
-        return None;
-    }
-    // SAFETY: the earlier check keeps the eight bytes at `address` inside one
-    // committed, readable region that `VirtualQuery` reported.
-    Some(unsafe { crate::memory::read(address, 0) })
+    crate::pages::read(address).map(u64::from_le_bytes)
 }
 
 /// What unwinding one function's frame reads, from its `UNWIND_INFO`.

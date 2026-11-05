@@ -558,8 +558,9 @@ Each entry names the pull request that made the change.
   in the loader, not that Enshwick was not involved (#932).
 - Game code changed while a mod loaded, ran `init` or ran `ready` is put
   down to that mod only when the change jumps into its DLL, directly or
-  through up to three more jumps; any other change reads `by another
-  program`, since another program's thread may write at any time (#932).
+  through up to three more jumps, also for a DLL skipped as no mod of this
+  ABI; any other change reads `by another program`, without the mod's
+  stage, since another program's thread may write at any time (#932).
 - A changed client no longer passes the chat mute or forges an emote or
   notice line by sending a chat type other than typed text: the server tells
   a player's line by where the game posts it and posts it as typed text,

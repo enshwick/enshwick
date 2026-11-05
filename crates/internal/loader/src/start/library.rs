@@ -276,8 +276,8 @@ fn discover(mods_dir: &Path, loaded: &mut Loaded<'_>) -> Vec<Library> {
                 );
                 continue;
             }
-            let library = load(&path, &name, &file);
-            loaded(&file, library.as_ref().and_then(|library| library.range));
+            let (library, range) = load(&path, &name, &file);
+            loaded(&file, range);
             first = Some(file);
             mods.extend(library);
         }
@@ -314,29 +314,38 @@ pub(super) enum Run {
 }
 
 /// Loads the mod DLL at `path`, in `folder` of `mods/` and named `file`
-/// there; `None`, logged, when it is no mod of this ABI.
-fn load(path: &Path, folder: &str, file: &str) -> Option<Library> {
+/// there, and where it was mapped; the mod is `None`, logged, when it is no
+/// mod of this ABI. A DLL freed for that still ran while it loaded, so its
+/// range is taken before it is freed.
+fn load(path: &Path, folder: &str, file: &str) -> (Option<Library>, Option<(usize, usize)>) {
     let module = match crate::module::load_library(path) {
         Ok(module) => module,
         Err(error) => {
             crate::log!(WARN, "{}", crate::errors::load_failure(file, &error));
-            return None;
+            return (None, None);
         }
     };
-    let library = exports_of(module, folder, file);
+    let range = crate::crash::range_of(module);
+    let library = exports_of(module, folder, file, range);
     if library.is_none() {
-        // SAFETY: `module` was loaded by `load_library` in this function, and
-        // `exports_of` returned `None` without calling into it, so nothing of
-        // it is in use.
+        // SAFETY: `module` was loaded by `load_library` in this function;
+        // `exports_of` returned `None`, so it kept none of the module's
+        // exports or manifest, and the calls it made into them have
+        // returned, so none of its code is in use.
         unsafe { FreeLibrary(module) };
     }
-    library
+    (library, range)
 }
 
 /// The mod in the loaded `module`, from `folder` of `mods/` and named `file`
-/// in messages; `None`, logged, when it exports no Enshwick interface of
-/// this ABI.
-fn exports_of(module: HMODULE, folder: &str, file: &str) -> Option<Library> {
+/// in messages and mapped at `range`; `None`, logged, when it exports no
+/// Enshwick interface of this ABI.
+fn exports_of(
+    module: HMODULE,
+    folder: &str,
+    file: &str,
+    range: Option<(usize, usize)>,
+) -> Option<Library> {
     // SAFETY: `module` was loaded by `load`, which frees it only after
     // this returns; the `Module` does not leave this function, and the
     // exports it finds are called only while the library stays loaded.
@@ -384,7 +393,7 @@ fn exports_of(module: HMODULE, folder: &str, file: &str) -> Option<Library> {
         file: file.to_owned(),
         module,
         pack: false,
-        range: crate::crash::range_of(module),
+        range,
         manifest,
         init,
         ready,

@@ -87,6 +87,17 @@ impl CodeChange {
             &self.by
         }
     }
+
+    /// When, in words fit for [`who`](Self::who); `None` for another
+    /// program's change in a mod's own stage, which would read as that
+    /// program's own load, init or ready.
+    #[must_use]
+    pub fn when(&self) -> Option<Stage> {
+        match self.stage {
+            Stage::Load | Stage::Init | Stage::Ready if self.by.is_empty() => None,
+            stage => Some(stage),
+        }
+    }
 }
 
 /// The ranges where `old` and `new` differ, as offset and length; ranges
@@ -425,13 +436,16 @@ pub fn report(changes: &[CodeChange], place: impl Fn(usize) -> String) -> Vec<St
                     } else {
                         change.by.clone()
                     };
-                    crate::texts::fill(
-                        "watch.change",
-                        &[
-                            ("who", &who),
-                            ("when", &crate::texts::fill(change.stage.key(), &[])),
-                        ],
-                    )
+                    match change.when() {
+                        Some(stage) => crate::texts::fill(
+                            "watch.change",
+                            &[
+                                ("who", &who),
+                                ("when", &crate::texts::fill(stage.key(), &[])),
+                            ],
+                        ),
+                        None => who,
+                    }
                 })
                 .collect();
             crate::texts::fill(
@@ -658,5 +672,31 @@ mod tests {
                 "game code at game+0x40, 14 bytes: changed outside the API by b.dll while it loaded, then by you.mod in its init",
             ]
         );
+    }
+
+    #[test]
+    fn another_programs_change_never_borrows_the_running_mods_stage() {
+        let change = |stage| CodeChange {
+            offset: 0x10,
+            len: 5,
+            by: String::new(),
+            stage,
+        };
+        for stage in [Stage::Load, Stage::Init, Stage::Ready] {
+            assert_eq!(change(stage).when(), None, "{stage:?}");
+        }
+        assert_eq!(
+            report(&[change(Stage::Init)], |at| format!("game+{at:#x}")),
+            ["game code at game+0x10, 5 bytes: changed outside the API by another program"]
+        );
+        assert_eq!(
+            change(Stage::BeforeArming).when(),
+            Some(Stage::BeforeArming)
+        );
+        let by_mod = CodeChange {
+            by: "you.mod".into(),
+            ..change(Stage::Init)
+        };
+        assert_eq!(by_mod.when(), Some(Stage::Init));
     }
 }

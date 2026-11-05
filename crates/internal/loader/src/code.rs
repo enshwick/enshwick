@@ -233,11 +233,12 @@ impl Watching {
         for change in &self.watch.changes()[first..] {
             crate::log!(
                 WARN,
-                "{} changed game code at game+{:#x}, {} bytes, outside the API {}",
+                "{} changed game code at game+{:#x}, {} bytes, outside the API{}{}",
                 change.who(),
                 self.rva + change.offset,
                 change.len,
-                change.stage.describe()
+                if change.when().is_some() { " " } else { "" },
+                change.when().map_or("", crate::code_watch::Stage::describe)
             );
         }
     }
@@ -261,19 +262,10 @@ pub(crate) fn entry_rva(base: u64) -> Option<usize> {
 }
 
 /// The first [`BRANCH_BYTES`](crate::code_watch::BRANCH_BYTES) bytes at
-/// `at`, for following a jump; `None` unless all of them read.
+/// `at`, for following a jump; `None` unless all of them read, even while
+/// another program's thread changes the pages.
 fn code_at(at: usize) -> Option<[u8; crate::code_watch::BRANCH_BYTES]> {
-    let region = crate::pages::query(at).filter(crate::pages::Region::reads)?;
-    if at.checked_add(crate::code_watch::BRANCH_BYTES)? > region.end {
-        return None;
-    }
-    let mut code = [0; crate::code_watch::BRANCH_BYTES];
-    // SAFETY: `pages::query` just found `at..at + BRANCH_BYTES` committed
-    // and readable; the loader is still starting, so the code a hook jumps
-    // through is held by the module that wrote it, and a byte has no
-    // invalid value.
-    unsafe { crate::memory::read_bytes(at, 0, &mut code) };
-    Some(code)
+    crate::pages::read(at)
 }
 
 /// The game's `.text` as the executable on disk holds it, relocated to

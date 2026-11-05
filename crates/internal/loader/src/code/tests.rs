@@ -283,4 +283,14 @@ fn a_jump_is_read_only_where_all_its_bytes_read() {
     assert_eq!(read[..jump.len()], jump);
     assert_eq!(code_at(last + 1), None, "past the page");
     assert_eq!(code_at(0), None);
+    // SAFETY: `page` is the test's own allocation, released once.
+    let released = unsafe {
+        windows_sys::Win32::System::Memory::VirtualFree(
+            page.as_ptr().cast(),
+            0,
+            windows_sys::Win32::System::Memory::MEM_RELEASE,
+        )
+    };
+    assert_ne!(released, 0);
+    assert_eq!(code_at(last), None, "released");
 }

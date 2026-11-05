@@ -3,7 +3,7 @@
 
 use core::ptr::NonNull;
 
-use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
+use windows_sys::Win32::System::Diagnostics::Debug::{FlushInstructionCache, ReadProcessMemory};
 use windows_sys::Win32::System::Memory::{
     MEM_COMMIT, MEM_FREE, MEM_RESERVE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
     PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY,
@@ -95,6 +95,43 @@ pub(crate) fn query(address: usize) -> Option<Region> {
     })
 }
 
+/// The `N` bytes at `address`; `None` unless all of them lie in one region
+/// that [`Region::reads`], and still read when copied, though another thread
+/// may free or protect the pages in between. Allocates nothing, for the
+/// crash hook.
+pub(crate) fn read<const N: usize>(address: usize) -> Option<[u8; N]> {
+    let region = query(address).filter(Region::reads)?;
+    if address.checked_add(N)? > region.end {
+        return None;
+    }
+    copy(address)
+}
+
+/// The `N` bytes at `address`, copied by the kernel, which refuses a page
+/// that does not read where a plain read would fault.
+fn copy<const N: usize>(address: usize) -> Option<[u8; N]> {
+    let mut bytes = [0u8; N];
+    let mut copied = 0;
+    // SAFETY: `GetCurrentProcess` takes no arguments and returns a
+    // pseudo-handle that needs no closing.
+    let process = unsafe { GetCurrentProcess() };
+    // SAFETY: `ReadProcessMemory` reads this process's `address..address + N`
+    // through the kernel and fails rather than faults when any of it is not
+    // accessible ("the entire area to be read must be accessible, or the
+    // operation fails", Win32 docs); it writes at most `N` bytes into
+    // `bytes`, a local of that size, and their count into `copied`.
+    let done = unsafe {
+        ReadProcessMemory(
+            process,
+            core::ptr::with_exposed_provenance(address),
+            bytes.as_mut_ptr().cast(),
+            N,
+            &raw mut copied,
+        )
+    };
+    (done != 0 && copied == N).then_some(bytes)
+}
+
 /// Reserves and commits `len` bytes of fresh read-write pages, at `address`
 /// rounded down to the 64 KiB allocation granularity when one is given and
 /// where Windows picks otherwise; `None` when Windows refused or the range
@@ -161,7 +198,9 @@ pub(crate) fn flush(address: usize, len: usize) {
 
 #[cfg(test)]
 mod tests {
-    use windows_sys::Win32::System::Memory::{MEM_RESERVE, PAGE_EXECUTE_READ};
+    use windows_sys::Win32::System::Memory::{
+        MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READ, VirtualFree,
+    };
 
     use super::*;
 
@@ -231,5 +270,27 @@ mod tests {
         let restored = unsafe { protect(address, 1, PAGE_READWRITE) };
         assert_eq!(old, Some(PAGE_READWRITE));
         assert_eq!(restored, Some(PAGE_READONLY));
+    }
+
+    #[test]
+    fn bytes_read_only_where_all_of_them_read() {
+        const PAGE: usize = 4096;
+        let page = allocate(None, PAGE).expect("a fresh page");
+        let start = page.as_ptr().expose_provenance();
+        let last = start + PAGE - 8;
+        // SAFETY: the eight bytes at `last` lie in the read-write page just
+        // committed.
+        unsafe { crate::memory::write_bytes(last, 0, &[1, 2, 3, 4, 5, 6, 7, 8]) };
+        assert_eq!(read::<8>(last), Some([1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_eq!(read::<8>(last + 1), None, "past the page");
+        assert_eq!(read::<8>(0), None);
+        // SAFETY: `page` is the test's own allocation, released once.
+        unsafe { VirtualFree(page.as_ptr().cast(), 0, MEM_RELEASE) };
+        assert_eq!(read::<8>(start), None, "released");
+        assert_eq!(
+            copy::<8>(start),
+            None,
+            "a page released after the query is refused, not a fault"
+        );
     }
 }

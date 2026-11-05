@@ -258,7 +258,7 @@ conflicts:
 | `by a.dll while it loaded` | while that DLL loaded, from its own start-up code, jumping into it |
 | `by another program while Enshwick unloaded the DLLs it skips` | while the loader unloaded a mod that is off or an older copy |
 | `by you.mod in its init` or `in its ready` | while that mod's `init` or `ready` ran |
-| `by another program while it loaded`, `in its init` or `in its ready` | while a DLL or mod ran, without a jump into it: from another program's thread |
+| `by another program` | while a DLL loaded or a mod ran `init` or `ready`, without a jump into it: from another program's thread |
 | `by another program after every init, before Enshwick turned on its hooks` | between the last `init` and arming, from a thread of some mod or another program |
 
 The copy starts from the executable on disk, so code changed before the
