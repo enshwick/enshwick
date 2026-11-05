@@ -29,14 +29,10 @@ pub const EDIT: u8 = 9;
 pub const RESULT: u8 = 10;
 /// The server's disabled recipes.
 pub const RECIPES: u8 = 11;
-/// A client asks for the actions its player may use.
-pub const ACTIONS_QUERY: u8 = 12;
-/// The server's actions of one mod for the player.
-pub const ACTIONS_SHEET: u8 = 13;
+/// A client names the language its player reads action replies in.
+pub const ACTIONS_LANGUAGE: u8 = 12;
 /// A client runs an action.
 pub const ACTION_RUN: u8 = 14;
-/// The server's answer to a run.
-pub const ACTION_RESULT: u8 = 15;
 
 /// The least time between two changes one player sends.
 pub const EDIT_GAP: Duration = Duration::from_millis(250);
@@ -111,23 +107,10 @@ pub enum Message {
         /// The recipes of this part.
         ids: Vec<u32>,
     },
-    /// A client asks for its player's actions, in the language it reads.
-    ActionsQuery {
+    /// A client names the language its player reads action replies in.
+    ActionsLanguage {
         /// The client's language.
         language: u32,
-    },
-    /// The actions of mod `id` the player may use, as a sheet.
-    ActionsSheet {
-        /// Whether it is the first mod: the client forgets earlier sheets.
-        first: bool,
-        /// Whether it is the last mod.
-        last: bool,
-        /// The mod; empty when no mod has actions.
-        id: String,
-        /// Its name.
-        label: String,
-        /// The sheet's text.
-        text: String,
     },
     /// A client runs mod `id`'s action `action` with `args`.
     ActionRun {
@@ -137,13 +120,6 @@ pub enum Message {
         action: String,
         /// The arguments, in the sheet's encoding.
         args: String,
-    },
-    /// The server's answer to a run.
-    ActionResult {
-        /// Whether it was done.
-        ok: bool,
-        /// What the player reads.
-        text: String,
     },
 }
 
@@ -172,10 +148,8 @@ impl Message {
             Self::Edit { .. } => EDIT,
             Self::Result { .. } => RESULT,
             Self::Recipes { .. } => RECIPES,
-            Self::ActionsQuery { .. } => ACTIONS_QUERY,
-            Self::ActionsSheet { .. } => ACTIONS_SHEET,
+            Self::ActionsLanguage { .. } => ACTIONS_LANGUAGE,
             Self::ActionRun { .. } => ACTION_RUN,
-            Self::ActionResult { .. } => ACTION_RESULT,
         }
     }
 
@@ -188,7 +162,7 @@ impl Message {
             self,
             Self::Query { .. }
                 | Self::Edit { .. }
-                | Self::ActionsQuery { .. }
+                | Self::ActionsLanguage { .. }
                 | Self::ActionRun { .. }
         )
     }
@@ -219,7 +193,7 @@ impl Message {
                 put(&mut out, key);
                 put(&mut out, value);
             }
-            Self::Result { ok, text } | Self::ActionResult { ok, text } => {
+            Self::Result { ok, text } => {
                 out.push(u8::from(*ok));
                 put(&mut out, text);
             }
@@ -229,19 +203,7 @@ impl Message {
                     out.extend_from_slice(&id.to_le_bytes());
                 }
             }
-            Self::ActionsQuery { language } => out.extend_from_slice(&language.to_le_bytes()),
-            Self::ActionsSheet {
-                first,
-                last,
-                id,
-                label,
-                text,
-            } => {
-                out.push(u8::from(*first) | (u8::from(*last) << 1));
-                put(&mut out, id);
-                put(&mut out, label);
-                put(&mut out, text);
-            }
+            Self::ActionsLanguage { language } => out.extend_from_slice(&language.to_le_bytes()),
             Self::ActionRun { id, action, args } => {
                 put(&mut out, id);
                 put(&mut out, action);
@@ -299,33 +261,14 @@ impl Message {
                     ids: ids.iter().map(|id| u32::from_le_bytes(*id)).collect(),
                 }
             }
-            ACTIONS_QUERY => Self::ActionsQuery {
+            ACTIONS_LANGUAGE => Self::ActionsLanguage {
                 language: u32::from_le_bytes(*bytes.first_chunk::<4>()?),
             },
-            ACTIONS_SHEET => {
-                let (&flags, rest) = bytes.split_first()?;
-                *bytes = rest;
-                Self::ActionsSheet {
-                    first: flags & 1 != 0,
-                    last: flags & 2 != 0,
-                    id: take(bytes)?.to_owned(),
-                    label: take(bytes)?.to_owned(),
-                    text: take(bytes)?.to_owned(),
-                }
-            }
             ACTION_RUN => Self::ActionRun {
                 id: take(bytes)?.to_owned(),
                 action: take(bytes)?.to_owned(),
                 args: take(bytes)?.to_owned(),
             },
-            ACTION_RESULT => {
-                let (&ok, rest) = bytes.split_first()?;
-                *bytes = rest;
-                Self::ActionResult {
-                    ok: ok != 0,
-                    text: take(bytes)?.to_owned(),
-                }
-            }
             _ => return None,
         })
     }
@@ -437,7 +380,7 @@ impl Queries {
 
     /// Decides whether the server serves `message` of the player with
     /// account key `key` at `now`. Only [rated](Message::is_rated) messages
-    /// spend the player's rate; an actions query over it gets no answer.
+    /// spend the player's rate; a language message over it gets no answer.
     pub fn gate(&mut self, key: u64, admin: bool, message: &Message, now: Instant) -> Gate {
         let admitted = match message {
             Message::ActionRun { .. } => {
@@ -452,7 +395,7 @@ impl Queries {
         };
         if admitted {
             Gate::Pass
-        } else if matches!(message, Message::ActionsQuery { .. }) {
+        } else if matches!(message, Message::ActionsLanguage { .. }) {
             Gate::Drop
         } else {
             Gate::Busy(Message::Result {

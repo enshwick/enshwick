@@ -54,7 +54,7 @@ fn back_steps_from_each_page_towards_the_list_and_closes_from_it() {
         Back::List,
         "a server page a mod opened goes back to the mods"
     );
-    assert_eq!(back(Kind::Actions), Back::Inside);
+    assert_eq!(back(Kind::Controls), Back::Inside);
 }
 
 #[test]

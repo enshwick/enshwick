@@ -15,7 +15,6 @@ use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
 
-mod actions;
 mod demo;
 mod dialog;
 mod engine;
@@ -304,8 +303,11 @@ impl Arena {
         let Some(buffer) = self.buffers.get_mut(self.current) else {
             return UiText::EMPTY;
         };
-        let backslashes = |p: &[u8]| p.iter().filter(|&&b| b == b'\\').count();
-        let len: usize = parts.iter().map(|p| p.len() + backslashes(p)).sum();
+        let len: usize = parts
+            .iter()
+            .flat_map(|p| p.iter())
+            .map(|&b| 1 + usize::from(b == b'\\'))
+            .sum();
         if buffer.len() + len > buffer.capacity() {
             return UiText::EMPTY;
         }

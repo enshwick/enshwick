@@ -112,8 +112,6 @@ enum Page {
         entries: Entries,
         from_mod: bool,
     },
-    /// The actions the server offers.
-    Actions(super::actions::View),
     /// Every mod's controls and their keys.
     Controls(controls::View),
     /// The mods that differ from those of a server that refused or kicked
@@ -135,7 +133,6 @@ impl Page {
                 from_mod: false, ..
             } => Kind::ServerSettings,
             Self::ServerSettings { from_mod: true, .. } => Kind::ModServerSettings,
-            Self::Actions(_) => Kind::Actions,
             Self::Controls(_) => Kind::Controls,
         }
     }
@@ -356,9 +353,6 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
                 scroll: Scroll::new(),
             });
             BACK.store(0, Ordering::Relaxed);
-            if opened == FROM_PAUSE {
-                let _asked = crate::actions::ask_server();
-            }
         }
         let Some(screen) = slot.as_mut() else {
             return;
@@ -441,7 +435,6 @@ fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
         Page::ServerSettings { id, .. } => {
             copy(&[texts::fill("mods.server.of", &[("id", id)]).as_bytes()])
         }
-        Page::Actions(view) => copy(&[view.title().as_bytes()]),
         Page::Controls(_) => copy(&[texts::text("controls").as_bytes()]),
         Page::Mismatch { .. } => copy(&[texts::text("join.dialog.title").as_bytes()]),
     }
@@ -542,9 +535,6 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             }
             match list(loader, paint, first) {
                 Listed::Settings(index) => settings_page(loader, from, index),
-                Listed::Actions(id) => {
-                    Next::Page(Page::Actions(super::actions::View::new(id)), None)
-                }
                 Listed::Controls => Next::Page(Page::Controls(controls::View::default()), None),
                 Listed::Nothing => Next::Stay,
             }
@@ -606,10 +596,6 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             ..
         } => server_settings(paint, id, first, rows, schema, news, entries)
             .map_or(Next::Stay, Next::Message),
-        Page::Actions(view) => {
-            super::actions::body(paint, view);
-            Next::Stay
-        }
         Page::Controls(view) => {
             controls::body(loader, paint, view);
             Next::Stay
