@@ -1,7 +1,7 @@
 use iced_x86::{Decoder, DecoderOptions, Instruction};
 
 use super::shape::{self, Step};
-use super::{Routed, Routes};
+use super::{How, Routed, Routes};
 use crate::reflect::{Image, Layout, Reflection};
 use crate::{Side, Table, embedded, exact};
 
@@ -9,6 +9,58 @@ use crate::{Side, Table, embedded, exact};
 fn the_embedded_routes_read() {
     let routes = Routes::embedded().unwrap();
     assert!(routes.ids().count() > 0);
+}
+
+/// Every type a `field` or `size` route names is in the typed catalogue of
+/// each table build of its side that has a snapshot, and each field holds
+/// the type of the step after it.
+#[test]
+fn every_reflected_name_a_route_takes_is_in_the_typed_catalogue() {
+    let routes = Routes::embedded().unwrap();
+    let mut checked = 0;
+    for (_, text) in embedded() {
+        let table = Table::parse(text).unwrap();
+        let file = std::path::Path::new(&table.file_name()).with_extension("jsonl");
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("typed")
+            .join(&file);
+        let Ok(snapshot) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let catalogue = crate::typed::Catalogue::from_snapshot(&snapshot).unwrap();
+        for route in routes
+            .routes
+            .iter()
+            .filter(|r| r.sides.contains(&table.side()))
+        {
+            let ty = |name: &str| {
+                catalogue
+                    .types
+                    .get(name)
+                    .unwrap_or_else(|| panic!("{}: {name} is not in {file:?}", route.id))
+            };
+            match &route.how {
+                How::Field(steps) => {
+                    for (at, (owner, field)) in steps.iter().enumerate() {
+                        let held = ty(owner)
+                            .fields
+                            .iter()
+                            .find(|f| f.name == *field)
+                            .unwrap_or_else(|| panic!("{}: {owner}.{field} in {file:?}", route.id));
+                        if let Some((next, _)) = steps.get(at + 1) {
+                            assert_eq!(held.ty.as_ref(), Some(next), "{}", route.id);
+                        }
+                    }
+                }
+                How::Size(name) => {
+                    ty(name);
+                }
+                _ => continue,
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "no reflected route met a snapshot");
 }
 
 #[test]
