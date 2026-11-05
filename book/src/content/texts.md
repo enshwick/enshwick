@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: A mod ships its texts, item names, descriptions and chat phrases, in one TOML file with a table per language, which a server owner can add to or change.
+description: A mod ships its texts, item names, descriptions and chat phrases, in one TOML file with a table per language, embedded in the mod and read by the i18n module.
 -->
 
 # Texts
@@ -8,7 +8,7 @@ description: A mod ships its texts, item names, descriptions and chat phrases, i
 A mod ships its texts, item names, descriptions and chat phrases, in one
 TOML file with a table per language. The
 [`i18n`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
-module reads it, and a server owner can add to it or change it.
+module reads it.
 
 ## The texts file
 
@@ -94,9 +94,7 @@ The mod does not build when the file has one of these faults:
 - two texts of a key fill in different values, such as `{name}` in `uk`
   where the `en` text has `{owner}`.
 
-`load.texts` returns `Err(Off)` when the crate has no `src/texts.toml` or
-the override file below is malformed, with the override's path in the
-message.
+`load.texts` returns `Err(Off)` when the crate has no `src/texts.toml`.
 [`Load::texts_from(toml)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 hands over texts from a string, as for a data pack.
 

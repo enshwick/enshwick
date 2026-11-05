@@ -71,7 +71,7 @@ local bench = enshwick.content.add_workshop({
     recipe_cost = 1,
     debug_name = "Craftingstation_BulkWorkbench",
 })
-enshwick.content.derive_recipes("you.bench", function(recipe)
+enshwick.content.derive_recipes("my-mod", function(recipe)
     if string.sub(recipe.debug_name, 1, 6) == "Block_" then
         return { output = 2, cost = 1, workshop = bench }
     end

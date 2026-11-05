@@ -1,6 +1,6 @@
 <!--
 type: explanation
-description: Enshrouded ships a dedicated server and a client, and the Enshwick loader runs in both. A mod's side says where it runs: on a server or while a client hosts.
+description: Enshrouded ships a dedicated server and a client, and the Enshwick loader runs in both. A mod's side, server or both, says who must have it.
 -->
 
 # Sides and hosting

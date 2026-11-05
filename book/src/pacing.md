@@ -68,6 +68,21 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local ONLINE_WAIT_NS = "1000000"
+
+enshwick.pacing.on_server_wait(function(wait_ns)
+    if wait_ns == ONLINE_WAIT_NS then
+        return "2000000"
+    end
+    return nil
+end)
+```
+
+A Luau handler gets the wait as decimal text, since a Luau number cannot
+hold every `u64`, and returns the new wait as text or `nil` to keep it. The
+constants are Rust items; `SERVER_ONLINE_WAIT_NS` is 1,000,000.
+
 ## Task workers
 
 The engine starts a worker thread per logical CPU in each task group, up to
