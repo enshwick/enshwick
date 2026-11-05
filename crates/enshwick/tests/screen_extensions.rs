@@ -30,7 +30,10 @@ mod tests {
                     WINDOW_DRAWN.store(true, Ordering::Relaxed);
                 }
             });
-            REFUSED.store(added.is_err(), Ordering::Relaxed);
+            let left = load.extend_screen(HudScreenType::StorageChest, Edge::Left, |panel| {
+                panel.label(Label::new("Left"));
+            });
+            REFUSED.store(added.is_err() || left.is_err(), Ordering::Relaxed);
             let host = load.host();
             let raw = |screen: &str, edge: u32| {
                 let spec = UiExtension {
@@ -45,12 +48,16 @@ mod tests {
                 raw("Map", UiExtension::BOTTOM),
                 raw("StorageChest", UiExtension::BOTTOM + 1),
                 raw("", UiExtension::LEFT),
+                raw("NoSuchScreen", UiExtension::LEFT),
+                raw("InGame", UiExtension::LEFT),
+                raw("NoUi", UiExtension::LEFT),
             ];
             Ok(Self)
         }
     }
 
-    /// What the loader answered the raw extensions, the last two malformed.
+    /// What the loader answered the raw extensions, all but the first
+    /// refused.
     static MALFORMED: Mutex<Vec<Status>> = Mutex::new(Vec::new());
 
     unsafe extern "system" fn nothing(_frame: *const UiFrame, _user: *mut c_void) {}
@@ -73,29 +80,51 @@ mod tests {
         assert!(!REFUSED.load(Ordering::Relaxed));
         assert_eq!(
             *MALFORMED.lock().unwrap(),
-            [Status::OK, Status::BAD_ARGS, Status::BAD_ARGS],
-            "the bottom edge, an unknown edge and an empty screen name"
+            [
+                Status::OK,
+                Status::BAD_ARGS,
+                Status::MISSING,
+                Status::MISSING,
+                Status::BAD_ARGS,
+                Status::BAD_ARGS,
+            ],
+            "the bottom edge, an unknown edge, an empty and an unknown screen, \
+             and two screens of play with no window open"
         );
 
         assert!(loader.draw_screen(HudScreenType::Backpack).is_empty());
+        assert!(
+            loader.draw_screen(HudScreenType::Map).is_empty(),
+            "a panel that draws nothing shows nothing"
+        );
         assert!(loader.draw_frame().is_empty());
 
         loader.input("Sort", Input::Click);
         assert_eq!(
             loader.draw_screen(HudScreenType::StorageChest),
-            [(
-                UiExtension::RIGHT,
-                vec![
-                    Drawn::Label {
-                        text: "Shared".into(),
-                        style: UiWidget::STYLE_SECONDARY,
-                    },
-                    Drawn::Button {
-                        text: "Sort".into(),
-                        enabled: true,
-                    },
-                ]
-            )]
+            [
+                (
+                    UiExtension::LEFT,
+                    vec![Drawn::Label {
+                        text: "Left".into(),
+                        style: UiWidget::STYLE_BODY,
+                    }]
+                ),
+                (
+                    UiExtension::RIGHT,
+                    vec![
+                        Drawn::Label {
+                            text: "Shared".into(),
+                            style: UiWidget::STYLE_SECONDARY,
+                        },
+                        Drawn::Button {
+                            text: "Sort".into(),
+                            enabled: true,
+                        },
+                    ]
+                ),
+            ],
+            "edge by edge, left before right, though the right one came first"
         );
         assert_eq!(SORTED.load(Ordering::Relaxed), 1);
         assert!(!WINDOW_DRAWN.load(Ordering::Relaxed));

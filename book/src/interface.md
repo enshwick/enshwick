@@ -144,11 +144,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-The game's screens have no place to add to, so the loader draws each panel
-in a window of its own, on a layer above the game's screen and below the
-game's tooltips and the item being dragged. The panel never moves or changes
-the game's screen. `frame.window` is refused inside a panel, which is already
-one. The game's buttons stay the game's: a panel's buttons are the mod's own,
+The game's screens have no place to add to, so the loader draws the panels
+at each edge in one window of its own, on a layer above the game's screen and
+below the game's tooltips and the item being dragged. That window shows only
+once a panel draws a widget in it, so a panel that draws nothing shows
+nothing. The panel never moves or changes the game's screen. `frame.window`
+is refused inside a panel, which is already one. A panel cannot go on the
+screens of play with no window open (`InGame`, `NoUi`, `TakeScreenshot` and
+the multitools' building screens), where it would cover the world:
+`extend_screen` returns `Off` for them. The game's buttons stay the game's: a panel's buttons are the mod's own,
 and a press that changes the world goes to the server as a
 [player action](actions.md), which the server checks again.
 
@@ -174,8 +178,9 @@ prompt with parts that work on every client, with or without Enshwick:
 | No prompt for a player            | refuse `Kind::Open` in [`load.on_interaction`](vetoes.md#interactions)    |
 | The mod's own action on the press | the game event `AcceptOfferedInteractionEvent` ([Game events](game-events.md)), its `host_entity_id` the object |
 
-The object's own action, such as opening the chest, still runs on the
-press; the mod's action runs beside it, on the server.
+The game's data shows the object's own action, such as opening the chest,
+running on the press as well, with the mod's action beside it on the server.
+This is not yet checked in the running game.
 
 ## Map markers
 

@@ -4462,11 +4462,19 @@ typedef struct EnshwickHostApi {
   // the thread that draws the interface; the callback draws into the
   // panel with `HostApi::ui_widget`, without a window of its own
   // (`Status::REFUSED` for `UiWidget::WINDOW` and `UiWidget::END`).
-  // The panel never changes the game screen's own layout. Client only
-  // (`Status::MISSING` on a server or for a screen this game build
-  // lacks); `Status::BAD_ARGS` for an unknown edge or unreadable
-  // screen name; allowed during `enshwick_mod_init` only. A panic in the
-  // loader returns `Status::REFUSED`.
+  // Panels at one edge share one window, which opens only once a panel
+  // draws a widget that needs it. The panel never changes the game
+  // screen's own layout. Client only (`Status::MISSING` on a server or
+  // for a screen this game build lacks); `Status::BAD_ARGS` for a null
+  // or short `spec`, an unknown edge, an unreadable screen name, or a
+  // screen on which the player is in the world with no window open
+  // (`InGame`, `NoUi`, `TakeScreenshot`, the multitools' building
+  // screens); allowed during `enshwick_mod_init` only, on the thread that
+  // runs it, once per panel; the loader never calls `callback` inside this
+  // call. `spec` and its screen name are borrowed for
+  // the call; `callback` and `user` are kept for the life of the process
+  // and never freed by the loader. A panic in the loader returns
+  // `Status::REFUSED`.
   EnshwickStatus (*ui_extension)(EnshwickModHandle me,
                                  const struct EnshwickUiExtension *spec,
                                  EnshwickUiFrameFn callback,

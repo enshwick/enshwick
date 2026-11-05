@@ -197,8 +197,18 @@ pub(super) fn draw(
         return Status::BAD_ARGS;
     };
     let read_only = raw.flags & UiWidget::READ_ONLY != 0;
-    if drawing.extension && matches!(raw.kind, UiWidget::WINDOW | UiWidget::END) {
-        return Status::REFUSED;
+    if let Some(edge) = drawing.extension {
+        if matches!(raw.kind, UiWidget::WINDOW | UiWidget::END) {
+            return Status::REFUSED;
+        }
+        if !drawing.window_open && widget_checks::needs_window(raw.kind) {
+            // SAFETY: `widget` found this thread's `DRAWING`, which
+            // `extensions::run` sets only while it runs an extension's
+            // callback inside the frame on the interface thread, with its
+            // non-zero `context` and no window but the extensions' own open.
+            unsafe { super::extensions::open(engine, context, edge) };
+            drawing.window_open = true;
+        }
     }
     let order = widget_checks::order(raw.kind, drawing.window_open);
     if !order.is_ok() {

@@ -253,9 +253,10 @@ struct Drawing {
     window_open: bool,
     /// Drawing the HUD: items gather for their anchors.
     hud: bool,
-    /// Drawing an extension of a game screen, inside the window the loader
-    /// opened for it, which the callback may not end or nest.
-    extension: bool,
+    /// The edge of the game screen whose extension draws now: its widgets
+    /// go into that edge's window, which the loader opens and the callback
+    /// may not end or nest.
+    extension: Option<u32>,
 }
 
 /// A HUD item a callback drew: anchor, then a label or a bar.
@@ -420,7 +421,7 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
 pub(crate) fn link(loader: &'static Loader) {
     let count = FRAMES.seal().len();
     let hud_count = HUDS.seal().len();
-    extensions::link(loader);
+    extensions::seal();
     if loader.side != Side::CLIENT {
         return;
     }
@@ -457,6 +458,7 @@ pub(crate) fn link(loader: &'static Loader) {
             INFO,
             "interface: {count} frame and {hud_count} HUD callbacks from mods"
         );
+        extensions::link(loader);
     }
 }
 
@@ -619,7 +621,7 @@ fn hud(engine: &Engine, context: usize) {
             context,
             window_open: false,
             hud: true,
-            extension: false,
+            extension: None,
         }));
         let frame = UiFrame {
             header: enshwick::abi::Header::of::<UiFrame>(),
@@ -751,7 +753,7 @@ fn frames(engine: &Engine, context: usize) {
             context,
             window_open: false,
             hud: false,
-            extension: false,
+            extension: None,
         }));
         let frame = UiFrame {
             header: enshwick::abi::Header::of::<UiFrame>(),

@@ -57,6 +57,8 @@ mod frame;
 mod hud;
 #[cfg(feature = "unstable")]
 mod map;
+#[cfg(any(feature = "unstable", feature = "test"))]
+pub(crate) mod screens;
 mod widgets;
 
 pub use dialog::{Dialog, Response};

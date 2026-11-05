@@ -192,6 +192,12 @@ function without one, unless this table names it and says why.
 | `ui::Ui::ask` | It blocks a thread of the mod's own until the player answers. A script has no thread of its own, so it takes a dialog's answer in a callback, as `Ui::dialog` does. |
 | `affixes::lines_of` | The loader's own listing of an item's lines from the pool it keeps. A script reads them with `enshwick.affixes.lines`. |
 
+A few calls cost more in Luau than in Rust. The filter of
+`enshwick.interactions.on_interaction` runs for every entity in each
+player's reach on every frame; where a Rust filter allocates nothing, the
+runtime builds the interaction's table and enters the script each time. Keep
+that filter short, or write it in Rust for a mod that checks many entities.
+
 ## The sandbox
 
 A script reaches the game only through `enshwick`. It has Luau's own

@@ -7,6 +7,7 @@ use crate::abi::{
     UiFrameFn, UiMarker, UiWidget,
 };
 use crate::test::table::{State, text, with};
+use crate::ui::screens;
 
 /// table it sees for the process, so it is one static.
 pub(crate) extern "system" fn ui_frame(
@@ -206,8 +207,9 @@ pub(crate) extern "system" fn ui_hud(
     })
 }
 
-/// Records an extension of a game screen, as the loader takes it: client
-/// only, a known edge and a readable screen name.
+/// Records an extension of a game screen, refusing what the loader
+/// refuses, in its order: a server, an unknown edge or a screen where the
+/// player is in the world with no window open, a screen the game lacks.
 pub(crate) extern "system" fn ui_extension(
     _me: ModHandle,
     spec: *const UiExtension,
@@ -218,11 +220,14 @@ pub(crate) extern "system" fn ui_extension(
         return Status::BAD_ARGS;
     };
     let screen = text(spec.screen);
-    if spec.edge > UiExtension::BOTTOM || screen.is_empty() {
-        return Status::BAD_ARGS;
-    }
     with(Status::MISSING, |s| {
         if s.host.side == Side::SERVER {
+            return Status::MISSING;
+        }
+        if spec.edge > UiExtension::BOTTOM || screens::OPEN.contains(&screen.as_str()) {
+            return Status::BAD_ARGS;
+        }
+        if !screens::NAMES.contains(&screen.as_str()) {
             return Status::MISSING;
         }
         s.extensions

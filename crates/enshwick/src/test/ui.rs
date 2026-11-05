@@ -87,9 +87,10 @@ impl Installed {
 
     /// Runs the callbacks of the mod's extensions of the game screen
     /// `screen` once, as when the player has that screen open, and returns
-    /// what each drew, with its edge (`UiExtension::LEFT` and on), in order.
-    /// The loader opens each extension's panel, so a window widget is
-    /// refused there.
+    /// what each drew, with its edge (`UiExtension::LEFT` and on), edge by
+    /// edge and in registration order within an edge. The loader opens each
+    /// edge's window for its panels, so a window widget is refused there,
+    /// and a panel that drew nothing is left out, as it shows no window.
     ///
     /// # Examples
     ///
@@ -103,7 +104,8 @@ impl Installed {
     #[cfg(feature = "unstable")]
     #[must_use]
     pub fn draw_screen(&self, screen: crate::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
-        let extensions = table::with(Vec::new(), |s| s.extensions.clone());
+        let mut extensions = table::with(Vec::new(), |s| s.extensions.clone());
+        extensions.sort_by_key(|&(_, edge, _, _)| edge);
         let mut drawn = Vec::new();
         for (token, (name, edge, callback, user)) in (1u64..).zip(extensions) {
             if name != screen.name() {
@@ -130,7 +132,7 @@ impl Installed {
                 s.extending = None;
                 s.frame.take()
             });
-            if let Some((_, _, list)) = list {
+            if let Some((_, _, list)) = list.filter(|(_, _, list)| !list.is_empty()) {
                 drawn.push((edge, list));
             }
         }

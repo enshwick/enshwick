@@ -7,6 +7,9 @@ use crate::{Load, Off};
 
 use super::client_only;
 use super::frame::{Drawer, draw_frame};
+use super::screens::NAMES;
+#[cfg(test)]
+use super::screens::OPEN;
 
 /// One of the game's screens, which [`Load::extend_screen`] adds a panel to.
 ///
@@ -89,61 +92,7 @@ impl HudScreenType {
     /// See [`HudScreenType`].
     #[must_use]
     pub const fn name(self) -> &'static str {
-        match self {
-            Self::InGame => "InGame",
-            Self::SystemMenu => "SystemMenu",
-            Self::SettingsMenu => "SettingsMenu",
-            Self::InGameMenu => "InGameMenu",
-            Self::Map => "Map",
-            Self::Journal => "Journal",
-            Self::Character => "Character",
-            Self::PlayerCrafting => "PlayerCrafting",
-            Self::Backpack => "Backpack",
-            Self::SkillTree => "SkillTree",
-            Self::SkillTreeRespec => "SkillTreeRespec",
-            Self::FlameAltar => "FlameAltar",
-            Self::AltarUpgrade => "AltarUpgrade",
-            Self::FlameUpgrade => "FlameUpgrade",
-            Self::AltarDeactivate => "AltarDeactivate",
-            Self::AltarReskill => "AltarReskill",
-            Self::AltarItemPickup => "AltarItemPickup",
-            Self::LoreReading => "LoreReading",
-            Self::Signpost => "Signpost",
-            Self::LogicEditor => "LogicEditor",
-            Self::ReadOnlyLootChest => "ReadOnlyLootChest",
-            Self::StorageChest => "StorageChest",
-            Self::Collection => "Collection",
-            Self::FeedingStation => "FeedingStation",
-            Self::StationBasedCrafting => "StationBasedCrafting",
-            Self::NpcDialog => "NpcDialog",
-            Self::NpcCrafting => "NpcCrafting",
-            Self::FactoryCrafting => "FactoryCrafting",
-            Self::BlueprintMultiTool => "BlueprintMultiTool",
-            Self::BlueprintMultiToolMaterialCatalog => "BlueprintMultiToolMaterialCatalog",
-            Self::OvergrowthMultiTool => "OvergrowthMultiTool",
-            Self::DecayMultiTool => "DecayMultiTool",
-            Self::ScrewdriverMultiToolBuildingMode => "ScrewdriverMultiToolBuildingMode",
-            Self::ScrewdriverMultiToolGraphManager => "ScrewdriverMultiToolGraphManager",
-            Self::ScrewdriverMultiToolEntityConfig => "ScrewdriverMultiToolEntityConfig",
-            Self::TerraformingSideMenu => "TerraformingSideMenu",
-            Self::NpcSummonerMenu => "NpcSummonerMenu",
-            Self::UserFeedback => "UserFeedback",
-            Self::TwitchDrops => "TwitchDrops",
-            Self::RedeemCommerceProducts => "RedeemCommerceProducts",
-            Self::CommerceProductChest => "CommerceProductChest",
-            Self::ItemTinting => "ItemTinting",
-            Self::TextChat => "TextChat",
-            Self::Social => "Social",
-            Self::ShroudForge => "ShroudForge",
-            Self::CharacterCustomization => "CharacterCustomization",
-            Self::Rename => "Rename",
-            Self::TakeScreenshot => "TakeScreenshot",
-            Self::InfoPopup => "InfoPopup",
-            Self::NewCommerceUnlock => "NewCommerceUnlock",
-            Self::NoUi => "NoUi",
-            Self::TechGallery => "TechGallery",
-            Self::YcPlayground => "YcPlayground",
-        }
+        NAMES[self as usize]
     }
 }
 
@@ -188,12 +137,17 @@ impl Load<'_> {
     /// shows above the game's screen, never changes its layout, and goes
     /// away with it; its buttons are the mod's own, so a press that changes
     /// the world goes to the server as a player action, which the server
-    /// checks again. Client only. A panic in `draw` turns the mod off.
+    /// checks again. Panels at one edge share one window, which shows only
+    /// once a panel draws in it. Client only. A panic in `draw` turns the
+    /// mod off.
     ///
     /// # Errors
     ///
-    /// [`Off`] on a server, after `init`, or on a game build without the
-    /// screen.
+    /// [`Off`] on a server, after `init`, on a game build without the
+    /// screen, or for a screen on which the player is in the world with no
+    /// window open ([`HudScreenType::InGame`], [`HudScreenType::NoUi`],
+    /// [`HudScreenType::TakeScreenshot`] and the multitools' building
+    /// screens), where a panel would cover play.
     ///
     /// # Examples
     ///
@@ -239,6 +193,15 @@ impl Load<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_screen_is_named_by_its_own_member() {
+        assert_eq!(HudScreenType::InGame.name(), "InGame");
+        assert_eq!(HudScreenType::StorageChest.name(), "StorageChest");
+        assert_eq!(HudScreenType::NoUi.name(), "NoUi");
+        assert_eq!(HudScreenType::YcPlayground.name(), "YcPlayground");
+        assert!(OPEN.iter().all(|open| NAMES.contains(open)));
+    }
 
     #[test]
     fn every_edge_maps_to_its_own_raw_value() {
