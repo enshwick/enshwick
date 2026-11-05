@@ -22,6 +22,7 @@ pub(crate) struct Staged(Vec<File>);
 
 impl Staged {
     /// Adds a file that must not exist yet.
+    #[cfg(test)]
     pub(crate) fn create(&mut self, path: PathBuf, text: String) {
         self.0.push(File {
             path,

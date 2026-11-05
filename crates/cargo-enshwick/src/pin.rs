@@ -3,10 +3,11 @@
 //! Given the executable the current rows were made for and a new one, it
 //! re-finds every pinned symbol of the loader's build table and of each
 //! mod's `[[package.metadata.enshwick.builds]]` rows in the new executable,
-//! checks the constants against the code that uses them, and writes the new
-//! build's table file (with the code patterns that find each entry on a build
-//! without a table) and new mod rows in each mod's `Cargo.toml`, with a
-//! report. It never guesses: whatever it
+//! checks the constants against the code that uses them, and writes new mod
+//! rows in each mod's `Cargo.toml` and the routes' check shapes, with a
+//! report of how the loader's entries port. It writes no loader table: the
+//! loader finds every build by its anchors and routes. It never guesses:
+//! whatever it
 //! cannot place for sure is left out, with a note, and listed for a human.
 //! With `--patterns` it writes the patterns of one build's table from its own
 //! executable. See the README.
@@ -113,7 +114,7 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
     }
     let mut staged = Staged::default();
     let mut ported = Vec::new();
-    let mut sections = port_tables(args, &old, &new, &mut staged, &mut ported)?;
+    let mut sections = port_tables(args, &old, &new, &mut ported)?;
     sections.extend(refresh_checks(args, &old, &new, &ported, &mut staged)?);
     sections.extend(port_mods(args, &old, &new, &mut staged)?);
     if sections.is_empty() {
@@ -233,14 +234,14 @@ fn finish(staged: Staged, report: Option<&Path>, text: &str) -> anyhow::Result<(
     Ok(())
 }
 
-/// Ports the loader's table for `old`'s build to `new`'s build; with
-/// `--write`, stages the new table file. Each ported table goes to `tables`
-/// as its side, the old table and the new one.
+/// Ports the loader's table for `old`'s build to `new`'s build for the
+/// report: the loader finds every build by its anchors and routes, so no
+/// table file is written. Each ported table goes to `tables` as its side,
+/// the old table and the new one, for the routes' check shapes.
 fn port_tables(
     args: &Args,
     old: &Exe<'_>,
     new: &Exe<'_>,
-    staged: &mut Staged,
     tables: &mut Vec<(Side, Resolved, Resolved)>,
 ) -> anyhow::Result<Vec<report::Section>> {
     let (Some(old_fp), Some(new_fp)) = (old.fingerprint(), new.fingerprint()) else {
@@ -254,14 +255,6 @@ fn port_tables(
             continue;
         }
         let target = path.with_file_name(table_file(row.side, new_fp));
-        if args.write {
-            if target.exists() {
-                bail!("{} already exists", target.display());
-            }
-            if args.steam_build.is_none() {
-                bail!("--write needs --steam-build for the loader table");
-            }
-        }
         let mut ported = row::port_row(&row, old, new);
         let source =
             enshwick_gamedata::Table::parse(&src).with_context(|| path.display().to_string())?;
@@ -297,9 +290,6 @@ fn port_tables(
             .with_context(|| target.display().to_string())?
             .resolve();
         tables.push((row.side, source.resolve(), resolved));
-        if args.write {
-            staged.create(target, text);
-        }
     }
     Ok(sections)
 }
