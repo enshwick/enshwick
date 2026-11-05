@@ -727,6 +727,10 @@ mod tests {
             None,
             "jmp rcx is no jump to rax"
         );
+        let mut r11 = vec![0x49, 0xBB];
+        r11.extend(0x8888u64.to_le_bytes());
+        r11.extend([0x41, 0xFF, 0xE3]);
+        assert_eq!(branch(&r11, at, |_| None), Some(0x8888));
         assert_eq!(branch(&[0xE9, 0, 0], at, |_| None), None, "cut short");
     }
 
