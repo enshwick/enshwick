@@ -201,13 +201,12 @@ fn luau_definitions(
         done.push(format!("wrote {}", path.display()));
     }
     let text = cargo_enshwick::luau::definitions();
-    match out {
-        Some(path) => {
-            std::fs::write(path, text).with_context(|| path.display().to_string())?;
-            done.push(format!("wrote {}", path.display()));
-        }
-        None => done.push(text),
-    }
+    let Some(path) = out else {
+        // Printed definitions stay a file luau-lsp reads: no status line.
+        return Ok(text);
+    };
+    std::fs::write(path, text).with_context(|| path.display().to_string())?;
+    done.push(format!("wrote {}", path.display()));
     Ok(done.join("\n"))
 }
 
@@ -301,6 +300,20 @@ mod tests {
             )
         );
         assert!(ids(&["safe".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn printed_definitions_hold_only_luau_when_the_typed_file_is_written() {
+        let typed =
+            std::env::temp_dir().join(format!("enshwick-typed-{}.d.luau", std::process::id()));
+        let printed = luau_definitions(None, Some(&typed)).unwrap();
+        assert!(printed.starts_with("--!strict"), "{}", &printed[..40]);
+        assert!(
+            std::fs::read_to_string(&typed)
+                .unwrap()
+                .contains("export type typed_")
+        );
+        std::fs::remove_file(&typed).unwrap();
     }
 
     #[test]

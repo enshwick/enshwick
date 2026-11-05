@@ -144,7 +144,9 @@ the file beside `enshwick.d.luau` and name the type where it helps:
 ```luau
 local health = enshwick.typed.component_type("ecs.NetworkHealth")
 local value: typed_ecs_NetworkHealth? = health:read(1)
-```## Write the game's types into your crate
+```
+
+## Write the game's types into your crate
 
 For a struct the typed API does not cover, such as one a
 [hooked system](ecs.md) hands you, `cargo enshwick types` writes the game's
