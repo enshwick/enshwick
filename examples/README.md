@@ -16,6 +16,7 @@ and none is released. The book's own examples cover the smaller cases.
 | [you.recipe-cost-and-time](you.recipe-cost-and-time/) | a data pack that halves three recipes' cost and time        |
 | [you.storage-slots](you.storage-slots/)               | a data pack that gives storage boxes more slots             |
 | [you.welcome](you.welcome/)                           | a Luau mod that greets players and counts who is online     |
+| [you.shrine](you.shrine/)                             | a content mod: an item with a script, a recipe, loot, a reward and world settings |
 
 The book's chapter [Services between mods](../book/src/services.md) follows
 the trading post, [Extending other mods](../book/src/extending.md) the

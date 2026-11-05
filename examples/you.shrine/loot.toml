@@ -1,0 +1,7 @@
+#:schema ./loot.schema.json
+# Chests hold a tonic as often as the world's `tonic_chance` says.
+
+[[drop]]
+items = ["tonic"]
+chance = { setting = "tonic_chance" }
+from = "chests"

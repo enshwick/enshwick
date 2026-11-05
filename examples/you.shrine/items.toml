@@ -1,0 +1,12 @@
+#:schema ./items.schema.json
+# The shrine tonic: a clone of the game's first health potion, with its own
+# name. `on` names the functions of main.luau that run on
+# the tonic's actions; leave it out for a pack without scripts.
+
+[[item]]
+id = "tonic"
+# Consumable_Potion_Health_T1
+like = "cd7c8239-51ad-4e08-a90d-642f8b8616a1"
+name = "tonic.name"
+description = "tonic.description"
+on = { consume = "drink_tonic", trash = "keep_tonic" }

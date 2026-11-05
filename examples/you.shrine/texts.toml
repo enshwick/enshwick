@@ -1,0 +1,11 @@
+[en]
+"tonic.name" = "Shrine Tonic"
+"tonic.description" = "Brewed from shrine water. The first one a traveller drinks in a world teaches them something."
+"config.tonic_chance" = "Tonic chance in chests"
+"config.first_drink_experience" = "Experience for the first tonic"
+
+[uk]
+"tonic.name" = "Святилищний тонік"
+"tonic.description" = "Зварений зі святилищної води. Перший такий тонік у світі чогось навчає мандрівника."
+"config.tonic_chance" = "Шанс тоніка в скринях"
+"config.first_drink_experience" = "Досвід за перший тонік"

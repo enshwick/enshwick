@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PackManifest",
+  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's `[package.metadata.enshwick]` says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\nexports = [\"event:lit\"]\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.exports, [\"event:lit\"]);\nassert_eq!(manifest.side, PackSide::Both);\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
+  "type": "object",
+  "properties": {
+    "after": {
+      "description": "Mods it loads after when they run, by alias; they take no version.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      }
+    },
+    "authors": {
+      "description": "The authors' names.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "breaks": {
+      "description": "Mods it cannot run beside, by alias; with a `version`, only those\nversions.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      }
+    },
+    "description": {
+      "description": "One sentence on what it adds.",
+      "type": "string",
+      "default": ""
+    },
+    "enshwick": {
+      "description": "The Enshwick releases it is made for, as a Cargo-style version\nrequirement such as `=1.0.0-alpha.12` (empty for any); a loader of\nanother release skips the pack and names both.",
+      "type": "string",
+      "default": ""
+    },
+    "exports": {
+      "description": "What other mods may use, each `event:<name>` for an event its scripts\ndefine or `content:<name>` for its content: `event:greeted` lets them\nhear `<id>:greeted`. The loader refuses them anything else of the\npack's.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "homepage": {
+      "description": "Where players read about it, an `https://` address.",
+      "type": "string",
+      "default": ""
+    },
+    "id": {
+      "description": "The pack id, `<author>.<name>` like a mod's; it names the folder, the\nnamespace of the pack's content and its settings folder in each world.",
+      "type": "string"
+    },
+    "license": {
+      "description": "An SPDX licence expression.",
+      "type": "string",
+      "default": ""
+    },
+    "name": {
+      "description": "The name players read; the id when empty.",
+      "type": "string",
+      "default": ""
+    },
+    "requires": {
+      "description": "Mods and packs it needs, by the aliases its files and scripts know\nthem by; the loader runs them first and leaves the pack off without\nthem.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PackDependency"
+      }
+    },
+    "setting": {
+      "description": "The pack's settings, in the order the Mods screen shows them; a Luau\nmod reads them, as a Rust mod reads its `Config`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PackSetting"
+      }
+    },
+    "side": {
+      "description": "Where it runs.",
+      "$ref": "#/$defs/PackSide"
+    },
+    "version": {
+      "description": "Its SemVer version.",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "version"
+  ],
+  "$defs": {
+    "DependencyTable": {
+      "description": "The table form of a [`DependencyEntry`].",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The mod's id.",
+          "type": "string"
+        },
+        "version": {
+          "description": "A Cargo-style version requirement; empty for any.",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    },
+    "PackDependency": {
+      "description": "One dependency of a pack, the value under its alias in `requires`,\n`after` or `breaks`: a mod id, or a table with the `id`\nand a `version` requirement.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\nlockers = \"you.lockers\"\n\"#)?;\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\nassert_eq!(manifest.requires[\"market\"].version, \">=0.5, <1.0\");\nassert_eq!(manifest.requires[\"lockers\"].version, \"\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
+      "anyOf": [
+        {
+          "description": "The mod's id alone, for any version.",
+          "type": "string"
+        },
+        {
+          "description": "The mod's id with a version requirement.",
+          "$ref": "#/$defs/DependencyTable"
+        }
+      ]
+    },
+    "PackSetting": {
+      "description": "One setting of a pack, a `[[setting]]` table of `pack.toml`.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.greeter\"\nversion = \"1.0.0\"\n\n[[setting]]\nkey = \"greeting\"\ndefault = \"Welcome\"\ndoc = \"What a player who joins reads.\"\n\n[[setting]]\nkey = \"every\"\ndefault = 30\nmin = 1\n\"#)?;\nlet schema = manifest.settings_schema().ok_or(\"no settings\")?;\nassert_eq!(schema.fields[1].min, Some(1.0));\n# Ok::<(), Box<dyn std::error::Error>>(())\n```",
+      "type": "object",
+      "properties": {
+        "choices": {
+          "description": "The values it accepts; empty for any.",
+          "type": "array",
+          "default": [],
+          "items": true
+        },
+        "default": {
+          "description": "The value on first start; its type is the setting's."
+        },
+        "doc": {
+          "description": "What it does, for the file's comments and the Mods screen.",
+          "type": "string",
+          "default": ""
+        },
+        "key": {
+          "description": "The key in the settings file, of `[a-z0-9_]`.",
+          "type": "string"
+        },
+        "max": {
+          "description": "The largest number it accepts.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "min": {
+          "description": "The smallest number it accepts.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "text": {
+          "description": "The key of its translated label in the pack's `texts.toml`;\n`config.<key>` unless said.",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "default"
+      ]
+    },
+    "PackSide": {
+      "description": "Where a pack runs, in `pack.toml`.\n\n# Examples\n\nSee [`PackManifest`].",
+      "oneOf": [
+        {
+          "description": "Where the world runs and on every client playing in it, which must\nrun the same pack, files and all: the default, as both read content.",
+          "type": "string",
+          "const": "both"
+        },
+        {
+          "description": "Only where the world runs: the dedicated server, or a client that\nhosts or plays alone, such as a pack of loot alone.",
+          "type": "string",
+          "const": "server"
+        }
+      ]
+    }
+  }
+}

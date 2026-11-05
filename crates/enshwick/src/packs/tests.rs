@@ -8,6 +8,7 @@ use crate::loot::Kinds;
 use super::*;
 
 mod folders;
+mod rewards;
 
 const CHEST: &str = "6943053a-32c1-4718-ae22-e61427ddf54d";
 

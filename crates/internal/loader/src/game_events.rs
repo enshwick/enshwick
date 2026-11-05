@@ -183,7 +183,10 @@ pub(crate) fn link(loader: &'static Loader) {
     // A client always links the move, to raise the loader's notices in its
     // own world.
     if SEALED.set(sealed).is_err()
-        || (count == 0 && !crate::vetoes::crafting() && loader.side != Side::CLIENT)
+        || (count == 0
+            && !crate::vetoes::crafting()
+            && !crate::item_actions::wanted()
+            && loader.side != Side::CLIENT)
     {
         return;
     }
@@ -331,6 +334,17 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
                 crate::vetoes::screen(
                     type_hash,
                     core::ptr::with_exposed_provenance_mut(record + layout.record_header),
+                    size,
+                );
+            };
+            // SAFETY: the payload is the live event of `type_hash` after the
+            // record's header, `size` bytes inside the bytes used (the `> used`
+            // check breaks first), on the game thread before the engine moves
+            // the streams (the caller's contract).
+            unsafe {
+                crate::item_actions::screen(
+                    type_hash,
+                    core::ptr::with_exposed_provenance(record + layout.record_header),
                     size,
                 );
             };

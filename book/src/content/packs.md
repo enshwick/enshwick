@@ -133,6 +133,10 @@ each item a count of its own (`start` is `max` when left out); `format` is
 `number`, `signed` or `percent`. An `icon` either recolours a vanilla icon
 (`tint`, `amount` in percent, `like` the icon's item, the item's `like` when
 left out) or names a PNG of the pack: `icon = { png = "icons/lantern.png" }`.
+An `on` table names the global functions of the pack's `main.luau` that run
+when a player uses, trashes, equips, takes off, picks up or places the item:
+`on = { consume = "drink" }` (see
+[What players do with items](item-actions.md#bind-a-function-in-itemstoml)).
 
 ## Changes of vanilla values
 
@@ -438,6 +442,38 @@ an `items.toml` change may have raised.
 
 The pack's texts, in the form of a mod's [texts file](texts.md): a table per
 language, `en` the fallback.
+
+## Let an admin tune a pack per world
+
+A drop's `chance` in `loot.toml`, and a reward's `chance`, item `count` and
+`experience` in [`rewards.toml`](rewards.md), may name a setting of
+`pack.toml` in place of a number: `{ setting = "<key>" }`.
+
+```toml
+# pack.toml
+[[setting]]
+key = "lantern_chance"
+default = 0.1
+min = 0.0
+max = 1.0
+doc = "How likely a chest holds a lantern."
+
+# loot.toml
+[[drop]]
+items = ["lantern"]
+chance = { setting = "lantern_chance" }
+from = "chests"
+```
+
+The pack's settings are the mod's [settings](../settings.md): each world
+keeps its own file beside its save, and the Mods screen shows them behind
+the mod's gear. The value takes effect when a world loads, and a change
+takes effect at the next world load. Until a world's settings come, the
+default stands. A chance outside 0 to 1 is held to that range. Items,
+recipes and workshops stay as the mod starts them, whatever the settings say.
+`pack check` reports a key `pack.toml` does not declare and a default of
+another type. A pack with a `main.luau` reads the same values with
+`enshwick.settings()`.
 
 ## Problems
 

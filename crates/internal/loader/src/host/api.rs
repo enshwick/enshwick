@@ -27,6 +27,7 @@ use super::entries::hooks::{
     code_range, hook, hook_at, loop_wait, patch_code, server_wait, task_workers, workshop_recipes,
 };
 use super::entries::inventory::{inventory_open, inventory_submit, item_info};
+use super::entries::items::item_filter;
 use super::entries::mods::{
     config_check, config_schema, fault, join_missing, language, log, mods, rename_content,
     settings, texts,
@@ -242,4 +243,5 @@ pub(crate) static API: HostApi = HostApi {
     control,
     run_action,
     ui_extension,
+    item_filter,
 };

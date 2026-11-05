@@ -55,11 +55,11 @@
 //! | Interface | [`ui`] |
 #![cfg_attr(
     feature = "unstable",
-    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`item_data`], [`entity_data`], [`actions`], [`controls`], [`console`], [`rates`], [`script`](mod@script) |"
+    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`item_data`], [`entity_data`], [`actions`], [`controls`], [`items`], [`rewards`], [`console`], [`rates`], [`script`](mod@script) |"
 )]
 #![cfg_attr(
     not(feature = "unstable"),
-    doc = "| Unstable, with the `unstable` feature | `world`, `map`, `item_data`, `entity_data`, `actions`, `controls`, `console`, `rates`, `script` |"
+    doc = "| Unstable, with the `unstable` feature | `world`, `map`, `item_data`, `entity_data`, `actions`, `controls`, `items`, `rewards`, `console`, `rates`, `script` |"
 )]
 //! | Tests | `test`, with the `test` feature |
 //!
@@ -161,6 +161,8 @@ pub mod interactions;
 pub mod inventory;
 #[cfg(feature = "unstable")]
 pub mod item_data;
+#[cfg(feature = "unstable")]
+pub mod items;
 // Without `unstable` item data stays inside, for the stats of single items.
 #[cfg(not(feature = "unstable"))]
 #[expect(
@@ -196,6 +198,8 @@ pub mod raw;
 #[cfg(doctest)]
 mod refused;
 pub mod resources;
+#[cfg(feature = "unstable")]
+pub mod rewards;
 mod rules;
 pub mod schedule;
 #[cfg(feature = "unstable")]

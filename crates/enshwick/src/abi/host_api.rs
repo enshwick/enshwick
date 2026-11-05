@@ -10,8 +10,8 @@ use crate::abi::{
     ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, ContentRename, ControlFn, ControlSpec,
     CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
     EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
-    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo,
+    InteractionFn, InventoryRequest, InventoryResultFn, ItemActionFn, ItemData, ItemLine,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo,
     MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
     PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind,
     RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec,
@@ -1634,4 +1634,14 @@ pub struct HostApi {
         callback: UiFrameFn,
         user: *mut c_void,
     ) -> Status,
+    /// Calls `callback` with `user` for each player's action with an item
+    /// in the server's world, on the thread of the system that runs it:
+    /// before the game uses, throws away, equips or takes off an item, where
+    /// 0 refuses it as an action already run, and after a pickup or a
+    /// placement, whose answer is ignored. Allowed during
+    /// `enshwick_mod_init` only: [`Status::TOO_LATE`] after,
+    /// [`Status::MISSING`] on a build without the player input it reads. A
+    /// panic in the loader returns [`Status::REFUSED`].
+    pub item_filter:
+        extern "system" fn(me: ModHandle, callback: ItemActionFn, user: *mut c_void) -> Status,
 }

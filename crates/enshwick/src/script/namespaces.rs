@@ -381,6 +381,12 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<crate::files::FilesFns>(),
     Namespace::starting("vetoes", "", &[crate::Load::SCRIPT_VETOES]),
     Namespace::starting("interactions", "", &[crate::Load::SCRIPT_INTERACTIONS]),
+    #[cfg(feature = "unstable")]
+    Namespace::starting("items", "", &[crate::Load::SCRIPT_ITEMS]),
+    #[cfg(feature = "unstable")]
+    Namespace::of::<crate::rewards::Rewards>(),
+    #[cfg(feature = "unstable")]
+    Namespace::starting("rewards", "", &[crate::Load::SCRIPT_REWARDS]),
     Namespace::starting(
         "progress",
         "",

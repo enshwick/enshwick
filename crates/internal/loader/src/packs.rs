@@ -274,6 +274,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
     let status = unsafe {
         enshwick::__private::init_pack(api, me, |load| {
             load.add_pack(&pack)?;
+            let scripts = scripts.map(|s| s.with_items(&pack.item_bindings()));
             let limits = enshwick_luau::Limits::default();
             runtime = match (scripts, &manifest) {
                 (None, _) => None,

@@ -63,6 +63,8 @@ mod inventory;
 mod item_changes;
 #[cfg(feature = "unstable")]
 mod item_data;
+#[cfg(feature = "unstable")]
+mod items;
 mod knowledge;
 mod language;
 mod lifecycle;
@@ -86,6 +88,8 @@ mod notices;
 mod pacing;
 #[cfg(feature = "schema")]
 mod pack_schemas;
+#[cfg(feature = "unstable")]
+mod pack_settings;
 mod packs;
 mod panic_abort;
 mod panic_reasons;
@@ -114,6 +118,8 @@ mod recipe_rules;
 mod required_names;
 mod resource_types;
 mod resource_values;
+#[cfg(feature = "unstable")]
+mod rewards;
 mod schedule;
 #[cfg(feature = "unstable")]
 mod screen_extensions;

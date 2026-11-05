@@ -119,6 +119,8 @@ side = "{side}"
 
 const MAIN_LUAU: &str = r#"--!strict
 -- {name}: the loader runs this file when the world's server starts.
+-- An item of an items.toml beside it with on = { consume = "drink" } runs
+-- the global function drink(used) of this file when a player uses it.
 
 enshwick.on("PlayerJoined", function(player)
 	local joined = enshwick.world.player(player.entity)

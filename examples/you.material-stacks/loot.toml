@@ -1,5 +1,6 @@
 #:schema ./loot.schema.json
-# Drops this pack adds to the game's loot.
+# Drops this pack adds to the game's loot. A chance may follow a setting of
+# pack.toml: chance = { setting = "torch_chance" }.
 
 # [[drop]]
 # items = ["Tool_Torch01"]

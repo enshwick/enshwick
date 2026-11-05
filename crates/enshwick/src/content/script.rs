@@ -229,6 +229,20 @@ impl Content {
         vanilla::item(name)
     }
 
+    /// The item id of the content id `id` in full (`<mod>:<name>`), as
+    /// `ItemId::named` gives it in Rust, for a mod's own items in
+    /// `enshwick.items`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a malformed content id.
+    #[script]
+    pub fn item_id(self, id: &str) -> Result<ItemId, Off> {
+        Guid::try_named(id)
+            .map(ItemId::from_guid)
+            .ok_or_else(|| Off::new(format!("{id:?} is no content id")))
+    }
+
     /// The vanilla recipe named `name`.
     ///
     /// # Errors

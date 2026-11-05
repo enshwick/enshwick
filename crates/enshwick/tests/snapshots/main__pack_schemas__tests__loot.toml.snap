@@ -8,8 +8,7 @@ expression: shape
       "additionalProperties": false,
       "properties": {
         "chance": {
-          "format": "double",
-          "type": "number"
+          "$ref": "#/$defs/NumberEntry"
         },
         "count": {
           "items": {
@@ -131,6 +130,17 @@ expression: shape
       ],
       "type": "object"
     },
+    "NumberEntry": {
+      "anyOf": [
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/SettingEntry"
+        }
+      ]
+    },
     "ScaleEntry": {
       "additionalProperties": false,
       "properties": {
@@ -141,6 +151,18 @@ expression: shape
       },
       "required": [
         "times"
+      ],
+      "type": "object"
+    },
+    "SettingEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "setting": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "setting"
       ],
       "type": "object"
     },

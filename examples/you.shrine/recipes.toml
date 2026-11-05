@@ -1,0 +1,9 @@
+#:schema ./recipes.schema.json
+# The tonic's recipe: a clone of a night potion's recipe, at the same
+# station, that makes the tonic.
+
+[[recipe]]
+id = "brew-tonic"
+# _Consumable_Potion_T1_HoT_night_Health
+like = "5d7fab01-0fc3-450e-a84c-7163affd3278"
+output = "tonic"

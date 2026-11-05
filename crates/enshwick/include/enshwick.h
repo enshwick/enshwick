@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 4
+#define ENSHWICK_ABI_MINOR 5
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -2963,6 +2963,52 @@ typedef struct EnshwickUiExtension {
 // The bottom edge, centred from left to right.
 #define EnshwickUiExtension_BOTTOM 3
 
+// A player's action with an item, handed to the filters registered with
+// `HostApi::item_filter` in the server's
+// world.
+//
+// The name is the game's `ItemAction`; the kinds are its `ItemActionType`,
+// `ChangeEquipment` and the events that follow a pickup or a placement.
+typedef struct EnshwickItemAction {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // What the player does; one of the constants on this type.
+  uint32_t kind;
+  // The player's character entity.
+  EnshwickEntity player;
+  // The item.
+  EnshwickItemId item;
+  // How many: 1 for a use, the stack for the others.
+  uint32_t count;
+  // The inventory that holds the item's slot, 0 when none does.
+  EnshwickEntity inventory;
+  // The slot's index in `inventory`.
+  uint32_t slot;
+} EnshwickItemAction;
+// The player eats, drinks or uses the item from the inventory; a
+// refusal leaves it in the slot.
+#define EnshwickItemAction_CONSUME 1
+// The player throws the stack away from the inventory; a refusal
+// keeps it.
+#define EnshwickItemAction_TRASH 2
+// The player equips the item; a refusal keeps the equipment as it was.
+#define EnshwickItemAction_EQUIP 3
+// The player takes the item off; a refusal keeps it on.
+#define EnshwickItemAction_UNEQUIP 4
+// The player picked the item up, after the game moved it; the answer
+// is ignored.
+#define EnshwickItemAction_PICKUP 5
+// The player placed the item as a building piece or a prop, after the
+// game placed it; the answer is ignored.
+#define EnshwickItemAction_PLACE 6
+
+// A mod's item filter: the action and the pointer given at registration;
+// returns 0 to refuse an action that can be refused.
+//
+// The game handles a refused action as one it already ran, so nothing
+// moves and nothing is lost.
+typedef uint8_t (*EnshwickItemActionFn)(const struct EnshwickItemAction *call, void *user);
+
 // The table of services the loader offers a mod.
 //
 // A function appended at its end is a new
@@ -4479,6 +4525,15 @@ typedef struct EnshwickHostApi {
                                  const struct EnshwickUiExtension *spec,
                                  EnshwickUiFrameFn callback,
                                  void *user);
+  // Calls `callback` with `user` for each player's action with an item
+  // in the server's world, on the thread of the system that runs it:
+  // before the game uses, throws away, equips or takes off an item, where
+  // 0 refuses it as an action already run, and after a pickup or a
+  // placement, whose answer is ignored. Allowed during
+  // `enshwick_mod_init` only: `Status::TOO_LATE` after,
+  // `Status::MISSING` on a build without the player input it reads. A
+  // panic in the loader returns `Status::REFUSED`.
+  EnshwickStatus (*item_filter)(EnshwickModHandle me, EnshwickItemActionFn callback, void *user);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

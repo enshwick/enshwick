@@ -205,6 +205,16 @@ expression: shape
             "null"
           ]
         },
+        "on": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "stats": {
           "items": {
             "$ref": "#/$defs/StatEntry"
@@ -253,6 +263,48 @@ expression: shape
       "required": [
         "max"
       ],
+      "type": "object"
+    },
+    "OnEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "consume": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "equip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pickup": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "place": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unequip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "ScaleEntry": {

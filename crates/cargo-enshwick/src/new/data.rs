@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, bail};
 use enshwick::i18n::Language;
 use enshwick::packs::{
-    ITEMS_FILE, LOOT_FILE, MANIFEST_FILE, RECIPES_FILE, TEXTS_FILE, WORKSHOPS_FILE,
+    ITEMS_FILE, LOOT_FILE, MANIFEST_FILE, RECIPES_FILE, REWARDS_FILE, TEXTS_FILE, WORKSHOPS_FILE,
 };
 
 use crate::Side;
@@ -60,6 +60,7 @@ fn files(id: &str, side: Side) -> Vec<(PathBuf, String)> {
         (RECIPES_FILE.into(), fill(RECIPES_TOML)),
         (WORKSHOPS_FILE.into(), fill(WORKSHOPS_TOML)),
         (LOOT_FILE.into(), fill(LOOT_TOML)),
+        (REWARDS_FILE.into(), fill(REWARDS_TOML)),
         (TEXTS_FILE.into(), texts()),
         ("README.md".into(), fill(README)),
     ];
@@ -131,12 +132,24 @@ const WORKSHOPS_TOML: &str = r#"#:schema ./workshops.schema.json
 "#;
 
 const LOOT_TOML: &str = r#"#:schema ./loot.schema.json
-# Drops this pack adds to the game's loot.
+# Drops this pack adds to the game's loot. A chance may follow a setting of
+# pack.toml: chance = { setting = "torch_chance" }.
 
 # [[drop]]
 # items = ["Tool_Torch01"]
 # chance = 0.05
 # from = "chests"
+"#;
+
+const REWARDS_TOML: &str = r#"#:schema ./rewards.schema.json
+# Rewards for players' actions: on, what it gives, how often.
+# A number may follow a setting of pack.toml: { setting = "<key>" }.
+
+# [[reward]]
+# id = "first-level"
+# on = { level_up = 2 }
+# give = [{ item = "Tool_Torch01", count = 2 }, { experience = 50 }]
+# limit = "once"
 "#;
 
 const README: &str = "# {name}

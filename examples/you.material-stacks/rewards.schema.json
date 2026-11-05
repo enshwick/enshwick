@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rewards",
+  "type": "object",
+  "properties": {
+    "reward": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/RewardEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "BuffEntry": {
+      "description": "A buff, for its type's own duration.",
+      "type": "object",
+      "properties": {
+        "buff": {
+          "description": "The buff type's GUID.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "buff"
+      ]
+    },
+    "ExperienceEntry": {
+      "description": "Experience, added to the player's next gains.",
+      "type": "object",
+      "properties": {
+        "experience": {
+          "description": "How much, or `{ setting = \"<key>\" }`.",
+          "$ref": "#/$defs/NumberEntry"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "experience"
+      ]
+    },
+    "GiveEntry": {
+      "description": "One thing a reward gives.",
+      "anyOf": [
+        {
+          "description": "Items.",
+          "$ref": "#/$defs/ItemsEntry"
+        },
+        {
+          "description": "Experience.",
+          "$ref": "#/$defs/ExperienceEntry"
+        },
+        {
+          "description": "A knowledge entry.",
+          "$ref": "#/$defs/KnowledgeEntry"
+        },
+        {
+          "description": "A buff.",
+          "$ref": "#/$defs/BuffEntry"
+        }
+      ]
+    },
+    "ItemsEntry": {
+      "description": "`count` of `item`, all or nothing.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "description": "How many, or `{ setting = \"<key>\" }`; 1 when left out.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumberEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "item": {
+          "description": "The item: the pack's own name, a content id or a vanilla item.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "item"
+      ]
+    },
+    "KnowledgeEntry": {
+      "description": "A knowledge entry, set.",
+      "type": "object",
+      "properties": {
+        "knowledge": {
+          "description": "The entry's GUID.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "knowledge"
+      ]
+    },
+    "LimitEntry": {
+      "description": "How often one player gets a reward.",
+      "oneOf": [
+        {
+          "description": "Every time.",
+          "type": "string",
+          "const": "every"
+        },
+        {
+          "description": "Once per player in the world.",
+          "type": "string",
+          "const": "once"
+        },
+        {
+          "description": "Once per player each day.",
+          "type": "string",
+          "const": "daily"
+        },
+        {
+          "description": "Once in the world.",
+          "type": "string",
+          "const": "world"
+        }
+      ]
+    },
+    "NumberEntry": {
+      "description": "A number as a pack file writes it.",
+      "anyOf": [
+        {
+          "description": "The number itself.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        {
+          "description": "The world's value of a setting of `pack.toml`.",
+          "$ref": "#/$defs/SettingEntry"
+        }
+      ]
+    },
+    "NumberEntry2": {
+      "description": "A number as a pack file writes it.",
+      "anyOf": [
+        {
+          "description": "The number itself.",
+          "type": "number",
+          "format": "float"
+        },
+        {
+          "description": "The world's value of a setting of `pack.toml`.",
+          "$ref": "#/$defs/SettingEntry"
+        }
+      ]
+    },
+    "OnEntry": {
+      "description": "The action a reward follows; exactly one key.",
+      "type": "object",
+      "properties": {
+        "consume": {
+          "description": "A player eats, drinks or uses this item.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "craft": {
+          "description": "A player crafts this recipe.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "join": {
+          "description": "A player joins the world.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "level_up": {
+          "description": "A player reaches this level; 0 for every level.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "loot": {
+          "description": "A player loots a container.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pickup": {
+          "description": "A player picks this item up.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quest": {
+          "description": "A player completes a quest.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "RewardEntry": {
+      "description": "One reward.",
+      "type": "object",
+      "properties": {
+        "chance": {
+          "description": "How likely, from 0 to 1, or `{ setting = \"<key>\" }`; always when\nleft out.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumberEntry2"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "give": {
+          "description": "What it gives, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GiveEntry"
+          }
+        },
+        "id": {
+          "description": "Its name in the pack, 1 to 64 of `[a-z0-9_-]`, which the world's\ndata keeps who got it under.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "How often one player gets it; every time when left out.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LimitEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "on": {
+          "description": "The action it follows: one key of the table.",
+          "$ref": "#/$defs/OnEntry"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "on",
+        "give"
+      ]
+    },
+    "SettingEntry": {
+      "description": "`{ setting = \"<key>\" }`.",
+      "type": "object",
+      "properties": {
+        "setting": {
+          "description": "The key of a `[[setting]]` in `pack.toml`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "setting"
+      ]
+    }
+  }
+}

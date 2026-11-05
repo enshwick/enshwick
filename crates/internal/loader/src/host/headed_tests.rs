@@ -48,6 +48,7 @@ macro_rules! headed {
             FogInfo,
             GameEventData,
             Interaction,
+            ItemAction,
             InventoryRequest,
             InventoryResult,
             ItemData,

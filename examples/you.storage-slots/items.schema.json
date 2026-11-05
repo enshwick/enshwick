@@ -246,6 +246,17 @@
             "null"
           ]
         },
+        "on": {
+          "description": "The functions of the pack's `main.luau` that run on players' actions\nwith the item.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "stats": {
           "type": "array",
           "items": {
@@ -300,6 +311,55 @@
       "required": [
         "max"
       ]
+    },
+    "OnEntry": {
+      "description": "An item's functions in the pack's `main.luau`, one per kind of action,\neach the name of a global function.",
+      "type": "object",
+      "properties": {
+        "consume": {
+          "description": "Runs when a player eats, drinks or uses the item; `false` refuses it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "equip": {
+          "description": "Runs when a player equips the item; `false` refuses it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pickup": {
+          "description": "Runs after a player picked the item up.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "place": {
+          "description": "Runs after a player placed the item.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trash": {
+          "description": "Runs when a player throws the item away; `false` refuses it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unequip": {
+          "description": "Runs when a player takes the item off; `false` refuses it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "ScaleEntry": {
       "type": "object",

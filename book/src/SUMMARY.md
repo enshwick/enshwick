@@ -65,6 +65,8 @@
 
 - [Content](content.md)
   - [Items](content/items.md)
+  - [What players do with items](content/item-actions.md)
+  - [Rewards for actions](content/rewards.md)
   - [Recipes](content/recipes.md)
   - [Disabling recipes](content/disabled-recipes.md)
   - [Workshops](content/workshops.md)

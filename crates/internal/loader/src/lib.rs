@@ -122,6 +122,8 @@ mod interface_parts;
 #[cfg(windows)]
 mod inventory;
 #[cfg(windows)]
+mod item_actions;
+#[cfg(windows)]
 mod item_data;
 pub mod item_kinds;
 pub mod item_records;

@@ -23,7 +23,26 @@ first and the served resources under them last:
 - [Texts](content/texts.md): names and descriptions per language;
 - [Data packs](content/packs.md): all of the above from TOML files, in a
   folder with no code or inside a mod, and changes of vanilla values such as
-  stack sizes.
+  stack sizes;
+- [What players do with items](content/item-actions.md): an item's
+  behaviour when a player uses, trashes, equips, picks up or places it;
+- [Rewards for actions](content/rewards.md): "when a player does this, give
+  that", kept per world.
+
+## How to build a content mod in steps
+
+Start with data only, then add scripts where data is not enough:
+
+1. A [data pack](content/packs.md): items, recipes, loot and rewards in
+   TOML, with no code.
+2. [World settings](content/packs.md#let-an-admin-tune-a-pack-per-world):
+   numbers of `loot.toml` and `rewards.toml` that each world sets.
+3. A [`main.luau`](luau.md) with functions the item's `on` table binds, for
+   [what players do with items](content/item-actions.md).
+
+The repository's
+[`examples/you.shrine`](https://github.com/enshwick/enshwick/tree/main/examples/you.shrine)
+takes these steps with one item.
 
 [Inventories](inventories.md), which read and change what players and chests
 hold, have a chapter of their own.

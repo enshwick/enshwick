@@ -24,6 +24,7 @@ pub(crate) mod gameplay;
 mod headed_tests;
 mod hooks;
 mod inventory;
+mod items;
 mod mods;
 mod net;
 mod pacing;
@@ -54,6 +55,7 @@ use gameplay::{
 };
 use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
+use items::item_filter;
 use mods::{
     config_check, config_schema, fault, join_missing, language, log, mods, rename_content,
     settings, texts,
@@ -270,6 +272,7 @@ pub(crate) struct State {
     pub(crate) controls: super::controls::FakeControls,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
+    pub(crate) item_filters: Vec<(crate::abi::ItemActionFn, usize)>,
     pub(crate) skills: Vec<(crate::abi::SkillNode, SkillCheckFn, usize)>,
     pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
     /// The rates the mod declared, with the factor it set for each.
@@ -662,6 +665,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         controls: super::controls::FakeControls::default(),
         survivor_status: None,
         interaction_filters: Vec::new(),
+        item_filters: Vec::new(),
         skills: Vec::new(),
         comfort_filters: Vec::new(),
         rates: Vec::new(),
@@ -1004,4 +1008,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     control,
     run_action,
     ui_extension,
+    item_filter,
 };

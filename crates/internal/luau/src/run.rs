@@ -459,7 +459,11 @@ fn begin(
         settings: ArcSwap::from_pointee(toml::Table::new()),
     });
     if let Some(schema) = settings {
-        let (settings, values) = load.table_config(schema)?;
+        // A pack's settings are declared once, by `add_pack` when it ran.
+        let (settings, values) = match enshwick::packs::declared_settings() {
+            Some(declared) => declared,
+            None => load.table_config(schema)?,
+        };
         inner.settings.store(Arc::new(values));
         let weak = Arc::downgrade(&inner);
         // Subscribed before the script's own handlers, so a handler of
