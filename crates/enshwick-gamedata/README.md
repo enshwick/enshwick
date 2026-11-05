@@ -43,8 +43,7 @@ game update that moves a field changes this crate, not the mods.
   executable it is given.
 - [`anchors/classes.toml`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/anchors/classes.toml)
   says for every entry whether the engine gives it (`engine`) or why research
-  found no route (`pattern`); `research` marks an entry whose route is not
-  researched yet.
+  found no route (`pattern`).
 - On a build without a table, the loader takes the newest table of the same
   side, by Steam build id, and finds each entry by its `pattern`: a symbol at or through the
   code it matches, a constant read from the operand of the instruction that
@@ -106,6 +105,15 @@ the run stays unique without them.
   instruction and confirms the value while that code stands. A pattern with
   neither an operand nor `fixed = true` does not read, so no carried value
   stays without a check.
+- A value an operand reads that no engine route finds also carries a
+  **witness**: another instruction that holds the same value, in another
+  function where one exists (`witness`, with its operand at `witness_at`,
+  `witness_size` bytes). A build without a table takes the value only where
+  the witness is found once and reads the same value, so a pattern that
+  matches changed code leaves the entry missing instead of wrong. A value no
+  other instruction holds says why in `one_witness`, and
+  `cargo xtask compat` lists each one a carry takes. `cargo enshwick pin`
+  writes both.
 - A symbol's expected code bytes (`<id>.bytes`) count where its pattern
   finds code that still starts with them.
 - A value only a function too short to find on its own holds is read `via`

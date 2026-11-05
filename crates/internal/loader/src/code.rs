@@ -531,6 +531,35 @@ fn stop_replacement(stop: usize, next: usize, len: usize) -> Option<Box<[u8]>> {
     Some(bytes.into())
 }
 
+/// The most bytes [`stop_len`] decodes before it gives up.
+const MOST_STOP: usize = 64; // bound, not a game offset: a stop block is a few instructions
+
+/// The length of the stop block whose `code` starts at `stop`, for a block an
+/// engine route found, which carries no table body: up to and with its
+/// unconditional jump to the next recipe at `next`, or up to the `int3`
+/// padding after its last call, which does not return on 1.0 builds;
+/// `None` without either in its first [`MOST_STOP`] bytes, or when the block
+/// leaves first by another jump or a return, so the patch never covers code
+/// past the block.
+pub(crate) fn stop_len(code: &[u8], stop: u64, next: u64) -> Option<usize> {
+    use iced_x86::{Code, Decoder, DecoderOptions, FlowControl};
+    let code = code.get(..code.len().min(MOST_STOP))?;
+    let mut decoder = Decoder::with_ip(64, code, stop, DecoderOptions::NONE);
+    decoder
+        .iter()
+        .take_while(|i| !i.is_invalid())
+        .find_map(|i| match (i.code(), i.flow_control()) {
+            (Code::Int3, _) => Some(Some(i.ip())),
+            (_, FlowControl::UnconditionalBranch) => {
+                Some((i.near_branch_target() == next).then(|| i.next_ip()))
+            }
+            (_, FlowControl::IndirectBranch | FlowControl::Return) => Some(None),
+            _ => None,
+        })
+        .flatten()
+        .and_then(|end| usize::try_from(end - stop).ok())
+}
+
 /// The lift of the workshop limit, as the log and the Mods screen name it.
 const LIFT_FEATURE: &str = "workshop recipe limit";
 
@@ -605,11 +634,22 @@ fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftLimitError> {
     let stop = checked(loader, pinned::recipe::LIMIT_STOP)?;
     let next = checked(loader, pinned::recipe::LIMIT_NEXT)?;
     let entry = || pinned::recipe::LIMIT_STOP.id().to_owned();
-    let len = loader
-        .build
-        .body(pinned::recipe::LIMIT_STOP.id())
-        .map(enshwick_gamedata::Body::len)
-        .ok_or_else(|| LiftLimitError::NoBody { entry: entry() })?;
+    let routed_len = || {
+        let (start, size) = text(loader.base)?;
+        let end = start.checked_add(size)?;
+        let mut code = vec![0u8; end.checked_sub(stop)?.min(MOST_STOP)];
+        // SAFETY: `stop` is the routed `recipe.limit_stop` inside the game's
+        // code section, which starts at `start`, holds `size` bytes and stays
+        // mapped and readable; the read ends at that section's end.
+        unsafe { crate::memory::read_bytes(stop, 0, &mut code) };
+        stop_len(&code, stop as u64, next as u64)
+    };
+    let len = match loader.build.body(pinned::recipe::LIMIT_STOP.id()) {
+        Some(body) => Some(body.len()),
+        None if loader.build.routed(pinned::recipe::LIMIT_STOP.id()) => routed_len(),
+        None => None,
+    }
+    .ok_or_else(|| LiftLimitError::NoBody { entry: entry() })?;
     let replacement =
         stop_replacement(stop, next, len).ok_or_else(|| LiftLimitError::TooShort {
             entry: entry(),
@@ -617,9 +657,10 @@ fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftLimitError> {
             next,
         })?;
     let mut expected = vec![0u8; len];
-    // SAFETY: `stop` is the table's `recipe.limit_stop`, whose whole `len`
-    // bytes of code `checked` compared against the table's body, inside the
-    // game's image, which stays mapped and readable.
+    // SAFETY: `stop` is `recipe.limit_stop` in the game's image, which stays
+    // mapped and readable, and its `len` bytes are code: `checked` compared
+    // them against the table's body, or, for a routed block without one,
+    // `stop_len` decoded them inside the code section.
     unsafe { crate::memory::read_bytes(stop, 0, &mut expected) };
     Ok(CodePatch {
         owner: ModIndex::LOADER,

@@ -162,9 +162,12 @@ pub(super) unsafe extern "system" fn base_ids(vec: *mut u8, obj: *mut u8) -> u64
 ///   object `game` views.
 pub(super) unsafe fn append_ids(vec: *mut u8, obj: *mut u8, game: &Game, layout: &Layout) {
     let container = &game.fields().container;
+    let Some(base_id) = layout.record.base_id else {
+        return;
+    };
     for i in window_of(game) {
         // SAFETY: record `i` holds a base; its 16-byte id.
-        let id = unsafe { read_at::<[u64; 2]>(rec(obj, i, &layout.window), layout.record.base_id) };
+        let id = unsafe { read_at::<[u64; 2]>(rec(obj, i, &layout.window), base_id) };
         // SAFETY: the caller's live container of 16-byte ids.
         if id != [0, 0] && !unsafe { append(vec, container, id) } {
             break;

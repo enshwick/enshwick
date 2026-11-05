@@ -5,10 +5,13 @@ use std::collections::BTreeMap;
 
 use enshwick::code::{Pattern, find_each_unique};
 
+#[cfg(test)]
+mod carry;
+
 use crate::entries::read;
 use crate::reflect::Fingerprint;
 use crate::{
-    Body, Constant, GameVersion, Kind, Locate, Operand, Resolved, Side, SteamBuild, Symbol,
+    Body, Constant, GameVersion, Kind, Locate, Operand, Resolved, Side, SteamBuild, Symbol, Witness,
 };
 
 /// Why a table does not read.
@@ -146,6 +149,10 @@ struct ConstantFull {
     carried: bool,
     #[serde(default)]
     fixed: bool,
+    witness: Option<String>,
+    witness_at: Option<u64>,
+    witness_size: Option<u8>,
+    one_witness: Option<String>,
 }
 
 const fn carried() -> bool {
@@ -174,6 +181,46 @@ impl ConstantFull {
             (false, false) => {}
         }
         Ok(Some(operand.plus(self.plus)))
+    }
+
+    /// The second use `witness`, `witness_at` and `witness_size` name, its
+    /// operand read the way the row's own `operand` reads; refuses a witness
+    /// or a `one_witness` on a value its pattern does not read alone.
+    fn witness(&self, id: &str, operand: Option<Operand>) -> Result<Option<Witness>, TableError> {
+        let bad = |why: &str| Err(TableError::Toml(format!("{id}: {why}")));
+        let alone = operand.is_some() && self.via.is_none() && self.cell.is_none();
+        let (Some(text), Some(at), Some(size)) =
+            (&self.witness, self.witness_at, self.witness_size)
+        else {
+            if self.witness.is_some() || self.witness_at.is_some() || self.witness_size.is_some() {
+                return bad("`witness`, `witness_at` and `witness_size` go together");
+            }
+            if self.one_witness.is_some() && !alone {
+                return bad("`one_witness` marks a value its own pattern's operand reads alone");
+            }
+            return Ok(None);
+        };
+        if !alone || self.one_witness.is_some() {
+            return bad(
+                "a `witness` checks a value its own pattern's operand reads alone, without `one_witness`",
+            );
+        }
+        let (Some(own), Some(mut read)) = (operand, Operand::new(at, size)) else {
+            return bad("a witness operand is 1, 2, 4 or 8 bytes");
+        };
+        if own.is_negative() {
+            read = read.negative();
+        }
+        if own.is_shift() {
+            read = read.shift();
+        }
+        let Some(pattern) = pattern(id, Some(text.clone()))? else {
+            return bad("a `witness` is a pattern");
+        };
+        Ok(Some(Witness {
+            pattern,
+            operand: read.plus(own.addend()),
+        }))
     }
 
     /// Refuses a row whose keys contradict each other, or whose `cell`
@@ -368,46 +415,41 @@ impl Table {
             .constants
             .into_iter()
             .map(|(id, value)| {
-                let (value, text, operand, via, within, attribute, cell, carried, fixed) =
-                    match value {
-                        ConstantValue::Plain(value) => (
-                            value.value(&id)?,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            true,
-                            false,
-                        ),
-                        ConstantValue::Full(full) => {
-                            let operand = full.operand(&id)?;
-                            full.check(&id, &symbols)?;
-                            (
-                                full.value.value(&id)?,
-                                full.pattern,
-                                operand,
-                                full.via,
-                                full.within,
-                                full.attribute,
-                                full.cell,
-                                full.carried,
-                                full.fixed,
-                            )
-                        }
-                    };
+                let full = match value {
+                    ConstantValue::Plain(value) => {
+                        return Ok(Constant {
+                            value: value.value(&id)?,
+                            id,
+                            pattern: None,
+                            operand: None,
+                            via: None,
+                            within: None,
+                            attribute: None,
+                            cell: None,
+                            carried: true,
+                            fixed: false,
+                            witness: None,
+                            one_witness: None,
+                        });
+                    }
+                    ConstantValue::Full(full) => full,
+                };
+                let operand = full.operand(&id)?;
+                full.check(&id, &symbols)?;
+                let witness = full.witness(&id, operand)?;
                 Ok(Constant {
-                    pattern: pattern(&id, text)?,
+                    pattern: pattern(&id, full.pattern)?,
+                    value: full.value.value(&id)?,
                     id,
-                    value,
                     operand,
-                    via,
-                    within,
-                    attribute,
-                    cell,
-                    carried,
-                    fixed,
+                    via: full.via,
+                    within: full.within,
+                    attribute: full.attribute,
+                    cell: full.cell,
+                    carried: full.carried,
+                    fixed: full.fixed,
+                    witness,
+                    one_witness: full.one_witness,
                 })
             })
             .collect::<Result<_, TableError>>()?;
@@ -541,7 +583,9 @@ impl Table {
     /// there still starts with the bytes its `<id>.bytes` constant pins and
     /// still holds its whole function's [`Body`], if any; a constant counts
     /// when the code that uses it is still found once, and takes the value
-    /// read from that code where its operand say; a constant read
+    /// read from that code where its operand say, and with a
+    /// [`Constant::witness`] only when that second use is found once and
+    /// reads the same value; a constant read
     /// [`Constant::via`] a symbol counts when that symbol counts and its code
     /// there matches; a constant in a
     /// [`Constant::cell`] counts when the cell's symbol counts and `cell`
@@ -567,17 +611,18 @@ impl Table {
 
     /// The patterns [`Table::fall_back`] searches for, each once, with the
     /// id of its entry: the symbols' in table order, then the carried
-    /// constants' searched alone.
+    /// constants' searched alone, then those constants' witnesses.
     fn carry_patterns(&self) -> impl Iterator<Item = (&str, &Pattern)> {
+        let alone = || {
+            self.constants
+                .iter()
+                .filter(|c| c.carried && c.searched_alone())
+        };
         self.symbols
             .iter()
             .filter_map(|s| Some((s.id.as_str(), s.pattern.as_ref()?)))
-            .chain(
-                self.constants
-                    .iter()
-                    .filter(|c| c.carried && c.searched_alone())
-                    .filter_map(|c| Some((c.id.as_str(), c.pattern.as_ref()?))),
-            )
+            .chain(alone().filter_map(|c| Some((c.id.as_str(), c.pattern.as_ref()?))))
+            .chain(alone().filter_map(|c| Some((c.id.as_str(), &c.witness.as_ref()?.pattern))))
     }
 
     /// [`Table::fall_back`] once its patterns are found: `starts` holds, in
@@ -596,15 +641,21 @@ impl Table {
             .iter()
             .map(|s| (s, s.pattern.as_ref().and_then(|_| each.next().flatten())))
             .collect();
-        let constants_at: Vec<(&Constant, Option<usize>)> = carried
+        let mut constants_at: Vec<(&Constant, Option<usize>, Option<usize>)> = carried
             .iter()
             .map(|&c| {
                 (
                     c,
                     c.searched_alone().then(|| each.next().flatten()).flatten(),
+                    None,
                 )
             })
             .collect();
+        for (c, _, witness_at) in &mut constants_at {
+            if c.searched_alone() && c.witness.is_some() {
+                *witness_at = each.next().flatten();
+            }
+        }
         let found_symbols = search(&symbols_at, |&(s, start)| {
             let rva = s.locate(code, code_rva, start?)?;
             let bytes_ok = self
@@ -626,7 +677,7 @@ impl Table {
                 None => missing.push(symbol.id.clone()),
             }
         }
-        let found_constants = search(&constants_at, |&(c, start)| {
+        let found_constants = search(&constants_at, |&(c, start, witness_at)| {
             if let Some(symbol) = c.id.strip_suffix(".bytes") {
                 let (_, rva) = symbols.iter().find(|(id, _)| id == symbol)?;
                 let value = read(code, rva.checked_sub(code_rva)?, 8)?;
@@ -640,7 +691,14 @@ impl Table {
                 let (_, rva) = symbols.iter().find(|(id, _)| id == at)?;
                 return cell(*rva).map(u64::from);
             }
-            c.read(code, u64::try_from(start?).ok()?)
+            let value = c.read(code, u64::try_from(start?).ok()?)?;
+            match &c.witness {
+                Some(witness) => {
+                    let second = witness.operand.read(code, u64::try_from(witness_at?).ok()?);
+                    (second == Some(value)).then_some(value)
+                }
+                None => Some(value),
+            }
         });
         let mut constants = Vec::new();
         for (constant, found) in carried.iter().zip(found_constants) {

@@ -343,35 +343,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
                 out.push('\n');
             }
         }
-        Kind::Fallback => {
-            works = args.patterns && table.missing().is_empty();
-            let how = if args.patterns {
-                "As asked, the loader's newest table of this side,"
-            } else {
-                "None is made for this build. The loader takes"
-            };
-            let _w = writeln!(
-                out,
-                "## Build table\n\n{how} `{}`, finds its entries by their patterns: {} found, {} missing.\n",
-                source.name(),
-                table.symbols().len() + table.constants().len(),
-                table.missing().len()
-            );
-            if !args.patterns {
-                let _w = writeln!(out, "Write this build's table with `cargo enshwick pin`.\n");
-            }
-            let _w = writeln!(
-                out,
-                "Patterns find {} of {} symbols and {} of {} constants.\n",
-                table.symbols().len(),
-                source.symbols().len(),
-                table.constants().len() - build.slots.as_ref().map_or(0, |s| s.found),
-                source.constants().len()
-            );
-            if !table.missing().is_empty() {
-                let _w = writeln!(out, "Missing: {}.\n", code_list(table.missing()));
-            }
-        }
+        Kind::Fallback => works = write_carried(&mut out, args, &build, table, source),
     }
     match &build.slots {
         Ok(slots) if slots.named > 0 => {
@@ -397,6 +369,57 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     works &= write_mods(&mut out, args)?;
     emit(args, &out)?;
     Ok(works)
+}
+
+/// The build table section of a build that carries `source` by its
+/// patterns, as `table`; whether everything works.
+fn write_carried(
+    out: &mut String,
+    args: &Args,
+    build: &Build,
+    table: &Resolved,
+    source: &Table,
+) -> bool {
+    let how = if args.patterns {
+        "As asked, the loader's newest table of this side,"
+    } else {
+        "None is made for this build. The loader takes"
+    };
+    let _w = writeln!(
+        out,
+        "## Build table\n\n{how} `{}`, finds its entries by their patterns: {} found, {} missing.\n",
+        source.name(),
+        table.symbols().len() + table.constants().len(),
+        table.missing().len()
+    );
+    if !args.patterns {
+        let _w = writeln!(out, "Write this build's table with `cargo enshwick pin`.\n");
+    }
+    let _w = writeln!(
+        out,
+        "Patterns find {} of {} symbols and {} of {} constants.\n",
+        table.symbols().len(),
+        source.symbols().len(),
+        table.constants().len() - build.slots.as_ref().map_or(0, |s| s.found),
+        source.constants().len()
+    );
+    if !table.missing().is_empty() {
+        let _w = writeln!(out, "Missing: {}.\n", code_list(table.missing()));
+    }
+    let alone: Vec<String> = source
+        .constants()
+        .iter()
+        .filter(|c| c.one_witness().is_some() && table.constant(c.id()).is_some())
+        .map(|c| c.id().to_owned())
+        .collect();
+    if !alone.is_empty() {
+        let _w = writeln!(
+            out,
+            "Taken on one pattern, with no second use of the value to agree: {}.\n",
+            code_list(&alone)
+        );
+    }
+    args.patterns && table.missing().is_empty()
 }
 
 /// The report data of `build`, whose own table is `source`, as TOML: names,

@@ -33,6 +33,8 @@ pub struct KnownBuild {
     pub name: String,
     /// Whether the table was made for this build.
     pub kind: Kind,
+    /// The name of the table a build without its own carries.
+    carried: Option<String>,
     table: Resolved,
     /// The names of the parts [`Self::lacking`] found, once asked.
     lacking: OnceLock<String>,
@@ -199,6 +201,56 @@ impl KnownBuild {
         }
         count
     }
+
+    /// The start's line about this build, run as `fingerprint`, once the
+    /// engine routes ran: a build without its own table that misses nothing
+    /// and keeps no row from carrying logs at info, and only one that lacks
+    /// entries warns.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Level, Side};
+    /// use enshwick_gamedata::Fingerprint;
+    ///
+    /// use enshwick_loader::builds::{load, select};
+    ///
+    /// let unknown = Fingerprint::new([0xee; 16], 1);
+    /// let code = [0u8; 64];
+    /// let build = select(&load(), Side::SERVER, unknown, Some((&code, 0x1000)), |_| None)
+    ///     .ok_or("no server table")?;
+    /// let (level, line) = build.start_line(unknown);
+    /// assert_eq!(level, Level::WARN, "{line}");
+    /// # Ok::<(), &str>(())
+    /// ```
+    #[must_use]
+    pub fn start_line(&self, fingerprint: Fingerprint) -> (enshwick::abi::Level, String) {
+        use enshwick::abi::Level;
+        if self.kind == Kind::Exact {
+            return (Level::INFO, format!("game: {}", self.name));
+        }
+        if self.missing().is_empty() && self.table.uncarried().is_empty() {
+            return (
+                Level::INFO,
+                format!(
+                    "game build {} runs without its own table: {} entries found by engine routes and the patterns of {}",
+                    fingerprint_name(fingerprint),
+                    self.entries(),
+                    self.carried.as_deref().unwrap_or(self.table.name())
+                ),
+            );
+        }
+        (
+            Level::WARN,
+            format!(
+                "game build {} has no build table yet: {} entries found by engine routes or their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table ({})",
+                fingerprint_name(fingerprint),
+                self.entries(),
+                self.missing().len(),
+                crate::errors::FEATURES_OFF
+            ),
+        )
+    }
 }
 
 fn side(side: Side) -> Option<tables::Side> {
@@ -244,6 +296,7 @@ pub fn select(
         return Some(KnownBuild {
             name: table.name().to_owned(),
             kind: Kind::Exact,
+            carried: None,
             table: table.resolve(),
             lacking: OnceLock::new(),
         });
@@ -261,6 +314,7 @@ pub fn select(
             base.name()
         ),
         kind: Kind::Fallback,
+        carried: Some(base.name().to_owned()),
         table,
         lacking: OnceLock::new(),
     })
@@ -297,6 +351,7 @@ pub fn by_patterns(
     Some(KnownBuild {
         name: table.name().to_owned(),
         kind: Kind::Fallback,
+        carried: Some(base.name().to_owned()),
         table,
         lacking: OnceLock::new(),
     })
@@ -380,6 +435,7 @@ pub fn embedded(running: Side) -> KnownBuild {
     KnownBuild {
         name: table.name().to_owned(),
         kind: Kind::Exact,
+        carried: None,
         table: table.resolve(),
         lacking: OnceLock::new(),
     }

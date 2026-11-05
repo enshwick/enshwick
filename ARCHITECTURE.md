@@ -74,10 +74,11 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
   per build under `crates/enshwick-gamedata/tables/`, kept as the fallback and
   the cross-check of a routed entry. On a build without a table, the newest
   table of the same side carries over by its patterns, and only what neither a
-  route nor a pattern finds turns off.
+  route nor a pattern finds turns off; a build where nothing is missing runs
+  without a warning.
 - `crates/enshwick-gamedata/anchors/classes.toml` classes every table entry:
-  found from the engine, still to research, or a pattern because research
-  found no route, each with its reason; a test fails on an entry without one.
+  found from the engine, or a pattern because research found no route, each
+  with its reason; a test fails on an entry without one.
 - In the loader, each symbol and constant of the build table is declared once in
   `pinned/<part>.rs` as a typed `Symbol` or `Constant`, and code names it by
   path, such as `pinned::world::TIME`. Each part lists the ids it needs in its

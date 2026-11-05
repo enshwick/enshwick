@@ -10,7 +10,6 @@ use crate::{Routes, Side, Table, embedded};
 #[serde(rename_all = "lowercase")]
 enum Class {
     Engine,
-    Research,
     Pattern,
 }
 
@@ -146,7 +145,7 @@ fn an_id_takes_its_own_row_before_the_longest_prefix() {
     let rows = vec![
         Row {
             entries: vec!["ui.*".into()],
-            class: Class::Research,
+            class: Class::Engine,
             reason: "r".into(),
         },
         Row {
@@ -163,6 +162,6 @@ fn an_id_takes_its_own_row_before_the_longest_prefix() {
     let class = |id: &str| class_of(&rows, id).map(|r| r.class);
     assert_eq!(class("ui.hud.bytes"), Some(Class::Engine));
     assert_eq!(class("ui.hud.x"), Some(Class::Pattern));
-    assert_eq!(class("ui.slider"), Some(Class::Research));
+    assert_eq!(class("ui.slider"), Some(Class::Engine));
     assert_eq!(class("map.x"), None);
 }

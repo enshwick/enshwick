@@ -301,6 +301,22 @@ fn patterns_into(
         })
         .map(|c| (c.id(), c))
         .collect();
+    let routes = enshwick_gamedata::Routes::embedded()?;
+    let held: FxHashMap<&str, patterns::OperandKey> = constants
+        .iter()
+        .filter(|(id, _)| {
+            id.strip_suffix(".bytes").is_none()
+                && !kept.contains_key(id.as_str())
+                && !routes.routes(id, present.side())
+        })
+        .filter_map(|(id, _)| match anchors_here.get(id)? {
+            Anchor::Read(site, carrier, _) => {
+                Some((id.as_str(), patterns::operand_key(exe, *site, *carrier)?))
+            }
+            _ => None,
+        })
+        .collect();
+    let sites = patterns::operand_sites(exe, &held.values().copied().collect());
     let failed = || Err(anyhow!("the search failed"));
     let symbol_texts = parallel(
         &symbols,
@@ -317,7 +333,13 @@ fn patterns_into(
                 return kept_written(exe, constant, &symbols, written.get(id));
             }
             match anchors_here.get(id) {
-                Some(anchor) => constant_written(exe, id, *value, anchor),
+                Some(anchor) => constant_written(
+                    exe,
+                    id,
+                    *value,
+                    anchor,
+                    held.contains_key(id.as_str()).then_some(&sites),
+                ),
                 None => Ok(confirmed.get(id.as_str()).map(|text| {
                     format!(
                         "{{ value = {}, pattern = \"{text}\", fixed = true }}",
@@ -378,8 +400,16 @@ fn symbol_written(exe: &Exe<'_>, id: &str, rva: u64, anchor: Option<&Anchor>) ->
     }
 }
 
-/// The pattern of the constant `id` around its anchor.
-fn constant_written(exe: &Exe<'_>, id: &str, value: u64, anchor: &Anchor) -> Written {
+/// The pattern of the constant `id` around its anchor; with `sites`, the
+/// instructions that hold each operand, for a value no route finds, also
+/// the witness of a value its operand reads, or why it has none.
+fn constant_written(
+    exe: &Exe<'_>,
+    id: &str,
+    value: u64,
+    anchor: &Anchor,
+    sites: Option<&FxHashMap<patterns::OperandKey, Vec<u64>>>,
+) -> Written {
     match anchor {
         Anchor::Read(site, carrier, plus) => {
             let read = anchor::read(exe, anchor);
@@ -391,16 +421,34 @@ fn constant_written(exe: &Exe<'_>, id: &str, value: u64, anchor: &Anchor) -> Wri
             }
             let pattern =
                 patterns::constant_from(exe, *site, *carrier).with_context(|| id.to_string())?;
-            Ok(Some(constant_text(value, &pattern, *plus)))
+            let extra = sites.map_or_else(String::new, |sites| {
+                let second = patterns::operand_key(exe, *site, *carrier)
+                    .and_then(|key| sites.get(&key))
+                    .and_then(|held| patterns::witness(exe, *site, *carrier, held));
+                match second {
+                    Some(ConstantPattern {
+                        text,
+                        operand: Some((offset, width)),
+                        ..
+                    }) => format!(
+                        ", witness = \"{text}\", witness_at = {offset}, witness_size = {width}"
+                    ),
+                    _ => format!(", one_witness = \"{ONE_WITNESS}\""),
+                }
+            });
+            Ok(Some(constant_text(value, &pattern, *plus, &extra)))
         }
         Anchor::Confirm(site) => {
             let pattern =
                 patterns::constant_confirmed(exe, *site).with_context(|| id.to_string())?;
-            Ok(Some(constant_text(value, &pattern, 0)))
+            Ok(Some(constant_text(value, &pattern, 0, "")))
         }
         other => Err(anyhow!("{id}: a constant cannot take {other:?}")),
     }
 }
+
+/// Why a held constant has no witness.
+const ONE_WITNESS: &str = "no other instruction holds the value in a window unique in the code";
 
 /// A constant only its own build holds, read from the game's data, read
 /// from its data cell, or read via a symbol in its code at the symbol's
@@ -462,7 +510,7 @@ fn kept_written(
     let plus = constant
         .operand()
         .map_or(0, enshwick_gamedata::Operand::addend);
-    let written = constant_text(value, &pattern, plus);
+    let written = constant_text(value, &pattern, plus, "");
     let within = constant.within().map_or_else(String::new, |n| {
         format!(", within = {}", spelled(u64::from(n)))
     });
@@ -550,8 +598,9 @@ fn body_text(rva: u64, pattern: &BodyPattern) -> String {
     )
 }
 
-/// A constant entry with its pattern, as a table spells it.
-fn constant_text(value: u64, pattern: &ConstantPattern, plus: i64) -> String {
+/// A constant entry with its pattern, as a table spells it, `extra` keys
+/// last.
+fn constant_text(value: u64, pattern: &ConstantPattern, plus: i64, extra: &str) -> String {
     let operand = match pattern.operand {
         None => ", fixed = true".to_owned(),
         Some((at, size)) => {
@@ -569,7 +618,7 @@ fn constant_text(value: u64, pattern: &ConstantPattern, plus: i64) -> String {
         }
     };
     format!(
-        "{{ value = {}, pattern = \"{}\"{operand} }}",
+        "{{ value = {}, pattern = \"{}\"{operand}{extra} }}",
         spelled(value),
         pattern.text
     )
@@ -819,5 +868,90 @@ revision = 1
         };
         let row = body_text(0x1000, &through);
         assert!(row.contains("\", rel = 4, body = {"), "{row}");
+    }
+
+    /// On the server `ENSH_SERVER_EXE` names (skipped without it), its own
+    /// table rendered from the executable gives every held operand value the
+    /// witness the committed table has, and carried to the same executable
+    /// each witnessed value reads where the table pins it.
+    #[test]
+    fn a_table_rendered_from_its_build_writes_the_witnesses_it_carries() {
+        let Some(path) = std::env::var_os("ENSH_SERVER_EXE") else {
+            return;
+        };
+        let bytes = std::fs::read(path).unwrap();
+        let exe = Exe::parse(&bytes).unwrap();
+        let fp = exe.fingerprint().unwrap();
+        let tables = enshwick_gamedata::embedded();
+        let (src, committed) = tables
+            .iter()
+            .map(|(_, text)| (*text, enshwick_gamedata::Table::parse(text).unwrap()))
+            .find(|(_, t)| t.side() == enshwick_gamedata::Side::Server && t.fingerprint() == fp)
+            .unwrap();
+        // The table without its witnesses, so only the render can write them.
+        let mut bare: DocumentMut = src.parse().unwrap();
+        for (_, item) in bare["constants"].as_table_like_mut().unwrap().iter_mut() {
+            if let Some(row) = item.as_inline_table_mut() {
+                for key in ["witness", "witness_at", "witness_size", "one_witness"] {
+                    row.remove(key);
+                }
+            }
+        }
+        let src = bare.to_string();
+        let row = parse(&src).unwrap();
+        let identity = Identity {
+            guid: &row.guid,
+            age: row.age,
+            name: row.name.as_deref().unwrap_or_default(),
+            steam_build: None,
+            game_version: None,
+            new_build: false,
+        };
+        let (text, _) = render(
+            &src,
+            &row,
+            &identity,
+            &[],
+            Some(&exe),
+            &FxHashMap::default(),
+        )
+        .unwrap();
+        let rendered = enshwick_gamedata::Table::parse(&text).unwrap();
+        let witnessed: Vec<_> = committed
+            .constants()
+            .iter()
+            .filter(|c| c.witness().is_some())
+            .collect();
+        assert!(!witnessed.is_empty());
+        let written = |table: &enshwick_gamedata::Table| {
+            table
+                .constants()
+                .iter()
+                .filter(|c| c.witness().is_some() || c.one_witness().is_some())
+                .count()
+        };
+        assert_eq!(
+            written(&rendered),
+            written(&committed),
+            "only held values take one"
+        );
+        for constant in &witnessed {
+            let made = rendered
+                .constants()
+                .iter()
+                .find(|c| c.id() == constant.id())
+                .unwrap();
+            assert_eq!(made.witness(), constant.witness(), "{}", constant.id());
+        }
+        let (code, code_rva) = exe.text();
+        let carried = rendered.fall_back(code, code_rva, |_| None);
+        for constant in witnessed {
+            assert_eq!(
+                carried.constant(constant.id()),
+                Some(constant.value()),
+                "{}",
+                constant.id()
+            );
+        }
     }
 }

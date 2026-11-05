@@ -79,6 +79,7 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
         let mut build = KnownBuild {
             name: stripped.name().to_owned(),
             kind: Kind::Exact,
+            carried: None,
             table: stripped.resolve(),
             lacking: OnceLock::new(),
         };
@@ -105,6 +106,141 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
             assert_eq!(have, want, "{var}: {id}");
         }
         assert!(build.missing().is_empty(), "{var}: {:?}", build.missing());
+    }
+}
+
+/// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
+/// skipped without it), their own table without the join, the start of user
+/// interactions, the division before the loop's waits and the workshop
+/// limit's stop block, nor their `.bytes`, heads and bodies, gets each back
+/// from its engine route with its code checked, and what each feature reads
+/// in their place holds: the join is the provider's one slot, the division
+/// leads to each wait in its function, and the stop block's length is the
+/// table's body's.
+#[cfg(windows)]
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one executable's four features, each a few lines over the same stripped build"
+)]
+fn routed_symbols_without_table_checks_serve_their_features() {
+    use crate::pinned;
+    let routes = tables::Routes::embedded().unwrap();
+    let ids = [
+        pinned::net::JOIN_GAME,
+        pinned::user::START_INTERACTION,
+        pinned::pacing::WAIT_DIVIDE,
+        pinned::recipe::LIMIT_STOP,
+    ];
+    for (var, side, running) in [
+        ("ENSH_SERVER_EXE", tables::Side::Server, Side::SERVER),
+        ("ENSH_CLIENT_EXE", tables::Side::Client, Side::CLIENT),
+    ] {
+        let Ok(path) = std::env::var(var) else {
+            continue;
+        };
+        let bytes = std::fs::read(path).unwrap();
+        let image = enshwick_gamedata::reflect::Image::parse(
+            &bytes,
+            enshwick_gamedata::reflect::Layout::File,
+            None,
+        )
+        .unwrap();
+        let full = tables::exact(&load(), side, image.fingerprint().unwrap())
+            .unwrap()
+            .clone();
+        let text = tables::embedded()
+            .iter()
+            .find(|(file, _)| *file == full.file_name())
+            .unwrap()
+            .1;
+        let mut doc: toml_edit::DocumentMut = text.parse().unwrap();
+        for id in ids {
+            doc["symbols"].as_table_mut().unwrap().remove(id.id());
+            doc["constants"]
+                .as_table_mut()
+                .unwrap()
+                .remove(&format!("{id}.bytes"));
+        }
+        let stripped = Table::parse(&doc.to_string()).unwrap();
+        let mut build = KnownBuild {
+            name: stripped.name().to_owned(),
+            kind: Kind::Exact,
+            carried: None,
+            table: stripped.resolve(),
+            lacking: OnceLock::new(),
+        };
+        let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
+        build.route(&routes, &image, &reflection, running);
+        let own = full.resolve();
+        let base = image.base();
+        let range = image.range(image.section(".text").unwrap());
+        let code = range.start..range.end;
+        for id in ids.into_iter().filter(|id| own.symbol(id.id()).is_some()) {
+            assert_eq!(build.symbol(id.id()), own.symbol(id.id()), "{var}: {id}");
+            assert!(
+                build.routed(id.id()),
+                "{var}: {id} is not checked by its route"
+            );
+            assert!(build.head(id.id()).is_none() && build.body(id.id()).is_none());
+        }
+        if let Some(join) = build.symbol(pinned::net::JOIN_GAME.id()) {
+            let pins = crate::join::provider::Pins {
+                routed: true,
+                ..crate::join::provider::Pins::from_table(
+                    |id| build.symbol(id),
+                    |id| build.constant(id),
+                    base,
+                )
+                .unwrap()
+            };
+            let read = |va: u64| image.u64(va);
+            assert_eq!(
+                crate::join::provider::verify(&pins, read, code.clone()),
+                Ok(base + join),
+                "{var}"
+            );
+        }
+        if let (Some(stop), Some(next)) = (
+            build.symbol(pinned::recipe::LIMIT_STOP.id()),
+            build.symbol(pinned::recipe::LIMIT_NEXT.id()),
+        ) {
+            let block = image.read(base + stop, 64).unwrap();
+            let len = crate::code::stop_len(block, base + stop, base + next);
+            let body = own
+                .body(pinned::recipe::LIMIT_STOP.id())
+                .map(enshwick_gamedata::Body::len);
+            assert!(len.is_some(), "{var}: the stop block has no end");
+            assert_eq!(len, body.or(len), "{var}: the routed length is the table's");
+        }
+        if let Some(divide) = build.symbol(pinned::pacing::WAIT_DIVIDE.id()) {
+            let pdata = image.range(image.section(".pdata").unwrap());
+            let rows = image.read(pdata.start, pdata.end - pdata.start).unwrap();
+            let end = rows
+                .as_chunks::<12>()
+                .0
+                .iter()
+                .find_map(|row| {
+                    let begin = u64::from(u32::from_le_bytes(row[0..4].try_into().ok()?));
+                    let end = u64::from(u32::from_le_bytes(row[4..8].try_into().ok()?));
+                    (begin <= divide && divide < end).then_some(end)
+                })
+                .unwrap();
+            let span = usize::try_from(end - divide).unwrap();
+            for wait in [pinned::pacing::LOOP_WAIT, pinned::pacing::MESSAGE_WAIT] {
+                if let Some(at) = build.symbol(wait.id()) {
+                    assert!(
+                        crate::pacing::after_division(divide, span, at),
+                        "{var}: {wait}"
+                    );
+                    let between = image.read(base + divide, at - divide).unwrap();
+                    assert!(
+                        crate::pacing::keeps_left(between, base + divide),
+                        "{var}: {wait} reads the time left"
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -541,6 +677,84 @@ fn a_build_without_a_table_names_itself_and_the_carried_table() {
     let moved = Unhooked::Moved.to_string();
     assert_eq!(found.reason("npc.lookup", &moved), moved);
     assert_eq!(embedded(Side::SERVER).reason("npc.nope", &absent), absent);
+}
+
+/// No server table holds a row bases past 16 reads only on a client, so a
+/// server build carried from one never goes missing on an entry no server
+/// feature reads.
+#[test]
+fn no_server_table_holds_a_client_only_bases_row() {
+    use crate::pinned::bases;
+    let client_only = [
+        bases::BASE_IDS.id(),
+        bases::CLIENT_CREATE.id(),
+        bases::CLIENT_DESTROY.id(),
+        bases::CLIENT_SIZE.id(),
+        bases::RECORD_BASE_ID.id(),
+    ];
+    for table in load().iter().filter(|t| t.side() == tables::Side::Server) {
+        let resolved = table.resolve();
+        for id in client_only {
+            assert!(
+                resolved.symbol(id).is_none() && resolved.constant(id).is_none(),
+                "{}: {id}",
+                table.name()
+            );
+        }
+    }
+}
+
+/// A build without its own table logs at info when nothing is missing and
+/// names the carried table, and warns with its error code only when entries
+/// are missing.
+#[test]
+fn a_carried_build_warns_only_when_entries_are_missing() {
+    use enshwick::abi::Level;
+    let unknown = Fingerprint::new([0xee; 16], 1);
+    let mut complete = embedded(Side::SERVER);
+    complete.kind = Kind::Fallback;
+    complete.carried = Some("1.0 server (1)".to_owned());
+    let (level, line) = complete.start_line(unknown);
+    assert_eq!(level, Level::INFO);
+    assert!(
+        line.starts_with(
+            "game build eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/1 runs without its own table: "
+        ) && line.ends_with("entries found by engine routes and the patterns of 1.0 server (1)"),
+        "{line}"
+    );
+    let code = [0u8; 64];
+    let lacking = select(
+        &load(),
+        Side::SERVER,
+        unknown,
+        Some((&code, 0x1000)),
+        |_| None,
+    )
+    .unwrap();
+    let (level, line) = lacking.start_line(unknown);
+    assert_eq!(level, Level::WARN);
+    assert!(
+        line.contains(crate::errors::FEATURES_OFF.as_str()),
+        "{line}"
+    );
+    assert_eq!(embedded(Side::SERVER).start_line(unknown).0, Level::INFO);
+    let kept = Table::parse(
+        "name = \"1.0 server (1)\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n[constants]\n\"g.slot\" = { value = 16, carried = false }\n",
+    )
+    .unwrap();
+    let uncarried = KnownBuild {
+        name: kept.name().to_owned(),
+        kind: Kind::Fallback,
+        carried: Some(kept.name().to_owned()),
+        table: kept.fall_back(&code, 0x1000, |_| None),
+        lacking: OnceLock::new(),
+    };
+    assert!(uncarried.missing().is_empty());
+    assert_eq!(
+        uncarried.start_line(unknown).0,
+        Level::WARN,
+        "a row kept from carrying is off too"
+    );
 }
 
 /// Every symbol with a `.bytes` constant reads those bytes in the client

@@ -392,8 +392,9 @@ fn the_stock_cache_skips_a_window_index_whose_slot_was_never_made() {
 #[test]
 fn the_base_ids_of_the_window_follow_the_game_s() {
     let mut fake = twenty_bases();
-    fake.put(at(93) + RECORD.base_id, [1u64, 2]);
-    fake.put(at(95) + RECORD.base_id, [3u64, 4]);
+    let base_id = RECORD.base_id.unwrap();
+    fake.put(at(93) + base_id, [1u64, 2]);
+    fake.put(at(95) + base_id, [3u64, 4]);
     let grower = fake::grow_16 as unsafe extern "system" fn(*mut u8, i64, u64) -> u8;
     let mut vec = [0u64, 0, 0, (grower as *const ()).addr() as u64];
     let obj = fake.ptr();
@@ -446,6 +447,22 @@ fn a_field_past_its_record_object_or_answer_is_named() {
         ..LAYOUT
     };
     assert_eq!(animals.misfit(), Some(bases::RECORD_ANIMALS.id()));
+    let base_id = Layout {
+        record: RecordFields {
+            base_id: Some(GEOMETRY.record() - 8),
+            ..RECORD
+        },
+        ..LAYOUT
+    };
+    assert_eq!(base_id.misfit(), Some(bases::RECORD_BASE_ID.id()));
+    let server = Layout {
+        record: RecordFields {
+            base_id: None,
+            ..RECORD
+        },
+        ..LAYOUT
+    };
+    assert_eq!(server.misfit(), None, "a server reads no base id");
     let staging = Layout {
         object: ObjectFields {
             staging: GEOMETRY.record_at(window::WINDOW),

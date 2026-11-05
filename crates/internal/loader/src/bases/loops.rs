@@ -95,8 +95,9 @@ pub(super) struct RecordFields {
     pub(super) comfort_len: usize,
     /// The crafting prop mask, u64.
     pub(super) props: usize,
-    /// The base's `BaseId`, 16 bytes.
-    pub(super) base_id: usize,
+    /// The base's `BaseId`, 16 bytes; on a client only, whose base id list
+    /// alone the window serves (a dedicated server never runs that code).
+    pub(super) base_id: Option<usize>,
     /// [`BEDS`] bed counts, u32 each.
     pub(super) beds: usize,
     /// NPCs at home, u16.
@@ -169,8 +170,12 @@ pub(super) fn list_misfit(c: &Container) -> Option<&'static str> {
 impl Layout {
     /// The layout as `offset` reads the build table's constants, each field
     /// checked to lie inside its record, the object below its window
-    /// records, or the stock cache's answer.
-    pub(super) fn read(offset: &dyn Fn(Constant) -> Option<usize>) -> Result<Self, SiteError> {
+    /// records, or the stock cache's answer; the client's own fields only
+    /// on a `client`.
+    pub(super) fn read(
+        offset: &dyn Fn(Constant) -> Option<usize>,
+        client: bool,
+    ) -> Result<Self, SiteError> {
         let f = |id: Constant| offset(id).ok_or(SiteError::Missing(id.id()));
         let layout = Self {
             record: RecordFields {
@@ -183,7 +188,7 @@ impl Layout {
                 comfort: f(bases::RECORD_COMFORT)?,
                 comfort_len: f(bases::RECORD_COMFORT_LEN)?,
                 props: f(bases::RECORD_PROPS)?,
-                base_id: f(bases::RECORD_BASE_ID)?,
+                base_id: client.then(|| f(bases::RECORD_BASE_ID)).transpose()?,
                 beds: f(bases::RECORD_BEDS)?,
                 npcs_home: f(bases::RECORD_NPCS_HOME)?,
                 animals: f(bases::RECORD_ANIMALS)?,
@@ -223,7 +228,11 @@ impl Layout {
             window: window::Geometry::new(
                 (f(bases::RECORDS)?, f(bases::STRIDE)?),
                 (f(bases::SLOTS)?, f(bases::SLOT)?),
-                (f(bases::SERVER_SIZE)?, f(bases::CLIENT_SIZE)?),
+                // A server has no client object for the window to clear.
+                (
+                    f(bases::SERVER_SIZE)?,
+                    if client { f(bases::CLIENT_SIZE)? } else { 0 },
+                ),
             )
             .map_err(SiteError::Window)?,
             count: f(bases::COUNT)?,
@@ -264,7 +273,7 @@ impl Layout {
             (bases::RECORD_SET_COUNT, r.set_count + 4),
             (bases::RECORD_COMFORT_LEN, r.comfort + r.comfort_len),
             (bases::RECORD_PROPS, r.props + 8),
-            (bases::RECORD_BASE_ID, r.base_id + 16),
+            (bases::RECORD_BASE_ID, r.base_id.map_or(0, |at| at + 16)),
             (bases::RECORD_BEDS, r.beds + BEDS * 4),
             (bases::RECORD_NPCS_HOME, r.npcs_home + 2),
             (bases::RECORD_ANIMALS, r.animals + ANIMAL_COUNTS * 2),
@@ -347,7 +356,8 @@ pub(super) struct Sites {
     npc_totals: u64,
     server_update: u64,
     stock_cache: u64,
-    base_ids: u64,
+    /// The base id list, on a client only.
+    base_ids: Option<u64>,
     cleanups: [u64; 3],
     hash_at: usize,
     query: usize,
@@ -366,9 +376,9 @@ impl Sites {
             self.npc_totals,
             self.server_update,
             self.stock_cache,
-            self.base_ids,
         ]
         .into_iter()
+        .chain(self.base_ids)
         .chain(self.cleanups)
     }
 
@@ -419,7 +429,7 @@ pub(super) fn find(
 ) -> Result<Sites, SiteError> {
     let address = |id| pins.at(id).map(|offset| start + offset);
     let at = |id| address(id).map(|a| a as u64);
-    let layout = Layout::read(&|id| pins.offset(id))?;
+    let layout = Layout::read(&|id| pins.offset(id), client)?;
     let getter = if client {
         let getter = pins.at(bases::COUNT_GETTER)?;
         let expected = u8::try_from(layout.count)
@@ -440,7 +450,7 @@ pub(super) fn find(
         npc_totals: at(bases::NPC_TOTALS)?,
         server_update: at(bases::SERVER_UPDATE)?,
         stock_cache: at(bases::STOCK_CACHE)?,
-        base_ids: at(bases::BASE_IDS)?,
+        base_ids: client.then(|| at(bases::BASE_IDS)).transpose()?,
         cleanups: [
             at(bases::BED_CLEANUP)?,
             at(bases::COMFORT_CLEANUP)?,
@@ -497,13 +507,14 @@ pub(super) fn link(loader: &Loader, sites: &Sites) -> [bool; 10] {
             sort::sort_all,
             none,
         ),
-        loader.link_feature(
-            super::past16::PAST_16,
-            at(bases::BASE_IDS),
-            &sort::BASE_IDS_NEXT,
-            sort::base_ids,
-            none,
-        ),
+        sites.base_ids.is_none()
+            || loader.link_feature(
+                super::past16::PAST_16,
+                at(bases::BASE_IDS),
+                &sort::BASE_IDS_NEXT,
+                sort::base_ids,
+                none,
+            ),
         loader.link_feature(
             super::past16::PAST_16,
             at(bases::REBUILD),

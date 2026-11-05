@@ -87,7 +87,7 @@ pub enum Error {
 /// ```
 /// use enshwick_loader::join::provider::Pins;
 ///
-/// let pins = Pins { table: 0x1_41db_2f28, join: 0x1_4108_9230, bytes: None };
+/// let pins = Pins { table: 0x1_41db_2f28, join: 0x1_4108_9230, bytes: None, routed: false };
 /// assert_eq!(pins.bytes, None);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,6 +98,9 @@ pub struct Pins {
     pub join: u64,
     /// The join's first eight bytes.
     pub bytes: Option<u64>,
+    /// Whether an engine route found the join and its own match checked the
+    /// code there, which stands for `bytes` when the table pins none.
+    pub routed: bool,
 }
 
 impl Pins {
@@ -131,6 +134,7 @@ impl Pins {
             table: at(pinned::net::PROVIDER_VTABLE.id())?,
             join: at(pinned::net::JOIN_GAME.id())?,
             bytes: constant(BYTES_ID),
+            routed: false,
         })
     }
 }
@@ -170,7 +174,7 @@ fn slots(read: impl Fn(u64) -> Option<u64>, table: u64, code: &Range<u64>) -> Ve
 ///     0x4000 => Some(bytes),
 ///     _ => None,
 /// };
-/// let pins = Pins { table, join, bytes: Some(bytes) };
+/// let pins = Pins { table, join, bytes: Some(bytes), routed: false };
 /// assert_eq!(verify(&pins, read, 0x1000..0x8000), Ok(join));
 /// ```
 pub fn verify(
@@ -178,15 +182,18 @@ pub fn verify(
     read: impl Fn(u64) -> Option<u64>,
     code: Range<u64>,
 ) -> Result<u64, Error> {
-    let expected = pins.bytes.ok_or(Error::NoBytes)?;
     let join = pins.join;
     let found = read(join).ok_or(Error::JoinUnreadable { join })?;
-    if found != expected {
-        return Err(Error::Bytes {
-            join,
-            found,
-            expected,
-        });
+    match pins.bytes {
+        Some(expected) if found != expected => {
+            return Err(Error::Bytes {
+                join,
+                found,
+                expected,
+            });
+        }
+        None if !pins.routed => return Err(Error::NoBytes),
+        _ => {}
     }
     let slots = slots(&read, pins.table, &code);
     if slots.is_empty() {
@@ -263,6 +270,7 @@ mod tests {
             table: TABLE,
             join: JOIN,
             bytes,
+            routed: false,
         }
     }
 
@@ -308,6 +316,15 @@ mod tests {
             verify(&pins(None), memory(&[JOIN]), CODE),
             Err(Error::NoBytes)
         );
+        let routed = Pins {
+            routed: true,
+            ..pins(None)
+        };
+        assert_eq!(
+            verify(&routed, memory(&[JOIN]), CODE),
+            Ok(JOIN),
+            "a route's checked match stands for the bytes"
+        );
     }
 
     #[test]
@@ -332,6 +349,7 @@ mod tests {
             table: start + 16,
             join: start,
             bytes: Some(BYTES),
+            routed: false,
         };
         // SAFETY: `image` spans the 32 bytes of `memory`, whose provenance
         // `start` exposed, alive and unwritten until the end of the test.

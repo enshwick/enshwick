@@ -4,14 +4,14 @@
 table = "1.0 server (1269579)"
 side = "server"
 game_version = 1269579
-entries = 569
-routed = 512
-missing = ["bases.animal_value", "bases.answer_box", "bases.answer_size", "bases.base_ids", "bases.client_create", "bases.client_destroy", "bases.client_size", "bases.heap_allocate", "bases.holder_at", "bases.npc_value", "bases.record_base_id", "building.box_extent", "building.box_min", "building.box_size", "voxel.finest_level", "voxel.grid_stride"]
+entries = 571
+routed = 540
+missing = ["bases.animal_value", "bases.answer_box", "bases.answer_size", "bases.holder_at", "bases.npc_value", "building.box_extent", "building.box_min", "building.box_size", "voxel.grid_stride"]
 
 [[feature]]
 name = "bases"
 state = "partly"
-missing = ["bases.base_ids", "bases.client_create", "bases.client_destroy", "bases.client_size", "bases.holder_at", "bases.animal_value", "bases.answer_box", "bases.answer_size", "bases.npc_value", "bases.record_base_id", "bases.heap_allocate"]
+missing = ["bases.holder_at", "bases.animal_value", "bases.answer_box", "bases.answer_size", "bases.npc_value"]
 
 [[feature]]
 name = "transactions"
@@ -21,4 +21,4 @@ missing = ["building.box_extent", "building.box_min", "building.box_size"]
 [[feature]]
 name = "voxels"
 state = "partly"
-missing = ["voxel.finest_level", "voxel.grid_stride"]
+missing = ["voxel.grid_stride"]

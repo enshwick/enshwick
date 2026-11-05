@@ -15,11 +15,16 @@
 //!   operand, as for an offset of 0, the pattern fixes the instruction and
 //!   only confirms the value. No pattern is guessed for a constant: a value
 //!   found in some code says nothing about what that code means.
+//! - A constant's witness is another instruction that holds the same value.
+//!   It never gives a value; a build without a table takes the value only
+//!   where the witness reads it too, so a changed use goes missing instead
+//!   of wrong.
 
 use std::ops::Range;
 
 use anyhow::{Context as _, bail};
 use enshwick_gamedata::{Body, Locate};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::exe::Exe;
 use super::signature::{Insn, Masked, Owned, Reference};
@@ -142,6 +147,73 @@ pub(crate) fn constant_from(
         negative: matches!(carrier, Carrier::Displacement { negative: true }),
         shift: carrier == Carrier::Shift,
     })
+}
+
+/// An operand as [`operand_sites`] keys it: whether it is a displacement
+/// (else an immediate), and its raw value.
+pub(crate) type OperandKey = (bool, u64);
+
+/// The key of the operand `carrier` names in the instruction at `site`.
+pub(crate) fn operand_key(exe: &Exe<'_>, site: u64, carrier: Carrier) -> Option<OperandKey> {
+    let (masked, _, index) = instruction(exe, site).ok()?;
+    let insn = &masked.insns[index];
+    match carrier {
+        Carrier::Displacement { .. } => Some((true, insn.displacement?)),
+        Carrier::Immediate | Carrier::Shift => Some((false, insn.immediate?)),
+    }
+}
+
+/// Every instruction in `exe`'s functions whose displacement or immediate is
+/// one of `wanted`, by that operand: where a constant's second use may sit.
+pub(crate) fn operand_sites(
+    exe: &Exe<'_>,
+    wanted: &FxHashSet<OperandKey>,
+) -> FxHashMap<OperandKey, Vec<u64>> {
+    let mut sites: FxHashMap<OperandKey, Vec<u64>> = FxHashMap::default();
+    if wanted.is_empty() {
+        return sites;
+    }
+    for function in exe.functions() {
+        let Some(code) = exe.code(function.start, function.end - function.start) else {
+            continue;
+        };
+        let masked = Masked::decode(code, function.start, &exe.absolute_range());
+        for insn in &masked.insns {
+            let keys = [
+                insn.displacement.map(|d| (true, d)),
+                insn.immediate.map(|i| (false, i)),
+            ];
+            let Ok(offset) = u64::try_from(insn.offset) else {
+                continue;
+            };
+            for key in keys.into_iter().flatten().filter(|k| wanted.contains(k)) {
+                sites.entry(key).or_default().push(function.start + offset);
+            }
+        }
+    }
+    sites
+}
+
+/// How many second uses [`witness`] tries before it gives up.
+const WITNESS_TRIES: usize = 32;
+
+/// The pattern of a second use of the constant the instruction at `site`
+/// reads through `carrier`, among `sites` that hold the same operand: the
+/// nearest one in another function with a unique window, else one in the
+/// same function, so a changed value shows as a disagreement.
+pub(crate) fn witness(
+    exe: &Exe<'_>,
+    site: u64,
+    carrier: Carrier,
+    sites: &[u64],
+) -> Option<ConstantPattern> {
+    let own = exe.function_at(site).map(|f| f.start);
+    let mut candidates: Vec<u64> = sites.iter().copied().filter(|&s| s != site).collect();
+    candidates.sort_by_key(|&s| (exe.function_at(s).map(|f| f.start) == own, s.abs_diff(site)));
+    candidates
+        .into_iter()
+        .take(WITNESS_TRIES)
+        .find_map(|s| constant_from(exe, s, carrier).ok())
 }
 
 /// The pattern that confirms a constant by the exact instruction at `site`.
