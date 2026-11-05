@@ -344,7 +344,7 @@ fn a_new_recipe_like_a_recipe_instead_of_an_item_is_refused_at_its_line() {
     };
     assert!(Pack::parse_with("you.torches", &recipes(&new(torch)), Some(&vanilla)).is_ok());
     let by_name = "[[recipe]]\nid = \"bright\"\nlike = \"Material_T1_Wood_Logs\"\noutput = \"Tool_Torch01\"\n";
-    for text in [new(recipe), by_name.to_owned()] {
+    for text in [new(recipe), new(wood), by_name.to_owned()] {
         let errors = Pack::parse_with("you.torches", &recipes(&text), Some(&vanilla))
             .unwrap_err()
             .to_string();
@@ -354,8 +354,8 @@ fn a_new_recipe_like_a_recipe_instead_of_an_item_is_refused_at_its_line() {
         );
     }
     assert!(
-        Pack::parse_with("you.torches", &recipes(&new(wood)), Some(&vanilla)).is_ok(),
-        "a GUID that is no vanilla recipe may be another mod's item"
+        Pack::parse_with("you.torches", &recipes(&new(Guid([9; 16]))), Some(&vanilla)).is_ok(),
+        "a GUID the game does not know may be another mod's item"
     );
     assert!(
         Pack::parse_with("you.torches", &recipes(&new(recipe)), None).is_ok(),

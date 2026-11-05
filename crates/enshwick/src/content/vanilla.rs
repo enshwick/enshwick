@@ -566,6 +566,12 @@ impl Vanilla {
             .collect())
     }
 
+    /// Whether `guid` is a vanilla item's GUID; `false` without the registry.
+    pub(crate) fn is_item(&self, guid: Guid) -> bool {
+        self.names()
+            .is_ok_and(|names| names.values().flatten().any(|item| *item == guid))
+    }
+
     /// Whether `guid` is a vanilla recipe's own GUID; `false` without the
     /// registry.
     pub(crate) fn is_recipe(&self, guid: Guid) -> bool {

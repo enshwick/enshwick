@@ -689,7 +689,9 @@ pub(super) fn recipes(
         // the game does not know may be another mod's item.
         if let (Some((item, Ref::Elsewhere)), false, Some(vanilla)) =
             (like, e.like.contains(':'), reader.vanilla)
-            && (vanilla.is_recipe(item) || Guid::try_parse(&e.like).is_none())
+            && (vanilla.is_recipe(item)
+                || vanilla.is_item(item)
+                || Guid::try_parse(&e.like).is_none())
             && vanilla
                 .recipes_making(item)
                 .is_ok_and(|made| made.is_empty())
