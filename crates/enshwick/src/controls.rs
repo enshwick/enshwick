@@ -659,14 +659,13 @@ pub fn chords(
             }
         }
     }
-    // The key code and rank (one more than its modifiers) of `bits` if it
-    // may come down now.
+    // The key code and the count of modifiers of `bits` if it may come down
+    // now.
     let mut rise = |control: usize, slot: usize, bits: u32| {
         let key = Key::from_bits(bits)?;
         let mods = held(control, slot, key)?;
         let code = key.code() as usize;
-        (key.modifiers() & !mods == 0 && !taken[code])
-            .then(|| (code, key.modifiers().count_ones() + 1))
+        (key.modifiers() & !mods == 0 && !taken[code]).then(|| (code, key.modifiers().count_ones()))
     };
     for (control, keys) in bound.iter().enumerate().filter(|(c, _)| !was(*c)) {
         for (slot, &bits) in keys.iter().enumerate() {
