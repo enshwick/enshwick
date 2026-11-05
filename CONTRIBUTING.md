@@ -73,21 +73,32 @@ Security issues go through [SECURITY.md](SECURITY.md), not public issues.
 
 ## Releases
 
-Until the first public release, 1.0.0, this repository has no regular
-releases. The platform's crates carry prerelease versions, `1.0.0-alpha.N`,
-and a mod depends on `enshwick = "=1.0.0-alpha.N"`.
+Until the first public release, 1.0.0, the loader ships as alphas. The
+platform's crates carry prerelease versions, `1.0.0-alpha.N`, and a mod
+depends on `enshwick = "=1.0.0-alpha.N"`. An alpha follows a merged change
+that players, admins or mod authors get, at most one a day:
 
-The
-[dev-build workflow](.github/workflows/dev-build.yml)
-runs on every push to `main` that changes the crates or the tools, and by
-hand. It builds the commit with `cargo xtask dist` and replaces the files
-of the one prerelease tagged `dev`, whose tag moves to that commit, so
-`dev` always carries `main`. `enshwick.zip` there holds the stub and the
-loader, and no mod: each mod ships in its own archive from its own
-repository. `cargo xtask dist` writes the same archive into `target/dist` on
-any machine with `cargo-xwin`.
+1. A pull request moves every crate to the next `1.0.0-alpha.N`, with the
+   exact `=` pins between the published crates, and closes each
+   `CHANGELOG.md`'s Unreleased section as `## [1.0.0-alpha.N] - <date>`.
+2. Once it merges, the [alpha workflow](.github/workflows/alpha.yml), run by
+   hand on `main`, makes the GitHub prerelease `v1.0.0-alpha.N`:
+   `enshwick.zip` with the PDB and CycloneDX SBOM of each DLL and their build
+   provenance. `cargo xtask notes` writes its notes: a warning in English and
+   Ukrainian that anything may change before 1.0, the game builds the
+   loader's tables support, each crate's changelog section and the known
+   issues the run is given. A version released already is refused, and so
+   is one no changelog has a section for.
 
-Versions come from [release-plz](https://release-plz.dev), set up in
+`enshwick.zip` holds the stub and the loader, and no mod: each mod ships in
+its own archive from its own repository. `cargo xtask dist` writes the same
+archive into `target/dist` on any machine with `cargo-xwin`; the
+[dev-build workflow](.github/workflows/dev-build.yml) builds it on every
+push to `main` that changes the crates or the tools and keeps it as the
+run's artefact.
+
+Alphas go to GitHub only, never to crates.io. Real releases come from
+[release-plz](https://release-plz.dev), set up in
 [release-plz.toml](release-plz.toml) and run by hand through the
 [release-plz workflow](.github/workflows/release-plz.yml):
 
