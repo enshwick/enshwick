@@ -253,8 +253,9 @@ impl Load<'_> {
         let settings = declared.0.clone();
         let me = self.host().handle();
         DECLARED
-            .get_or_init(|| std::sync::Mutex::new(Vec::new()))
+            .get_or_init(std::sync::Mutex::default)
             .relock()
+            .0
             .push((me, declared));
         let drops: Vec<(crate::loot::Drop, values::Number<f64>)> = pack
             .drops
@@ -298,8 +299,10 @@ impl Load<'_> {
 /// The settings each pack declared, and their defaults, by the pack's
 /// handle, for a script runtime of the same mod, which follows them instead
 /// of declaring them again.
-static DECLARED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, Declared)>>> =
-    crate::fresh::Fresh::new();
+#[derive(Default)]
+struct DeclaredByMod(Vec<(crate::abi::ModHandle, Declared)>);
+
+static DECLARED: crate::fresh::Fresh<std::sync::Mutex<DeclaredByMod>> = crate::fresh::Fresh::new();
 
 /// A pack's settings and their defaults, as `table_config` gives them.
 type Declared = (crate::config::TableConfig, toml::Table);
@@ -311,8 +314,9 @@ type Declared = (crate::config::TableConfig, toml::Table);
 pub fn declared_settings(load: &Load<'_>) -> Option<(crate::config::TableConfig, toml::Table)> {
     let me = load.host().handle();
     DECLARED
-        .get_or_init(|| std::sync::Mutex::new(Vec::new()))
+        .get_or_init(std::sync::Mutex::default)
         .relock()
+        .0
         .iter()
         .find(|(handle, _)| *handle == me)
         .map(|(_, declared)| declared.clone())

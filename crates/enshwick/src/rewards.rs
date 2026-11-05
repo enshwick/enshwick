@@ -373,14 +373,17 @@ impl Pending {
 
 /// Each mod's rewards state by its handle: a mod DLL holds one, the
 /// loader's own copy of this crate one per data pack or script it runs.
-static SHARED: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Shared)>>> =
-    crate::fresh::Fresh::new();
+#[derive(Default)]
+struct ByMod(Vec<(ModHandle, &'static Shared)>);
+
+static SHARED: crate::fresh::Fresh<Mutex<ByMod>> = crate::fresh::Fresh::new();
 
 /// The rewards state of mod `me`, `None` before its first reward.
 fn find(me: ModHandle) -> Option<&'static Shared> {
     SHARED
-        .get_or_init(|| Mutex::new(Vec::new()))
+        .get_or_init(Mutex::default)
         .relock()
+        .0
         .iter()
         .find(|(handle, _)| *handle == me)
         .map(|&(_, shared)| shared)
@@ -418,8 +421,9 @@ fn shared(load: &mut Load<'_>) -> Result<&'static Shared, Off> {
     load.on::<crate::events::PlayerLeft>(move |left| shared.experience.forget(left.entity))?;
     load.on::<crate::events::WorldLoaded>(move |()| shared.experience.clear())?;
     SHARED
-        .get_or_init(|| Mutex::new(Vec::new()))
+        .get_or_init(Mutex::default)
         .relock()
+        .0
         .push((me, shared));
     Ok(shared)
 }
