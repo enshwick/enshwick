@@ -83,6 +83,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::DROPDOWN_CAPACITY.id(),
     pinned::ui::DROPDOWN_COUNT.id(),
     pinned::ui::DROPDOWN_ENABLED.id(),
+    pinned::ui::DROPDOWN_EXTERNAL.id(),
     pinned::ui::DROPDOWN_ENTRY_TEXT.id(),
     pinned::ui::DROPDOWN_EXTENT.id(),
     pinned::ui::DROPDOWN_INIT.id(),

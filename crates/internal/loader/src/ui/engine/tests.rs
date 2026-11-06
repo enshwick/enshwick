@@ -28,13 +28,7 @@ fn the_tables_layouts_fit_the_loader_s_buffers() {
         .iter()
         .map(|(_, text)| enshwick_gamedata::Table::parse(text).unwrap());
     for table in tables.filter(|t| t.side() == enshwick_gamedata::Side::Client) {
-        let lookup = |id: &str| {
-            table
-                .constants()
-                .iter()
-                .find(|c| c.id() == id)
-                .map(enshwick_gamedata::Constant::value)
-        };
+        let lookup = |id: &str| constant(&table, id);
         let layout = Layout::read(&lookup).unwrap();
         assert_eq!(layout.nav, [0, 0x20, 0x24, 0x28, 0x30, 0x34, 0x48]);
         DialogLayout::read(&lookup).unwrap();
@@ -61,11 +55,15 @@ fn client_tables() -> Vec<enshwick_gamedata::Table> {
         .collect()
 }
 
-/// A table's constant by id; the text field's kept-state key, which only
-/// its engine route finds, stands in as 1.
+/// A table's constant by id; the entries only their engine routes find
+/// stand in: the text field's kept-state key as 1, the dropdown's external
+/// mode byte as 0xc76, its offset on every kept client build.
 fn constant(table: &enshwick_gamedata::Table, id: &str) -> Option<u64> {
     if id == pinned::ui::TEXT_FIELD_STATE_KEY.id() {
         return Some(1);
+    }
+    if id == pinned::ui::DROPDOWN_EXTERNAL.id() {
+        return Some(0xc76);
     }
     table
         .constants()

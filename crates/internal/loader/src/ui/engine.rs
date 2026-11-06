@@ -257,6 +257,9 @@ pub(super) struct Layout {
     slider_stop_capacity: usize,
     dropdown_count: usize,
     dropdown_enabled: usize,
+    /// The config byte that has a click report the open state instead of
+    /// opening the game's list.
+    dropdown_external: usize,
     dropdown_capacity: usize,
     dropdown_entry_text: usize,
 }
@@ -398,6 +401,7 @@ impl Layout {
             slider_stop_capacity: f(pinned::ui::SLIDER_STOP_CAPACITY.id())?,
             dropdown_count: f(pinned::ui::DROPDOWN_COUNT.id())?,
             dropdown_enabled: f(pinned::ui::DROPDOWN_ENABLED.id())?,
+            dropdown_external: f(pinned::ui::DROPDOWN_EXTERNAL.id())?,
             dropdown_capacity: f(pinned::ui::DROPDOWN_CAPACITY.id())?,
             dropdown_entry_text: f(pinned::ui::DROPDOWN_ENTRY_TEXT.id())?,
         }

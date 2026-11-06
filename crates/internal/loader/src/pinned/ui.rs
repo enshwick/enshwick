@@ -28,6 +28,7 @@ pub(crate) const DROPDOWN_CAPACITY: Constant = Constant::new("ui.dropdown_capaci
 pub(crate) const DROPDOWN_COUNT: Constant = Constant::new("ui.dropdown_count");
 pub(crate) const DROPDOWN_ENABLED: Constant = Constant::new("ui.dropdown_enabled");
 pub(crate) const DROPDOWN_ENTRY_TEXT: Constant = Constant::new("ui.dropdown_entry_text");
+pub(crate) const DROPDOWN_EXTERNAL: Constant = Constant::new("ui.dropdown_external");
 pub(crate) const DROPDOWN_EXTENT: Constant = Constant::new("ui.dropdown_extent");
 pub(crate) const DROPDOWN_INIT: Symbol = Symbol::new("ui.dropdown_init");
 pub(crate) const ENTRY_SIZE: Constant = Constant::new("ui.entry_size");

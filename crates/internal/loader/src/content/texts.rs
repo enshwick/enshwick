@@ -328,9 +328,12 @@ mod tests {
 
     #[test]
     fn the_text_format_answers_the_loaders_tags_and_passes_the_rest_on() {
-        FORMAT_NEXT
-            .slot()
-            .store(passed as FormatFn as usize, Ordering::Release);
+        let next: FormatFn = passed;
+        #[expect(
+            clippy::fn_to_numeric_cast_any,
+            reason = "a slot holds its next function's address"
+        )]
+        FORMAT_NEXT.slot().store(next as usize, Ordering::Release);
         let mut texts = rustc_hash::FxHashMap::default();
         texts.insert(7, vec![(ENGLISH, "Luau check")]);
         assert!(OURS.set(ours(&texts)).is_ok());
@@ -346,7 +349,7 @@ mod tests {
         // the process, `out[1]` bytes long.
         let shown = unsafe {
             core::slice::from_raw_parts(
-                core::ptr::with_exposed_provenance::<u8>(out[0] as usize),
+                core::ptr::with_exposed_provenance::<u8>(usize::try_from(out[0]).unwrap()),
                 10,
             )
         };
