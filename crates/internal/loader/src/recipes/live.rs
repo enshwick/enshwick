@@ -390,7 +390,9 @@ pub(crate) fn rule(owner: ModIndex, kind: RecipeRuleKind, name: &str, disable: b
     if name.is_empty() {
         return Status::BAD_ARGS;
     }
-    if layout().is_none() {
+    // Mods' init runs before `init` resolves the layout: keep their rules
+    // until then, and refuse only on a build known to lack it.
+    if LAYOUT.get().is_some_and(Option::is_none) {
         return Status::MISSING;
     }
     live(|l| {
@@ -749,6 +751,27 @@ mod tests {
             made.as_deref(),
             Some(&[1_u64, 2][..]),
             "the old list lives on"
+        );
+    }
+
+    #[test]
+    fn a_mod_s_rule_from_init_is_kept_before_the_layout_resolves() {
+        assert!(LAYOUT.get().is_none(), "one process per test");
+        let owner = ModIndex::new(3);
+        assert_eq!(
+            rule(owner, RecipeRuleKind::OUTPUT, "a-guid", true),
+            Status::OK
+        );
+        assert!(live(|l| l.mods.contains(&(
+            3,
+            Kind::Output,
+            "a-guid".to_owned()
+        ))));
+        let _set = LAYOUT.set(None);
+        assert_eq!(
+            rule(owner, RecipeRuleKind::OUTPUT, "a-guid", true),
+            Status::MISSING,
+            "a build without the layout refuses"
         );
     }
 

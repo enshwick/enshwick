@@ -22,6 +22,8 @@ pub use add::{
 pub use change::{RecipeChanges, change_recipes_in, recipe_workshops};
 pub use derive::{Derived, RecipeView, derive_recipes_in, derived_guid};
 pub use kind::RecipeKind;
+#[cfg(feature = "typed")]
+pub(crate) use rules::disable_as;
 pub use rules::{Name, RecipeRule, disable, enable, is_disabled};
 
 #[cfg(feature = "unstable")]

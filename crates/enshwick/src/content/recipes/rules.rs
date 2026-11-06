@@ -150,6 +150,21 @@ impl<'a> RecipeRule<'a> {
 
 fn rule(rule: RecipeRule<'_>, disable: bool) -> Result<(), Off> {
     let host = crate::host().ok_or_else(|| Off::new("recipe rules: no loader"))?;
+    rule_as(host, rule, disable)
+}
+
+/// [`disable`] as the mod `host` names, such as a data pack's through its
+/// [`Load`](crate::Load), whose handle the process's host is not.
+///
+/// # Errors
+///
+/// As [`disable`].
+#[cfg(feature = "typed")]
+pub(crate) fn disable_as(host: crate::Host, rule: RecipeRule<'_>) -> Result<(), Off> {
+    rule_as(host, rule, true)
+}
+
+fn rule_as(host: crate::Host, rule: RecipeRule<'_>, disable: bool) -> Result<(), Off> {
     let api = host.api();
     let (kind, what, name) = rule.parts();
     if name.trim().is_empty() {
