@@ -44,9 +44,15 @@ const UNPINNED_UNCHECKED: &[(&str, &[&str])] = &[
 ];
 
 /// Entries no table pins, found only by their route, with the value the
-/// route must find on each table build, by table name; a build not listed
-/// is not checked.
+/// route must find on each table build, by table name.
 const ROUTED_ONLY: &[(&str, &str, u64)] = &[
+    (
+        "1.0 client (1269579)",
+        "ui.text_field_state_key",
+        0x64d2_7908_60d9_c7f6,
+    ),
+    ("1.0 client (1269579)", "text.format", 0xae_f3d0),
+    ("1.0 client (1269579)", "ui.dropdown_external", 0xc76),
     (
         "1.0 client (26082781)",
         "ui.text_field_state_key",
