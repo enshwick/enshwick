@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Make a data pack that changes the game with TOML files in a folder and no code: one that lets four times as many wood logs fit in one inventory slot.
+-->
+
 # A mod without Rust
 
 A data pack changes the game with TOML files in a folder, without code. Here

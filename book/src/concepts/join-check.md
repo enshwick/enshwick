@@ -1,3 +1,8 @@
+<!--
+type: explanation
+description: The join check keeps a player out of a world whose mods of side both the player's game lacks or runs in another version, and tells the player which mods.
+-->
+
 # The join check
 
 The join check keeps a player out of a world whose mods of side `both` the

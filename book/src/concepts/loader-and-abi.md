@@ -1,3 +1,8 @@
+<!--
+type: explanation
+description: How the Enshwick loader finds and loads mods: its two DLLs, the record of a world, the versioned ABI between loader and mod, and what a mod's manifest declares.
+-->
+
 # The loader and the ABI
 
 ## Two DLLs

@@ -1,3 +1,8 @@
+<!--
+type: explanation
+description: The loader takes every mod through five steps at game start, from reading its manifest to running it, and turns off only the mod that fails a step.
+-->
+
 # The life of a mod
 
 The loader takes every mod through five steps, all at game start.

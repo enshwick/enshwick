@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read any resource of the game's archive as typed values by its reflected type name, and serve a changed copy when the game reads it, for every resource type.
+-->
+
 # Game resources as values
 
 `enshwick::resources` reads any resource of the game's archive as typed values
@@ -52,6 +57,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+for _, key in enshwick.resources.resource_keys("keen::BalancingTable") do
+    enshwick.resources.serve(key, key, function(table)
+        return { damageMod2Handed = table.damageMod2Handed * 2 }
+    end)
+end
+```
+
 `damageMod2Handed` is 1.5 on dedicated server build 26319703.
 
 An array that grows moves to the end of the resource, its offset rewritten.
@@ -76,15 +89,8 @@ A field an edit leaves out keeps its value, so give `none()` to clear one. A pat
 the table to serve, naming only what it changes, or `nil` to serve the base
 unchanged. A patch that fails, or returns a value that does not fit the type,
 is logged. A game resource patched under its own key is then served
-unchanged; a new resource turns the mod off.
-
-```lua
-for _, key in enshwick.resources.resource_keys("keen::BalancingTable") do
-    enshwick.resources.serve(key, key, function(table)
-        return { damageMod2Handed = table.damageMod2Handed * 2 }
-    end)
-end
-```
+unchanged; a new resource turns the mod off. The Luau tab of
+[Serve a change](#serve-a-change) shows a patch.
 
 [`Registry::game`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/resources/table.rs
 [`Host::resource_keys`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/resources/table.rs

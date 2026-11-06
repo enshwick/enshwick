@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: The Map of the game server holds the markers a world comes with, its frame and each player's waypoint, with snapshots for other maps and the fog of war.
+-->
+
 # The map
 
 Unstable: everything in this chapter needs the `unstable` feature and may

@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mid-function hook runs a mod's handler before one instruction inside a game function, with its registers, to change a value no function boundary reaches.
+-->
+
 # Mid-function hooks
 
 Sometimes the value to change sits in a register halfway through a function,

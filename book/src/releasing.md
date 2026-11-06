@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod release carries the mod's version, its archives and the page players are sent to when a server runs a mod they lack, and loads under one ABI version.
+-->
+
 # Releasing mods
 
 A release carries a mod's version, its archives and the page players are sent

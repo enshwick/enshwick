@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Most of the game's simulation runs as ECS systems that walk the rows of a query. A hook on a system's update function reads its components through its context.
+-->
+
 # ECS inside systems
 
 Most of the game's simulation runs as ECS systems: functions that walk the rows

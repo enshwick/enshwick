@@ -1,3 +1,8 @@
+<!--
+type: tutorial
+description: Set up the tools, create a first Enshwick mod in Rust, put it into Enshrouded and find its log. The mod uses the API's high-level calls; raw hooks come last.
+-->
+
 # Getting started
 
 You set up the tools, create a mod, put it into the game and find its log.

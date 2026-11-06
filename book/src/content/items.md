@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Add an item to the game with Load::add_item: a clone of a vanilla item that looks and behaves like it, under a content id of its own, with its own name.
+-->
+
 # Items
 
 [`Load::add_item`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)

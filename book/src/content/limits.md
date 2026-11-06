@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A Rust mod changes vanilla values, such as an item's stack size or a chest's slots, with the changes data packs make, at init or declared then and set later.
+-->
+
 # Vanilla value changes from a mod
 
 Unstable: everything in this chapter needs the `unstable` feature and may

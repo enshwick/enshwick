@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read and change the difficulty and gameplay values of a world while it runs: those of a dedicated server's configuration or of the host's world menu, typed.
+-->
+
 # Game settings
 
 [`load.game_settings()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_settings.rs)

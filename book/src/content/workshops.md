@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A workshop is what a crafting station crafts at. Load::add_workshop clones a vanilla station into a new one with a workshop of its own for a mod's recipes.
+-->
+
 # Workshops
 
 A workshop is what a crafting station crafts at.
@@ -45,6 +50,37 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     })
 }
 ```
+
+```luau
+local BENCH = "you.bench:bulk-bench"
+
+local texts = enshwick.i18n.texts_from([[
+[en]
+"bench.name" = "Bulk Workbench"
+"bench.description" = "A workbench for building in bulk."
+]])
+enshwick.i18n.add_texts(texts, {
+    { "bench.name", `{BENCH}.name` },
+    { "bench.description", `{BENCH}.description` },
+})
+local bench = enshwick.content.add_workshop({
+    like = enshwick.content.station("Craftingstation_Workbench"),
+    id = BENCH,
+    named = true,
+    described = true,
+    recipe_cost = 1,
+    debug_name = "Craftingstation_BulkWorkbench",
+})
+enshwick.content.derive_recipes("my-mod", function(recipe)
+    if string.sub(recipe.debug_name, 1, 6) == "Block_" then
+        return { output = 2, cost = 1, workshop = bench }
+    end
+    return nil
+end)
+```
+
+In Luau, `enshwick.content.station` reads a vanilla station by its item's
+debug name, and `add_workshop` returns the workshop's GUID.
 
 The mod writes one name. The station item is `BENCH`, and every other id
 the station needs derives from it:

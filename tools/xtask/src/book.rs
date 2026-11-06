@@ -1,7 +1,8 @@
 //! The modding book's structure: every chapter `SUMMARY.md` links exists,
 //! every chapter is in `SUMMARY.md`, and every chapter is included by a
 //! doctest harness of the API crate, so its Rust examples compile. Every
-//! chapter's intro stays short.
+//! chapter opens with its page type and description and keeps its intro
+//! short.
 
 use std::path::Path;
 
@@ -33,9 +34,97 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
     });
     for chapter in &chapters {
         match std::fs::read_to_string(source.join(chapter)) {
-            Ok(text) => found.extend(intro_problem(chapter, &text)),
+            Ok(text) => {
+                found.extend(page_problems(chapter, &text));
+                found.extend(intro_problem(chapter, &text));
+            }
             Err(error) => found.push(format!("{SOURCE}/{chapter}: {error}")),
         }
+    }
+    found
+}
+
+/// The Diátaxis page types a chapter may declare.
+const PAGE_TYPES: [&str; 4] = ["tutorial", "how-to", "reference", "explanation"];
+/// The opening comment's key for the page type.
+const TYPE_KEY: &str = "type";
+/// The opening comment's key for the description.
+const DESCRIPTION_KEY: &str = "description";
+/// The characters a description has: the site's search snippet, cut by
+/// search engines past the upper bound.
+const DESCRIPTION_CHARS: std::ops::RangeInclusive<usize> = 120..=160;
+
+/// The problems with the comment a chapter opens with, which mdBook hides
+/// and the site reads for the page's type and description, with the same
+/// grammar as the site's reader:
+///
+/// ```text
+/// <!--
+/// type: how-to
+/// description: One or two sentences, 120 to 160 characters.
+/// -->
+/// ```
+fn page_problems(chapter: &str, text: &str) -> Vec<String> {
+    let at = format!("{SOURCE}/{chapter}");
+    if text.starts_with("<!--\r\n") {
+        return vec![format!(
+            "{at}: has CRLF line endings; the site reads LF only"
+        )];
+    }
+    let Some(block) = text
+        .strip_prefix("<!--\n")
+        .and_then(|rest| rest.split_once("\n-->\n"))
+        .map(|(block, _)| block)
+    else {
+        return vec![format!(
+            "{at}: opens with no <!-- type: … description: … --> comment on lines of their own"
+        )];
+    };
+    if block.contains('\r') {
+        return vec![format!(
+            "{at}: has CRLF line endings; the site reads LF only"
+        )];
+    }
+    let mut found = Vec::new();
+    let (mut kind, mut description) = (None, None);
+    for line in block.lines() {
+        let (key, value) = line.split_once(": ").unwrap_or_default();
+        let slot = match key {
+            TYPE_KEY => &mut kind,
+            DESCRIPTION_KEY => &mut description,
+            _ => {
+                found.push(format!(
+                    "{at}: the opening comment has an unknown line `{line}`"
+                ));
+                continue;
+            }
+        };
+        if slot.replace(value.trim()).is_some() {
+            found.push(format!("{at}: the opening comment has `{key}` twice"));
+        }
+    }
+    match kind {
+        None => found.push(format!("{at}: the opening comment has no {TYPE_KEY}")),
+        Some(kind) if !PAGE_TYPES.contains(&kind) => found.push(format!(
+            "{at}: {TYPE_KEY} `{kind}` is none of {}",
+            PAGE_TYPES.join(", ")
+        )),
+        Some(_) => {}
+    }
+    match description {
+        None => found.push(format!("{at}: the opening comment has no {DESCRIPTION_KEY}")),
+        Some(text) if text.contains(['`', '[', ']']) => found.push(format!(
+            "{at}: the {DESCRIPTION_KEY} is plain text for search snippets, without backticks or links"
+        )),
+        Some(text) if !DESCRIPTION_CHARS.contains(&text.chars().count()) => {
+            found.push(format!(
+                "{at}: the {DESCRIPTION_KEY} has {} characters; keep it within {} to {}",
+                text.chars().count(),
+                DESCRIPTION_CHARS.start(),
+                DESCRIPTION_CHARS.end()
+            ));
+        }
+        Some(_) => {}
     }
     found
 }
@@ -241,6 +330,129 @@ mod tests {
             )
         );
         assert_eq!(intro_problem("hooks.md", &short), None);
+    }
+
+    fn page(block: &str) -> String {
+        format!("<!--\n{block}\n-->\n\n# Title\n")
+    }
+
+    #[test]
+    fn a_chapter_with_a_type_and_a_fitting_description_passes() {
+        let text = page(&format!("type: how-to\ndescription: {}", "d".repeat(120)));
+        assert!(page_problems("hooks.md", &text).is_empty());
+    }
+
+    #[test]
+    fn a_chapter_without_the_opening_comment_is_named() {
+        assert_eq!(
+            page_problems("hooks.md", "# Title\n"),
+            [
+                "book/src/hooks.md: opens with no <!-- type: … description: … --> comment on lines of their own"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_unknown_type_a_long_description_and_stray_lines_are_named() {
+        let text = page(&format!(
+            "type: guide\ndescription: {}\nowner: me",
+            "d".repeat(161)
+        ));
+        assert_eq!(
+            page_problems("hooks.md", &text),
+            [
+                "book/src/hooks.md: the opening comment has an unknown line `owner: me`",
+                "book/src/hooks.md: type `guide` is none of tutorial, how-to, reference, explanation",
+                "book/src/hooks.md: the description has 161 characters; keep it within 120 to 160",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_comment_missing_its_type_and_description_names_both() {
+        let text = page("type:how-to");
+        assert_eq!(
+            page_problems("hooks.md", &text),
+            [
+                "book/src/hooks.md: the opening comment has an unknown line `type:how-to`",
+                "book/src/hooks.md: the opening comment has no type",
+                "book/src/hooks.md: the opening comment has no description",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_comment_the_site_cannot_read_is_named() {
+        let fitting = format!("type: how-to\ndescription: {}", "d".repeat(120));
+        let closed_mid_line = format!("<!--\n{fitting}\n--> # Title\n");
+        let crlf = format!("<!--\r\n{fitting}\r\n-->\r\n");
+        let one_crlf = format!(
+            "<!--\ntype: how-to\r\ndescription: {}\n-->\n",
+            "d".repeat(120)
+        );
+        assert_eq!(
+            page_problems("hooks.md", &one_crlf),
+            ["book/src/hooks.md: has CRLF line endings; the site reads LF only"]
+        );
+        assert_eq!(
+            page_problems("hooks.md", &closed_mid_line),
+            [
+                "book/src/hooks.md: opens with no <!-- type: … description: … --> comment on lines of their own"
+            ]
+        );
+        assert_eq!(
+            page_problems("hooks.md", &crlf),
+            ["book/src/hooks.md: has CRLF line endings; the site reads LF only"]
+        );
+    }
+
+    #[test]
+    fn a_repeated_key_markdown_and_padding_are_named() {
+        let twice = page(&format!(
+            "type: how-to\ndescription: {}\ndescription: {}",
+            "d".repeat(130),
+            "d".repeat(140)
+        ));
+        let marked = page(&format!(
+            "type: how-to\ndescription: `Load` {}",
+            "d".repeat(120)
+        ));
+        let padded = page(&format!("type: how-to\ndescription: {} ", "d".repeat(119)));
+        assert_eq!(
+            page_problems("hooks.md", &twice),
+            ["book/src/hooks.md: the opening comment has `description` twice"]
+        );
+        assert_eq!(
+            page_problems("hooks.md", &marked),
+            [
+                "book/src/hooks.md: the description is plain text for search snippets, without backticks or links"
+            ]
+        );
+        assert_eq!(
+            page_problems("hooks.md", &padded),
+            ["book/src/hooks.md: the description has 119 characters; keep it within 120 to 160"]
+        );
+    }
+
+    #[test]
+    fn a_book_with_an_untyped_chapter_fails_the_check() {
+        let root = std::env::temp_dir().join(format!("xtask-book-{}", std::process::id()));
+        let source = root.join(SOURCE);
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(root.join("crates/enshwick/src")).unwrap();
+        for harness in HARNESSES {
+            std::fs::write(root.join(harness), r#""hooks.md""#).unwrap();
+        }
+        std::fs::write(source.join("SUMMARY.md"), "- [Hooks](hooks.md)\n").unwrap();
+        std::fs::write(source.join("hooks.md"), "# Hooks\n\nA hook runs first.\n").unwrap();
+        let found = check(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(
+            found,
+            [
+                "book/src/hooks.md: opens with no <!-- type: … description: … --> comment on lines of their own"
+            ]
+        );
     }
 
     #[test]

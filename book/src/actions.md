@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod declares what players and administrators can do as actions, and the platform offers them on the Mods screen, from the mod's controls and on the console.
+-->
+
 # Player actions
 
 Unstable: everything in this chapter needs the `unstable` feature and may

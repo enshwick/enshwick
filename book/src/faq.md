@@ -1,3 +1,8 @@
+<!--
+type: reference
+description: Where the Enshwick logs, crash files and status summary are, why a mod is off, why a join was refused, and how to remove a mod or the loader from the game.
+-->
+
 # FAQ and troubleshooting
 
 ## Where are the logs?

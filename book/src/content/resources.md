@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Load::serve serves any game resource, new or changed, as if it came from the game's archive. Items, recipes and workshops are built on this lower-level call.
+-->
+
 # Served resources
 
 Items, recipes and workshops are built on one lower-level call,

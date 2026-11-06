@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A game rate multiplies something the game hands out, such as experience or workshop speed. A mod declares each rate in init and sets its factor while it runs.
+-->
+
 # Game rates
 
 Unstable: everything in this chapter needs the `unstable` feature and may

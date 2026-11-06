@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Stats are named numbers on entities, such as extra health or a chance to crit. Items, buffs and mods modify them, and a mod defines stat kinds of its own.
+-->
+
 # Stats
 
 Stats are named numbers on entities: extra health, a chance to crit, a

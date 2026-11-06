@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: The Effects handle of a mod raises game events in the server's world, teleports entities and spawns them, from event handlers, tasks and player actions.
+-->
+
 # Effects
 
 [`load.effects()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/effects.rs)

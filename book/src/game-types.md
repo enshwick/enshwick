@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Every component, event and resource the game reflects has a typed Rust item in enshwick::typed. For any other struct, cargo enshwick types writes one.
+-->
+
 # The game's own types
 
 Every component, event and resource the game reflects has a typed Rust item in

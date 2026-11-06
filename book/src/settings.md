@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod's settings belong to each world and lie beside its save. The loader writes them from the mod's settings types as the world loads, and the mod reads them.
+-->
+
 # Settings
 
 A mod's settings belong to each world, beside its save in

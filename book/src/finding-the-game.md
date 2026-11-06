@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod never hard-codes a game address. It asks the loader by name during init, and the loader answers with the function or value for the game build that runs.
+-->
+
 # Finding the game
 
 Addresses in the game change with every update, so a mod never hard-codes one.

@@ -1,3 +1,8 @@
+<!--
+type: reference
+description: The C ABI between the Enshwick loader and a mod: versions, exports, the manifest, status codes, ids, events and the host table, for logs and raw calls.
+-->
+
 # ABI reference
 
 The loader and a mod talk through a C ABI. Mods normally use the safe layer

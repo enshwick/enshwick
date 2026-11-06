@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Read the containers a dead enemy leaves, corpses and loot bags, and other containers that dissolve once emptied. Their items are emptied through inventories.
+-->
+
 # Loot containers
 
 [`enshwick::loot`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
@@ -31,6 +36,27 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     })
 }
 ```
+
+```luau
+local spot = vector.create(0, 0, 0)
+
+enshwick.loot.on_loot_pass(function(containers)
+    local open = 0
+    for _, c in containers do
+        local offset = c.position - spot
+        local across = vector.magnitude(vector.create(offset.x, 0, offset.z))
+        local enemy_loot = c.expires and c.area_loot == true
+        if enemy_loot and not c.is_empty and c.offer and not c.offer.is_disabled
+            and across <= 12 and math.abs(offset.y) <= 4 then
+            open += 1
+        end
+    end
+end)
+```
+
+A Luau handler gets the pass's containers as a list of `Container` tables,
+the fields of the table under [Reading one container](#reading-one-container);
+`is_open()` and `near` are the checks the Luau example spells out.
 
 `each` leaves the system's row where it found it, so the walk does not
 disturb vanilla. Keep the handler short; it runs every step. A mod that walks

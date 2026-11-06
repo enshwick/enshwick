@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: What a mod keeps for a world lies beside that world's save, so copying the save folder moves its mod data too. A mod's installation lies in its folder in mods.
+-->
+
 # State and data folders
 
 What a mod keeps for a world lies beside that world's save, so copying the

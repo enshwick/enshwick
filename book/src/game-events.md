@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: The game's systems tell each other what happens through ECS events. A mod observes them, typed for the common ones and by reflected name for any other.
+-->
+
 # Game events
 
 The game's own systems tell each other what happens through ECS events.

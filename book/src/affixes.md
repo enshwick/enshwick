@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: An affix is a named bundle of stat modifiers whose values roll within ranges. Items roll affixes as they drop or are crafted; their wearer gets the modifiers.
+-->
+
 # Affixes
 
 An affix is a named bundle of [stat](stats.md) modifiers whose values roll

@@ -1,3 +1,8 @@
+<!--
+type: explanation
+description: How the Enshwick loader and a mod work together: the ABI, the life of a mod, sides and hosting, the join check, threads and typed types across game builds.
+-->
+
 # Concepts
 
 These pages say how the loader and a mod work together. Read them once

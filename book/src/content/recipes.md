@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: Add a single recipe or derive recipes from vanilla ones, set their kind and place in the crafting menu, and keep within the game's workshop limit.
+-->
+
 # Recipes
 
 Two calls add recipes:
@@ -97,6 +102,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
             .then_some(Derived { output: 2, cost: 1, workshop: None })
     })
 }
+```
+
+```luau
+enshwick.content.derive_recipes("my-mod", function(recipe)
+    if string.sub(recipe.debug_name, 1, 6) == "Block_" then
+        return { output = 2, cost = 1 }
+    end
+    return nil
+end)
 ```
 
 Each copy has the original's workshop and unlock, unless `workshop` moves

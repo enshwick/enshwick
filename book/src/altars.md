@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: A mod reads the Flame Altars of a world through a handle it asks for in init: each altar's entity, level and build zone, and an event when the altars change.
+-->
+
 # Altars and bases
 
 Flame Altars are game data, so the platform reads them for every mod. A mod

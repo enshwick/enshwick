@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: The World handle reads and writes entities and their components in the server's world, finds them, destroys them, and reads players, build rights and labels.
+-->
+
 # The world
 
 Unstable: everything in this chapter needs the `unstable` feature and may

@@ -1,3 +1,8 @@
+<!--
+type: how-to
+description: The engine paces its loops with waits on handles and sizes its thread pools from the CPUs it sees. A mod changes these places to make the game use less CPU.
+-->
+
 # Pacing and threads
 
 The engine paces its loops with waits on handles and sizes its thread pools
@@ -63,6 +68,21 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+```luau
+local ONLINE_WAIT_NS = "1000000"
+
+enshwick.pacing.on_server_wait(function(wait_ns)
+    if wait_ns == ONLINE_WAIT_NS then
+        return "2000000"
+    end
+    return nil
+end)
+```
+
+A Luau handler gets the wait as decimal text, since a Luau number cannot
+hold every `u64`, and returns the new wait as text or `nil` to keep it. The
+constants are Rust items; `SERVER_ONLINE_WAIT_NS` is 1,000,000.
+
 ## Task workers
 
 The engine starts a worker thread per logical CPU in each task group, up to
@@ -83,6 +103,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     Ok(())
 }
 ```
+
+```luau
+if not enshwick.pacing.cap_task_workers({ default = 4, background = 4 }) then
+    enshwick.log.info("the task workers stay as the game sizes them")
+end
+```
+
+A Luau mod names both caps; `TaskWorkers::at_most(4)` is the Rust way to
+give both the same value.
 
 [`SERVER_IDLE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
 [`SERVER_ONLINE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
