@@ -78,6 +78,7 @@ mod typed {
         Enemies => "content/enemies.md",
         Spawns => "content/spawns.md",
         Knowledge => "content/knowledge.md",
+        Journal => "content/journal.md",
     }
 }
 

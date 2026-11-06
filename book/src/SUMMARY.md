@@ -31,6 +31,7 @@
   - [Disabling recipes](content/disabled-recipes.md)
   - [Workshops](content/workshops.md)
   - [Knowledge entries](content/knowledge.md)
+  - [Quests and journal pages](content/journal.md)
   - [Random loot](content/random-loot.md)
   - [Loot containers](content/loot.md)
   - [What players do with items](content/item-actions.md)
