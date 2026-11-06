@@ -77,6 +77,7 @@ mod typed {
         Props => "content/props.md",
         Enemies => "content/enemies.md",
         Spawns => "content/spawns.md",
+        Knowledge => "content/knowledge.md",
     }
 }
 

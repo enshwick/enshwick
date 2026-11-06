@@ -398,8 +398,9 @@ impl Load<'_> {
     /// and saves it like a vanilla entry; a player's entry gives its skill
     /// points and experience when granted.
     ///
-    /// A save keeps the values of the mod's entries; without the mod the
-    /// game no longer knows them.
+    /// A save keeps the values of the mod's entries while the mod runs; a
+    /// save made without the mod drops them, so they read 0 when the mod
+    /// comes back (server 399, read on a server copy).
     ///
     /// # Errors
     ///
