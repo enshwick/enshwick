@@ -616,7 +616,12 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
             loader.emit(Event::WORLD_LOADED, None, core::ptr::null());
         }
         STATE_SHUTDOWN if old != STATE_SHUTDOWN => {
-            loader.emit(Event::SHUTDOWN_STARTED, None, core::ptr::null());
+            // The game asks for its final save on a later pass of the
+            // server's loop, through the same request a hold refuses
+            // (server 26430253).
+            crate::saves::shut_down(loader, || {
+                loader.emit(Event::SHUTDOWN_STARTED, None, core::ptr::null());
+            });
             if loader.side == Side::CLIENT {
                 end_session();
                 crate::chat::forget();

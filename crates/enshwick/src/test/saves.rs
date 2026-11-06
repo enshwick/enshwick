@@ -32,6 +32,26 @@ impl Installed {
         table::with((), |s| s.save.info = info);
     }
 
+    /// Shuts the hosted game down as the loader does: the mod's hold on saves
+    /// lets go, [`ShutdownStarted`](crate::events::ShutdownStarted) reaches
+    /// the mod, and the final save runs unless the mod held saves again from
+    /// that event on; whether it ran.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().world().install();
+    /// assert!(loader.shut_down(), "nothing holds the final save");
+    /// ```
+    #[must_use = "the answer says whether the final save ran"]
+    pub fn shut_down(&self) -> bool {
+        table::with((), |s| s.save.held = false);
+        // SAFETY: the event carries no data.
+        let _heard =
+            unsafe { self.raise_raw(crate::abi::Event::SHUTDOWN_STARTED, core::ptr::null()) };
+        table::with(false, |s| !s.save.held)
+    }
+
     /// Whether the mod holds the world's saves.
     ///
     /// # Examples
