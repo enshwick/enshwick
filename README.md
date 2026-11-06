@@ -1,8 +1,9 @@
 # Enshwick
 
-Enshwick is a modding API platform for [Enshrouded](https://enshrouded.com). Mod
-makers write mods against its API. The Enshwick loader comes with the platform
-and runs every mod, so players install one thing.
+Enshwick is the modding framework and API for
+[Enshrouded](https://enshrouded.com), with a mod loader for PCs and dedicated
+servers. Mod makers write mods against its API; players install the loader once,
+and it runs every mod.
 
 ## For mod makers
 
@@ -90,11 +91,19 @@ server's from the same page. The server's console also takes
 again. A world's `<save>-mod-settings/enshwick/enshwick.toml` holds the
 loader's own rule for it, `require_enshwick`.
 
+### Recipes taken out of a world
+
 A world's `<save>-mod-settings/enshwick/recipes.toml` takes recipes out of
-that world ([Disabling recipes](book/src/content/disabled-recipes.md)). The logs are in
-`logs/`, one file per source and run, such as
-`logs/enshwick_2026-11-03_10-00-00.log`; `enshwick.toml` in the game's folder
-sets how much they keep.
+that world ([Disabling recipes](book/src/content/disabled-recipes.md)).
+
+### Logs
+
+The logs are in `logs/`, one file per source and run, such as
+`logs/enshwick_2026-11-03_10-00-00.log`.
+
+### The loader's own file
+
+`enshwick.toml` in the game's folder sets how much the logs keep.
 
 ## What is in this repository
 
