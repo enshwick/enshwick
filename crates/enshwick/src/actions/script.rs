@@ -432,6 +432,21 @@ impl Actions {
     ) -> Result<(), Off> {
         self.run_at(action, &args, target)
     }
+
+    /// Puts the declared action `action` on `key`, as [`Actions::control`]
+    /// does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Actions::control`].
+    #[script(name = "control")]
+    pub(crate) fn control_script(
+        &self,
+        action: &str,
+        key: crate::controls::Key,
+    ) -> Result<(), Off> {
+        self.control(action, key)
+    }
 }
 
 /// The free functions of [`actions`](super) as a script's namespace

@@ -120,6 +120,35 @@ A control that only runs an action without arguments names it with
 `.runs("honk")` instead: the client sends the run each time the control
 fires, and the handler still runs on the client.
 
+`actions.control(id, key)` does all of that in one call, after
+`actions.add`: it declares a control named after the action, on `key`,
+that runs the action at each press. Its label is the action's label, a key
+of the texts the mod gave `load.actions`, so the Controls page shows it in
+each player's language. An action with arguments or a list of players
+takes no key.
+
+```rust
+use enshwick::actions::{Action, Outcome};
+use enshwick::controls::Key;
+use enshwick::i18n::Texts;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let texts = Texts::parse("[en]\n\"honk\" = \"Honk\"\n\n[uk]\n\"honk\" = \"Посигналити\"\n")?;
+    let actions = load.actions(texts)?;
+    actions.add(Action::new("honk", "honk"), |_| Outcome::done("Honk!"))?;
+    actions.control("honk", Key::parse("H")?)?;
+    Ok(())
+}
+```
+
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.parse('[en]\n"honk" = "Honk"\n\n[uk]\n"honk" = "Посигналити"\n'))
+actions:add({ id = "honk", label = "honk" }, function()
+    return enshwick.actions.done("Honk!")
+end)
+actions:control("honk", "H")
+```
+
 ## A mod that runs on the server only
 
 A mod of side `server` has no code on the players' clients, so it declares
@@ -133,7 +162,7 @@ player without Enshwick gets nothing and plays on.
 
 ```rust
 use enshwick::actions::{Action, Outcome};
-use enshwick::controls::{Control, Key};
+use enshwick::controls::Key;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts_from(
@@ -141,7 +170,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     )?;
     let actions = load.actions(texts)?;
     actions.add(Action::new("day", "day").admins(), |_| Outcome::done("Morning"))?;
-    load.control(Control::new("day", "day").key(Key::parse("F8")?).runs("day"), |_| {})?;
+    actions.control("day", Key::parse("F8")?)?;
     Ok(())
 }
 ```
@@ -152,8 +181,11 @@ local actions = enshwick.actions.actions(texts)
 actions:add({ id = "day", label = "day", admins = true }, function()
     return enshwick.actions.done("Morning")
 end)
-enshwick.controls.control({ name = "day", label = "day", key = "F8", runs = "day" }, function() end)
+actions:control("day", "F8")
 ```
+
+A control declared with `load.control` and `.runs` does the same with a
+handler of its own.
 
 The server sends up to 24 such controls a mod, each label cut to 160 bytes;
 a client keeps those of up to 32 mods. While a client

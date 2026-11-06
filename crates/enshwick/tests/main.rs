@@ -7,6 +7,8 @@ mod abi_versions;
 #[cfg(feature = "unstable")]
 mod accounts;
 #[cfg(feature = "unstable")]
+mod action_keys;
+#[cfg(feature = "unstable")]
 mod action_targets;
 #[cfg(feature = "unstable")]
 mod actions;

@@ -158,6 +158,11 @@ its index from 0, as in Rust. The handler returns
 done without a text. A Luau client runs an action with
 `actions:run(id, values)`.
 
+`actions.control(id, key)` puts an action without arguments on a key in
+one call, labelled with the action's label in each player's language; in
+Luau it is `actions:control(id, key)`. [Controls](controls.md#changing-the-world)
+shows it.
+
 The server decides everything. It checks `.allow` and runs `.at` again on
 every run, whatever the client sent, and refuses values outside their
 types and ranges before the handler sees them. A mod's own permission rules,

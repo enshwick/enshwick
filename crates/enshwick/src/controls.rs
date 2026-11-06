@@ -485,7 +485,7 @@ impl Load<'_> {
     }
 }
 
-fn declare<F>(host: crate::Host, control: &Control, on: F) -> Result<(), Off>
+pub(crate) fn declare<F>(host: crate::Host, control: &Control, on: F) -> Result<(), Off>
 where
     F: Fn(&Fired<'_>) + Send + Sync + 'static,
 {

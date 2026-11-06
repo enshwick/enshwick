@@ -341,7 +341,8 @@ impl Installed {
     }
 
     /// The mod's controls as the controls page lists them: name, label and
-    /// the keys in force.
+    /// the keys in force. As in the loader, the label is a key of the texts
+    /// the mod handed over, in the fake's language, else as written.
     ///
     /// # Examples
     ///
@@ -352,10 +353,21 @@ impl Installed {
     #[must_use]
     pub fn controls(&self) -> Vec<(String, String, [Option<Key>; 2])> {
         with(Vec::new(), |s| {
+            let texts = s
+                .published_texts
+                .as_deref()
+                .and_then(|toml| crate::i18n::Texts::parse(toml).ok());
+            let language = crate::i18n::Language(s.host.language);
             s.controls
                 .controls
                 .iter()
-                .map(|c| (c.name.clone(), c.label.clone(), c.keys))
+                .map(|c| {
+                    let label = texts
+                        .as_ref()
+                        .and_then(|t| t.get(&c.label, language))
+                        .unwrap_or(&c.label);
+                    (c.name.clone(), label.to_owned(), c.keys)
+                })
                 .collect()
         })
     }

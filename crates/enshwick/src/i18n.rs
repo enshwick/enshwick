@@ -620,6 +620,23 @@ impl Texts {
 static HANDED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, Texts)>>> =
     crate::fresh::Fresh::new();
 
+/// Adds `texts` to what the loader keeps of the mod `host` names, which
+/// labels its settings and controls in each reader's language.
+pub(crate) fn hand(host: Host, texts: &Texts) {
+    // The loader keeps the last texts it was given, so it gets all of this
+    // mod's, a pack's added to the mod's own.
+    let me = host.handle();
+    let mut handed = HANDED.get_or_init(std::sync::Mutex::default).relock();
+    let all = if let Some((_, kept)) = handed.iter_mut().find(|(owner, _)| *owner == me) {
+        kept.merge(texts.clone());
+        kept.to_toml()
+    } else {
+        handed.push((me, texts.clone()));
+        texts.to_toml()
+    };
+    let _kept = (host.api().texts)(me, crate::abi::Str::new(&all));
+}
+
 impl Load<'_> {
     /// The mod's texts: its `src/texts.toml`, which
     /// [`declare_mod!`](crate::declare_mod) embeds and checks. The loader
@@ -668,19 +685,7 @@ impl Load<'_> {
     /// ```
     pub fn texts_from(&mut self, toml: &str) -> Result<Texts, Off> {
         let texts = Texts::parse(toml)?;
-        let api = self.host().api();
-        // The loader keeps the last texts it was given, so it gets all
-        // of this mod's, a pack's added to the mod's own.
-        let me = self.host().handle();
-        let mut handed = HANDED.get_or_init(std::sync::Mutex::default).relock();
-        let all = if let Some((_, kept)) = handed.iter_mut().find(|(owner, _)| *owner == me) {
-            kept.merge(texts.clone());
-            kept.to_toml()
-        } else {
-            handed.push((me, texts.clone()));
-            texts.to_toml()
-        };
-        let _kept = (api.texts)(me, crate::abi::Str::new(&all));
+        hand(self.host(), &texts);
 
         Ok(texts)
     }
