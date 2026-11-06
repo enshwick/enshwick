@@ -74,6 +74,8 @@ mod item_changes;
 mod item_data;
 #[cfg(feature = "unstable")]
 mod items;
+#[cfg(feature = "typed")]
+mod journal;
 mod knowledge;
 #[cfg(feature = "typed")]
 mod knowledge_content;

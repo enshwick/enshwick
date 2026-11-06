@@ -424,9 +424,16 @@ impl Load<'_> {
     /// ```
     #[script]
     pub fn add_knowledge(&mut self, new: NewKnowledge) -> Result<KnowledgeId, Off> {
-        let key = KnowledgeId::from_guid(new.id.guid()).get();
-        new.to_value(key)?;
+        new.to_value(KnowledgeId::from_guid(new.id.guid()).get())?;
         self.declare(new.id)?;
+        self.serve_knowledge(new)
+    }
+}
+
+impl Load<'_> {
+    /// Serves the game's knowledge with `new`, whose id the mod declared.
+    pub(super) fn serve_knowledge(&self, new: NewKnowledge) -> Result<KnowledgeId, Off> {
+        let key = KnowledgeId::from_guid(new.id.guid()).get();
         let resource = GAME_KNOWLEDGE.key_by_hash(self.hash(GameKnowledgeResource::ID)?);
         // shortcut: each entry decodes and encodes the whole resource once at its first build; batch a mod's entries when a mod adds hundreds.
         crate::resources::serve_value(self.host(), resource, resource, move |value| {

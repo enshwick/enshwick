@@ -11,6 +11,19 @@ const KNOWLEDGE: &str = "demo::GameKnowledgeResource";
 const OBJECT: &str = "demo::KnowledgeObjectResource";
 const WORLD_OBJECT: &str = "demo::WorldKnowledgeObjectResource";
 const PLAYER_OBJECT: &str = "demo::PlayerKnowledgeObjectResource";
+const JOURNAL: &str = "demo::JournalRegistryResource";
+const COLLECTION: &str = "demo::JournalCollectionResource";
+const QUEST: &str = "demo::JournalQuestResource";
+/// Each player's quest progression component.
+pub const PROGRESSION: &str = "demo::ecs::PlayerQuestProgressionMode";
+
+/// The vanilla quest of the fake's journal, a world's main quest of one
+/// step.
+pub const VANILLA_QUEST: u32 = 0x0000_0500;
+/// The item [`VANILLA_QUEST`] pays.
+pub const QUEST_ITEM: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000a0e57");
+/// The document the fake's journal entries name.
+const VANILLA_DOCUMENT: u32 = 0x0000_0506;
 
 /// A vanilla bool of the fake's players' knowledge, which gives a skill
 /// point.
@@ -145,7 +158,209 @@ fn knowledge_types() -> Vec<Type<'static>> {
     ];
     types.extend(map("demo::WorldKnowledgeMap", WORLD_OBJECT));
     types.extend(map("demo::PlayerKnowledgeMap", PLAYER_OBJECT));
+    types.extend(journal_types());
     types
+}
+
+/// An enum type of `constants`, one byte.
+fn enumeration(name: &'static str, constants: &[&'static str]) -> Type<'static> {
+    let constants = constants
+        .iter()
+        .zip(0..)
+        .map(|(&name, value)| Constant::new(name, value))
+        .collect();
+    Type::new(name, Kind::Enum, 1, 1)
+        .with_inner("demo::uint8")
+        .with_constants(constants)
+}
+
+/// The journal and every type it holds, laid out as the game lays them out
+/// (server 387); its ids and text tags are `HashKey32`s here.
+fn journal_types() -> Vec<Type<'static>> {
+    let field = Field::new;
+    let key = "demo::HashKey32";
+    vec![
+        Type::new("demo::ecs::Component", Kind::Struct, 1, 1),
+        named(
+            PROGRESSION,
+            8,
+            4,
+            vec![
+                field("isInPersonalProgressionMode", 0, "demo::bool"),
+                field("changeCounter", 4, "demo::uint32"),
+            ],
+        )
+        .with_inner("demo::ecs::Component"),
+        enumeration(
+            "demo::CompareOperator",
+            &["GreaterThan", "LessThan", "Equals"],
+        ),
+        enumeration(
+            "demo::KnowledgeQueryDataType",
+            &["Extern", "SimpleBool", "SimpleCount", "SimpleFlag"],
+        ),
+        enumeration("demo::QuestSourceType", &["None", "Flame", "Blacksmith"]),
+        enumeration("demo::QuestType", &["Auto", "WorldQuest", "PlayerQuest"]),
+        named(
+            "demo::KnowledgeQueryData",
+            12,
+            4,
+            vec![
+                field("knowledgeOrQueryId", 0, key),
+                field("compareValue", 4, "demo::uint32"),
+                field("compareOperator", 8, "demo::CompareOperator"),
+                field("type", 9, "demo::KnowledgeQueryDataType"),
+                field("isExplicitPlayerKnowledgeQuery", 10, "demo::bool"),
+            ],
+        ),
+        blobs("demo::KnowledgeQueryData"),
+        Type::new(
+            "demo::ObjectReference<demo::Item>",
+            Kind::ObjectReference,
+            16,
+            4,
+        ),
+        Type::new(
+            "demo::ObjectReference<demo::Voiceover>",
+            Kind::ObjectReference,
+            16,
+            4,
+        ),
+        named(
+            "demo::JournalEntryResource",
+            72,
+            4,
+            vec![
+                field("entryId", 0, key),
+                field("name", 4, key),
+                field("text", 8, key),
+                field("mapMarkerReference", 12, key),
+                field("knowledgeRequirement", 16, "demo::KnowledgeQueryData"),
+                field("completionRequirement", 28, "demo::KnowledgeQueryData"),
+                field(
+                    "progressStepsRequirement",
+                    40,
+                    "demo::BlobArray<demo::KnowledgeQueryData>",
+                ),
+                field("voiceover", 48, "demo::ObjectReference<demo::Voiceover>"),
+                field("itemIconId", 64, key),
+                field("recommendedLevel", 68, "demo::uint8"),
+            ],
+        ),
+        blobs("demo::JournalEntryResource"),
+        named(
+            COLLECTION,
+            32,
+            4,
+            vec![
+                field("entryId", 0, key),
+                field("loreCategory", 4, key),
+                field("name", 8, key),
+                field("referencedDocumentName", 12, key),
+                field("priority", 16, "demo::uint32"),
+                field("isTutorial", 20, "demo::bool"),
+                field("entries", 24, "demo::BlobArray<demo::JournalEntryResource>"),
+            ],
+        ),
+        blobs(COLLECTION),
+        named(
+            "demo::QuestRewardResource",
+            24,
+            4,
+            vec![
+                field("itemRef", 0, "demo::ObjectReference<demo::Item>"),
+                field("itemId", 16, key),
+                field("experienceValueId", 20, key),
+            ],
+        ),
+        blobs("demo::QuestRewardResource"),
+        named(
+            QUEST,
+            44,
+            4,
+            vec![
+                field("source", 32, "demo::QuestSourceType"),
+                field("type", 33, "demo::QuestType"),
+                field("isMainQuest", 34, "demo::bool"),
+                field("unlockForAllPlayers", 35, "demo::bool"),
+                field("rewards", 36, "demo::BlobArray<demo::QuestRewardResource>"),
+            ],
+        )
+        .with_inner(COLLECTION),
+        blobs(QUEST),
+        named(
+            JOURNAL,
+            16,
+            4,
+            vec![
+                field("quests", 0, "demo::BlobArray<demo::JournalQuestResource>"),
+                field(
+                    "collections",
+                    8,
+                    "demo::BlobArray<demo::JournalCollectionResource>",
+                ),
+            ],
+        ),
+    ]
+}
+
+/// A `HashKey32` of `key`.
+fn hash_key(key: u32) -> Value {
+    fields(vec![("value", Value::Uint(key.into()))])
+}
+
+/// The vanilla journal, as the codec writes it: [`VANILLA_QUEST`], one step
+/// shown on [`VANILLA_PLAYER_KNOWLEDGE`], paying the item [`QUEST_ITEM`].
+fn journal_value() -> Value {
+    let query = |id: u32, kind: &str| {
+        fields(vec![
+            ("knowledgeOrQueryId", hash_key(id)),
+            ("compareValue", Value::Uint(1)),
+            ("compareOperator", Value::Name("Equals".into())),
+            ("type", Value::Name(kind.into())),
+            ("isExplicitPlayerKnowledgeQuery", Value::Bool(true)),
+        ])
+    };
+    let step = fields(vec![
+        ("entryId", hash_key(0x0000_0501)),
+        ("name", hash_key(0x0000_0502)),
+        ("text", hash_key(0x0000_0503)),
+        ("mapMarkerReference", hash_key(0)),
+        (
+            "knowledgeRequirement",
+            query(VANILLA_PLAYER_KNOWLEDGE, "SimpleBool"),
+        ),
+        ("completionRequirement", query(0x0000_0504, "Extern")),
+        ("progressStepsRequirement", Value::List(Vec::new())),
+        ("voiceover", Value::Guid(Guid([0; 16]))),
+        ("itemIconId", hash_key(0)),
+        ("recommendedLevel", Value::Uint(1)),
+    ]);
+    let quest = fields(vec![
+        ("entryId", hash_key(VANILLA_QUEST)),
+        ("loreCategory", hash_key(0)),
+        ("name", hash_key(0x0000_0505)),
+        ("referencedDocumentName", hash_key(VANILLA_DOCUMENT)),
+        ("priority", Value::Uint(100)),
+        ("isTutorial", Value::Bool(false)),
+        ("entries", Value::List(vec![step])),
+        ("source", Value::Name("Flame".into())),
+        ("type", Value::Name("WorldQuest".into())),
+        ("isMainQuest", Value::Bool(true)),
+        ("unlockForAllPlayers", Value::Bool(false)),
+        (
+            "rewards",
+            Value::List(vec![fields(vec![
+                ("itemRef", Value::Guid(QUEST_ITEM)),
+                ("itemId", hash_key(QUEST_ITEM.fnv1a())),
+                ("experienceValueId", hash_key(0)),
+            ])]),
+        ),
+    ]);
+    fields(vec![
+        ("quests", Value::List(vec![quest])),
+        ("collections", Value::List(Vec::new())),
+    ])
 }
 
 /// A struct value of `fields`.
@@ -247,7 +462,15 @@ impl FakeHost {
             let key = Guid::parse("cb1eeb8b-f58a-4785-bf0f-6dd5437e9a5b");
             host = host.resource(key.key_by_hash(hash(KNOWLEDGE)), bytes);
         }
+        if let Ok(bytes) = registry.encode(JOURNAL, &journal_value(), None) {
+            // `content::journal::JOURNAL_REGISTRY`.
+            let key = Guid::parse("33701b26-ec1d-423f-8e06-49f023b91b7f");
+            host = host.resource(key.key_by_hash(hash(JOURNAL)), bytes);
+        }
         host.type_hash("GameKnowledgeResource", hash(KNOWLEDGE))
+            .type_hash("JournalRegistryResource", hash(JOURNAL))
+            .type_hash("ecs::PlayerQuestProgressionMode", hash(PROGRESSION))
+            .type_size("ecs::PlayerQuestProgressionMode", 8)
     }
 }
 
@@ -266,5 +489,7 @@ mod tests {
             read.field("skillPoints"),
             knowledge_value().field("skillPoints")
         );
+        let bytes = registry.encode(JOURNAL, &journal_value(), None).unwrap();
+        assert_eq!(registry.decode(JOURNAL, &bytes).unwrap(), journal_value());
     }
 }

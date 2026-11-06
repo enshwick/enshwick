@@ -112,7 +112,9 @@ pub use content::{LiveChange, ServedResource};
 pub use hooks::LinkedHook;
 pub use inventory::SubmittedRequest;
 #[cfg(feature = "typed")]
-pub use progression::{VANILLA_PLAYER_KNOWLEDGE, VANILLA_WORLD_KNOWLEDGE};
+pub use progression::{
+    PROGRESSION, QUEST_ITEM, VANILLA_PLAYER_KNOWLEDGE, VANILLA_QUEST, VANILLA_WORLD_KNOWLEDGE,
+};
 pub use settings::SettingsRefused;
 pub use templates::{
     BITE, BOSS_CREATURE, CRAFTING_PROP_ITEM, CREATURE, ENEMY, ENEMY_ARSENAL, HOWL, LUNGE, NEST,

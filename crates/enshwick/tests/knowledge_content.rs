@@ -122,7 +122,7 @@ mod tests {
 
     /// The entry the game's lookup finds for `id` in `map`: the run of its
     /// bucket, the id masked by the bucket count less one.
-    fn find<'a>(map: &'a Value, id: u32) -> Option<&'a Value> {
+    fn find(map: &Value, id: u32) -> Option<&Value> {
         let (Some(Value::List(entries)), Some(Value::List(keys)), Some(Value::List(values))) =
             (map.field("entries"), map.field("keys"), map.field("values"))
         else {
