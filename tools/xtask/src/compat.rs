@@ -790,6 +790,39 @@ mod tests {
             let file = report_file(first.side, first.fingerprint);
             let want = read(&file).unwrap_or_else(|e| panic!("{}: {file}: {e}", exe.display()));
             let stated: toml::Table = want.parse().unwrap();
+            let dir = exe.parent().unwrap();
+            if dir.join("steamapps").is_dir() {
+                let steam = number(&stated, "steam_build").and_then(|n| u64::try_from(n).ok());
+                assert_eq!(first.steam, steam, "{}", exe.display());
+            }
+            let archive = exe.with_extension("kfc");
+            if archive.is_file() {
+                let version = number(&stated, "game_version").and_then(|n| u64::try_from(n).ok());
+                assert_eq!(first.game_version, version, "{}", exe.display());
+            }
+            let shown = std::env::temp_dir().join(format!("enshwick-compat-{file}.md"));
+            args.report = Some(shown.clone());
+            let works = run(&args).unwrap();
+            let text = std::fs::read_to_string(&shown).unwrap();
+            let _gone = std::fs::remove_file(&shown);
+            let entries = number(&stated, "entries").unwrap();
+            assert!(
+                text.contains(&format!("The loader finds {entries} entries")),
+                "{text}"
+            );
+            assert!(
+                text.contains("A compatibility report of this loader covers"),
+                "{text}"
+            );
+            assert_eq!(
+                text.contains("attribute slots.\n"),
+                archive.is_file(),
+                "{text}"
+            );
+            let complete = stated["missing"].as_array().is_some_and(Vec::is_empty)
+                && !stated.contains_key("unread");
+            assert_eq!(works, complete, "{}", exe.display());
+            args.report = None;
             args.steam_build = number(&stated, "steam_build").and_then(|n| u64::try_from(n).ok());
             args.game_version = number(&stated, "game_version").and_then(|n| u64::try_from(n).ok());
             assert_eq!(
