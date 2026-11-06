@@ -65,6 +65,18 @@ mod tests {
                 note,
             )?;
             load.control(Control::new("nitro", "Nitro").key(Key::parse("N")?), note)?;
+            load.control(
+                Control::new("flash", "Flash the lights")
+                    .key(Key::parse("F")?)
+                    .fires(&[Phase::Press, Phase::Release])
+                    .runs("honk"),
+                note,
+            )?;
+            assert!(
+                load.control(Control::new("wipe", "Wipe").runs("Wipers"), note)
+                    .is_err(),
+                "an action id is 1 to 32 of [a-z0-9-]"
+            );
             assert!(
                 load.control(Control::new("horn", "Again"), note).is_err(),
                 "a name is declared once"
@@ -122,7 +134,7 @@ mod tests {
         assert_eq!(
             listed,
             [
-                "horn", "boost", "enter", "brake", "lights", "dim", "map", "nitro"
+                "horn", "boost", "enter", "brake", "lights", "dim", "map", "nitro", "flash"
             ]
         );
         let tick = Duration::from_millis(16);
@@ -131,6 +143,25 @@ mod tests {
         assert_eq!(loader.keys(&[], tick), 0, "no release asked for");
         assert_eq!(taken(), [("horn".to_owned(), Phase::Press, None)]);
         assert_eq!(loader.action_runs(), [("honk".to_owned(), "b1".to_owned())]);
+    }
+
+    #[test]
+    fn a_control_that_runs_an_action_asks_the_server_each_time_it_fires() {
+        let loader = client();
+        let tick = Duration::from_millis(16);
+        assert_eq!(loader.keys(&[key("F")], tick), 1);
+        assert_eq!(loader.keys(&[key("F")], tick), 0, "held, not repeated");
+        assert_eq!(loader.keys(&[], tick), 1);
+        assert_eq!(
+            taken(),
+            [
+                ("flash".to_owned(), Phase::Press, None),
+                ("flash".to_owned(), Phase::Release, None)
+            ]
+        );
+        let honk = ("honk".to_owned(), String::new());
+        assert_eq!(loader.action_runs(), [honk.clone(), honk]);
+        assert_eq!(loader.action_targets(), [None, None]);
     }
 
     #[test]

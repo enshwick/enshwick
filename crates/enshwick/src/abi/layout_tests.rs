@@ -248,7 +248,7 @@ shapes! {
         ChatRewrite { header, buffer, capacity, len },
         UiExtension { header, screen, edge, reserved },
         ItemAction { header, kind, player, item, count, inventory, slot },
-        ControlSpec { header, name, label, key, second, link, fires, hold_ms },
+        ControlSpec { header, name, label, key, second, link, fires, hold_ms, action },
         ControlEvent { header, name, kind, server, reserved, player },
         AccountActionType { 0 },
         LoopWaitData { header, ms, reserved, left_ns },

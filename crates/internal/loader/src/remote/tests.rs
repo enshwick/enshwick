@@ -160,6 +160,137 @@ fn messages_round_trip() {
     assert!(most.body().len() + 2 <= 720 * 8 - 2);
 }
 
+fn horn() -> Carried {
+    Carried {
+        name: "horn".into(),
+        label: "Сурма".into(),
+        action: "honk".into(),
+        keys: [0x23, 0],
+        fires: 1,
+        hold_ms: 500,
+    }
+}
+
+fn controls(controls: Vec<Carried>) -> Message {
+    Message::Controls {
+        id: "you.cars".into(),
+        name: "Cars".into(),
+        controls,
+    }
+}
+
+#[test]
+fn a_server_s_controls_round_trip_up_to_their_bound() {
+    let most = Message::Controls {
+        id: format!("{}.{}", "a".repeat(31), "b".repeat(32)),
+        name: "й".repeat(MAX_CARRIED_TEXT / 2),
+        controls: (0..MAX_CARRIED)
+            .map(|at| Carried {
+                name: format!("{at:0>32}"),
+                label: "й".repeat(MAX_CARRIED_TEXT / 2),
+                action: "a".repeat(32),
+                keys: [0x23, 0x24],
+                ..horn()
+            })
+            .collect(),
+    };
+    assert!(most.body().len() + 2 <= crate::wire::MAX_CONTROL);
+    for message in [controls(Vec::new()), controls(vec![horn()]), most] {
+        assert_eq!(
+            Message::read(message.kind(), &message.body()),
+            Some(message)
+        );
+    }
+}
+
+#[test]
+fn a_client_refuses_a_server_s_controls_out_of_bounds() {
+    let refused = |message: Message| Message::read(CONTROLS, &message.body()).is_none();
+    assert!(refused(controls(vec![horn(); MAX_CARRIED + 1])), "too many");
+    let long = "x".repeat(MAX_CARRIED_TEXT + 1);
+    assert!(refused(controls(vec![Carried {
+        label: long.clone(),
+        ..horn()
+    }])));
+    for id in [long.as_str(), "", "you.cars:horn", "cars", "You.Cars"] {
+        assert!(
+            refused(Message::Controls {
+                id: id.into(),
+                name: "Cars".into(),
+                controls: Vec::new(),
+            }),
+            "{id:?} is no mod id"
+        );
+    }
+    assert!(refused(controls(vec![horn(), horn()])), "a name twice");
+    assert!(
+        refused(Message::Controls {
+            id: "you.cars".into(),
+            name: "x".repeat(MAX_CARRIED_TEXT + 1),
+            controls: Vec::new(),
+        }),
+        "a mod's name too long"
+    );
+    for bad in [
+        Carried {
+            name: "Horn".into(),
+            ..horn()
+        },
+        Carried {
+            action: String::new(),
+            ..horn()
+        },
+        Carried {
+            keys: [0x01, 0],
+            ..horn()
+        },
+        Carried { fires: 0, ..horn() },
+        Carried { fires: 8, ..horn() },
+    ] {
+        assert!(refused(controls(vec![bad.clone()])), "{bad:?}");
+    }
+    let mut cut_short = controls(vec![horn()]).body();
+    cut_short.pop();
+    assert_eq!(Message::read(CONTROLS, &cut_short), None);
+}
+
+#[test]
+fn a_mod_s_carried_controls_replace_its_earlier_ones_and_the_mods_are_bounded() {
+    let lights = Carried {
+        name: "lights".into(),
+        ..horn()
+    };
+    let kept = carried_after(&[], "you.cars", "Cars", &[horn(), lights.clone()]);
+    let kept = carried_after(&kept, "you.boats", "Boats", &[horn()]);
+    let kept = carried_after(&kept, "you.cars", "Autos", &[lights]);
+    let ids: Vec<String> = kept.iter().map(Heard::id).collect();
+    assert_eq!(ids, ["you.cars:lights", "you.boats:horn"], "in its place");
+    assert_eq!(kept[0].mod_name, "Autos");
+    assert_eq!(
+        carried_after(&kept, "you.cars", "Autos", &[kept[0].control.clone()]),
+        kept,
+        "sent again, nothing moves"
+    );
+    let mut full = Vec::new();
+    for at in 0..MAX_CARRIED_MODS {
+        full = carried_after(&full, &format!("mod{at}"), "M", &[horn()]);
+    }
+    assert_eq!(carried_after(&full, "one-more", "M", &[horn()]), full);
+    let replaced = carried_after(&full, "mod3", "M", &[]);
+    assert_eq!(
+        replaced.len(),
+        MAX_CARRIED_MODS - 1,
+        "a known mod still changes"
+    );
+}
+
+#[test]
+fn a_text_is_cut_at_a_character_s_edge() {
+    assert_eq!(cut("Сурма", 3), "С");
+    assert_eq!(cut("horn", 10), "horn");
+    assert_eq!(cut("horn", 0), "");
+}
+
 #[test]
 fn secrets_never_leave_and_never_change() {
     let text = "# Limit.\nlimit = 4\ntoken = \"hunter2\"\n";

@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 10
+#define ENSHWICK_ABI_MINOR 11
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -843,6 +843,12 @@ typedef struct EnshwickControlSpec {
   // How long a key stays down before `ControlSpec::HOLD` fires, in
   // milliseconds.
   uint32_t hold_ms;
+  // The id of the mod's own action the server runs, for the player, each
+  // time the control fires on a client; empty for none. A mod of side
+  // server needs it, since its controls reach the clients without its
+  // code; then `label` is a key of its texts. Valid for the
+  // call. ABI 11.11.
+  struct EnshwickStr action;
 } EnshwickControlSpec;
 // The control fires once when its key goes down.
 #define EnshwickControlSpec_PRESS 1

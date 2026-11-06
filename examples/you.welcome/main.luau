@@ -27,6 +27,24 @@ enshwick.on("SettingsReplaced", function()
 	enshwick.log.info(`this world greets with "{enshwick.settings().greeting}"`)
 end)
 
+-- A key for administrators that tells everyone how many are online. The mod
+-- runs on the server alone, so the server sends the control to each player's
+-- controls page, and a press runs the action on the server.
+local texts = enshwick.i18n.texts_from([[
+[en]
+"count" = "Tell everyone how many are online"
+
+[uk]
+"count" = "Сказати всім, скільки гравців онлайн"
+]])
+local actions = enshwick.actions.actions(texts)
+actions:add({ id = "count", label = "count", admins = true }, function()
+	local online = count.online(#enshwick.world.players())
+	enshwick.world.broadcast(online)
+	return enshwick.actions.done(online)
+end)
+enshwick.controls.control({ name = "count", label = "count", key = "F8", runs = "count" }, function() end)
+
 enshwick.schedule.every(enshwick.settings().announce_minutes * 60, function()
 	enshwick.log.info(count.online(#enshwick.world.players()))
 	return true

@@ -145,13 +145,15 @@ pub(super) fn handed(state: &mut State, key: u64, whole: bool, now: Instant) -> 
 }
 
 /// Sends client `key` the data a joining client gets: item data, the
-/// disabled recipes and the join values. A dropped part leaves it owed.
+/// disabled recipes, the join values and the controls of the mods of side
+/// server. A dropped part leaves it owed.
 fn hand_data(key: u64) {
     let whole = crate::item_data::hello()
         .iter()
         .all(|records| item_data(key, records))
         && crate::recipes::hello(key)
-        && crate::remote::sync_to(key);
+        && crate::remote::sync_to(key)
+        && crate::controls::hello(key);
     match state(|s| handed(s, key, whole, Instant::now())) {
         Handover::Whole | Handover::Again { first: false } => {}
         Handover::Again { first: true } => crate::log!(

@@ -8,6 +8,16 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Control::runs(action)` (unstable): a control runs the mod's own action on
+  the server, for the player, each time it fires on a client; the server
+  checks who may run it and shows the reply as a notice. The server sends
+  the controls of a mod of side `server` that run an action to each client
+  with Enshwick that joins: the Controls page lists them under the mod's
+  name in the player's language, the player may change their keys in
+  `mod-controls.toml`, and a press runs the action on the server, so a
+  server-only mod offers its actions in every game, hosted and single player
+  included. Luau: the control's `runs` field. `ControlSpec::action`,
+  ABI 11.11 (#964).
 - `input` (unstable): `Load::input` and `Input::held(player)` read the game
   actions a player holds this step in the server's world, also for a player
   without Enshwick, as an `InputMask` (`contains(GameAction)`, `iter`,

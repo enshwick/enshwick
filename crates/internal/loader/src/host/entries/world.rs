@@ -236,15 +236,20 @@ pub(crate) extern "system" fn control(
         }) else {
             return Status::BAD_ARGS;
         };
-        let (Some(name), Some(label), Some(link)) =
-            (text(spec.name), text(spec.label), text(spec.link))
-        else {
+        // A mod before ABI 11.11 has no action, which the copy leaves zero: empty.
+        let (Some(name), Some(label), Some(link), Some(action)) = (
+            text(spec.name),
+            text(spec.label),
+            text(spec.link),
+            text(spec.action),
+        ) else {
             return Status::BAD_ARGS;
         };
         let read = crate::controls::Spec {
             name,
             label,
             link,
+            action,
             keys: [spec.key, spec.second],
             fires: spec.fires,
             hold_ms: spec.hold_ms,

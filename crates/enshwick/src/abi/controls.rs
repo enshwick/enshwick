@@ -26,6 +26,7 @@ use crate::abi::{Header, PlayerInfo, Str};
 ///     link: Str::EMPTY,
 ///     fires: ControlSpec::PRESS,
 ///     hold_ms: 0,
+///     action: Str::EMPTY,
 /// };
 /// assert_eq!(spec.fires, ControlSpec::PRESS);
 /// ```
@@ -55,9 +56,15 @@ pub struct ControlSpec {
     /// How long a key stays down before [`ControlSpec::HOLD`] fires, in
     /// milliseconds.
     pub hold_ms: u32,
+    /// The id of the mod's own action the server runs, for the player, each
+    /// time the control fires on a client; empty for none. A mod of side
+    /// server needs it, since its controls reach the clients without its
+    /// code; then [`label`](Self::label) is a key of its texts. Valid for the
+    /// call. ABI 11.11.
+    pub action: Str,
 }
 
-impl_headed!(ControlSpec);
+impl_headed!(ControlSpec, born = 72);
 
 impl ControlSpec {
     /// The control fires once when its key goes down.

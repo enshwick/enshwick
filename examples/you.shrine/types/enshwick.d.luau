@@ -554,6 +554,8 @@ export type Control = {
 	fires: {Phase}?,
 	--- Seconds the key stays down before a hold fires, as `Control.hold_for` sets it.
 	hold_for: number?,
+	--- The id of the mod's action the server runs each time the control fires on a client, as `Control.runs` sets it.
+	runs: string?,
 }
 
 --- A player asked a station to craft, before the server checks ingredients.

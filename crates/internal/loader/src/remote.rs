@@ -34,6 +34,15 @@ pub const RECIPES: u8 = 11;
 pub const ACTIONS_LANGUAGE: u8 = 12;
 /// A client runs an action.
 pub const ACTION_RUN: u8 = 14;
+/// The server's controls of one of its mods of side server; 13 and 15
+/// stay unused, since loaders before them read those as action sheets.
+pub const CONTROLS: u8 = 16;
+
+/// The controls of one mod a [`Message::Controls`] carries at most.
+pub const MAX_CARRIED: usize = 24;
+/// The longest text a [`Message::Controls`] carries, a label or the mod's
+/// name, in bytes; the server cuts a longer one.
+pub const MAX_CARRIED_TEXT: usize = 160;
 
 /// The least time between two changes one player sends.
 pub const EDIT_GAP: Duration = Duration::from_millis(250);
@@ -125,6 +134,117 @@ pub enum Message {
         /// and one before it reads past the arguments.
         target: Option<ActionTarget>,
     },
+    /// The controls of the server's mod `id` of side server that run an
+    /// action, which the client lists and reads keys for without the mod.
+    Controls {
+        /// The mod.
+        id: String,
+        /// Its name, in the client's language.
+        name: String,
+        /// Its controls, at most [`MAX_CARRIED`].
+        controls: Vec<Carried>,
+    },
+}
+
+/// A control of a server's mod, as [`Message::Controls`] carries it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Carried {
+    /// Its name in its mod.
+    pub name: String,
+    /// What the controls page shows, in the client's language.
+    pub label: String,
+    /// The mod's action a firing runs on the server.
+    pub action: String,
+    /// The mod's default keys, 0 for none.
+    pub keys: [u32; 2],
+    /// The phases it fires on.
+    pub fires: u32,
+    /// How long a key stays down before a hold fires, in milliseconds.
+    pub hold_ms: u32,
+}
+
+impl Carried {
+    /// Whether everything a client reads of it is in bounds: a name and an
+    /// action as controls name them, a label of at most
+    /// [`MAX_CARRIED_TEXT`] bytes, keys that bind, phases that fire.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        use enshwick::controls::{Key, is_valid_name, valid_phases};
+        is_valid_name(&self.name)
+            && is_valid_name(&self.action)
+            && self.label.len() <= MAX_CARRIED_TEXT
+            && self
+                .keys
+                .iter()
+                .all(|&bits| bits == 0 || Key::from_bits(bits).is_some())
+            && valid_phases(self.fires)
+    }
+}
+
+/// The server mods a client keeps carried controls of at most.
+pub const MAX_CARRIED_MODS: usize = 32;
+
+/// A server's control as its client keeps it, with its mod.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Heard {
+    /// The mod's id.
+    pub mod_id: String,
+    /// The mod's name, in the client's language.
+    pub mod_name: String,
+    /// The control.
+    pub control: Carried,
+}
+
+impl Heard {
+    /// `<mod id>:<name>`, as `mod-controls.toml` names it.
+    #[must_use]
+    pub fn id(&self) -> String {
+        format!("{}:{}", self.mod_id, self.control.name)
+    }
+}
+
+/// The carried controls once the server sent mod `id`'s `controls`.
+///
+/// They take the place of the mod's earlier ones, where those stood, so a
+/// control sent again keeps its place; a new mod goes after the others. A
+/// new mod past [`MAX_CARRIED_MODS`] is left out, so a server cannot grow the
+/// list without end.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::remote::{Carried, carried_after};
+///
+/// let horn = Carried { name: "horn".into(), label: "Horn".into(), action: "honk".into(), keys: [0x23, 0], fires: 1, hold_ms: 500 };
+/// let kept = carried_after(&[], "you.cars", "Cars", &[horn.clone()]);
+/// let again = carried_after(&kept, "you.cars", "Cars", &[horn]);
+/// assert_eq!(again.len(), 1);
+/// assert_eq!(again[0].id(), "you.cars:horn");
+/// ```
+#[must_use]
+pub fn carried_after(kept: &[Heard], id: &str, name: &str, controls: &[Carried]) -> Vec<Heard> {
+    let known = kept.iter().position(|h| h.mod_id == id);
+    let mut list: Vec<Heard> = kept.iter().filter(|h| h.mod_id != id).cloned().collect();
+    let mut mods: Vec<&str> = list.iter().map(|h| h.mod_id.as_str()).collect();
+    mods.dedup();
+    if known.is_none() && mods.len() >= MAX_CARRIED_MODS {
+        return list;
+    }
+    // A mod's controls stand together, so its first one's place is free.
+    let at = known.unwrap_or(list.len());
+    let heard = controls.iter().map(|control| Heard {
+        mod_id: id.to_owned(),
+        mod_name: name.to_owned(),
+        control: control.clone(),
+    });
+    drop(list.splice(at..at, heard));
+    list
+}
+
+/// `text` cut to at most `max` bytes at a character's edge.
+#[must_use]
+pub fn cut(text: &str, max: usize) -> &str {
+    &text[..text.floor_char_boundary(max)]
 }
 
 /// The bytes of a run's object after its arguments: flags, entity and the
@@ -193,6 +313,7 @@ impl Message {
             Self::Recipes { .. } => RECIPES,
             Self::ActionsLanguage { .. } => ACTIONS_LANGUAGE,
             Self::ActionRun { .. } => ACTION_RUN,
+            Self::Controls { .. } => CONTROLS,
         }
     }
 
@@ -260,6 +381,24 @@ impl Message {
                     put_target(&mut out, target);
                 }
             }
+            Self::Controls { id, name, controls } => {
+                put(&mut out, id);
+                put(&mut out, name);
+                out.push(u8::try_from(controls.len()).unwrap_or(u8::MAX));
+                for control in controls.iter().take(usize::from(u8::MAX)) {
+                    put(&mut out, &control.name);
+                    put(&mut out, &control.label);
+                    put(&mut out, &control.action);
+                    for word in [
+                        control.keys[0],
+                        control.keys[1],
+                        control.fires,
+                        control.hold_ms,
+                    ] {
+                        out.extend_from_slice(&word.to_le_bytes());
+                    }
+                }
+            }
         }
         out
     }
@@ -321,6 +460,41 @@ impl Message {
                 args: take(bytes)?.to_owned(),
                 target: take_target(bytes),
             },
+            CONTROLS => {
+                let id = take(bytes)?.to_owned();
+                let name = take(bytes)?.to_owned();
+                let (&count, rest) = bytes.split_first()?;
+                *bytes = rest;
+                if !enshwick::abi::is_valid_id(&id)
+                    || name.len() > MAX_CARRIED_TEXT
+                    || usize::from(count) > MAX_CARRIED
+                {
+                    return None;
+                }
+                let mut controls: Vec<Carried> = Vec::with_capacity(usize::from(count));
+                for _ in 0..count {
+                    let (name, label, action) = (take(bytes)?, take(bytes)?, take(bytes)?);
+                    let mut words = [0u32; 4];
+                    for word in &mut words {
+                        let (four, rest) = bytes.split_first_chunk::<4>()?;
+                        *word = u32::from_le_bytes(*four);
+                        *bytes = rest;
+                    }
+                    let control = Carried {
+                        name: name.to_owned(),
+                        label: label.to_owned(),
+                        action: action.to_owned(),
+                        keys: [words[0], words[1]],
+                        fires: words[2],
+                        hold_ms: words[3],
+                    };
+                    if !control.is_valid() || controls.iter().any(|c| c.name == control.name) {
+                        return None;
+                    }
+                    controls.push(control);
+                }
+                Self::Controls { id, name, controls }
+            }
             _ => return None,
         })
     }

@@ -11,7 +11,9 @@
 //! key or button the player bound it to, also for a player without
 //! Enshwick. Players rebind controls on the Mods screen; their keys live in
 //! `mod-controls.toml` in the game's folder. What changes the world goes to
-//! the server as a player action, with [`Actions::run`](crate::actions::Actions::run).
+//! the server as a player action, with [`Actions::run`](crate::actions::Actions::run)
+//! or [`Control::runs`]. A mod of side server offers its controls with
+//! [`Control::runs`]: the server sends them to the clients that join.
 //!
 //! # Examples
 //!
@@ -271,6 +273,7 @@ pub struct Control {
     link: Option<GameAction>,
     fires: u32,
     hold: Duration,
+    action: Option<String>,
 }
 
 impl Control {
@@ -291,7 +294,39 @@ impl Control {
             link: None,
             fires: ControlSpec::PRESS,
             hold: HOLD,
+            action: None,
         }
+    }
+
+    /// Runs the mod's [action](crate::actions) `action` on the server, for
+    /// the player, each time the control fires on a client: the server checks
+    /// who may run it, as for any action, and shows the reply as a notice.
+    /// The handler still runs wherever the mod's code does.
+    ///
+    /// A mod of side server needs it: the server sends its controls to each
+    /// client that joins, whose controls page lists them under the mod's name
+    /// and whose player may rebind them, though the client runs none of the
+    /// mod's code. The label is then a key of the mod's texts, shown in each
+    /// player's language.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Outcome};
+    /// use enshwick::controls::{Control, Key};
+    /// use enshwick::i18n::Texts;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let actions = load.actions(Texts::default())?;
+    ///     actions.add(Action::new("day", "Make it day").admins(), |_| Outcome::done("Morning"))?;
+    ///     let day = Control::new("day", "Make it day").key(Key::parse("F8")?).runs("day");
+    ///     load.control(day, |_| {})
+    /// }
+    /// ```
+    #[must_use]
+    pub fn runs(mut self, action: &str) -> Self {
+        self.action = Some(action.to_owned());
+        self
     }
 
     /// The default key, which the player may change.
@@ -460,6 +495,13 @@ where
             control.name
         )));
     }
+    let action = control.action.as_deref().unwrap_or("");
+    if control.action.is_some() && !is_valid_name(action) {
+        return Err(Off::new(format!(
+            "control {}: action {action}: ids are 1 to 32 of [a-z0-9-]",
+            control.name
+        )));
+    }
     let spec = ControlSpec {
         header: crate::abi::Header::of::<ControlSpec>(),
         name: Str::new(&control.name),
@@ -469,6 +511,7 @@ where
         link: Str::new(control.link.map_or("", GameAction::name)),
         fires: control.fires,
         hold_ms: u32::try_from(control.hold.as_millis()).unwrap_or(u32::MAX),
+        action: Str::new(action),
     };
     let handler: Handler = Box::new(on);
     crate::load::hand_over(

@@ -105,6 +105,22 @@ mod tests {
             "{:?}",
             loader.chat()
         );
+        let listed: Vec<String> = loader.controls().into_iter().map(|c| c.0).collect();
+        assert_eq!(listed, ["count"]);
+        let run = enshwick::abi::ActionCall::RUN;
+        let refused = loader.ask_actions(run, &ann, 0, "count", "");
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|reply| reply.starts_with('0')),
+            "{refused:?}"
+        );
+        let admin = PlayerInfo {
+            permissions: PlayerInfo::CAN_KICK_BAN,
+            ..ann
+        };
+        let done = loader.ask_actions(run, &admin, 0, "count", "");
+        assert_eq!(done.as_deref(), Some("11 player online"));
     }
 
     #[test]

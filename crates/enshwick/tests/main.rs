@@ -144,6 +144,8 @@ mod saves;
 mod schedule;
 #[cfg(feature = "unstable")]
 mod screen_extensions;
+#[cfg(feature = "unstable")]
+mod server_controls;
 mod services;
 mod shapes;
 mod sides;
