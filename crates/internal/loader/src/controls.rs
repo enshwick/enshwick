@@ -502,25 +502,31 @@ pub(crate) fn frame(context: usize) {
                     for bit in phases(kind) {
                         fire(control, bit, None);
                         if !control.action.is_empty() {
-                            let _sent = crate::actions::run_on_server(
-                                control.mod_id(),
-                                &control.action,
-                                "",
-                                None,
-                            );
+                            press(control.mod_id(), &control.action);
                         }
                     }
                 } else if let Some(heard) = bound.carried.get(index - declared.len()) {
                     let c = &heard.control;
                     let kind = tracker.look(*down != 0, now, c.hold_ms) & c.fires;
                     for _ in phases(kind) {
-                        let _sent =
-                            crate::actions::run_on_server(&heard.mod_id, &c.action, "", None);
+                        press(&heard.mod_id, &c.action);
                     }
                 }
             }
         });
     });
+}
+
+/// Asks the server to run mod `id`'s `action` for a key press; a press the
+/// server takes no message for is logged, since the player gets no reply.
+#[cold]
+fn press(id: &str, action: &str) {
+    if !crate::actions::run_on_server(id, action, "", None) {
+        crate::log!(
+            WARN,
+            "controls: {id} {action} was not sent; the server takes no messages"
+        );
+    }
 }
 
 /// Whether `control`'s keys fire on this client: its mod runs, and a mod of
@@ -937,3 +943,21 @@ pub(crate) enum SetKeyError {
 mod input;
 
 pub(crate) use input::{capture_keys, focused, key_name};
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_press_the_server_cannot_take_leaves_a_warning_in_the_log() {
+        crate::log::capture();
+        super::press("you.weather", "day");
+        let lines = crate::log::captured();
+        crate::log::end_capture();
+        assert!(
+            lines
+                .iter()
+                .any(|(level, _, line)| *level == enshwick::abi::Level::WARN
+                    && line.contains("you.weather day was not sent")),
+            "{lines:?}"
+        );
+    }
+}

@@ -159,9 +159,9 @@ done without a text. A Luau client runs an action with
 `actions:run(id, values)`.
 
 `actions.control(id, key)` puts an action without arguments on a key in
-one call, labelled with the action's label in each player's language; in
-Luau it is `actions:control(id, key)`. [Controls](controls.md#changing-the-world)
-shows it.
+one call. The control shows the action's label in each player's language.
+In Luau it is `actions:control(id, key)`, and
+[Controls](controls.md#changing-the-world) shows it.
 
 The server decides everything. It checks `.allow` and runs `.at` again on
 every run, whatever the client sent, and refuses values outside their

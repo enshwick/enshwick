@@ -121,8 +121,8 @@ A control that only runs an action without arguments names it with
 fires, and the handler still runs on the client.
 
 `actions.control(id, key)` does all of that in one call, after
-`actions.add`: it declares a control named after the action, on `key`,
-that runs the action at each press. Its label is the action's label, a key
+`actions.add`. It declares a control named after the action, on that key,
+which runs the action at each press. Its label is the action's label, a key
 of the texts the mod gave `load.actions`, so the Controls page shows it in
 each player's language. An action with arguments or a list of players
 takes no key.

@@ -404,16 +404,18 @@ impl Actions {
         crate::load::ok(status, (), || format!("action {action}"))
     }
 
-    /// Puts the declared action `action` on `key` during init: a
-    /// [control](crate::controls) of the same name, labelled with the
-    /// action's label in each player's language, that runs the action on the
-    /// server at each press, as [`Control::runs`](crate::controls::Control::runs)
-    /// does. A mod of side server offers it to the clients that join.
+    /// Puts the declared action `action` on `key` during init, so a press runs it.
+    ///
+    /// It declares a [control](crate::controls) of the same name that runs
+    /// the action on the server, as [`Control::runs`](crate::controls::Control::runs)
+    /// does. Its label is the action's label in each player's language. A mod
+    /// of side server offers it to the clients that join.
     ///
     /// # Errors
     ///
     /// [`Off`] for an action not declared yet, one with arguments or a list
-    /// of players, or when the loader refuses the control.
+    /// of players, or when the loader refuses the control, such as when the
+    /// mod already declared a control named after the action.
     ///
     /// # Examples
     ///
@@ -442,7 +444,7 @@ impl Actions {
             }
             found.action.label.clone()
         };
-        crate::i18n::hand(self.registry.host, &self.registry.texts);
+        crate::i18n::hand_missing(self.registry.host, &self.registry.texts, &label);
         let control = Control::new(action, &label).key(key).runs(action);
         crate::controls::declare(self.registry.host, &control, |_| {})
     }

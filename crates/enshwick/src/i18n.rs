@@ -637,6 +637,39 @@ pub(crate) fn hand(host: Host, texts: &Texts) {
     let _kept = (host.api().texts)(me, crate::abi::Str::new(&all));
 }
 
+/// Hands the loader the texts of `key` in `texts` in each language the mod
+/// `host` names has not handed it yet, so a text handed since stays.
+#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable")]
+pub(crate) fn hand_missing(host: Host, texts: &Texts, key: &str) {
+    let me = host.handle();
+    let mut missing = Texts::default();
+    {
+        let handed = HANDED.get_or_init(std::sync::Mutex::default).relock();
+        let kept = handed
+            .iter()
+            .find(|(owner, _)| *owner == me)
+            .map(|(_, k)| k);
+        for (language, entries) in &texts.by_language {
+            let handed_already = kept
+                .and_then(|k| k.by_language.get(language))
+                .is_some_and(|e| e.contains_key(key));
+            if let Some(text) = entries.get(key)
+                && !handed_already
+            {
+                missing
+                    .by_language
+                    .entry(*language)
+                    .or_default()
+                    .insert(key.to_owned(), text.clone());
+            }
+        }
+    }
+    if !missing.by_language.is_empty() {
+        hand(host, &missing);
+    }
+}
+
 impl Load<'_> {
     /// The mod's texts: its `src/texts.toml`, which
     /// [`declare_mod!`](crate::declare_mod) embeds and checks. The loader
