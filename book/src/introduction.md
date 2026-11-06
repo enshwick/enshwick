@@ -36,9 +36,12 @@ mod acted.
 
 ## How to read this book
 
-Start with [Getting started](getting-started.md), then read
-[Concepts](concepts.md) once. Each other chapter covers one subject; read the
-one you need. The API's rustdoc is the reference for every type and function
+The book leads from the simplest mod to the hardest parts. Start with
+[Hello, world](getting-started.md) and [Your first real mod](first-mod.md).
+Everyday tasks and Game systems each cover one subject; read the one you
+need. [Reaching into the game](reaching-into-the-game.md) is for what the API
+has no call for, and [Concepts](concepts.md) explains how the loader runs
+mods. The API's rustdoc is the reference for every type and function
 (`cargo doc -p enshwick --features test --open` builds it). This book says how
 they fit together. Its links to the API point at the source the rustdoc is built
 from.

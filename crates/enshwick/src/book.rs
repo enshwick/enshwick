@@ -13,7 +13,6 @@ macro_rules! chapters {
 
 chapters! {
     Introduction => "introduction.md",
-    GettingStarted => "getting-started.md",
     Concepts => "concepts.md",
     LoaderAndAbi => "concepts/loader-and-abi.md",
     Lifecycle => "concepts/lifecycle.md",
@@ -26,6 +25,7 @@ chapters! {
     Progress => "progress.md",
     Services => "services.md",
     Luau => "luau.md",
+    ReachingIntoTheGame => "reaching-into-the-game.md",
     FindingTheGame => "finding-the-game.md",
     TypedStability => "concepts/typed-stability.md",
     ResourceValues => "resource-values.md",
@@ -85,6 +85,8 @@ mod typed {
 #[cfg(feature = "unstable")]
 mod unstable {
     chapters! {
+        GettingStarted => "getting-started.md",
+        FirstMod => "first-mod.md",
         Threads => "concepts/threads.md",
         GameEvents => "game-events.md",
         World => "world.md",
