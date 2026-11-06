@@ -260,12 +260,12 @@ pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), Status> {
 /// step; vanilla entities are refused, so no mod drops the game's own data
 /// from a save.
 pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
-    let saving = layout.saving.ok_or(Status::MISSING)?;
-    let world = entity_world()?;
     if entity == Entity(0) {
         return Err(Status::BAD_ARGS);
     }
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let saving = layout.saving.ok_or(Status::MISSING)?;
+    let world = entity_world()?;
     let template = crate::world::template(loader, entity)?;
     if crate::spawns::spawned(entity) != Some(template) {
         return Err(Status::REFUSED);

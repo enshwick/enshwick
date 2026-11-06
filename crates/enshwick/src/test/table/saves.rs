@@ -14,19 +14,23 @@ pub(crate) struct Saves {
     pub(crate) unsaved: Vec<u32>,
 }
 
-pub(crate) extern "system" fn set_saved(me: ModHandle, entity: crate::Entity, saved: u8) -> Status {
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
+pub(crate) extern "system" fn set_saved(
+    _me: ModHandle,
+    entity: crate::Entity,
+    saved: u8,
+) -> Status {
     if entity == crate::Entity(0) {
         return Status::BAD_ARGS;
+    }
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
     }
     with(Status::MISSING, |s| {
         let spawned = s.spawns.iter().any(|(id, _)| *id == entity.0)
             || s.edits
                 .transactions
                 .iter()
-                .any(|t| t.owner == me && t.created.contains(&entity));
+                .any(|t| t.created.contains(&entity));
         if !spawned {
             return Status::REFUSED;
         }
