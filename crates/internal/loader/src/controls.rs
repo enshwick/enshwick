@@ -14,7 +14,7 @@
 
 use core::cell::RefCell;
 use core::ffi::c_void;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
@@ -31,6 +31,7 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
+use crate::remote::{Carried, Heard, MAX_CARRIED, MAX_CARRIED_TEXT, Message, cut};
 
 /// A control a mod declared.
 #[derive(Debug)]
@@ -42,10 +43,21 @@ pub(crate) struct Declared {
     pub(crate) label: String,
     pub(crate) defaults: [u32; 2],
     link: String,
+    /// The mod's action a firing on a client runs on the server; empty for
+    /// none.
+    action: String,
     fires: u32,
     hold_ms: u32,
     callback: ControlFn,
     user: usize,
+}
+
+impl Declared {
+    /// The id of the mod that declared it.
+    fn mod_id(&self) -> &str {
+        let end = self.id.len().saturating_sub(self.name.len() + 1);
+        self.id.get(..end).unwrap_or_default()
+    }
 }
 
 static DECLARED: Registry<Declared> = Registry::new();
@@ -63,9 +75,9 @@ static LINKED_FUSE: Fuse = Fuse::new("controls that follow game actions");
 
 /// The controls' state once they are sealed.
 struct State {
-    /// The keys in force, by sealed index; set on the client at link and by
-    /// the controls page.
-    keys: ArcSwapOption<Vec<[u32; 2]>>,
+    /// The keys in force and the controls the server carried; set on the
+    /// client at link, by the controls page and by the server's messages.
+    keys: ArcSwapOption<Bound>,
     /// Where the client's screen gate reads, once the build has it.
     gate: OnceLock<Gate>,
     /// The controls that follow game actions, once reflection names them.
@@ -79,6 +91,20 @@ struct State {
     /// The server's players' trackers and the firings that wait for the
     /// step's end.
     players: Mutex<Players>,
+}
+
+/// What the client's key reader reads, swapped whole.
+#[derive(Debug)]
+struct Bound {
+    /// The keys in force: the declared controls' by sealed index, then the
+    /// carried ones' in their order.
+    keys: Vec<[u32; 2]>,
+    /// The controls of the server's mods of side server, which this client
+    /// runs none of.
+    carried: Vec<Heard>,
+    /// One more each time `carried` changes, so the reader starts their
+    /// trackers over.
+    carried_at: u64,
 }
 
 /// The HUD screens on which the player is in the world with no window
@@ -132,7 +158,8 @@ pub(crate) fn register(
         .iter()
         .all(|&bits| bits == 0 || Key::from_bits(bits).is_some());
     let link_ok = spec.link.is_empty() || GameAction::ALL.iter().any(|a| a.name() == spec.link);
-    if !well_named || !keys_ok || !link_ok || !valid_phases(spec.fires) {
+    let action_ok = spec.action.is_empty() || is_valid_name(spec.action);
+    if !well_named || !keys_ok || !link_ok || !action_ok || !valid_phases(spec.fires) {
         return Status::BAD_ARGS;
     }
     let id = format!("{mod_id}:{name}");
@@ -149,6 +176,7 @@ pub(crate) fn register(
             label: spec.label.to_owned(),
             defaults: spec.keys,
             link: spec.link.to_owned(),
+            action: spec.action.to_owned(),
             fires: spec.fires,
             hold_ms: spec.hold_ms,
             callback,
@@ -162,6 +190,7 @@ pub(crate) struct Spec<'a> {
     pub(crate) name: &'a str,
     pub(crate) label: &'a str,
     pub(crate) link: &'a str,
+    pub(crate) action: &'a str,
     pub(crate) keys: [u32; 2],
     pub(crate) fires: u32,
     pub(crate) hold_ms: u32,

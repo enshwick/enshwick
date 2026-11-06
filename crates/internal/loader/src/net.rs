@@ -401,6 +401,7 @@ pub(crate) fn forget() {
     let mut guard = STATE.relock();
     *guard = None;
     crate::item_data::forget_client();
+    crate::controls::forget_carried();
 }
 
 /// Forgets a player's client, when the player leaves.
