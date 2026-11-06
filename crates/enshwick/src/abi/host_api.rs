@@ -366,8 +366,9 @@ pub struct HostApi {
     ) -> Status,
     /// Asks the server to destroy `entity` after the systems of the next
     /// step; [`Status::REFUSED`] for a player's character,
-    /// [`Status::MISSING`] for an entity not in the world. On the server's
-    /// game thread only.
+    /// [`Status::MISSING`] for an entity not in the world,
+    /// [`Status::UNAVAILABLE`] where no server runs or on a build without the
+    /// command (ABI 11.13). On the server's game thread only.
     pub destroy: extern "system" fn(me: ModHandle, entity: Entity) -> Status,
     /// Asks the server to save the world now, as its timed saves do;
     /// [`Event::WORLD_SAVED`] follows once the save is on disk. A save under
@@ -387,8 +388,9 @@ pub struct HostApi {
     /// copy the game keeps for clients (`Network*`, `Client*`), which it
     /// overwrites; [`Status::STATIC_HALF`] for the static half of an ECS
     /// type, the template's set-up data;
-    /// [`Status::MISSING`] when the entity lacks the component. On the
-    /// server's game thread only.
+    /// [`Status::MISSING`] when the entity lacks the component or is not in
+    /// the world; [`Status::UNAVAILABLE`] where no server runs or on a build
+    /// without writes (ABI 11.13). On the server's game thread only.
     pub component_write: extern "system" fn(
         me: ModHandle,
         entity: Entity,
@@ -407,7 +409,8 @@ pub struct HostApi {
     /// Asks the server to move an entity as its admin teleport does, after
     /// the next step; [`Status::MISSING`] for an entity not in the world,
     /// [`Status::REFUSED`] for one the game's teleport does not move, as a
-    /// prop: it moves actors and characters.
+    /// prop: it moves actors and characters; [`Status::UNAVAILABLE`] where
+    /// no server runs or on a build without teleports (ABI 11.13).
     /// On the server's game thread only.
     pub teleport: extern "system" fn(me: ModHandle, request: *const TeleportRequest) -> Status,
     /// Asks the server to spawn an entity from a template, as its admin
@@ -1703,8 +1706,9 @@ pub struct HostApi {
     /// the next step on; the next save after that keeps it or leaves it
     /// out. [`Status::REFUSED`] for an entity no mod spawned since the world
     /// loaded, such as a vanilla one, or a full command buffer; [`Status::MISSING`] for an
-    /// entity not in the world, on a client or on a build without the
-    /// commands; [`Status::BAD_ARGS`] for entity 0. On the server's game
+    /// entity not in the world; [`Status::UNAVAILABLE`] where no server
+    /// runs, as on a client in another's game, or on a build without the
+    /// commands (ABI 11.13); [`Status::BAD_ARGS`] for entity 0. On the server's game
     /// thread only ([`Status::WRONG_THREAD`] elsewhere). A panic in the
     /// loader returns [`Status::REFUSED`]. ABI 11.9.
     pub set_saved: extern "system" fn(me: ModHandle, entity: Entity, saved: u8) -> Status,

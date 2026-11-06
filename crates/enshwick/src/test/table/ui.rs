@@ -9,6 +9,18 @@ use crate::abi::{
 use crate::test::table::{State, text, with};
 use crate::ui::screens;
 
+/// The screens on which the player is in the world with no window open,
+/// as the loader's controls gate counts them; a panel there is refused.
+const OPEN: [&str; 7] = [
+    "InGame",
+    "BlueprintMultiTool",
+    "OvergrowthMultiTool",
+    "DecayMultiTool",
+    "ScrewdriverMultiToolBuildingMode",
+    "TakeScreenshot",
+    "NoUi",
+];
+
 /// table it sees for the process, so it is one static.
 pub(crate) extern "system" fn ui_frame(
     me: ModHandle,
@@ -229,7 +241,7 @@ pub(crate) extern "system" fn ui_extension(
         if s.host.side == Side::SERVER {
             return Status::MISSING;
         }
-        if spec.edge > UiExtension::BOTTOM || screens::OPEN.contains(&screen.as_str()) {
+        if spec.edge > UiExtension::BOTTOM || OPEN.contains(&screen.as_str()) {
             return Status::BAD_ARGS;
         }
         if !screens::NAMES.contains(&screen.as_str()) {
@@ -383,4 +395,14 @@ pub(crate) extern "system" fn fog_read(
         }
         Status::OK
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_screen_without_a_window_is_one_the_game_names() {
+        assert!(OPEN.iter().all(|open| screens::NAMES.contains(open)));
+    }
 }

@@ -118,6 +118,60 @@ fn two_types_with_one_rust_name_are_refused() {
     );
 }
 
+#[test]
+fn the_game_s_screens_generate_the_ui_enum_and_names_without_invalid() {
+    let mut catalogue = fixture();
+    assert!(
+        !catalogue
+            .files("b", &Renames::default())
+            .unwrap()
+            .contains_key(SCREENS),
+        "no screens file without the game's screen type"
+    );
+    let mut screens = catalogue.types["demo::ecs::Faction"].clone();
+    screens.name = "keen::HudScreenType".to_owned();
+    screens.values = ["Invalid", "InGame", "StorageChest"]
+        .iter()
+        .zip(0..)
+        .map(|(name, value)| ((*name).to_owned(), value))
+        .collect();
+    catalogue.types.insert(screens.name.clone(), screens);
+    let files = catalogue.files("b", &Renames::default()).unwrap();
+    let file = &files[SCREENS];
+    assert!(file.contains("pub enum HudScreenType {\n    /// `InGame`.\n    InGame,\n    /// `StorageChest`.\n    StorageChest,\n}"), "{file}");
+    assert!(file.contains("pub const ALL: [Self; NAMES.len()] = [\n        Self::InGame,\n        Self::StorageChest,\n    ];"), "{file}");
+    assert!(
+        file.contains(
+            "pub(crate) const NAMES: [&str; 2] = [\n    \"InGame\",\n    \"StorageChest\",\n];"
+        ),
+        "{file}"
+    );
+    assert!(!file.contains("Invalid"), "{file}");
+    assert!(file.contains("from the reflection of b;"), "{file}");
+}
+
+#[test]
+fn two_screens_that_case_alike_take_numbered_variants() {
+    let mut catalogue = fixture();
+    let mut screens = catalogue.types["demo::ecs::Faction"].clone();
+    screens.name = "keen::HudScreenType".to_owned();
+    screens.values = vec![("NpcDialog".to_owned(), 0), ("Npc_Dialog".to_owned(), 1)];
+    catalogue.types.insert(screens.name.clone(), screens);
+    let files = catalogue.files("b", &Renames::default()).unwrap();
+    let file = &files[SCREENS];
+    assert!(
+        file.contains("    NpcDialog,\n    /// `Npc_Dialog`.\n    NpcDialog2,\n}"),
+        "{file}"
+    );
+    assert!(
+        file.contains("        Self::NpcDialog,\n        Self::NpcDialog2,\n    ];"),
+        "{file}"
+    );
+}
+
+/// Where the generator writes the game's screens.
+const SCREENS: &str = "crates/enshwick/src/ui/screens.rs";
+
 /// The fixture as a later build changes it: one change of each case.
 fn next_build() -> Catalogue {
     let mut new = fixture();

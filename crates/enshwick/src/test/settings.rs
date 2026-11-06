@@ -59,7 +59,9 @@ impl FakeHost {
     }
 
     /// The path `Load::mod_dir` returns; `mods/test` by default. The fake
-    /// creates nothing there.
+    /// creates nothing there. Where the loader lists every mod, the calling
+    /// one included, the fake lists only what [`FakeHost::loaded`] adds, so a
+    /// test of `Load::export_dir` adds the mod with its file in this folder.
     ///
     /// # Examples
     ///

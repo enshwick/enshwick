@@ -361,6 +361,18 @@ pub(crate) fn server() -> Result<usize, Status> {
     Ok(server)
 }
 
+/// The server, as [`server`] finds it, for an entity call (destroy, keep out
+/// of the save, teleport, a component write): [`Status::UNAVAILABLE`] where
+/// no server runs in this process or the build lacks the world's reads, so
+/// the call's [`Status::MISSING`] says only that its entity is gone.
+pub(crate) fn entity_call(loader: &Loader) -> Result<usize, Status> {
+    layout(loader).ok_or(Status::UNAVAILABLE)?;
+    server().map_err(|status| match status {
+        Status::MISSING => Status::UNAVAILABLE,
+        other => other,
+    })
+}
+
 /// `Ok` on the game thread at a quiet moment while a world runs:
 /// [`Status::WRONG_THREAD`] elsewhere or inside a step,
 /// [`Status::MISSING`] while no world runs.

@@ -8,6 +8,13 @@ use super::names::{camel, snake, split};
 use super::{Catalogue, Renames, Role, Ty};
 use crate::reflect::Kind;
 
+/// The game's enum of its screens, which `ui/screens.rs` is generated from.
+const SCREEN_TYPE: &str = "keen::HudScreenType";
+/// The member of [`SCREEN_TYPE`] that names no screen.
+const NO_SCREEN: &str = "Invalid";
+/// Where the screens go, below the enshwick repository root.
+const SCREENS_FILE: &str = "crates/enshwick/src/ui/screens.rs";
+
 /// Typedefs deeper than this are taken for a loop in bad data.
 const MAX_HOPS: usize = 32;
 
@@ -421,19 +428,7 @@ fn enum_item(ty: &Ty, place: &Place, doc: &str) -> String {
     );
     let mut taken = BTreeSet::from(["Other".to_owned()]);
     for (name, value) in &ty.values {
-        let base = camel(name);
-        // One suffix more than there are constants always finds a free name.
-        let variant = (1..=ty.values.len() + 1)
-            .map(|n| {
-                if n == 1 {
-                    base.clone()
-                } else {
-                    format!("{base}{n}")
-                }
-            })
-            .find(|candidate| !taken.contains(candidate))
-            .unwrap_or_default();
-        taken.insert(variant.clone());
+        let variant = variant(name, ty.values.len(), &mut taken);
         let _ = write!(
             out,
             "        /// `{name}`, {value}.\n        {variant} = \"{name}\",\n"
@@ -441,6 +436,26 @@ fn enum_item(ty: &Ty, place: &Place, doc: &str) -> String {
     }
     out.push_str("    }\n}\n");
     out
+}
+
+/// The Rust variant of the enum constant `name`, numbered past the names
+/// `taken` holds, which it then holds too; `count` is how many constants the
+/// enum has.
+fn variant(name: &str, count: usize, taken: &mut BTreeSet<String>) -> String {
+    let base = camel(name);
+    // One suffix more than there are constants always finds a free name.
+    let variant = (1..=count + 1)
+        .map(|n| {
+            if n == 1 {
+                base.clone()
+            } else {
+                format!("{base}{n}")
+            }
+        })
+        .find(|candidate| !taken.contains(candidate))
+        .unwrap_or_default();
+    taken.insert(variant.clone());
+    variant
 }
 
 impl Catalogue {
@@ -479,8 +494,8 @@ impl Catalogue {
     }
 
     /// Every file the typed API is generated into, by path below the
-    /// enshwick repository root: the API crate's `typed` modules and the
-    /// loader's id table.
+    /// enshwick repository root: the API crate's `typed` modules and game
+    /// screens, and the loader's id table.
     ///
     /// # Errors
     ///
@@ -509,7 +524,88 @@ impl Catalogue {
             "crates/enshwick-gamedata/src/typed/ids.rs".to_owned(),
             self.ids_file(build, renames)?,
         );
+        if let Some(screens) = self.screens_file(build) {
+            files.insert(SCREENS_FILE.to_owned(), screens);
+        }
         Ok(files)
+    }
+
+    /// `ui/screens.rs` of the API crate: the game's screens, `HudScreenType`
+    /// without its `Invalid`, as the Rust enum mods extend screens by and
+    /// the names the fake host checks them against; `None` for a catalogue
+    /// without the type.
+    fn screens_file(&self, build: &str) -> Option<String> {
+        let screens: Vec<&str> = self
+            .types
+            .get(SCREEN_TYPE)?
+            .values
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .filter(|name| *name != NO_SCREEN)
+            .collect();
+        let mut taken = BTreeSet::new();
+        let variants: Vec<String> = screens
+            .iter()
+            .map(|name| variant(name, screens.len(), &mut taken))
+            .collect();
+        let mut out = String::from(
+            "//! The game's screens, which mods extend and the fake host checks\n\
+             //! extensions against as the loader does.\n\n",
+        );
+        out.push_str(&header(build));
+        let _ = write!(
+            out,
+            "\n/// One of the game's screens, which [`Load::extend_screen`](crate::Load::extend_screen) adds a panel to.\n\
+             ///\n\
+             /// The members and their names are the game's `HudScreenType`, from the\n\
+             /// reflection of {build}; a screen the running build lacks is refused at\n\
+             /// registration.\n\
+             ///\n\
+             /// # Examples\n\
+             ///\n\
+             /// ```\n\
+             /// use enshwick::ui::HudScreenType;\n\
+             ///\n\
+             /// assert_eq!(HudScreenType::StorageChest.name(), \"StorageChest\");\n\
+             /// ```\n\
+             #[cfg(feature = \"unstable\")]\n\
+             #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]\n\
+             #[non_exhaustive]\n\
+             pub enum HudScreenType {{\n"
+        );
+        for (name, variant) in screens.iter().zip(&variants) {
+            let _ = writeln!(out, "    /// `{name}`.\n    {variant},");
+        }
+        out.push_str(
+            "}\n\n\
+             #[cfg(feature = \"unstable\")]\n\
+             impl HudScreenType {\n    \
+             /// Every screen, in the game's order.\n    \
+             ///\n    \
+             /// # Examples\n    \
+             ///\n    \
+             /// ```\n    \
+             /// use enshwick::ui::HudScreenType;\n    \
+             ///\n    \
+             /// assert!(HudScreenType::ALL.contains(&HudScreenType::Map));\n    \
+             /// ```\n    \
+             pub const ALL: [Self; NAMES.len()] = [\n",
+        );
+        for variant in &variants {
+            let _ = writeln!(out, "        Self::{variant},");
+        }
+        let _ = write!(
+            out,
+            "    ];\n}}\n\n\
+             /// The game's name of each `HudScreenType` member, in the game's order.\n\
+             pub(crate) const NAMES: [&str; {}] = [\n",
+            screens.len()
+        );
+        for name in &screens {
+            let _ = writeln!(out, "    \"{name}\",");
+        }
+        out.push_str("];\n");
+        Some(out)
     }
 }
 

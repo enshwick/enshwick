@@ -260,8 +260,9 @@ pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Statu
 /// Asks the server to teleport an entity after the next step, as its admin
 /// teleport does.
 pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
-    let teleport = layout.teleport.ok_or(Status::MISSING)?;
+    crate::world::entity_call(loader)?;
+    let layout = layout(loader).ok_or(Status::UNAVAILABLE)?;
+    let teleport = layout.teleport.ok_or(Status::UNAVAILABLE)?;
     let world = entity_world()?;
     if request.entity == Entity(0) {
         return Err(Status::BAD_ARGS);
@@ -304,7 +305,7 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     // sits at the table's `ecs.command_buffers`.
     let buffer: usize = unsafe { crate::memory::read(world, layout.command_buffers) };
     if buffer == 0 {
-        return Err(Status::MISSING);
+        return Err(Status::UNAVAILABLE);
     }
     let size = u32::try_from(layout.record_data + data.len()).map_err(|_| Status::BAD_ARGS)?;
     // SAFETY: `layout.append` is the table's `ecs.command_append`, on the

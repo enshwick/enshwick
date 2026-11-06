@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 12
+#define ENSHWICK_ABI_MINOR 13
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -1354,6 +1354,12 @@ typedef uint32_t EnshwickStatus;
 // The entity has nothing the world's next load finds it again by: a
 // player's character, or an entity with no place in the world.
 #define EnshwickStatus_NOT_KEPT 12
+// The call cannot run in this process: no server runs here, as on a
+// client in another's game, or this build lacks the pieces the call
+// needs; `Status::MISSING` then means only that what the call names
+// is not there. A mod built for an older minor reads it as any status
+// it does not know.
+#define EnshwickStatus_UNAVAILABLE 13
 
 // An opaque handle the loader gives each mod; every call names its caller
 // with it.
@@ -3497,8 +3503,9 @@ typedef struct EnshwickHostApi {
                              uint32_t *count);
   // Asks the server to destroy `entity` after the systems of the next
   // step; `Status::REFUSED` for a player's character,
-  // `Status::MISSING` for an entity not in the world. On the server's
-  // game thread only.
+  // `Status::MISSING` for an entity not in the world,
+  // `Status::UNAVAILABLE` where no server runs or on a build without the
+  // command (ABI 11.13). On the server's game thread only.
   EnshwickStatus (*destroy)(EnshwickModHandle me, EnshwickEntity entity);
   // Asks the server to save the world now, as its timed saves do;
   // `Event::WORLD_SAVED` follows once the save is on disk. A save under
@@ -3518,8 +3525,9 @@ typedef struct EnshwickHostApi {
   // copy the game keeps for clients (`Network*`, `Client*`), which it
   // overwrites; `Status::STATIC_HALF` for the static half of an ECS
   // type, the template's set-up data;
-  // `Status::MISSING` when the entity lacks the component. On the
-  // server's game thread only.
+  // `Status::MISSING` when the entity lacks the component or is not in
+  // the world; `Status::UNAVAILABLE` where no server runs or on a build
+  // without writes (ABI 11.13). On the server's game thread only.
   EnshwickStatus (*component_write)(EnshwickModHandle me,
                                     EnshwickEntity entity,
                                     uint32_t type_hash,
@@ -3538,7 +3546,8 @@ typedef struct EnshwickHostApi {
   // Asks the server to move an entity as its admin teleport does, after
   // the next step; `Status::MISSING` for an entity not in the world,
   // `Status::REFUSED` for one the game's teleport does not move, as a
-  // prop: it moves actors and characters.
+  // prop: it moves actors and characters; `Status::UNAVAILABLE` where
+  // no server runs or on a build without teleports (ABI 11.13).
   // On the server's game thread only.
   EnshwickStatus (*teleport)(EnshwickModHandle me, const struct EnshwickTeleportRequest *request);
   // Asks the server to spawn an entity from a template, as its admin
@@ -4759,8 +4768,9 @@ typedef struct EnshwickHostApi {
   // the next step on; the next save after that keeps it or leaves it
   // out. `Status::REFUSED` for an entity no mod spawned since the world
   // loaded, such as a vanilla one, or a full command buffer; `Status::MISSING` for an
-  // entity not in the world, on a client or on a build without the
-  // commands; `Status::BAD_ARGS` for entity 0. On the server's game
+  // entity not in the world; `Status::UNAVAILABLE` where no server
+  // runs, as on a client in another's game, or on a build without the
+  // commands (ABI 11.13); `Status::BAD_ARGS` for entity 0. On the server's game
   // thread only (`Status::WRONG_THREAD` elsewhere). A panic in the
   // loader returns `Status::REFUSED`. ABI 11.9.
   EnshwickStatus (*set_saved)(EnshwickModHandle me, EnshwickEntity entity, uint8_t saved);

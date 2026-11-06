@@ -1,7 +1,8 @@
 //! `cargo enshwick generate`: the typed API from a build's reflection. With
 //! an executable it snapshots the build's covered types beside the build
-//! tables; it then writes the API crate's `typed` modules and the loader's id
-//! table from the newest server build's snapshot, or with `--check` fails
+//! tables; it then writes the API crate's `typed` modules and game screens
+//! and the loader's id table from the newest server build's snapshot, or with
+//! `--check` fails
 //! when they differ from what is committed.
 
 use std::collections::BTreeMap;

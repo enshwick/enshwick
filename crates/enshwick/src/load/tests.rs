@@ -7,6 +7,11 @@ fn a_failed_call_names_what_failed_and_why() {
         off.unwrap_err().to_string(),
         "component type keen::X: missing on this game build"
     );
+    let off = super::ok(Status::UNAVAILABLE, (), || "destroy".to_owned());
+    assert_eq!(
+        off.unwrap_err().to_string(),
+        "destroy: not available here or on this game build"
+    );
 }
 
 #[test]

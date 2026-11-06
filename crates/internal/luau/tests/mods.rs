@@ -414,10 +414,17 @@ mod tests {
     ";
 
     #[test]
-    fn the_export_folder_sits_beside_mods_named_as_the_mod_s_folder() {
+    fn the_export_folder_sits_beside_mods_named_by_the_mod_id() {
         let script = EXPORT;
+        let listed = enshwick::abi::ModInfo {
+            id: enshwick::abi::Str::new("you.export"),
+            file: enshwick::abi::Str::new("mods/Export Pack/pack.toml"),
+            ..enshwick::abi::ModInfo::EMPTY
+        };
         let (installed, status) = start_with(
-            FakeHost::new().mod_dir("game/mods/you.export"),
+            FakeHost::new()
+                .mod_dir("game/mods/Export Pack")
+                .loaded(listed),
             script,
             Scripts::new(),
             None,

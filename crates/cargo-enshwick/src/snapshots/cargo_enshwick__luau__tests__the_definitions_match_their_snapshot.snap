@@ -945,7 +945,7 @@ export type Hud = {
 	progress: (self: Hud, anchor: Anchor, fraction: number) -> (),
 }
 
---- One of the game's screens, which `Load.extend_screen` adds a panel to. The members and their names are the game's `HudScreenType`, read from its reflection on client 520; a screen the running build lacks is refused at registration.
+--- One of the game's screens, which `Load.extend_screen` adds a panel to. The members and their names are the game's `HudScreenType`, from the reflection of server build 224 (Steam 26430253); a screen the running build lacks is refused at registration.
 export type HudScreenType = "InGame" | "SystemMenu" | "SettingsMenu" | "InGameMenu" | "Map" | "Journal" | "Character" | "PlayerCrafting" | "Backpack" | "SkillTree" | "SkillTreeRespec" | "FlameAltar" | "AltarUpgrade" | "FlameUpgrade" | "AltarDeactivate" | "AltarReskill" | "AltarItemPickup" | "LoreReading" | "Signpost" | "LogicEditor" | "ReadOnlyLootChest" | "StorageChest" | "Collection" | "FeedingStation" | "StationBasedCrafting" | "NpcDialog" | "NpcCrafting" | "FactoryCrafting" | "BlueprintMultiTool" | "BlueprintMultiToolMaterialCatalog" | "OvergrowthMultiTool" | "DecayMultiTool" | "ScrewdriverMultiToolBuildingMode" | "ScrewdriverMultiToolGraphManager" | "ScrewdriverMultiToolEntityConfig" | "TerraformingSideMenu" | "NpcSummonerMenu" | "UserFeedback" | "TwitchDrops" | "RedeemCommerceProducts" | "CommerceProductChest" | "ItemTinting" | "TextChat" | "Social" | "ShroudForge" | "CharacterCustomization" | "Rename" | "TakeScreenshot" | "InfoPopup" | "NewCommerceUnlock" | "NoUi" | "TechGallery" | "YcPlayground"
 
 --- An item's own icon, for `NewItem.icon`.
@@ -3303,7 +3303,7 @@ declare enshwick: {
 	--- The mod's folder in `mods/`, which holds its installation, such as an installation `Hold`.
 	--- Only while the mod starts, at the top level of main.luau.
 	mod_dir: () -> string,
-	--- The folder `export/<folder>/` in the game folder, named as the mod's folder in `mods/`, its id as players install it, where a mod writes files for tools outside the game, such as a wiki or a map; a mod may write to any other path too.
+	--- The folder `export/<id>/` in the game folder, named by the mod id whatever the mod's folder in `mods/` is called, where a mod writes files for tools outside the game, such as a wiki or a map; a mod may write to any other path too.
 	--- Only while the mod starts, at the top level of main.luau.
 	export_dir: () -> string,
 	--- The data a mod keeps for a world, and holds on its saves.

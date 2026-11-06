@@ -7,148 +7,9 @@ use crate::{Load, Off};
 
 use super::client_only;
 use super::frame::{Drawer, draw_frame};
-use super::screens::NAMES;
-#[cfg(test)]
-use super::screens::OPEN;
-
-/// One of the game's screens, which [`Load::extend_screen`] adds a panel to.
-///
-/// The members and their names are the game's `HudScreenType`, read from
-/// its reflection on client 520; a screen the running build lacks is
-/// refused at registration.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::ui::HudScreenType;
-///
-/// assert_eq!(HudScreenType::StorageChest.name(), "StorageChest");
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
-#[non_exhaustive]
-#[expect(missing_docs, reason = "each member is the game's screen of that name")]
-pub enum HudScreenType {
-    InGame,
-    SystemMenu,
-    SettingsMenu,
-    InGameMenu,
-    Map,
-    Journal,
-    Character,
-    PlayerCrafting,
-    Backpack,
-    SkillTree,
-    SkillTreeRespec,
-    FlameAltar,
-    AltarUpgrade,
-    FlameUpgrade,
-    AltarDeactivate,
-    AltarReskill,
-    AltarItemPickup,
-    LoreReading,
-    Signpost,
-    LogicEditor,
-    ReadOnlyLootChest,
-    StorageChest,
-    Collection,
-    FeedingStation,
-    StationBasedCrafting,
-    NpcDialog,
-    NpcCrafting,
-    FactoryCrafting,
-    BlueprintMultiTool,
-    BlueprintMultiToolMaterialCatalog,
-    OvergrowthMultiTool,
-    DecayMultiTool,
-    ScrewdriverMultiToolBuildingMode,
-    ScrewdriverMultiToolGraphManager,
-    ScrewdriverMultiToolEntityConfig,
-    TerraformingSideMenu,
-    NpcSummonerMenu,
-    UserFeedback,
-    TwitchDrops,
-    RedeemCommerceProducts,
-    CommerceProductChest,
-    ItemTinting,
-    TextChat,
-    Social,
-    ShroudForge,
-    CharacterCustomization,
-    Rename,
-    TakeScreenshot,
-    InfoPopup,
-    NewCommerceUnlock,
-    NoUi,
-    TechGallery,
-    YcPlayground,
-}
+use super::screens::{HudScreenType, NAMES};
 
 impl HudScreenType {
-    /// Every screen, in the game's order.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::ui::HudScreenType;
-    ///
-    /// assert!(HudScreenType::ALL.contains(&HudScreenType::Map));
-    /// ```
-    pub const ALL: [Self; NAMES.len()] = [
-        Self::InGame,
-        Self::SystemMenu,
-        Self::SettingsMenu,
-        Self::InGameMenu,
-        Self::Map,
-        Self::Journal,
-        Self::Character,
-        Self::PlayerCrafting,
-        Self::Backpack,
-        Self::SkillTree,
-        Self::SkillTreeRespec,
-        Self::FlameAltar,
-        Self::AltarUpgrade,
-        Self::FlameUpgrade,
-        Self::AltarDeactivate,
-        Self::AltarReskill,
-        Self::AltarItemPickup,
-        Self::LoreReading,
-        Self::Signpost,
-        Self::LogicEditor,
-        Self::ReadOnlyLootChest,
-        Self::StorageChest,
-        Self::Collection,
-        Self::FeedingStation,
-        Self::StationBasedCrafting,
-        Self::NpcDialog,
-        Self::NpcCrafting,
-        Self::FactoryCrafting,
-        Self::BlueprintMultiTool,
-        Self::BlueprintMultiToolMaterialCatalog,
-        Self::OvergrowthMultiTool,
-        Self::DecayMultiTool,
-        Self::ScrewdriverMultiToolBuildingMode,
-        Self::ScrewdriverMultiToolGraphManager,
-        Self::ScrewdriverMultiToolEntityConfig,
-        Self::TerraformingSideMenu,
-        Self::NpcSummonerMenu,
-        Self::UserFeedback,
-        Self::TwitchDrops,
-        Self::RedeemCommerceProducts,
-        Self::CommerceProductChest,
-        Self::ItemTinting,
-        Self::TextChat,
-        Self::Social,
-        Self::ShroudForge,
-        Self::CharacterCustomization,
-        Self::Rename,
-        Self::TakeScreenshot,
-        Self::InfoPopup,
-        Self::NewCommerceUnlock,
-        Self::NoUi,
-        Self::TechGallery,
-        Self::YcPlayground,
-    ];
-
     /// The game's name of the screen, which the loader looks up in the
     /// running build.
     ///
@@ -351,7 +212,6 @@ mod tests {
         assert_eq!(HudScreenType::StorageChest.name(), "StorageChest");
         assert_eq!(HudScreenType::NoUi.name(), "NoUi");
         assert_eq!(HudScreenType::YcPlayground.name(), "YcPlayground");
-        assert!(OPEN.iter().all(|open| NAMES.contains(open)));
     }
 
     #[test]

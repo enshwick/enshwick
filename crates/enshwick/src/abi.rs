@@ -514,6 +514,12 @@ impl Status {
     /// The entity has nothing the world's next load finds it again by: a
     /// player's character, or an entity with no place in the world.
     pub const NOT_KEPT: Self = Self(12);
+    /// The call cannot run in this process: no server runs here, as on a
+    /// client in another's game, or this build lacks the pieces the call
+    /// needs; [`Status::MISSING`] then means only that what the call names
+    /// is not there. A mod built for an older minor reads it as any status
+    /// it does not know.
+    pub const UNAVAILABLE: Self = Self(13);
 
     /// Whether this is [`Status::OK`].
     ///

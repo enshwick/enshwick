@@ -262,7 +262,8 @@ fn place(layout: &Layout, entry: &[u8]) -> EntityPlace {
 /// Asks the engine to destroy `entity` after the systems of the next step;
 /// players' characters and entities not in the world are refused.
 pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+    crate::world::entity_call(loader)?;
+    let layout = layout(loader).ok_or(Status::UNAVAILABLE)?;
     let world = entity_world()?;
     if entity == Entity(0) {
         return Err(Status::BAD_ARGS);
@@ -279,7 +280,7 @@ pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), Status> {
     // command buffers at the table's `ecs.command_buffers`.
     let buffer = unsafe { crate::memory::read_ptr::<u8>(world, layout.command_buffers) };
     if buffer.is_null() {
-        return Err(Status::MISSING);
+        return Err(Status::UNAVAILABLE);
     }
     // SAFETY: `buffer` is the world's first command buffer, non-null by the
     // earlier check, used on the game thread between steps, where no system
@@ -300,7 +301,8 @@ pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<
     if entity == Entity(0) {
         return Err(Status::BAD_ARGS);
     }
-    let saving = saving(loader).ok_or(Status::MISSING)?;
+    crate::world::entity_call(loader)?;
+    let saving = saving(loader).ok_or(Status::UNAVAILABLE)?;
     let world = entity_world()?;
     let template = crate::world::template(loader, entity)?;
     if crate::spawns::spawned(entity) != Some(template) {
@@ -311,7 +313,7 @@ pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<
         return Ok(());
     }
     if saved {
-        let remove = saving.remove.ok_or(Status::MISSING)?;
+        let remove = saving.remove.ok_or(Status::UNAVAILABLE)?;
         let command = append(saving, world, remove.kind, remove.size, entity)?;
         // SAFETY: `append` handed out `remove.size` writable bytes, the
         // table's `ecs.remove_components_size`, which nothing else touches
@@ -319,7 +321,7 @@ pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<
         // table's `ecs.remove_components_hashes`, inside them.
         unsafe { enshwick::raw::write_at(command, remove.hash_at, saving.hash) };
     } else {
-        let add = saving.add.ok_or(Status::MISSING)?;
+        let add = saving.add.ok_or(Status::UNAVAILABLE)?;
         let command = append(saving, world, add.kind, add.size, entity)?;
         // SAFETY: `append` handed out `add.size` writable bytes,
         // `ecs.command_set_data` plus the component's size, zeroed after the
@@ -350,7 +352,7 @@ fn append(
     // command buffers at the table's `ecs.command_buffers`.
     let buffer = unsafe { crate::memory::read_ptr::<u8>(world, saving.command_buffers) };
     if buffer.is_null() {
-        return Err(Status::MISSING);
+        return Err(Status::UNAVAILABLE);
     }
     // SAFETY: `saving.append` is the table's `ecs.command_append`, on the
     // world's first command buffer, non-null by the guard before it, and its
