@@ -53,7 +53,7 @@ knowledge entry or a buff is its GUID.
 | `Join`             | `join = true`           | The player joins the world                 |
 | `Loot`             | `loot = true`           | The player loots a container               |
 | `Quest`            | `quest = true`          | The player completes a quest               |
-| `Consume(item)`    | `consume = "<item>"`    | Every item filter allowed the player's use |
+| `Consume(item)`    | `consume = "<item>"`    | The game took the item of an allowed use   |
 | `Pickup(item)`     | `pickup = "<item>"`     | The player picks the item up               |
 
 | Gift                       | In `rewards.toml`                 | What the player gets                                     |
