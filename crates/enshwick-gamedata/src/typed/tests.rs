@@ -150,6 +150,25 @@ fn the_game_s_screens_generate_the_ui_enum_and_names_without_invalid() {
     assert!(file.contains("from the reflection of b;"), "{file}");
 }
 
+#[test]
+fn two_screens_that_case_alike_take_numbered_variants() {
+    let mut catalogue = fixture();
+    let mut screens = catalogue.types["demo::ecs::Faction"].clone();
+    screens.name = "keen::HudScreenType".to_owned();
+    screens.values = vec![("NpcDialog".to_owned(), 0), ("Npc_Dialog".to_owned(), 1)];
+    catalogue.types.insert(screens.name.clone(), screens);
+    let files = catalogue.files("b", &Renames::default()).unwrap();
+    let file = &files[SCREENS];
+    assert!(
+        file.contains("    NpcDialog,\n    /// `Npc_Dialog`.\n    NpcDialog2,\n}"),
+        "{file}"
+    );
+    assert!(
+        file.contains("        Self::NpcDialog,\n        Self::NpcDialog2,\n    ];"),
+        "{file}"
+    );
+}
+
 /// Where the generator writes the game's screens.
 const SCREENS: &str = "crates/enshwick/src/ui/screens.rs";
 

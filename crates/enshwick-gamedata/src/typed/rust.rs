@@ -428,19 +428,7 @@ fn enum_item(ty: &Ty, place: &Place, doc: &str) -> String {
     );
     let mut taken = BTreeSet::from(["Other".to_owned()]);
     for (name, value) in &ty.values {
-        let base = camel(name);
-        // One suffix more than there are constants always finds a free name.
-        let variant = (1..=ty.values.len() + 1)
-            .map(|n| {
-                if n == 1 {
-                    base.clone()
-                } else {
-                    format!("{base}{n}")
-                }
-            })
-            .find(|candidate| !taken.contains(candidate))
-            .unwrap_or_default();
-        taken.insert(variant.clone());
+        let variant = variant(name, ty.values.len(), &mut taken);
         let _ = write!(
             out,
             "        /// `{name}`, {value}.\n        {variant} = \"{name}\",\n"
@@ -448,6 +436,26 @@ fn enum_item(ty: &Ty, place: &Place, doc: &str) -> String {
     }
     out.push_str("    }\n}\n");
     out
+}
+
+/// The Rust variant of the enum constant `name`, numbered past the names
+/// `taken` holds, which it then holds too; `count` is how many constants the
+/// enum has.
+fn variant(name: &str, count: usize, taken: &mut BTreeSet<String>) -> String {
+    let base = camel(name);
+    // One suffix more than there are constants always finds a free name.
+    let variant = (1..=count + 1)
+        .map(|n| {
+            if n == 1 {
+                base.clone()
+            } else {
+                format!("{base}{n}")
+            }
+        })
+        .find(|candidate| !taken.contains(candidate))
+        .unwrap_or_default();
+    taken.insert(variant.clone());
+    variant
 }
 
 impl Catalogue {
@@ -535,6 +543,11 @@ impl Catalogue {
             .map(|(name, _)| name.as_str())
             .filter(|name| *name != NO_SCREEN)
             .collect();
+        let mut taken = BTreeSet::new();
+        let variants: Vec<String> = screens
+            .iter()
+            .map(|name| variant(name, screens.len(), &mut taken))
+            .collect();
         let mut out = String::from(
             "//! The game's screens, which mods extend and the fake host checks\n\
              //! extensions against as the loader does.\n\n",
@@ -560,8 +573,8 @@ impl Catalogue {
              #[non_exhaustive]\n\
              pub enum HudScreenType {{\n"
         );
-        for name in &screens {
-            let _ = writeln!(out, "    /// `{name}`.\n    {},", camel(name));
+        for (name, variant) in screens.iter().zip(&variants) {
+            let _ = writeln!(out, "    /// `{name}`.\n    {variant},");
         }
         out.push_str(
             "}\n\n\
@@ -578,8 +591,8 @@ impl Catalogue {
              /// ```\n    \
              pub const ALL: [Self; NAMES.len()] = [\n",
         );
-        for name in &screens {
-            let _ = writeln!(out, "        Self::{},", camel(name));
+        for variant in &variants {
+            let _ = writeln!(out, "        Self::{variant},");
         }
         let _ = write!(
             out,
