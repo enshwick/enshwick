@@ -11,6 +11,7 @@ mod tests {
     use enshwick::resources::{Registry, Value};
     use enshwick::test::{
         ENTITY_ITEM, FILL_TABLE, FakeHost, Installed, LOOT_ITEM, OTHER_ITEM, RANDOM_LOOT,
+        SPARE_ITEM,
     };
     use enshwick::{Load, Mod, Off};
 
@@ -24,6 +25,8 @@ mod tests {
             load.remove_workshop(ENTITY_ITEM)?;
             load.remove_loot_table(FILL_TABLE)?;
             load.rekey_item(OTHER_ITEM, LOOT_ITEM)?;
+            // A second re-key of the same item chains on the first.
+            load.rekey_item(OTHER_ITEM, SPARE_ITEM)?;
             let mut refused = REFUSED.lock().unwrap();
             for result in [
                 load.rekey_item(LOOT_ITEM, ENTITY_ITEM),
@@ -130,10 +133,14 @@ mod tests {
             "loot_fill_table",
             "demo::ecs::DefaultInventoryResource",
         );
-        let stacks = fill
-            .field("rootGroup")
-            .and_then(|root| root.field("stacks"));
-        assert_eq!(stacks, Some(&Value::List(vec![])));
+        let root = fill.field("rootGroup").unwrap();
+        assert_eq!(root.field("stacks"), Some(&Value::List(vec![])));
+        assert_eq!(
+            root.field("lootLabels")
+                .and_then(|labels| labels.field("labels")),
+            Some(&Value::List(vec![])),
+            "no loot by label"
+        );
         let refused = REFUSED.lock().unwrap().clone();
         assert!(
             refused.iter().any(|r| r.contains("not in the game")),
@@ -142,12 +149,12 @@ mod tests {
     }
 
     #[test]
-    fn a_rekeyed_item_keeps_its_id_and_stack_and_one_with_another_entity_kind_is_refused() {
+    fn a_rekeyed_item_keeps_its_id_guid_and_stack_and_chains_and_an_entity_mismatch_is_refused() {
         let loader = start();
         let item = built(
             &loader,
             OTHER_ITEM,
-            LOOT_ITEM,
+            OTHER_ITEM,
             "item_info",
             "demo::ItemInfo",
         );
@@ -155,10 +162,16 @@ mod tests {
             id(item.field("itemId")),
             Some(u64::from(OTHER_ITEM.fnv1a()))
         );
+        assert_eq!(item.field("objectId"), Some(&Value::Guid(OTHER_ITEM)));
         assert_eq!(
             item.field("maxStackSize"),
             Some(&Value::Uint(50)),
-            "the old item's 50 over 20"
+            "the old item's 50 over 20 and 30"
+        );
+        assert_eq!(
+            item.field("category"),
+            Some(&Value::Uint(u64::from(SPARE_ITEM.0[15]))),
+            "the last re-key's data"
         );
         let refused = REFUSED.lock().unwrap().clone();
         assert!(

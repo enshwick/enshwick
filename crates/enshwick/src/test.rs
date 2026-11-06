@@ -119,7 +119,7 @@ pub use progression::{
     VANILLA_PLAYER_KNOWLEDGE, VANILLA_QUEST, VANILLA_WORLD_KNOWLEDGE,
 };
 #[cfg(feature = "typed")]
-pub use removal::{ENTITY_ITEM, FILL_TABLE, LOOT_ITEM, OTHER_ITEM, RANDOM_LOOT};
+pub use removal::{ENTITY_ITEM, FILL_TABLE, LOOT_ITEM, OTHER_ITEM, RANDOM_LOOT, SPARE_ITEM};
 pub use settings::SettingsRefused;
 pub use templates::{
     BITE, BOSS_CREATURE, CRAFTING_PROP_ITEM, CREATURE, ENEMY, ENEMY_ARSENAL, HOWL, LUNGE, NEST,

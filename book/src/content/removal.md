@@ -50,7 +50,8 @@ which the mod leaves alone.
 ## Empty a loot table
 
 `load.remove_loot_table(table)` serves a random loot table or a container's
-fill table that gives nothing. Loot players hold is plain stacks and stays.
+fill table that gives nothing: a fill table loses its stacks, its groups and
+the labels it rolls loot by. Loot players hold is plain stacks and stays.
 A table the game lacks returns `Err(Off)`.
 
 ## Serve one item with another's data
@@ -63,7 +64,10 @@ ammunition, and every held stack of logs stayed.
 
 - The stack size is at least `old`'s: the game cuts a held stack above its
   item's stack size and saves the cut.
-- Saves keep `old`'s id, so a world opens as vanilla without the mod.
+- Saves keep `old`'s id and GUID, so a world opens as vanilla without the
+  mod.
+- Mods that re-key or serve `old` chain in load order, and the last
+  re-key's data wins. A build that fails keeps `old` as it was.
 - An item with an entity of its own (`ItemFlag::HasPIDE`), such as one with
   durability, re-keys only to another such item; otherwise the call returns
   `Err(Off)`, since the game would make or clear that entity in every held

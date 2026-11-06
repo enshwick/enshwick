@@ -1,5 +1,5 @@
 //! The fake's items and loot tables reflected, for removing and re-keying
-//! vanilla content: three items, a random loot table and a fill table.
+//! vanilla content: four items, a random loot table and a fill table.
 
 use crate::content::Guid;
 use crate::resources::{Constant, Field, Kind, Registry, Type, Value, fnv1a32};
@@ -14,6 +14,8 @@ const FILL: &str = "demo::ecs::DefaultInventoryResource";
 pub const LOOT_ITEM: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000017e1");
 /// A vanilla item of the fake that stacks to 50.
 pub const OTHER_ITEM: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000017e2");
+/// A vanilla item of the fake that stacks to 30.
+pub const SPARE_ITEM: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000017e4");
 /// A vanilla item of the fake with an entity of its own (`HasPIDE`).
 pub const ENTITY_ITEM: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000017e3");
 /// The fake's random loot table, listing [`LOOT_ITEM`] and [`OTHER_ITEM`].
@@ -50,13 +52,16 @@ fn removal_types() -> Vec<Type<'static>> {
                 Constant::new("HasPIDE", 1),
             ]),
         Type::new("demo::ItemFlags", Kind::Bitmask32, 4, 4).with_inner("demo::ItemFlag"),
+        Type::new("demo::Guid", Kind::Guid, 16, 4),
         named(
             ITEM,
-            12,
+            32,
             vec![
                 field("itemId", 0, "demo::ItemId"),
-                field("maxStackSize", 4, "demo::uint16"),
-                field("flags", 8, "demo::ItemFlags"),
+                field("objectId", 4, "demo::Guid"),
+                field("maxStackSize", 20, "demo::uint16"),
+                field("category", 22, "demo::uint8"),
+                field("flags", 24, "demo::ItemFlags"),
             ],
         ),
         named(
@@ -82,18 +87,27 @@ fn removal_types() -> Vec<Type<'static>> {
             ],
         ),
         blobs("demo::ecs::ItemStackInfoResource"),
+        blobs("demo::uint32"),
+        named(
+            "demo::ItemLabelGroupResource",
+            8,
+            vec![field("labels", 0, "demo::BlobArray<demo::uint32>")],
+        ),
         named(
             "demo::ecs::DefaultInventoryGroupResource",
-            8,
-            vec![field(
-                "stacks",
-                0,
-                "demo::BlobArray<demo::ecs::ItemStackInfoResource>",
-            )],
+            16,
+            vec![
+                field(
+                    "stacks",
+                    0,
+                    "demo::BlobArray<demo::ecs::ItemStackInfoResource>",
+                ),
+                field("lootLabels", 8, "demo::ItemLabelGroupResource"),
+            ],
         ),
         named(
             FILL,
-            8,
+            16,
             vec![field(
                 "rootGroup",
                 0,
@@ -118,7 +132,7 @@ fn id(item: Guid) -> Value {
 
 impl FakeHost {
     /// Items and loot tables reflected: the vanilla items [`LOOT_ITEM`],
-    /// [`OTHER_ITEM`] and [`ENTITY_ITEM`], the random loot table
+    /// [`OTHER_ITEM`], [`SPARE_ITEM`] and [`ENTITY_ITEM`], the random loot table
     /// [`RANDOM_LOOT`] and the fill table [`FILL_TABLE`]. What
     /// `Load::remove_item`, `remove_loot_table` and `rekey_item` resolve.
     ///
@@ -139,7 +153,9 @@ impl FakeHost {
         let item = |guid: Guid, stack: u64, flags: Vec<String>| {
             fields(vec![
                 ("itemId", id(guid)),
+                ("objectId", Value::Guid(guid)),
                 ("maxStackSize", Value::Uint(stack)),
+                ("category", Value::Uint(u64::from(guid.0[15]))),
                 ("flags", Value::Flags(flags)),
             ])
         };
@@ -149,6 +165,7 @@ impl FakeHost {
         let served = [
             (LOOT_ITEM, ITEM, item(LOOT_ITEM, 20, vec![])),
             (OTHER_ITEM, ITEM, item(OTHER_ITEM, 50, vec![])),
+            (SPARE_ITEM, ITEM, item(SPARE_ITEM, 30, vec![])),
             (
                 ENTITY_ITEM,
                 ITEM,
@@ -167,7 +184,13 @@ impl FakeHost {
                 FILL,
                 fields(vec![(
                     "rootGroup",
-                    fields(vec![("stacks", Value::List(vec![stack]))]),
+                    fields(vec![
+                        ("stacks", Value::List(vec![stack])),
+                        (
+                            "lootLabels",
+                            fields(vec![("labels", Value::List(vec![Value::Uint(9)]))]),
+                        ),
+                    ]),
                 )]),
             ),
         ];

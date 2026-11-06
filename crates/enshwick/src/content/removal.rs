@@ -31,12 +31,16 @@ use super::{EngineFacts, Guid, types};
 
 /// The game's names of the fields a removal reads and writes (server 399).
 const ITEM_ID: &str = "itemId";
+const OBJECT_ID: &str = "objectId";
 const MAX_STACK: &str = "maxStackSize";
 const FLAGS: &str = "flags";
 const ITEMS: &str = "items";
 const ROOT: &str = "rootGroup";
 const STACKS: &str = "stacks";
 const GROUPS: &str = "groups";
+const LOOT_LABELS: &str = "lootLabels";
+const LABELS: &str = "labels";
+const CHILD_GROUPS: &str = "childGroups";
 /// The bit `ItemFlag::HasPIDE` holds when flags read as a number.
 const PIDE_BIT: u64 = 1 << 1;
 
@@ -74,7 +78,9 @@ fn without(mut table: Value, item: u32) -> Result<Value, Off> {
     }
 }
 
-/// The loot table `table`, random or a fill table, giving nothing.
+/// The loot table `table`, random or a fill table, giving nothing: a fill
+/// table's root group loses its stacks, its groups and the labels it rolls
+/// loot by.
 fn emptied(mut table: Value) -> Result<Value, Off> {
     if let Some(Value::List(entries)) = table.field_mut(ITEMS) {
         entries.clear();
@@ -88,33 +94,44 @@ fn emptied(mut table: Value) -> Result<Value, Off> {
             list.clear();
         }
     }
+    if let Some(labels) = root.field_mut(LOOT_LABELS) {
+        for name in [LABELS, CHILD_GROUPS] {
+            if let Some(Value::List(list)) = labels.field_mut(name) {
+                list.clear();
+            }
+        }
+    }
     Ok(table)
 }
 
-/// The item `new` served as `old`: `old`'s id and at least its stack size,
-/// the rest `new`'s.
+/// The item `old` with the data of the item `new`: `old`'s own id and GUID,
+/// and at least its stack size.
 ///
 /// # Errors
 ///
 /// [`Off`] when one of the two has an entity of its own and the other not.
-fn rekeyed(mut new: Value, old: &Value) -> Result<Value, Off> {
-    if has_entity(&new) != has_entity(old) {
+fn rekeyed(old: &Value, new: &Value) -> Result<Value, Off> {
+    if has_entity(new) != has_entity(old) {
         return Err(Off::new(
             "one item has an entity of its own and the other not, which the game would make or clear in every held stack",
         ));
     }
-    let id = old
-        .field(ITEM_ID)
-        .cloned()
-        .ok_or_else(|| Off::new("the old item has no id"))?;
     let stack = |item: &Value| item.field(MAX_STACK).and_then(id_of).unwrap_or(0);
-    let most = stack(old).max(stack(&new));
-    *new.field_mut(ITEM_ID)
-        .ok_or_else(|| Off::new("the new item has no id"))? = id;
-    if let Some(size) = new.field_mut(MAX_STACK) {
+    let most = stack(old).max(stack(new));
+    let mut served = new.clone();
+    for name in [ITEM_ID, OBJECT_ID] {
+        let own = old
+            .field(name)
+            .cloned()
+            .ok_or_else(|| Off::new(format!("the old item has no {name}")))?;
+        *served
+            .field_mut(name)
+            .ok_or_else(|| Off::new(format!("the new item has no {name}")))? = own;
+    }
+    if let Some(size) = served.field_mut(MAX_STACK) {
         *size = Value::Uint(most);
     }
-    Ok(new)
+    Ok(served)
 }
 
 #[crate::script(content_removal)]
@@ -139,20 +156,21 @@ impl Load<'_> {
     /// See the [module](self).
     #[script]
     pub fn remove_item(&mut self, item: Guid) -> Result<(), Off> {
-        recipes::disable(RecipeRule::Output(item.into()))?;
-        let source = format!("remove_item {item}");
-        self.change(
-            &Change::new(item, Field::Count, changes::Value::Set(0.0)),
-            &source,
-        )?;
         let host = self.host();
         let hash = host.hash(ids::LOOTABLE_ITEMS)?;
         let registry = Registry::game()?;
         let ty = registry
             .hashed(hash)
             .ok_or_else(|| Off::new("random loot tables: not a type of this build"))?;
+        let tables = host.resource_keys(Some(ty))?;
+        recipes::disable(RecipeRule::Output(item.into()))?;
+        let source = format!("remove_item {item}");
+        self.change(
+            &Change::new(item, Field::Count, changes::Value::Set(0.0)),
+            &source,
+        )?;
         let id = item.fnv1a();
-        for key in host.resource_keys(Some(ty))? {
+        for key in tables {
             crate::resources::serve_value(host, key, key, move |table| without(table, id))?;
         }
         Ok(())
@@ -216,11 +234,13 @@ impl Load<'_> {
     }
 
     /// Serves the vanilla item `old` with the data of the vanilla item
-    /// `new` while the mod runs, under `old`'s own id: saves, recipes and
-    /// loot that name `old` get `new`'s look and use. The stack size is at
-    /// least `old`'s, since the game cuts a held stack above its item's and
-    /// saves the cut; saves keep `old`'s id, so a world opens as vanilla
-    /// without the mod.
+    /// `new` while the mod runs, under `old`'s own id and GUID: saves,
+    /// recipes and loot that name `old` get `new`'s look and use. The stack
+    /// size is at least `old`'s, since the game cuts a held stack above its
+    /// item's and saves the cut; saves keep `old`'s id, so a world opens as
+    /// vanilla without the mod. Mods that serve `old` chain in load order,
+    /// and the last re-key's data wins; a build that fails keeps `old` as
+    /// it was.
     ///
     /// # Errors
     ///
@@ -234,11 +254,13 @@ impl Load<'_> {
     #[script]
     pub fn rekey_item(&mut self, old: Guid, new: Guid) -> Result<(), Off> {
         let host = self.host();
-        let (old_key, new_key) = (old.key(types::ITEM_INFO)?, new.key(types::ITEM_INFO)?);
-        let base = host.game_value(old_key)?;
-        rekeyed(host.game_value(new_key)?, &base)
+        let key = old.key(types::ITEM_INFO)?;
+        let data = host.game_value(new.key(types::ITEM_INFO)?)?;
+        rekeyed(&host.game_value(key)?, &data)
             .map_err(|off| Off::new(format!("re-key {old} to {new}: {off}")))?;
-        crate::resources::serve_value(host, old_key, new_key, move |item| rekeyed(item, &base))
+        // Served from `old` itself, so other mods' patches of it chain and a
+        // failed build keeps the vanilla item rather than none.
+        crate::resources::serve_value(host, key, key, move |item| rekeyed(&item, &data))
     }
 }
 
@@ -246,14 +268,16 @@ impl Load<'_> {
 mod tests {
     use super::*;
 
-    fn item(id: u64, stack: u64, flags: Value) -> Value {
+    fn item(id: u8, stack: u64, flags: Value) -> Value {
         Value::Struct(vec![
             (
                 ITEM_ID.into(),
-                Value::Struct(vec![("value".into(), Value::Uint(id))]),
+                Value::Struct(vec![("value".into(), Value::Uint(id.into()))]),
             ),
+            (OBJECT_ID.into(), Value::Guid(Guid([id; 16]))),
             (MAX_STACK.into(), Value::Uint(stack)),
             (FLAGS.into(), flags),
+            ("category".into(), Value::Uint(id.into())),
         ])
     }
 
@@ -265,29 +289,31 @@ mod tests {
     }
 
     #[test]
-    fn a_rekeyed_item_keeps_the_old_id_and_the_larger_stack() {
+    fn a_rekeyed_item_keeps_the_old_id_guid_and_the_larger_stack_and_takes_the_rest() {
         let served = rekeyed(
-            item(2, 20, Value::Flags(vec![])),
             &item(1, 50, Value::Flags(vec![])),
+            &item(2, 20, Value::Flags(vec![])),
         )
         .unwrap();
         assert_eq!(served.field(ITEM_ID).and_then(id_of), Some(1));
+        assert_eq!(served.field(OBJECT_ID), Some(&Value::Guid(Guid([1; 16]))));
         assert_eq!(served.field(MAX_STACK), Some(&Value::Uint(50)));
-        let served = rekeyed(item(2, 99, Value::Uint(0)), &item(1, 50, Value::Uint(0))).unwrap();
+        assert_eq!(served.field("category"), Some(&Value::Uint(2)));
+        let served = rekeyed(&item(1, 50, Value::Uint(0)), &item(2, 99, Value::Uint(0))).unwrap();
         assert_eq!(served.field(MAX_STACK), Some(&Value::Uint(99)));
     }
 
     #[test]
     fn a_rekey_between_an_item_with_an_entity_and_one_without_is_refused() {
-        assert!(rekeyed(item(2, 1, pide()), &item(1, 1, Value::Flags(vec![]))).is_err());
+        assert!(rekeyed(&item(1, 1, Value::Flags(vec![])), &item(2, 1, pide())).is_err());
         assert!(
             rekeyed(
-                item(2, 1, Value::Uint(0)),
-                &item(1, 1, Value::Uint(PIDE_BIT))
+                &item(1, 1, Value::Uint(PIDE_BIT)),
+                &item(2, 1, Value::Uint(0))
             )
             .is_err()
         );
-        assert!(rekeyed(item(2, 1, pide()), &item(1, 1, Value::Uint(PIDE_BIT))).is_ok());
+        assert!(rekeyed(&item(1, 1, Value::Uint(PIDE_BIT)), &item(2, 1, pide())).is_ok());
     }
 
     #[test]
@@ -323,9 +349,15 @@ mod tests {
         let second = without(first, 3).unwrap();
         assert_eq!(second.field(ITEMS), Some(&Value::List(vec![entry(2)])));
         let old = item(1, 10, Value::Flags(vec![]));
-        let first = rekeyed(item(2, 30, Value::Flags(vec![])), &old).unwrap();
-        let second = rekeyed(item(3, 5, Value::Flags(vec![])), &first).unwrap();
+        let first = rekeyed(&old, &item(2, 30, Value::Flags(vec![]))).unwrap();
+        let second = rekeyed(&first, &item(3, 5, Value::Flags(vec![]))).unwrap();
         assert_eq!(second.field(ITEM_ID).and_then(id_of), Some(1));
+        assert_eq!(second.field(OBJECT_ID), Some(&Value::Guid(Guid([1; 16]))));
+        assert_eq!(
+            second.field("category"),
+            Some(&Value::Uint(3)),
+            "the last mod's data"
+        );
         assert_eq!(
             second.field(MAX_STACK),
             Some(&Value::Uint(30)),
@@ -340,14 +372,26 @@ mod tests {
             emptied(random).unwrap().field(ITEMS),
             Some(&Value::List(vec![]))
         );
+        let labels = Value::Struct(vec![
+            (LABELS.into(), Value::List(vec![Value::Uint(3)])),
+            (CHILD_GROUPS.into(), Value::List(vec![Value::Uint(4)])),
+        ]);
         let group = Value::Struct(vec![
             (STACKS.into(), Value::List(vec![Value::Uint(1)])),
             (GROUPS.into(), Value::List(vec![Value::Uint(2)])),
+            (LOOT_LABELS.into(), labels),
         ]);
         let fill = emptied(Value::Struct(vec![(ROOT.into(), group)])).unwrap();
         let root = fill.field(ROOT).unwrap();
         assert_eq!(root.field(STACKS), Some(&Value::List(vec![])));
         assert_eq!(root.field(GROUPS), Some(&Value::List(vec![])));
+        let labels = root.field(LOOT_LABELS).unwrap();
+        assert_eq!(
+            labels.field(LABELS),
+            Some(&Value::List(vec![])),
+            "no loot by label"
+        );
+        assert_eq!(labels.field(CHILD_GROUPS), Some(&Value::List(vec![])));
         assert!(emptied(Value::Struct(vec![])).is_err());
     }
 }
