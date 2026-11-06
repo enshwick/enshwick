@@ -52,6 +52,16 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
         0x64d2_7908_60d9_c7f6,
     ),
     ("1.0 client (1269579)", "text.format", 0xae_f3d0),
+    // The resource database's key listing, which the server lists its
+    // templates through at start; on 26083076 checked live with a debugger.
+    ("1.0 server (1269579)", "textures.keys", 0x81_eac0),
+    ("1.0 server (1269579)", "textures.key_size", 0x20),
+    ("1.0 server (26083076)", "textures.keys", 0x82_0e00),
+    ("1.0 server (26083076)", "textures.key_size", 0x20),
+    ("1.0 server (26319703)", "textures.keys", 0x82_a8a0),
+    ("1.0 server (26319703)", "textures.key_size", 0x20),
+    ("1.0 server (26430253)", "textures.keys", 0x82_a8a0),
+    ("1.0 server (26430253)", "textures.key_size", 0x20),
     ("1.0 client (1269579)", "ui.dropdown_external", 0xc76),
     (
         "1.0 client (26082781)",
