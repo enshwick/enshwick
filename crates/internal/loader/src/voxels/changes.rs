@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 
 #[cfg(windows)]
-use enshwick::abi::{Event, Header, Voxel, VoxelEditData};
+use enshwick::abi::{Event, Header, VoxelEditData};
 use enshwick::abi::{ModHandle, VoxelChange};
 
 #[cfg(windows)]
@@ -57,6 +57,33 @@ type CommitFn = unsafe extern "system" fn(
 struct Layout {
     read_box: super::ReadBoxFn,
     level: u32,
+    /// The editor's `voxel.store` offset: the read dereferences the store
+    /// unconditionally, so a commit before the store is attached is skipped.
+    store: usize,
+}
+
+/// The most voxels a commit's box may hold for the link to read it, 128³:
+/// past the box of the largest terrain edit the API takes, aligned to its
+/// bricks. A larger box is not raised and counted.
+const MAX_BOX: u64 = 1 << 21;
+
+/// The voxels of a commit's box of `size` from `min` whose buffer holds
+/// `held` words; `None` for an empty box, one past
+/// [`Voxel::END`](enshwick::abi::Voxel::END), one over [`MAX_BOX`] or a
+/// buffer that does not hold it.
+fn box_count(min: [u32; 3], size: [u32; 3], held: u64) -> Option<usize> {
+    let mut count = 1u64;
+    for axis in 0..3 {
+        let end = min[axis].checked_add(size[axis])?;
+        if size[axis] == 0 || end > enshwick::abi::Voxel::END {
+            return None;
+        }
+        count = count.checked_mul(u64::from(size[axis]))?;
+    }
+    if count > MAX_BOX || count > held {
+        return None;
+    }
+    usize::try_from(count).ok()
 }
 
 /// The state of the voxel edits: the link, the server's editor it hears,
@@ -94,6 +121,11 @@ thread_local! {
     /// The mod whose call runs on this thread, whose writes happen on the
     /// thread of the call; none for the game's own.
     static BY: Cell<ModHandle> = const { Cell::new(ModHandle::NONE) };
+
+    /// The image of a commit's box before the write, kept between commits
+    /// so the game's write allocates only for the voxels that changed.
+    #[cfg(windows)]
+    static BEFORE: core::cell::RefCell<Vec<u16>> = const { core::cell::RefCell::new(Vec::new()) };
 }
 
 /// Runs `work`, a call of mod `by` that may write voxels on this thread, so
@@ -171,7 +203,7 @@ fn dropped() {
     if let Some(total) = EDITS.dropped.add(1) {
         crate::log!(
             WARN,
-            "voxel edits: {total} writes not raised to mods, past {MAX_WAITING} changed voxels in a step or in a box not loaded"
+            "voxel edits: {total} writes not raised to mods, past {MAX_WAITING} changed voxels in a step, or in a box the loader could not read"
         );
     }
 }
@@ -225,7 +257,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let read_box = loader
         .address(pinned::voxel::READ_BOX)
         .and_then(|address| usize::try_from(address).ok());
-    let (Some(read_box), Ok(finest)) = (read_box, super::finest(loader)) else {
+    let Some(read_box) = read_box else {
         loader.feature_off(
             feature,
             pinned::voxel::READ_BOX.id(),
@@ -233,38 +265,46 @@ pub(crate) fn link(loader: &'static Loader) {
         );
         return;
     };
+    let (Some(store), Ok(finest)) = (loader.offset(pinned::voxel::STORE), super::finest(loader))
+    else {
+        let missing = [
+            pinned::voxel::STORE,
+            pinned::voxel::FINEST_LEVEL,
+            pinned::voxel::GRIDS,
+            pinned::voxel::GRID_PAGES,
+            pinned::voxel::GRID_STRIDE,
+            pinned::voxel::GRID_DEPTH,
+        ]
+        .into_iter()
+        .find(|&id| loader.offset(id).is_none())
+        .unwrap_or(pinned::voxel::FINEST_LEVEL);
+        loader.feature_off(feature, missing.id(), "this build has no voxel grid layout");
+        return;
+    };
     // SAFETY: the table's `voxel.read_box` is the address of the game
     // function with the `ReadBoxFn` signature on this build, in the image,
     // which stays mapped.
     let read_box = unsafe { core::mem::transmute::<usize, super::ReadBoxFn>(read_box) };
-    if EDITS
-        .layout
-        .set(Layout {
-            read_box,
-            level: finest.level,
-        })
-        .is_err()
-    {
-        return;
-    }
     let target = crate::host::Target::Pinned(pinned::voxel::COMMIT);
+    // The link passes every write through until the layout is set, so
+    // `after_step` reads no editor while the link is refused.
     if loader.link_feature(
         feature,
         target,
         &EDITS.next,
         commit,
         enshwick::abi::HookFlags::NONE,
-    ) {
+    ) && EDITS
+        .layout
+        .set(Layout {
+            read_box,
+            level: finest.level,
+            store,
+        })
+        .is_ok()
+    {
         crate::log!(INFO, "voxel edits on");
     }
-}
-
-/// The box a commit writes and its image before the write.
-#[cfg(windows)]
-struct Before {
-    min: [u32; 3],
-    size: [u32; 3],
-    words: Vec<u16>,
 }
 
 /// The link on the editor's commit.
@@ -283,55 +323,49 @@ unsafe extern "system" fn commit(
 ) -> u64 {
     let next = EDITS.next.get();
     let server = EDITS.editor.load(Ordering::Acquire);
-    let Some(&layout) = EDITS
+    if let Some(&layout) = EDITS
         .layout
         .get()
         .filter(|_| server != 0 && editor.addr() == server)
-    else {
-        // SAFETY: this link runs only on `voxel.commit`, so the slot holds
-        // the next function of that signature; the game's arguments pass
-        // unchanged.
-        return unsafe { next(editor, words, size, min) };
-    };
-    // SAFETY: the game's own arguments, by this function's `# Safety`.
-    let before = EDITS
-        .fuse
-        .run("the read before a voxel write", || unsafe {
-            image_before(layout, editor, words, size, min)
-        })
-        .flatten();
-    // SAFETY: this link runs only on `voxel.commit`, so the slot holds the
-    // next function of that signature; the game's arguments pass unchanged.
-    let done = unsafe { next(editor, words, size, min) };
-    if let Some(before) = before {
-        // SAFETY: `words` is the game's buffer for this call, which the
-        // caller still owns while its call has not returned.
-        EDITS.fuse.run("the voxels a write changed", || unsafe {
-            after(&before, words);
+    {
+        // SAFETY: the game's own arguments, by this function's `# Safety`,
+        // before the game's write.
+        let _noted = EDITS.fuse.run("the voxels a write changes", || unsafe {
+            note(layout, editor, words, size, min);
         });
     }
-    done
+    // SAFETY: this link runs only on `voxel.commit`, so the slot holds the
+    // next function of that signature; the game's arguments pass unchanged.
+    unsafe { next(editor, words, size, min) }
 }
 
-/// The box `size` and `min` give and its image before the write, read with
-/// the game's box read; `None` for a box the API never reads, one not
-/// loaded, or a buffer that does not hold the box.
+/// Queues the voxels the commit's new image of the box `size` and `min`
+/// give differs in from the box as the game's box read has it now; a box
+/// it cannot read is counted, not raised.
 ///
 /// # Safety
 ///
-/// As [`commit`].
+/// As [`commit`], before the game's write: `words` still holds the box's
+/// new image, the caller's for the call.
 #[cfg(windows)]
-unsafe fn image_before(
+unsafe fn note(
     layout: Layout,
     editor: *mut u8,
     words: *const super::Words,
     size: *const [u32; 3],
     min: *const [u32; 3],
-) -> Option<Before> {
-    use enshwick::raw::read_at;
+) {
+    use enshwick::raw::{read_at, read_ptr_at};
 
     if editor.is_null() || words.is_null() || size.is_null() || min.is_null() {
-        return None;
+        return;
+    }
+    // SAFETY: `editor` is the non-null voxel editor the commit writes
+    // through, by this function's `# Safety`; the table's `voxel.store`
+    // offset holds its store pointer.
+    let store: usize = unsafe { crate::memory::read(editor.addr(), layout.store) };
+    if store == 0 {
+        return;
     }
     // SAFETY: `size` is non-null (checked above) and is the commit's box
     // size, three `u32`s, by this function's `# Safety`.
@@ -342,67 +376,57 @@ unsafe fn image_before(
     // SAFETY: `words` is non-null (checked above) and is the commit's buffer,
     // a data pointer and a count.
     let held: u64 = unsafe { read_at(words.cast(), core::mem::offset_of!(super::Words, count)) };
-    let count = Voxel::read_count(min, size).filter(|&count| count <= held)?;
-    let mut image = vec![0u16; usize::try_from(count).ok()?];
-    let mut out = super::Words {
-        data: image.as_mut_ptr(),
-        count,
-    };
-    // SAFETY: `read_box` is the table's `voxel.read_box`, called with the
-    // editor the commit writes through, on the commit's own thread: the
-    // game's read inside the commit answers at once there (server 26430253,
-    // the loader's writes; client 26430625, a player's dig and add). It
-    // writes the product of `size` words at `out.data`, which
-    // `Voxel::read_count` gives with overflow checks and `image` holds, for
-    // a box below `Voxel::END` on every axis, where its signed loops do not
-    // wrap.
-    let resident = unsafe {
-        (layout.read_box)(
-            &raw mut out,
-            &raw const size,
-            editor,
-            layout.level,
-            &raw const min,
-        )
-    };
-    if resident == 0 {
+    // SAFETY: as above, the buffer's data pointer at offset 0.
+    let data = unsafe { read_ptr_at::<u16>(words.cast(), 0) };
+    let Some(count) = box_count(min, size, held).filter(|_| !data.is_null()) else {
         dropped();
-        return None;
-    }
-    Some(Before {
-        min,
-        size,
-        words: image,
-    })
-}
-
-/// Queues the voxels the write changed against `before`.
-///
-/// # Safety
-///
-/// `words` is the commit's buffer of the box's new words, valid for the
-/// call, holding at least as many words as `before` (checked by
-/// [`image_before`]).
-#[cfg(windows)]
-unsafe fn after(before: &Before, words: *const super::Words) {
-    // SAFETY: `words` is the commit's non-null buffer (checked by
-    // `image_before`), a data pointer and a count.
-    let data = unsafe { enshwick::raw::read_ptr_at::<u16>(words.cast(), 0) };
-    if data.is_null() {
         return;
-    }
-    // SAFETY: the buffer at `data` holds at least `before.words.len()` words
-    // (its count checked by `image_before`), the game's for the call.
-    let after = unsafe { core::slice::from_raw_parts(data.cast_const(), before.words.len()) };
-    let changes = changes(before.min, before.size, &before.words, after);
-    if changes.is_empty() {
-        return;
-    }
-    queue(Edit {
-        by: current(),
-        min: before.min,
-        size: before.size,
-        changes,
+    };
+    BEFORE.with(|before| {
+        let Ok(mut image) = before.try_borrow_mut() else {
+            dropped();
+            return;
+        };
+        image.clear();
+        image.resize(count, 0);
+        let mut out = super::Words {
+            data: image.as_mut_ptr(),
+            count: count as u64,
+        };
+        // SAFETY: `read_box` is the table's `voxel.read_box`, called with the
+        // editor the commit writes through, whose store is non-zero (checked
+        // above), on the commit's own thread: the game's read inside the
+        // commit answers at once there (server 26430253, the loader's
+        // writes; client 26430625, a player's dig and add). It writes the
+        // product of `size` words at `out.data`, which `box_count` gives
+        // with overflow checks and `image` holds, for a box below
+        // `Voxel::END` on every axis, where its signed loops do not wrap.
+        let resident = unsafe {
+            (layout.read_box)(
+                &raw mut out,
+                &raw const size,
+                editor,
+                layout.level,
+                &raw const min,
+            )
+        };
+        if resident == 0 {
+            dropped();
+            return;
+        }
+        // SAFETY: the buffer at the non-null `data` holds `held` words, at
+        // least `count` (checked by `box_count`), the caller's for the call,
+        // and the game has not written it yet.
+        let after = unsafe { core::slice::from_raw_parts(data.cast_const(), count) };
+        let changes = changes(min, size, &image, after);
+        if !changes.is_empty() {
+            queue(Edit {
+                by: current(),
+                min,
+                size,
+                changes,
+            });
+        }
     });
 }
 
@@ -428,6 +452,31 @@ mod tests {
         assert_eq!(found[0].after, super::super::decode(0));
         assert_eq!(found[1].before.fill, 0xff);
         assert_eq!(found[1].after.fill, 0x40);
+    }
+
+    #[test]
+    fn a_box_past_the_api_read_limit_is_read_up_to_its_own_limit() {
+        let big = [72, 72, 72];
+        assert!(enshwick::abi::Voxel::read_count([0; 3], big).is_none());
+        assert_eq!(box_count([8, 0, 8], big, u64::MAX), Some(72 * 72 * 72));
+        assert_eq!(box_count([0; 3], [128; 3], MAX_BOX), Some(1 << 21));
+    }
+
+    #[test]
+    fn a_box_the_link_cannot_read_is_refused() {
+        assert_eq!(
+            box_count([0; 3], [129, 128, 128], u64::MAX),
+            None,
+            "over 128³"
+        );
+        assert_eq!(box_count([0; 3], [8; 3], 511), None, "the buffer is short");
+        assert_eq!(box_count([0; 3], [0, 8, 8], u64::MAX), None, "an empty box");
+        assert_eq!(
+            box_count([enshwick::abi::Voxel::END - 4, 0, 0], [8; 3], u64::MAX),
+            None,
+            "past the end"
+        );
+        assert_eq!(box_count([u32::MAX, 0, 0], [8; 3], u64::MAX), None);
     }
 
     #[test]
