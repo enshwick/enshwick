@@ -29,6 +29,7 @@
   - [Items](content/items.md)
   - [Recipes](content/recipes.md)
   - [Disabling recipes](content/disabled-recipes.md)
+  - [Removing and re-keying vanilla content](content/removal.md)
   - [Workshops](content/workshops.md)
   - [Knowledge entries](content/knowledge.md)
   - [Quests and journal pages](content/journal.md)
