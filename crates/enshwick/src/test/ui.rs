@@ -24,7 +24,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn draw_frame(&self) -> Vec<Drawn> {
-        let frames = table::with(Vec::new(), |s| s.frames.clone());
+        let (frames, open) = table::with((Vec::new(), ""), |s| (s.frames.clone(), s.open_screen));
         let mut drawn = Vec::new();
         for (token, (callback, user, owner)) in (1u64..).zip(frames) {
             table::with((), |s| {
@@ -36,6 +36,7 @@ impl Installed {
                 token,
                 screen: crate::abi::UiFrame::IN_GAME,
                 reserved: 0,
+                hud_screen: crate::abi::Str::new(open),
             };
             // SAFETY: a callback the mod registered with its own pointer.
             unsafe {
@@ -68,7 +69,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn draw_hud(&self) -> Vec<(u32, Drawn)> {
-        let huds = table::with(Vec::new(), |s| s.huds.clone());
+        let (huds, open) = table::with((Vec::new(), ""), |s| (s.huds.clone(), s.open_screen));
         let mut drawn = Vec::new();
         for (token, (callback, user, owner)) in (1u64..).zip(huds) {
             table::with((), |s| {
@@ -80,6 +81,7 @@ impl Installed {
                 token,
                 screen: crate::abi::UiFrame::IN_GAME,
                 reserved: 0,
+                hud_screen: crate::abi::Str::new(open),
             };
             // SAFETY: a callback the mod registered with its own pointer.
             unsafe {
@@ -120,6 +122,7 @@ impl Installed {
     pub fn draw_screen(&self, screen: crate::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
         let mut extensions = table::with(Vec::new(), |s| s.extensions.clone());
         extensions.sort_by_key(|&(_, edge, _, _, _)| edge);
+        let open = screen.name();
         let mut drawn = Vec::new();
         for (token, (name, edge, callback, user, owner)) in (1u64..).zip(extensions) {
             if name != screen.name() {
@@ -135,6 +138,7 @@ impl Installed {
                 token,
                 screen: crate::abi::UiFrame::IN_GAME,
                 reserved: 0,
+                hud_screen: crate::abi::Str::new(open),
             };
             // SAFETY: a callback the mod registered with its own pointer.
             unsafe {
@@ -153,6 +157,26 @@ impl Installed {
             }
         }
         drawn
+    }
+
+    /// Opens the game screen `screen` for the frames and HUDs drawn from
+    /// now on, as when the player opens it; `None` closes it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Side;
+    /// use enshwick::ui::HudScreenType;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.open_screen(Some(HudScreenType::Map));
+    /// assert!(loader.draw_frame().is_empty());
+    /// ```
+    #[cfg(feature = "unstable")]
+    pub fn open_screen(&self, screen: Option<crate::ui::HudScreenType>) {
+        table::with((), |s| {
+            s.open_screen = screen.map_or("", crate::ui::HudScreenType::name);
+        });
     }
 
     /// The mod's markers on the map, as it set them last.

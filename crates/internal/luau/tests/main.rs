@@ -15,6 +15,7 @@ mod deps;
 mod every_call;
 mod harness;
 mod i18n;
+mod input;
 mod interactions;
 mod inventory;
 mod items;

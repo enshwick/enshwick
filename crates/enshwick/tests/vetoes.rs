@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::{BuildCheck, CraftCheck, Header, Status};
+    use enshwick::vetoes::BuildVerdict;
     use enshwick::{Load, Mod, Off};
 
     struct Picky;
@@ -11,7 +12,11 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on_craft(|craft| craft.crafting_station_id.is_some() || craft.recipe_amount < 10)?;
             load.on_build(|placement| {
-                placement.position[1] >= 0.0 && placement.item != enshwick::ItemId::new(13)
+                if placement.position[1] < 0.0 {
+                    BuildVerdict::refuse_because("picky.below_sea")
+                } else {
+                    (placement.item != enshwick::ItemId::new(13)).into()
+                }
             })?;
             Ok(Self)
         }
@@ -48,9 +53,16 @@ mod tests {
             player: enshwick::Entity(2),
             item,
             position: [0, y << 32, 0],
+            reason: core::ptr::null_mut(),
         };
-        assert!(loader.build(&build(enshwick::ItemId::new(7), 5)));
-        assert!(!loader.build(&build(enshwick::ItemId::new(7), -1)));
-        assert!(!loader.build(&build(enshwick::ItemId::new(13), 5)));
+        assert_eq!(loader.build(&build(enshwick::ItemId::new(7), 5)), Ok(()));
+        assert_eq!(
+            loader.build(&build(enshwick::ItemId::new(7), -1)),
+            Err(Some("picky.below_sea".to_owned()))
+        );
+        assert_eq!(
+            loader.build(&build(enshwick::ItemId::new(13), 5)),
+            Err(None)
+        );
     }
 }

@@ -354,6 +354,54 @@ impl Actions {
         let status = (host.api().run_action)(host.handle(), Str::new(action), Str::new(&args));
         crate::load::ok(status, (), || format!("action {action}"))
     }
+
+    /// Runs the action as [`run`](Self::run) does, on the object `target`,
+    /// such as the chest whose screen holds the panel the player pressed:
+    /// the server hands it to the action's [`at`](Action::at) as
+    /// [`Ask::target`] and to its handler, which check it as they check any
+    /// object a client names.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a server, while the server takes no messages, or for a
+    /// position that is not finite.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, ActionTarget, Outcome};
+    /// use enshwick::i18n::Texts;
+    /// use enshwick::ui::{Edge, HudScreenType};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let actions = load.actions(Texts::default())?;
+    ///     actions.add(
+    ///         Action::new("sort", "Sort").at(|ask| match ask.target {
+    ///             Some(chest) => Ok(enshwick::actions::Subject::new(1, format!("{chest:?}"))),
+    ///             None => Err("Open a chest first".into()),
+    ///         }),
+    ///         |_| Outcome::done("Sorted"),
+    ///     )?;
+    ///     let chest = ActionTarget::at([10.0, 2.0, -4.5]);
+    ///     load.extend_screen(HudScreenType::StorageChest, Edge::Right, move |panel| {
+    ///         if panel.button("Sort") {
+    ///             let _sent = actions.run_at("sort", &[], chest);
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    pub fn run_at(&self, action: &str, args: &[Value], target: ActionTarget) -> Result<(), Off> {
+        let host = self.registry.host;
+        let args = sheet::encode_args(args);
+        let raw = target.to_raw();
+        let status = (host.api().run_action_at)(
+            host.handle(),
+            Str::new(action),
+            Str::new(&args),
+            &raw const raw,
+        );
+        crate::load::ok(status, (), || format!("action {action}"))
+    }
 }
 
 thread_local! {
@@ -394,7 +442,10 @@ unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out
     let args = unsafe { call.args.as_str() }.unwrap_or("");
     let reply = crate::host::guard("panic in an action", String::new, || match call.kind {
         ActionCall::SHEET => registry.sheet(&player, language),
-        ActionCall::RUN => registry.run_from_interface(&player, action, args, language),
+        ActionCall::RUN => {
+            let target = ActionTarget::from_raw(&call.target);
+            registry.run_from_interface(&player, action, args, language, target)
+        }
         ActionCall::CONSOLE => {
             let outcome = registry.run_from_console(&player, action);
             format!("{}{}", u8::from(outcome.done), outcome.text)

@@ -27,6 +27,7 @@ use crate::abi::{Entity, Header, PlayerInfo, Str};
 ///     },
 ///     action: Str::new("access"),
 ///     args: Str::new("p0000000000000009\tb1"),
+///     target: enshwick::abi::ActionTarget::NONE,
 /// };
 /// assert_eq!(call.kind, ActionCall::RUN);
 /// ```
@@ -49,9 +50,60 @@ pub struct ActionCall {
     /// The action's arguments in the sheet's encoding, for
     /// [`ActionCall::RUN`]; valid for the call.
     pub args: Str,
+    /// The object the player's client named for [`ActionCall::RUN`]; no
+    /// flags for none, and for the other questions.
+    pub target: ActionTarget,
 }
 
-impl_headed!(ActionCall);
+impl_headed!(ActionCall, born = 144);
+
+/// The object a run of an action names, sent with
+/// [`HostApi::run_action_at`](super::HostApi::run_action_at) and handed back
+/// to the mod in [`ActionCall::target`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{ActionTarget, Header};
+///
+/// let chest = ActionTarget {
+///     header: Header::of::<ActionTarget>(),
+///     flags: ActionTarget::POSITION,
+///     entity: enshwick::Entity(0),
+///     position: [10.0, 2.0, -4.5],
+/// };
+/// assert_eq!(chest.flags & ActionTarget::ENTITY, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+pub struct ActionTarget {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Which fields hold a value: [`ActionTarget::ENTITY`],
+    /// [`ActionTarget::POSITION`], both or none.
+    pub flags: u32,
+    /// The object's entity in the server's world, with
+    /// [`ActionTarget::ENTITY`].
+    pub entity: Entity,
+    /// Where it stands, in metres, with [`ActionTarget::POSITION`].
+    pub position: [f64; 3],
+}
+
+impl_headed!(ActionTarget);
+
+impl ActionTarget {
+    /// `entity` holds the object's entity.
+    pub const ENTITY: u32 = 1;
+    /// `position` holds where it stands.
+    pub const POSITION: u32 = 2;
+    /// No object.
+    pub const NONE: Self = Self {
+        header: Header::of::<Self>(),
+        flags: 0,
+        entity: Entity(0),
+        position: [0.0; 3],
+    };
+}
 
 impl ActionCall {
     /// The actions the player may use now, as a sheet: the reply is the

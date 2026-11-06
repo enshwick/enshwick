@@ -6,7 +6,7 @@ use crate::i18n::{Language, Texts};
 use crate::locks::RelockRw;
 use crate::world::Player;
 
-use super::request::{Arg, Ask, Outcome, Request, Value, Via};
+use super::request::{ActionTarget, Arg, Ask, Outcome, Request, Value, Via};
 use super::sheet::{ArgView, Entry};
 use super::{Action, Handler, MAX_PLAYERS, sheet};
 
@@ -51,10 +51,16 @@ impl Registry {
         crate::world::online(self.host)
     }
 
-    fn ask<'a>(&'a self, player: &'a Player, language: Language) -> Ask<'a> {
+    fn ask<'a>(
+        &'a self,
+        player: &'a Player,
+        language: Language,
+        target: Option<ActionTarget>,
+    ) -> Ask<'a> {
         Ask {
             player,
             language,
+            target,
             texts: &self.texts,
         }
     }
@@ -138,7 +144,7 @@ impl Registry {
             return Outcome::refused(self.say("actions.unknown", language, &[("word", &word)]));
         };
         match self.console_args(d, player, rest, language) {
-            Ok(values) => self.run(d, player, &values, language, Via::Console),
+            Ok(values) => self.run(d, player, &values, language, Via::Console, None),
             Err(why) => Outcome::refused(self.refusal(&why, &d.action, language)),
         }
     }
@@ -249,7 +255,7 @@ impl Registry {
         player: &Player,
         language: Language,
     ) -> Vec<(PlayerKey, String)> {
-        let ask = self.ask(player, language);
+        let ask = self.ask(player, language, None);
         let subject = match d.action.at.as_ref().map(|at| at(&ask)) {
             Some(Ok(subject)) => Some(subject),
             Some(Err(_)) => return Vec::new(),
@@ -274,11 +280,12 @@ impl Registry {
         values: &[Value],
         language: Language,
         via: Via,
+        target: Option<ActionTarget>,
     ) -> Outcome {
         if !Self::allowed(d, player) {
             return Outcome::refused(self.say("actions.denied", language, &[]));
         }
-        let ask = self.ask(player, language);
+        let ask = self.ask(player, language, target);
         let subject = match d.action.at.as_ref().map(|at| at(&ask)) {
             Some(Ok(subject)) => Some(subject),
             Some(Err(why)) => return Outcome::refused(why.reason()),
@@ -303,6 +310,7 @@ impl Registry {
             args: values,
             language,
             via,
+            target,
             texts: &self.texts,
         })
     }
@@ -319,7 +327,7 @@ impl Registry {
             .collect();
         let mut entries = Vec::new();
         for d in declared.iter().filter(|d| Self::allowed(d, player)) {
-            let ask = self.ask(player, language);
+            let ask = self.ask(player, language, None);
             let subject = d.action.at.as_ref().map(|at| at(&ask));
             let (offered, subject_text) = match &subject {
                 Some(Ok(subject)) => (true, subject.label.clone()),
@@ -383,14 +391,15 @@ impl Registry {
         sheet::encode(&entries)
     }
 
-    /// Runs action `id` for `player` from the interface; `1` or `0` and the
-    /// text.
+    /// Runs action `id` for `player` from the interface, on the object
+    /// `target` the client named, if any; `1` or `0` and the text.
     pub(super) fn run_from_interface(
         &self,
         player: &Player,
         id: &str,
         args: &str,
         language: Language,
+        target: Option<ActionTarget>,
     ) -> String {
         let declared = self.declared();
         let outcome = match declared.iter().find(|d| d.action.id == id) {
@@ -398,7 +407,7 @@ impl Registry {
             Some(d) => match sheet::decode_args(args) {
                 None => Outcome::refused(self.say("actions.denied", language, &[])),
                 Some(mut values) => match self.name_players(d, player, &mut values, language) {
-                    Ok(()) => self.run(d, player, &values, language, Via::Interface),
+                    Ok(()) => self.run(d, player, &values, language, Via::Interface, target),
                     Err(why) => Outcome::refused(self.refusal(&why, &d.action, language)),
                 },
             },

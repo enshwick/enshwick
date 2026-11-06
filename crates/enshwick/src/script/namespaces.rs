@@ -405,6 +405,8 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::starting("chat", "", &[crate::Load::SCRIPT_CHAT]),
     Namespace::starting("interactions", "", &[crate::Load::SCRIPT_INTERACTIONS]),
     #[cfg(feature = "unstable")]
+    Namespace::of::<crate::input::Input>(),
+    #[cfg(feature = "unstable")]
     Namespace::starting("items", "", &[crate::Load::SCRIPT_ITEMS]),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::rewards::Rewards>(),
@@ -451,6 +453,8 @@ pub const NAMESPACES: &[Namespace] = &[
     ),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::map::Map>(),
+    #[cfg(feature = "unstable")]
+    Namespace::starting("map", "", &[crate::Load::SCRIPT_MAP_EVENTS]),
     #[cfg(feature = "unstable")]
     Namespace::on_request::<crate::map::FogOfWar>("fog_of_war"),
     Namespace::of::<crate::daytime::Clock>(),

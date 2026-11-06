@@ -18,6 +18,7 @@ macro_rules! headed {
     ($check:ident) => {
         $check!(
             ActionCall,
+            ActionTarget,
             ActiveBuff,
             AffixDefData,
             AffixRoll,

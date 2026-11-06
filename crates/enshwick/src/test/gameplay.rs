@@ -788,7 +788,13 @@ impl Installed {
     }
 
     /// Asks the mod's build filters about `call`, as the cursor check does
-    /// after it allowed a placement; whether the placement goes ahead.
+    /// after it allowed a placement: `Ok` when the placement goes ahead,
+    /// else the reason the first refusing filter gave, if any. `call`'s own
+    /// `reason` is not used; the fake host gives each filter a slot.
+    ///
+    /// # Errors
+    ///
+    /// The refusal, with the reason as the filter gave it.
     ///
     /// # Examples
     ///
@@ -796,15 +802,36 @@ impl Installed {
     /// use enshwick::abi::{BuildCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let wall = BuildCheck { header: Header::of::<BuildCheck>(), player: enshwick::Entity(2), item: enshwick::ItemId::new(7), position: [0; 3] };
-    /// assert!(loader.build(&wall));
+    /// let wall = BuildCheck {
+    ///     header: Header::of::<BuildCheck>(),
+    ///     player: enshwick::Entity(2),
+    ///     item: enshwick::ItemId::new(7),
+    ///     position: [0; 3],
+    ///     reason: core::ptr::null_mut(),
+    /// };
+    /// assert_eq!(loader.build(&wall), Ok(()));
     /// ```
-    #[must_use]
-    pub fn build(&self, call: &crate::abi::BuildCheck) -> bool {
+    pub fn build(&self, call: &crate::abi::BuildCheck) -> Result<(), Option<String>> {
         let filters = table::with(Vec::new(), |s| s.build_filters.clone());
-        filters.iter().all(|&(callback, user)| {
-            // SAFETY: a filter the mod registered with its own pointer.
-            unsafe { callback(call, core::ptr::with_exposed_provenance_mut(user)) != 0 }
-        })
+        for (callback, user) in filters {
+            let mut reason = crate::abi::Str::new("");
+            let mut asked = *call;
+            asked.reason = &raw mut reason;
+            // SAFETY: a filter the mod registered with its own pointer; `asked`
+            // and its `reason` slot live on this stack for the call.
+            let allowed = unsafe {
+                callback(
+                    &raw const asked,
+                    core::ptr::with_exposed_provenance_mut(user),
+                )
+            };
+            if allowed == 0 {
+                // SAFETY: the refusing filter wrote a text it keeps until its
+                // next call on this thread, or left the empty one.
+                let reason = unsafe { reason.as_str() }.filter(|r| !r.is_empty());
+                return Err(reason.map(str::to_owned));
+            }
+        }
+        Ok(())
     }
 }

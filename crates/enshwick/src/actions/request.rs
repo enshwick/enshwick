@@ -1,8 +1,8 @@
 use core::ops::RangeInclusive;
 
-use crate::PlayerKey;
 use crate::i18n::{Language, Texts};
 use crate::world::Player;
+use crate::{Entity, PlayerKey};
 
 use super::sheet::ArgView;
 
@@ -219,7 +219,109 @@ pub struct Ask<'a> {
     /// The language they read: the game's on their client; the fallback
     /// for the console.
     pub language: Language,
+    /// The object the player's client named for this run, from
+    /// [`Actions::run_at`](crate::actions::Actions::run_at); `None` for a
+    /// run without one, the console and the actions' list. It is what the
+    /// client says, so `at` checks it as it checks any object: that it is
+    /// there, within reach and the player's to use.
+    pub target: Option<ActionTarget>,
     pub(super) texts: &'a Texts,
+}
+
+/// The object a run of an action names, such as the chest whose screen
+/// holds the panel that ran it: its entity in the server's world, where it
+/// stands, or both. The name is enshwick's.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::actions::ActionTarget;
+///
+/// let chest = ActionTarget::at([10.0, 2.0, -4.5]);
+/// assert_eq!(chest.position, Some([10.0, 2.0, -4.5]));
+/// assert_eq!(chest.entity, None);
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, crate::Script)]
+#[non_exhaustive]
+pub struct ActionTarget {
+    /// Its entity in the server's world, as the server sent it to the
+    /// client; entity ids differ between the worlds of a server and its
+    /// clients.
+    #[script(default)]
+    pub entity: Option<Entity>,
+    /// Where it stands, in metres.
+    #[script(default)]
+    pub position: Option<[f64; 3]>,
+}
+
+impl ActionTarget {
+    /// The object with the server's entity `entity`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let chest = enshwick::actions::ActionTarget::entity(enshwick::Entity(4096));
+    /// assert_eq!(chest.entity, Some(enshwick::Entity(4096)));
+    /// ```
+    #[must_use]
+    pub const fn entity(entity: Entity) -> Self {
+        Self {
+            entity: Some(entity),
+            position: None,
+        }
+    }
+
+    /// The object standing at `position`, in metres.
+    ///
+    /// # Examples
+    ///
+    /// See [`ActionTarget`].
+    #[must_use]
+    pub const fn at(position: [f64; 3]) -> Self {
+        Self {
+            entity: None,
+            position: Some(position),
+        }
+    }
+
+    /// The same object, standing at `position` too, so the server can
+    /// check either.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::ActionTarget;
+    ///
+    /// let chest = ActionTarget::entity(enshwick::Entity(4096)).with_position([1.0, 2.0, 3.0]);
+    /// assert_eq!(chest.position, Some([1.0, 2.0, 3.0]));
+    /// ```
+    #[must_use]
+    pub const fn with_position(mut self, position: [f64; 3]) -> Self {
+        self.position = Some(position);
+        self
+    }
+
+    /// The object `raw` names; `None` for none.
+    pub(crate) fn from_raw(raw: &crate::abi::ActionTarget) -> Option<Self> {
+        use crate::abi::ActionTarget as Raw;
+        let target = Self {
+            entity: (raw.flags & Raw::ENTITY != 0).then_some(raw.entity),
+            position: (raw.flags & Raw::POSITION != 0).then_some(raw.position),
+        };
+        (target != Self::default()).then_some(target)
+    }
+
+    /// The object as the loader takes it.
+    pub(crate) fn to_raw(self) -> crate::abi::ActionTarget {
+        use crate::abi::ActionTarget as Raw;
+        Raw {
+            flags: self.entity.map_or(0, |_| Raw::ENTITY)
+                | self.position.map_or(0, |_| Raw::POSITION),
+            entity: self.entity.unwrap_or(Entity(0)),
+            position: self.position.unwrap_or_default(),
+            ..Raw::NONE
+        }
+    }
 }
 
 impl Ask<'_> {
@@ -276,6 +378,8 @@ pub struct Request<'a> {
     pub language: Language,
     /// Where it came from.
     pub via: Via,
+    /// The object the client named, as [`Ask::target`] says.
+    pub target: Option<ActionTarget>,
     pub(super) texts: &'a Texts,
 }
 

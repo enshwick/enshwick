@@ -367,6 +367,42 @@ impl FakeHost {
         )
     }
 
+    /// Each player's `PlayerInput` with the game controls held, and the
+    /// reflected enum of controls as the type registry holds it, with
+    /// `MainhandAction` at bit 0, `ContextualAction` at 5 and `Block` at 30;
+    /// what [`Input::held`](crate::input::Input::held) reads.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().player_input();
+    /// let held = host.offset(facts::PLAYER_INPUT_DIGITAL.id())?;
+    /// assert!(held + 8 <= host.size(facts::PLAYER_INPUT.id())?);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn player_input(self) -> Self {
+        use crate::resources::{Constant, Kind, Type};
+        let controls =
+            Type::new("keen::ecs::PlayerInputType", Kind::Enum, 1, 1).with_constants(vec![
+                Constant::new("MainhandAction", 0),
+                Constant::new("ContextualAction", 5),
+                Constant::new("Block", 30),
+            ]);
+        let hash = controls.qualified_hash();
+        self.types([controls])
+            .preset(
+                &[ids::PLAYER_INPUT],
+                &[(ids::PLAYER_INPUT, 1536)],
+                &[(ids::PLAYER_INPUT_DIGITAL, 936)],
+            )
+            .type_hash(ids::PLAYER_INPUT_TYPE, hash)
+    }
+
     /// The events [`Effects`](crate::effects::Effects) raises for an NPC
     /// command, a threat and a ping; the toggle event stays off.
     ///

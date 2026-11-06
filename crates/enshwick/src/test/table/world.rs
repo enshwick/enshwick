@@ -153,6 +153,7 @@ pub(crate) extern "system" fn run_console(_me: ModHandle, line: Str, out: *mut S
                     0,
                     &rest,
                     "",
+                    crate::abi::ActionTarget::NONE,
                 );
                 reply.get(1..).unwrap_or_default().to_owned()
             }

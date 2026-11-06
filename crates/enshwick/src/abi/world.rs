@@ -242,7 +242,13 @@ pub type CraftCheckFn = unsafe extern "system" fn(call: *const CraftCheck, user:
 /// ```
 /// use enshwick::abi::{BuildCheck, Header};
 ///
-/// let wall = BuildCheck { header: Header::of::<BuildCheck>(), player: enshwick::Entity(2), item: enshwick::ItemId::new(0x1d), position: [0; 3] };
+/// let wall = BuildCheck {
+///     header: Header::of::<BuildCheck>(),
+///     player: enshwick::Entity(2),
+///     item: enshwick::ItemId::new(0x1d),
+///     position: [0; 3],
+///     reason: core::ptr::null_mut(),
+/// };
 /// assert_eq!(wall.item, enshwick::ItemId::new(0x1d));
 /// ```
 #[repr(C)]
@@ -256,9 +262,14 @@ pub struct BuildCheck {
     pub item: ItemId,
     /// Where, in 32.32 fixed-point metres.
     pub position: [i64; 3],
+    /// Null, or where a filter that refuses writes why: a key of its mod's
+    /// texts or plain words, which the builder reads. The text it points at
+    /// stays valid until the filter's next call on the same thread; the
+    /// loader copies it before then, on that thread.
+    pub reason: *mut Str,
 }
 
-impl_headed!(BuildCheck);
+impl_headed!(BuildCheck, born = 40);
 
 /// A mod's build filter: the placement and the pointer given at
 /// registration; returns 1 to let it through, 0 to refuse it.

@@ -331,7 +331,64 @@ impl Installed {
         args: &str,
     ) -> Option<String> {
         let (callback, user) = table::with(None, |s| s.actions)?;
-        Some(ask(callback, user, kind, player, language, action, args))
+        Some(ask(
+            callback,
+            user,
+            kind,
+            player,
+            language,
+            action,
+            args,
+            crate::abi::ActionTarget::NONE,
+        ))
+    }
+
+    /// Runs the mod's action `action` with `args` for `player` as the
+    /// loader does when a client named `target` with
+    /// [`Actions::run_at`](crate::actions::Actions::run_at); the reply, or
+    /// `None` when the mod has no actions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, PlayerInfo};
+    /// use enshwick::actions::ActionTarget;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let player = PlayerInfo {
+    ///     header: Header::of::<PlayerInfo>(),
+    ///     slot: 0,
+    ///     entity: enshwick::Entity(2),
+    ///     key: enshwick::PlayerKey::new(7),
+    ///     permissions: 0,
+    ///     name_len: 0,
+    ///     name: [0; 64],
+    /// };
+    /// let chest = ActionTarget::at([1.0, 2.0, 3.0]);
+    /// assert_eq!(loader.ask_action_at(&player, 0, "open", "", chest), None);
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn ask_action_at(
+        &self,
+        player: &PlayerInfo,
+        language: u32,
+        action: &str,
+        args: &str,
+        target: crate::actions::ActionTarget,
+    ) -> Option<String> {
+        let (callback, user) = table::with(None, |s| s.actions)?;
+        let run = crate::abi::ActionCall::RUN;
+        Some(ask(
+            callback,
+            user,
+            run,
+            player,
+            language,
+            action,
+            args,
+            target.to_raw(),
+        ))
     }
 
     /// The lines the mod ran with `console::run`, in
@@ -545,6 +602,10 @@ pub(crate) fn console() -> PlayerInfo {
 }
 
 /// Asks a mod's actions callback as the loader does; its reply.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the fields of the loader's question, one each"
+)]
 pub(crate) fn ask(
     callback: crate::abi::ActionFn,
     user: usize,
@@ -553,6 +614,7 @@ pub(crate) fn ask(
     language: u32,
     action: &str,
     args: &str,
+    target: crate::abi::ActionTarget,
 ) -> String {
     let call = crate::abi::ActionCall {
         header: Header::of::<crate::abi::ActionCall>(),
@@ -561,6 +623,7 @@ pub(crate) fn ask(
         player: *player,
         action: Str::new(action),
         args: Str::new(args),
+        target,
     };
     let mut reply = Str::EMPTY;
     // SAFETY: a valid call; `user` is the pointer the mod registered with.

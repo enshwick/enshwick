@@ -197,6 +197,33 @@ mod tests {
     }
 
     #[test]
+    fn a_script_reads_the_open_screen_and_hears_it_change() {
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT),
+            r"
+            enshwick.ui.on_frame(function(frame)
+                enshwick.log.info(`open {frame:open_screen()}`)
+            end)
+            enshwick.ui.on_screen_changed(function(change)
+                enshwick.log.info(`changed {change.before} to {change.now}`)
+            end)
+            ",
+        );
+        loader.open_screen(Some(HudScreenType::Map));
+        let _drawn = loader.draw_frame();
+        loader.open_screen(None);
+        let _drawn = loader.draw_frame();
+        for line in [
+            "open Map",
+            "changed nil to Map",
+            "open nil",
+            "changed Map to nil",
+        ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_server_script_is_refused_the_interface() {
         let (loader, status) = start(FakeHost::new(), "enshwick.ui.on_frame(function() end)");
         assert!(!status.is_ok());

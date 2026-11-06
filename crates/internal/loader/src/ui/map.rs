@@ -15,7 +15,7 @@
 
 use std::collections::VecDeque;
 use std::num::NonZeroU32;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
@@ -175,6 +175,8 @@ struct Markers {
     /// The running registry's marker types, once read; `None` for good
     /// when it has no type for the loader's choice.
     registry: OnceLock<Option<RunningTypes>>,
+    /// Whether the log told of mod markers the game's list had no room for.
+    told_full: AtomicBool,
 }
 
 static MARKERS: Markers = Markers {
@@ -186,6 +188,7 @@ static MARKERS: Markers = Markers {
     play_data: AtomicUsize::new(0),
     noted_at: AtomicU64::new(0),
     registry: OnceLock::new(),
+    told_full: AtomicBool::new(false),
 };
 
 /// One marker, owned by the loader.
@@ -405,14 +408,13 @@ fn append() {
     // earlier, on the replicate system's thread; its `u64` capacity sits at
     // the build table's `map.list_capacity`.
     let capacity: u64 = unsafe { crate::memory::read(list, layout.list_capacity) };
-    if entries.is_null() {
-        return;
-    }
+    let mut left_out = 0usize;
     for marker in sets.iter().flat_map(|set| set.iter()) {
-        if count >= capacity {
-            break;
-        }
         if crate::host::is_off(marker.owner) {
+            continue;
+        }
+        if entries.is_null() || count >= capacity {
+            left_out += 1;
             continue;
         }
         let Ok(index) = usize::try_from(count) else {
@@ -437,6 +439,20 @@ fn append() {
         // the system runs.
         unsafe { core::ptr::copy_nonoverlapping(entry.ptr(), slot, layout.entry_size) };
         count += 1;
+    }
+    if left_out > 0 && !MARKERS.told_full.swap(true, Ordering::Relaxed) {
+        crate::log!(
+            WARN,
+            "map markers: the map's list holds {count} of {capacity} entries{}; {left_out} mod markers do not show",
+            if entries.is_null() {
+                " and no storage"
+            } else {
+                ""
+            }
+        );
+    }
+    if entries.is_null() {
+        return;
     }
     // SAFETY: the live play data's marker list, checked fresh and non-zero
     // earlier, on the replicate system's thread, which owns it while the

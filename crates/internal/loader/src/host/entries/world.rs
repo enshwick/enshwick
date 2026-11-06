@@ -269,7 +269,45 @@ pub(crate) extern "system" fn run_action(me: ModHandle, action: Str, args: Str) 
         let (Some(action), Some(args)) = (text(action), text(args)) else {
             return Status::BAD_ARGS;
         };
-        if crate::actions::run_on_server(&record.id, action, args) {
+        if crate::actions::run_on_server(&record.id, action, args, None) {
+            Status::OK
+        } else {
+            Status::MISSING
+        }
+    })
+}
+
+pub(crate) extern "system" fn run_action_at(
+    me: ModHandle,
+    action: Str,
+    args: Str,
+    target: *const enshwick::abi::ActionTarget,
+) -> Status {
+    entry("run_action_at", || {
+        let (loader, _, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if loader.side != Side::CLIENT {
+            return Status::MISSING;
+        }
+        let (Some(action), Some(args)) = (text(action), text(args)) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: `HostApi::run_action_at` has the mod pass `target` null or
+        // a live `ActionTarget` readable for the size its header states, for
+        // the call.
+        let target = unsafe {
+            enshwick::abi::read_headed(
+                target,
+                <enshwick::abi::ActionTarget as enshwick::abi::Headed>::BORN,
+            )
+        };
+        if target.is_some_and(|t| !t.position.iter().all(|c| c.is_finite())) {
+            return Status::BAD_ARGS;
+        }
+        let target = target.filter(|t| t.flags != 0);
+        if crate::actions::run_on_server(&record.id, action, args, target) {
             Status::OK
         } else {
             Status::MISSING

@@ -10,7 +10,7 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use enshwick::abi::{ActionCall, ActionFn, Header, PlayerInfo, Status, Str};
+use enshwick::abi::{ActionCall, ActionFn, ActionTarget, Header, PlayerInfo, Status, Str};
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -84,14 +84,15 @@ fn running(loader: &Loader) -> Vec<Registered> {
         .collect()
 }
 
-/// Asks `registered` its question `kind` about `player`; the reply.
+/// Asks `registered` its question `kind` about `player`, with the action
+/// and its arguments and the object `target` the run names; the reply.
 fn ask(
     registered: Registered,
     kind: u32,
     player: &PlayerInfo,
     language: u32,
-    action: &str,
-    args: &str,
+    (action, args): (&str, &str),
+    target: ActionTarget,
 ) -> String {
     let call = ActionCall {
         header: Header::of::<ActionCall>(),
@@ -100,6 +101,7 @@ fn ask(
         player: *player,
         action: Str::new(action),
         args: Str::new(args),
+        target,
     };
     let mut reply = Str::EMPTY;
     // SAFETY: the callback lives in the mod's DLL, which stays loaded; the
@@ -126,7 +128,14 @@ pub(crate) fn console(loader: &Loader, index: usize, rest: &str) -> Option<Strin
         .into_iter()
         .find(|r| r.owner == ModIndex::new(index))?;
     let console = crate::console::the_console();
-    let reply = ask(registered, ActionCall::CONSOLE, &console, 0, rest, "");
+    let reply = ask(
+        registered,
+        ActionCall::CONSOLE,
+        &console,
+        0,
+        (rest, ""),
+        ActionTarget::NONE,
+    );
     Some(reply.get(1..).unwrap_or_default().to_owned())
 }
 
@@ -149,8 +158,16 @@ pub(crate) fn language(key: u64, language: u32) {
     server_state(|s| s.clients.entry(key).or_default().language = language);
 }
 
-/// A client runs mod `id`'s action, on the server's game thread.
-pub(crate) fn run(loader: &Loader, key: u64, id: &str, action: &str, args: &str) {
+/// A client runs mod `id`'s action on the object `target` its client named,
+/// on the server's game thread.
+pub(crate) fn run(
+    loader: &Loader,
+    key: u64,
+    id: &str,
+    action: &str,
+    args: &str,
+    target: Option<ActionTarget>,
+) {
     let now = Instant::now();
     let (language, admitted) = server_state(|s| {
         let client = s.clients.entry(key).or_default();
@@ -175,7 +192,15 @@ pub(crate) fn run(loader: &Loader, key: u64, id: &str, action: &str, args: &str)
     else {
         return;
     };
-    let reply = ask(registered, ActionCall::RUN, &player, language, action, args);
+    let target = target.unwrap_or(ActionTarget::NONE);
+    let reply = ask(
+        registered,
+        ActionCall::RUN,
+        &player,
+        language,
+        (action, args),
+        target,
+    );
     let (ok, text) = match reply.split_at_checked(1) {
         Some(("1", text)) => (true, text),
         Some((_, text)) => (false, text),
@@ -206,12 +231,19 @@ pub(crate) fn forget() {
     *SERVER.relock() = None;
 }
 
-/// Runs mod `id`'s action on the server; false while it takes no messages.
-pub(crate) fn run_on_server(id: &str, action: &str, args: &str) -> bool {
+/// Runs mod `id`'s action on the server, on the object `target` names if
+/// any; false while it takes no messages.
+pub(crate) fn run_on_server(
+    id: &str,
+    action: &str,
+    args: &str,
+    target: Option<ActionTarget>,
+) -> bool {
     crate::net::to_server(&Message::ActionRun {
         id: id.to_owned(),
         action: action.to_owned(),
         args: args.to_owned(),
+        target,
     })
 }
 

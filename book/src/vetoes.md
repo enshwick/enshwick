@@ -39,15 +39,29 @@ request reaches the crafting system empty, with no crafter and no amount.
 runs after the game's cursor check allows a placement, with a `Placement`,
 Enshwick's name, since the game's check has none: the building `player`,
 the `item` placed and its `position` in metres.
-Returning `false` refuses it the way the game refuses a placement without
-building permission: the building systems do not place it.
+It answers a `BuildVerdict`: `Refuse` refuses the placement the way the game
+refuses one without building permission, so the building systems do not
+place it, and `RefuseBecause` refuses it with a reason the builder reads. The
+reason is a key of the mod's [texts](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs), shown in the player's
+language, or plain words. A client that runs the mod shows it under the build
+cursor while the player aims there. The server tells a player whose client
+does not show it once, as a notice, or in chat to a client without Enshwick;
+it tells one player at most once a second, and the same reason again only
+after that player's refusals stopped for a second. A `bool` turns into a
+verdict with `.into()`.
 
 ```rust
+use enshwick::vetoes::BuildVerdict;
+
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // Nothing is built in a ring around the world's centre.
     load.on_build(|placement| {
         let [x, _, z] = placement.position;
-        (x * x + z * z).sqrt() > 50.0
+        if (x * x + z * z).sqrt() > 50.0 {
+            BuildVerdict::Allow
+        } else {
+            BuildVerdict::refuse_because("build.centre")
+        }
     })
 }
 ```
@@ -56,9 +70,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 -- Nothing is built in a ring around the world's centre.
 enshwick.vetoes.on_build(function(placement)
     local at = placement.position
-    return math.sqrt(at.x * at.x + at.z * at.z) > 50
+    if math.sqrt(at.x * at.x + at.z * at.z) > 50 then
+        return true
+    end
+    return "build.centre"
 end)
 ```
+
+From Luau the filter returns `true` or nil to allow, `false` to refuse, and a
+string to refuse with that reason.
 
 The server runs the cursor check on the cursor each player's client sends,
 and the client runs it for its own prediction, so the filter runs on both

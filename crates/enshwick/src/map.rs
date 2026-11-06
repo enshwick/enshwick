@@ -30,9 +30,11 @@
 //! }
 //! ```
 
+mod events;
 mod fog;
 mod snapshot;
 
+pub use events::{MapPinged, WaypointChanged};
 pub use fog::{FogError, FogImage, FogOfWar, FogState};
 
 pub use snapshot::{

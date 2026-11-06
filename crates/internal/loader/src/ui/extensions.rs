@@ -9,7 +9,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
-use enshwick::abi::{Header, Side, Status, UiExtension, UiFrame, UiFrameFn};
+use enshwick::abi::{Header, Side, Status, Str, UiExtension, UiFrame, UiFrameFn};
 use enshwick_gamedata::catalogue;
 
 use crate::host::{Loader, Registered};
@@ -48,6 +48,9 @@ struct Linked {
     context_state: usize,
     state_play_data: usize,
     hud_screen: usize,
+    /// The game's name of each screen by its value; empty for a value no
+    /// constant names.
+    names: Vec<&'static str>,
 }
 
 /// The extensions: open while mods initialise, sealed after.
@@ -115,34 +118,78 @@ pub(super) fn seal() {
     let _sealed = EXTENSIONS.seal();
 }
 
-/// Reads where the open screen lies, once the interface is on; without the
-/// table's entries for it, only the extensions turn off.
 pub(super) fn link(loader: &Loader) {
     let extensions = EXTENSIONS.seal();
-    if extensions.is_empty() {
-        return;
-    }
     let table = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
     let found = (|| {
         Ok::<_, &str>(Linked {
             context_state: table(pinned::map::CONTEXT_STATE)?,
             state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
             hud_screen: table(pinned::ui::HUD_SCREEN)?,
+            names: screen_names(loader),
         })
     })();
     match found {
         Ok(linked) => {
             let _first = LINKED.set(linked);
-            crate::log!(
-                INFO,
-                "interface: {} screen extensions from mods",
-                extensions.len()
-            );
+            if !extensions.is_empty() {
+                crate::log!(
+                    INFO,
+                    "interface: {} screen extensions from mods",
+                    extensions.len()
+                );
+            }
         }
-        Err(id) => {
+        Err(id) if !extensions.is_empty() => {
             loader.feature_off(FEATURE, id, "this build's table lacks it");
         }
+        Err(_) => {}
     }
+}
+
+/// The game's name of each `HudScreenType` value on this build, indexed by
+/// value; values past a byte are left out, as the screen is read as one.
+fn screen_names(loader: &Loader) -> Vec<&'static str> {
+    let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
+    let mut names = vec![""; usize::from(u8::MAX) + 1];
+    if let Ok(info) = loader.reflection.type_info(screens) {
+        for constant in info.enum_values() {
+            if let Some(slot) = usize::try_from(constant.value())
+                .ok()
+                .and_then(|value| names.get_mut(value))
+            {
+                *slot = constant.name();
+            }
+        }
+    }
+    names
+}
+
+/// The game's name of the screen the player has open, for the frames mods
+/// draw; empty outside a game and on a build without the screen's read.
+///
+/// # Safety
+///
+/// - `context` is 0 or the live interface context of the frame being
+///   drawn, on the interface thread.
+pub(super) unsafe fn open_screen(context: usize) -> Str {
+    let Some(linked) = LINKED.get().filter(|_| context != 0) else {
+        return Str::EMPTY;
+    };
+    // SAFETY: the caller passes the frame's live interface context on the
+    // interface thread, non-zero by the check before it; the offsets are the
+    // table's `map.context_state` and `map.state_play_data`.
+    let data = unsafe { super::play_data(context, linked.context_state, linked.state_play_data) };
+    if data == 0 {
+        return Str::EMPTY;
+    }
+    // SAFETY: `data` is the non-null play data (checked before it), whose
+    // HUD screen byte sits at `ui.hud_screen` (clients 410, 426 and 520).
+    let screen = unsafe { crate::memory::read::<u8>(data, linked.hud_screen) };
+    linked
+        .names
+        .get(usize::from(screen))
+        .map_or(Str::EMPTY, |name| Str::new(name))
 }
 
 /// The panels of `screen`, edge by edge and in registration order within
@@ -262,6 +309,9 @@ unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32) {
         token,
         screen: UiFrame::IN_GAME,
         reserved: 0,
+        // SAFETY: the caller's contract gives the frame's live, non-zero
+        // `context` on the interface thread.
+        hud_screen: unsafe { open_screen(context) },
     };
     // SAFETY: the callback lives in a mod DLL that stays loaded, and it gets
     // a live `UiFrame` and the pointer its mod registered with it; an

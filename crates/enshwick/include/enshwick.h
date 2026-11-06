@@ -119,6 +119,26 @@ typedef struct EnshwickStr {
   size_t len;
 } EnshwickStr;
 
+// The object a run of an action names, sent with
+// `HostApi::run_action_at` and handed back
+// to the mod in `ActionCall::target`.
+typedef struct EnshwickActionTarget {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // Which fields hold a value: `ActionTarget::ENTITY`,
+  // `ActionTarget::POSITION`, both or none.
+  uint32_t flags;
+  // The object's entity in the server's world, with
+  // `ActionTarget::ENTITY`.
+  EnshwickEntity entity;
+  // Where it stands, in metres, with `ActionTarget::POSITION`.
+  double position[3];
+} EnshwickActionTarget;
+// `entity` holds the object's entity.
+#define EnshwickActionTarget_ENTITY 1
+// `position` holds where it stands.
+#define EnshwickActionTarget_POSITION 2
+
 // A question the loader asks a mod about its player actions, registered
 // with `HostApi::actions`.
 typedef struct EnshwickActionCall {
@@ -138,6 +158,9 @@ typedef struct EnshwickActionCall {
   // The action's arguments in the sheet's encoding, for
   // `ActionCall::RUN`; valid for the call.
   struct EnshwickStr args;
+  // The object the player's client named for `ActionCall::RUN`; no
+  // flags for none, and for the other questions.
+  struct EnshwickActionTarget target;
 } EnshwickActionCall;
 // The actions the player may use now, as a sheet: the reply is the
 // sheet's text.
@@ -441,6 +464,11 @@ typedef struct EnshwickBuildCheck {
   EnshwickItemId item;
   // Where, in 32.32 fixed-point metres.
   int64_t position[3];
+  // Null, or where a filter that refuses writes why: a key of its mod's
+  // texts or plain words, which the builder reads. The text it points at
+  // stays valid until the filter's next call on the same thread; the
+  // loader copies it before then, on that thread.
+  struct EnshwickStr *reason;
 } EnshwickBuildCheck;
 
 // Which binary of the game runs, or where a mod runs.
@@ -2085,6 +2113,11 @@ typedef struct EnshwickUiFrame {
   uint32_t screen;
   // Zero.
   uint32_t reserved;
+  // The game's name of its screen the player has open, such as
+  // `StorageChest`, a member of its `HudScreenType`; empty outside a game
+  // and on a build where the loader does not find it. The loader keeps
+  // the text for the life of the process.
+  struct EnshwickStr hud_screen;
 } EnshwickUiFrame;
 // The title screen and the menus before a game.
 #define EnshwickUiFrame_MENU 0
@@ -4712,6 +4745,18 @@ typedef struct EnshwickHostApi {
   // thread only (`Status::WRONG_THREAD` elsewhere). A panic in the
   // loader returns `Status::REFUSED`. ABI 11.9.
   EnshwickStatus (*set_saved)(EnshwickModHandle me, EnshwickEntity entity, uint8_t saved);
+  // Runs the mod's action `action` with `args` as
+  // `HostApi::run_action` does, naming the object `target` the run acts
+  // on, null for none; the server hands it to the mod's `at` and handler
+  // in `ActionCall::target`, to check
+  // as any object a client names.
+  // Client only; `Status::BAD_ARGS` for a position that is not finite.
+  // Strings and `target` are borrowed for the call. A panic in the
+  // loader returns `Status::REFUSED`. ABI 11.10.
+  EnshwickStatus (*run_action_at)(EnshwickModHandle me,
+                                  struct EnshwickStr action,
+                                  struct EnshwickStr args,
+                                  const struct EnshwickActionTarget *target);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

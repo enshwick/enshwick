@@ -70,7 +70,7 @@ use dialog::{Answer, answered};
 use frame::{Drawer, draw_frame};
 
 #[cfg(feature = "unstable")]
-pub use extension::{Edge, HudScreenType};
+pub use extension::{Edge, HudScreenType, ScreenChanged};
 pub use hud::{Anchor, Hud};
 #[cfg(feature = "unstable")]
 pub use map::{MAX_MARKERS, Marker, MarkerColor};

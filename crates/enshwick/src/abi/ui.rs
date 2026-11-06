@@ -11,13 +11,14 @@ use crate::abi::{Header, Status, Str};
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, UiFrame};
+/// use enshwick::abi::{Header, Str, UiFrame};
 ///
 /// let frame = UiFrame {
 ///     header: Header::of::<UiFrame>(),
 ///     token: 7,
 ///     screen: UiFrame::IN_GAME,
 ///     reserved: 0,
+///     hud_screen: Str::new("StorageChest"),
 /// };
 /// assert_eq!(frame.screen, UiFrame::IN_GAME);
 /// ```
@@ -34,9 +35,14 @@ pub struct UiFrame {
     pub screen: u32,
     /// Zero.
     pub reserved: u32,
+    /// The game's name of its screen the player has open, such as
+    /// `StorageChest`, a member of its `HudScreenType`; empty outside a game
+    /// and on a build where the loader does not find it. The loader keeps
+    /// the text for the life of the process.
+    pub hud_screen: Str,
 }
 
-impl_headed!(UiFrame);
+impl_headed!(UiFrame, born = 24);
 
 impl UiFrame {
     /// The title screen and the menus before a game.

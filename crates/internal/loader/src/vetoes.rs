@@ -19,7 +19,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 
 use enshwick::abi::{
-    BuildCheck, BuildCheckFn, CraftCheck, CraftCheckFn, Header, HookFlags, Status,
+    BuildCheck, BuildCheckFn, CraftCheck, CraftCheckFn, Header, HookFlags, Status, Str,
 };
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
@@ -329,6 +329,7 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // item's static data, which starts with its `u32` id and stays loaded.
         unsafe { read_at::<u32>(info, 0) }
     };
+    let mut reason = Str::new("");
     let call = BuildCheck {
         header: Header::of::<BuildCheck>(),
         player: enshwick::Entity(player),
@@ -337,16 +338,23 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // the check's live cursor transform (the caller's contract), which
         // starts with its 32.32 position, three `i64`.
         position: unsafe { read_at(transform.cast(), 0) },
+        reason: &raw mut reason,
     };
-    let allowed = filters.iter().filter(|f| f.live()).all(|f| {
+    let refused_by = filters.iter().filter(|f| f.live()).find(|f| {
         // SAFETY: `callback` is a `BuildCheckFn` the mod registered, in its
         // DLL, which stays loaded (`Registered`); `user` is the pointer it
-        // registered with it, and `call` lives on this stack for the call.
+        // registered with it, and `call` and the `reason` it points at live
+        // on this stack for the call.
         crate::profile::call(f.owner, crate::profile::Feature::Vetoes, || unsafe {
-            (f.callback)(&raw const call, f.user()) != 0
+            (f.callback)(&raw const call, f.user()) == 0
         })
     });
-    if !allowed {
+    if let Some(filter) = refused_by {
+        // SAFETY: only the refusing filter wrote `reason`, a text it keeps
+        // until its next call on this thread, which comes after this read.
+        if let Some(text) = unsafe { reason.as_str() } {
+            crate::build_reasons::refused(filter.owner, player, text);
+        }
         // SAFETY: `flags` is non-null (the null checks return first) and the
         // check's live `u32` flags word, which nothing else writes during the
         // call (the caller's contract) and the building systems read after it.

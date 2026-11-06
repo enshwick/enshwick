@@ -18,6 +18,32 @@ fn a_client_that_says_hello_gets_every_mod_s_settings() {
         matches!(&messages[0], Message::Sync { id, values } if id == "you.trading-post" && values == "{cost = 5}")
     );
 }
+
+#[test]
+fn a_run_s_object_with_unknown_flags_or_an_endless_position_reads_as_none() {
+    let sent_back = |flags: u32, x: f64| {
+        let message = Message::ActionRun {
+            id: "you.safes".into(),
+            action: "switch".into(),
+            args: String::new(),
+            target: Some(ActionTarget {
+                flags,
+                position: [x, 0.0, 0.0],
+                ..ActionTarget::NONE
+            }),
+        };
+        match Message::read(message.kind(), &message.body()) {
+            Some(Message::ActionRun { target, .. }) => target,
+            _ => None,
+        }
+    };
+    let finite = 1.5;
+    assert!(sent_back(ActionTarget::POSITION, finite).is_some());
+    assert_eq!(sent_back(ActionTarget::POSITION, f64::NAN), None);
+    assert_eq!(sent_back(ActionTarget::POSITION, f64::INFINITY), None);
+    assert_eq!(sent_back(8, finite), None);
+    assert_eq!(sent_back(0, finite), None);
+}
 use enshwick::config::Field;
 
 fn schema() -> Schema {
@@ -71,6 +97,18 @@ fn messages_round_trip() {
             id: "you.trading-post".into(),
             action: "access".into(),
             args: "p0000000000000007\tb1".into(),
+            target: None,
+        },
+        Message::ActionRun {
+            id: "you.safes".into(),
+            action: "switch".into(),
+            args: String::new(),
+            target: Some(ActionTarget {
+                flags: ActionTarget::ENTITY | ActionTarget::POSITION,
+                entity: enshwick::Entity(4096),
+                position: [10.5, -2.0, 7.25],
+                ..ActionTarget::NONE
+            }),
         },
     ] {
         assert_eq!(
@@ -250,6 +288,7 @@ fn action_runs_have_a_rate_of_their_own_and_over_it_are_busy_and_not_run() {
         id: "zones".into(),
         action: "clear".into(),
         args: String::new(),
+        target: None,
     };
     let passed = (0..100)
         .take_while(|_| queries.gate(7, false, &run, now) == Gate::Pass)

@@ -167,6 +167,56 @@ mod's controls and panels and the console all follow them.
 The platform's replies, such as "No player named Bob.", are under
 `actions.*` keys and take the mod's texts over them.
 
+## On a named object
+
+A panel beside a chest's screen acts on that chest, not on whatever `.at`
+finds nearest. `actions.run_at(id, values, target)` runs the action on the
+object an `ActionTarget` names: its entity in the server's world, as the
+server sent it to the client, where it stands in metres, or both, from
+`ActionTarget::entity(entity)`, `ActionTarget::at(position)` and
+`with_position`. The server hands it to `.at` as `ask.target` and to the
+handler as `request.target`; a run without one, the console and the
+actions' list have `None`.
+
+```rust
+use enshwick::actions::{Action, ActionTarget, Outcome, Subject};
+use enshwick::i18n::Texts;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let actions = load.actions(Texts::default())?;
+    actions.add(
+        Action::new("sort", "Sort").at(|ask| match ask.target.and_then(|t| t.position) {
+            Some(_) => Ok(Subject::new(1, "This chest")),
+            None => Err("Open a chest first".into()),
+        }),
+        |_request| Outcome::done("Sorted"),
+    )?;
+    let chest = ActionTarget::at([10.0, 2.0, -4.5]);
+    let _sent = actions.run_at("sort", &[], chest);
+    Ok(())
+}
+```
+
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+actions:add({
+    id = "sort",
+    label = "Sort",
+    at = function(ask)
+        if ask:target() == nil then
+            return { Err = "Open a chest first" }
+        end
+        return { Ok = enshwick.actions.subject("1", "This chest") }
+    end,
+}, function() return enshwick.actions.done("Sorted") end)
+actions:run_at("sort", {}, { position = vector.create(10, 2, -4.5) })
+```
+
+The target is what the client says, so `.at` checks it as it checks any
+object: that it is there, within the player's reach and theirs to use. The
+loader drops a target whose position is not finite or whose flags it does
+not know before the mod sees the run.
+
 ## From the console
 
 A console line names the mod by its id, then the action and its values as
@@ -197,7 +247,9 @@ extension point; `on` names the players allowed there; a second action,
 
 With the `test` feature, the [fake loader](testing.md) asks the actions as
 the loader does: `ask_actions(ActionCall::RUN, ...)` runs one as a control
-sends it, `ask_actions(ActionCall::SHEET, &player, language, "", "")`
+sends it, `ask_action_at(&player, language, id, args, target)` runs one on a
+named object, `action_targets()` lists the objects a client's runs named,
+`ask_actions(ActionCall::SHEET, &player, language, "", "")`
 returns the mod's sheet, which `actions::sheet::decode` reads, and
 `console::run("<mod id> <action> ...")` runs the console form: the fake
 hands a line to the mod's own actions unless `console_answer` gave its first
