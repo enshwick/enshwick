@@ -171,6 +171,43 @@ fn screen_names(loader: &Loader) -> Vec<&'static str> {
     names
 }
 
+/// Runs `read` only for the in-game app state: a menu or loading frame may
+/// still point at the last game's play data.
+fn in_game_only(app_state: u8, read: impl FnOnce() -> Option<u8>) -> Option<u8> {
+    (super::screen(app_state) == UiFrame::IN_GAME)
+        .then(read)
+        .flatten()
+}
+
+/// The HUD screen byte of the game the player is in; `None` outside one.
+///
+/// # Safety
+///
+/// - `context` is 0 or the live interface context of the frame being
+///   drawn, on the interface thread.
+unsafe fn screen_byte(engine: &Engine, context: usize, linked: &Linked) -> Option<u8> {
+    if context == 0 {
+        return None;
+    }
+    in_game_only(engine.app_state(context), || {
+        // SAFETY: the caller passes the frame's live interface context on
+        // the interface thread, non-zero by the check before it; the offsets
+        // are the table's `map.context_state` and `map.state_play_data`.
+        let data =
+            unsafe { super::play_data(context, linked.context_state, linked.state_play_data) };
+        // SAFETY: `data` is the non-null play data (checked before it), whose
+        // HUD screen byte sits at `ui.hud_screen` (clients 410, 426 and 520).
+        (data != 0).then(|| unsafe { crate::memory::read::<u8>(data, linked.hud_screen) })
+    })
+}
+
+/// The game's name of screen byte `screen`; empty for `None`.
+fn screen_name(linked: &Linked, screen: Option<u8>) -> Str {
+    screen
+        .and_then(|s| linked.names.get(usize::from(s)))
+        .map_or(Str::EMPTY, |name| Str::new(name))
+}
+
 /// The game's name of the screen the player has open, for the frames mods
 /// draw; empty outside a game and on a build without the screen's read.
 ///
@@ -178,24 +215,12 @@ fn screen_names(loader: &Loader) -> Vec<&'static str> {
 ///
 /// - `context` is 0 or the live interface context of the frame being
 ///   drawn, on the interface thread.
-pub(super) unsafe fn open_screen(context: usize) -> Str {
-    let Some(linked) = LINKED.get().filter(|_| context != 0) else {
+pub(super) unsafe fn open_screen(engine: &Engine, context: usize) -> Str {
+    let Some(linked) = LINKED.get() else {
         return Str::EMPTY;
     };
-    // SAFETY: the caller passes the frame's live interface context on the
-    // interface thread, non-zero by the check before it; the offsets are the
-    // table's `map.context_state` and `map.state_play_data`.
-    let data = unsafe { super::play_data(context, linked.context_state, linked.state_play_data) };
-    if data == 0 {
-        return Str::EMPTY;
-    }
-    // SAFETY: `data` is the non-null play data (checked before it), whose
-    // HUD screen byte sits at `ui.hud_screen` (clients 410, 426 and 520).
-    let screen = unsafe { crate::memory::read::<u8>(data, linked.hud_screen) };
-    linked
-        .names
-        .get(usize::from(screen))
-        .map_or(Str::EMPTY, |name| Str::new(name))
+    // SAFETY: the caller's contract.
+    screen_name(linked, unsafe { screen_byte(engine, context, linked) })
 }
 
 /// The panels of `screen`, edge by edge and in registration order within
@@ -225,21 +250,17 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         return;
     }
     // SAFETY: the caller passes the frame's live interface context on the
-    // interface thread; the offsets are the table's `map.context_state` and
-    // `map.state_play_data`.
-    let data = unsafe { super::play_data(context, linked.context_state, linked.state_play_data) };
-    if data == 0 {
+    // interface thread.
+    let Some(screen) = (unsafe { screen_byte(engine, context, linked) }) else {
         return;
-    }
-    // SAFETY: `data` is the non-null play data (checked before it), whose
-    // HUD screen byte sits at `ui.hud_screen` (clients 410, 426 and 520).
-    let screen = unsafe { crate::memory::read::<u8>(data, linked.hud_screen) };
+    };
+    let name = screen_name(linked, Some(screen));
     for extension in by_edge(extensions, screen, |e| (e.screen, e.edge)) {
         if extension.registered.live() {
             // SAFETY: this function's `# Safety` gives the frame, its thread
             // and its `context`; the only window open is the extensions' own,
             // which `open` and `close` keep one at a time.
-            unsafe { run(extension.registered, context, extension.edge) };
+            unsafe { run(extension.registered, context, extension.edge, name) };
         }
     }
     // SAFETY: this function's `# Safety` gives the frame, its thread and its
@@ -303,7 +324,7 @@ unsafe fn close(engine: &Engine, context: usize) {
 /// - Called inside a frame of the game's interface update, on its thread,
 ///   with that frame's non-zero `context`, while no window but the
 ///   extensions' own is open.
-unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32) {
+unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, hud_screen: Str) {
     let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
     DRAWING.set(Some(Drawing {
         token,
@@ -318,9 +339,7 @@ unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32) {
         token,
         screen: UiFrame::IN_GAME,
         reserved: 0,
-        // SAFETY: the caller's contract gives the frame's live, non-zero
-        // `context` on the interface thread.
-        hud_screen: unsafe { open_screen(context) },
+        hud_screen,
     };
     // SAFETY: the callback lives in a mod DLL that stays loaded, and it gets
     // a live `UiFrame` and the pointer its mod registered with it; an
@@ -336,6 +355,16 @@ unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_open_screen_is_read_only_in_a_game() {
+        for menu_or_loading in [0, 3, 4, 5, 6, 8] {
+            let read = in_game_only(menu_or_loading, || panic!("read the last game's play data"));
+            assert_eq!(read, None, "app state {menu_or_loading}");
+        }
+        assert_eq!(in_game_only(7, || Some(12)), Some(12));
+        assert_eq!(in_game_only(7, || None), None, "no play data");
+    }
 
     #[test]
     fn panels_of_the_open_screen_draw_edge_by_edge_in_registration_order() {
