@@ -71,9 +71,46 @@ Each entry names the pull request that made the change.
   function for one call, so a runtime hands the function the same script
   object on every call. A Luau script that keeps it past the call gets an
   error from it, never the next call's value (#947).
+- `content::templates`: `Load::add_template` copies one of the game's entity
+  templates under the mod's content id, and `Load::change_template` changes
+  one of the game's own, by `ComponentChange`s that set, edit or remove a
+  component (by its generated type with `typed`), in memory and in load
+  order. The loader lists the templates mods serve to the game's template
+  registry on the server and the client, so a copy spawns and places like
+  the game's own, and lists a removed mod's copies as the vanilla template
+  they were made from, so a world's placed copies still load. Workshops and
+  item meters are templates made this way.
+  Luau reaches both through `enshwick.content` (#952).
+- `content::props`: `Load::add_prop` adds a prop type, an item that places a
+  copy of a vanilla prop's template, with a copy of its recipe for the build
+  menu, and optionally a crafting prop that the named recipes require. The
+  loader gives each crafting prop the next bit of the game's 64-bit crafting
+  prop mask, which all mods share, and refuses one past the last.
+  `HostApi::crafting_prop`, ABI 11.8 (#952).
+- `content::enemies` (behind `typed`): `Load::add_enemy` copies a vanilla
+  enemy with its own level, health, damage, faction, arsenal and boss mark;
+  `Load::add_arsenal` and `Load::change_arsenal` make and change arsenals
+  from the game's attacks and behaviours. `vanilla::enemy` and
+  `vanilla::template` name the game's enemies and templates; a Rust mod's
+  first such call after `init` logs a warning, as it reads every
+  template's name on the calling thread (#952).
+- `content::spawns` (behind `typed`): `Load::add_spawn_entry` adds a
+  template to the game's random spawners, by spawner or wherever a template
+  spawns already, and `Load::change_spawner` changes their counts and
+  timeouts (#952).
+- `altars::kinds`: `Load::add_flame_altar` adds a kind of Flame Altar, a
+  prop copied from the vanilla altar whose altars take zones of their own
+  per level through the altar zone filter chain. `Altar::template` names an
+  altar's kind (#952).
 
 ### Changed
 
+- **Breaking:** item meters and workshops are made through
+  `content::templates`, so `content::items::MeterLayout`,
+  `clone_meter_template`, `list_meter_template`,
+  `content::workshops::clone_template` and `list_template` are gone,
+  `TEMPLATE_COLLECTION` moved to `content::templates`, and `WorkshopLayout`
+  lost its `crafting`, `interaction` and `client` fields (#952).
 - The loader finds every game build the same way, a new one too: by the
   anchors of `enshwick-gamedata` carried by their code patterns, then the
   engine routes. It reads no per-build table at run time, and an entry
@@ -130,8 +167,22 @@ Each entry names the pull request that made the change.
   before. The client no longer asks the server for action sheets, and the
   reply to a run reaches the player as one notice with all its lines, or as
   a chat line where the client takes no notices (#950).
+- `Weather::set` with a `lasting` over `MAX_RESTORED_REMAINING`, 30
+  minutes, logs a warning: a save keeps a front only while it has that much
+  left, so a longer front lasts only until the world next loads (#952).
 
 ### Fixed
+
+- A world's saved weather fronts keep their phenomenon when the mods that
+  add phenomena change: the loader writes the phenomena's GUIDs beside the
+  save and gives each restored front its phenomenon's new place, where
+  before a front could load as another phenomenon. A save from before the
+  loader kept them frees only the fronts outside their layer's
+  phenomena (#952).
+- A mod item's meter lives: its template is registered with the game, where
+  before the entity of a given item read as gone (#952).
+- The workshop of `Load::add_workshop` places and spawns like the game's
+  own: its template is registered with the game (#952).
 
 - A client joins a dedicated server again in the same game process: the
   loader closes its own socket of the last game before it opens one for

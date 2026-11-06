@@ -73,6 +73,10 @@ mod typed {
     chapters! {
         GameTypes => "game-types.md",
         WeatherPhenomena => "weather-phenomena.md",
+        Templates => "content/templates.md",
+        Props => "content/props.md",
+        Enemies => "content/enemies.md",
+        Spawns => "content/spawns.md",
     }
 }
 

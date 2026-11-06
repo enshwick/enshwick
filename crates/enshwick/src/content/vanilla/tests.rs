@@ -176,7 +176,7 @@ pub(crate) fn game_with_tables(containers: &[(&str, Guid)]) -> Vanilla {
     let at = collection.append(&guids, 8);
     assert!(collection.set_array(0, at, u32::try_from(containers.len()).unwrap()));
     data.insert(
-        super::super::workshops::TEMPLATE_COLLECTION.key_by_hash(HASHES.template_collection),
+        super::super::templates::TEMPLATE_COLLECTION.key_by_hash(HASHES.template_collection),
         collection.into_bytes(),
     );
     Vanilla::with_parts(
@@ -211,6 +211,28 @@ fn a_container_s_loot_table_is_found_by_its_name_with_its_sharers() {
             .to_string()
             .contains("near: LootChest_Gold")
     );
+}
+
+#[test]
+fn a_template_is_found_by_its_name_or_its_near_names_or_its_twins_named() {
+    use super::super::loot_tables::tests::FILL;
+
+    let vanilla = game_with_tables(&[
+        ("Enemy_Wolf", Guid([1; 16])),
+        ("Prop_Chest", Guid([2; 16])),
+        ("Prop_Chest", Guid([3; 16])),
+    ])
+    .with_template_names(Some(FILL.name));
+    assert_eq!(vanilla.template("Enemy_Wolf"), Ok(Guid([0x40; 16])));
+    assert_eq!(
+        vanilla.template("Prop_Chest"),
+        Err(VanillaError::AmbiguousTemplate {
+            name: "Prop_Chest".into(),
+            templates: vec![Guid([0x41; 16]), Guid([0x42; 16])],
+        })
+    );
+    let unknown = vanilla.template("Enemy_Wolv").unwrap_err().to_string();
+    assert!(unknown.contains("near: Enemy_Wolf"), "{unknown}");
 }
 
 /// The archive of [`game`], by key.

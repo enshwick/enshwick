@@ -36,8 +36,8 @@ use super::entries::mods::{
 use super::entries::net::{net_channel, net_ready, net_send};
 use super::entries::saves::{hold_saves, save_info};
 use super::entries::services::{
-    attach_point, declare_content, define_event, define_point, publish, run_point, send_event,
-    service, set_tick_every, subscribe, subscribe_event, subscribe_tick, use_content,
+    attach_point, crafting_prop, declare_content, define_event, define_point, publish, run_point,
+    send_event, service, set_tick_every, subscribe, subscribe_event, subscribe_tick, use_content,
 };
 use super::entries::transactions::{
     transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
@@ -249,4 +249,5 @@ pub(crate) static API: HostApi = HostApi {
     chat_filter,
     save_info,
     hold_saves,
+    crafting_prop,
 };

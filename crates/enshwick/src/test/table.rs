@@ -68,8 +68,8 @@ use net::{net_channel, net_ready, net_send};
 use saves::{Saves, hold_saves, save_info};
 pub(crate) use services::view;
 use services::{
-    declare_content, define_event, publish, send_event, service, subscribe, subscribe_event,
-    use_content,
+    crafting_prop, declare_content, define_event, publish, send_event, service, subscribe,
+    subscribe_event, use_content,
 };
 use transactions::{
     transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
@@ -141,6 +141,9 @@ pub(crate) struct State {
     pub(crate) content_renames: Option<Vec<([u8; 16], [u8; 16])>>,
     /// Content ids the mod declared, in order.
     pub(crate) content_ids: Vec<String>,
+    /// The crafting props the mod was given an index for, in order, after
+    /// the game's count and the mask's bits of the first call.
+    pub(crate) crafting_props: (Option<(u8, u8)>, Vec<[u8; 16]>),
     /// The mod's player actions callback, once registered.
     pub(crate) actions: Option<(crate::abi::ActionFn, usize)>,
     pub(crate) chat: Vec<(crate::PlayerKey, String)>,
@@ -606,6 +609,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         sent_events: Vec::new(),
         content_renames: None,
         content_ids: Vec::new(),
+        crafting_props: (None, Vec::new()),
         inventory_requests: Vec::new(),
         actions: None,
         chat: Vec::new(),
@@ -1034,4 +1038,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     chat_filter,
     save_info,
     hold_saves,
+    crafting_prop,
 };

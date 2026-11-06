@@ -469,6 +469,54 @@ impl Host {
     }
 }
 
+/// Serves the resource `key`, built from the resource `base` the first time
+/// the game reads it: `patch` gets the base's value and returns the value to
+/// serve, which may name only the fields it changes; nil serves the base
+/// unchanged. A base that does not read, a patch that fails, or a value that
+/// does not fit the type is logged; then a changed game resource (`key` is
+/// `base`) is served unchanged, and a new one turns the mod off, as
+/// [`Load::serve`](crate::Load::serve) does for a builder's `None`.
+pub(crate) fn serve_value(
+    host: Host,
+    key: crate::abi::ResourceKey,
+    base: crate::abi::ResourceKey,
+    patch: impl Fn(super::Value) -> Result<super::Value, Off> + Send + Sync + 'static,
+) -> Result<(), Off> {
+    let registry = Registry::game()?;
+    let name = registry
+        .hashed(base.type_hash)
+        .ok_or_else(|| Off::new("the base's type is not a type of this build"))?
+        .qualified_name();
+    crate::content::serve(host, key, base, move |bytes| {
+        let keep = |error: &dyn std::fmt::Display| {
+            host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
+            fallback(key, base, bytes)
+        };
+        let value = match registry.decode(name, bytes) {
+            Ok(value) => value,
+            Err(error) => return keep(&error),
+        };
+        match patch(value) {
+            Ok(super::Value::Nil) => Some(bytes.to_vec()),
+            Ok(edited) => registry
+                .encode(name, &edited, Some(bytes))
+                .map_or_else(|error| keep(&error), Some),
+            Err(error) => keep(&error),
+        }
+    })
+}
+
+/// What a failed patch serves: the game's own resource unchanged when it
+/// patches one, nothing for a new one, which turns the mod off rather than
+/// pass a vanilla copy off as the mod's.
+fn fallback(
+    key: crate::abi::ResourceKey,
+    base: crate::abi::ResourceKey,
+    bytes: &[u8],
+) -> Option<Vec<u8>> {
+    (key == base).then(|| bytes.to_vec())
+}
+
 /// Serves `value` as the new resource `key`, of the type its key names; the
 /// loader builds it from any vanilla resource of that type, whose bytes the
 /// value replaces.
@@ -540,4 +588,27 @@ pub(crate) fn declare(host: Host, id: &str) -> Result<crate::content::Guid, Off>
     crate::load::ok(status, crate::content::Guid(out), || {
         format!("content id {id}")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::abi::ResourceKey;
+
+    #[test]
+    fn a_failed_patch_keeps_a_game_resource_and_serves_no_new_one() {
+        let key = |guid: u8| ResourceKey {
+            guid: [guid; 16],
+            type_hash: 7,
+            part: 0,
+        };
+        assert_eq!(
+            super::fallback(key(1), key(1), b"base"),
+            Some(b"base".to_vec())
+        );
+        assert_eq!(
+            super::fallback(key(2), key(1), b"base"),
+            None,
+            "a copy turns the mod off"
+        );
+    }
 }

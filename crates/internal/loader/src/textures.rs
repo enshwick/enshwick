@@ -24,7 +24,7 @@ use enshwick::abi::{HookFlags, Side, Status};
 use enshwick::raw::{read_at, read_bytes_at, read_ptr_at, write_at, write_bytes_at, write_ptr_at};
 use rustc_hash::FxHashMap;
 
-use crate::catalogue::types::UI_IMAGE;
+use crate::catalogue::types::{TEMPLATE, UI_IMAGE};
 use crate::chains::Next;
 use crate::host::{Loader, Target};
 use crate::locks::Relock;
@@ -76,6 +76,8 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 /// The listing handed back for the game's own array (its address and
 /// count): built once, as the game lists its UI images once or twice.
 static COMBINED: OnceLock<Combined> = OnceLock::new();
+/// The template listing handed back, as [`COMBINED`] is for UI images.
+static TEMPLATES: OnceLock<Combined> = OnceLock::new();
 
 /// The game's array, as its address and count, and the listing with the
 /// served keys after it.
@@ -267,37 +269,77 @@ pub(crate) fn ready() -> bool {
 }
 
 /// Links the content request, the key listing and the UI registry's fill
-/// on a client that serves UI images.
+/// on a client that serves UI images; on any side that serves templates of
+/// its own, the key listing alone when the images did not link it, so the
+/// game registers them.
 pub(crate) fn link(loader: &'static Loader) {
-    if loader.side != Side::CLIENT || crate::content::new_keys_of_type(UI_IMAGE).is_empty() {
+    let images =
+        loader.side == Side::CLIENT && !crate::content::new_keys_of_type(UI_IMAGE).is_empty();
+    let mut keys_linked = false;
+    if images {
+        let _first = LOADED.set(loader);
+        if layout(loader).is_some() {
+            let none = HookFlags::NONE;
+            keys_linked = loader.link_feature(
+                "mod textures (content)",
+                Target::Pinned(pinned::textures::REQUEST),
+                &REQUEST_NEXT,
+                request as RequestFn,
+                none,
+            ) && loader.link_feature(
+                "mod textures (keys)",
+                Target::Pinned(pinned::textures::KEYS),
+                &KEYS_NEXT,
+                keys as KeysFn,
+                none,
+            );
+            let linked = keys_linked
+                && loader.link_feature(
+                    "mod textures (UI registry)",
+                    Target::Pinned(pinned::textures::REGISTRY_FILL),
+                    &FILL_NEXT,
+                    fill as FillFn,
+                    none,
+                );
+            if linked {
+                crate::log!(INFO, "mod textures: linked for the served UI images");
+            }
+        }
+    }
+    let templates = !crate::content::new_keys_of_type(TEMPLATE).is_empty()
+        || !crate::content::orphan_templates().is_empty();
+    if templates && !keys_linked {
+        link_templates(loader);
+    }
+}
+
+/// Links the key listing alone, for served templates, once its code and key
+/// size check out.
+fn link_templates(loader: &'static Loader) {
+    if !loader.code_holds(pinned::textures::KEYS) {
+        crate::log!(
+            WARN,
+            "mod templates off: {} is not the code the loader knows",
+            pinned::textures::KEYS
+        );
         return;
     }
-    let _first = LOADED.set(loader);
-    if layout(loader).is_none() {
+    if loader.offset(pinned::textures::KEY_SIZE) != Some(KEY) {
+        crate::log!(
+            WARN,
+            "mod templates off: this build's resource keys are not {KEY} bytes"
+        );
         return;
     }
-    let none = HookFlags::NONE;
     let linked = loader.link_feature(
-        "mod textures (content)",
-        Target::Pinned(pinned::textures::REQUEST),
-        &REQUEST_NEXT,
-        request as RequestFn,
-        none,
-    ) && loader.link_feature(
-        "mod textures (keys)",
+        "mod templates (keys)",
         Target::Pinned(pinned::textures::KEYS),
         &KEYS_NEXT,
         keys as KeysFn,
-        none,
-    ) && loader.link_feature(
-        "mod textures (UI registry)",
-        Target::Pinned(pinned::textures::REGISTRY_FILL),
-        &FILL_NEXT,
-        fill as FillFn,
-        none,
+        HookFlags::NONE,
     );
     if linked {
-        crate::log!(INFO, "mod textures: linked for the served UI images");
+        crate::log!(INFO, "mod templates: linked for the served templates");
     }
 }
 
@@ -501,15 +543,27 @@ unsafe extern "system" fn keys(
     // holds the next function of that signature; the game's arguments pass
     // unchanged.
     let result = unsafe { KEYS_NEXT.get()(out, database, type_hash, found) };
-    if type_hash != UI_IMAGE || out.is_null() {
+    if !lists(type_hash, images_armed()) || out.is_null() {
         return result;
     }
     let _done = TEXTURES_FUSE.run("the keys", || {
         // SAFETY: `out` is non-null by the check before it and is the hooked
         // listing's result, which the listing has just written.
-        unsafe { append(out) };
+        unsafe { append(out, type_hash) };
     });
     result
+}
+
+/// Whether the content request and the UI registry's fill are armed, without
+/// which a listed UI image could not load.
+fn images_armed() -> bool {
+    REQUEST_NEXT.wired().is_some() && FILL_NEXT.wired().is_some()
+}
+
+/// Whether the listing of `type_hash` gets served keys: templates always,
+/// UI images only while `images` are armed.
+fn lists(type_hash: u32, images: bool) -> bool {
+    type_hash == TEMPLATE || (images && type_hash == UI_IMAGE)
 }
 
 /// Points the listing's result at `keys` and marks it a success.
@@ -532,7 +586,10 @@ unsafe fn hand_back(out: *mut KeysOut, keys: &'static [[u8; KEY]]) {
     unsafe { write_at(out, core::mem::offset_of!(KeysOut, status), 0u8) };
 }
 
-/// Hands back the listing with the served UI images after the game's own.
+/// Hands back the listing of `type_hash` with the served keys of that type
+/// after the game's own: UI images, which the client's UI registry lists, and
+/// templates, which every side registers once at start from this listing
+/// (server 399, checked live with a debugger).
 ///
 /// # Safety
 ///
@@ -541,7 +598,12 @@ unsafe fn hand_back(out: *mut KeysOut, keys: &'static [[u8; KEY]]) {
 /// - Its keys, when not null, are `count` readable keys of [`KEY`] bytes
 ///   that stay alive, as the game never frees the listing.
 /// - Called on the listing's thread, which alone touches `out` meanwhile.
-unsafe fn append(out: *mut KeysOut) {
+unsafe fn append(out: *mut KeysOut, type_hash: u32) {
+    let (combined, images) = if type_hash == UI_IMAGE {
+        (&COMBINED, true)
+    } else {
+        (&TEMPLATES, false)
+    };
     let result = out.cast_const().cast::<u8>();
     // SAFETY: the caller guarantees a live `KeysOut`, whose `keys` pointer
     // field sits at its `offset_of!`.
@@ -553,17 +615,22 @@ unsafe fn append(out: *mut KeysOut) {
     let count: u64 = unsafe { read_at(result, core::mem::offset_of!(KeysOut, count)) };
     let count = usize::try_from(count).unwrap_or(0);
     let original = (listed.addr(), count);
-    if let Some(&(from, keys)) = COMBINED.get()
+    if let Some(&(from, keys)) = combined.get()
         && from == original
     {
         // SAFETY: the caller guarantees `out` is live and writable, and
         // nothing else touches it during the call.
         unsafe { hand_back(out, keys) };
-        LISTED.store(true, Ordering::Release);
+        LISTED.fetch_or(images, Ordering::AcqRel);
         return;
     }
-    let extra = crate::content::new_keys_of_type(UI_IMAGE);
-    if extra.is_empty() {
+    let extra = crate::content::new_keys_of_type(type_hash);
+    let orphans = if images {
+        Vec::new()
+    } else {
+        crate::content::orphan_templates()
+    };
+    if extra.is_empty() && orphans.is_empty() {
         return;
     }
     let mut keys: Vec<[u8; KEY]> = Vec::with_capacity(count + extra.len());
@@ -575,7 +642,28 @@ unsafe fn append(out: *mut KeysOut) {
             unsafe { read_at::<[u8; KEY]>(listed.cast(), index * KEY) }
         }));
     }
-    for key in &extra {
+    with_served(&mut keys, &extra);
+    with_aliases(&mut keys, &orphans);
+    let keys: &'static [[u8; KEY]] = Box::leak(keys.into_boxed_slice());
+    let _first = combined.set((original, keys));
+    // SAFETY: the caller guarantees `out` is live and writable, and nothing
+    // else touches it during the call.
+    unsafe { hand_back(out, keys) };
+    LISTED.fetch_or(images, Ordering::AcqRel);
+    if !images {
+        crate::log!(
+            INFO,
+            "mod templates: {} listed for the game's template registry, {} of removed mods as vanilla ones",
+            extra.len(),
+            orphans.len()
+        );
+    }
+}
+
+/// `keys`, the game's listing, with each of `served` after them as the
+/// listing lays a key out (GUID, type hash, part), once each.
+fn with_served(keys: &mut Vec<[u8; KEY]>, served: &[enshwick::abi::ResourceKey]) {
+    for key in served {
         let mut entry = [0u8; KEY];
         entry[..16].copy_from_slice(&key.guid);
         entry[16..20].copy_from_slice(&key.type_hash.to_le_bytes());
@@ -584,12 +672,25 @@ unsafe fn append(out: *mut KeysOut) {
             keys.push(entry);
         }
     }
-    let keys: &'static [[u8; KEY]] = Box::leak(keys.into_boxed_slice());
-    let _first = COMBINED.set((original, keys));
-    // SAFETY: the caller guarantees `out` is live and writable, and nothing
-    // else touches it during the call.
-    unsafe { hand_back(out, keys) };
-    LISTED.store(true, Ordering::Release);
+}
+
+/// `keys`, the game's listing, with each clone of `aliases` listed as its
+/// vanilla template's entry with the clone's GUID, once each; a clone whose
+/// vanilla template the game does not list stays out.
+fn with_aliases(keys: &mut Vec<[u8; KEY]>, aliases: &[([u8; 16], [u8; 16])]) {
+    for (clone, vanilla) in aliases {
+        let Some(mut entry) = keys
+            .iter()
+            .find(|key| key[..16] == vanilla[..] && key[16..20] == TEMPLATE.to_le_bytes())
+            .copied()
+        else {
+            continue;
+        };
+        entry[..16].copy_from_slice(clone);
+        if !keys.contains(&entry) {
+            keys.push(entry);
+        }
+    }
 }
 
 unsafe extern "system" fn fill(registry: *mut u8) {
@@ -656,6 +757,56 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn served_keys_follow_the_game_s_listing_once_each_as_it_lays_keys_out() {
+        let key = |guid: u8| enshwick::abi::ResourceKey {
+            guid: [guid; 16],
+            type_hash: TEMPLATE,
+            part: 2,
+        };
+        let mut listed = vec![[7u8; KEY]];
+        with_served(&mut listed, &[key(1), key(1), key(3)]);
+        assert_eq!(listed.len(), 3, "the game's key, then each served one once");
+        assert_eq!(listed[0], [7u8; KEY]);
+        assert_eq!(listed[1][..16], [1; 16]);
+        assert_eq!(listed[1][16..20], TEMPLATE.to_le_bytes());
+        assert_eq!(listed[1][20..24], 2u32.to_le_bytes());
+        assert_eq!(listed[2][..16], [3; 16]);
+    }
+
+    #[test]
+    fn templates_are_listed_even_when_the_ui_image_hooks_are_not_armed() {
+        assert!(lists(TEMPLATE, false));
+        assert!(lists(TEMPLATE, true));
+        assert!(!lists(UI_IMAGE, false), "an image the request cannot load");
+        assert!(lists(UI_IMAGE, true));
+        assert!(!lists(0x1234, true));
+    }
+
+    #[test]
+    fn a_removed_mod_s_clone_is_listed_as_its_vanilla_template_s_entry() {
+        let mut vanilla = [0u8; KEY];
+        vanilla[..16].copy_from_slice(&[4; 16]);
+        vanilla[16..20].copy_from_slice(&TEMPLATE.to_le_bytes());
+        vanilla[20..24].copy_from_slice(&3u32.to_le_bytes());
+        let mut listed = vec![vanilla];
+        with_aliases(
+            &mut listed,
+            &[([8; 16], [4; 16]), ([8; 16], [4; 16]), ([9; 16], [5; 16])],
+        );
+        assert_eq!(
+            listed.len(),
+            2,
+            "once, and never for an unlisted vanilla template"
+        );
+        assert_eq!(listed[1][..16], [8; 16]);
+        assert_eq!(
+            listed[1][16..],
+            vanilla[16..],
+            "the vanilla entry's type and part"
+        );
     }
 
     #[test]

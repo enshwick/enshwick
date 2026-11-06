@@ -14,13 +14,11 @@ use std::sync::OnceLock;
 use crate::Off;
 use crate::abi::ResourceKey;
 
-use super::containers::{ContainerLayout, container_slots};
+use super::containers::{ContainerLayout, container_slots, template_components};
 use super::items::{ITEM_REGISTRY, ItemLayout};
 use super::loot_tables::{FillTableLayout, template_table};
 use super::recipes::{RECIPE_REGISTRY, RecipeLayout};
-use super::workshops::{
-    Station, WORKSHOP_REGISTRY, WorkshopId, WorkshopLayout, clone_template, stations,
-};
+use super::workshops::{Station, WORKSHOP_REGISTRY, WorkshopId, WorkshopLayout, stations};
 use super::{Blob, EngineFacts, Guid, types};
 
 /// Reads one resource of the game's archive.
@@ -95,6 +93,26 @@ pub enum VanillaError {
     /// the crafting components.
     #[error("{0} is no crafting station that can be cloned")]
     NotAStation(Guid),
+    /// No vanilla template has the name; `near` lists names that look like
+    /// it.
+    #[error("no vanilla template {name:?}{}", near_list(near))]
+    UnknownTemplate {
+        /// The name asked for.
+        name: String,
+        /// Names that look like it, at most five.
+        near: Vec<String>,
+    },
+    /// Several vanilla templates have the name.
+    #[error("{} vanilla templates are named {name:?}: {}; name one by its GUID", templates.len(), guid_list(templates))]
+    AmbiguousTemplate {
+        /// The name asked for.
+        name: String,
+        /// The templates that carry it.
+        templates: Vec<Guid>,
+    },
+    /// The template is no enemy: it names no arsenal.
+    #[error("{0} is no enemy template")]
+    NotAnEnemy(Guid),
 }
 
 fn near_list(near: &[String]) -> String {
@@ -213,6 +231,96 @@ pub fn workshop(name: &str) -> Result<WorkshopId, VanillaError> {
     vanilla.workshop(vanilla.item(name)?)
 }
 
+/// The running game's vanilla template named `name`, as the game's data
+/// names it, such as `Enemy_Wildbeast_Wolf`: an enemy, a spawner or a prop
+/// to copy or change by name.
+///
+/// # Errors
+///
+/// As [`Vanilla::template`], and [`VanillaError::Unreadable`] outside the
+/// game.
+///
+/// # Examples
+///
+/// ```
+/// let wolf = enshwick::content::vanilla::template("Enemy_Wildbeast_Wolf");
+/// assert!(wolf.is_err(), "no game runs here");
+/// ```
+pub fn template(name: &str) -> Result<Guid, VanillaError> {
+    game()?.template(name)
+}
+
+/// A vanilla enemy, from [`enemy`]: its template, faction and arsenal.
+///
+/// # Examples
+///
+/// See [`enemy`].
+#[cfg(feature = "typed")]
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+pub struct Enemy {
+    /// The enemy's template.
+    pub template: Guid,
+    /// Its faction, when the template names one.
+    pub faction: Option<crate::typed::FactionType>,
+    /// Its arsenal.
+    pub arsenal: super::enemies::ArsenalId,
+}
+
+/// The running game's vanilla enemy whose template is named `name`, to copy
+/// with [`crate::Load::add_enemy`] or to give its arsenal to another.
+///
+/// # Errors
+///
+/// As [`template`], and [`VanillaError::NotAnEnemy`] for a template that
+/// names no arsenal.
+///
+/// # Examples
+///
+/// ```
+/// let wolf = enshwick::content::vanilla::enemy("Enemy_Wildbeast_Wolf");
+/// assert!(wolf.is_err(), "no game runs here");
+/// ```
+#[cfg(feature = "typed")]
+pub fn enemy(name: &str) -> Result<Enemy, VanillaError> {
+    use crate::typed::Named as _;
+    use crate::typed::ecs::{EnemyArsenalReference, Faction};
+
+    let template = template(name)?;
+    let host = crate::host().ok_or(VanillaError::Unreadable("data"))?;
+    let unreadable = |_| VanillaError::Unreadable("enemy template");
+    let registry = crate::resources::Registry::game().map_err(unreadable)?;
+    let hash = host
+        .hash(types::TEMPLATE_RESOURCE.id())
+        .map_err(unreadable)?;
+    let value = host
+        .game_value(template.key_by_hash(hash))
+        .map_err(unreadable)?;
+    let component = |id: &str| {
+        let name = registry.hashed(host.hash(id).ok()?)?.qualified_name();
+        match value.field("components")? {
+            crate::resources::Value::List(held) => held.iter().find_map(|held| match held {
+                crate::resources::Value::Variant(held) if held.type_name() == name => {
+                    Some(held.value().clone())
+                }
+                _ => None,
+            }),
+            _ => None,
+        }
+    };
+    let read = <EnemyArsenalReference as crate::typed::Reflected>::from_value;
+    let arsenal = component(EnemyArsenalReference::ID)
+        .and_then(|value| read(&value).ok())
+        .ok_or(VanillaError::NotAnEnemy(template))?;
+    let faction = component(Faction::ID)
+        .and_then(|value| <Faction as crate::typed::Reflected>::from_value(&value).ok())
+        .map(|held| held.faction);
+    Ok(Enemy {
+        template,
+        faction,
+        arsenal: super::enemies::ArsenalId::new(arsenal.arsenal),
+    })
+}
+
 /// The game's vanilla content, read on demand.
 ///
 /// # Examples
@@ -243,6 +351,9 @@ pub struct Vanilla {
     /// reflects it.
     fill: Option<FillTableLayout>,
     fill_tables: OnceLock<Option<FillTables>>,
+    /// Where a template names itself, when the build reflects it.
+    template_name: Option<usize>,
+    template_names: OnceLock<Option<Names>>,
 }
 
 /// The fill tables containers roll: each container template's by its name,
@@ -335,7 +446,14 @@ impl Vanilla {
         )
         .with_recipe_facts(facts)
         .with_containers(ContainerLayout::resolve(facts).ok())
-        .with_fill_tables(FillTableLayout::resolve(facts).ok()))
+        .with_fill_tables(FillTableLayout::resolve(facts).ok())
+        .with_template_names(facts.offset(crate::engine_ids::TEMPLATE_NAME).ok()))
+    }
+
+    /// The same, reading template names at `at`.
+    fn with_template_names(mut self, at: Option<usize>) -> Self {
+        self.template_name = at;
+        self
     }
 
     fn with_parts(
@@ -355,7 +473,83 @@ impl Vanilla {
             containers: None,
             fill: None,
             fill_tables: OnceLock::new(),
+            template_name: None,
+            template_names: OnceLock::new(),
         }
+    }
+
+    /// The vanilla template named `name`, as the template collection lists
+    /// it. The first call reads every template's name once, 139 ms on a
+    /// dedicated server (build 26083076), more than a Luau script's budget
+    /// of 100 ms a second: name templates while the mod starts. A Rust mod's
+    /// first call after `init` logs a warning saying so.
+    ///
+    /// # Errors
+    ///
+    /// [`VanillaError::UnknownTemplate`] with the names that look like it,
+    /// [`VanillaError::AmbiguousTemplate`] when several templates carry it,
+    /// and [`VanillaError::Unreadable`] when the templates do not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// if let Some(vanilla) = Vanilla::game() {
+    ///     let _wolf = vanilla.template("Enemy_Wildbeast_Wolf");
+    /// }
+    /// ```
+    pub fn template(&self, name: &str) -> Result<Guid, VanillaError> {
+        let names = self
+            .template_names
+            .get_or_init(|| {
+                if crate::__private::initialised() {
+                    crate::warn_once!(
+                        "vanilla templates named after init: every template's name is read now, on this thread, about 139 ms on a dedicated server; name them in init"
+                    );
+                }
+                self.read_template_names()
+            })
+            .as_ref()
+            .ok_or(VanillaError::Unreadable("templates"))?;
+        match names.get(name).map(Vec::as_slice) {
+            Some([one]) => Ok(*one),
+            Some(several) if !several.is_empty() => Err(VanillaError::AmbiguousTemplate {
+                name: name.to_owned(),
+                templates: several.to_vec(),
+            }),
+            _ => Err(VanillaError::UnknownTemplate {
+                name: name.to_owned(),
+                near: near(names, name),
+            }),
+        }
+    }
+
+    fn read_template_names(&self) -> Option<Names> {
+        let at = self.template_name?;
+        let collection = (self.read)(
+            super::templates::TEMPLATE_COLLECTION.key_by_hash(self.hashes.template_collection),
+        )?;
+        let (start, count) = Blob::new(&collection).array(self.workshops.templates)?;
+        let mut names = Names::new();
+        for at_guid in (0..usize::try_from(count).ok()?).map(|i| start + i * 16) {
+            let guid = Guid(collection.get(at_guid..at_guid + 16)?.try_into().ok()?);
+            let Some(template) = (self.read)(guid.key_by_hash(self.hashes.template)) else {
+                continue;
+            };
+            let blob = Blob::new(&template);
+            let Some((text, len)) = blob.array(at) else {
+                continue;
+            };
+            let Some(name) = template.get(text..text + usize::try_from(len).ok()?) else {
+                continue;
+            };
+            let name = String::from_utf8_lossy(name)
+                .trim_end_matches('\0')
+                .to_owned();
+            names.entry(name).or_default().push(guid);
+        }
+        Some(names)
     }
 
     /// The same, reading recipes through `layout` from the registry of type
@@ -419,7 +613,7 @@ impl Vanilla {
     fn read_fill_tables(&self) -> Option<FillTables> {
         let layout = self.fill?;
         let collection = (self.read)(
-            super::workshops::TEMPLATE_COLLECTION.key_by_hash(self.hashes.template_collection),
+            super::templates::TEMPLATE_COLLECTION.key_by_hash(self.hashes.template_collection),
         )?;
         let blob = Blob::new(&collection);
         let (start, count) = blob.array(self.workshops.templates)?;
@@ -658,8 +852,13 @@ impl Vanilla {
             .ok_or(VanillaError::NotAStation(item))?;
         let data = (self.read)(template.key_by_hash(self.hashes.template))
             .ok_or(VanillaError::NotAStation(item))?;
-        clone_template(&self.workshops, &data, Guid([0xee; 16]))
-            .map(|_| Station { item, template })
+        let blob = Blob::new(&data);
+        let crafts = self.workshops.crafting_types.iter().all(|&ty| {
+            template_components(&blob, self.workshops.components, ty)
+                .is_some_and(|found| !found.is_empty())
+        });
+        crafts
+            .then_some(Station { item, template })
             .ok_or(VanillaError::NotAStation(item))
     }
 

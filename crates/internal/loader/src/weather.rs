@@ -467,6 +467,261 @@ pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, Status> {
     Ok(out)
 }
 
+/// Frees a layer's instances and empties its slot as the game's reset does,
+/// so the next update picks anew.
+///
+/// # Safety
+///
+/// `slot` is a slot of the live layer array of the weather system `system`,
+/// and the call runs on the game thread at a quiet moment, as `system()`
+/// checks.
+unsafe fn empty(layout: &Layout, system: *mut u8, slot: usize) {
+    for at in [layout.slot_current, layout.slot_next] {
+        // SAFETY: the caller passes a live slot; its u32 handles sit at the
+        // build table's `weather.slot_current` and `weather.slot_next` offsets.
+        let handle: u32 = unsafe { read(slot, at) };
+        if handle != 0 {
+            // SAFETY: `handle` is a non-zero handle the slot holds, and the
+            // caller runs on the game thread at a quiet moment, where the
+            // game's own free runs.
+            unsafe { (layout.free)(system, handle) };
+        }
+    }
+    // SAFETY: the caller passes a live slot, written here on the game thread
+    // at a quiet moment as the game's reset writes it; its i64 time sits at
+    // the build table's `weather.slot_time` offset.
+    unsafe { write(slot, layout.slot_time, i64::MIN) };
+    // SAFETY: the caller passes a live slot, written on the game thread at a
+    // quiet moment; its u64 last phenomenon sits at the build table's
+    // `weather.slot_phenomenon` offset.
+    unsafe { write(slot, layout.slot_phenomenon, u64::MAX) };
+    for at in [layout.slot_current, layout.slot_next] {
+        // SAFETY: the caller passes a live slot, written on the game thread at
+        // a quiet moment; its u32 handles sit at the build table's
+        // `weather.slot_current` and `weather.slot_next` offsets.
+        unsafe { write(slot, at, 0u32) };
+    }
+}
+
+/// The loader's file beside a save that keeps the GUIDs of the weather
+/// resource's phenomena in index order, as the save's fronts index them.
+const PHENOMENA_FILE: &str = "weather-phenomena.txt";
+
+/// The index a saved front's phenomenon has now: `saved` holds the GUIDs by
+/// index at the save, `served` the running world's, and the layer owns the
+/// indices `first..first + count`. `None` when the phenomenon is gone or
+/// outside its layer, and the front is freed.
+fn remapped(
+    saved: &[[u8; 16]],
+    served: &[[u8; 16]],
+    (first, count): (u8, u8),
+    index: u8,
+) -> Option<u8> {
+    let guid = saved.get(usize::from(index))?;
+    let now = served.iter().position(|served| served == guid)?;
+    let now = u8::try_from(now).ok()?;
+    let (start, end) = (u16::from(first), u16::from(first) + u16::from(count));
+    (start..end).contains(&u16::from(now)).then_some(now)
+}
+
+/// The GUIDs of the locked weather resource's phenomena, in index order;
+/// `None` on a build that does not reflect a phenomenon's GUID, or when the
+/// list does not read or is empty, which no world's weather is.
+fn phenomena(layout: &Layout, resource: &Resource<'_>) -> Option<Vec<[u8; 16]>> {
+    let guid = layout.phenomenon_guid?;
+    // SAFETY: `resource` holds the weather resource locked, and its
+    // reflected `phenomenons` field is a blob array header.
+    let BlobArray { start, count } =
+        unsafe { BlobArray::read(resource.address() + layout.resource_phenomena) }?;
+    let guids: Vec<[u8; 16]> = (0..count)
+        // SAFETY: `index` is below the resource's phenomenon count and the
+        // resource stays locked; the 16-byte GUID sits at the reflected
+        // `guid` field of a phenomenon.
+        .map(|index| unsafe { read::<[u8; 16]>(start + index * layout.phenomenon_size, guid) })
+        .collect();
+    (!guids.is_empty()).then_some(guids)
+}
+
+/// The phenomena a save's fronts index: the file's, or the running world's
+/// when the save has no file (one from before the loader kept it) or an
+/// empty one (written while they did not read), so a front whose index now
+/// falls outside its layer is still freed.
+fn as_saved(saved: Option<Vec<[u8; 16]>>, served: &[[u8; 16]]) -> Vec<[u8; 16]> {
+    saved
+        .filter(|saved| !saved.is_empty())
+        .unwrap_or_else(|| served.to_vec())
+}
+
+/// The GUIDs of the phenomena the running world serves, in index order; at
+/// a save, on the game thread, where the weather reads.
+fn served(loader: &Loader) -> Option<Vec<[u8; 16]>> {
+    let layout = layout(loader)?;
+    let (system, _) = system(layout).ok()?;
+    let resource = Resource::lock(layout, system)?;
+    phenomena(layout, &resource)
+}
+
+/// Whether the loader follows the world's loads and saves for its weather:
+/// on a build where a front's phenomenon is known by its GUID.
+pub(crate) fn follows(loader: &Loader) -> bool {
+    layout(loader).is_some_and(|layout| layout.phenomenon_guid.is_some())
+}
+
+/// Keeps saved fronts on their phenomena when the phenomena mods add
+/// change: at a load, maps each restored front's index through the GUIDs
+/// beside the save to its phenomenon's index now, or frees its layer; at a
+/// save, writes the GUIDs beside it.
+pub(crate) fn world_event(loader: &Loader, event: Event) {
+    if !follows(loader) {
+        return;
+    }
+    let Some(key) = crate::saves::world_key(loader) else {
+        return;
+    };
+    let path = crate::world_folders::loader_data(key, PHENOMENA_FILE);
+    match event {
+        Event::WORLD_LOADED => {
+            if let Err(why) = remap(loader, &path) {
+                crate::log!(
+                    WARN,
+                    "weather: saved fronts kept as the save has them: {why}"
+                );
+            }
+        }
+        Event::WORLD_SAVED => {
+            let Some(served) = served(loader) else {
+                // A file left from an earlier save would map this save's
+                // indices through phenomena it no longer has.
+                let removed = std::fs::remove_file(&path);
+                crate::log!(
+                    WARN,
+                    "weather: the phenomena do not read; {} removed ({removed:?}), so the next load keeps the fronts in their layers",
+                    path.display()
+                );
+                return;
+            };
+            let text = served.iter().fold(String::new(), |mut text, guid| {
+                use core::fmt::Write as _;
+                let _infallible = writeln!(text, "{}", enshwick::content::Guid(*guid));
+                text
+            });
+            if let Err(why) = enshwick::files::write_atomically(&path, text) {
+                crate::log!(WARN, "weather: {} not written: {why}", path.display());
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Why the saved fronts were not remapped.
+#[derive(Debug, thiserror::Error)]
+enum RemapError {
+    /// The weather system or its resource is not there.
+    #[error("the weather is not loaded ({0:?})")]
+    Unloaded(Status),
+    /// The file beside the save does not read.
+    #[error("{path} does not read: {why}", path = .0.display(), why = .1)]
+    Unread(std::path::PathBuf, String),
+}
+
+/// Remaps or frees the restored fronts by the GUIDs at `path`; see
+/// [`as_saved`] for a save without them.
+fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
+    let layout = layout(loader).ok_or(RemapError::Unloaded(Status::MISSING))?;
+    let (system, _) = system(layout).map_err(RemapError::Unloaded)?;
+    let resource = Resource::lock(layout, system).ok_or(RemapError::Unloaded(Status::MISSING))?;
+    let served = phenomena(layout, &resource).ok_or(RemapError::Unloaded(Status::MISSING))?;
+    let text = enshwick::files::read_to_string_if_present(path)
+        .map_err(|why| RemapError::Unread(path.to_owned(), why.to_string()))?;
+    let saved = text
+        .map(|text| {
+            text.lines()
+                .map(|line| enshwick::content::Guid::try_parse(line.trim()).map(|guid| guid.0))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| RemapError::Unread(path.to_owned(), "a line is no GUID".to_owned()))
+        })
+        .transpose()?;
+    let saved = as_saved(saved, &served);
+    // SAFETY: `resource` holds the weather resource locked, and its
+    // reflected `layers` field is a blob array header.
+    let BlobArray {
+        start: layer_defs,
+        count: layer_def_count,
+    } = unsafe { BlobArray::read(resource.address() + layout.resource_layers) }
+        .ok_or(RemapError::Unloaded(Status::MISSING))?;
+    // SAFETY: `system` is the live weather system `system()` found on the
+    // game thread; its layer array pointer sits at the build table's
+    // `weather.layers` offset.
+    let layers: usize = unsafe { read(system, layout.layers) };
+    // SAFETY: `system` is the live weather system `system()` found on the
+    // game thread; its u64 layer count sits at the build table's
+    // `weather.layer_count` offset.
+    let layer_count: u64 = unsafe { read(system, layout.layer_count) };
+    let layer_count = usize::try_from(layer_count)
+        .unwrap_or(0)
+        .min(layer_def_count);
+    let system_mut = core::ptr::with_exposed_provenance_mut::<u8>(system);
+    let (mut moved, mut freed) = (0usize, 0usize);
+    for layer in 0..layer_count {
+        let def = layer_defs + layer * layout.layer_size;
+        // SAFETY: `layer` is below the resource's layer count (the `min`
+        // before it) and the resource stays locked; the u8 first phenomenon
+        // is the reflected `start` of its `phenomenonIndexRange`.
+        let first: u8 = unsafe { read(def, layout.layer_range_start) };
+        // SAFETY: `layer` is below the resource's layer count and the
+        // resource stays locked; the u8 count is the reflected `count` of its
+        // `phenomenonIndexRange`.
+        let count: u8 = unsafe { read(def, layout.layer_range_count) };
+        let range = (first, count);
+        let slot = layers + layer * layout.slot_size;
+        let mut keep = true;
+        let mut changes = Vec::new();
+        for at in [layout.slot_current, layout.slot_next] {
+            // SAFETY: `layer` is below the system's layer count, so `slot` is
+            // a slot of its layer array; its u32 handles sit at the build
+            // table's `weather.slot_current` and `weather.slot_next` offsets.
+            let handle: u32 = unsafe { read(slot, at) };
+            let Some(data) = instance(layout, system, handle) else {
+                continue;
+            };
+            // SAFETY: `instance` checked the handle's page, index and
+            // generation, so `data` is a live instance; its u8 phenomenon
+            // index sits at the build table's `weather.instance_phenomenon`.
+            let index: u8 = unsafe { read(data, layout.instance_phenomenon) };
+            match remapped(&saved, &served, range, index) {
+                Some(now) => changes.push((data, index, now)),
+                None => keep = false,
+            }
+        }
+        if !keep {
+            // SAFETY: `slot` is a slot of the live layer array, and
+            // `system()` put this call on the game thread at a quiet moment.
+            unsafe { empty(layout, system_mut, slot) };
+            freed += 1;
+            continue;
+        }
+        for (data, index, now) in changes.into_iter().filter(|&(_, index, now)| index != now) {
+            // SAFETY: `data` is a live instance `instance` checked, written on
+            // the game thread at a quiet moment before the weather's first
+            // update; its u8 phenomenon index sits at the build table's
+            // `weather.instance_phenomenon`.
+            unsafe { write(data, layout.instance_phenomenon, now) };
+            crate::log!(
+                INFO,
+                "weather: a saved front of layer {layer} moved from phenomenon {index} to {now}"
+            );
+            moved += 1;
+        }
+    }
+    if moved + freed > 0 {
+        crate::log!(
+            INFO,
+            "weather: the phenomena changed since the save; {moved} fronts moved, {freed} layers picked anew"
+        );
+    }
+    Ok(())
+}
+
 /// Starts new weather in every layer: `effect` where a layer has it,
 /// nothing elsewhere, for `duration` game nanoseconds (0 for the game's
 /// own); [`ANY`] lets the game choose at its next update.
@@ -504,33 +759,10 @@ pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Sta
     let system_mut = core::ptr::with_exposed_provenance_mut::<u8>(system);
     for layer in 0..layer_count {
         let slot = layers + layer * layout.slot_size;
-        for at in [layout.slot_current, layout.slot_next] {
-            // SAFETY: `layer` is below the system's layer count, so `slot` is
-            // a slot of its layer array; its u32 handles sit at the build
-            // table's `weather.slot_current` and `weather.slot_next` offsets.
-            let handle: u32 = unsafe { read(slot, at) };
-            if handle != 0 {
-                // SAFETY: `handle` is a non-zero handle the slot holds, and
-                // `system()` put this call on the game thread at a quiet
-                // moment, where the game's own free runs.
-                unsafe { (layout.free)(system_mut, handle) };
-            }
-        }
-        // SAFETY: `slot` is a slot of the live layer array, written here on
-        // the game thread at a quiet moment as the game's reset writes it;
-        // its i64 time sits at the build table's `weather.slot_time` offset.
-        unsafe { write(slot, layout.slot_time, i64::MIN) };
-        // SAFETY: `slot` is a slot of the live layer array, written on the
-        // game thread at a quiet moment; its u64 last phenomenon sits at the
-        // build table's `weather.slot_phenomenon` offset.
-        unsafe { write(slot, layout.slot_phenomenon, u64::MAX) };
-        for at in [layout.slot_current, layout.slot_next] {
-            // SAFETY: `slot` is a slot of the live layer array, written on
-            // the game thread at a quiet moment; its u32 handles sit at the
-            // build table's `weather.slot_current` and `weather.slot_next`
-            // offsets.
-            unsafe { write(slot, at, 0u32) };
-        }
+        // SAFETY: `layer` is below the system's layer count, so `slot` is a
+        // slot of its live layer array, and `system()` put this call on the
+        // game thread at a quiet moment.
+        unsafe { empty(layout, system_mut, slot) };
         if effect == ANY {
             continue;
         }
@@ -713,3 +945,6 @@ pub(crate) fn after_step(loader: &Loader) {
 pub(crate) fn forget() {
     CHUNK_EVENTS.relock().clear();
 }
+
+#[cfg(test)]
+mod tests;

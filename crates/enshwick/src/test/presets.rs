@@ -120,8 +120,8 @@ impl FakeHost {
             ],
             &[
                 (ids::CRAFTING, 0x18),
-                (ids::CRAFTING_INTERACTION, 0x18),
-                (ids::CLIENT_CRAFTING_INTERACTION, 8),
+                (ids::CRAFTING_INTERACTION, 0x20),
+                (ids::CLIENT_CRAFTING_INTERACTION, 0x10),
                 (ids::WORKSHOP, 0x40),
             ],
             &[
@@ -129,9 +129,9 @@ impl FakeHost {
                 (ids::TEMPLATE_COLLECTION_TEMPLATES, 0),
                 (ids::CRAFTING_WORKSHOP, 0),
                 (ids::CRAFTING_WORKSHOP_ID, 0x10),
-                (ids::CRAFTING_INTERACTION_WORKSHOP, 0),
-                (ids::CRAFTING_INTERACTION_WORKSHOP_ID, 0x10),
-                (ids::CLIENT_CRAFTING_INTERACTION_WORKSHOP_ID, 0),
+                (ids::CRAFTING_INTERACTION_WORKSHOP, 12),
+                (ids::CRAFTING_INTERACTION_WORKSHOP_ID, 28),
+                (ids::CLIENT_CRAFTING_INTERACTION_WORKSHOP_ID, 12),
                 (ids::WORKSHOP_REGISTRY_WORKSHOPS, 0),
                 (ids::WORKSHOP_GUID, 0),
                 (ids::WORKSHOP_ID, 0x10),
@@ -141,6 +141,7 @@ impl FakeHost {
                 (ids::WORKSHOP_NPC, 0x3c),
             ],
         )
+        .templates()
     }
 
     /// The client's crafting menu in its UI bundle: what
@@ -428,32 +429,32 @@ impl FakeHost {
         )
     }
 
-    /// Item meters: what [`MeterLayout`](crate::content::items::MeterLayout)
-    /// resolves, the meter's own component and the templates it is cloned
-    /// into.
+    /// Item meters: the meter's own component and, through
+    /// [`FakeHost::templates`], the water pouch's template every meter
+    /// template is copied from.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::items::MeterLayout;
+    /// use enshwick::content::EngineFacts;
     ///
     /// let host = enshwick::test::FakeHost::new().meters();
-    /// let layout = MeterLayout::resolve(&host)?;
-    /// assert!(layout.fuel_setup[2] + 4 <= layout.fuel_setup[0]);
+    /// assert!(host.offset("fuel_setup.start")? + 4 <= host.size("fuel_setup")?);
     /// # Ok::<(), enshwick::Off>(())
     /// ```
     #[must_use]
     pub fn meters(self) -> Self {
         self.preset(
             &[ids::FUEL_SETUP, ids::TEMPLATE, ids::TEMPLATE_COLLECTION],
-            &[(ids::FUEL_SETUP, 8)],
+            &[(ids::FUEL_SETUP, 40)],
             &[
-                (ids::FUEL_SETUP_MAX, 0),
-                (ids::FUEL_SETUP_START, 4),
+                (ids::FUEL_SETUP_MAX, 32),
+                (ids::FUEL_SETUP_START, 36),
                 (ids::TEMPLATE_COMPONENTS, 0x10),
                 (ids::TEMPLATE_COLLECTION_TEMPLATES, 0),
             ],
         )
+        .templates()
     }
 
     /// The markers `ContainerKinds` tells holders apart by: characters, NPCs, animals, drops, loot chests and

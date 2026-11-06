@@ -463,6 +463,7 @@ pub const NAMESPACES: &[Namespace] = &[
             crate::Load::SCRIPT_ALTARS,
             crate::Load::SCRIPT_ALTAR_LIMIT,
             crate::Load::SCRIPT_ALTAR_LIMITS,
+            crate::Load::SCRIPT_FLAME_ALTARS,
         ],
     ),
     Namespace::of::<crate::loot::LootFns>(),
@@ -489,6 +490,12 @@ pub const NAMESPACES: &[Namespace] = &[
             #[cfg(feature = "unstable")]
             crate::Load::SCRIPT_CONTENT_RECIPE_WITH,
             crate::Load::SCRIPT_CONTENT_WORKSHOPS,
+            crate::Load::SCRIPT_CONTENT_TEMPLATES,
+            crate::Load::SCRIPT_CONTENT_PROPS,
+            #[cfg(feature = "typed")]
+            crate::Load::SCRIPT_CONTENT_ENEMIES,
+            #[cfg(feature = "typed")]
+            crate::Load::SCRIPT_CONTENT_SPAWNS,
             crate::Load::SCRIPT_CONTENT_ICONS,
             crate::Load::SCRIPT_CONTENT_RENAMES,
             crate::Load::SCRIPT_CONTENT_CHANGE,

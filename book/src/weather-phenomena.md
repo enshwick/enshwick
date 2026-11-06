@@ -21,6 +21,16 @@ client assets. Clients draw weather from their own copy of the resource, so a
 mod that adds a phenomenon runs on both sides. The resource holds at most 255
 phenomena, for the game and every mod together.
 
+## When the mods that add phenomena change
+
+A world keeps its fronts when the mods that add phenomena change, are
+removed or load in another order. The save holds each front by its
+phenomenon's place in the resource, so the loader writes the phenomena's
+GUIDs beside the save at each save. When the world loads, each restored front
+gets its phenomenon's new place back, and a layer whose phenomenon is gone
+picks new weather. Without enshwick (the vanilla game), a saved front may
+show as another phenomenon until it ends.
+
 ```rust
 use core::time::Duration;
 use enshwick::content::{Guid, Id};

@@ -22,8 +22,11 @@
 //! }
 //! ```
 
+mod kinds;
 mod limits;
 mod script;
+
+pub use kinds::{KindZone, NewFlameAltar};
 
 use core::ffi::c_void;
 
@@ -32,6 +35,7 @@ use crate::abi::{
     AltarInfo, AltarLimit as RawAltarLimit, AltarZone as RawAltarZone, Bounds,
     BuildingZoneCheck as RawBuildingZoneCheck,
 };
+use crate::content::Guid;
 use crate::{Host, Load, Off};
 
 /// A world-aligned, half-open box of whole 0.5 m cells; axis 1 is up.
@@ -197,6 +201,7 @@ pub fn cell_of_metres(metres: [f64; 3]) -> [i64; 3] {
 ///     position: [0.0; 3],
 ///     zone: CellBox::new([-40, -40, -40], [40, 40, 40]),
 ///     levels: vec![CellBox::new([-40, -40, -40], [40, 40, 40])],
+///     template: None,
 /// };
 /// assert!(altar.zone.contains([0, 0, 0]));
 /// ```
@@ -216,12 +221,16 @@ pub struct Altar {
     /// Its vanilla zone at each level from 1 to the current one, each inside
     /// the next; empty while the level is unknown.
     pub levels: Vec<CellBox>,
+    /// Its template, which names its kind: the vanilla altar's or one from
+    /// [`Load::add_flame_altar`]; `None` off the server's game thread.
+    pub template: Option<Guid>,
 }
 
 impl Altar {
-    fn from_info(info: &AltarInfo) -> Self {
+    fn from_info(host: Host, info: &AltarInfo) -> Self {
         let count = usize::from(info.level_count).min(info.levels.len());
         Self {
+            template: template_of(host, info.entity),
             entity: info.entity,
             level: info.level,
             tilted: info.tilted != 0,
@@ -252,6 +261,7 @@ impl Altar {
 ///     position: [0.0; 3],
 ///     zone: CellBox::new([x, 0, 0], [x + 10, 10, 10]),
 ///     levels: Vec::new(),
+///     template: None,
 /// };
 /// let bases = bases_of(&[altar(1, 0), altar(2, 10), altar(3, 50)]);
 /// assert_eq!(bases.len(), 2);
@@ -384,7 +394,10 @@ impl Altars {
             return Vec::new();
         }
         infos.truncate((count as usize).min(infos.len()));
-        infos.iter().map(Altar::from_info).collect()
+        infos
+            .iter()
+            .map(|info| Altar::from_info(self.host, info))
+            .collect()
     }
 
     /// The bases the altars form now; see [`bases_of`].
@@ -890,6 +903,14 @@ where
     }
 }
 
+/// `entity`'s template; `None` off the server's game thread or for an entity
+/// the loader cannot read.
+fn template_of(host: Host, entity: Entity) -> Option<Guid> {
+    let mut out = [0u8; 16];
+    let status = (host.api().entity_template)(host.handle(), entity, &raw mut out);
+    status.is_ok().then_some(Guid(out))
+}
+
 #[crate::script(altar_limit)]
 impl Load<'_> {
     /// Runs `filter` when the game asks how many altars a Flame level
@@ -935,6 +956,7 @@ mod tests {
             position: [0.0; 3],
             zone: CellBox::new(min, max),
             levels: Vec::new(),
+            template: None,
         }
     }
 

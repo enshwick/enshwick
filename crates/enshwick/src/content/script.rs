@@ -7,6 +7,7 @@ use super::changes::ChangeHandle;
 use super::items::{FuelSetup, fill};
 use super::recipes::{self as rules, RecipeKind, RecipeRule, RecipeView, derived_guid};
 use super::renames::{Renames, current_id};
+use super::templates::ComponentChange;
 use super::vanilla::{self, LootTable, Vanilla};
 use super::workshops::{Station, WorkshopId};
 use super::{Guid, Id, is_id};
@@ -198,6 +199,69 @@ impl FromScript for Renames {
     }
 }
 
+impl Typed for ComponentChange {
+    const TY: &'static Ty = &Ty::Record(&Record::new(
+        "ComponentChange",
+        "A change of one component of a template: `set` it whole, `edit` the fields a table names, or neither to remove it.",
+        &[
+            Field::new(
+                "component",
+                "The generated component type by its path in the typed API, such as `ecs.Faction`.",
+                &Ty::String,
+            ),
+            Field::new(
+                "set",
+                "The whole component as a table by its field names; added when the template lacks one.",
+                &Ty::Optional(&Ty::Data),
+            ),
+            Field::new(
+                "edit",
+                "The fields to change as a table by their names; the others keep their values.",
+                &Ty::Optional(&Ty::Data),
+            ),
+        ],
+    ));
+}
+
+impl IntoScript for ComponentChange {
+    fn into_value(self) -> Value {
+        Value::Record(vec![
+            self.component().replace("::", ".").into_value(),
+            Value::Nil,
+            Value::Nil,
+        ])
+    }
+}
+
+#[cfg(not(feature = "typed"))]
+impl FromScript for ComponentChange {
+    fn from_value(_value: Value) -> Result<Self, Error> {
+        Err(Error::new(
+            "a component change names a generated type, which needs the typed API",
+        ))
+    }
+}
+
+#[cfg(feature = "typed")]
+impl FromScript for ComponentChange {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        let mut fields = crate::script::convert::record_fields(value, 3)?;
+        let component: String = crate::script::convert::argument(&mut fields, "component")?;
+        let set: Option<Value> = fields.next().filter(|v| !matches!(v, Value::Nil));
+        let edit: Option<Value> = fields.next().filter(|v| !matches!(v, Value::Nil));
+        let row =
+            crate::typed::Row::component(&component).map_err(|e| Error::new(e.to_string()))?;
+        let set = set
+            .map(|fields| row.value_of(fields))
+            .transpose()
+            .map_err(|e| Error::new(e.to_string()).within("set"))?;
+        let edit = edit.map(|fields| -> super::templates::ValueFn {
+            std::sync::Arc::new(move |value: &Data| row.overlaid(value, &fields))
+        });
+        Ok(ComponentChange::scripted(row.id, row.check, set, edit))
+    }
+}
+
 impl Object for ChangeHandle {
     const CLASS: &'static Class = &Class::of::<Self>(
         "ChangeHandle",
@@ -271,6 +335,28 @@ impl Content {
     #[script]
     pub fn station(self, name: &str) -> Result<Station, vanilla::VanillaError> {
         vanilla::station(name)
+    }
+
+    /// The vanilla template named `name`.
+    ///
+    /// # Errors
+    ///
+    /// As [`vanilla::template`].
+    #[script]
+    pub fn template(self, name: &str) -> Result<Guid, vanilla::VanillaError> {
+        vanilla::template(name)
+    }
+
+    /// The vanilla enemy whose template is named `name`: its template,
+    /// faction and arsenal.
+    ///
+    /// # Errors
+    ///
+    /// As [`vanilla::enemy`].
+    #[cfg(feature = "typed")]
+    #[script]
+    pub fn enemy(self, name: &str) -> Result<vanilla::Enemy, vanilla::VanillaError> {
+        vanilla::enemy(name)
     }
 
     /// The workshop of the vanilla station item named `name`.

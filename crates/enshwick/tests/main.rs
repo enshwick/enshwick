@@ -10,6 +10,7 @@ mod accounts;
 mod actions;
 #[cfg(feature = "unstable")]
 mod affixes;
+mod altar_kinds;
 mod altar_limit;
 mod altar_zones;
 mod base_limits;
@@ -39,6 +40,8 @@ pub mod deps;
 mod developer_tools;
 #[cfg(feature = "unstable")]
 mod effects;
+#[cfg(feature = "typed")]
+mod enemies;
 mod engine_names;
 #[cfg(feature = "unstable")]
 mod entity_data;
@@ -106,6 +109,8 @@ mod points_described;
 mod points_links;
 mod points_owner;
 mod poisoned_locks;
+mod props;
+mod props_server;
 mod published_texts;
 #[cfg(feature = "unstable")]
 mod rates;
@@ -135,6 +140,8 @@ mod services;
 mod shapes;
 mod sides;
 mod skills;
+#[cfg(feature = "typed")]
+mod spawns;
 #[cfg(feature = "unstable")]
 mod stat_kinds;
 #[cfg(feature = "unstable")]
@@ -146,6 +153,8 @@ mod survivor_lookup;
 mod symbols;
 mod table_config;
 mod task_workers;
+#[cfg(feature = "typed")]
+mod templates;
 mod terrain;
 mod ticks;
 #[cfg(feature = "unstable")]

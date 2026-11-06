@@ -229,7 +229,8 @@ stand-in until the mod is back. See
 For each world it keeps `<stem>-mod-data/enshwick/`: the world's GUID
 (`world.toml`), the mods it last ran with (`mods.lock`), item and entity
 data (`attachments.bin`), lasting stat modifiers (`stats.bin`), kept game
-settings (`game-settings.toml`) and queued knowledge (`knowledge.toml`). The
+settings (`game-settings.toml`), queued knowledge (`knowledge.toml`) and the
+weather phenomena the save's fronts name (`weather-phenomena.txt`). The
 recipes a world turns off are a setting, in
 `<stem>-mod-settings/enshwick/recipes.toml`.
 

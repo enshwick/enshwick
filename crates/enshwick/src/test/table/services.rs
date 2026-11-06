@@ -196,6 +196,49 @@ pub(crate) extern "system" fn declare_content(
     })
 }
 
+pub(crate) extern "system" fn crafting_prop(
+    _me: ModHandle,
+    prop: *const [u8; 16],
+    first: u8,
+    width: u8,
+    out: *mut u8,
+) -> Status {
+    // SAFETY: the safe layer passes the prop's GUID, alive for the call.
+    let Some(&prop) = (unsafe { prop.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.registration == super::Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        if !s.manifest.as_ref().is_none_or(|manifest| manifest.joins) {
+            return Status::REFUSED;
+        }
+        let (bounds, added) = &mut s.crafting_props;
+        if *bounds.get_or_insert((first, width)) != (first, width) {
+            return Status::BAD_ARGS;
+        }
+        let at = added
+            .iter()
+            .position(|known| *known == prop)
+            .unwrap_or(added.len());
+        let Some(index) = u8::try_from(at)
+            .ok()
+            .and_then(|at| first.checked_add(at))
+            .filter(|index| *index < width)
+        else {
+            return Status::REFUSED;
+        };
+        if at == added.len() {
+            added.push(prop);
+        }
+        put(out, index)
+    })
+}
+
 pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
     let id = text(id);
     if crate::content::Guid::try_named(&id).is_none() {

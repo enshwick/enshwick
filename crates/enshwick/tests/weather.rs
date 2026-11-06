@@ -77,6 +77,26 @@ mod tests {
             loader.forecasts(),
             [(WeatherFront::NONE, 600_000_000_000), (u32::MAX, 0)]
         );
+        let warned = |loader: &enshwick::test::Installed| {
+            loader
+                .logs()
+                .iter()
+                .filter(|(_, line)| line.contains("outlive no restart"))
+                .count()
+        };
+        assert_eq!(warned(&loader), 0, "ten minutes outlive a restart");
+        weather
+            .set(
+                Forecast::Rain,
+                Some(enshwick::weather::MAX_RESTORED_REMAINING),
+            )
+            .unwrap();
+        assert_eq!(warned(&loader), 0, "thirty minutes do too");
+        weather
+            .set(Forecast::Rain, Some(Duration::from_hours(2)))
+            .unwrap();
+        assert_eq!(warned(&loader), 1, "{:?}", loader.logs());
+        assert_eq!(loader.forecasts().len(), 4, "the long rain still starts");
 
         let chunk = ChunkData {
             header: Header::of::<ChunkData>(),

@@ -181,6 +181,198 @@ mod tests {
     }
 
     #[test]
+    fn a_luau_mod_copies_a_template_and_changes_a_vanilla_one_by_component() {
+        use enshwick::resources::{Registry, Value, fnv1a32};
+        use enshwick::test::CREATURE;
+
+        let main = format!(
+            r#"
+            local tame = enshwick.content.add_template({{
+                id = "you.luau:tame-wolf",
+                like = "{CREATURE}",
+                changes = {{
+                    {{ component = "ecs.Faction", edit = {{ faction = "Vukah" }} }},
+                    {{ component = "ecs.Aggro" }},
+                }},
+            }})
+            enshwick.log.info(`tame {{tame}}`)
+            enshwick.content.change_template("{CREATURE}", {{
+                {{ component = "ecs.Aggro", set = {{ base = {{}}, apply_enemy_value = false, sight_check_slot = "Root" }} }},
+            }})
+            local ok = pcall(enshwick.content.change_template, "{CREATURE}", {{ {{ component = "ecs.Boss" }} }})
+            enshwick.log.info(`no boss to remove: {{not ok}}`)
+            "#
+        );
+        let (loader, status) = start_with(FakeHost::new().templates(), &main, Scripts::new(), None);
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let tame = enshwick::content::Guid::named("you.luau:tame-wolf");
+        assert!(
+            logged(&loader, &format!("tame {tame}")),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(
+            logged(&loader, "no boss to remove: true"),
+            "{:?}",
+            loader.logs()
+        );
+
+        let ty = "demo::ecs::TemplateResource";
+        let key = |guid: enshwick::content::Guid| guid.key_by_hash(fnv1a32(ty.as_bytes()));
+        let base = enshwick::host()
+            .unwrap()
+            .game_resource(key(CREATURE))
+            .unwrap();
+        let registry = Registry::game().unwrap();
+        let components = |built: Vec<u8>| {
+            let value = registry.decode(ty, &built).unwrap();
+            let Some(Value::List(components)) = value.field("components").cloned() else {
+                panic!("{value:?}")
+            };
+            components
+        };
+        let copied = components(loader.build_resource(&key(tame), &base).unwrap());
+        assert_eq!(copied.len(), 1, "aggro removed: {copied:?}");
+        let Value::Variant(faction) = &copied[0] else {
+            panic!("{copied:?}")
+        };
+        assert_eq!(
+            faction.value().field("faction"),
+            Some(&Value::Name("Vukah".into()))
+        );
+        let vanilla = components(loader.build_resource(&key(CREATURE), &base).unwrap());
+        let Value::Variant(aggro) = &vanilla[1] else {
+            panic!("{vanilla:?}")
+        };
+        assert_eq!(
+            aggro.value().field("sightCheckSlot"),
+            Some(&Value::Name("Root".into()))
+        );
+    }
+
+    #[test]
+    fn a_luau_mod_adds_a_prop_whose_item_places_its_template_and_a_crafting_prop() {
+        use enshwick::content::{EngineFacts, Guid, types};
+        use enshwick::test::{CRAFTING_PROP_ITEM, PROP_ITEM};
+
+        let main = format!(
+            r#"
+            local crate = enshwick.content.add_prop({{ item = {{ id = "you.luau:crate", like = "{PROP_ITEM}" }} }})
+            local anvil = enshwick.content.add_prop({{
+                item = {{ id = "you.luau:anvil", like = "{CRAFTING_PROP_ITEM}" }},
+                crafting_prop = {{ recipes = {{}} }},
+            }})
+            enshwick.log.info(`crate {{crate.template}} {{crate.crafting_prop}}`)
+            enshwick.log.info(`anvil {{anvil.crafting_prop}}`)
+            "#
+        );
+        let (loader, status) = start_with(FakeHost::new().props(), &main, Scripts::new(), None);
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let named = |id: &str| Guid::named(id);
+        for line in [
+            format!("crate {} nil", named("you.luau:crate.template")),
+            format!("anvil {}", named("you.luau:anvil.crafting-prop")),
+        ] {
+            assert!(logged(&loader, &line), "{line}: {:?}", loader.logs());
+        }
+
+        let host = enshwick::host().unwrap();
+        let at = host.offset("item_info.placed_entity").unwrap();
+        let vanilla = host
+            .game_resource(PROP_ITEM.key(types::ITEM_INFO).unwrap())
+            .unwrap();
+        let item = loader
+            .build_resource(
+                &named("you.luau:crate").key(types::ITEM_INFO).unwrap(),
+                &vanilla,
+            )
+            .unwrap();
+        assert_eq!(item[at..at + 16], named("you.luau:crate.template").0);
+    }
+
+    #[test]
+    fn a_luau_mod_adds_an_arsenal_and_an_enemy_that_uses_it() {
+        use enshwick::content::{EngineFacts, Guid};
+        use enshwick::resources::{Registry, Value};
+        use enshwick::test::{BITE, ENEMY, ENEMY_ARSENAL};
+
+        let main = format!(
+            r#"
+            local pack = enshwick.content.add_arsenal({{
+                id = "you.luau:pack",
+                like = "{ENEMY_ARSENAL}",
+                change = {{ attacks = {{ "{BITE}" }} }},
+            }})
+            local elder = enshwick.content.add_enemy({{
+                id = "you.luau:elder", like = "{ENEMY}", level = 12, faction = "Vukah", arsenal = pack,
+            }})
+            enshwick.log.info(`elder {{elder}} uses {{pack}}`)
+            "#
+        );
+        let (loader, status) = start_with(FakeHost::new().enemies(), &main, Scripts::new(), None);
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let (elder, pack) = (Guid::named("you.luau:elder"), Guid::named("you.luau:pack"));
+        let line = format!("elder {elder} uses {pack}");
+        assert!(logged(&loader, &line), "{line}: {:?}", loader.logs());
+
+        let host = enshwick::host().unwrap();
+        let hash = host.hash("ecs::TemplateResource").unwrap();
+        let base = host.game_resource(ENEMY.key_by_hash(hash)).unwrap();
+        let built = loader
+            .build_resource(&elder.key_by_hash(hash), &base)
+            .unwrap();
+        let value = Registry::game()
+            .unwrap()
+            .decode("demo::ecs::TemplateResource", &built)
+            .unwrap();
+        let Some(Value::List(components)) = value.field("components") else {
+            panic!("{value:?}")
+        };
+        let held = |name: &str| {
+            components.iter().find_map(|held| match held {
+                Value::Variant(held) if held.type_name() == name => Some(held.value().clone()),
+                _ => None,
+            })
+        };
+        assert_eq!(
+            held("demo::ecs::Faction").and_then(|f| f.field("faction").cloned()),
+            Some(Value::Name("Vukah".into()))
+        );
+        assert_eq!(
+            held("demo::ecs::EnemyArsenalReference").and_then(|a| a.field("arsenal").cloned()),
+            Some(Value::Guid(pack))
+        );
+    }
+
+    #[test]
+    fn a_luau_mod_adds_a_spawn_entry_changes_a_spawner_and_adds_an_altar_kind() {
+        use enshwick::content::Guid;
+        use enshwick::test::{ENEMY, NEST, PROP_ITEM};
+
+        let main = format!(
+            r#"
+            enshwick.content.add_spawn_entry({{ spawner = {{ Listing = "{ENEMY}" }}, template = "{NEST}", weight = 3 }})
+            enshwick.content.change_spawner({{ Spawner = "{NEST}" }}, {{ max_entities_alive = 2 }})
+            local wide = enshwick.altars.add_flame_altar({{
+                item = {{ id = "you.luau:wide", like = "{PROP_ITEM}" }},
+                zones = {{ {{ grow = 4, height = 20 }} }},
+            }})
+            enshwick.log.info(`altars of {{wide.template}}`)
+            "#
+        );
+        let kind = Guid::named("you.luau:wide.template");
+        let host = FakeHost::new()
+            .enemies()
+            .props()
+            .template(enshwick::Entity(10), kind.0);
+        let (loader, status) = start_with(host, &main, Scripts::new(), None);
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let line = format!("altars of {kind}");
+        assert!(logged(&loader, &line), "{line}: {:?}", loader.logs());
+        assert_eq!(loader.altar_zone(enshwick::Entity(10), 1, 30), (4, 20));
+    }
+
+    #[test]
     fn on_settings_hands_the_settings_over_now_and_at_each_world_load() {
         let (loader, status) = start_with(
             FakeHost::new(),

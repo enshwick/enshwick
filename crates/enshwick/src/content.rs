@@ -14,14 +14,20 @@ use crate::{Load, Off};
 pub mod categories;
 pub mod changes;
 pub mod containers;
+#[cfg(feature = "typed")]
+pub mod enemies;
 pub mod icons;
 mod ids;
 pub mod items;
 pub mod loot_tables;
 pub mod menu;
+pub mod props;
 pub mod recipes;
 pub mod renames;
 mod script;
+#[cfg(feature = "typed")]
+pub mod spawns;
+pub mod templates;
 pub mod vanilla;
 pub mod workshops;
 

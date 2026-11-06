@@ -103,6 +103,50 @@ step. A size changes the altar's built zone and so raises `AltarsChanged`
 again: compare the input you solve from, the `levels`, not the built zones,
 before solving again.
 
+## Altar kinds with zones of their own
+
+`load.add_flame_altar(NewFlameAltar)` adds a kind of Flame Altar: a
+[prop](content/props.md) copied from the vanilla altar whose item is
+`item.like`, with its item, its template and, with `recipe_cost`, its recipe.
+Its altars take `zones`, one `KindZone { grow, height }` per level from 1: the
+cells added on each side of the vanilla zone and the height, in the terms of
+a zone filter. A level past the list takes the last entry. The kind sizes its
+altars through a zone filter of the mod, so filters that run after it see the
+kind's size. Each altar's `template` names its kind.
+
+On a server copy, a level-1 altar of a kind with `grow = 20` and
+`height = 80` had a zone 121 cells wide and 80 high; the game's level-1 altar
+had 80 by 80. The kind looks like the vanilla altar: a new look needs client
+files.
+
+```rust
+use enshwick::altars::{KindZone, NewFlameAltar};
+use enshwick::content::{Guid, id};
+use enshwick::content::items::NewItem;
+
+fn init(load: &mut enshwick::Load<'_>, altar: Guid) -> Result<(), enshwick::Off> {
+    load.add_flame_altar(NewFlameAltar {
+        item: NewItem::new(id!("wide-altar"), altar),
+        zones: vec![KindZone { grow: 20, height: 80 }],
+        recipe_cost: Some(2),
+    })?;
+    Ok(())
+}
+```
+
+In Luau the call is `enshwick.altars.add_flame_altar{...}`, at the top level
+of `main.luau`, with the same fields.
+
+```luau
+local altar = "<the GUID of the game's Flame Altar item>"
+local wide = enshwick.altars.add_flame_altar({
+    item = { id = "you.altars:wide-altar", like = altar },
+    zones = { { grow = 20, height = 80 } },
+    recipe_cost = 2,
+})
+enshwick.log.info(`wide altars are {wide.template}`)
+```
+
 ## Altars per level and bases past 16
 
 `load.on_altar_limit(|limit| ...)` adds a filter to the chain that decides
