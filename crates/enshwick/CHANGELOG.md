@@ -8,6 +8,13 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `actions`: `Actions::control(id, key)` puts a declared action without
+  arguments on a key in one call: a control of the same name that runs the
+  action at each press, labelled with the action's label in each player's
+  language, offered to joining clients by a mod of side server; Luau
+  `actions:control(id, key)`. The fake host's `controls()` lists a label in
+  its language from the texts the mod handed over, as the Controls page
+  does (#970).
 - `voxels`: `Load::on_voxels_changed` hears every write of the server's
   world voxels after the step, a player's digging and building, the game's
   own and the terrain edits and transactions of mods, as a `VoxelEdit`: its

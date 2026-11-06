@@ -58,6 +58,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::PlayerKey;
 use crate::abi::{ActionCall, Str, read_headed};
+use crate::controls::{Control, Key};
 use crate::i18n::{Language, Texts};
 use crate::world::Player;
 use crate::{Load, Off};
@@ -401,6 +402,51 @@ impl Actions {
             &raw const raw,
         );
         crate::load::ok(status, (), || format!("action {action}"))
+    }
+
+    /// Puts the declared action `action` on `key` during init, so a press runs it.
+    ///
+    /// It declares a [control](crate::controls) of the same name that runs
+    /// the action on the server, as [`Control::runs`](crate::controls::Control::runs)
+    /// does. Its label is the action's label in each player's language. A mod
+    /// of side server offers it to the clients that join.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for an action not declared yet, one with arguments or a list
+    /// of players, or when the loader refuses the control, such as when the
+    /// mod already declared a control named after the action.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Outcome};
+    /// use enshwick::controls::Key;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let texts = load.texts_from("[en]\n\"day\" = \"Make it day\"\n\n[uk]\n\"day\" = \"Зробити день\"\n")?;
+    ///     let actions = load.actions(texts)?;
+    ///     actions.add(Action::new("day", "day").admins(), |_| Outcome::done("Morning"))?;
+    ///     actions.control("day", Key::parse("F8")?)
+    /// }
+    /// ```
+    pub fn control(&self, action: &str, key: Key) -> Result<(), Off> {
+        let label = {
+            let declared = self.registry.declared.relock_read();
+            let found = declared
+                .iter()
+                .find(|d| d.action.id == action)
+                .ok_or_else(|| Off::new(format!("action {action}: declare it before its key")))?;
+            if found.action.on.is_some() || !found.action.args.is_empty() {
+                return Err(Off::new(format!(
+                    "action {action}: a key runs only an action without arguments"
+                )));
+            }
+            found.action.label.clone()
+        };
+        crate::i18n::hand_missing(self.registry.host, &self.registry.texts, &label);
+        let control = Control::new(action, &label).key(key).runs(action);
+        crate::controls::declare(self.registry.host, &control, |_| {})
     }
 }
 

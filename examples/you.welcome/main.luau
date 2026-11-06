@@ -43,7 +43,7 @@ actions:add({ id = "count", label = "count", admins = true }, function()
 	enshwick.world.broadcast(online)
 	return enshwick.actions.done(online)
 end)
-enshwick.controls.control({ name = "count", label = "count", key = "F8", runs = "count" }, function() end)
+actions:control("count", "F8")
 
 enshwick.schedule.every(enshwick.settings().announce_minutes * 60, function()
 	enshwick.log.info(count.online(#enshwick.world.players()))

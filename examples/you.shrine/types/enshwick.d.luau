@@ -53,6 +53,8 @@ export type Actions = {
 	run: (self: Actions, action: string, args: {ActionValue}) -> (),
 	--- On a client, asks the server to run this mod's action `action` with `args` on the object `target`, as `Actions.run_at` does.
 	run_at: (self: Actions, action: string, args: {ActionValue}, target: ActionTarget) -> (),
+	--- Puts the declared action `action` on `key`, as `Actions.control` does.
+	control: (self: Actions, action: string, key: string) -> (),
 }
 
 --- Rolls on crafted items, for `Load.add_craft_affixes`.
