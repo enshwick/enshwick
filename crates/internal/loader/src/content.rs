@@ -40,6 +40,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::resource::KEY_OF.id(),
     pinned::resource::OPEN.id(),
     pinned::resource::RESOLVE.id(),
+    pinned::text::FORMAT.id(),
     pinned::text::LOOKUP.id(),
     pinned::text::LOOKUP_ENGLISH.id(),
     pinned::text::POOL_LANGUAGE.id(),
@@ -940,4 +941,4 @@ unsafe extern "system" fn key_of(out: *mut u8, database: *mut u8, handle: u32) -
 mod tests;
 mod texts;
 
-pub(crate) use texts::{Handed, add_text, language};
+pub(crate) use texts::{Handed, add_text, hash as text_hash, language};

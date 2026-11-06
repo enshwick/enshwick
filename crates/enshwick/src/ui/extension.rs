@@ -182,6 +182,7 @@ impl Load<'_> {
         };
         crate::load::hand_over(
             Drawer {
+                host,
                 draw: Mutex::new(draw),
             },
             |user| (host.api().ui_extension)(host.handle(), &raw const spec, draw_frame::<F>, user),

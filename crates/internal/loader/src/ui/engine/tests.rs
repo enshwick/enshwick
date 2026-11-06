@@ -2,6 +2,7 @@ use super::*;
 
 #[test]
 fn texts_hash_as_the_game_does() {
+    const FNV_PRIME: u64 = 0x0100_0000_01b3;
     assert_eq!(hash(b""), FNV_BASIS);
     assert_eq!(hash(b"doBasicProgressBar()"), 0xb37b_692b_58e0_8ab5);
     assert_eq!(hash(b"contentLayer"), 0xffd8_6fcd_3b62_1d0f);
@@ -28,15 +29,16 @@ fn the_tables_layouts_fit_the_loader_s_buffers() {
         .iter()
         .map(|(_, text)| enshwick_gamedata::Table::parse(text).unwrap());
     for table in tables.filter(|t| t.side() == enshwick_gamedata::Side::Client) {
-        let lookup = |id: &str| {
-            table
-                .constants()
-                .iter()
-                .find(|c| c.id() == id)
-                .map(enshwick_gamedata::Constant::value)
-        };
+        let lookup = |id: &str| constant(&table, id);
         let layout = Layout::read(&lookup).unwrap();
         assert_eq!(layout.nav, [0, 0x20, 0x24, 0x28, 0x30, 0x34, 0x48]);
+        assert_eq!(layout.dropdown_external, Some(0xc76));
+        let unrouted = |id: &str| (id != pinned::ui::DROPDOWN_EXTERNAL.id()).then(|| lookup(id))?;
+        assert_eq!(
+            Layout::read(&unrouted).map(|l| l.dropdown_external).ok(),
+            Some(None),
+            "a build whose dropdown mode byte no route finds keeps the interface"
+        );
         DialogLayout::read(&lookup).unwrap();
         let grown = |id: &str| {
             if id == pinned::ui::LABEL_EXTENT.id() {
@@ -61,8 +63,16 @@ fn client_tables() -> Vec<enshwick_gamedata::Table> {
         .collect()
 }
 
-/// A table's constant by id.
+/// A table's constant by id; the entries only their engine routes find
+/// stand in: the text field's kept-state key as 1, the dropdown's external
+/// mode byte as 0xc76, its offset on every kept client build.
 fn constant(table: &enshwick_gamedata::Table, id: &str) -> Option<u64> {
+    if id == pinned::ui::TEXT_FIELD_STATE_KEY.id() {
+        return Some(1);
+    }
+    if id == pinned::ui::DROPDOWN_EXTERNAL.id() {
+        return Some(0xc76);
+    }
     table
         .constants()
         .iter()
@@ -112,8 +122,9 @@ fn each_optional_part_turns_off_alone() {
 }
 
 /// Every client table that pins the text field gives its sizes, they fit
-/// the loader's buffer, and a build whose field or kept state moved turns
-/// the text field off instead of letting the game write past the buffer.
+/// the loader's buffer, a build whose field or kept state moved turns the
+/// text field off instead of letting the game write past the buffer, and
+/// one where the route finds no kept-state key turns it off too.
 #[test]
 fn the_text_field_s_sizes_come_from_the_table_and_fit_its_buffer() {
     let mut checked = 0;
@@ -135,11 +146,13 @@ fn the_text_field_s_sizes_come_from_the_table_and_fit_its_buffer() {
         let text = pinned::ui::TEXT_FIELD_TEXT.id();
         let state = pinned::ui::TEXT_FIELD_STATE_SIZE.id();
         let editing = pinned::ui::TEXT_FIELD_EDITING.id();
+        let key = pinned::ui::TEXT_FIELD_STATE_KEY.id();
         for (id, value, room, blamed) in [
             (extent, Some(0x1000), true, extent),
             (text, Some(0x1000), true, text),
             (state, Some(0x10), true, editing),
             (extent, None, false, extent),
+            (key, None, false, key),
         ] {
             let read = text_field::TextLayout::read(&changed(id, value));
             let got = match read {

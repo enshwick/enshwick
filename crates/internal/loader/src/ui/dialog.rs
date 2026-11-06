@@ -156,6 +156,11 @@ fn tag_id(index: usize) -> u32 {
     enshwick_gamedata::reflect::fnv1a32(&TAGS[index])
 }
 
+/// The ids of the dialog text tags.
+pub(crate) fn tag_ids() -> impl Iterator<Item = u32> {
+    (0..TAGS.len()).map(tag_id)
+}
+
 /// The text of a dialog text tag, by its id, while its dialog is kept.
 pub(crate) fn text(id: u32) -> Option<&'static str> {
     let index = (0..TAGS.len()).find(|&i| tag_id(i) == id)?;

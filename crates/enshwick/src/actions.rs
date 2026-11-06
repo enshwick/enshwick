@@ -1,5 +1,5 @@
-//! Player actions: what a player asks a mod to do, declared once and offered
-//! in the game's interface.
+//! Player actions: what a player asks a mod to do, declared once and run
+//! from the mod's own controls and panels or the console.
 //!
 //! Unstable: needs the `unstable` feature and may change in any release.
 //!
@@ -7,8 +7,7 @@
 //! it acts on and its arguments as typed choices, and handles it on the
 //! server. The platform does the rest:
 //!
-//! - it draws the action in the game's style, on the mod's page of the Mods
-//!   screen, and runs it when the mod's own control or panel asks with
+//! - it runs the action when the mod's own control or panel asks with
 //!   [`Actions::run`];
 //! - it sends the player's pick to the server over the loader's own
 //!   messages, checks there who may use the action, runs the handler and
@@ -17,11 +16,10 @@
 //!   as the mod's id, the action's id and its values as words, such as
 //!   `weather set storm 10` in a dedicated server's command file.
 //!
-//! The server decides everything: the client only shows what the server
-//! offered and sends what the player picked, and the server checks again on
-//! every run. Texts are keys of the mod's [`Texts`], shown in each player's
-//! language; a key without a text shows as it is, so plain English works
-//! too.
+//! The server decides everything: the client only sends what the player
+//! picked, and the server checks again on every run. Texts are keys of the
+//! mod's [`Texts`], shown in each player's language; a key without a text
+//! shows as it is, so plain English works too.
 //!
 //! # Examples
 //!
@@ -326,10 +324,9 @@ impl Actions {
     }
 
     /// On a client, asks the server to run this mod's action `action` with
-    /// `args`, as the player's pick in the interface does: the server checks
-    /// it again, runs the handler and shows the reply as a notice. A
-    /// [control](crate::controls)'s handler uses it for what changes the
-    /// world.
+    /// `args`: the server checks who may run it, runs the handler and shows
+    /// the reply as a notice. A [control](crate::controls)'s handler uses it
+    /// for what changes the world.
     ///
     /// # Errors
     ///

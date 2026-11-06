@@ -522,6 +522,7 @@ dependencies = [
  "iced-x86",
  "insta",
  "loom",
+ "memchr",
  "postcard",
  "proptest",
  "rustc-hash",

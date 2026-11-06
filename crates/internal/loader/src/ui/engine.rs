@@ -101,7 +101,6 @@ pub(crate) struct UiText {
 /// The byte the game points empty texts at.
 static NUL: u8 = 0;
 const FNV_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
-const FNV_PRIME: u64 = 0x0100_0000_01b3;
 
 impl UiText {
     /// The text over `bytes`, which must outlive every use the game makes of
@@ -124,17 +123,7 @@ impl UiText {
     };
 }
 
-/// FNV-1a over sign-extended bytes, as the game hashes its texts.
-#[expect(
-    clippy::cast_possible_wrap,
-    clippy::cast_sign_loss,
-    reason = "the game sign-extends each byte before the xor"
-)]
-pub(crate) fn hash(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(FNV_BASIS, |h, &b| {
-        (h ^ (i64::from(b as i8) as u64)).wrapping_mul(FNV_PRIME)
-    })
-}
+pub(crate) use crate::content::text_hash as hash;
 
 type Ptr = *mut u8;
 pub(super) type PopupFn = unsafe extern "system" fn(state: Ptr);
@@ -257,6 +246,10 @@ pub(super) struct Layout {
     slider_stop_capacity: usize,
     dropdown_count: usize,
     dropdown_enabled: usize,
+    /// The config byte that has a click report the open state instead of
+    /// opening the game's list; `None` where its route misses, and the
+    /// game's own list opens.
+    dropdown_external: Option<usize>,
     dropdown_capacity: usize,
     dropdown_entry_text: usize,
 }
@@ -398,6 +391,7 @@ impl Layout {
             slider_stop_capacity: f(pinned::ui::SLIDER_STOP_CAPACITY.id())?,
             dropdown_count: f(pinned::ui::DROPDOWN_COUNT.id())?,
             dropdown_enabled: f(pinned::ui::DROPDOWN_ENABLED.id())?,
+            dropdown_external: f(pinned::ui::DROPDOWN_EXTERNAL.id()).ok(),
             dropdown_capacity: f(pinned::ui::DROPDOWN_CAPACITY.id())?,
             dropdown_entry_text: f(pinned::ui::DROPDOWN_ENTRY_TEXT.id())?,
         }

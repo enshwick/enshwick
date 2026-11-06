@@ -10,15 +10,13 @@ use crate::listing::Listing;
 use crate::locks::Relock;
 use crate::mods_screen;
 use crate::texts;
-use crate::ui::{Painter, actions};
+use crate::ui::Painter;
 
 /// What the player did on the mod list.
 pub(super) enum Listed {
     Nothing,
     /// Opened mod `index`'s settings.
     Settings(usize),
-    /// Opened the actions of the mod with this id.
-    Actions(String),
     /// Opened the controls page.
     Controls,
 }
@@ -153,9 +151,6 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
                 paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
             }
         }
-        if actions::offers(&record.id) && paint.button(texts::text("actions").as_bytes(), true) {
-            done = Listed::Actions(record.id.clone());
-        }
         let settings = record
             .settings_schema()
             .is_some_and(|s| !s.fields.is_empty());
@@ -165,12 +160,6 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             && paint.button(texts::text("mods.settings").as_bytes(), true)
         {
             done = Listed::Settings(index);
-        }
-    }
-    for (id, name) in crate::actions::server_only(|id| mods.iter().any(|m| m.id == id)) {
-        paint.label(name.as_bytes(), UiWidget::STYLE_H3, false, false);
-        if paint.button(texts::text("actions").as_bytes(), true) {
-            done = Listed::Actions(id);
         }
     }
     let beside = crate::others::loaded(&loader.others);

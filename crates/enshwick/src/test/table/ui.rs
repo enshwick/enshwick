@@ -11,7 +11,7 @@ use crate::ui::screens;
 
 /// table it sees for the process, so it is one static.
 pub(crate) extern "system" fn ui_frame(
-    _me: ModHandle,
+    me: ModHandle,
     callback: UiFrameFn,
     user: *mut c_void,
 ) -> Status {
@@ -19,7 +19,7 @@ pub(crate) extern "system" fn ui_frame(
         if s.host.side == Side::SERVER {
             return Status::MISSING;
         }
-        s.frames.push((callback, user.expose_provenance()));
+        s.frames.push((callback, user.expose_provenance(), me));
         Status::OK
     })
 }
@@ -87,13 +87,18 @@ pub(crate) fn hud_widget(s: &mut State, frame: u64, w: &UiWidget, label: &str) -
 }
 
 pub(crate) extern "system" fn ui_widget(
-    _me: ModHandle,
+    me: ModHandle,
     frame: u64,
     widget: *mut UiWidget,
 ) -> Status {
     let Some(mut copy) = super::get_headed(widget.cast_const()) else {
         return Status::BAD_ARGS;
     };
+    // The loader refuses a widget outside a callback or from a handle not
+    // the drawing callback's.
+    if with(false, |s| s.drawing != Some(me)) {
+        return Status::WRONG_THREAD;
+    }
     let status = draw(frame, &mut copy);
     match super::put_headed(widget, copy) {
         Status::OK => status,
@@ -194,7 +199,7 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
 }
 
 pub(crate) extern "system" fn ui_hud(
-    _me: ModHandle,
+    me: ModHandle,
     callback: UiFrameFn,
     user: *mut c_void,
 ) -> Status {
@@ -202,7 +207,7 @@ pub(crate) extern "system" fn ui_hud(
         if s.host.side == Side::SERVER {
             return Status::MISSING;
         }
-        s.huds.push((callback, user.expose_provenance()));
+        s.huds.push((callback, user.expose_provenance(), me));
         Status::OK
     })
 }
@@ -211,7 +216,7 @@ pub(crate) extern "system" fn ui_hud(
 /// refuses, in its order: a server, an unknown edge or a screen where the
 /// player is in the world with no window open, a screen the game lacks.
 pub(crate) extern "system" fn ui_extension(
-    _me: ModHandle,
+    me: ModHandle,
     spec: *const UiExtension,
     callback: UiFrameFn,
     user: *mut c_void,
@@ -231,7 +236,7 @@ pub(crate) extern "system" fn ui_extension(
             return Status::MISSING;
         }
         s.extensions
-            .push((screen, spec.edge, callback, user.expose_provenance()));
+            .push((screen, spec.edge, callback, user.expose_provenance(), me));
         Status::OK
     })
 }

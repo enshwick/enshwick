@@ -15,7 +15,6 @@ use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
 
-mod actions;
 mod demo;
 mod dialog;
 mod engine;
@@ -84,6 +83,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::DROPDOWN_CAPACITY.id(),
     pinned::ui::DROPDOWN_COUNT.id(),
     pinned::ui::DROPDOWN_ENABLED.id(),
+    pinned::ui::DROPDOWN_EXTERNAL.id(),
     pinned::ui::DROPDOWN_ENTRY_TEXT.id(),
     pinned::ui::DROPDOWN_EXTENT.id(),
     pinned::ui::DROPDOWN_INIT.id(),
@@ -195,6 +195,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::TEXT_FIELD_EXTENT.id(),
     pinned::ui::TEXT_FIELD_INPUT.id(),
     pinned::ui::TEXT_FIELD_STATE.id(),
+    pinned::ui::TEXT_FIELD_STATE_KEY.id(),
     pinned::ui::TEXT_FIELD_STATE_SIZE.id(),
     pinned::ui::TEXT_FIELD_TEXT.id(),
     pinned::ui::TOGGLE.id(),
@@ -269,6 +270,24 @@ struct HudItem {
     value: f32,
 }
 
+/// Appends `text` to `out` with each backslash doubled: the game's label
+/// markup reads `\` with the character after it, and shows `\\` as one
+/// backslash (client 26430625).
+fn escape(out: &mut Vec<u8>, text: &[u8]) {
+    let mut from = 0;
+    for at in memchr::memchr_iter(b'\\', text) {
+        out.extend_from_slice(&text[from..=at]);
+        out.push(b'\\');
+        from = at + 1;
+    }
+    out.extend_from_slice(&text[from..]);
+}
+
+/// The bytes [`escape`] adds to `text`.
+fn escaped_extra(text: &[u8]) -> usize {
+    memchr::memchr_iter(b'\\', text).count()
+}
+
 /// Mod texts of the last frames, each frame's in its own buffer.
 struct Arena {
     buffers: Vec<Vec<u8>>,
@@ -296,18 +315,18 @@ impl Arena {
     }
 
     /// `parts` joined, as a text the game may read for the next frames;
-    /// empty once the frame's buffer is full.
+    /// empty once the frame's buffer is full; [`escape`]d.
     fn text(&mut self, parts: &[&[u8]]) -> UiText {
         let Some(buffer) = self.buffers.get_mut(self.current) else {
             return UiText::EMPTY;
         };
-        let len: usize = parts.iter().map(|p| p.len()).sum();
+        let len: usize = parts.iter().map(|p| p.len() + escaped_extra(p)).sum();
         if buffer.len() + len > buffer.capacity() {
             return UiText::EMPTY;
         }
         let start = buffer.len();
         for part in parts {
-            buffer.extend_from_slice(part);
+            escape(buffer, part);
         }
         // Within capacity, the buffer never moves; it is cleared only
         // `ARENA_FRAMES` frames later.
@@ -408,6 +427,11 @@ pub(crate) fn mod_dialog(
         raw.buttons,
         dialog::Answerer::Mod(Registered::new(owner, callback, user)),
     ))
+}
+
+/// The ids of the dialogs' text tags, for the loader's text format.
+pub(crate) fn tag_ids() -> impl Iterator<Item = u32> {
+    dialog::tag_ids()
 }
 
 /// The text of a dialog's text tag, for the loader's text lookup.

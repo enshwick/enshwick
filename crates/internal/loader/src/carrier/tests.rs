@@ -215,6 +215,59 @@ fn a_socket_the_session_did_not_make_is_tried_again_later() {
 }
 
 #[test]
+fn the_host_s_own_player_gets_no_socket_where_its_machine_is_not_the_host_s() {
+    let _alone = alone();
+    host_for_test(7);
+    let state = members_twice(1200);
+    unhost_for_test();
+    assert_eq!(
+        CREATES.load(Ordering::Relaxed),
+        0,
+        "the host's own player is reached in process"
+    );
+    assert!(state.peers.is_empty() && state.tried.is_empty());
+}
+
+#[test]
+fn every_other_player_on_a_machine_of_its_own_gets_a_socket() {
+    assert!(wired(8, 2, 1, 7), "another player, the host known");
+    assert!(wired(8, 2, 1, 0), "another player, the host not known yet");
+    assert!(!wired(7, 2, 1, 7), "the host's own player by its key");
+    assert!(!wired(8, 1, 1, 7), "the host's machine");
+    assert!(!wired(8, 0, 1, 7), "no machine");
+}
+
+#[test]
+fn a_socket_opened_to_the_host_s_player_before_its_key_was_known_goes() {
+    let _alone = alone();
+    PACKET.store(1200, Ordering::Relaxed);
+    DESTROYS.store(0, Ordering::Relaxed);
+    let game = Game::for_test(fake_create, fake_destroy, fake_limit);
+    let host: [u32; 2] = [1, 0];
+    let session = host.as_ptr().expose_provenance();
+    // The fake game reads a socket's channel and peer, both 0, from it.
+    let socket = [0u32; 2];
+    let mut slot = None;
+    let state = fresh(&mut slot, session);
+    for (key, machine) in [(7, 2), (8, 3)] {
+        state.peers.insert(
+            key,
+            Peer {
+                machine,
+                socket: socket.as_ptr().expose_provenance(),
+                ..peer(true)
+            },
+        );
+    }
+    host_for_test(7);
+    members(&game, session, state, &[(7, 2), (8, 3)], Instant::now());
+    unhost_for_test();
+    let kept: Vec<u64> = state.peers.keys().copied().collect();
+    assert_eq!(kept, [8], "the remote player keeps its socket");
+    assert_eq!(DESTROYS.load(Ordering::Relaxed), 1, "the silent one closes");
+}
+
+#[test]
 fn a_session_turned_off_is_on_again_after_the_game_ends() {
     let _alone = alone();
     *CARRIER.server.relock() = Some(members_twice(0));

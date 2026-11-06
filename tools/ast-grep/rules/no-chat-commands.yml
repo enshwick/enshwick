@@ -3,8 +3,8 @@ language: rust
 severity: error
 message: an action goes through the actions API with a UI path, not a typed chat command
 note: >-
-  Players and admins act through the Mods screen, admin actions and contextual
-  windows; a dedicated server's console and command file take the actions
+  Players and admins act through a mod's own controls and panels, which run
+  its actions; a dedicated server's console and command file take the actions
   API's own lines. A console's or command file's own `handle_command` or
   `on_command` is allowed: both are for server admins and automation, not
   players, so it carries `// ast-grep-ignore` with that reason. The rule refuses an item named for registering or

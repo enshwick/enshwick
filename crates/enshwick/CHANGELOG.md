@@ -125,6 +125,11 @@ Each entry names the pull request that made the change.
   down goes up, and a modifier pressed or let go meanwhile fires nothing.
   The fake host's `keys` holds the modifiers of all the keys it is given
   together, as a keyboard does (#942).
+- **Breaking:** the Mods screen shows no player actions: a mod offers them
+  through its own controls and panels, and the console runs them as
+  before. The client no longer asks the server for action sheets, and the
+  reply to a run reaches the player as one notice with all its lines, or as
+  a chat line where the client takes no notices (#950).
 
 ### Fixed
 
@@ -144,6 +149,22 @@ Each entry names the pull request that made the change.
   one whose player does anything else before then, so a stack dragged or
   stashed out of its slot pays no reward. The fake
   host's `Installed::refused_use` plays such a use (#953).
+- Text settings on the Mods screen take typing on client builds 26320373
+  and 26430625: the loader finds the text field's kept-state key, which
+  changes with each build, through an engine route (#950).
+- A text the loader draws on the game's screens or a map marker label, such
+  as an off reason with a Windows path, shows each backslash and the letter
+  after it (#950).
+- A dialog shows its title and message, and a notice its text, where the
+  game turns a text tag into text: the loader answers its own tags in the
+  game's text format too, not only in its text lookup (#950).
+- A data pack, Luau scripts included, draws its windows, HUD and screen
+  panels: their callbacks draw under the pack's own handle, which the
+  loader takes, not the loader's (#950).
+- A dropdown shows its options under its row and takes a pick; the game's
+  own list opened under the loader's windows (#950).
+- The host of a game opens no socket to its own player, which it reaches
+  in process (#950).
 - An action's handler, `allow`, `at` or `per_player` may add an action with
   `Actions::add`; before, the call deadlocked the thread (#947).
 - A use reward (`Action::Consume`, a pack's `consume` reward) follows only

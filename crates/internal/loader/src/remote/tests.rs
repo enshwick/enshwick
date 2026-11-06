@@ -66,22 +66,11 @@ fn messages_round_trip() {
             last: true,
             ids: Vec::new(),
         },
-        Message::ActionsQuery { language: 34 },
-        Message::ActionsSheet {
-            first: true,
-            last: false,
-            id: "you.trading-post".into(),
-            label: "Trading Post".into(),
-            text: "A\taccess\t5\tWho\t\tYour stall\n".into(),
-        },
+        Message::ActionsLanguage { language: 34 },
         Message::ActionRun {
             id: "you.trading-post".into(),
             action: "access".into(),
             args: "p0000000000000007\tb1".into(),
-        },
-        Message::ActionResult {
-            ok: true,
-            text: "Ann may use it".into(),
         },
     ] {
         assert_eq!(
@@ -191,7 +180,7 @@ fn queries_and_edits_are_rated_and_answers_are_not() {
             key: "radius".into(),
             value: "5".into(),
         },
-        Message::ActionsQuery { language: 0 },
+        Message::ActionsLanguage { language: 0 },
     ];
     assert!(rated.iter().all(Message::is_rated));
     let free = [
@@ -233,11 +222,11 @@ fn a_query_or_edit_over_the_rate_is_answered_busy_and_not_served() {
 }
 
 #[test]
-fn an_actions_query_over_the_rate_gets_no_answer_at_all() {
+fn a_language_message_over_the_rate_gets_no_answer_at_all() {
     let mut queries = Queries::default();
     let now = Instant::now();
     over_the_rate(&mut queries, 7, now);
-    let message = Message::ActionsQuery { language: 0 };
+    let message = Message::ActionsLanguage { language: 0 };
     assert_eq!(queries.gate(7, false, &message, now), Gate::Drop);
 }
 

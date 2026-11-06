@@ -232,8 +232,11 @@ impl Frame<'_> {
     }
 }
 
-/// A frame callback as the loader keeps it.
+/// A frame callback as the loader keeps it, with the host of the mod that
+/// registered it: in the loader's own copy of the API, which runs every
+/// data pack, the process's host is the loader's and not the pack's.
 pub(super) struct Drawer<F> {
+    pub(super) host: Host,
     pub(super) draw: Mutex<F>,
 }
 
@@ -245,12 +248,10 @@ where
     let Some(raw) = (unsafe { frame.as_ref() }) else {
         return;
     };
-    let Some(host) = crate::host() else {
-        return;
-    };
     // SAFETY: `user` is the leaked `Drawer<F>` this function was registered
     // with.
     let drawer = unsafe { &*user.cast::<Drawer<F>>() };
+    let host = drawer.host;
     let screen = match raw.screen {
         UiFrame::IN_GAME => Screen::InGame,
         UiFrame::LOADING => Screen::Loading,

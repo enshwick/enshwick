@@ -251,6 +251,7 @@ impl Load<'_> {
         client_only(host, "frame callbacks")?;
         crate::load::hand_over(
             Drawer {
+                host,
                 draw: Mutex::new(draw),
             },
             |user| (host.api().ui_frame)(host.handle(), draw_frame::<F>, user),

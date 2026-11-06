@@ -111,17 +111,9 @@ pub(crate) fn client(message: Message) {
             heard.news += 1;
         }
         Message::Recipes { first, last, ids } => crate::recipes::received(first, last, &ids),
-        Message::ActionsSheet {
-            first,
-            last,
-            id,
-            label,
-            text,
-        } => crate::actions::sheet_heard(first, last, id, label, &text),
-        Message::ActionResult { ok, text } => crate::actions::result_heard(ok, text),
         Message::Query { .. }
         | Message::Edit { .. }
-        | Message::ActionsQuery { .. }
+        | Message::ActionsLanguage { .. }
         | Message::ActionRun { .. } => {}
     }
 }
@@ -191,16 +183,14 @@ fn answer(loader: &Loader, key: u64, message: Message) {
             crate::net::to_player(key, &Message::Result { ok, text });
             snapshot(loader, key, &id, admin);
         }
-        Message::ActionsQuery { language } => crate::actions::query(loader, key, language),
+        Message::ActionsLanguage { language } => crate::actions::language(key, language),
         Message::ActionRun { id, action, args } => {
             crate::actions::run(loader, key, &id, &action, &args);
         }
         Message::Sync { .. }
         | Message::Snapshot { .. }
         | Message::Result { .. }
-        | Message::Recipes { .. }
-        | Message::ActionsSheet { .. }
-        | Message::ActionResult { .. } => {}
+        | Message::Recipes { .. } => {}
     }
 }
 

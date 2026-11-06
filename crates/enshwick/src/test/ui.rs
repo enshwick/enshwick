@@ -26,8 +26,11 @@ impl Installed {
     pub fn draw_frame(&self) -> Vec<Drawn> {
         let frames = table::with(Vec::new(), |s| s.frames.clone());
         let mut drawn = Vec::new();
-        for (token, (callback, user)) in (1u64..).zip(frames) {
-            table::with((), |s| s.frame = Some((token, false, Vec::new())));
+        for (token, (callback, user, owner)) in (1u64..).zip(frames) {
+            table::with((), |s| {
+                s.frame = Some((token, false, Vec::new()));
+                s.drawing = Some(owner);
+            });
             let frame = crate::abi::UiFrame {
                 header: Header::of::<crate::abi::UiFrame>(),
                 token,
@@ -41,7 +44,11 @@ impl Installed {
                     core::ptr::with_exposed_provenance_mut(user),
                 );
             };
-            if let Some((_, _, list)) = table::with(None, |s| s.frame.take()) {
+            let list = table::with(None, |s| {
+                s.drawing = None;
+                s.frame.take()
+            });
+            if let Some((_, _, list)) = list {
                 drawn.extend(list);
             }
         }
@@ -63,8 +70,11 @@ impl Installed {
     pub fn draw_hud(&self) -> Vec<(u32, Drawn)> {
         let huds = table::with(Vec::new(), |s| s.huds.clone());
         let mut drawn = Vec::new();
-        for (token, (callback, user)) in (1u64..).zip(huds) {
-            table::with((), |s| s.hud = Some((token, Vec::new())));
+        for (token, (callback, user, owner)) in (1u64..).zip(huds) {
+            table::with((), |s| {
+                s.hud = Some((token, Vec::new()));
+                s.drawing = Some(owner);
+            });
             let frame = crate::abi::UiFrame {
                 header: Header::of::<crate::abi::UiFrame>(),
                 token,
@@ -78,7 +88,11 @@ impl Installed {
                     core::ptr::with_exposed_provenance_mut(user),
                 );
             }
-            if let Some((_, list)) = table::with(None, |s| s.hud.take()) {
+            let list = table::with(None, |s| {
+                s.drawing = None;
+                s.hud.take()
+            });
+            if let Some((_, list)) = list {
                 drawn.extend(list);
             }
         }
@@ -105,15 +119,16 @@ impl Installed {
     #[must_use]
     pub fn draw_screen(&self, screen: crate::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
         let mut extensions = table::with(Vec::new(), |s| s.extensions.clone());
-        extensions.sort_by_key(|&(_, edge, _, _)| edge);
+        extensions.sort_by_key(|&(_, edge, _, _, _)| edge);
         let mut drawn = Vec::new();
-        for (token, (name, edge, callback, user)) in (1u64..).zip(extensions) {
+        for (token, (name, edge, callback, user, owner)) in (1u64..).zip(extensions) {
             if name != screen.name() {
                 continue;
             }
             table::with((), |s| {
                 s.frame = Some((token, true, Vec::new()));
                 s.extending = Some(token);
+                s.drawing = Some(owner);
             });
             let frame = crate::abi::UiFrame {
                 header: Header::of::<crate::abi::UiFrame>(),
@@ -130,6 +145,7 @@ impl Installed {
             }
             let list = table::with(None, |s| {
                 s.extending = None;
+                s.drawing = None;
                 s.frame.take()
             });
             if let Some((_, _, list)) = list.filter(|(_, _, list)| !list.is_empty()) {

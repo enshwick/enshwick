@@ -115,9 +115,7 @@ impl Hud<'_> {
     }
 }
 
-struct Drawer<F> {
-    draw: Mutex<F>,
-}
+use super::frame::Drawer;
 
 unsafe extern "system" fn draw_hud<F>(frame: *const UiFrame, user: *mut c_void)
 where
@@ -127,12 +125,10 @@ where
     let Some(raw) = (unsafe { frame.as_ref() }) else {
         return;
     };
-    let Some(host) = crate::host() else {
-        return;
-    };
     // SAFETY: `user` is the leaked `Drawer<F>` this function was registered
     // with.
     let drawer = unsafe { &*user.cast::<Drawer<F>>() };
+    let host = drawer.host;
     crate::host::guard(
         "panic in a HUD callback",
         || (),
@@ -168,6 +164,7 @@ impl Load<'_> {
         client_only(host, "HUD callbacks")?;
         crate::load::hand_over(
             Drawer {
+                host,
                 draw: Mutex::new(draw),
             },
             |user| (host.api().ui_hud)(host.handle(), draw_hud::<F>, user),

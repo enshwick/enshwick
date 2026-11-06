@@ -43,6 +43,39 @@ const UNPINNED_UNCHECKED: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// Entries no table pins, found only by their route, with the value the
+/// route must find on each table build, by table name.
+const ROUTED_ONLY: &[(&str, &str, u64)] = &[
+    (
+        "1.0 client (1269579)",
+        "ui.text_field_state_key",
+        0x64d2_7908_60d9_c7f6,
+    ),
+    ("1.0 client (1269579)", "text.format", 0xae_f3d0),
+    ("1.0 client (1269579)", "ui.dropdown_external", 0xc76),
+    (
+        "1.0 client (26082781)",
+        "ui.text_field_state_key",
+        0x64d2_7908_60d9_c7f6,
+    ),
+    (
+        "1.0 client (26320373)",
+        "ui.text_field_state_key",
+        0x397c_0808_484b_9ef3,
+    ),
+    (
+        "1.0 client (26430625)",
+        "ui.text_field_state_key",
+        0x7261_5e88_968a_8b89,
+    ),
+    ("1.0 client (26430625)", "text.format", 0xaf_f9f0),
+    ("1.0 client (26430625)", "ui.dropdown_external", 0xc76),
+    ("1.0 client (26082781)", "text.format", 0xaf_0f20),
+    ("1.0 client (26320373)", "text.format", 0xaf_f930),
+    ("1.0 client (26082781)", "ui.dropdown_external", 0xc76),
+    ("1.0 client (26320373)", "ui.dropdown_external", 0xc76),
+];
+
 /// Entries a kept build's table pins that the loader needs on no build of
 /// that side, by side: the server keeps the client's base set-up code but
 /// never runs it (`anchors/classes.toml`).
@@ -88,8 +121,8 @@ fn tables() -> Vec<Table> {
 
 /// On every [`executables`] entry, every route of its side finds, with no
 /// table behind it, the value its own table pins; an entry the table does
-/// not pin takes the value the newest table's patterns find there, or is
-/// one of [`UNPINNED_UNCHECKED`].
+/// not pin takes the value [`ROUTED_ONLY`] gives, else the value the newest
+/// table's patterns find there, or is one of [`UNPINNED_UNCHECKED`].
 #[test]
 #[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
 fn every_route_holds_on_every_kept_build() {
@@ -130,8 +163,13 @@ fn every_route_holds_on_every_kept_build() {
                     }
                 };
                 let pinned = own.symbol(id).is_some() || own.constant(id).is_some();
+                let routed_only = ROUTED_ONLY
+                    .iter()
+                    .find(|&&(name, routed, _)| name == own.name() && routed == id);
                 let want = if pinned {
                     entry(&own)
+                } else if let Some(&(_, _, known)) = routed_only {
+                    Some(known)
                 } else if value.is_none() || unchecked.contains(&id) {
                     return None;
                 } else {
@@ -147,6 +185,21 @@ fn every_route_holds_on_every_kept_build() {
             own.name(),
             wrong.len(),
             wrong.join("\n")
+        );
+    }
+}
+
+/// A [`ROUTED_ONLY`] row with a table or route id that does not exist would
+/// check nothing, so each names a kept table and a route of its side.
+#[test]
+fn every_routed_only_row_names_a_kept_table_and_a_route() {
+    let tables = tables();
+    let routes = Routes::embedded().unwrap();
+    for &(name, id, _) in ROUTED_ONLY {
+        let table = tables.iter().find(|t| t.name() == name);
+        assert!(
+            table.is_some_and(|t| routes.routes(id, t.side())),
+            "{name}: {id}"
         );
     }
 }

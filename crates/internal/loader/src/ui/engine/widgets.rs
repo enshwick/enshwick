@@ -275,7 +275,14 @@ impl Engine {
         (changed && !read_only).then_some(current)
     }
 
-    /// Draws a dropdown row; the new index when the player picked another.
+    /// Draws a dropdown row and, while it is open, its options under it as
+    /// buttons; the new index when the player picked another.
+    ///
+    /// The game draws its own list as a window on layer 0x1b, under the
+    /// loader's windows (layer 0x1f, and 0x1b over the pause menu, which
+    /// keeps the earlier window on top), so it never showed (client
+    /// 26430625). The row runs in the game's external mode instead: a click
+    /// reports the open state, and the loader draws the list.
     ///
     /// # Safety
     ///
@@ -308,21 +315,53 @@ impl Engine {
         }
         config.u8(layout.dropdown_count, u8::try_from(count).unwrap_or(0));
         config.u8(layout.dropdown_enabled, u8::from(!read_only));
+        if let Some(external) = layout.dropdown_external {
+            config.u8(external, 1);
+        }
         // An index past the entries, "none", stays inside the config the
         // game reads the shown entry from.
         let last = count.min(capacity.saturating_sub(1));
         let shown = index.min(u32::try_from(last).unwrap_or(0));
         let mut value = i32::try_from(shown).unwrap_or(0);
+        if layout.dropdown_external.is_none() {
+            // SAFETY: `self.dropdown` is the game's `ui.dropdown`, checked in
+            // `Engine::resolve`, inside the window this function's `# Safety`
+            // gives; at most `ui.dropdown_capacity` entries fill the config
+            // before `ui.dropdown_count` (`Layout::checked`), `value` is a
+            // live integer the game writes, and the open state may be null.
+            let changed =
+                unsafe { (self.dropdown)(config.ptr(), &raw mut value, core::ptr::null_mut()) }
+                    != 0;
+            return (changed && !read_only)
+                .then(|| u32::try_from(value).ok())
+                .flatten();
+        }
+        let mut clicked = 0u8;
         // SAFETY: `self.dropdown` is the game's `ui.dropdown`, checked in
         // `Engine::resolve`, inside the window this function's `# Safety`
         // gives; at most `ui.dropdown_capacity` entries fill the config before
-        // `ui.dropdown_count` (`Layout::checked`), `value` is a live integer
-        // the game writes, and the open state may be null.
-        let changed =
-            unsafe { (self.dropdown)(config.ptr(), &raw mut value, core::ptr::null_mut()) } != 0;
-        (changed && !read_only)
-            .then(|| u32::try_from(value).ok())
-            .flatten()
+        // `ui.dropdown_count` (`Layout::checked`), and `value` and `clicked`
+        // are live locals the game writes.
+        let _shown = unsafe { (self.dropdown)(config.ptr(), &raw mut value, &raw mut clicked) };
+        let id = label.hash ^ count as u64;
+        let open = OPEN_DROPDOWN.get();
+        if read_only {
+            OPEN_DROPDOWN.set(open.filter(|&o| o != id));
+            return None;
+        }
+        OPEN_DROPDOWN.set(toggled(open, id, clicked != 0));
+        if OPEN_DROPDOWN.get() != Some(id) {
+            return None;
+        }
+        for (at, option) in (0u32..).zip(&options[..count]) {
+            // SAFETY: inside the window, on the frame's thread, and the
+            // option's bytes outlive the frame, by this function's `# Safety`.
+            if unsafe { self.button(option, true) } {
+                OPEN_DROPDOWN.set(None);
+                return (at != index).then_some(at);
+            }
+        }
+        None
     }
 
     /// Draws a bar filled to `value` between `min` and `max`, the width of
@@ -355,5 +394,37 @@ impl Engine {
         // in `Engine::resolve`, on the frame `frame_open` opened above, with
         // nothing opened inside it.
         unsafe { (self.frame_close)(frame.ptr()) };
+    }
+}
+
+thread_local! {
+    /// The dropdown whose options show, by its label's hash and option
+    /// count; one at a time, as the game opens one list at a time.
+    // shortcut: two dropdowns of one label and count open together, upgrade to a per-window id if a screen holds such twins.
+    static OPEN_DROPDOWN: core::cell::Cell<Option<u64>> = const { core::cell::Cell::new(None) };
+}
+
+/// The open dropdown after a frame of dropdown `id`: a click on its row
+/// opens it, or closes it when it was open.
+fn toggled(open: Option<u64>, id: u64, clicked: bool) -> Option<u64> {
+    match (clicked, open == Some(id)) {
+        (false, _) => open,
+        (true, true) => None,
+        (true, false) => Some(id),
+    }
+}
+
+#[cfg(test)]
+mod dropdown_tests {
+    use super::toggled;
+
+    #[test]
+    fn a_click_opens_a_dropdown_closes_it_again_and_moves_to_another() {
+        assert_eq!(toggled(None, 1, false), None);
+        assert_eq!(toggled(None, 1, true), Some(1));
+        assert_eq!(toggled(Some(1), 1, false), Some(1), "stays open");
+        assert_eq!(toggled(Some(1), 1, true), None);
+        assert_eq!(toggled(Some(1), 2, true), Some(2), "one list at a time");
+        assert_eq!(toggled(Some(1), 2, false), Some(1), "another row leaves it");
     }
 }

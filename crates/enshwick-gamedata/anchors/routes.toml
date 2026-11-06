@@ -5256,6 +5256,13 @@ shape = ["mov [rsp+?],rcx", "movups [rax+*],xmm0"]
 take = "value"
 
 [[route]]
+id = "ui.dropdown_external"
+sides = ["client"]
+in = "ui.dropdown"
+shape = ["cmp [r14+*],sil", "je ?", "test rdi,rdi", "je ?", "mov [rdi],?"]
+take = "value"
+
+[[route]]
 id = "ui.dropdown_extent"
 sides = ["client"]
 in = "ui.dropdown_init"
@@ -5909,6 +5916,20 @@ shape = [
 take = "value"
 
 [[route]]
+id = "text.format"
+sides = ["client"]
+in = "ui.popup"
+shape = [
+  "mov edx,[rsi+?]",
+  "lea rcx,[rbp+?]",
+  "call *",
+  "movups xmm0,[rax]",
+  "movsd xmm1,[rax+?]",
+]
+take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi", "push rbp", "push rdi"]
+
+[[route]]
 id = "ui.progress"
 sides = ["client"]
 loads = ["doBasicProgressBar()"]
@@ -6167,6 +6188,13 @@ in = "~fn:ui.text_field_editing"
 shape = ["call *", "mov [rax+?],?", "jmp ?", "mov rcx,{ui.context}"]
 take = "address"
 check = ["push rbx", "sub rsp,0x30", "mov rcx,[rcx+0x8]"]
+
+[[route]]
+id = "ui.text_field_state_key"
+sides = ["client"]
+in = "~fn:ui.text_field_editing"
+shape = ["mov r13,*", "mov [rbp+?],r12w"]
+take = "value"
 
 [[route]]
 id = "ui.text_field_state_size"
