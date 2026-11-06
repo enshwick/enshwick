@@ -1324,6 +1324,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         enum_constant(EQUIPMENT_SLOT, "MainHand"),
     ),
     (
+        ids::EQUIPMENT_SLOT_TYPE_BACKPACK,
+        enum_constant(EQUIPMENT_SLOT_TYPE, "Backpack"),
+    ),
+    (
         ids::INVENTORY_ERROR_INVALID_STATE,
         enum_constant(INVENTORY_ERROR, "InvalidState"),
     ),
@@ -1836,6 +1840,9 @@ const ALTAR_ACTION: &str = "keen::ecs::FlameAltarActionType";
 
 /// A character's equipment slot.
 const EQUIPMENT_SLOT: &str = "keen::EquipmentSlot";
+
+/// The slot an item is worn in, as its equipment setup names it.
+const EQUIPMENT_SLOT_TYPE: &str = "keen::EquipmentSlotType";
 
 /// The error an inventory operation ends with.
 const INVENTORY_ERROR: &str = "keen::ErrorId";

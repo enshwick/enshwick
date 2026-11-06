@@ -42,7 +42,7 @@ pub(crate) extern "system" fn symbol(me: ModHandle, name: Str, out: *mut u64) ->
         let (Some(loader), Some(name)) = (loader(), text(name)) else {
             return Status::BAD_ARGS;
         };
-        let Some((index, _)) = loader.record(me) else {
+        let Some(index) = loader.rows_of(me) else {
             return Status::BAD_ARGS;
         };
         loader
@@ -137,7 +137,7 @@ pub(crate) extern "system" fn constant(me: ModHandle, name: Str, out: *mut u64) 
         let (Some(loader), Some(name)) = (loader(), text(name)) else {
             return Status::BAD_ARGS;
         };
-        let Some((index, _)) = loader.record(me) else {
+        let Some(index) = loader.rows_of(me) else {
             return Status::BAD_ARGS;
         };
         loader

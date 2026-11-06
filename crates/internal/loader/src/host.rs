@@ -471,6 +471,13 @@ impl Loader {
         Some((index, self.mods.get(index.get())?))
     }
 
+    /// Whose build rows answer `me`'s lookups: a mod's, or for the loader's
+    /// own copy of the API, which reads vanilla content for data packs, the
+    /// loader's.
+    fn rows_of(&self, me: ModHandle) -> Option<ModIndex> {
+        ModIndex::looking_up(me, self.mods.len())
+    }
+
     /// Turns a mod off: unlinks its hooks and logs why.
     pub(crate) fn turn_off(&self, index: ModIndex, reason: &str) {
         let Some(record) = self.mods.get(index.get()) else {

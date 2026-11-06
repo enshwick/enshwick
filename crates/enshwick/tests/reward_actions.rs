@@ -271,6 +271,26 @@ mod tests {
         assert_eq!(gained(&loader, 2), 3, "a use that goes through rewards");
         assert!(!loader.item_action(&drink(4)), "the later filter refuses");
         assert_eq!(gained(&loader, 4), 0, "a refused use rewards nothing");
+        assert!(
+            loader.refused_use(&drink(2)),
+            "every filter allows it, then the game keeps the potion"
+        );
+        assert_eq!(
+            gained(&loader, 2),
+            0,
+            "a use the game refuses rewards nothing"
+        );
+        for _ in 0..3 {
+            assert!(
+                loader.refused_use(&drink(2)),
+                "at full health again, then the stack dragged out of its slot"
+            );
+        }
+        assert_eq!(
+            gained(&loader, 2),
+            0,
+            "a drag after a refused use pays nothing"
+        );
         let _gone = std::fs::remove_dir_all(&data);
     }
 }

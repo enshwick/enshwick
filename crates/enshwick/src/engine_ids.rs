@@ -432,6 +432,9 @@ ids! {
     /// The id of the `Backpack` member of the game's equipment slots.
     EQUIPMENT_SLOT_BACKPACK = "equipment_slot.backpack";
     EQUIPMENT_SLOT_MAIN_HAND = "equipment_slot.main_hand";
+    /// The id of the `Backpack` member of the slot types an item is worn in,
+    /// apart from the character's own slots.
+    EQUIPMENT_SLOT_TYPE_BACKPACK = "equipment_slot_type.backpack";
     INVENTORY_ERROR_INVALID_STATE = "inventory_error.invalid_state";
     INVENTORY_ERROR_OUT_OF_MEMORY = "inventory_error.out_of_memory";
     GAME_SETTINGS_PRESET_DEFAULT = "game_settings_preset.default";

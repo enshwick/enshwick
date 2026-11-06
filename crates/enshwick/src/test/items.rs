@@ -15,7 +15,9 @@ impl Installed {
     /// after the fact ([`ItemAction::PICKUP`], [`ItemAction::PLACE`],
     /// [`ItemAction::CONSUMED`]) reaches every filter, and a
     /// [`ItemAction::CONSUME`] every filter allowed is followed by its
-    /// `CONSUMED`. Whether every filter allowed it.
+    /// `CONSUMED`, as when the game then takes the item; see
+    /// [`Installed::refused_use`] for a use the game refuses. Whether every
+    /// filter allowed it.
     ///
     /// # Examples
     ///
@@ -36,23 +38,6 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn item_action(&self, call: &ItemAction) -> bool {
-        let filters = table::with(Vec::new(), |s| s.item_filters.clone());
-        let ask = |call: &ItemAction| {
-            let refusable = !matches!(
-                call.kind,
-                ItemAction::PICKUP | ItemAction::PLACE | ItemAction::CONSUMED
-            );
-            let mut allowed = true;
-            for &(callback, user) in &filters {
-                if refusable && !allowed {
-                    break;
-                }
-                let user = core::ptr::with_exposed_provenance_mut(user);
-                // SAFETY: a valid call; `user` is the mod's pointer.
-                allowed &= unsafe { callback(call, user) != 0 };
-            }
-            allowed || !refusable
-        };
         let allowed = ask(call);
         if allowed && call.kind == ItemAction::CONSUME {
             let _heard = ask(&ItemAction {
@@ -62,4 +47,53 @@ impl Installed {
         }
         allowed
     }
+
+    /// Hands the use `call` to the mod's item filters as the loader would
+    /// for a use the game refuses after them, such as a potion at full
+    /// health, or one whose player does anything else before the game takes
+    /// the item, such as dragging the stack out of its slot: no
+    /// [`ItemAction::CONSUMED`] follows. Whether every filter allowed it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, ItemAction};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let call = ItemAction {
+    ///     header: Header::of::<ItemAction>(),
+    ///     kind: ItemAction::CONSUME,
+    ///     player: enshwick::Entity(1),
+    ///     item: enshwick::ItemId::new(0x5e01),
+    ///     count: 1,
+    ///     inventory: enshwick::Entity(2),
+    ///     slot: 0,
+    /// };
+    /// assert!(loader.refused_use(&call));
+    /// ```
+    #[must_use]
+    pub fn refused_use(&self, call: &ItemAction) -> bool {
+        ask(call)
+    }
+}
+
+/// Asks the installed mod's filters about `call` as the loader does: a
+/// refusable action stops at the first refusal, one after the fact reaches
+/// every filter. Whether it is allowed.
+fn ask(call: &ItemAction) -> bool {
+    let filters = table::with(Vec::new(), |s| s.item_filters.clone());
+    let refusable = !matches!(
+        call.kind,
+        ItemAction::PICKUP | ItemAction::PLACE | ItemAction::CONSUMED
+    );
+    let mut allowed = true;
+    for &(callback, user) in &filters {
+        if refusable && !allowed {
+            break;
+        }
+        let user = core::ptr::with_exposed_provenance_mut(user);
+        // SAFETY: a valid call; `user` is the mod's pointer.
+        allowed &= unsafe { callback(call, user) != 0 };
+    }
+    allowed || !refusable
 }

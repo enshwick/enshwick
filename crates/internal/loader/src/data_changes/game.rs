@@ -19,6 +19,7 @@ use enshwick::content::containers::{ContainerLayout, container_slots};
 use enshwick::content::loot_tables::LootLayout;
 use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
 use enshwick_gamedata::catalogue;
+use enshwick_gamedata::reflect::Reflection;
 use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
@@ -219,33 +220,38 @@ pub(crate) fn has_live() -> bool {
 /// archive; none when the build does not reflect a value it needs or the
 /// archive does not read.
 fn vanilla_items(loader: &Loader) -> Vec<(Guid, ItemTraits)> {
-    let at = |id: &str| {
-        catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
-    };
-    let backpack = at(catalogue::ids::ITEM_INFO_PID_ENTITY)
-        .zip(at(catalogue::ids::ITEM_INFO_EQUIPMENT_SLOT))
-        .zip(
-            catalogue::constant(catalogue::ids::EQUIPMENT_SLOT_BACKPACK, &loader.reflection)
-                .and_then(|value| u8::try_from(value).ok()),
-        )
-        .map(|((pid, slot), value)| (pid, slot, value));
-    let offsets = (|| {
-        Some(TraitOffsets {
-            max_stack: at(catalogue::ids::ITEM_INFO_MAX_STACK)?,
-            category: at(catalogue::ids::ITEM_INFO_CATEGORY)?,
-            flags: at(catalogue::ids::ITEM_INFO_FLAGS)?,
-            placed: at(catalogue::ids::ITEM_INFO_PLACED_ENTITY)?,
-            backpack,
-        })
-    })();
-    let (Some(offsets), Some(archive)) = (offsets, crate::archive::game()) else {
+    let items = crate::archive::game().and_then(|archive| items_in(&loader.reflection, archive));
+    items.unwrap_or_else(|| {
         crate::log!(
             WARN,
             "changes of selected items are off: this build does not reflect what they read, or the game's archive does not read"
         );
-        return Vec::new();
+        Vec::new()
+    })
+}
+
+/// Every item of `archive` with what a selection reads of it, by the
+/// offsets `reflection` gives; `None` when it lacks one.
+fn items_in(
+    reflection: &Reflection<'_>,
+    archive: &crate::archive::Archive,
+) -> Option<Vec<(Guid, ItemTraits)>> {
+    let at = |id: &str| catalogue::constant(id, reflection).and_then(|at| usize::try_from(at).ok());
+    let backpack = at(catalogue::ids::ITEM_INFO_PID_ENTITY)
+        .zip(at(catalogue::ids::ITEM_INFO_EQUIPMENT_SLOT))
+        .zip(
+            catalogue::constant(catalogue::ids::EQUIPMENT_SLOT_TYPE_BACKPACK, reflection)
+                .and_then(|value| u8::try_from(value).ok()),
+        )
+        .map(|((pid, slot), value)| (pid, slot, value));
+    let offsets = TraitOffsets {
+        max_stack: at(catalogue::ids::ITEM_INFO_MAX_STACK)?,
+        category: at(catalogue::ids::ITEM_INFO_CATEGORY)?,
+        flags: at(catalogue::ids::ITEM_INFO_FLAGS)?,
+        placed: at(catalogue::ids::ITEM_INFO_PLACED_ENTITY)?,
+        backpack,
     };
-    let layout = ContainerLayout::resolve(&catalogue::Reflected(&loader.reflection)).ok();
+    let layout = ContainerLayout::resolve(&catalogue::Reflected(reflection)).ok();
     let slots = |template: Guid| {
         let layout = layout.as_ref()?;
         let data = archive.resource(&template.key_by_hash(crate::catalogue::types::TEMPLATE))?;
@@ -260,7 +266,7 @@ fn vanilla_items(loader: &Loader) -> Vec<(Guid, ItemTraits)> {
         })
         .collect();
     items.sort_unstable_by_key(|(item, _)| item.0);
-    items
+    Some(items)
 }
 
 /// Whether the loader follows the world for changes: some mod declared one,
@@ -625,6 +631,45 @@ pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// On each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, with
+    /// the archive beside it (each skipped without it), the selections by
+    /// kind pick vanilla items.
+    #[test]
+    fn each_kind_of_selection_picks_vanilla_items_on_each_executable() {
+        use enshwick::content::changes::Items;
+        use enshwick_gamedata::reflect::{Image, Layout};
+        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+            let Ok(path) = std::env::var(var) else {
+                continue;
+            };
+            let path = std::path::Path::new(&path);
+            let bytes = std::fs::read(path).unwrap();
+            let image = Image::parse(&bytes, Layout::File, None).unwrap();
+            let reflection = Reflection::scan(&image);
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap();
+            // A kept executable alone, without its archive, is skipped.
+            let Some(archive) = path
+                .parent()
+                .and_then(|folder| crate::archive::Archive::open(folder, stem))
+            else {
+                continue;
+            };
+            let items = items_in(&reflection, &archive).expect(var);
+            for (kind, field) in [
+                (Items::Stackable, Field::MaxStackSize),
+                (Items::Containers, Field::Slots),
+                (Items::Backpacks, Field::Slots),
+            ] {
+                let picked = items.iter().filter(|(_, t)| kind.picks(field, t)).count();
+                assert!(
+                    picked > 0,
+                    "{var}: {kind:?} picks no item of {}",
+                    items.len()
+                );
+            }
+        }
+    }
 
     #[test]
     fn a_label_is_the_name_in_parentheses() {

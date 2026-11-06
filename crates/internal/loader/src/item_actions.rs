@@ -9,12 +9,21 @@
 //! entry the loader asks the filters about every pending action and refuses
 //! one by writing its version as handled, the game's own path for an action
 //! it already ran: the item stays where it was. A use every filter allowed
-//! then reaches them all again as `CONSUMED`. Pickups and placements reach
+//! reaches them all again as `CONSUMED` once the game took the item from
+//! its slot, at a later entry of `inventory_actions`: the game refuses some
+//! uses after the filters, such as a potion at full health, and keeps the
+//! item (a healing potion at full health, client 26430625 and server
+//! 26430253). A use whose player does anything else before then raises
+//! none, since a stack dragged or stashed out of the slot looks taken. Pickups
+//! and placements reach
 //! the filters from the server's event streams, after the game made them.
 //! Reflection of dedicated server build 26319703 names all of it.
 
+mod uses;
+
 use core::ffi::c_void;
 use std::sync::OnceLock;
+use std::time::Instant;
 
 use enshwick::abi::{Header, HookFlags, ItemAction, ItemActionFn, Side, Status};
 use enshwick::raw::{read_at, write_at};
@@ -24,6 +33,8 @@ use crate::ecs::{Components, Engine};
 use crate::host::{Loader, Registered, Target};
 use crate::mod_index::ModIndex;
 use crate::registry::Registry;
+pub(crate) use uses::forget;
+use uses::{moves, taken, watch};
 
 /// The system that runs the players' equips and unequips.
 const EQUIPMENT_SYSTEM: &str = "equipment_actions";
@@ -71,6 +82,10 @@ struct Layout {
     slot_index: usize,
     item: Versioned,
     equipment: Versioned,
+    /// Where the handled `u32` versions of `ServerConsumedPlayerInput`
+    /// start and the component ends, so a watched use sees whether its
+    /// player did anything else; `None` turns `CONSUMED` off alone.
+    moves: Option<(usize, usize)>,
     /// `ItemActionType` `Consume` and `Trash`.
     consume: u8,
     trash: u8,
@@ -166,6 +181,12 @@ fn layout(loader: &Loader) -> Option<Layout> {
             kind: change + field(equipment, "type")?,
             consumed: field(consumed, "consumedChangeEquipmentAction")?,
         },
+        moves: field(consumed, "consumedCursorSelectObjectAction").zip(
+            reflection
+                .type_info(consumed)
+                .ok()
+                .and_then(|info| usize::try_from(info.size()).ok()),
+        ),
         consume: value("keen::ecs::ItemActionType", "Consume")?,
         trash: value("keen::ecs::ItemActionType", "Trash")?,
         equip: value("keen::ecs::ChangeEquipment", "Equip")?,
@@ -250,6 +271,12 @@ pub(crate) fn link(loader: &'static Loader) {
     let (Some(layout), Some(components)) = (layout(loader), Components::resolve(loader)) else {
         return;
     };
+    if layout.moves.is_none() {
+        crate::log!(
+            WARN,
+            "item filters hear no consumed: this build does not reflect the players' handled actions"
+        );
+    }
     let _first = LOADED.set((loader, layout, components));
     let _events = EVENTS.set(events(loader));
     let entry = |name: &str| {
@@ -362,6 +389,25 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
     } else {
         layout.item
     };
+    let now = Instant::now();
+    if !equipment {
+        let slot_now = |call: &ItemAction| {
+            // SAFETY: the caller guarantees the system's live context, at its
+            // entry on its thread.
+            let consumed =
+                unsafe { components.component(ctx, call.player.0, layout.consumed_input) }?;
+            let slot = u8::try_from(call.slot).ok()?;
+            // SAFETY: the caller guarantees the system's live context, at its
+            // entry on its thread.
+            let stack = unsafe { holding(components, layout, ctx, call.inventory.0, slot) }?;
+            // SAFETY: `consumed` is the player's live
+            // `ServerConsumedPlayerInput` component.
+            Some((stack, unsafe { moves(layout, consumed) }))
+        };
+        for consumed in taken(now, slot_now) {
+            let _heard = ask(&consumed, false);
+        }
+    }
     let players = crate::interactions::players();
     for &player in players.as_deref().map_or(&[][..], Vec::as_slice) {
         // SAFETY: the caller guarantees the system's live context, at its
@@ -425,12 +471,18 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
                 crate::recipes::item_words(loader, item)
             );
         } else if kind == ItemAction::CONSUME {
-            let _heard = ask(
-                &ItemAction {
+            watch(
+                ItemAction {
                     kind: ItemAction::CONSUMED,
                     ..call
                 },
-                false,
+                version,
+                item,
+                count,
+                // SAFETY: `consumed` is the player's live
+                // `ServerConsumedPlayerInput` component.
+                unsafe { moves(layout, consumed) },
+                now,
             );
         }
     }
@@ -443,6 +495,26 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
 ///
 /// - `ctx` is the live context of a running system, used on its thread.
 unsafe fn stack(
+    components: &Components,
+    layout: &Layout,
+    ctx: *mut u64,
+    inventory: u32,
+    index: u8,
+) -> Option<(u32, u32)> {
+    // SAFETY: `ctx` is the live context of a running system on its thread,
+    // by this function's `# Safety`, all `holding` asks for.
+    unsafe { holding(components, layout, ctx, inventory, index) }
+        .filter(|&(item, count)| item != 0 && count != 0)
+}
+
+/// The item and count in slot `index` of the inventory `inventory`, both 0
+/// for an empty slot; `None` for an index past the inventory or no
+/// inventory.
+///
+/// # Safety
+///
+/// - `ctx` is the live context of a running system, used on its thread.
+unsafe fn holding(
     components: &Components,
     layout: &Layout,
     ctx: *mut u64,
@@ -465,7 +537,7 @@ unsafe fn stack(
     // stack `index`, below `layout.slots`; the stack's u32 count sits at the
     // catalogue's `item_stack.count` offset within it.
     let count: u32 = unsafe { read_at(slots, at + layout.stack_count) };
-    (item != 0 && count != 0).then_some((item, count))
+    Some((item, count))
 }
 
 /// Whether the filters hear events of `type_hash`, so the event link copies
@@ -532,7 +604,7 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *const u8, size: usize) {
 mod tests {
     use super::*;
 
-    const LAYOUT: Layout = Layout {
+    pub(super) const LAYOUT: Layout = Layout {
         player_input: 1,
         consumed_input: 2,
         inventory: 3,
@@ -554,6 +626,7 @@ mod tests {
             kind: 13,
             consumed: 120,
         },
+        moves: Some((24, 224)),
         consume: 1,
         trash: 2,
         equip: 0,

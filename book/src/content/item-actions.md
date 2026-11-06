@@ -84,12 +84,16 @@ the item and the key in the log.
 | `Unequip` | `unequip` | A player takes the item off                     | The item stays on                  |
 | `Pickup`  | `pickup`  | After a player picked the item up               | Nothing: the answer is ignored     |
 | `Place`   | `place`   | After a player placed the item as a piece       | Nothing: the answer is ignored     |
-| `Consumed` | `consumed` | After every mod allowed a `Consume`           | Nothing: the answer is ignored     |
+| `Consumed` | `consumed` | After the game took the item of an allowed `Consume` | Nothing: the answer is ignored |
 
 A mod that counts uses or rewards one listens to `Consumed`: a `Consume`
 reaches the mods before they all decided, so another mod may still refuse
-it. `Consumed` comes before the game runs the use, so a use the game
-itself then drops still counts.
+it, and the game may refuse it after them. `Consumed` comes once the stack
+in the used slot went down or left it, within 5 seconds of the use. A use
+the game refuses, such as a healing potion at full health, raises no
+`Consumed`. Neither does a use whose player does anything else before the
+game takes the item, such as moving or stashing a stack, since a stack
+dragged out of the slot looks like one the game took.
 
 A refusal takes the game's path for an action it already ran, so the item
 stays where it was and nothing is lost. `count` is 1 for a use and a

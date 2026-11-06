@@ -88,7 +88,7 @@ pub(super) struct OnEntry {
     pub(super) pickup: Option<String>,
     /// Runs after a player placed the item.
     pub(super) place: Option<String>,
-    /// Runs once every filter allowed a player's use of the item.
+    /// Runs once the game took the item of a use every filter allowed.
     pub(super) consumed: Option<String>,
 }
 
