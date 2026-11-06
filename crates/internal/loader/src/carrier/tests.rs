@@ -237,6 +237,7 @@ fn every_other_player_on_a_machine_of_its_own_gets_a_socket() {
     assert!(!wired(8, 0, 1, 7), "no machine");
 }
 
+#[test]
 fn a_socket_opened_to_the_host_s_player_before_its_key_was_known_goes() {
     let _alone = alone();
     PACKET.store(1200, Ordering::Relaxed);
