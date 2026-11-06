@@ -27,6 +27,10 @@ pub const HOWL: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000b17e3");
 /// A vanilla random spawner template the fake holds, listing [`ENEMY`].
 pub const NEST: Guid = Guid::parse("c0ffee00-0000-4000-8000-00000000e57e");
 
+/// The spawn group of [`NEST`]'s entry: a GUID its bytes hold that no entry
+/// lists as a template.
+pub const NEST_GROUP: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000e5791");
+
 /// The enemy and spawner components and the arsenal registry, by qualified
 /// name.
 const LEVEL: &str = "demo::ecs::Level";
@@ -326,7 +330,7 @@ fn nest_value() -> Value {
     let time = |seconds: i64| fields(vec![("value", Value::Int(seconds * 1_000_000_000))]);
     let entry = fields(vec![
         ("entityTemplates", Value::List(vec![Value::Guid(ENEMY)])),
-        ("spawnGroupId", Value::Guid(Guid([0; 16]))),
+        ("spawnGroupId", Value::Guid(NEST_GROUP)),
         ("spawnConditions", Value::List(Vec::new())),
         ("weight", Value::Float(1.0)),
         ("isHighPriorityEntry", Value::Bool(false)),

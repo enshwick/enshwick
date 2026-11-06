@@ -111,7 +111,7 @@ pub use inventory::SubmittedRequest;
 pub use settings::SettingsRefused;
 pub use templates::{
     BITE, BOSS_CREATURE, CRAFTING_PROP_ITEM, CREATURE, ENEMY, ENEMY_ARSENAL, HOWL, LUNGE, NEST,
-    OTHER_ARSENAL, PROP_ITEM, VANILLA_CRAFTING_PROPS,
+    NEST_GROUP, OTHER_ARSENAL, PROP_ITEM, VANILLA_CRAFTING_PROPS,
 };
 pub use transactions::{FakeChange, FakeTransaction};
 pub use ui::{Drawn, FakeMarker, Input, ShownDialog};

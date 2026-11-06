@@ -9,7 +9,7 @@ mod tests {
     use enshwick::content::spawns::{SpawnEntry, SpawnerChange, SpawnerPick};
     use enshwick::content::{EngineFacts, Guid};
     use enshwick::resources::{Registry, Value};
-    use enshwick::test::{ENEMY, FakeHost, NEST};
+    use enshwick::test::{ENEMY, FakeHost, NEST, NEST_GROUP};
     use enshwick::{Load, Mod, Off};
 
     const ELDER: Guid = Guid::parse("0d75b9a9-7e48-4f3a-bf2a-19bf6021f531");
@@ -32,10 +32,13 @@ mod tests {
                     ..SpawnerChange::default()
                 },
             )?;
-            if let Err(off) =
-                load.add_spawn_entry(SpawnEntry::new(SpawnerPick::Listing(Guid([7; 16])), ELDER))
-            {
-                REFUSED.lock().unwrap().push(off.to_string());
+            // A GUID no spawner holds, and one the nest holds but not as a template.
+            for listed in [Guid([7; 16]), NEST_GROUP] {
+                if let Err(off) =
+                    load.add_spawn_entry(SpawnEntry::new(SpawnerPick::Listing(listed), ELDER))
+                {
+                    REFUSED.lock().unwrap().push(off.to_string());
+                }
             }
             Ok(Self)
         }
@@ -101,7 +104,7 @@ mod tests {
         );
 
         let refused = REFUSED.lock().unwrap().clone();
-        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert_eq!(refused.len(), 2, "{refused:?}");
         assert!(
             refused[0].contains("no vanilla random spawner lists"),
             "{}",

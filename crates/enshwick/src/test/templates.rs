@@ -11,7 +11,7 @@ use super::FakeHost;
 
 mod enemies;
 
-pub use enemies::{BITE, ENEMY, ENEMY_ARSENAL, HOWL, LUNGE, NEST, OTHER_ARSENAL};
+pub use enemies::{BITE, ENEMY, ENEMY_ARSENAL, HOWL, LUNGE, NEST, NEST_GROUP, OTHER_ARSENAL};
 
 /// The template types and every type they hold, by their qualified names.
 pub(crate) const TEMPLATE: &str = "demo::ecs::TemplateResource";
