@@ -36,6 +36,24 @@ use crate::{Load, Off};
 use super::templates::{ComponentChange, NewTemplate, TemplateId};
 use super::{EngineFacts, Guid, Id};
 
+/// Whether the vanilla template `template` holds a [`Boss`]; `true` when
+/// it does not read, so the template's own refusal names why.
+fn holds_boss(load: &Load<'_>, template: Guid) -> bool {
+    let host = load.host();
+    let read = || {
+        let registry = crate::resources::Registry::game().ok()?;
+        let boss = registry.hashed(host.hash(Boss::ID).ok()?)?.qualified_name();
+        let hash = host.hash(super::types::TEMPLATE_RESOURCE.id()).ok()?;
+        let value = host.game_value(template.key_by_hash(hash)).ok()?;
+        Some(
+            super::templates::components_of(&value)
+                .iter()
+                .any(|held| held == boss),
+        )
+    };
+    read().unwrap_or(true)
+}
+
 /// The game's list of every arsenal.
 pub const ARSENAL_REGISTRY: Guid = Guid::parse("cd861d95-a79c-4c11-8b48-8fae34a4156c");
 
@@ -431,6 +449,10 @@ impl Load<'_> {
                 "arsenal {target}: {guid} is no vanilla attack or behaviour"
             )));
         }
+        // A tune names an attack of the arsenal after its picks, which only
+        // building it shows.
+        serve_arsenal(vanilla.clone(), target, like, &change)
+            .map_err(|why| Off::new(format!("arsenal {target}: {why}")))?;
         crate::resources::serve_value(host, key, key, move |value| {
             serve_arsenal(value, target, like, &change)
         })
@@ -464,8 +486,11 @@ impl Load<'_> {
     /// }
     /// ```
     #[script]
-    pub fn add_enemy(&mut self, new: NewEnemy) -> Result<TemplateId, Off> {
+    pub fn add_enemy(&mut self, mut new: NewEnemy) -> Result<TemplateId, Off> {
         let (id, like) = (new.id, new.like);
+        if new.boss == Some(false) && !holds_boss(self, like) {
+            new.boss = None;
+        }
         let changes = new.into_changes()?;
         self.add_template(NewTemplate {
             changes,

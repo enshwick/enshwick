@@ -473,7 +473,9 @@ impl Host {
 /// the game reads it: `patch` gets the base's value and returns the value to
 /// serve, which may name only the fields it changes; nil serves the base
 /// unchanged. A base that does not read, a patch that fails, or a value that
-/// does not fit the type is logged, and the base is served unchanged.
+/// does not fit the type is logged; then a changed game resource (`key` is
+/// `base`) is served unchanged, and a new one turns the mod off, as
+/// [`Load::serve`](crate::Load::serve) does for a builder's `None`.
 pub(crate) fn serve_value(
     host: Host,
     key: crate::abi::ResourceKey,
@@ -488,7 +490,7 @@ pub(crate) fn serve_value(
     crate::content::serve(host, key, base, move |bytes| {
         let keep = |error: &dyn std::fmt::Display| {
             host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
-            Some(bytes.to_vec())
+            fallback(key, base, bytes)
         };
         let value = match registry.decode(name, bytes) {
             Ok(value) => value,
@@ -502,6 +504,40 @@ pub(crate) fn serve_value(
             Err(error) => keep(&error),
         }
     })
+}
+
+/// What a failed patch serves: the game's own resource unchanged when it
+/// patches one, nothing for a new one, which turns the mod off rather than
+/// pass a vanilla copy off as the mod's.
+fn fallback(
+    key: crate::abi::ResourceKey,
+    base: crate::abi::ResourceKey,
+    bytes: &[u8],
+) -> Option<Vec<u8>> {
+    (key == base).then(|| bytes.to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::abi::ResourceKey;
+
+    #[test]
+    fn a_failed_patch_keeps_a_game_resource_and_serves_no_new_one() {
+        let key = |guid: u8| ResourceKey {
+            guid: [guid; 16],
+            type_hash: 7,
+            part: 0,
+        };
+        assert_eq!(
+            super::fallback(key(1), key(1), b"base"),
+            Some(b"base".to_vec())
+        );
+        assert_eq!(
+            super::fallback(key(2), key(1), b"base"),
+            None,
+            "a copy turns the mod off"
+        );
+    }
 }
 
 /// Serves `value` as the new resource `key`, of the type its key names; the

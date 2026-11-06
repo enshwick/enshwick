@@ -532,7 +532,7 @@ fn family_of(template: &Value) -> String {
 }
 
 /// The qualified names of a template value's components.
-fn components_of(template: &Value) -> Vec<String> {
+pub(super) fn components_of(template: &Value) -> Vec<String> {
     match template.field(COMPONENTS) {
         Some(Value::List(components)) => components
             .iter()

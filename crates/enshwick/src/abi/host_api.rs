@@ -1680,9 +1680,10 @@ pub struct HostApi {
     /// props, for the first prop any mod adds, then one more for each new
     /// prop in call order, and the same index again for a prop given one
     /// before. [`Status::REFUSED`] when the index would reach `width`, the
-    /// mask's bits, which turns the mod off naming the prop;
-    /// [`Status::BAD_ARGS`] for a null `prop` or a `first` and `width` other
-    /// than the first call's. Allowed during `enshwick_mod_init` only
+    /// mask's bits, or for a mod not of side both, whose bit clients would
+    /// lack, either of which turns the mod off naming the prop;
+    /// [`Status::BAD_ARGS`] for a null `prop` or `out`, or a `first` and
+    /// `width` other than the first call's. Allowed during `enshwick_mod_init` only
     /// ([`Status::TOO_LATE`] after); `prop` and `out` are borrowed for the
     /// call. A panic in the loader returns [`Status::REFUSED`]. ABI 11.8.
     pub crafting_prop: extern "system" fn(

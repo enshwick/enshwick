@@ -75,7 +75,8 @@ integer. An absent optional or variant is a field the table leaves out, and
 A field an edit leaves out keeps its value, so give `none()` to clear one. A patch returns
 the table to serve, naming only what it changes, or `nil` to serve the base
 unchanged. A patch that fails, or returns a value that does not fit the type,
-is logged, and the base is served unchanged.
+is logged. A game resource patched under its own key is then served
+unchanged; a new resource turns the mod off.
 
 ```lua
 for _, key in enshwick.resources.resource_keys("keen::BalancingTable") do

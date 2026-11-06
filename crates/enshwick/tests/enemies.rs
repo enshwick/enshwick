@@ -94,6 +94,21 @@ mod tests {
                 level: Some(0),
                 ..NewEnemy::new(Id::new("you.enemies:zero"), ENEMY)
             }));
+            // A tune of an attack the arsenal does not pick.
+            refused(load.add_arsenal(NewArsenal {
+                id: Id::new("you.enemies:untuned"),
+                like: ENEMY_ARSENAL,
+                change: ArsenalChange {
+                    attacks: Some(vec![HOWL]),
+                    tune: vec![AttackChange::new(BITE)],
+                    ..ArsenalChange::default()
+                },
+            }));
+            // Not a boss already: no change, never a refusal.
+            refused(load.add_enemy(NewEnemy {
+                boss: Some(false),
+                ..NewEnemy::new(Id::new("you.enemies:calm"), ENEMY)
+            }));
             let (first, second) = clashing();
             for id in [first, second] {
                 refused(load.add_arsenal(NewArsenal {
@@ -200,14 +215,19 @@ mod tests {
         assert!(component(&elder, "demo::ecs::Boss").is_some());
 
         let refused = REFUSED.lock().unwrap().clone();
-        assert_eq!(refused.len(), 4, "{refused:?}");
+        assert_eq!(refused.len(), 5, "{refused:?}");
         assert!(refused[0].contains("no vanilla attack"), "{}", refused[0]);
         assert!(refused[1].contains("no vanilla arsenal"), "{}", refused[1]);
         assert!(refused[2].contains("levels start at 1"), "{}", refused[2]);
         assert!(
-            refused[3].contains("content id"),
-            "a collision: {}",
+            refused[3].contains("holds no attack"),
+            "a tune past the picks: {}",
             refused[3]
+        );
+        assert!(
+            refused[4].contains("content id"),
+            "a collision: {}",
+            refused[4]
         );
     }
 

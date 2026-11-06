@@ -103,6 +103,12 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** item meters and workshops are made through
+  `content::templates`, so `content::items::MeterLayout`,
+  `clone_meter_template`, `list_meter_template`,
+  `content::workshops::clone_template` and `list_template` are gone,
+  `TEMPLATE_COLLECTION` moved to `content::templates`, and `WorkshopLayout`
+  lost its `crafting`, `interaction` and `client` fields (#952).
 - The loader finds every game build the same way, a new one too: by the
   anchors of `enshwick-gamedata` carried by their code patterns, then the
   engine routes. It reads no per-build table at run time, and an entry

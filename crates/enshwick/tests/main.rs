@@ -110,6 +110,7 @@ mod points_links;
 mod points_owner;
 mod poisoned_locks;
 mod props;
+mod props_server;
 mod published_texts;
 #[cfg(feature = "unstable")]
 mod rates;

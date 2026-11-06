@@ -207,7 +207,16 @@ pub(crate) extern "system" fn crafting_prop(
     let Some(&prop) = (unsafe { prop.as_ref() }) else {
         return Status::BAD_ARGS;
     };
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
     with(Status::MISSING, |s| {
+        if s.registration == super::Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        if !s.manifest.as_ref().is_none_or(|manifest| manifest.joins) {
+            return Status::REFUSED;
+        }
         let (bounds, added) = &mut s.crafting_props;
         if *bounds.get_or_insert((first, width)) != (first, width) {
             return Status::BAD_ARGS;

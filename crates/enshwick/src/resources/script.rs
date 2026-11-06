@@ -636,8 +636,9 @@ impl Resources {
     /// time the game reads it: `patch` gets the base's value and returns
     /// the value to serve, which may name only the fields it changes; nil
     /// serves the base unchanged. A patch that fails, returns what is not
-    /// game data or does not fit the type is logged, and the base is served
-    /// unchanged. Allowed while the mod initialises.
+    /// game data or does not fit the type is logged; a game resource patched
+    /// in place is then served unchanged, and a new resource turns the mod
+    /// off. Allowed while the mod initialises.
     ///
     /// # Errors
     ///

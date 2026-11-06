@@ -270,42 +270,44 @@ pub(crate) fn ready() -> bool {
 
 /// Links the content request, the key listing and the UI registry's fill
 /// on a client that serves UI images; on any side that serves templates of
-/// its own, the key listing alone, so the game registers them.
+/// its own, the key listing alone when the images did not link it, so the
+/// game registers them.
 pub(crate) fn link(loader: &'static Loader) {
     let images =
         loader.side == Side::CLIENT && !crate::content::new_keys_of_type(UI_IMAGE).is_empty();
-    if !images {
-        if !crate::content::new_keys_of_type(TEMPLATE).is_empty() {
-            link_templates(loader);
+    let mut keys_linked = false;
+    if images {
+        let _first = LOADED.set(loader);
+        if layout(loader).is_some() {
+            let none = HookFlags::NONE;
+            keys_linked = loader.link_feature(
+                "mod textures (content)",
+                Target::Pinned(pinned::textures::REQUEST),
+                &REQUEST_NEXT,
+                request as RequestFn,
+                none,
+            ) && loader.link_feature(
+                "mod textures (keys)",
+                Target::Pinned(pinned::textures::KEYS),
+                &KEYS_NEXT,
+                keys as KeysFn,
+                none,
+            );
+            let linked = keys_linked
+                && loader.link_feature(
+                    "mod textures (UI registry)",
+                    Target::Pinned(pinned::textures::REGISTRY_FILL),
+                    &FILL_NEXT,
+                    fill as FillFn,
+                    none,
+                );
+            if linked {
+                crate::log!(INFO, "mod textures: linked for the served UI images");
+            }
         }
-        return;
     }
-    let _first = LOADED.set(loader);
-    if layout(loader).is_none() {
-        return;
-    }
-    let none = HookFlags::NONE;
-    let linked = loader.link_feature(
-        "mod textures (content)",
-        Target::Pinned(pinned::textures::REQUEST),
-        &REQUEST_NEXT,
-        request as RequestFn,
-        none,
-    ) && loader.link_feature(
-        "mod textures (keys)",
-        Target::Pinned(pinned::textures::KEYS),
-        &KEYS_NEXT,
-        keys as KeysFn,
-        none,
-    ) && loader.link_feature(
-        "mod textures (UI registry)",
-        Target::Pinned(pinned::textures::REGISTRY_FILL),
-        &FILL_NEXT,
-        fill as FillFn,
-        none,
-    );
-    if linked {
-        crate::log!(INFO, "mod textures: linked for the served UI images");
+    if !keys_linked && !crate::content::new_keys_of_type(TEMPLATE).is_empty() {
+        link_templates(loader);
     }
 }
 
@@ -539,7 +541,7 @@ unsafe extern "system" fn keys(
     // holds the next function of that signature; the game's arguments pass
     // unchanged.
     let result = unsafe { KEYS_NEXT.get()(out, database, type_hash, found) };
-    if !(type_hash == UI_IMAGE || type_hash == TEMPLATE) || out.is_null() {
+    if !lists(type_hash, images_armed()) || out.is_null() {
         return result;
     }
     let _done = TEXTURES_FUSE.run("the keys", || {
@@ -548,6 +550,18 @@ unsafe extern "system" fn keys(
         unsafe { append(out, type_hash) };
     });
     result
+}
+
+/// Whether the content request and the UI registry's fill are armed, without
+/// which a listed UI image could not load.
+fn images_armed() -> bool {
+    REQUEST_NEXT.wired().is_some() && FILL_NEXT.wired().is_some()
+}
+
+/// Whether the listing of `type_hash` gets served keys: templates always,
+/// UI images only while `images` are armed.
+fn lists(type_hash: u32, images: bool) -> bool {
+    type_hash == TEMPLATE || (images && type_hash == UI_IMAGE)
 }
 
 /// Points the listing's result at `keys` and marks it a success.
@@ -732,6 +746,15 @@ mod tests {
         assert_eq!(listed[1][16..20], TEMPLATE.to_le_bytes());
         assert_eq!(listed[1][20..24], 2u32.to_le_bytes());
         assert_eq!(listed[2][..16], [3; 16]);
+    }
+
+    #[test]
+    fn templates_are_listed_even_when_the_ui_image_hooks_are_not_armed() {
+        assert!(lists(TEMPLATE, false));
+        assert!(lists(TEMPLATE, true));
+        assert!(!lists(UI_IMAGE, false), "an image the request cannot load");
+        assert!(lists(UI_IMAGE, true));
+        assert!(!lists(0x1234, true));
     }
 
     #[test]

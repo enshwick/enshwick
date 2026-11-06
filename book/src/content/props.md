@@ -43,8 +43,10 @@ The game keeps the crafting props of a base in one mask of 64 bits, which
 vanilla and every mod share: the game's own props take 51 of them. The loader
 gives each new crafting prop the next free bit, in load order, and refuses one
 past the last, which turns its mod off. Load order is by mod id and
-dependencies, so the same mods give the same bits. A placed crafting prop
-and the save name the prop by its GUID and id, never by its bit.
+dependencies, so the same mods give the same bits. The server sends clients
+the bits of a base's crafting props, so only a mod of side both adds a
+crafting prop: a client takes the same bits when it runs the world's mods
+and no other mod with a crafting prop.
 
 ```rust
 use enshwick::content::{Guid, id};

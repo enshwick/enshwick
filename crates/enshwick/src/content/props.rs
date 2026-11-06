@@ -169,6 +169,32 @@ fn game_id(id: u32) -> Value {
     Value::Struct(vec![("value".into(), Value::Uint(id.into()))])
 }
 
+/// The change that marks a template as the crafting prop `guid`.
+fn crafting_mark(guid: Guid) -> ComponentChange {
+    ComponentChange::set_value(
+        MARK,
+        Value::Struct(vec![
+            ("type".into(), Value::Guid(guid)),
+            ("craftingPropId".into(), game_id(guid.fnv1a())),
+        ]),
+    )
+}
+
+/// The first bit of the crafting prop mask no vanilla prop of `props`
+/// takes: one past the highest index, which need not be the count.
+fn first_free(props: &[Value]) -> Result<u8, Off> {
+    let next = props
+        .iter()
+        .map(|prop| match prop.field("craftingPropIndex") {
+            Some(Value::Uint(index)) => index.saturating_add(1),
+            _ => 0,
+        })
+        .max()
+        .unwrap_or(0)
+        .max(u64::try_from(props.len()).unwrap_or(u64::MAX));
+    u8::try_from(next).map_err(|_| Off::new("crafting props: more than 255 in the game"))
+}
+
 /// The workshop registry `registry` with the crafting prop `entry` after
 /// its others.
 fn list_prop(mut registry: Value, entry: &Value) -> Result<Value, Off> {
@@ -223,9 +249,7 @@ impl Load<'_> {
         let Some(Value::List(props)) = vanilla.field(PROPS) else {
             return Err(Off::new("workshop registry: no list of crafting props"));
         };
-        let first = u8::try_from(props.len())
-            .map_err(|_| Off::new("crafting props: more than 255 in the game"))?;
-        Ok((first, width))
+        Ok((first_free(props)?, width))
     }
 
     /// The index the loader gives the crafting prop `prop`.
@@ -243,28 +267,27 @@ impl Load<'_> {
         crate::load::ok(status, index, || format!("crafting prop {prop}"))
     }
 
-    /// Makes `prop`, the prop of `item`, a crafting prop: listed in the
-    /// workshop registry, required by `setup`'s recipes, and marked on the
-    /// template by the returned change.
+    /// Makes `prop`, the prop of the item `item` named `name`, a crafting
+    /// prop: listed in the workshop registry and required by `setup`'s
+    /// recipes. Runs once the prop's template and item are added, so a
+    /// refusal before it takes no bit.
     fn add_crafting_prop(
         &mut self,
         prop: Id,
-        item: &NewItem,
+        item: Guid,
+        name: Option<Guid>,
         setup: CraftingPropSetup,
-    ) -> Result<ComponentChange, Off> {
+    ) -> Result<(), Off> {
         let guid = prop.guid();
         self.declare(prop)?;
         let index = self.crafting_prop_index(guid)?;
-        let name = item
-            .name
-            .or_else(|| super::items::vanilla_name_tag(item.like));
         let entry = Value::Struct(vec![
             ("craftingPropGuid".into(), Value::Guid(guid)),
             ("craftingPropId".into(), game_id(guid.fnv1a())),
             ("craftingPropIndex".into(), Value::Uint(index.into())),
             ("name".into(), game_id(name.map_or(0, Guid::fnv1a))),
-            ("item".into(), game_id(item.id.guid().fnv1a())),
-            ("itemRef".into(), Value::Guid(item.id.guid())),
+            ("item".into(), game_id(item.fnv1a())),
+            ("itemRef".into(), Value::Guid(item)),
         ]);
         let host = self.host();
         let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY_RESOURCE)?;
@@ -277,13 +300,7 @@ impl Load<'_> {
                 require_prop(value, &setup.recipes, guid.fnv1a(), index)
             })?;
         }
-        Ok(ComponentChange::set_value(
-            MARK,
-            Value::Struct(vec![
-                ("type".into(), Value::Guid(guid)),
-                ("craftingPropId".into(), game_id(guid.fnv1a())),
-            ]),
-        ))
+        Ok(())
     }
 }
 
@@ -334,11 +351,11 @@ impl Load<'_> {
         let (template, recipe) = (part(TEMPLATE)?, part(RECIPE)?);
         let like = placed_by(self, new.item.like)?;
         let mut changes = new.template;
-        let crafting_prop = match new.crafting_prop {
+        let crafting = match new.crafting_prop {
             Some(setup) => {
                 let prop = part(CRAFTING_PROP)?;
-                changes.push(self.add_crafting_prop(prop, &new.item, setup)?);
-                Some(prop.guid())
+                changes.push(crafting_mark(prop.guid()));
+                Some((prop, setup))
             }
             None => None,
         };
@@ -347,7 +364,15 @@ impl Load<'_> {
             ..NewTemplate::new(template, like)
         })?;
         let vanilla = new.item.like;
+        let name = new
+            .item
+            .name
+            .or_else(|| super::items::vanilla_name_tag(vanilla));
         self.add_item(new.item)?;
+        let crafting_prop = crafting.as_ref().map(|(prop, _)| prop.guid());
+        if let Some((prop, setup)) = crafting {
+            self.add_crafting_prop(prop, item.guid(), name, setup)?;
+        }
         let at = self.offset(ids::ITEM_INFO_PLACED_ENTITY)?;
         let (placed, base) = (template.guid(), vanilla.key(types::ITEM_INFO)?);
         for guid in super::renames::old_guids(item.guid())
@@ -405,6 +430,20 @@ mod tests {
         };
         assert_eq!((props.len(), props.last()), (52, Some(&entry)));
         assert!(list_prop(Value::Struct(Vec::new()), &entry).is_err());
+    }
+
+    #[test]
+    fn the_first_free_bit_is_past_the_highest_vanilla_index_not_the_count() {
+        let indexed = |indices: &[u64]| -> Vec<Value> {
+            indices
+                .iter()
+                .map(|&i| Value::Struct(vec![("craftingPropIndex".into(), Value::Uint(i))]))
+                .collect()
+        };
+        assert_eq!(first_free(&indexed(&[0, 1, 2])), Ok(3));
+        assert_eq!(first_free(&indexed(&[0, 1, 5])), Ok(6), "a gap");
+        assert_eq!(first_free(&[]), Ok(0));
+        assert!(first_free(&indexed(&[255])).is_err());
     }
 
     #[test]

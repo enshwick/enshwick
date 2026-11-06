@@ -591,9 +591,12 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
         }
         Event::WORLD_SAVED => {
             let Some(served) = served(loader) else {
+                // A file left from an earlier save would map this save's
+                // indices through phenomena it no longer has.
+                let removed = std::fs::remove_file(&path);
                 crate::log!(
                     WARN,
-                    "weather: the phenomena do not read; {} kept as it is",
+                    "weather: the phenomena do not read; {} removed ({removed:?}), so the next load keeps the fronts in their layers",
                     path.display()
                 );
                 return;
@@ -645,7 +648,8 @@ fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
     let BlobArray {
         start: layer_defs,
         count: layer_def_count,
-    } = unsafe { BlobArray::read(resource.address() + layout.resource_layers) }.unwrap_or_default();
+    } = unsafe { BlobArray::read(resource.address() + layout.resource_layers) }
+        .ok_or(RemapError::Unloaded(Status::MISSING))?;
     // SAFETY: `system` is the live weather system `system()` found on the
     // game thread; its layer array pointer sits at the build table's
     // `weather.layers` offset.
