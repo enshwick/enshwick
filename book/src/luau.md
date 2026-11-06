@@ -244,7 +244,8 @@ loads compiled code.
 A script reads only its own folder, with `enshwick.mods.read`. It writes
 files with `enshwick.files.write_atomically`. Exports for a wiki or a map go
 into `enshwick.export_dir()`. That is the folder `export/<id>/` in the
-game folder, named by the mod id whatever its folder in `mods/` is called.
+game folder, named by the mod id. A Luau mod's folder in `mods/` has the
+same name.
 
 The sandbox keeps a script's mistakes small, but it is no security
 boundary. A write may name any path the game may write, as a Rust mod's
