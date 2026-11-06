@@ -46,7 +46,8 @@ game update that moves a field changes this crate, not the mods.
   where the shape matches once; a taken constant's shape has two steps,
   an exact operand or an `{entry}`. A memory operand through `[?+*]` takes
   any base register, and `nth` takes the n-th run of a shape that repeats,
-  counted after the one match of an `after` shape in the same part.
+  counted after the one match of an `after` shape in the same part, only
+  where there are exactly `of` runs.
   Routes build on each other through waypoints, anonymous functions no
   entry names. A route that finds nothing, or more than one answer, leaves
   its entry to its anchor, and an entry with no anchor is missing; a route

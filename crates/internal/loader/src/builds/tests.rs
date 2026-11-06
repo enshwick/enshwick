@@ -79,6 +79,8 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
         let mut build = KnownBuild {
             name: stripped.name().to_owned(),
             table: stripped.resolve(),
+            unanchored: Vec::new(),
+            conflicts: Vec::new(),
             lacking: OnceLock::new(),
         };
         let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
@@ -164,6 +166,8 @@ fn routed_symbols_without_table_checks_serve_their_features() {
         let mut build = KnownBuild {
             name: stripped.name().to_owned(),
             table: stripped.resolve(),
+            unanchored: Vec::new(),
+            conflicts: Vec::new(),
             lacking: OnceLock::new(),
         };
         let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
@@ -612,8 +616,9 @@ fn a_build_runs_on_its_anchors_when_allowed_and_given_code() {
 }
 
 /// A build is named by its side, Steam build, game version and executable,
-/// each where it reads, and an absent entry says whether its anchor's
-/// pattern found nothing or nothing finds it.
+/// each where it reads, and an absent entry says why: its anchor's pattern
+/// found nothing, nothing finds it, the game's data did not give it, or its
+/// route and anchor disagree.
 #[test]
 fn a_build_is_named_by_the_game_and_tells_why_an_entry_is_absent() {
     let fingerprint = Fingerprint::new([0xee; 16], 1);
@@ -631,7 +636,7 @@ fn a_build_is_named_by_the_game_and_tells_why_an_entry_is_absent() {
         build_name(Side::CLIENT, None, None, fingerprint),
         format!("client, {executable}")
     );
-    let found = on_no_code();
+    let mut found = on_no_code();
     let absent = Unhooked::Absent.to_string();
     assert_eq!(
         found.reason("bases.holder_at", &absent),
@@ -641,12 +646,43 @@ fn a_build_is_named_by_the_game_and_tells_why_an_entry_is_absent() {
         found.reason("npc.nope", &absent),
         "is found by no engine route or anchor"
     );
+    found.unfound("recipe.list_lookup");
+    assert!(found.missing().iter().any(|id| id == "recipe.list_lookup"));
+    assert_eq!(
+        found.reason("recipe.list_lookup", &absent),
+        "is found by no engine route or anchor"
+    );
+    assert_eq!(
+        found.reason("attribute.health_max_slot", &absent),
+        "is not read from the game's data"
+    );
+    found.conflict("chat.post");
+    assert_eq!(
+        found.reason("chat.post", &absent),
+        "is found elsewhere by its engine route than by its anchor"
+    );
     let moved = Unhooked::Moved.to_string();
     assert_eq!(found.reason("npc.lookup", &moved), moved);
 }
 
+/// A run on the anchors alone counts every entry only a route finds as
+/// missing, so it never calls such a build complete.
+#[test]
+fn a_run_on_the_anchors_alone_misses_what_only_a_route_finds() {
+    let routes = tables::Routes::embedded().unwrap();
+    let mut found = on_no_code();
+    found.unrouted(&routes, Side::SERVER);
+    assert!(!found.complete());
+    assert!(found.missing().iter().any(|id| id == "knowledge.push"));
+    assert_eq!(
+        found.reason("knowledge.push", &Unhooked::Absent.to_string()),
+        "is found by no engine route or anchor"
+    );
+}
+
 /// The Steam build is the appmanifest's `buildid`, beside a Steam library
-/// (two folders up) or inside a `SteamCMD` install.
+/// (two folders up) or inside a `SteamCMD` install, also one at a drive's
+/// root.
 #[test]
 fn the_steam_build_comes_from_the_appmanifest_where_steam_keeps_it() {
     let manifest =
@@ -665,14 +701,24 @@ fn the_steam_build_comes_from_the_appmanifest_where_steam_keeps_it() {
         manifest,
     )
     .unwrap();
+    // A one-component path has no library two folders up.
+    let shallow = std::path::PathBuf::from(format!("enshwick-shallow-{}", std::process::id()));
+    std::fs::create_dir_all(shallow.join("steamapps")).unwrap();
+    std::fs::write(
+        shallow.join("steamapps").join("appmanifest_2278520.acf"),
+        manifest,
+    )
+    .unwrap();
     let found = (
         steam_build(&client, Side::CLIENT),
         steam_build(&server, Side::SERVER),
         steam_build(&server, Side::CLIENT),
+        steam_build(&shallow, Side::SERVER),
     );
     std::fs::remove_dir_all(&root).unwrap();
+    std::fs::remove_dir_all(&shallow).unwrap();
     let build = Some(SteamBuild::new(26_430_253));
-    assert_eq!(found, (build, build, None));
+    assert_eq!(found, (build, build, None, build));
 }
 
 /// No server table and no server anchor holds a row bases past 16 reads

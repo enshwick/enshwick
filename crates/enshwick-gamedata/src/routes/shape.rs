@@ -479,7 +479,8 @@ const READS: [OpAccess; 4] = [
 /// memory or an immediate holds no `i`; an instruction that only reads
 /// registers changes nothing, and one that only writes them clears them.
 /// Any other instruction that reads a register holding `i` and writes a
-/// register, and a call, leaves no answer, and so do a first instruction reading
+/// register, a byte or word of a register holding `i`, a shift at or past
+/// the register's width, and a call, leave no answer, and so do a first instruction reading
 /// no register or two, and a factor below 2, which multiplies nothing.
 pub(crate) fn scale(run: &[Instruction]) -> Option<u64> {
     let last = run.len().checked_sub(1)?;
@@ -501,6 +502,7 @@ pub(crate) fn scale(run: &[Instruction]) -> Option<u64> {
         let memory = (0..ins.op_count()).any(|i| ins.op_kind(i) == OpKind::Memory);
         if at == last && memory {
             answer = Some(address_factor(ins, &factors));
+            break;
         }
         fold(ins, &mut factors, &mut info)?;
         if at == last && !memory && ins.op_count() > 0 && ins.op0_kind() == OpKind::Register {
@@ -535,6 +537,16 @@ fn fold(
         OpKind::Register => factor(factors, ins.op_register(i)),
         _ => 0,
     };
+    // A byte or word of a register truncates a multiple of the index, and a
+    // write to one keeps the rest of the register.
+    let partial = (0..ins.op_count()).any(|i| {
+        ins.op_kind(i) == OpKind::Register
+            && ins.op_register(i).size() < 4
+            && factors.contains_key(&ins.op_register(i).full_register())
+    });
+    if partial {
+        return None;
+    }
     let to_register = ins.op_count() > 0 && ins.op0_kind() == OpKind::Register;
     let folded = match ins.mnemonic() {
         _ if !to_register => None,
@@ -543,7 +555,11 @@ fn fold(
         Mnemonic::Add => operand(0).checked_add(operand(1)),
         Mnemonic::Sub => operand(0).checked_sub(operand(1)),
         Mnemonic::Shl | Mnemonic::Sal if is_immediate(ins.op1_kind()) => {
-            let by = u32::try_from(ins.immediate(1)).ok()?;
+            // The processor masks a count at or past the register's width.
+            let width = 8 * u32::try_from(ins.op0_register().size()).ok()?;
+            let by = u32::try_from(ins.immediate(1))
+                .ok()
+                .filter(|&by| by < width)?;
             operand(0).checked_mul(1i64.checked_shl(by)?)
         }
         Mnemonic::Imul if ins.op_count() == 3 => {

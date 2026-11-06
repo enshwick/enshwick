@@ -140,13 +140,12 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
     if let Some(exe_dir) = exe_dir {
         crate::attribute_slots::supply(&mut build, &reflection, exe_dir, side);
     }
-    if !patterns {
-        match enshwick_gamedata::Routes::embedded() {
-            Ok(routes) => {
-                build.route(&routes, image, &reflection, side);
-            }
-            Err(e) => crate::log!(ERROR, "embedded engine routes: {e}"),
+    match enshwick_gamedata::Routes::embedded() {
+        Ok(routes) if patterns => build.unrouted(&routes, side),
+        Ok(routes) => {
+            build.route(&routes, image, &reflection, side);
         }
+        Err(e) => crate::log!(ERROR, "embedded engine routes: {e}"),
     }
     let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
     for dir in GAME_DIRS {

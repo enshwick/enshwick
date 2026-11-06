@@ -1,16 +1,16 @@
-//! The loader's build tables: per game build, the engine functions and
-//! constants that reflection does not describe, by symbolic id.
+//! The engine functions and constants that reflection does not describe,
+//! by symbolic id, found on any game build without a table made for it.
 //!
-//! A table is a TOML file named after the build's fingerprint (see
-//! [`file_name`]). The loader embeds the tables of `tables/` ([`embedded`]).
-//! For the running build it takes the table
-//! made for it ([`exact`], [`Table::resolve`]); on a build without one, the
-//! newest table of the same side ([`newest`]) finds each entry by its pattern
-//! ([`Table::fall_back`]), and what no pattern finds stays missing. Before
-//! either, the [`Routes`] find entries in the game's own code through what
-//! the engine names, the same way on every build ([`Resolved::route`]). The
-//! game's own archive reads with [`archive::Archive`], and the engine's
-//! reflection data with [`reflect::Reflection`].
+//! The [`Routes`] find entries in the game's own code through what the
+//! engine names, the same way on every build ([`Resolved::route`]); the
+//! [`anchors`] find the rest by their code patterns ([`Table::fall_back`]),
+//! and what neither finds stays missing. The tables of `tables/`, each a
+//! TOML file named after a kept build's fingerprint ([`file_name`],
+//! [`embedded`]), are a frozen record the tests check the routes and anchors
+//! against; the loader never reads them, and [`reported`] says which
+//! builds a compatibility report covers. The game's own archive reads with
+//! [`archive::Archive`], and the engine's reflection data with
+//! [`reflect::Reflection`].
 //! The [`catalogue`] maps the ids the API asks engine facts by to the
 //! game's reflected types and fields.
 

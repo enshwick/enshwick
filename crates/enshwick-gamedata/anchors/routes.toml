@@ -2718,6 +2718,7 @@ in = "access.transfer"
 after = ["mov ebx,[rsi+0x10]", "xor eax,eax", "mov [rbp+0x30],rax"]
 shape = ["mov rax,[r15+*]", "mov ?m,rax"]
 nth = 9
+of = 13
 take = "value"
 
 [[route]]
@@ -2732,6 +2733,7 @@ in = "access.transfer"
 after = ["mov ebx,[rsi+0x10]", "xor eax,eax", "mov [rbp+0x30],rax"]
 shape = ["mov rax,[r15+*]", "mov ?m,rax"]
 nth = 10
+of = 13
 take = "value"
 
 [[route]]

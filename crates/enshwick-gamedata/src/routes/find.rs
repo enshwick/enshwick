@@ -221,13 +221,14 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
 
     /// The `nth` run of `steps`, from 1, in address order: in the part of
     /// `function`'s code where `after` matches once, after that match, or,
-    /// with no `after`, anywhere in its code.
+    /// with no `after`, anywhere in its code; none unless there are `of`
+    /// runs, so a run added or dropped never shifts the count silently.
     fn nth_match(
         &mut self,
         function: u32,
         after: &[Step],
         steps: &[Step],
-        nth: u32,
+        (nth, of): (u32, u32),
     ) -> Option<shape::Match> {
         let entries = self.entries(after.iter().chain(steps))?;
         let entry = |id: &str| entries.iter().find(|(e, _)| *e == id).map(|&(_, va)| va);
@@ -250,6 +251,9 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
                 .filter(|run| run.start >= anchor.end)
                 .collect()
         };
+        if runs.len() != usize::try_from(of).ok()? {
+            return None;
+        }
         runs.sort_unstable_by_key(|run| run.start);
         runs.into_iter()
             .nth(usize::try_from(nth).ok()?.checked_sub(1)?)

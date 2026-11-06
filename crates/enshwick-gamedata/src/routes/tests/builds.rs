@@ -153,7 +153,9 @@ fn every_route_holds_on_every_kept_build() {
 
 /// On every [`executables`] entry, the anchors of its side carried by their
 /// patterns and then every engine route, with no table behind them, give
-/// each entry its own table pins the value it pins; the attribute slots,
+/// each entry its own table pins the value it pins, and miss, as the loader
+/// counts a miss, nothing that table pins and on each side's newest build
+/// nothing at all, but the attribute slots; the attribute slots,
 /// which the loader reads from the archive, the `.bytes` of a symbol whose
 /// route checks its code and the [`NOT_NEEDED`] entries are left out.
 #[test]
@@ -173,13 +175,27 @@ fn the_anchors_and_routes_find_every_pinned_entry_without_a_table() {
             .unwrap()
             .fall_back(code, text.start - base, |at| image.u32(base + at));
         for (id, routed) in routes.find(&image, &reflection, side, &found.clone()) {
-            found.route(id, routed);
+            if found.route(id, routed) == crate::Routing::Unresolved {
+                found.lack(id);
+            }
         }
+        let pinned = own.resolve();
+        let newest = crate::newest(&tables, side).is_some_and(|n| n.name() == own.name());
+        let unslotted: Vec<&String> = found
+            .missing()
+            .iter()
+            .filter(|id| found.attributes().iter().all(|(slot, _)| slot != *id))
+            .filter(|id| newest || pinned.symbol(id).is_some() || pinned.constant(id).is_some())
+            .collect();
+        assert!(
+            unslotted.is_empty(),
+            "{} misses, as the loader would: {unslotted:?}",
+            path.display()
+        );
         let not_needed: &[&str] = NOT_NEEDED
             .iter()
             .find(|(s, _)| *s == side)
             .map_or(&[], |(_, ids)| ids);
-        let pinned = own.resolve();
         let wrong: Vec<String> = pinned
             .symbols()
             .iter()

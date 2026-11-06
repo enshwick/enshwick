@@ -536,7 +536,8 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
 
 /// In `sys_b`, `call; mov eax,7; mov eax,7; ret`: an ordinal takes the
 /// `nth` of the identical moves, counted after its anchor when it has one,
-/// and finds nothing past the last or where the anchor is not unique.
+/// and finds nothing past the last, where the anchor is not unique or where
+/// the moves are not `of` many.
 #[test]
 fn an_ordinal_takes_the_nth_run_after_its_anchor() {
     let fake = fake();
@@ -546,11 +547,12 @@ fn an_ordinal_takes_the_nth_run_after_its_anchor() {
         format!("[[route]]\nid = \"{id}\"\nin = \"sys_b\"\nshape = [\"mov eax,0x7\"]\n{keys}\n")
     };
     let text = [
-        row("t.second", "nth = 2"),
-        row("t.after", "after = [\"call ?\"]\nnth = 1"),
-        row("t.past", "after = [\"call ?\"]\nnth = 3"),
-        row("t.anchors", "after = [\"mov eax,0x7\"]\nnth = 1"),
-        row("t.named", "after = [\"call {t.leaf}\"]\nnth = 2"),
+        row("t.second", "nth = 2\nof = 2"),
+        row("t.miscounted", "nth = 1\nof = 3"),
+        row("t.after", "after = [\"call ?\"]\nnth = 1\nof = 2"),
+        row("t.past", "after = [\"call ?\"]\nnth = 3\nof = 3"),
+        row("t.anchors", "after = [\"mov eax,0x7\"]\nnth = 1\nof = 1"),
+        row("t.named", "after = [\"call {t.leaf}\"]\nnth = 2\nof = 2"),
         "[[route]]\nid = \"t.unique\"\nin = \"sys_b\"\nshape = [\"call {t.leaf}\", \"mov eax,0x7\"]\n".to_owned(),
         "[[route]]\nid = \"~fn:a\"\nloads = [\"hello\"]\n".to_owned(),
         "[[route]]\nid = \"t.leaf\"\ncalled_by = [\"~fn:a\", \"sys_b\"]\n".to_owned(),
@@ -565,6 +567,7 @@ fn an_ordinal_takes_the_nth_run_after_its_anchor() {
             ("t.after", Some(Routed::Reached(0x1015))),
             ("t.anchors", None),
             ("t.leaf", Some(Routed::Reached(0x1040))),
+            ("t.miscounted", None),
             ("t.named", Some(Routed::Reached(0x101a))),
             ("t.past", None),
             ("t.second", Some(Routed::Reached(0x101a))),
@@ -572,10 +575,13 @@ fn an_ordinal_takes_the_nth_run_after_its_anchor() {
         ]
     );
     for bad in [
-        row("t.zero", "nth = 0"),
+        row("t.zero", "nth = 0\nof = 2"),
+        row("t.uncounted", "nth = 1"),
+        row("t.counted", "of = 2"),
+        row("t.beyond", "nth = 3\nof = 2"),
         row("t.alone", "after = [\"call ?\"]"),
-        row("t.taking", "after = [\"call *\"]\nnth = 1"),
-        "[[route]]\nid = \"t.callers\"\ncallers = \"t.leaf\"\nshape = [\"ret\"]\nnth = 1\n"
+        row("t.taking", "after = [\"call *\"]\nnth = 1\nof = 2"),
+        "[[route]]\nid = \"t.callers\"\ncallers = \"t.leaf\"\nshape = [\"ret\"]\nnth = 1\nof = 1\n"
             .to_owned(),
     ] {
         assert!(Routes::parse(&bad).is_err(), "{bad}");
@@ -789,6 +795,17 @@ fn a_scale_folds_the_factors_of_one_index_and_refuses_what_it_cannot_follow() {
         scale(&[0x4c, 0x8d, 0x0c, 0x80, 0x31, 0xc9, 0x42, 0x8b, 0x04, 0x0a]),
         Some(5)
     );
+    // lea rax,[rcx+rcx*2]; movss xmm0,[rdx+rax*4]: the last load needs no fold
+    assert_eq!(
+        scale(&[0x48, 0x8d, 0x04, 0x49, 0xf3, 0x0f, 0x10, 0x04, 0x82]),
+        Some(12)
+    );
+    // lea rax,[rcx+rcx*4]; movzx eax,al: a byte truncates the multiple
+    assert_eq!(scale(&[0x48, 0x8d, 0x04, 0x89, 0x0f, 0xb6, 0xc0]), None);
+    // lea rcx,[rcx+rcx*4]; mov al,cl: a byte write keeps the rest of rax
+    assert_eq!(scale(&[0x48, 0x8d, 0x0c, 0x89, 0x88, 0xc8]), None);
+    // lea eax,[rcx+rcx*4]; shl eax,0x21: the processor shifts by 1, not 33
+    assert_eq!(scale(&[0x8d, 0x04, 0x89, 0xc1, 0xe0, 0x21]), None);
     // lea rax,[rcx+rcx*2]; shl rax,cl: a shift by a register
     assert_eq!(scale(&[0x48, 0x8d, 0x04, 0x49, 0x48, 0xd3, 0xe0]), None);
     // lea rax,[rcx+rdx]: the first instruction reads two registers

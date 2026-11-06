@@ -280,10 +280,10 @@ fn port_tables(
             table::render(&src, &row, &identity, &ported.edits, Some(new), &anchors)
                 .with_context(|| path.display().to_string())?;
         sections.push(report::Section {
-            file: relative(&args.repo, &target),
+            file: format!("{} (ported, not written)", relative(&args.repo, &target)),
             title: name,
             lines: ported.lines,
-            text: (!args.write).then(|| (text.clone(), "toml")),
+            text: Some((text.clone(), "toml")),
             unpatterned: patterned.problems,
         });
         let resolved = enshwick_gamedata::Table::parse(&text)
@@ -575,6 +575,39 @@ mod tests {
         assert_eq!(fs::read_to_string(dir.join("new.toml")).unwrap(), "table");
         assert_eq!(fs::read_to_string(report).unwrap(), "report");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// With `--write` the report still holds each ported loader table whole,
+    /// since nothing writes it; skipped without `ENSH_SERVER_EXE`.
+    #[test]
+    fn a_ported_table_stays_in_the_report_with_write() {
+        let Some(path) = std::env::var_os("ENSH_SERVER_EXE") else {
+            return;
+        };
+        let bytes = fs::read(path).unwrap();
+        let exe = Exe::parse(&bytes).unwrap();
+        let args = Args {
+            old: None,
+            new: None,
+            patterns: None,
+            repo: Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."),
+            steam_build: None,
+            game_version: None,
+            write: true,
+            report: None,
+            from: Vec::new(),
+            from_file: None,
+        };
+        let sections = port_tables(&args, &exe, &exe, &mut Vec::new()).unwrap();
+        assert!(!sections.is_empty());
+        for section in &sections {
+            assert!(section.text.is_some(), "{}", section.file);
+            assert!(
+                section.file.ends_with("(ported, not written)"),
+                "{}",
+                section.file
+            );
+        }
     }
 
     #[test]

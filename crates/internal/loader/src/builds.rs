@@ -32,6 +32,10 @@ pub struct KnownBuild {
     /// executable <guid>/<age>`.
     pub name: String,
     table: Resolved,
+    /// The entries no engine route found that have no anchor either.
+    unanchored: Vec<String>,
+    /// The entries whose engine route and anchor disagree.
+    conflicts: Vec<String>,
     /// The names of the parts [`Self::lacking`] found, once asked.
     lacking: OnceLock<String>,
 }
@@ -134,17 +138,49 @@ impl KnownBuild {
     }
 
     /// `reason` for entry `id` as this build tells it: an [`ABSENT`] entry
-    /// is one its anchor's pattern did not find, or one with no anchor that
-    /// no engine route found.
+    /// is one whose engine route and anchor disagree, an attribute slot the
+    /// game's data did not give, one its anchor's pattern did not find, or
+    /// one with no anchor that no engine route found.
     #[must_use]
     pub fn reason<'a>(&self, id: &str, reason: &'a str) -> &'a str {
+        let has = |ids: &[String]| ids.iter().any(|m| m == id);
         if reason != ABSENT {
             reason
-        } else if self.missing().iter().any(|m| m == id) {
+        } else if has(&self.conflicts) {
+            "is found elsewhere by its engine route than by its anchor"
+        } else if self.attributes().iter().any(|(slot, _)| slot == id) {
+            "is not read from the game's data"
+        } else if has(self.missing()) && !has(&self.unanchored) {
             "is not found by its anchor's pattern"
         } else {
             "is found by no engine route or anchor"
         }
+    }
+
+    /// Counts every entry a route of `running`'s side finds as one no route
+    /// found, for a run on the anchors alone, so what only a route finds is
+    /// missing.
+    pub fn unrouted(&mut self, routes: &tables::Routes, running: Side) {
+        let Some(side) = side(running) else {
+            return;
+        };
+        for id in routes.ids().filter(|id| routes.routes(id, side)) {
+            self.unfound(id);
+        }
+    }
+
+    /// Notes that no engine route found entry `id`: missing unless an
+    /// anchor found it.
+    fn unfound(&mut self, id: &str) {
+        if self.table.lack(id) {
+            self.unanchored.push(id.to_owned());
+        }
+    }
+
+    /// Notes that entry `id`'s engine route and anchor disagree, which
+    /// took it off.
+    fn conflict(&mut self, id: &str) {
+        self.conflicts.push(id.to_owned());
     }
 
     /// Whether the build has every entry the loader knows: nothing missing.
@@ -186,14 +222,17 @@ impl KnownBuild {
         for (id, found) in routes.find(image, reflection, side, &self.table) {
             match self.table.route(id, found) {
                 Routing::Agrees | Routing::Supplied => count += 1,
-                Routing::Conflict { table, engine } => crate::log!(
-                    WARN,
-                    "{id} off on {}: its engine route finds {engine:#x}, its anchor {table:#x} ({})",
-                    self.name,
-                    crate::errors::TABLE_MISMATCH
-                ),
+                Routing::Conflict { table, engine } => {
+                    self.conflict(id);
+                    crate::log!(
+                        WARN,
+                        "{id} off on {}: its engine route finds {engine:#x}, its anchor {table:#x} ({})",
+                        self.name,
+                        crate::errors::TABLE_MISMATCH
+                    );
+                }
                 _ => {
-                    self.table.lack(id);
+                    self.unfound(id);
                     unfound.push(id);
                 }
             }
@@ -313,6 +352,8 @@ pub fn by_patterns(
     Some(KnownBuild {
         name,
         table: anchors.fall_back(code.0, code.1, cell),
+        unanchored: Vec::new(),
+        conflicts: Vec::new(),
         lacking: OnceLock::new(),
     })
 }
@@ -342,10 +383,12 @@ const APPS: [(Side, u32); 2] = [(Side::CLIENT, 1_203_620), (Side::SERVER, 2_278_
 pub fn steam_build(game_dir: &Path, running: Side) -> Option<SteamBuild> {
     let (_, app) = APPS.iter().find(|(side, _)| *side == running)?;
     let file = format!("appmanifest_{app}.acf");
-    let library = game_dir.parent()?.parent()?.join(&file);
     let text = std::fs::read_to_string(game_dir.join("steamapps").join(&file))
-        .or_else(|_| std::fs::read_to_string(library))
-        .ok()?;
+        .ok()
+        .or_else(|| {
+            let library = game_dir.parent()?.parent()?.join(&file);
+            std::fs::read_to_string(library).ok()
+        })?;
     manifest_build(&text)
 }
 
@@ -461,6 +504,8 @@ pub fn embedded(running: Side) -> KnownBuild {
     KnownBuild {
         name: table.name().to_owned(),
         table: table.resolve(),
+        unanchored: Vec::new(),
+        conflicts: Vec::new(),
         lacking: OnceLock::new(),
     }
 }

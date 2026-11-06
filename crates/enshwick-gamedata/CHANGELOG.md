@@ -10,7 +10,8 @@ Each entry names the pull request that made the change.
 
 - Routes fold a record size or stride from index arithmetic (`take =
   "scale"`), match memory through any base register (`[?+*]`) and take the
-  n-th run of a repeated shape after a unique anchor (`after`, `nth`).
+  n-th of a known number of runs of a repeated shape after a unique anchor
+  (`after`, `nth`, `of`).
   Twelve more constants come from the engine through them, among them
   `ecs.entity_record_size`, `weather.entry_size`, the building box offsets,
   the inventory view copies and the client's `ui.context_bundle` (#951).

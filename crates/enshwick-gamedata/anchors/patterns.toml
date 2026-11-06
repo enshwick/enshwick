@@ -14,8 +14,8 @@
 
 [client.constants]
 "server.permission_entry_size" = { value = 0xa0, pattern = "3D ?? ?? ?? ?? 77 1D 4C 8D 0C 80 49 C1 E1 05 43 39 14 01", fixed = true }
-"inventory.view_replication" = { value = 0xf8, pattern = "48 8B 5D ?? 4C 8B B5 ?? ?? ?? ?? 48 8B BD 98 00 00 00 83 7B ?? 00 74 0B", fixed = true }
-"save.path_parts" = { value = 0x4, pattern = "4C 8B 81 ?? ?? ?? ?? 48 8B D3 4C 03 81 48 08 00 00 0F 29 44 24 ?? E8 ?? ?? ?? ??", fixed = true }
+"inventory.view_replication" = { value = 0xf8, pattern = "48 8B 5D B0 4C 8B B5 18 01 00 00 48 8B BD 98 00 00 00 83 7B ?? 00 74 0B", fixed = true }
+"save.path_parts" = { value = 0x4, pattern = "4C 8B 81 40 08 00 00 48 8B D3 4C 03 81 48 08 00 00 0F 29 44 24 ?? E8 ?? ?? ?? ??", fixed = true }
 "attribute.health_max_slot" = { value = 0x7, attribute = "Health_Max" }
 "attribute.stamina_max_slot" = { value = 0x2, attribute = "Stamina_Max" }
 "attribute.mana_max_slot" = { value = 0x1, attribute = "Mana_Max" }
@@ -36,8 +36,8 @@
 
 [server.constants]
 "server.permission_entry_size" = { value = 0xa0, pattern = "3D ?? ?? ?? ?? 77 1D 4C 8D 0C 80 49 C1 E1 05 43 39 14 01", fixed = true }
-"inventory.view_replication" = { value = 0xf8, pattern = "48 8B 5D ?? 4C 8B B5 ?? ?? ?? ?? 48 8B BD 98 00 00 00 83 7B ?? 00 74 0B", fixed = true }
-"save.path_parts" = { value = 0x4, pattern = "4C 8B 81 ?? ?? ?? ?? 48 8B D3 4C 03 81 48 08 00 00 0F 29 44 24 ?? E8 ?? ?? ?? ??", fixed = true }
+"inventory.view_replication" = { value = 0xf8, pattern = "48 8B 5D B0 4C 8B B5 18 01 00 00 48 8B BD 98 00 00 00 83 7B ?? 00 74 0B", fixed = true }
+"save.path_parts" = { value = 0x4, pattern = "4C 8B 81 40 08 00 00 48 8B D3 4C 03 81 48 08 00 00 0F 29 44 24 ?? E8 ?? ?? ?? ??", fixed = true }
 "attribute.health_max_slot" = { value = 0x7, attribute = "Health_Max" }
 "attribute.stamina_max_slot" = { value = 0x2, attribute = "Stamina_Max" }
 "attribute.mana_max_slot" = { value = 0x1, attribute = "Mana_Max" }
