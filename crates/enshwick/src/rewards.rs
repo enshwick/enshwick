@@ -59,6 +59,7 @@ pub enum Action {
     /// Completes a quest.
     Quest,
     /// Eats, drinks or uses the item, once every item filter allowed the use
+    /// and the game took the item
     /// ([`Kind::Consumed`](crate::items::Kind::Consumed)).
     Consume(ItemId),
     /// Picks the item up.

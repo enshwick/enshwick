@@ -3048,8 +3048,8 @@ typedef struct EnshwickUiExtension {
 //
 // The name is the game's `ItemAction`; the kinds are its `ItemActionType`,
 // `ChangeEquipment` and the events that follow a pickup or a placement,
-// and `CONSUMED` the loader's word that every filter
-// allowed a use.
+// and `CONSUMED` the loader's word that the game took the
+// item of a use every filter allowed.
 typedef struct EnshwickItemAction {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -3082,8 +3082,9 @@ typedef struct EnshwickItemAction {
 // The player placed the item as a building piece or a prop, after the
 // game placed it; the answer is ignored.
 #define EnshwickItemAction_PLACE 6
-// Every filter allowed the `CONSUME` before it, which
-// the game runs next and may still drop; the answer is ignored. ABI 11.7.
+// The game took the item of a `CONSUME` every filter
+// allowed from its slot, at a later step; a use the game refuses raises
+// none. The answer is ignored. ABI 11.7.
 #define EnshwickItemAction_CONSUMED 7
 
 // A mod's item filter: the action and the pointer given at registration;
