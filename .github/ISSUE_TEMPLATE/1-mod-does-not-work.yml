@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Questions go to [Discussions](https://github.com/enshwick/.github/discussions).
-        The logs are in `logs/enshwick/` in the game's folder, beside `enshrouded.exe` or `enshrouded_server.exe`.
+        The logs are in `logs/` in the game's folder, beside `enshrouded.exe` or `enshrouded_server.exe`.
   - type: textarea
     id: what
     attributes:
@@ -21,6 +21,7 @@ body:
       options:
         - Single player
         - Hosting a game for friends
+        - Joining a game a friend hosts
         - Joining a dedicated server
         - On the dedicated server itself
     validations:
@@ -29,25 +30,25 @@ body:
     id: game
     attributes:
       label: Game version
-      description: "`logs/enshwick/report.md` names it, beside the loader version."
+      description: "The `game:` line of the loader's log, `logs/enshwick_<date>_<time>.log`, names it."
     validations:
       required: true
   - type: input
     id: loader
     attributes:
       label: Loader version
-      description: "Named at the top of `logs/enshwick/report.md`."
+      description: The loader's log names it.
     validations:
       required: true
   - type: textarea
     id: mods
     attributes:
       label: Mods
-      description: Only when `report.md` cannot be attached; every file in the game's `mods` folder.
+      description: Only when the loader's log cannot be attached; every folder in the game's `mods` folder.
   - type: textarea
     id: logs
     attributes:
-      label: Report
-      description: Drag `report.md` from `logs/enshwick/` here, and after a crash `crash.log` too.
+      label: Logs
+      description: Drag the loader's log of the run that went wrong here, `logs/enshwick_<date>_<time>.log`, and after a crash `logs/enshwick-crash_<date>_<time>.log` too. Paths in the log show your folders, so read it before you share it.
     validations:
       required: true

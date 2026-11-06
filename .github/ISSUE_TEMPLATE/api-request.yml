@@ -1,5 +1,5 @@
-name: An API call or an idea
-description: Something a mod needs from the API, or an idea for the loader or the API.
+name: An API call
+description: Something a mod needs from the API.
 labels: [enhancement]
 body:
   - type: markdown

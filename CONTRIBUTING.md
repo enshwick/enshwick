@@ -1,5 +1,9 @@
 # Contributing
 
+The [rules for every enshwick repository](https://github.com/enshwick/.github/blob/main/CONTRIBUTING.md)
+hold here too: branches, pull request titles, signed commits and what a pull
+request carries. This guide adds how to build and test Enshwick.
+
 Enshwick is a Rust workspace. You need Rust (`rust-toolchain.toml` installs the
 pinned version through rustup), [lefthook](https://lefthook.dev),
 [rumdl](https://github.com/rvben/rumdl),
@@ -77,7 +81,7 @@ always leaves the lower levels open (served resources, component reads,
 detours on any function), so no mod is blocked by what the API lacks yet.
 Resources several mods may change compose: their patches run in turn.
 
-To ask for an API call or share an idea, open an
+To ask for an API call, open an
 [API request](https://github.com/enshwick/enshwick/issues/new?template=api-request.yml).
 It asks for the game system, what the mod needs to do, its language and an
 example. Before a large pull request, open one first, so nobody builds the
