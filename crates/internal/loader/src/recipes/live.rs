@@ -75,6 +75,9 @@ struct Live {
 static DISABLED: LazyLock<ArcSwap<Disabled>> = LazyLock::new(ArcSwap::default);
 static LISTS: LazyLock<ArcSwap<Lists>> = LazyLock::new(ArcSwap::default);
 static LIVE: Mutex<Option<Live>> = Mutex::new(None);
+/// The loader part these rules are, as the status summary and the Mods
+/// screen name it.
+const PART: &str = "disabled recipes";
 static LAYOUT: OnceLock<Option<RecipeLayout>> = OnceLock::new();
 /// Set when the rules or what they resolve against changed.
 static DIRTY: AtomicBool = AtomicBool::new(true);
@@ -90,12 +93,7 @@ fn layout() -> Option<&'static RecipeLayout> {
 
 /// Sets disabled recipes up: the layout and the lookup hook. Before arming.
 pub(crate) fn init(loader: &'static Loader) {
-    let resolved = RecipeLayout::resolve(&Reflected(&loader.reflection));
-    if let Err(off) = &resolved {
-        crate::log!(WARN, "disabled recipes off: {off}");
-    }
-    let _first = LAYOUT.set(resolved.ok());
-    if layout().is_none() {
+    if !keep_layout(RecipeLayout::resolve(&Reflected(&loader.reflection))) {
         return;
     }
     if !crate::code::link_recipe_lookup(loader) {
@@ -105,6 +103,17 @@ pub(crate) fn init(loader: &'static Loader) {
         );
     }
     DIRTY.store(true, Ordering::Release);
+}
+
+/// Keeps the resolved layout, or turns disabled recipes off where players
+/// and admins see it: the rules mods set in init then do nothing.
+fn keep_layout(resolved: Result<RecipeLayout, impl core::fmt::Display>) -> bool {
+    if let Err(off) = &resolved {
+        crate::log!(WARN, "disabled recipes off: {off}");
+        crate::diag::part_off(PART, &off.to_string());
+    }
+    let _first = LAYOUT.set(resolved.ok());
+    layout().is_some()
 }
 
 /// The world's own recipe file, while a world runs.
@@ -755,7 +764,7 @@ mod tests {
     }
 
     #[test]
-    fn a_mod_s_rule_from_init_is_kept_before_the_layout_resolves() {
+    fn a_mod_s_rule_from_init_is_kept_until_the_layout_resolves_and_shows_off_without_it() {
         assert!(LAYOUT.get().is_none(), "one process per test");
         let owner = ModIndex::new(3);
         assert_eq!(
@@ -767,7 +776,13 @@ mod tests {
             Kind::Output,
             "a-guid".to_owned()
         ))));
-        let _set = LAYOUT.set(None);
+        assert!(!keep_layout(Err("no recipe layout")));
+        assert!(
+            crate::diag::parts_off()
+                .iter()
+                .any(|off| off.part == PART && off.reason == "no recipe layout"),
+            "the rules kept from init show as off"
+        );
         assert_eq!(
             rule(owner, RecipeRuleKind::OUTPUT, "a-guid", true),
             Status::MISSING,
