@@ -20,6 +20,8 @@ struct FakeControl {
     link: Option<GameAction>,
     fires: u32,
     hold_ms: u32,
+    /// The mod's action a firing runs on the server; empty for none.
+    action: String,
     callback: ControlFn,
     user: usize,
     tracker: Tracker,
@@ -60,9 +62,11 @@ pub(crate) extern "system" fn control(
         None if link.is_empty() => None,
         None => return Status::BAD_ARGS,
     };
+    let action = text(spec.action);
     if !is_valid_name(&name)
         || keys.iter().any(|k| matches!(k, Some(None)))
         || !valid_phases(spec.fires)
+        || !(action.is_empty() || is_valid_name(&action))
     {
         return Status::BAD_ARGS;
     }
@@ -86,6 +90,7 @@ pub(crate) extern "system" fn control(
             link,
             fires: spec.fires,
             hold_ms: spec.hold_ms,
+            action,
             callback,
             user: user.expose_provenance(),
             tracker: Tracker::default(),
@@ -242,7 +247,11 @@ impl Installed {
             }
             let now = advance(&mut s.controls, after);
             let FakeControls {
-                controls, slots, ..
+                controls,
+                slots,
+                runs,
+                targets,
+                ..
             } = &mut s.controls;
             let bound: Vec<[u32; 2]> = controls
                 .iter()
@@ -257,7 +266,13 @@ impl Installed {
             let mut calls = Vec::new();
             for (control, slots) in controls.iter_mut().zip(slots.iter()) {
                 let kind = control.tracker.look(*slots != 0, now, control.hold_ms) & control.fires;
-                calls.extend(phases(kind).map(|kind| control.call(kind)));
+                for kind in phases(kind) {
+                    calls.push(control.call(kind));
+                    if !control.action.is_empty() {
+                        runs.push((control.action.clone(), String::new()));
+                        targets.push(None);
+                    }
+                }
             }
             calls
         });
@@ -393,6 +408,7 @@ mod tests {
             link: Str::EMPTY,
             fires,
             hold_ms: 500,
+            action: Str::EMPTY,
         };
         control(
             ModHandle(1),

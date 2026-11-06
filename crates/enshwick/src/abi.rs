@@ -746,7 +746,7 @@ const _: () = {
     assert!(size_of::<ItemAction>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, control) == 24 + 180 * 8);
     assert!(core::mem::offset_of!(HostApi, run_action) == 24 + 181 * 8);
-    assert!(size_of::<ControlSpec>() == 8 + 2 * 16 + 8 + 16 + 8);
+    assert!(size_of::<ControlSpec>() == 8 + 2 * 16 + 8 + 16 + 8 + 16);
     assert!(core::mem::offset_of!(ControlEvent, player) == 8 + 16 + 8);
     assert!(core::mem::offset_of!(HostApi, game_version) == 24 + 179 * 8);
     assert!(core::mem::offset_of!(HostApi, resource_keys) == 24 + 176 * 8);

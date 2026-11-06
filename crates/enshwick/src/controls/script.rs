@@ -68,6 +68,9 @@ pub(crate) struct ScriptControl {
     /// Seconds the key stays down before a hold fires, as
     /// [`Control::hold_for`] sets it.
     pub hold_for: Option<Duration>,
+    /// The id of the mod's action the server runs each time the control
+    /// fires on a client, as [`Control::runs`] sets it.
+    pub runs: Option<String>,
 }
 
 impl From<ScriptControl> for Control {
@@ -75,6 +78,7 @@ impl From<ScriptControl> for Control {
         let mut control = Self::new(&script.name, &script.label).fires(&script.fires);
         control.keys = [script.key, script.second];
         control.link = script.link;
+        control.action = script.runs;
         if let Some(hold) = script.hold_for {
             control = control.hold_for(hold);
         }
@@ -206,6 +210,7 @@ mod tests {
             link: Some(GameAction::ContextualActionTap),
             fires: vec![Phase::Hold, Phase::Release],
             hold_for: Some(Duration::from_millis(250)),
+            runs: Some("lights".into()),
         });
         assert_eq!(
             control.keys,
@@ -214,6 +219,7 @@ mod tests {
         assert_eq!(control.link, Some(GameAction::ContextualActionTap));
         assert_eq!(control.fires, ControlSpec::HOLD | ControlSpec::RELEASE);
         assert_eq!(control.hold, Duration::from_millis(250));
+        assert_eq!(control.action.as_deref(), Some("lights"));
         let plain = Control::from(ScriptControl {
             name: "x".into(),
             label: "X".into(),
@@ -222,10 +228,23 @@ mod tests {
             link: None,
             fires: Vec::new(),
             hold_for: None,
+            runs: None,
         });
         assert_eq!(
-            (plain.keys, plain.link, plain.fires, plain.hold),
-            ([None, None], None, ControlSpec::PRESS, super::super::HOLD)
+            (
+                plain.keys,
+                plain.link,
+                plain.fires,
+                plain.hold,
+                plain.action
+            ),
+            (
+                [None, None],
+                None,
+                ControlSpec::PRESS,
+                super::super::HOLD,
+                None
+            )
         );
     }
 
