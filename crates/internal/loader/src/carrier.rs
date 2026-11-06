@@ -401,6 +401,11 @@ fn set_host(key: u64) {
     }
 }
 
+/// Whether `key` is the own player of this client that hosts the game.
+pub(crate) fn is_host(key: u64) -> bool {
+    key != 0 && client_hosts() && CARRIER.host_key.load(Ordering::Acquire) == key
+}
+
 fn loop_back(to_server: bool, host: u64, channel: u32, payload: &[u8]) -> Result<(), Status> {
     // Before the server half knows its own player, nobody would take it.
     if host == 0 {

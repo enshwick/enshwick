@@ -363,7 +363,7 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
                 // live, on the thread running that system (the caller's
                 // contract), all `is_world` asks for.
                 || unsafe { engine.is_world(system, crate::world::server_world()) };
-            crate::build_reasons::refused(filter.owner, player, text, server);
+            crate::build_reasons::refused(filter.owner, call.player, text, server);
         }
         // SAFETY: `flags` is non-null (the null checks return first) and the
         // check's live `u32` flags word, which nothing else writes during the

@@ -32,6 +32,18 @@ fn a_hosted_message_waits_until_its_half_takes_it_whole() {
 }
 
 #[test]
+fn only_the_hosting_client_s_own_player_counts_as_its_host() {
+    let _alone = alone();
+    assert!(!is_host(7), "no host known");
+    host_for_test(7);
+    assert!(is_host(7));
+    assert!(!is_host(8), "another player of the hosted game");
+    assert!(!is_host(0));
+    unhost_for_test();
+    assert!(!is_host(7), "a client that stopped hosting");
+}
+
+#[test]
 fn the_hosted_queues_are_bounded_and_forget_empties_them() {
     let _alone = alone();
     for _ in 0..MAX_LOOPED {

@@ -8,9 +8,11 @@
 //! server's step tells each player at most once a second, and the same
 //! reason again only after that player's refusals stopped for a second.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
+use enshwick::Entity;
 use enshwick::abi::Side;
 
 use crate::host::Loader;
@@ -40,10 +42,7 @@ struct Reason {
 
 impl Reason {
     fn new(owner: ModIndex, text: &str) -> Self {
-        let mut end = text.len().min(MAX_LEN);
-        while !text.is_char_boundary(end) {
-            end -= 1;
-        }
+        let end = text.floor_char_boundary(MAX_LEN);
         let mut bytes = [0; MAX_LEN];
         bytes[..end].copy_from_slice(&text.as_bytes()[..end]);
         Self {
@@ -61,22 +60,25 @@ impl Reason {
 /// A player's latest refusal: their character, the reason and when.
 #[derive(Clone, Copy)]
 struct Seen {
-    player: u32,
+    player: Entity,
     reason: Reason,
     at_ms: u64,
 }
 
-/// What the server last told a player.
+/// What the server last told a player; `sent_ms` is `None` before the
+/// first notice.
 #[derive(Clone, Copy)]
 struct Told {
-    player: u32,
+    player: Entity,
     reason: Reason,
-    sent_ms: u64,
+    sent_ms: Option<u64>,
     seen_ms: u64,
 }
 
 struct State {
     start: OnceLock<Instant>,
+    /// Set once `seen` may hold a refusal, so an idle step takes no lock.
+    any: AtomicBool,
     /// The step's refusals by player, filled on the cursor threads.
     seen: Mutex<[Option<Seen>; SLOTS]>,
     /// The client's own latest refusal, for its HUD.
@@ -87,6 +89,7 @@ struct State {
 
 static STATE: State = State {
     start: OnceLock::new(),
+    any: AtomicBool::new(false),
     seen: Mutex::new([None; SLOTS]),
     local: Mutex::new(None),
     told: Mutex::new(Vec::new()),
@@ -102,7 +105,7 @@ fn now_ms() -> u64 {
 /// `server` world for the notices, any other for the client's own HUD, so a
 /// hosting client shows only its own player's refusals.
 #[cold]
-pub(crate) fn refused(owner: ModIndex, player: u32, text: &str, server: bool) {
+pub(crate) fn refused(owner: ModIndex, player: Entity, text: &str, server: bool) {
     if text.is_empty() {
         return;
     }
@@ -126,6 +129,7 @@ pub(crate) fn refused(owner: ModIndex, player: u32, text: &str, server: bool) {
         .or_else(|| slots.iter().position(Option::is_none));
     if let Some(slot) = slot {
         slots[slot] = Some(seen);
+        STATE.any.store(true, Ordering::Release);
     }
 }
 
@@ -133,12 +137,17 @@ pub(crate) fn refused(owner: ModIndex, player: u32, text: &str, server: bool) {
 /// a new reason, or the same one after a pause, and never twice in a second.
 fn due(told: &Told, seen: &Seen) -> bool {
     let new = seen.reason != told.reason || seen.at_ms.saturating_sub(told.seen_ms) > GAP_MS;
-    new && seen.at_ms.saturating_sub(told.sent_ms) >= GAP_MS
+    new && told
+        .sent_ms
+        .is_none_or(|sent| seen.at_ms.saturating_sub(sent) >= GAP_MS)
 }
 
 /// Tells the builders the step's refusals, on the server's game thread after
 /// its step.
 pub(crate) fn after_step(loader: &Loader) {
+    if !STATE.any.swap(false, Ordering::Acquire) {
+        return;
+    }
     let seen = core::mem::replace(&mut *STATE.seen.relock(), [None; SLOTS]);
     let mut told = STATE.told.relock();
     let now = now_ms();
@@ -148,7 +157,7 @@ pub(crate) fn after_step(loader: &Loader) {
     }
     let players = crate::world::players(loader).unwrap_or_default();
     for seen in seen.iter().flatten() {
-        let Some(player) = players.iter().find(|p| p.entity.0 == seen.player) else {
+        let Some(player) = players.iter().find(|p| p.entity == seen.player) else {
             continue;
         };
         let index = told
@@ -158,7 +167,7 @@ pub(crate) fn after_step(loader: &Loader) {
                 told.push(Told {
                     player: seen.player,
                     reason: Reason::new(seen.reason.owner, ""),
-                    sent_ms: 0,
+                    sent_ms: None,
                     seen_ms: 0,
                 });
                 told.len() - 1
@@ -169,7 +178,7 @@ pub(crate) fn after_step(loader: &Loader) {
             continue;
         }
         told[index].reason = seen.reason;
-        told[index].sent_ms = seen.at_ms;
+        told[index].sent_ms = Some(seen.at_ms);
         let key = player.key.get();
         if shown_by_client(loader, seen.reason.owner, key) {
             continue;
@@ -182,18 +191,21 @@ pub(crate) fn after_step(loader: &Loader) {
 }
 
 /// Whether the client of player `key` shows mod `owner`'s reasons itself:
-/// it runs Enshwick, and the mod runs there too.
+/// it hosts this game, whose own cursor check runs every mod, or it runs
+/// Enshwick and the mod runs there too.
 fn shown_by_client(loader: &Loader, owner: ModIndex, key: u64) -> bool {
-    crate::net::ready(key)
-        && loader
-            .mods
-            .get(owner.get())
-            .is_some_and(|m| m.manifest.side == Side::BOTH)
+    crate::carrier::is_host(key)
+        || crate::net::ready(key)
+            && loader
+                .mods
+                .get(owner.get())
+                .is_some_and(|m| m.manifest.side == Side::BOTH)
 }
 
-/// `reason` in `language`, from its mod's texts, else as the mod gave it.
+/// `reason` in `language`, the game's for `None`, from its mod's texts,
+/// else as the mod gave it.
 fn shown(loader: &Loader, reason: &Reason, language: Option<enshwick::i18n::Language>) -> String {
-    let language = language.unwrap_or(enshwick::i18n::Language::FALLBACK);
+    let language = language.unwrap_or_else(crate::texts::language);
     loader
         .mods
         .get(reason.owner.get())
@@ -235,15 +247,15 @@ mod tests {
 
     fn seen(text: &str, at_ms: u64) -> Seen {
         Seen {
-            player: 7,
+            player: Entity(7),
             reason: Reason::new(ModIndex::new(1), text),
             at_ms,
         }
     }
 
-    fn told(text: &str, sent_ms: u64, seen_ms: u64) -> Told {
+    fn told(text: &str, sent_ms: Option<u64>, seen_ms: u64) -> Told {
         Told {
-            player: 7,
+            player: Entity(7),
             reason: Reason::new(ModIndex::new(1), text),
             sent_ms,
             seen_ms,
@@ -252,31 +264,38 @@ mod tests {
 
     #[test]
     fn a_player_hears_a_new_reason_at_most_once_a_second() {
-        assert!(due(&told("", 0, 0), &seen("low", 5000)));
-        assert!(!due(&told("low", 5000, 5000), &seen("high", 5400)));
-        assert!(due(&told("low", 5000, 5900), &seen("high", 6000)));
+        assert!(due(&told("", None, 0), &seen("low", 5000)));
+        assert!(!due(&told("low", Some(5000), 5000), &seen("high", 5400)));
+        assert!(due(&told("low", Some(5000), 5900), &seen("high", 6000)));
+    }
+
+    #[test]
+    fn a_player_refused_in_the_clock_s_first_second_hears_it() {
+        assert!(due(&told("", None, 0), &seen("low", 300)));
     }
 
     #[test]
     fn the_same_reason_is_told_again_only_after_the_refusals_paused() {
-        assert!(!due(&told("low", 5000, 9950), &seen("low", 9966)));
-        assert!(due(&told("low", 5000, 9000), &seen("low", 10_500)));
+        assert!(!due(&told("low", Some(5000), 9950), &seen("low", 9966)));
+        assert!(due(&told("low", Some(5000), 9000), &seen("low", 10_500)));
     }
 
     #[test]
     fn a_hosting_client_shows_only_its_own_worlds_refusals_and_tells_only_the_servers() {
-        refused(ModIndex::new(1), 40, "far player", true);
+        assert!(!STATE.any.load(Ordering::Acquire), "an idle step skips");
+        refused(ModIndex::new(1), Entity(40), "far player", true);
         assert!(
             STATE.local.relock().is_none(),
             "the server world's check is not the HUD's"
         );
         assert_eq!(STATE.seen.relock().iter().flatten().count(), 1);
-        refused(ModIndex::new(1), 3, "own cursor", false);
+        assert!(STATE.any.load(Ordering::Acquire), "the step looks");
+        refused(ModIndex::new(1), Entity(3), "own cursor", false);
         let local = STATE
             .local
             .relock()
             .map(|s| (s.player, s.reason.text().to_owned()));
-        assert_eq!(local, Some((3, "own cursor".to_owned())));
+        assert_eq!(local, Some((Entity(3), "own cursor".to_owned())));
         assert_eq!(
             STATE.seen.relock().iter().flatten().count(),
             1,
