@@ -153,9 +153,10 @@ pub fn start(mods: usize) {
 }
 
 /// Runs mod `owner`'s callback `f` for `feature`, marking it for crash
-/// blame, and timing it when diagnostics are on. A data pack's callback
-/// runs in the loader's own copy of the API, so it runs with the pack as
-/// that copy's host.
+/// blame, and timing it when diagnostics are on.
+///
+/// A data pack's callback runs in the loader's own copy of the API, so it
+/// runs with the pack as that copy's host.
 #[inline]
 pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
     let marker = u32::try_from(owner.get())
