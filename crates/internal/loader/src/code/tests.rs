@@ -23,11 +23,14 @@ fn a_missing_recipe_list_lookup_is_off_on_its_build_and_in_the_status() {
     assert_eq!(
         line,
         format!(
-            "recipe list lookup off on {}: recipe.list_lookup is not in this build",
+            "recipe list lookup off on {}: recipe.list_lookup is found by no engine route or anchor",
             build.name
         )
     );
-    assert_eq!(entry, "recipe.list_lookup is not in this build");
+    assert_eq!(
+        entry,
+        "recipe.list_lookup is found by no engine route or anchor"
+    );
 }
 
 #[test]

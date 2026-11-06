@@ -3,21 +3,30 @@
 Internal, not for mods: a part of [Enshwick](https://github.com/enshwick/enshwick). Mods
 depend on [`enshwick`](https://crates.io/crates/enshwick) only.
 
-The loader's build tables: per game build, the engine functions and constants
-reflection does not describe, by symbolic id, as SKSE's Address Library does.
-Each table is a TOML file in [`tables/`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/tables), named
-`<side>-<guid>-<age>.toml` after the build's fingerprint. A table also
-records the build's Steam build id (`steam_build`) and the game's own
-version number (`game_version`), each where it is known; several Steam
-builds can share one game version.
+The engine functions and constants reflection does not describe, by
+symbolic id, as SKSE's Address Library does, found on every game build the
+same way: by the engine routes and the anchors in
+[`anchors/`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/anchors),
+with no file made for a build.
+
+The tables in [`tables/`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/tables),
+one per kept build, named `<side>-<guid>-<age>.toml` after its fingerprint,
+are the record of what each kept build pins, with its Steam build id
+(`steam_build`) and the game's own version number (`game_version`). The
+tests compare the routes and anchors with them; the loader does not read
+them, and a new build gets none.
 
 The catalogue (`catalogue.rs`) maps the ids the API asks engine facts by,
 such as `item_info.name`, to the game's reflected types and fields, so a
 game update that moves a field changes this crate, not the mods.
 
-- The loader embeds every table of this folder, and reads no other: a table
-  for a newer game build ships with the next loader build.
-- Before any table, the engine routes in
+- The loader carries
+  [`anchors/patterns.toml`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/anchors/patterns.toml)
+  to every build first (`anchors()`): per side, a pattern row without an
+  address for each entry no route finds, for each symbol whose route does
+  not check its code, and for the symbols a kept constant reads through. A
+  test fails on a row a route makes needless.
+- Then the engine routes in
   [`anchors/routes.toml`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/anchors/routes.toml)
   find their entries in the game's own code, the same way on every build:
   an ECS system's code (`system`), the one function a set of functions
@@ -31,21 +40,27 @@ game update that moves a field changes this crate, not the mods.
   field offset or type size (`field`, each field holding the next type
   inline; `size`), or a value the shape spells
   in its own encoding (`spelled`: memory without a displacement for 0, else
-  an index scale or an immediate, never a `nop`'s), which counts only
+  an index scale or an immediate, never a `nop`'s), or the factor the
+  shape's instructions multiply one index by (`scale`, such as a record
+  size held only in `lea r9,[rax+rax*4]; shl r9,5`), which counts only
   where the shape matches once; a taken constant's shape has two steps,
-  an exact operand or an `{entry}`.
-  Routes build on each other through waypoints, anonymous functions no table
-  pins. A route that finds nothing, or more than one answer, leaves its entry
-  to the table; a route that disagrees with the table turns the entry off,
-  and nothing builds on it. A route whose shape starts at its symbol, or
-  whose `check` shape matches the code there, is the check a hook makes
-  before it patches; a symbol a route only reaches keeps its table's check. A test checks every route against the table of every build whose
-  executable it is given.
+  an exact operand or an `{entry}`. A memory operand through `[?+*]` takes
+  any base register, and `nth` takes the n-th run of a shape that repeats,
+  counted after the one match of an `after` shape in the same part, only
+  where there are exactly `of` runs.
+  Routes build on each other through waypoints, anonymous functions no
+  entry names. A route that finds nothing, or more than one answer, leaves
+  its entry to its anchor, and an entry with no anchor is missing; a route
+  that disagrees with its anchor turns the entry off, and nothing builds on
+  it. A route whose shape starts at its symbol, or whose `check` shape
+  matches the code there, is the check a hook makes before it patches; a
+  symbol a route only reaches keeps its anchor's check. A test checks every
+  route, and the anchors with the routes, against the table of every kept
+  build whose executable it is given.
 - [`anchors/classes.toml`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/anchors/classes.toml)
   says for every entry whether the engine gives it (`engine`) or why research
   found no route (`pattern`).
-- On a build without a table, the loader takes the newest table of the same
-  side, by Steam build id, and finds each entry by its `pattern`: a symbol at or through the
+- An anchor finds its entry by its `pattern`: a symbol at or through the
   code it matches, a constant read from the operand of the instruction that
   uses it, or in the code of a symbol it names (`via`), at its start or
   once `within` a number of bytes from it. The slots of
@@ -57,9 +72,9 @@ game update that moves a field changes this crate, not the mods.
   What neither finds stays missing, and only the features and mods that
   need it turn off.
 - [`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin)
-  writes the table for a new build, patterns included.
+  reports how the kept rows port to a new build and writes no table.
 - [`reports/`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/reports)
-  holds, under each table's file name, what the loader finds on that build:
+  holds, under each build's file name, what the loader finds on that build:
   its Steam build and game version, how many entries it has and how many
   the engine routes found, the entries it lacks that another build of its
   side has, and each loader feature that is off or partly off for them.
@@ -69,8 +84,8 @@ game update that moves a field changes this crate, not the mods.
 
 ## Patterns
 
-Every entry of the loader's tables carries a pattern that finds it on a
-build without a table: a run of the game's code, unique in its code
+Every row of the anchors and of the kept tables carries a pattern that finds
+its entry on any build: a run of the game's code, unique in its code
 section, with the bytes that move between builds left open (`??`): call and
 jump targets, RIP-relative addresses, and field and stack offsets wherever
 the run stays unique without them.

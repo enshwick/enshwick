@@ -8,6 +8,17 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- Routes fold a record size or stride from index arithmetic (`take =
+  "scale"`), match memory through any base register (`[?+*]`) and take the
+  n-th of a known number of runs of a repeated shape after a unique anchor
+  (`after`, `nth`, `of`).
+  Twelve more constants come from the engine through them, among them
+  `ecs.entity_record_size`, `weather.entry_size`, the building box offsets,
+  the inventory view copies and the client's `ui.context_bundle` (#951).
+- `anchors/patterns.toml` holds, per side, a pattern row without an address
+  or build for each entry no route finds, read by `anchors(side)`;
+  `reported` says whether a compatibility report covers a build, and
+  `Resolved::lack` counts an entry no row holds as missing (#951).
 - Routes read a constant from the engine's reflection (`field`, the sum of
   each listed field's offset, found only while each field holds the next
   type inline; `size`, a type's size), take a `spelled` value only where
@@ -27,6 +38,12 @@ Each entry names the pull request that made the change.
   a value only where the witness is found once and reads the same value.
   Every embedded table has a witness for each value a pattern's operand
   reads and no route finds (#946).
+
+### Changed
+
+- The tables in `tables/` are the frozen record of the kept builds, which
+  the tests compare the routes and anchors with; a new build gets its
+  compatibility report and no table (#951).
 
 ### Fixed
 

@@ -466,13 +466,13 @@ typedef struct EnshwickFingerprint {
   uint32_t age;
 } EnshwickFingerprint;
 
-// Where the loader's build table for the running build comes from.
+// Whether the loader found every entry it knows on the running build, by
+// its engine routes and anchors.
 typedef uint8_t EnshwickBuildTable;
-// The table was made for this build: every entry it pins is there.
+// Every entry the loader knows is there.
 #define EnshwickBuildTable_EXACT 0
-// The build has no table yet: the newest table of its side found what
-// it could by code patterns, and the rest is missing until the table
-// for this build arrives.
+// Some entries are missing: what needs one stays off until a loader
+// release finds it.
 #define EnshwickBuildTable_PATTERNS 1
 
 // The running game, as the loader identified it.
@@ -485,7 +485,7 @@ typedef struct EnshwickBuildInfo {
   uint64_t base;
   // The build fingerprint.
   struct EnshwickFingerprint fingerprint;
-  // Whether the loader's build table was made for this build.
+  // Whether the loader found every entry it knows on this build.
   EnshwickBuildTable table;
 } EnshwickBuildInfo;
 
@@ -3141,11 +3141,11 @@ typedef struct EnshwickHostApi {
   // The loader's own version.
   struct EnshwickStr host_version;
   // Writes the running game's identity, its side, image base, build
-  // fingerprint and where its build table is from, as far as the
+  // fingerprint and whether the loader found every entry it knows, as far as the
   // `Header` `out` starts with says the caller's struct reaches.
   void (*build)(struct EnshwickBuildInfo *out);
   // Resolves a symbolic id for the running build: the mod's own rows first,
-  // then the loader's table.
+  // then what the loader found.
   EnshwickStatus (*symbol)(EnshwickModHandle me, struct EnshwickStr name, uint64_t *out);
   // Resolves an ECS system's update function by its reflected name.
   EnshwickStatus (*system)(struct EnshwickStr name, uint64_t *out);

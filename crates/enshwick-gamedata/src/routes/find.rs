@@ -212,8 +212,72 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
 
     fn shaped(&mut self, within: &str, steps: &'f [Step], route: &Route) -> Option<Routed> {
         let function = self.address(within)?;
-        let (_, one) = self.only_match([function], steps)?;
+        let one = match route.nth {
+            Some(nth) => self.nth_match(function, &route.after, steps, nth)?,
+            None => self.only_match([function], steps)?.1,
+        };
         self.take(route, steps, one)
+    }
+
+    /// The `nth` run of `steps`, from 1, in address order: in the part of
+    /// `function`'s code where `after` matches once, after that match, or,
+    /// with no `after`, anywhere in its code; none unless there are `of`
+    /// runs, so a run added or dropped never shifts the count silently.
+    fn nth_match(
+        &mut self,
+        function: u32,
+        after: &[Step],
+        steps: &[Step],
+        (nth, of): (u32, u32),
+    ) -> Option<shape::Match> {
+        let entries = self.entries(after.iter().chain(steps))?;
+        let entry = |id: &str| entries.iter().find(|(e, _)| *e == id).map(|&(_, va)| va);
+        let parts = self.parts(function);
+        let mut runs: Vec<shape::Match> = if after.is_empty() {
+            parts
+                .iter()
+                .flat_map(|part| shape::matches(steps, part, &entry))
+                .collect()
+        } else {
+            let mut anchors = parts
+                .iter()
+                .enumerate()
+                .flat_map(|(i, part)| shape::matches(after, part, &entry).map(move |m| (i, m)));
+            let (part, anchor) = anchors.next()?;
+            if anchors.next().is_some() {
+                return None;
+            }
+            shape::matches(steps, &parts[part], &entry)
+                .filter(|run| run.start >= anchor.end)
+                .collect()
+        };
+        if runs.len() != usize::try_from(of).ok()? {
+            return None;
+        }
+        runs.sort_unstable_by_key(|run| run.start);
+        runs.into_iter()
+            .nth(usize::try_from(nth).ok()?.checked_sub(1)?)
+    }
+
+    /// The decoded parts of `function`'s code, decoded once.
+    fn parts(&mut self, function: u32) -> &[Vec<Instruction>] {
+        let code = self.code;
+        self.decoded
+            .entry(function)
+            .or_insert_with(|| code.parts_of(function).map(|p| code.decode(p)).collect())
+    }
+
+    /// The address of each entry `steps` name, by id; none when one is not
+    /// found.
+    fn entries<'s>(
+        &mut self,
+        steps: impl Iterator<Item = &'s Step>,
+    ) -> Option<Vec<(&'s str, u64)>> {
+        let base = self.code.base();
+        steps
+            .flat_map(Step::entries)
+            .map(|id| Some((id, base + u64::from(self.address(id)?))))
+            .collect()
     }
 
     /// Among the functions that call `callee` directly, the one whose code
@@ -240,20 +304,11 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         functions: impl IntoIterator<Item = u32>,
         steps: &'f [Step],
     ) -> Option<(u32, shape::Match)> {
-        let base = self.code.base();
-        let mut entries: Vec<(&str, u64)> = Vec::new();
-        for id in steps.iter().flat_map(Step::entries) {
-            let rva = self.address(id)?;
-            entries.push((id, base + u64::from(rva)));
-        }
+        let entries = self.entries(steps.iter())?;
         let entry = |id: &str| entries.iter().find(|(e, _)| *e == id).map(|&(_, va)| va);
-        let code = self.code;
         let mut found = None;
         for function in functions {
-            let parts = self
-                .decoded
-                .entry(function)
-                .or_insert_with(|| code.parts_of(function).map(|p| code.decode(p)).collect());
+            let parts = self.parts(function);
             for one in parts
                 .iter()
                 .flat_map(|part| shape::matches(steps, part, &entry))
@@ -295,6 +350,13 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             Take::Value => constant(one.taken?),
             Take::Cell => constant(u64::from(code.image().u32(one.taken?)?)),
             Take::Spelled => Some(Routed::Constant(route.value)),
+            Take::Scale => {
+                let run = (
+                    u32::try_from(rva(one.start)?).ok()?,
+                    u32::try_from(rva(one.end)?).ok()?,
+                );
+                shape::scale(&code.decode(run)).map(Routed::Constant)
+            }
         }
     }
 }

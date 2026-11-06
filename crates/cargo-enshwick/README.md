@@ -61,28 +61,30 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   `pack schema [dir]` writes the JSON Schema of each pack file for editors;
   `pack zip <dir> [--out <file>]` checks the pack and zips it for a release,
   its files under `mods/<id>/`.
-- `pin --old <exe> --new <exe>` writes the loader's build table for a new game
-  build and ports the mods' build rows, in an Enshwick checkout, for
-  maintainers. See [below](#porting-build-rows-pin).
+- `pin --old <exe> --new <exe>` ports the mods' build rows to a new game
+  build and reports how the loader's entries port, in an Enshwick checkout,
+  for maintainers. See [below](#porting-build-rows-pin).
 
 ## Porting build rows (`pin`)
 
-`cargo enshwick pin` writes the build table of a new game build. Every game
-update changes the build fingerprint and moves functions. Until the new
-build's table exists, the loader runs it on the code patterns of the newest
-table, and whatever they miss stays off. This tool writes the table where it
-can prove each entry and lists the rest for a human. It never guesses.
+`cargo enshwick pin` ports build rows to a new game build. Every game update
+changes the build fingerprint and moves functions. The loader finds its own
+entries on every build by its engine routes and anchors, with no file made
+for the build, so `pin` writes no loader table: it reports how each row of
+the kept table ports, which shows a route or anchor that needs fixing. A
+mod's own rows are per build, and `pin` writes them where it can prove each
+entry and lists the rest for a human. It never guesses.
 
-It reads the loader's tables, one TOML file per build in
+It reads the kept builds' tables, one TOML file per build in
 [`crates/enshwick-gamedata/tables`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/tables), and the
 `[[package.metadata.enshwick.builds]]` rows of every mod's `Cargo.toml`
 under `mods/`. A row gives its symbols and constants as
 `[package.metadata.enshwick.builds.symbols]` and
 `[package.metadata.enshwick.builds.constants]` tables of `"id" = value`
 lines; `pin` refuses a row that gives them as an inline table or dotted keys.
-It ports each table and row whose fingerprint is the old executable's. Each entry of the new table also
-gets the code pattern that finds it on a later build without a table, taken
-from the new executable: the smallest window of instructions that is unique
+It ports each table and row whose fingerprint is the old executable's. Each
+ported entry also gets the code pattern that finds it on a later build,
+taken from the new executable: the smallest window of instructions that is unique
 in the code, with moving parts masked, and field and frame offsets too where
 the window stays unique without them. A symbol's window is its own code, or
 the code that calls or addresses it; a constant's is the instruction picked
@@ -95,7 +97,7 @@ For each table it ports, `pin` also refreshes the `check` shapes of the
 engine routes in `crates/enshwick-gamedata/anchors/routes.toml` for that
 side: a check that still holds at its symbol on the old and the new build
 stays, a route of that side alone takes one made from their code, and the
-report lists each route left without one, whose hook then needs its table
+report lists each route left without one, whose hook then needs an anchor
 row.
 
 ### Workflow
@@ -126,29 +128,28 @@ row.
      --steam-build 26100001 --write --report pin-client.md
    ```
 
-   `--write` writes the new table file beside the old one and puts each new
-   mod row right after its old one; it needs `--steam-build`. The table
-   records it as `steam_build`, and the game's own version number as
-   `game_version` when `--game-version` gives it. Without `--write` the report
-   carries the new table and rows instead. It writes every file or none:
+   `--write` puts each new mod row right after its old one and writes the
+   refreshed check shapes; the report names the build by `--steam-build` and
+   `--game-version` when they are given. Without `--write` the report carries
+   the ported table and the new rows instead. It writes every file or none:
    when one cannot be written, the others stay as they were. The exit code is 0 when nothing
    needs a human, 2 when something does, and 1 on an error.
 4. **Review.** The report lists every entry with its verdict. Settle each item
-   under "For a human": a dropped entry has a `pin:` note (above its table's
-   header in the table file, where it was in a mod's row), and a flagged
-   constant has one above it. Read `git diff`, build, and try the new build in
-   game.
-5. **Write the report data** of the new table, which the compatibility page
-   reads, under the table's file name:
+   under "For a human": a dropped mod entry has a `pin:` note where it was
+   in the mod's row, and a flagged constant has one above it. A loader entry
+   the report cannot port needs its route or anchor fixed. Read `git diff`,
+   build, and try the new build in game.
+5. **Write the report data** of the new build, which the compatibility page
+   reads, under the build's file name:
 
    ```bash
    cargo xtask compat server/enshrouded_server.exe \
      --data crates/enshwick-gamedata/reports/<table file name>
    ```
 
-6. **Open a pull request** with the new table, its report data, the rows and
-   the report's summary. Never commit an executable or anything else from the game. Once
-   it is merged, the next loader build embeds the table.
+6. **Open a pull request** with the report data, the rows, any fixed route or
+   anchor and the report's summary. Never commit an executable or anything
+   else from the game.
 
 `--patterns <exe>` rewrites the patterns of the table for that executable's
 build from the executable itself. With `--write` it writes the table file;

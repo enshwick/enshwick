@@ -74,6 +74,15 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- The loader finds every game build the same way, a new one too: by the
+  anchors of `enshwick-gamedata` carried by their code patterns, then the
+  engine routes. It reads no per-build table at run time, and an entry
+  whose route finds nothing and that no anchor holds counts as missing.
+  The start line, the status report and every feature-off line name the
+  build by its side, Steam build, game version and executable.
+  `build_patterns = false` keeps vanilla a build that no compatibility
+  report of the release covers, and `BuildInfo::table` is `EXACT` on a
+  build where nothing is missing, `PATTERNS` otherwise (#951).
 - **Breaking:** a Luau mod declares a control with
   `enshwick.controls.control(control, on)`, as `Load::control` does, in
   place of `controls.declare`: the control is a table of the builder's

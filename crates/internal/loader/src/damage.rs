@@ -149,7 +149,7 @@ pub(crate) fn link(loader: &Loader) {
         if !loader.code_holds(name) {
             crate::log!(
                 WARN,
-                "damage filters: {site:?} off on {}: {name} does not read as the build table says",
+                "damage filters: {site:?} off on {}: {name} does not read as its anchor says",
                 loader.build.name
             );
             continue;

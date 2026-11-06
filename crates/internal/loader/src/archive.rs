@@ -33,7 +33,7 @@ pub(crate) fn open_game(dir: &Path, side: enshwick::abi::Side) -> Option<&'stati
         if archive.is_none() {
             crate::log!(
                 WARN,
-                "the game's archive {name}.kfc does not read: attribute slots come only from a build table, vanilla names and texts are unknown"
+                "the game's archive {name}.kfc does not read: attribute slots are missing, so what needs them stays off, and vanilla names and texts are unknown"
             );
         }
         archive

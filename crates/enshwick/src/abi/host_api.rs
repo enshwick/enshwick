@@ -41,11 +41,11 @@ pub struct HostApi {
     /// The loader's own version.
     pub host_version: Str,
     /// Writes the running game's identity, its side, image base, build
-    /// fingerprint and where its build table is from, as far as the
+    /// fingerprint and whether the loader found every entry it knows, as far as the
     /// [`Header`] `out` starts with says the caller's struct reaches.
     pub build: extern "system" fn(out: *mut BuildInfo),
     /// Resolves a symbolic id for the running build: the mod's own rows first,
-    /// then the loader's table.
+    /// then what the loader found.
     pub symbol: extern "system" fn(me: ModHandle, name: Str, out: *mut u64) -> Status,
     /// Resolves an ECS system's update function by its reflected name.
     pub system: extern "system" fn(name: Str, out: *mut u64) -> Status,

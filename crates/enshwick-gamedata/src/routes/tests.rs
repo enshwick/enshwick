@@ -1,9 +1,11 @@
+mod builds;
+
 use iced_x86::{Decoder, DecoderOptions, Instruction};
 
 use super::shape::{self, Step};
 use super::{How, Routed, Routes};
 use crate::reflect::{Image, Layout, Reflection};
-use crate::{Side, Table, embedded, exact};
+use crate::{Side, Table, embedded};
 
 #[test]
 fn the_embedded_routes_read() {
@@ -532,6 +534,69 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
     assert!(!routes.checks("t.leaf", Side::Server));
 }
 
+/// In `sys_b`, `call; mov eax,7; mov eax,7; ret`: an ordinal takes the
+/// `nth` of the identical moves, counted after its anchor when it has one,
+/// and finds nothing past the last, where the anchor is not unique or where
+/// the moves are not `of` many.
+#[test]
+fn an_ordinal_takes_the_nth_run_after_its_anchor() {
+    let fake = fake();
+    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+    let reflection = Reflection::scan(&image);
+    let row = |id: &str, keys: &str| {
+        format!("[[route]]\nid = \"{id}\"\nin = \"sys_b\"\nshape = [\"mov eax,0x7\"]\n{keys}\n")
+    };
+    let text = [
+        row("t.second", "nth = 2\nof = 2"),
+        row("t.miscounted", "nth = 1\nof = 3"),
+        row("t.after", "after = [\"call ?\"]\nnth = 1\nof = 2"),
+        row("t.past", "after = [\"call ?\"]\nnth = 3\nof = 3"),
+        row("t.anchors", "after = [\"mov eax,0x7\"]\nnth = 1\nof = 1"),
+        row("t.named", "after = [\"call {t.leaf}\"]\nnth = 2\nof = 2"),
+        "[[route]]\nid = \"t.unique\"\nin = \"sys_b\"\nshape = [\"call {t.leaf}\", \"mov eax,0x7\"]\n".to_owned(),
+        "[[route]]\nid = \"~fn:a\"\nloads = [\"hello\"]\n".to_owned(),
+        "[[route]]\nid = \"t.leaf\"\ncalled_by = [\"~fn:a\", \"sys_b\"]\n".to_owned(),
+    ]
+    .concat();
+    let routes = Routes::parse(&text).unwrap();
+    let found: Vec<(&str, Option<Routed>)> =
+        routes.find(&image, &reflection, Side::Server, &empty());
+    assert_eq!(
+        found,
+        [
+            ("t.after", Some(Routed::Reached(0x1015))),
+            ("t.anchors", None),
+            ("t.leaf", Some(Routed::Reached(0x1040))),
+            ("t.miscounted", None),
+            ("t.named", Some(Routed::Reached(0x101a))),
+            ("t.past", None),
+            ("t.second", Some(Routed::Reached(0x101a))),
+            ("t.unique", Some(Routed::Symbol(0x1010))),
+        ]
+    );
+    for bad in [
+        row("t.zero", "nth = 0\nof = 2"),
+        row("t.uncounted", "nth = 1"),
+        row("t.counted", "of = 2"),
+        row("t.beyond", "nth = 3\nof = 2"),
+        row("t.alone", "after = [\"call ?\"]"),
+        row("t.taking", "after = [\"call *\"]\nnth = 1\nof = 2"),
+        "[[route]]\nid = \"t.callers\"\ncallers = \"t.leaf\"\nshape = [\"ret\"]\nnth = 1\nof = 1\n"
+            .to_owned(),
+    ] {
+        assert!(Routes::parse(&bad).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn a_memory_operand_through_any_base_matches_every_register_but_rip() {
+    let none = |_: &str| None;
+    let any = first(&["lea rdx,[?-*]"], &none).unwrap();
+    assert_eq!((any.start, any.taken), (0x1006, Some(0x60)));
+    assert!(first(&["mov eax,[?+r10*4+0x10]"], &none).is_some());
+    assert!(first(&["mov ecx,[?+?]"], &none).is_none());
+}
+
 /// A slot route takes the function a vtable slot points at, only where the
 /// pointer starts a function and the route's check holds; a slot row names
 /// its vtable and slot and nothing else.
@@ -672,133 +737,135 @@ fn a_spelled_value_needs_a_step_that_spells_it_and_a_reflected_number_stands_alo
     }
 }
 
-/// Entries a route finds on a table build that its own table does not pin
-/// and no pattern of the newest table finds there either, by table name.
-const UNPINNED_UNCHECKED: &[(&str, &[&str])] = &[
-    (
-        "1.0 client (1269579)",
-        &[
-            "bases.cursor",
-            "bases.entity_query",
-            "bases.set_insert",
-            "building.block_box",
-            "recipe.limit_stop",
-            "ui.no_construct",
-            "ui.scroll_focus",
-            "ui.scroll_state_size",
-            "ui.text_field",
-            "ui.text_field_extent",
-            "ui.text_field_text",
-        ],
-    ),
-    (
-        "1.0 server (1269579)",
-        &[
-            "bases.cursor",
-            "bases.entity_query",
-            "bases.set_insert",
-            "building.block_box",
-            "recipe.limit_stop",
-        ],
-    ),
-];
-
-/// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
-/// skipped without it), every route of their side finds, with no table
-/// behind it, the value their own table pins; an entry the table does not
-/// pin takes the value the newest table's patterns find there, or is one of
-/// [`UNPINNED_UNCHECKED`].
+/// The record sizes of the game's code, each held only in index arithmetic,
+/// fold to their factor; what the fold cannot follow gives none.
 #[test]
-#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
-fn every_route_finds_what_the_own_table_pins() {
-    for (var, side) in [
-        ("ENSH_SERVER_EXE", Side::Server),
-        ("ENSH_CLIENT_EXE", Side::Client),
-    ] {
-        if let Ok(path) = std::env::var(var) {
-            routes_hold_on(std::path::Path::new(&path), side);
-        }
-    }
-}
-
-/// As [`every_route_finds_what_the_own_table_pins`] on every executable the
-/// opt-in `ENSH_EXES` lists (a path list, such as every kept build), each
-/// a server when its file is `enshrouded_server.exe`; skipped without it.
-#[test]
-#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
-fn every_route_holds_on_every_kept_build() {
-    let Some(list) = std::env::var_os("ENSH_EXES") else {
-        return;
-    };
-    for path in std::env::split_paths(&list) {
-        let server = path
-            .file_name()
-            .is_some_and(|name| name.eq_ignore_ascii_case("enshrouded_server.exe"));
-        let side = if server { Side::Server } else { Side::Client };
-        routes_hold_on(&path, side);
-    }
-}
-
-/// Runs every route of `side` with no table behind it on the executable at
-/// `path` and compares each with its own table, as the tests above say.
-fn routes_hold_on(path: &std::path::Path, side: Side) {
-    let var = path.display();
-    let tables: Vec<Table> = embedded()
-        .iter()
-        .map(|(_, text)| Table::parse(text).unwrap())
-        .collect();
-    let routes = Routes::embedded().unwrap();
-    {
-        let bytes = std::fs::read(path).unwrap();
-        let image = Image::parse(&bytes, Layout::File, None).unwrap();
-        let reflection = Reflection::scan(&image);
-        let own = exact(&tables, side, image.fingerprint().unwrap())
-            .unwrap()
-            .resolve();
-        let text = image.range(image.section(".text").unwrap());
-        let code = image.read(text.start, text.end - text.start).unwrap();
-        let carried = crate::newest(&tables, side).unwrap().fall_back(
-            code,
-            text.start - image.base(),
-            |at| image.u32(image.base() + at),
-        );
-        let unchecked: &[&str] = UNPINNED_UNCHECKED
-            .iter()
-            .find(|(name, _)| *name == own.name())
-            .map_or(&[], |(_, ids)| ids);
-        let wrong: Vec<String> = routes
-            .find(&image, &reflection, side, &empty())
+fn a_scale_folds_the_factors_of_one_index_and_refuses_what_it_cannot_follow() {
+    let scale = |bytes: &[u8]| {
+        let run: Vec<Instruction> = Decoder::with_ip(64, bytes, 0x1000, DecoderOptions::NONE)
             .into_iter()
-            .filter_map(|(id, routed)| {
-                let (value, constant) = match routed {
-                    Some(Routed::Symbol(v) | Routed::Reached(v)) => (Some(v), false),
-                    Some(Routed::Constant(v)) => (Some(v), true),
-                    None => (None, false),
-                };
-                let entry = |table: &crate::Resolved| {
-                    if constant {
-                        table.constant(id)
-                    } else {
-                        table.symbol(id)
-                    }
-                };
-                let pinned = own.symbol(id).is_some() || own.constant(id).is_some();
-                let want = if pinned {
-                    entry(&own)
-                } else if value.is_none() || unchecked.contains(&id) {
-                    return None;
-                } else {
-                    entry(&carried)
-                };
-                (value != want).then(|| format!("{id}: route {routed:x?}, table {want:x?}"))
-            })
             .collect();
-        assert!(
-            wrong.is_empty(),
-            "{var} ({}), {} wrong:\n{}",
-            own.name(),
-            wrong.len(),
-            wrong.join("\n")
-        );
+        shape::scale(&run)
+    };
+    // lea r9,[rax+rax*4]; shl r9,5; cmp [r9+r8],edx
+    assert_eq!(
+        scale(&[
+            0x4c, 0x8d, 0x0c, 0x80, 0x49, 0xc1, 0xe1, 0x05, 0x43, 0x39, 0x14, 0x01
+        ]),
+        Some(160)
+    );
+    // lea r10,[rax+rax*2]; cmp byte [rcx+r10*4+0x10],0
+    assert_eq!(
+        scale(&[0x4c, 0x8d, 0x14, 0x40, 0x42, 0x80, 0x7c, 0x91, 0x10, 0x00]),
+        Some(12)
+    );
+    // lea edx,[rax+8]; mov rax,[rcx+0x10]; add rdx,rdx; mov eax,[rax+rdx*8]
+    assert_eq!(
+        scale(&[
+            0x8d, 0x50, 0x08, 0x48, 0x8b, 0x41, 0x10, 0x48, 0x03, 0xd2, 0x8b, 0x04, 0xd0
+        ]),
+        Some(16)
+    );
+    // imul rax,rcx,0x48; mov eax,[rdx+rax]
+    assert_eq!(
+        scale(&[0x48, 0x6b, 0xc1, 0x48, 0x8b, 0x04, 0x02]),
+        Some(0x48)
+    );
+    // lea rcx,[rcx+rcx*4]; shl rcx,4: the register the last one writes
+    assert_eq!(
+        scale(&[0x48, 0x8d, 0x0c, 0x89, 0x48, 0xc1, 0xe1, 0x04]),
+        Some(80)
+    );
+    // mov rax,rcx; shl rax,4; sub rax,rcx; mov eax,[rdx+rax]
+    assert_eq!(
+        scale(&[
+            0x48, 0x89, 0xc8, 0x48, 0xc1, 0xe0, 0x04, 0x48, 0x29, 0xc8, 0x8b, 0x04, 0x02
+        ]),
+        Some(15)
+    );
+    // cmp rcx,[rip+0x10]; lea rax,[rcx+rcx*2]; mov eax,[rdx+rax*4]: RIP is no index
+    assert_eq!(
+        scale(&[
+            0x48, 0x3b, 0x0d, 0x10, 0, 0, 0, 0x48, 0x8d, 0x04, 0x49, 0x8b, 0x04, 0x82
+        ]),
+        Some(12)
+    );
+    // lea r9,[rax+rax*4]; xor ecx,ecx; mov eax,[rdx+r9]: a write of another register
+    assert_eq!(
+        scale(&[0x4c, 0x8d, 0x0c, 0x80, 0x31, 0xc9, 0x42, 0x8b, 0x04, 0x0a]),
+        Some(5)
+    );
+    // lea rax,[rcx+rcx*2]; movss xmm0,[rdx+rax*4]: the last load needs no fold
+    assert_eq!(
+        scale(&[0x48, 0x8d, 0x04, 0x49, 0xf3, 0x0f, 0x10, 0x04, 0x82]),
+        Some(12)
+    );
+    // lea rax,[rcx+rcx*4]; movzx eax,al: a byte truncates the multiple
+    assert_eq!(scale(&[0x48, 0x8d, 0x04, 0x89, 0x0f, 0xb6, 0xc0]), None);
+    // lea rcx,[rcx+rcx*4]; mov al,cl: a byte write keeps the rest of rax
+    assert_eq!(scale(&[0x48, 0x8d, 0x0c, 0x89, 0x88, 0xc8]), None);
+    // lea eax,[rcx+rcx*4]; shl eax,0x21: the processor shifts by 1, not 33
+    assert_eq!(scale(&[0x8d, 0x04, 0x89, 0xc1, 0xe0, 0x21]), None);
+    // lea rax,[rcx+rcx*2]; shl rax,cl: a shift by a register
+    assert_eq!(scale(&[0x48, 0x8d, 0x04, 0x49, 0x48, 0xd3, 0xe0]), None);
+    // lea rax,[rcx+rdx]: the first instruction reads two registers
+    assert_eq!(scale(&[0x48, 0x8d, 0x04, 0x11]), None);
+    // mov eax,[rcx]: a factor of 1 multiplies nothing
+    assert_eq!(scale(&[0x8b, 0x01]), None);
+    // lea r9,[rax+rax*4]; imul r9,rcx: a product of two registers
+    assert_eq!(
+        scale(&[0x4c, 0x8d, 0x0c, 0x80, 0x4c, 0x0f, 0xaf, 0xc9]),
+        None
+    );
+    // lea r9,[rax+rax*4]; call; mov eax,[r9]: the call may change r9
+    assert_eq!(
+        scale(&[0x4c, 0x8d, 0x0c, 0x80, 0xe8, 0, 0, 0, 0, 0x41, 0x8b, 0x01]),
+        None
+    );
+    let route = |keys: &str| Routes::parse(&format!("[[route]]\nid = \"a.b\"\nin = \"s\"\n{keys}"));
+    assert!(route("shape = [\"lea r9,[rax+rax*4]\", \"shl r9,0x5\"]\ntake = \"scale\"").is_ok());
+    for bad in [
+        "shape = [\"lea r9,[rax+rax*4]\", \"shl r9,*\"]\ntake = \"scale\"",
+        "shape = [\"lea r9,[rax+rax*4]\"]\ntake = \"scale\"",
+        "shape = [\"lea r9,[rax+rax*4]\", \"shl r9,0x5\"]\ntake = \"scale\"\nplus = 1",
+        "shape = [\"lea r9,[rax+rax*4]\", \"shl r9,0x5\"]\ntake = \"scale\"\nvalue = 0xa0",
+    ] {
+        assert!(route(bad).is_err(), "{bad}");
+    }
+}
+
+/// An anchor row stands only for what the routes leave: an entry no route
+/// of its side finds, a symbol whose route does not check its code, a
+/// symbol a kept constant reads through, or the `.bytes` of a kept symbol.
+#[test]
+fn the_anchors_hold_only_what_no_route_replaces() {
+    let routes = Routes::embedded().unwrap();
+    for side in [Side::Server, Side::Client] {
+        let anchors = crate::anchors(side).unwrap();
+        let read_through: Vec<&str> = anchors
+            .constants()
+            .iter()
+            .filter_map(crate::Constant::via)
+            .collect();
+        let kept: Vec<&str> = anchors.symbols().iter().map(crate::Symbol::id).collect();
+        let stale: Vec<&str> = anchors
+            .symbols()
+            .iter()
+            .map(crate::Symbol::id)
+            .filter(|id| {
+                routes.routes(id, side) && routes.checks(id, side) && !read_through.contains(id)
+            })
+            .chain(
+                anchors
+                    .constants()
+                    .iter()
+                    .map(crate::Constant::id)
+                    .filter(|id| match id.strip_suffix(".bytes") {
+                        Some(symbol) => !kept.contains(&symbol),
+                        None => routes.routes(id, side),
+                    }),
+            )
+            .collect();
+        assert!(stale.is_empty(), "{side:?}: {stale:?}");
     }
 }

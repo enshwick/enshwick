@@ -17,8 +17,18 @@ Each entry names the pull request that made the change.
   the value, in another function where one exists, or `one_witness` with
   the reason when none has a unique window (#946).
 
+### Changed
+
+- `pin --old --new` writes no loader table: it reports how the kept
+  table's rows port, and still writes the mods' build rows and the routes'
+  check shapes; `--steam-build` names the report's build and is no longer
+  needed with `--write` (#951).
+
 ### Fixed
 
+- `pin --patterns` takes a witness only from a second use whose pattern
+  reads the value, so a fixed pattern near the first use no longer drops
+  it for `one_witness` (#951).
 - `cargo enshwick pin` keeps the check of a `callers` route whose shape
   holds where the function starts, which the loader does not count as a
   check (#946).

@@ -1,16 +1,16 @@
-//! The loader's build tables: per game build, the engine functions and
-//! constants that reflection does not describe, by symbolic id.
+//! The engine functions and constants that reflection does not describe,
+//! by symbolic id, found on any game build without a table made for it.
 //!
-//! A table is a TOML file named after the build's fingerprint (see
-//! [`file_name`]). The loader embeds the tables of `tables/` ([`embedded`]).
-//! For the running build it takes the table
-//! made for it ([`exact`], [`Table::resolve`]); on a build without one, the
-//! newest table of the same side ([`newest`]) finds each entry by its pattern
-//! ([`Table::fall_back`]), and what no pattern finds stays missing. Before
-//! either, the [`Routes`] find entries in the game's own code through what
-//! the engine names, the same way on every build ([`Resolved::route`]). The
-//! game's own archive reads with [`archive::Archive`], and the engine's
-//! reflection data with [`reflect::Reflection`].
+//! The [`Routes`] find entries in the game's own code through what the
+//! engine names, the same way on every build ([`Resolved::route`]); the
+//! [`anchors`] find the rest by their code patterns ([`Table::fall_back`]),
+//! and what neither finds stays missing. The tables of `tables/`, each a
+//! TOML file named after a kept build's fingerprint ([`file_name`],
+//! [`embedded`]), are a frozen record the tests check the routes and anchors
+//! against; the loader never reads them, and [`reported`] says which
+//! builds a compatibility report covers. The game's own archive reads with
+//! [`archive::Archive`], and the engine's reflection data with
+//! [`reflect::Reflection`].
 //! The [`catalogue`] maps the ids the API asks engine facts by to the
 //! game's reflected types and fields.
 
@@ -36,7 +36,7 @@ pub use parts::{Part, PartState};
 
 pub use entries::{Body, Constant, Locate, Operand, Symbol, Witness};
 pub use reflect::Fingerprint;
-pub use resolve::{Kind, Resolved, Routing, embedded, exact, newest};
+pub use resolve::{Kind, Resolved, Routing, anchors, embedded, exact, newest, reported};
 pub use routes::{Routed, Routes, ShapeNames, check_holds, make_check, shape_checks};
 pub use table::{MAX_PATTERN, Table, TableError, file_name};
 pub use version::{GameVersion, SteamBuild};
@@ -832,6 +832,66 @@ age = 1
         assert_eq!(
             exact(&tables, Side::Server, old.fingerprint()),
             Some(&revised)
+        );
+    }
+
+    /// Every kept build is reported on its own side only, and no other
+    /// build is: not another age of its executable, nor another guid.
+    #[test]
+    fn a_report_covers_exactly_its_own_build_and_side() {
+        for table in tables() {
+            let fingerprint = table.fingerprint();
+            let other = match table.side() {
+                Side::Server => Side::Client,
+                Side::Client => Side::Server,
+            };
+            let mut guid = fingerprint.guid();
+            guid[15] ^= 1;
+            assert!(reported(table.side(), fingerprint), "{}", table.name());
+            assert!(!reported(other, fingerprint), "{}", table.name());
+            let aged = Fingerprint::new(fingerprint.guid(), fingerprint.age() + 1);
+            assert!(!reported(table.side(), aged), "{}", table.name());
+            let moved = Fingerprint::new(guid, fingerprint.age());
+            assert!(!reported(table.side(), moved), "{}", table.name());
+        }
+    }
+
+    /// An entry a route found nothing for is missing only when no row
+    /// holds it, and once.
+    #[test]
+    fn an_unrouted_entry_is_missing_only_without_a_row() {
+        let table = Table::parse(
+            "name = \"t\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 1\n[symbols]\n\"f.held\" = 0x10\n[constants]\n\"c.held\" = 3\n",
+        )
+        .unwrap();
+        let mut resolved = table.resolve();
+        assert!(!resolved.lack("f.held"));
+        assert!(!resolved.lack("c.held"));
+        assert!(resolved.lack("f.new"));
+        assert!(!resolved.lack("f.new"));
+        assert_eq!(resolved.missing(), ["f.new"]);
+    }
+
+    /// An anchor is a pattern row without an address; one with an address,
+    /// a bare address or no pattern is refused.
+    #[test]
+    fn an_anchor_has_a_pattern_and_no_address() {
+        let anchor = |row: &str| {
+            Table::anchors(
+                &format!("[server.symbols]\n\"a.b\" = {row}\n"),
+                Side::Server,
+            )
+        };
+        let found = anchor("{ pattern = \"90 C3\" }").unwrap();
+        assert_eq!(found.symbols()[0].rva(), 0);
+        for bad in ["0x10", "{ pattern = \"90 C3\", rva = 0x10 }", "{ at = 1 }"] {
+            assert!(anchor(bad).is_err(), "{bad}");
+        }
+        assert!(
+            Table::anchors("[server.symbols]\n", Side::Client)
+                .unwrap()
+                .symbols()
+                .is_empty()
         );
     }
 

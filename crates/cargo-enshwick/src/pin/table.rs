@@ -917,10 +917,12 @@ revision = 1
         )
         .unwrap();
         let rendered = enshwick_gamedata::Table::parse(&text).unwrap();
+        // A render leaves a routed value's witness out, as it does its row.
+        let routes = enshwick_gamedata::Routes::embedded().unwrap();
         let witnessed: Vec<_> = committed
             .constants()
             .iter()
-            .filter(|c| c.witness().is_some())
+            .filter(|c| c.witness().is_some() && !routes.routes(c.id(), committed.side()))
             .collect();
         assert!(!witnessed.is_empty());
         let written = |table: &enshwick_gamedata::Table| {
@@ -928,6 +930,7 @@ revision = 1
                 .constants()
                 .iter()
                 .filter(|c| c.witness().is_some() || c.one_witness().is_some())
+                .filter(|c| !routes.routes(c.id(), table.side()))
                 .count()
         };
         assert_eq!(

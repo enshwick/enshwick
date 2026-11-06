@@ -14,7 +14,7 @@ safe API.
 | `enshwick-luau`        | `crates/internal/luau`     | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the `enshwick` crate's script descriptions                                                                                       | no                      |
 | `enshwick`             | `crates/enshwick`          | the ABI types (`enshwick::abi`), the safe API mods use, and the fake loader for tests (`test` feature)                                                                                                                | yes                     |
 | `enshwick-macros`      | `crates/enshwick-macros`   | `#[hook]`, `#[config]` and the other macros of the API                                                                                                                                                                | yes                     |
-| `enshwick-gamedata`    | `crates/enshwick-gamedata` | the build tables of every game build, the engine's reflection reader (`reflect`) and the game archive reader (`archive`)                                                                                              | yes                     |
+| `enshwick-gamedata`    | `crates/enshwick-gamedata` | the engine routes and anchors, the kept builds' tables, the engine's reflection reader (`reflect`) and the game archive reader (`archive`)                                                                            | yes                     |
 | `cargo-enshwick`       | `crates/cargo-enshwick`    | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, the game's types from reflection, porting a table to a new build; its library reads point schemas for tests and fuzzing | yes                     |
 | `xtask`                | `tools/xtask`              | repository checks, the release archive and alpha notes, and `cargo xtask compat`, the maintainers' report of what works on a game build                                                                               | no                      |
 | `enshwick-fuzz`        | `fuzz`                     | the fuzz targets for untrusted input, a workspace of their own                                                                                                                                                        | no                      |
@@ -64,22 +64,26 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
 ## Where engine knowledge lives
 
 - Engine type and field names, offsets, addresses, function signatures and
-  patterns live in the loader and in `enshwick-gamedata`'s tables, never in
+  patterns live in the loader and in `enshwick-gamedata`'s anchors, never in
   `enshwick` or in a mod.
 - Facts the engine reflects are found by name through `reflect` and hold across
   game builds. Entries an engine route reaches come next: the loader finds
   them in the game's code through what the engine names (its ECS systems,
   its debug strings), on every build, from the data in
-  `crates/enshwick-gamedata/anchors/routes.toml`. The rest is in one TOML table
-  per build under `crates/enshwick-gamedata/tables/`, kept as the fallback and
-  the cross-check of a routed entry. On a build without a table, the newest
-  table of the same side carries over by its patterns, and only what neither a
-  route nor a pattern finds turns off; a build where nothing is missing runs
-  without a warning.
+  `crates/enshwick-gamedata/anchors/routes.toml`. The few no route reaches
+  are pattern rows without an address in
+  `crates/enshwick-gamedata/anchors/patterns.toml`, carried to every build
+  first; a route that finds another address than its anchor turns the entry
+  off. No file is made per build: what neither a route nor an anchor finds
+  turns off, and a build where nothing is missing runs without a warning.
+- The tables under `crates/enshwick-gamedata/tables/` are the frozen record
+  of the kept builds, which the tests compare the routes and anchors with;
+  the loader does not read them. `reports/` holds the public compatibility
+  report of each build.
 - `crates/enshwick-gamedata/anchors/classes.toml` classes every table entry:
   found from the engine, or a pattern because research found no route, each
   with its reason; a test fails on an entry without one.
-- In the loader, each symbol and constant of the build table is declared once in
+- In the loader, each symbol and constant it finds is declared once in
   `pinned/<part>.rs` as a typed `Symbol` or `Constant`, and code names it by
   path, such as `pinned::world::TIME`. Each part lists the ids it needs in its
   `TABLE_IDS`, which `cargo xtask compat` reads; a test refuses an id spelled as

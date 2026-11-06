@@ -3,7 +3,7 @@
 use enshwick::code::Pattern;
 
 use crate::reflect::Fingerprint;
-use crate::{Body, Routed, Side, Table};
+use crate::{Body, Routed, Side, Table, TableError};
 
 /// How a [`Resolved`] table came about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -267,6 +267,34 @@ impl Resolved {
         routing
     }
 
+    /// Counts entry `id` as [`Self::missing`] when the table has no row for
+    /// it, such as an entry whose engine route found nothing on a build its
+    /// anchors do not cover; whether it was added.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::{Side, anchors};
+    ///
+    /// let mut resolved = anchors(Side::Server)?.fall_back(&[], 0, |_| None);
+    /// assert!(resolved.lack("f.unrouted"));
+    /// assert!(!resolved.lack("f.unrouted"));
+    /// assert!(resolved.missing().iter().any(|id| id == "f.unrouted"));
+    /// # Ok::<(), enshwick_gamedata::TableError>(())
+    /// ```
+    pub fn lack(&mut self, id: &str) -> bool {
+        if self.symbol(id).is_some() || self.constant(id).is_some() {
+            return false;
+        }
+        match self.missing.binary_search_by(|have| have.as_str().cmp(id)) {
+            Ok(_) => false,
+            Err(at) => {
+                self.missing.insert(at, id.to_owned());
+                true
+            }
+        }
+    }
+
     /// Whether an engine route found entry `id`, whose code the route's own
     /// match then checks.
     ///
@@ -288,7 +316,50 @@ fn find(entries: &[(String, u64)], id: &str) -> Option<u64> {
         .map(|i| entries[i].1)
 }
 
-/// Every table this crate embeds, as `(file name, text)`.
+/// The patterns the loader carries to every build of `side` after the
+/// engine routes: a table without a build whose rows find, on any build,
+/// the entries no route finds ([`Table::fall_back`] resolves it).
+///
+/// # Errors
+///
+/// [`TableError`] when the embedded anchors do not read; a test reads them
+/// on every build of the crate.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::{Side, anchors};
+///
+/// let server = anchors(Side::Server)?;
+/// assert!(server.symbols().iter().all(|s| s.pattern().is_some()));
+/// # Ok::<(), enshwick_gamedata::TableError>(())
+/// ```
+pub fn anchors(side: Side) -> Result<Table, TableError> {
+    Table::anchors(include_str!("../anchors/patterns.toml"), side)
+}
+
+/// Whether a compatibility report of this crate covers the build of `side`
+/// with `fingerprint`: a build the tests ran the anchors and routes on.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::{Fingerprint, Side, reported};
+///
+/// assert!(!reported(Side::Server, Fingerprint::new([0xee; 16], 1)));
+/// ```
+#[must_use]
+pub fn reported(side: Side, fingerprint: Fingerprint) -> bool {
+    let builds: &[(&str, &str, u32)] = include!(concat!(env!("OUT_DIR"), "/reported.rs"));
+    builds.iter().any(|&(s, guid, age)| {
+        s == side.as_str()
+            && age == fingerprint.age()
+            && crate::table::parse_guid(guid) == Some(fingerprint.guid())
+    })
+}
+
+/// Every table this crate embeds, as `(file name, text)`: the tables of the
+/// kept builds, which the tests compare the routes and anchors with.
 ///
 /// # Examples
 ///

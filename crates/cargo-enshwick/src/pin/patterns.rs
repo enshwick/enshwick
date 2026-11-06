@@ -213,7 +213,9 @@ pub(crate) fn witness(
     candidates
         .into_iter()
         .take(WITNESS_TRIES)
-        .find_map(|s| constant_from(exe, s, carrier).ok())
+        .filter_map(|s| constant_from(exe, s, carrier).ok())
+        // A fixed pattern reads no operand, so it cannot witness the value.
+        .find(|pattern| pattern.operand.is_some())
 }
 
 /// The pattern that confirms a constant by the exact instruction at `site`.

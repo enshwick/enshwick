@@ -103,7 +103,7 @@ sets how much they keep.
 | [`crates/enshwick`](crates/enshwick)                   | the API crate, with the fake host for tests                   |
 | [`crates/cargo-enshwick`](crates/cargo-enshwick)       | the `cargo enshwick` tool                                     |
 | [`crates/enshwick-macros`](crates/enshwick-macros)     | the macros `enshwick` re-exports                              |
-| [`crates/enshwick-gamedata`](crates/enshwick-gamedata) | the build tables and the reader of the game's reflection data |
+| [`crates/enshwick-gamedata`](crates/enshwick-gamedata) | the engine routes and anchors and the reader of the game's reflection data |
 | [`crates/internal`](crates/internal)                   | the loader DLL, its `powrprof.dll` stub and the Luau runtime  |
 | [`examples`](examples)                                 | the whole mods and packs the modding book follows             |
 | [`book`](book)                                         | the modding book                                              |

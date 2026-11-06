@@ -34,14 +34,16 @@ A rename is data, never a guess. When `cargo enshwick pin` meets a new build,
 it compares the two builds' types. A removed type and an added type count as
 one renamed type only when their layouts match exactly, hold a field or enum
 constant, and neither has another match; the same holds for a field at one offset with one type. Every other
-case counts as a removal and an addition. Renames go into a table beside the
-build tables, and the loader resolves an old type's name under its new one.
+case counts as a removal and an addition. Renames go into
+`typed/renames.toml` of `enshwick-gamedata`, and the loader resolves an old
+type's name under its new one.
 
 ## How a new build gets its items
 
 `cargo enshwick pin --old <old exe> --new <new exe>` prints what the new build
 changed in the covered types. With `--write` it also keeps a snapshot of the
-new build's types beside its build table and writes the typed API again. The
+new build's types in `typed/` of `enshwick-gamedata` and writes the typed API
+again. The
 report marks what needs a person: a type that changed its kind, base, inner
 type or roles, or its size other than by added fields, and a rename the table
 cannot decide. A release of the API crate then carries the

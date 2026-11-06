@@ -48,13 +48,14 @@ pub struct BuildInfo {
     pub base: u64,
     /// The build fingerprint.
     pub fingerprint: Fingerprint,
-    /// Whether the loader's build table was made for this build.
+    /// Whether the loader found every entry it knows on this build.
     pub table: BuildTable,
 }
 
 impl_headed!(BuildInfo);
 
-/// Where the loader's build table for the running build comes from.
+/// Whether the loader found every entry it knows on the running build, by
+/// its engine routes and anchors.
 ///
 /// # Examples
 ///
@@ -68,11 +69,10 @@ impl_headed!(BuildInfo);
 pub struct BuildTable(pub u8);
 
 impl BuildTable {
-    /// The table was made for this build: every entry it pins is there.
+    /// Every entry the loader knows is there.
     pub const EXACT: Self = Self(0);
-    /// The build has no table yet: the newest table of its side found what
-    /// it could by code patterns, and the rest is missing until the table
-    /// for this build arrives.
+    /// Some entries are missing: what needs one stays off until a loader
+    /// release finds it.
     pub const PATTERNS: Self = Self(1);
 }
 

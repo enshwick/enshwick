@@ -31,9 +31,9 @@ pub struct Settings {
     pub diagnostics: bool,
     /// With diagnostics, also time every 256th call of each hooked function.
     pub diagnostics_timing: bool,
-    /// On a game build without a build table yet, find the table's entries
-    /// by their code patterns and run what they cover; false leaves such a
-    /// build vanilla until its table arrives.
+    /// On a game build no compatibility report of this release covers, find
+    /// the entries by the engine routes and anchors and run what they cover;
+    /// false leaves such a build vanilla until a release reports it.
     pub build_patterns: bool,
     /// Ask GitHub once per start whether a newer Enshwick release exists, so
     /// the Mods screen can say so; a dedicated server only logs it. false

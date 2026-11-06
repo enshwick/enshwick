@@ -75,12 +75,12 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
                 }
             }
         }
-        let stripped = Table::parse(&doc.to_string()).unwrap();
+        let stripped = tables::Table::parse(&doc.to_string()).unwrap();
         let mut build = KnownBuild {
             name: stripped.name().to_owned(),
-            kind: Kind::Exact,
-            carried: None,
             table: stripped.resolve(),
+            unanchored: Vec::new(),
+            conflicts: Vec::new(),
             lacking: OnceLock::new(),
         };
         let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
@@ -162,12 +162,12 @@ fn routed_symbols_without_table_checks_serve_their_features() {
                 .unwrap()
                 .remove(&format!("{id}.bytes"));
         }
-        let stripped = Table::parse(&doc.to_string()).unwrap();
+        let stripped = tables::Table::parse(&doc.to_string()).unwrap();
         let mut build = KnownBuild {
             name: stripped.name().to_owned(),
-            kind: Kind::Exact,
-            carried: None,
             table: stripped.resolve(),
+            unanchored: Vec::new(),
+            conflicts: Vec::new(),
             lacking: OnceLock::new(),
         };
         let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
@@ -505,7 +505,7 @@ fn an_off_line_names_the_feature_the_build_the_entry_and_why() {
             "map.fog_reveal",
             &Unhooked::Moved.to_string()
         ),
-        "fog of war off on 1.0 client (26082781): map.fog_reveal does not read as the build table says"
+        "fog of war off on 1.0 client (26082781): map.fog_reveal does not read as its anchor says"
     );
     assert_eq!(
         off_line(
@@ -572,26 +572,19 @@ fn every_replaced_function_carries_a_body_in_every_table() {
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 
+/// The anchors of the server carried to code where no pattern matches.
+fn on_no_code() -> KnownBuild {
+    let code = [0u8; 64];
+    by_patterns(Side::SERVER, "server".into(), (&code, 0x1000), |_| None).unwrap()
+}
+
 #[cfg(windows)]
 #[test]
 fn a_build_names_the_loader_features_it_lacks_once() {
     assert_eq!(embedded(Side::SERVER).lacking(crate::TABLE_IDS), "");
-    let tables = load();
-    let unknown = Fingerprint::new([0xee; 16], 1);
-    let code = [0u8; 64];
-    let carried = select(
-        &tables,
-        Side::SERVER,
-        unknown,
-        Some((&code, 0x1000)),
-        |_| None,
-    )
-    .unwrap();
+    let carried = on_no_code();
     let lacking = carried.lacking(crate::TABLE_IDS);
-    assert!(
-        lacking.split(", ").any(|name| name == "altars"),
-        "{lacking}"
-    );
+    assert!(lacking.split(", ").any(|name| name == "bases"), "{lacking}");
     assert_eq!(
         carried.lacking(&[]),
         lacking,
@@ -599,91 +592,140 @@ fn a_build_names_the_loader_features_it_lacks_once() {
     );
 }
 
+/// Any build runs on its anchors when given its code; with the setting off
+/// only a build a compatibility report covers does.
 #[test]
-fn a_known_build_resolves_its_symbols() {
-    let tables = load();
-    let server = embedded(Side::SERVER);
-    let fingerprint = tables
-        .iter()
-        .find(|t| t.name() == server.name)
-        .unwrap()
-        .fingerprint();
-    let found = select(&tables, Side::SERVER, fingerprint, None, |_| None).unwrap();
-    assert_eq!(found.kind, Kind::Exact);
-    assert_eq!(found.symbol("npc.lookup"), Some(0x20_9840));
-    assert_eq!(found.symbol("npc.nope"), None);
-    assert!(!found.checks().is_empty());
-    assert!(select(&tables, Side::CLIENT, fingerprint, None, |_| None,).is_none());
-}
-
-#[test]
-fn an_unknown_build_falls_back_only_when_allowed_and_given_code() {
-    let tables = load();
+fn a_build_runs_on_its_anchors_when_allowed_and_given_code() {
     let unknown = Fingerprint::new([0xee; 16], 1);
     let code = [0u8; 64];
-    let found = select(
-        &tables,
-        Side::SERVER,
-        unknown,
-        Some((&code, 0x1000)),
-        |_| None,
-    )
-    .unwrap();
-    assert_eq!(found.kind, Kind::Fallback);
-    assert_eq!(found.symbol("npc.lookup"), None);
+    let at = Some((&code[..], 0x1000));
+    let found = select(Side::SERVER, unknown, "server".into(), at, |_| None).unwrap();
+    assert_eq!(found.symbol("bases.holder_at"), None);
+    assert!(found.missing().iter().any(|id| id == "bases.holder_at"));
     assert!(found.checks().is_empty());
-    assert!(!found.missing().is_empty());
-    assert!(select(&tables, Side::SERVER, unknown, None, |_| None).is_none());
-    assert!(
-        select(&tables, Side::BOTH, unknown, Some((&code, 0x1000)), |_| {
-            None
-        },)
-        .is_none()
-    );
+    assert!(select(Side::SERVER, unknown, "server".into(), None, |_| None).is_none());
+    assert!(select(Side::BOTH, unknown, "both".into(), at, |_| None).is_none());
+    let tables = load();
+    let reported = tables::newest(&tables, tables::Side::Server)
+        .unwrap()
+        .fingerprint();
+    configure(false);
+    assert!(select(Side::SERVER, unknown, "server".into(), at, |_| None).is_none());
+    assert!(select(Side::SERVER, reported, "server".into(), at, |_| None).is_some());
+    configure(true);
 }
 
-/// A build without a table is named by its own fingerprint and the table it
-/// carries, never as the carried table's build, and an absent entry says
-/// whether the carried table lacks it or its pattern found nothing.
+/// A build is named by its side, Steam build, game version and executable,
+/// each where it reads, and an absent entry says why: its anchor's pattern
+/// found nothing, nothing finds it, the game's data did not give it, or its
+/// route and anchor disagree.
 #[test]
-fn a_build_without_a_table_names_itself_and_the_carried_table() {
-    let tables = load();
-    let base = tables::newest(&tables, enshwick_gamedata::Side::Server).unwrap();
-    let code = [0u8; 64];
-    let found = select(
-        &tables,
-        Side::SERVER,
-        Fingerprint::new([0xee; 16], 1),
-        Some((&code, 0x1000)),
-        |_| None,
-    )
-    .unwrap();
+fn a_build_is_named_by_the_game_and_tells_why_an_entry_is_absent() {
+    let fingerprint = Fingerprint::new([0xee; 16], 1);
+    let executable = "executable eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/1";
     assert_eq!(
-        found.name,
-        format!(
-            "build eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/1, carried table {}",
-            base.name()
-        )
+        build_name(
+            Side::SERVER,
+            Some(SteamBuild::new(26_430_253)),
+            Some("1287369|^/game38/branches/release_1.0|2026-11-03T10:00:00Z"),
+            fingerprint
+        ),
+        format!("server, Steam build 26430253, game 1287369, {executable}")
     );
+    assert_eq!(
+        build_name(Side::CLIENT, None, None, fingerprint),
+        format!("client, {executable}")
+    );
+    let mut found = on_no_code();
     let absent = Unhooked::Absent.to_string();
     assert_eq!(
-        found.reason("npc.lookup", &absent),
-        "is not found by the carried table's patterns"
+        found.reason("bases.holder_at", &absent),
+        "is not found by its anchor's pattern"
     );
     assert_eq!(
         found.reason("npc.nope", &absent),
-        "is not in the carried table"
+        "is found by no engine route or anchor"
+    );
+    found.unfound("recipe.list_lookup");
+    assert!(found.missing().iter().any(|id| id == "recipe.list_lookup"));
+    assert_eq!(
+        found.reason("recipe.list_lookup", &absent),
+        "is found by no engine route or anchor"
+    );
+    assert_eq!(
+        found.reason("attribute.health_max_slot", &absent),
+        "is not read from the game's data"
+    );
+    found.conflict("chat.post");
+    assert_eq!(
+        found.reason("chat.post", &absent),
+        "is found elsewhere by its engine route than by its anchor"
     );
     let moved = Unhooked::Moved.to_string();
     assert_eq!(found.reason("npc.lookup", &moved), moved);
-    assert_eq!(embedded(Side::SERVER).reason("npc.nope", &absent), absent);
 }
 
-/// No server table holds a row bases past 16 reads only on a client, so a
-/// server build carried from one never goes missing on an entry no server
+/// A run on the anchors alone counts every entry only a route finds as
+/// missing, so it never calls such a build complete.
+#[test]
+fn a_run_on_the_anchors_alone_misses_what_only_a_route_finds() {
+    let routes = tables::Routes::embedded().unwrap();
+    let mut found = on_no_code();
+    found.unrouted(&routes, Side::SERVER);
+    assert!(!found.complete());
+    assert!(found.missing().iter().any(|id| id == "knowledge.push"));
+    assert_eq!(
+        found.reason("knowledge.push", &Unhooked::Absent.to_string()),
+        "is found by no engine route or anchor"
+    );
+}
+
+/// The Steam build is the appmanifest's `buildid`, beside a Steam library
+/// (two folders up) or inside a `SteamCMD` install, also one at a drive's
+/// root.
+#[test]
+fn the_steam_build_comes_from_the_appmanifest_where_steam_keeps_it() {
+    let manifest =
+        "\"AppState\"\n{\n\t\"appid\"\t\t\"2278520\"\n\t\"buildid\"\t\t\"26430253\"\n}\n";
+    assert_eq!(manifest_build(manifest), Some(SteamBuild::new(26_430_253)));
+    assert_eq!(manifest_build("\"buildid\"\t\"next\"\n"), None);
+    let root = std::env::temp_dir().join(format!("enshwick-appmanifest-{}", std::process::id()));
+    let library = root.join("steamapps");
+    let client = library.join("common").join("Enshrouded");
+    let server = root.join("server");
+    std::fs::create_dir_all(&client).unwrap();
+    std::fs::create_dir_all(server.join("steamapps")).unwrap();
+    std::fs::write(library.join("appmanifest_1203620.acf"), manifest).unwrap();
+    std::fs::write(
+        server.join("steamapps").join("appmanifest_2278520.acf"),
+        manifest,
+    )
+    .unwrap();
+    // A one-component path has no library two folders up.
+    let shallow = std::path::PathBuf::from(format!("enshwick-shallow-{}", std::process::id()));
+    std::fs::create_dir_all(shallow.join("steamapps")).unwrap();
+    std::fs::write(
+        shallow.join("steamapps").join("appmanifest_2278520.acf"),
+        manifest,
+    )
+    .unwrap();
+    let found = (
+        steam_build(&client, Side::CLIENT),
+        steam_build(&server, Side::SERVER),
+        steam_build(&server, Side::CLIENT),
+        steam_build(&shallow, Side::SERVER),
+    );
+    std::fs::remove_dir_all(&root).unwrap();
+    std::fs::remove_dir_all(&shallow).unwrap();
+    let build = Some(SteamBuild::new(26_430_253));
+    assert_eq!(found, (build, build, None, build));
+}
+
+/// No server table and no server anchor holds a row bases past 16 reads
+/// only on a client, so a server never goes missing on an entry no server
 /// feature reads.
 #[test]
-fn no_server_table_holds_a_client_only_bases_row() {
+fn no_server_table_or_anchor_holds_a_client_only_bases_row() {
     use crate::pinned::bases;
     let client_only = [
         bases::BASE_IDS.id(),
@@ -692,7 +734,11 @@ fn no_server_table_holds_a_client_only_bases_row() {
         bases::CLIENT_SIZE.id(),
         bases::RECORD_BASE_ID.id(),
     ];
-    for table in load().iter().filter(|t| t.side() == tables::Side::Server) {
+    let anchors = tables::anchors(tables::Side::Server).unwrap();
+    let servers = load()
+        .into_iter()
+        .filter(|t| t.side() == tables::Side::Server);
+    for table in servers.chain([anchors]) {
         let resolved = table.resolve();
         for id in client_only {
             assert!(
@@ -704,56 +750,24 @@ fn no_server_table_holds_a_client_only_bases_row() {
     }
 }
 
-/// A build without its own table logs at info when nothing is missing and
-/// names the carried table, and warns with its error code only when entries
-/// are missing.
+/// A build logs at info when nothing is missing and warns with its error
+/// code when entries are missing.
 #[test]
-fn a_carried_build_warns_only_when_entries_are_missing() {
+fn a_build_warns_only_when_entries_are_missing() {
     use enshwick::abi::Level;
-    let unknown = Fingerprint::new([0xee; 16], 1);
-    let mut complete = embedded(Side::SERVER);
-    complete.kind = Kind::Fallback;
-    complete.carried = Some("1.0 server (1)".to_owned());
-    let (level, line) = complete.start_line(unknown);
+    let complete = embedded(Side::SERVER);
+    let (level, line) = complete.start_line();
     assert_eq!(level, Level::INFO);
     assert!(
-        line.starts_with(
-            "game build eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/1 runs without its own table: "
-        ) && line.ends_with("entries found by engine routes and the patterns of 1.0 server (1)"),
+        line.starts_with(&format!("game: {}, ", complete.name))
+            && line.ends_with("entries found by engine routes and anchors"),
         "{line}"
     );
-    let code = [0u8; 64];
-    let lacking = select(
-        &load(),
-        Side::SERVER,
-        unknown,
-        Some((&code, 0x1000)),
-        |_| None,
-    )
-    .unwrap();
-    let (level, line) = lacking.start_line(unknown);
+    let (level, line) = on_no_code().start_line();
     assert_eq!(level, Level::WARN);
     assert!(
         line.contains(crate::errors::FEATURES_OFF.as_str()),
         "{line}"
-    );
-    assert_eq!(embedded(Side::SERVER).start_line(unknown).0, Level::INFO);
-    let kept = Table::parse(
-        "name = \"1.0 server (1)\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n[constants]\n\"g.slot\" = { value = 16, carried = false }\n",
-    )
-    .unwrap();
-    let uncarried = KnownBuild {
-        name: kept.name().to_owned(),
-        kind: Kind::Fallback,
-        carried: Some(kept.name().to_owned()),
-        table: kept.fall_back(&code, 0x1000, |_| None),
-        lacking: OnceLock::new(),
-    };
-    assert!(uncarried.missing().is_empty());
-    assert_eq!(
-        uncarried.start_line(unknown).0,
-        Level::WARN,
-        "a row kept from carrying is off too"
     );
 }
 
@@ -791,7 +805,7 @@ fn checked_symbols_read_their_bytes_in_the_client() {
     let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
     // The offsets of client 26320373; other builds lay these types out
     // differently, so there each field only has to resolve.
-    let exact = client.steam_build() == Some(enshwick_gamedata::SteamBuild::new(26_320_373));
+    let exact = client.steam_build() == Some(SteamBuild::new(26_320_373));
     let moved = [
         ("keen::FbUiBundle", "namedStyles", 0x10bbc),
         ("keen::FbUiBundle", "sounds", 0x12210),
@@ -839,17 +853,15 @@ fn the_pattern_fallback_fits_the_server_hold() {
     let text = image.section(".text").unwrap();
     let range = image.range(text);
     let code = image.read(range.start, range.end - range.start).unwrap();
-    let tables = load();
     let started = std::time::Instant::now();
     let found = by_patterns(
-        &tables,
         Side::SERVER,
+        "server".into(),
         (code, range.start - image.base()),
         |rva| image.u32(image.base() + rva),
-    )
-    .unwrap();
+    );
     let took = started.elapsed();
-    assert_eq!(found.kind, Kind::Fallback);
+    assert!(found.is_some());
     // Unoptimised code scans about ten times slower than the release build.
     let budget = if cfg!(debug_assertions) { 15 } else { 2 };
     assert!(took < std::time::Duration::from_secs(budget), "{took:?}");

@@ -3,10 +3,11 @@
 //! Given the executable the current rows were made for and a new one, it
 //! re-finds every pinned symbol of the loader's build table and of each
 //! mod's `[[package.metadata.enshwick.builds]]` rows in the new executable,
-//! checks the constants against the code that uses them, and writes the new
-//! build's table file (with the code patterns that find each entry on a build
-//! without a table) and new mod rows in each mod's `Cargo.toml`, with a
-//! report. It never guesses: whatever it
+//! checks the constants against the code that uses them, and writes new mod
+//! rows in each mod's `Cargo.toml` and the routes' check shapes, with a
+//! report of how the loader's entries port. It writes no loader table: the
+//! loader finds every build by its anchors and routes. It never guesses:
+//! whatever it
 //! cannot place for sure is left out, with a note, and listed for a human.
 //! With `--patterns` it writes the patterns of one build's table from its own
 //! executable. See the README.
@@ -52,16 +53,16 @@ pub(crate) struct Args {
     /// The repository whose rows to port.
     #[arg(long, default_value = ".")]
     repo: PathBuf,
-    /// The new build's Steam build id, for the loader table's name and
-    /// `steam_build`; needed with `--write`.
+    /// The new build's Steam build id, for the report's name of the ported
+    /// table.
     #[arg(long)]
     steam_build: Option<u64>,
-    /// The game's own version number on the new build, for the loader
-    /// table's `game_version`; left out when not given.
+    /// The game's own version number on the new build, for the report's
+    /// ported table; left out when not given.
     #[arg(long)]
     game_version: Option<u32>,
-    /// Writes the new table file and inserts each new mod row after its old
-    /// one in the sources.
+    /// Inserts each new mod row after its old one in the sources and writes
+    /// the refreshed check shapes; no loader table is written.
     #[arg(long)]
     write: bool,
     /// Writes the report here instead of to standard output.
@@ -113,7 +114,7 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
     }
     let mut staged = Staged::default();
     let mut ported = Vec::new();
-    let mut sections = port_tables(args, &old, &new, &mut staged, &mut ported)?;
+    let mut sections = port_tables(args, &old, &new, &mut ported)?;
     sections.extend(refresh_checks(args, &old, &new, &ported, &mut staged)?);
     sections.extend(port_mods(args, &old, &new, &mut staged)?);
     if sections.is_empty() {
@@ -233,14 +234,14 @@ fn finish(staged: Staged, report: Option<&Path>, text: &str) -> anyhow::Result<(
     Ok(())
 }
 
-/// Ports the loader's table for `old`'s build to `new`'s build; with
-/// `--write`, stages the new table file. Each ported table goes to `tables`
-/// as its side, the old table and the new one.
+/// Ports the loader's table for `old`'s build to `new`'s build for the
+/// report: the loader finds every build by its anchors and routes, so no
+/// table file is written. Each ported table goes to `tables` as its side,
+/// the old table and the new one, for the routes' check shapes.
 fn port_tables(
     args: &Args,
     old: &Exe<'_>,
     new: &Exe<'_>,
-    staged: &mut Staged,
     tables: &mut Vec<(Side, Resolved, Resolved)>,
 ) -> anyhow::Result<Vec<report::Section>> {
     let (Some(old_fp), Some(new_fp)) = (old.fingerprint(), new.fingerprint()) else {
@@ -254,14 +255,6 @@ fn port_tables(
             continue;
         }
         let target = path.with_file_name(table_file(row.side, new_fp));
-        if args.write {
-            if target.exists() {
-                bail!("{} already exists", target.display());
-            }
-            if args.steam_build.is_none() {
-                bail!("--write needs --steam-build for the loader table");
-            }
-        }
         let mut ported = row::port_row(&row, old, new);
         let source =
             enshwick_gamedata::Table::parse(&src).with_context(|| path.display().to_string())?;
@@ -287,19 +280,16 @@ fn port_tables(
             table::render(&src, &row, &identity, &ported.edits, Some(new), &anchors)
                 .with_context(|| path.display().to_string())?;
         sections.push(report::Section {
-            file: relative(&args.repo, &target),
+            file: format!("{} (ported, not written)", relative(&args.repo, &target)),
             title: name,
             lines: ported.lines,
-            text: (!args.write).then(|| (text.clone(), "toml")),
+            text: Some((text.clone(), "toml")),
             unpatterned: patterned.problems,
         });
         let resolved = enshwick_gamedata::Table::parse(&text)
             .with_context(|| target.display().to_string())?
             .resolve();
         tables.push((row.side, source.resolve(), resolved));
-        if args.write {
-            staged.create(target, text);
-        }
     }
     Ok(sections)
 }
@@ -585,6 +575,39 @@ mod tests {
         assert_eq!(fs::read_to_string(dir.join("new.toml")).unwrap(), "table");
         assert_eq!(fs::read_to_string(report).unwrap(), "report");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// With `--write` the report still holds each ported loader table whole,
+    /// since nothing writes it; skipped without `ENSH_SERVER_EXE`.
+    #[test]
+    fn a_ported_table_stays_in_the_report_with_write() {
+        let Some(path) = std::env::var_os("ENSH_SERVER_EXE") else {
+            return;
+        };
+        let bytes = fs::read(path).unwrap();
+        let exe = Exe::parse(&bytes).unwrap();
+        let args = Args {
+            old: None,
+            new: None,
+            patterns: None,
+            repo: Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."),
+            steam_build: None,
+            game_version: None,
+            write: true,
+            report: None,
+            from: Vec::new(),
+            from_file: None,
+        };
+        let sections = port_tables(&args, &exe, &exe, &mut Vec::new()).unwrap();
+        assert!(!sections.is_empty());
+        for section in &sections {
+            assert!(section.text.is_some(), "{}", section.file);
+            assert!(
+                section.file.ends_with("(ported, not written)"),
+                "{}",
+                section.file
+            );
+        }
     }
 
     #[test]

@@ -26,9 +26,10 @@ pub(crate) extern "system" fn build(out: *mut BuildInfo) {
                         guid: loader.fingerprint.guid(),
                         age: loader.fingerprint.age(),
                     },
-                    table: match loader.build.kind {
-                        crate::builds::Kind::Exact => enshwick::abi::BuildTable::EXACT,
-                        crate::builds::Kind::Fallback => enshwick::abi::BuildTable::PATTERNS,
+                    table: if loader.build.complete() {
+                        enshwick::abi::BuildTable::EXACT
+                    } else {
+                        enshwick::abi::BuildTable::PATTERNS
                     },
                 },
             )

@@ -211,9 +211,9 @@ fn system() -> String {
     format!("Wine {}", text.to_string_lossy())
 }
 
-/// Identifies the running game and its build table; `None`, logged, when the
-/// loader cannot serve it. On a build it has no table for, a mod's hold under
-/// `mods_dir` stops the game.
+/// Identifies the running game and finds what the loader needs in it;
+/// `None`, logged, when the loader cannot serve it. On a build it does not
+/// run, a mod's hold under `mods_dir` stops the game.
 pub(super) fn game(mods_dir: &Path) -> Option<Game> {
     let Some((side, base, image_len)) = identify() else {
         crate::log!(
@@ -247,7 +247,6 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
     if !reflection_read(&reflection, fingerprint, mods_dir) {
         return None;
     }
-    let tables = builds::load();
     let code = image.section(".text").and_then(|text| {
         let range = image.range(text);
         image
@@ -255,36 +254,31 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
             .map(|bytes| (bytes, range.start - base))
     });
     let cell = |rva| image.u32(base + rva);
-    let Some(mut build) = builds::select(&tables, side, fingerprint, code, cell) else {
+    let game_dir = mods_dir.parent();
+    let name = builds::build_name(
+        side,
+        game_dir.and_then(|dir| builds::steam_build(dir, side)),
+        game_dir
+            .and_then(|dir| crate::archive::open_game(dir, side))
+            .and_then(crate::archive::Archive::version),
+        fingerprint,
+    );
+    let Some(mut build) = builds::select(side, fingerprint, name, code, cell) else {
         crate::log!(
             ERROR,
-            "unknown game build {}; the game runs vanilla until Enshwick has its build table ({})",
+            "unknown game build {}; the game runs vanilla until an Enshwick release reports it ({})",
             builds::fingerprint_name(fingerprint),
             errors::UNKNOWN_BUILD
         );
         crate::holds::enforce(mods_dir, &[], true, None);
         return None;
     };
-    for (name, rva) in build.checks() {
-        let entry = reflection
-            .system(name)
-            .map_or(0, enshwick_gamedata::reflect::System::entry);
-        if entry != base + rva {
-            crate::log!(
-                ERROR,
-                "{name} is not where the build table says; nothing loads ({})",
-                errors::TABLE_MISMATCH
-            );
-            crate::holds::enforce(mods_dir, &[], true, None);
-            return None;
-        }
-    }
-    if let Some(game_dir) = mods_dir.parent() {
+    if let Some(game_dir) = game_dir {
         crate::attribute_slots::supply(&mut build, &reflection, game_dir, side);
     }
     route(&mut build, image, &reflection, side);
     let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
-    let (level, line) = build.start_line(fingerprint);
+    let (level, line) = build.start_line();
     if log::enabled(level, crate::settings::LOADER_ID) {
         log::write(level, crate::settings::LOADER_ID, &line);
     }

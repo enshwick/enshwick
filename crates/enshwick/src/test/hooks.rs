@@ -43,8 +43,8 @@ impl FakeHost {
         self
     }
 
-    /// Where the build table comes from; [`BuildTable::EXACT`](crate::abi::BuildTable::EXACT)
-    /// by default.
+    /// Whether the loader found every entry it knows on the build;
+    /// [`BuildTable::EXACT`](crate::abi::BuildTable::EXACT) by default.
     ///
     /// # Examples
     ///

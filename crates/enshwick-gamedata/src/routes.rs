@@ -26,12 +26,20 @@
 //! takes), `cell` (the `u32` the game keeps at the address it takes) or
 //! `spelled` (the route's `value`, which a step of the shape spells in its
 //! own encoding: memory without a displacement spells 0, else an index
-//! scale or an immediate equal to it; a `nop` spells nothing); the last
-//! three are constants, the
-//! rest symbols. A taken constant needs a shape
-//! of two steps or one with an exact operand or an `{entry}`. `shift` turns
+//! scale or an immediate equal to it; a `nop` spells nothing) or `scale`
+//! (the factor the shape's instructions multiply the register its first
+//! one reads by, such as a record size held only in `lea r9,[rax+rax*4];
+//! shl r9,5`); the last four are constants, the rest symbols. A taken
+//! constant needs a shape of two steps or one with an exact operand or an
+//! `{entry}`. `shift` turns
 //! a taken constant `v` into `1 << v`, and `plus` then adds to it. `sides`
 //! limits a route to some sides; it defaults to every side.
+//!
+//! `nth` lets a `system` or `in` shape match more than once and takes its
+//! `nth` run, from 1, in address order, when there are exactly `of` runs;
+//! with `after`, a shape that must match once in the function, it counts
+//! only the runs in the same part of the code that start after that match,
+//! such as the ninth of thirteen identical copies.
 //!
 //! A shape's start checks the code of the symbol it finds
 //! ([`Routed::Symbol`]) when it has two steps or more over eight bytes, and so
@@ -97,6 +105,7 @@ enum Take {
     Value,
     Cell,
     Spelled,
+    Scale,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -141,6 +150,12 @@ struct Route {
     plus: i64,
     /// The constant a `spelled` take finds.
     value: u64,
+    /// The shape that must match once before an ordinal's runs are counted.
+    after: Vec<Step>,
+    /// Which run of the shape a route takes, from 1, and how many runs
+    /// there must be, where it takes one of several rather than the only
+    /// one.
+    nth: Option<(u32, u32)>,
 }
 
 impl Route {
@@ -187,6 +202,9 @@ struct RouteRow {
     callers: Option<String>,
     vtable: Option<String>,
     slot: Option<u32>,
+    after: Option<Vec<String>>,
+    nth: Option<u32>,
+    of: Option<u32>,
 }
 
 impl RouteRow {
@@ -215,18 +233,16 @@ impl RouteRow {
         match take {
             _ if reflected => {}
             Take::Start if takes == 0 => {}
-            Take::End | Take::Spelled if shaped && takes == 0 => {}
+            Take::End | Take::Spelled | Take::Scale if shaped && takes == 0 => {}
             Take::Address | Take::Value | Take::Cell if shaped && takes == 1 => {}
             _ => {
                 return Err(bad(
-                    "`end` and `spelled` take a shape without `*`, `address`, `value` and `cell` a shape with one `*`, and `start` no `*`",
+                    "`end`, `spelled` and `scale` take a shape without `*`, `address`, `value` and `cell` a shape with one `*`, and `start` no `*`",
                 ));
             }
         }
-        if matches!(take, Take::Value | Take::Cell | Take::Spelled)
-            && steps.len() < 2
-            && !steps.iter().any(Step::is_exact)
-        {
+        let constant = matches!(take, Take::Value | Take::Cell | Take::Spelled | Take::Scale);
+        if constant && steps.len() < 2 && !steps.iter().any(Step::is_exact) {
             return Err(bad(
                 "a taken constant needs a shape of two steps, an exact operand or an `{entry}`",
             ));
@@ -242,16 +258,26 @@ impl RouteRow {
             (_, Some(_)) => return Err(bad("only a `spelled` take names a `value`")),
         };
         let check = parse_steps(self.check, names).map_err(|e| bad(&e.to_string()))?;
-        if !check.is_empty()
-            && (matches!(take, Take::Value | Take::Cell | Take::Spelled)
-                || check.iter().any(|s| s.takes() > 0))
-        {
+        if !check.is_empty() && (constant || check.iter().any(|s| s.takes() > 0)) {
             return Err(bad("`check` is a shape without `*` for a symbol"));
         }
         if (self.shift.is_some() || self.plus.is_some())
             && !matches!(take, Take::Value | Take::Cell)
         {
             return Err(bad("`shift` and `plus` change a `value` or `cell` take"));
+        }
+        let after = parse_steps(self.after, names).map_err(|e| bad(&e.to_string()))?;
+        let ordinal = match (self.nth, self.of) {
+            (Some(nth), Some(of)) if matches!(how, How::Shape { .. }) && nth > 0 && nth <= of => {
+                Some((nth, of))
+            }
+            _ => None,
+        };
+        let asked = self.nth.is_some() || self.of.is_some() || !after.is_empty();
+        if asked && ordinal.is_none() || after.iter().any(|s| s.takes() > 0) {
+            return Err(bad(
+                "`nth` counts from 1 the `of` runs of a `system` or `in` shape, after the one match of `after`, a shape without `*`, when it is given",
+            ));
         }
         Ok(Route {
             sides: self
@@ -264,6 +290,8 @@ impl RouteRow {
             shift: self.shift.unwrap_or(false),
             plus: self.plus.unwrap_or(0),
             value,
+            after,
+            nth: ordinal,
         })
     }
 
