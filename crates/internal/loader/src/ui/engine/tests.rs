@@ -2,6 +2,7 @@ use super::*;
 
 #[test]
 fn texts_hash_as_the_game_does() {
+    const FNV_PRIME: u64 = 0x0100_0000_01b3;
     assert_eq!(hash(b""), FNV_BASIS);
     assert_eq!(hash(b"doBasicProgressBar()"), 0xb37b_692b_58e0_8ab5);
     assert_eq!(hash(b"contentLayer"), 0xffd8_6fcd_3b62_1d0f);
