@@ -483,6 +483,7 @@ pub(crate) fn frame(context: usize) {
             if look.carried_at != bound.carried_at {
                 look.carried_at = bound.carried_at;
                 look.trackers.truncate(declared.len());
+                look.down.truncate(declared.len());
             }
             input::keys_down(&bound.keys, window, live, &mut look.down);
             look.trackers.resize(bound.keys.len(), Tracker::default());
