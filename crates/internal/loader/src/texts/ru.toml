@@ -1,5 +1,6 @@
 [ru]
 "actions.close" = "Закрыть"
+"actions.out-of-reach" = "Это слишком далеко."
 "controls" = "Управление"
 "controls.key" = "Клавиша: {key}"
 "controls.second" = "Вторая клавиша: {key}"

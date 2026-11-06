@@ -1,5 +1,6 @@
 [th]
 "actions.close" = "ปิด"
+"actions.out-of-reach" = "อยู่ไกลเกินไป"
 "controls" = "การควบคุม"
 "controls.key" = "ปุ่ม: {key}"
 "controls.second" = "ปุ่มที่สอง: {key}"

@@ -28,8 +28,9 @@ Each entry names the pull request that made the change.
   with that reason. `BuildCheck::reason`, ABI 11.10 (#957).
 - Player actions name the object they act on: `Actions::run_at` with an
   `ActionTarget` (the server's entity, a position, or both), which the
-  handler reads in `Ask::target` and `Request::target` after the server's
-  bounds; Luau `actions:run_at`, `ask:target()` and `request:target()`.
+  handler reads in `Ask::target` and `Request::target` once the server
+  checked it: a named entity must exist there and gives its own position,
+  and the object must stand within 12 metres of the player; Luau `actions:run_at`, `ask:target()` and `request:target()`.
   `HostApi::run_action_at` and `ActionCall::target`, ABI 11.10 (#957).
 - `Load::on_waypoint` hears a player's waypoint set, moved or cleared
   (`WaypointChanged`), and `Load::on_ping` each ping (`MapPinged`), on the

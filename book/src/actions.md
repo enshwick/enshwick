@@ -212,10 +212,14 @@ actions:add({
 actions:run_at("sort", {}, { position = vector.create(10, 2, -4.5) })
 ```
 
-The target is what the client says, so `.at` checks it as it checks any
-object: that it is there, within the player's reach and theirs to use. The
-loader drops a target whose position is not finite or whose flags it does
-not know before the mod sees the run.
+The target comes from the client, so the server checks it before the mod
+sees the run. The loader drops a target whose position is not finite or
+whose flags it does not know. A named entity must exist in the server's
+world, and its position there replaces the one the client sent. The object
+must stand within 12 metres of the player, enshwick's own bound; otherwise
+the run is refused with "That is too far away." in the player's language.
+Who may use the object is the mod's rule, so `.at` still checks that the
+object is the kind it acts on and the player's to use.
 
 ## From the console
 

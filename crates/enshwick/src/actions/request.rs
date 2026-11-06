@@ -221,9 +221,11 @@ pub struct Ask<'a> {
     pub language: Language,
     /// The object the player's client named for this run, from
     /// [`Actions::run_at`](crate::actions::Actions::run_at); `None` for a
-    /// run without one, the console and the actions' list. It is what the
-    /// client says, so `at` checks it as it checks any object: that it is
-    /// there, within reach and the player's to use.
+    /// run without one, the console and the actions' list. The server
+    /// checked it first: a named entity exists in its world and gives its
+    /// own position, and the object stands within 12 metres of the player.
+    /// Whether it is the kind of object the action takes and the player's
+    /// to use is for `at` to check.
     pub target: Option<ActionTarget>,
     pub(super) texts: &'a Texts,
 }

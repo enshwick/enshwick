@@ -1,5 +1,6 @@
 [ko]
 "actions.close" = "닫기"
+"actions.out-of-reach" = "너무 멀리 있습니다."
 "controls" = "조작"
 "controls.key" = "키: {key}"
 "controls.second" = "두 번째 키: {key}"

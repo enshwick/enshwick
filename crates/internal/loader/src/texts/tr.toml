@@ -1,5 +1,6 @@
 [tr]
 "actions.close" = "Kapat"
+"actions.out-of-reach" = "Bu çok uzakta."
 "controls" = "Kontroller"
 "controls.key" = "Tuş: {key}"
 "controls.second" = "İkinci tuş: {key}"

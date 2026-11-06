@@ -358,8 +358,8 @@ impl Actions {
     /// Runs the action as [`run`](Self::run) does, on the object `target`,
     /// such as the chest whose screen holds the panel the player pressed:
     /// the server hands it to the action's [`at`](Action::at) as
-    /// [`Ask::target`] and to its handler, which check it as they check any
-    /// object a client names.
+    /// [`Ask::target`] and to its handler once it checked the object exists
+    /// and stands within reach of the player, as [`Ask::target`] says.
     ///
     /// # Errors
     ///
