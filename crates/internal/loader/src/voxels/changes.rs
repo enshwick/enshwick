@@ -376,7 +376,8 @@ unsafe fn note(
     // SAFETY: `words` is non-null (checked above) and is the commit's buffer,
     // a data pointer and a count.
     let held: u64 = unsafe { read_at(words.cast(), core::mem::offset_of!(super::Words, count)) };
-    // SAFETY: as above, the buffer's data pointer at offset 0.
+    // SAFETY: `words` is non-null (checked above) and is the commit's buffer,
+    // whose data pointer lies at offset 0.
     let data = unsafe { read_ptr_at::<u16>(words.cast(), 0) };
     let Some(count) = box_count(min, size, held).filter(|_| !data.is_null()) else {
         dropped();
