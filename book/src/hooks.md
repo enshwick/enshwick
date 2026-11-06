@@ -6,18 +6,8 @@ description: A hook puts a function of the mod in front of a game function, for 
 # Hooks
 
 A hook puts a function of the mod in front of a game function, for what the
-API has no call for.
-
-## How a hooked call runs
-
-Every call the
-game makes to that function goes through the mod's code first, which may change
-the arguments, call on, change the result, or answer alone.
-
-Several mods may hook one function. The loader keeps a chain of links per
-function and detours the function once, at arming, after every mod is
-initialised. Turning a mod off later only rewires the chain; it never touches
-game code again.
+API has no call for. [Before you reach into the game](reaching-into-the-game.md)
+says when to use one.
 
 ## Declaring a hook
 
@@ -60,8 +50,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 - `load.hook(&HOOK, address)` puts the link into the chain of the function at
   `address` (an absolute address from [Finding the game](finding-the-game.md)).
   Hooks are linked during `init` only; nothing runs until arming. The call is
-  `unsafe`: its `SAFETY` comment says why the function at `address` has the
-  hook's type, which the loader cannot check.
+  `unsafe`. Its `SAFETY` comment says why the target has the hook's type,
+  since the loader cannot check it.
 
 [`#[hook]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
 writes the same declaration from the body. The static is named after the
@@ -82,6 +72,17 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     unsafe { load.hook(&UPGRADE, target) }
 }
 ```
+
+## How a hooked call runs
+
+Every call the game makes to the function goes through the mod's code
+first. That code may change the arguments, call on, change the result, or
+answer alone.
+
+Several mods may hook one function. The loader keeps a chain of links per
+function and detours the function once, at arming, after every mod is
+initialised. Turning a mod off later only rewires the chain; it never touches
+game code again.
 
 ## Chains and priority
 
@@ -114,9 +115,9 @@ With `#[hook]`, the same settings go in the attribute:
   exclusive link on a function another mod already links;
 - a link asked for after `init`.
 
-At arming, a function the loader cannot detour (its first instructions do not
-decode or cannot move, or it is shorter than the 5-byte jump) stays unhooked,
-and every mod linked on it is turned off.
+Some functions cannot take a detour: their first instructions do not decode
+or cannot move, or they are shorter than the 5-byte jump. At arming such a
+function stays unhooked, and every mod linked on it is turned off.
 
 ## Flags
 
@@ -181,10 +182,10 @@ a hooked function.
 
 ## The mod's state in a hook
 
-`declare_mod!` adds `instance()` to the mod's type: `Some(&'static Self)` once
-`init` has returned the state, `None` before and when `init` failed. A hook
-that runs before the state exists, or whose mod failed at init, forwards to
-`next`. A hook can read settings there:
+`declare_mod!` adds `instance()` to the mod's type. It returns the mod's state
+once `init` has returned it. Before that, or when `init` failed, it returns
+`None`. A
+hook that gets `None` forwards to `next`:
 
 ```rust,standalone_crate
 use enshwick::{Load, Mod, Next, Off};
@@ -252,6 +253,10 @@ fn raise(next: enshwick::Next<'_, extern "system" fn(u32) -> u32>, level: u32) -
 }
 # fn main() {}
 ```
+
+A hardware fault is not a panic. An access violation in a mod's code is not
+caught: the game crashes, and the crash file names the mod
+([The life of a mod](concepts/lifecycle.md), [FAQ](faq.md)).
 
 A panic is a last resort, not error handling. A hook that can fail returns to
 vanilla on its own, as

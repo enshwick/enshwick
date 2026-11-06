@@ -11,10 +11,10 @@ log and in the game.
 
 ## What you need
 
-Every form needs the Enshwick loader in the game's folder. Extract
+Every form needs the Enshwick loader in the game's folder. Take
 `enshwick.zip` of the newest alpha on the
-[releases page](https://github.com/enshwick/enshwick/releases) next to
-`enshrouded.exe` or `enshrouded_server.exe`.
+[releases page](https://github.com/enshwick/enshwick/releases) and extract
+it next to the game's executable.
 
 Starting a mod and building one in Rust also need Rust 1.99 or newer, from
 [rustup](https://rustup.rs). Install the Windows target and the
@@ -76,7 +76,7 @@ A Luau mod is a data pack with scripts. This one writes a line to its log
 and greets each player who joins.
 
 1. Run `cargo enshwick new --luau you.hello-luau`. It makes the folder
-   `you.hello-luau/` with `pack.toml`, `main.luau` and the API's types for
+   `you.hello-luau/` with `main.luau`, a manifest and the API's types for
    your editor.
 2. Replace `main.luau` with:
 
@@ -120,8 +120,8 @@ crate. This one writes the same line and greets each player who joins.
    enshwick = { workspace = true, features = ["unstable"] }
    ```
 
-3. Keep the first line of `src/lib.rs`, the `//!` comment that `new`
-   wrote, and replace the rest with the code that follows this list.
+3. In `src/lib.rs`, keep the first line, the comment that `new` wrote.
+   Replace the rest with the code that follows this list.
 4. Build the mod and install it into the game's folder:
 
    ```bash
@@ -209,7 +209,7 @@ Inside a Cargo workspace, `new` adds the crate to the workspace's
 `.cargo/config.toml` only at the workspace root, so put `panic = "unwind"`
 and the static C runtime there.
 
-`cargo enshwick install` builds in release for `x86_64-pc-windows-msvc`,
+`cargo enshwick install` builds the mod in release for the Windows target,
 through `cargo xwin` off Windows. It copies the DLL to
 `<game>/mods/<id>/`. The game folder is `--game` or the `ENSHROUDED_DIR`
 environment variable. In a workspace with several mods, `-p` names one.
