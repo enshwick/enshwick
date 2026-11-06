@@ -1,19 +1,19 @@
 //! What works on a game build.
 //!
-//! Given a game executable, it takes the build table the loader would take
-//! (the one made for the build, or the newest table of its side carried over
-//! by patterns), checks it against the executable, and reports which of the
-//! loader's features have every entry they name. Given mods, it runs the
-//! loader itself on the executable, in a process of its own: the image
-//! mapped at its base, the mods resolved and initialised as at a start, and
-//! nothing hooked. Each mod that turns off says why, as it would in game.
+//! Given a game executable, it finds the loader's entries there as the
+//! loader does at its start (the anchors of its side carried by their
+//! patterns, then the engine routes) and reports which of the loader's
+//! features have every entry they name. Given mods, it runs the loader
+//! itself on the executable, in a process of its own: the image mapped at
+//! its base, the mods resolved and initialised as at a start, and nothing
+//! hooked. Each mod that turns off says why, as it would in game.
 
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
-use enshwick_gamedata::{self as tables, Kind, PartState, Resolved, Table};
+use enshwick_gamedata::{self as tables, PartState, Resolved, Table};
 
 /// Each part of the loader with the build table ids it names; only a
 /// Windows build carries the loader.
@@ -34,14 +34,23 @@ pub(crate) struct Args {
     /// Writes the report here instead of to standard output.
     #[arg(long)]
     report: Option<PathBuf>,
-    /// Takes the table by patterns even when one is made for this build,
-    /// to see what the patterns alone carry.
+    /// Finds the entries by the anchors' patterns alone, without the engine
+    /// routes, to see what the patterns carry.
     #[arg(long)]
     patterns: bool,
     /// Also writes what the loader finds on the build here, as TOML: the
-    /// report data beside the build tables; only for a build with a table.
+    /// build's compatibility report data; a folder takes it as
+    /// `<side>-<guid>-<age>.toml`.
     #[arg(long)]
     data: Option<PathBuf>,
+    /// The build's Steam build id, when no Steam appmanifest beside the
+    /// executable or two folders up states it.
+    #[arg(long)]
+    steam_build: Option<u64>,
+    /// The game's own version number, when no game archive beside the
+    /// executable states it.
+    #[arg(long)]
+    game_version: Option<u64>,
 }
 
 /// What the hidden `run` step is given: a game folder prepared with
@@ -66,7 +75,7 @@ pub(crate) const BROKEN: u8 = 2;
 #[derive(Debug, clap::Parser)]
 #[command(
     name = "cargo xtask compat",
-    about = "What works on a game build: which loader features have every table entry they name, and how given mods start"
+    about = "What works on a game build: which loader features find every entry they name, and how given mods start"
 )]
 struct Cli {
     #[command(flatten)]
@@ -107,19 +116,24 @@ pub(crate) fn main(args: &[String]) -> Result<bool, String> {
 struct Build {
     side: tables::Side,
     fingerprint: Fingerprint,
-    base: u64,
-    image: Image<'static>,
-    reflection: Reflection<'static>,
-    code: &'static [u8],
-    code_rva: u64,
-    /// The table the loader would use; `None` leaves the game vanilla.
-    table: Option<(Resolved, Table)>,
+    /// The build's name as the loader logs it.
+    name: String,
+    /// The Steam build id, where known.
+    steam: Option<u64>,
+    /// The game's own version number, where known.
+    game_version: Option<u64>,
+    /// The anchors of the side: the patterns that find what no route finds.
+    anchors: Table,
+    /// What the loader finds on the build.
+    table: Resolved,
     /// How many of its entries the engine routes found.
     routed: usize,
     /// Every entry a route of this side looks for, found or not.
     route_ids: Vec<String>,
     /// The attribute slots read from the game's data, or why none were.
     slots: Result<Slots, String>,
+    /// Whether the game's archive file lies beside the executable.
+    archive: bool,
 }
 
 /// The attribute slots the game's data beside the executable gives.
@@ -149,14 +163,14 @@ fn side_of(exe: &Path) -> Result<tables::Side, String> {
     }
 }
 
-/// Reads the executable and takes its table; the bytes live for the
-/// process.
-fn build(exe: &Path, patterns: bool) -> Result<Build, String> {
+/// Reads the executable and finds the loader's entries there as the loader
+/// does at its start: the anchors carried by their patterns, the attribute
+/// slots of the game's data, then, unless `args.patterns`, the engine routes.
+fn build(args: &Args) -> Result<Build, String> {
+    let exe = &args.exe;
     let side = side_of(exe)?;
-    let bytes: &'static [u8] = std::fs::read(exe)
-        .map_err(|e| format!("{}: {e}", exe.display()))?
-        .leak();
-    let image = Image::parse(bytes, Layout::File, None).map_err(|e| e.to_string())?;
+    let bytes = std::fs::read(exe).map_err(|e| format!("{}: {e}", exe.display()))?;
+    let image = Image::parse(&bytes, Layout::File, None).map_err(|e| e.to_string())?;
     let fingerprint = image
         .fingerprint()
         .ok_or("the executable has no fingerprint")?;
@@ -167,69 +181,106 @@ fn build(exe: &Path, patterns: bool) -> Result<Build, String> {
         .read(range.start, range.end - range.start)
         .ok_or(".text is unreadable")?;
     let reflection = Reflection::scan(&image);
-    let all = known_tables()?;
-    let exact = tables::exact(&all, side, fingerprint).filter(|_| !patterns);
-    let mut table = match exact {
-        Some(table) => Some((table.resolve(), table.clone())),
-        None => tables::newest(&all, side).map(|table| {
-            (
-                table.fall_back(code, range.start - base, |rva| image.u32(base + rva)),
-                table.clone(),
-            )
-        }),
-    };
+    let anchors = tables::anchors(side).map_err(|e| format!("embedded anchors: {e}"))?;
+    let mut table = anchors.fall_back(code, range.start - base, |rva| image.u32(base + rva));
+    let dir = exe
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = exe.file_stem().and_then(|n| n.to_str()).unwrap_or_default();
+    let archive = enshwick_gamedata::archive::Archive::open(dir, name);
+    let slots = supply_slots(archive.as_ref(), name, &reflection, &mut table);
     let routes = tables::Routes::embedded().map_err(|e| e.to_string())?;
-    let (count, route_ids) = match &mut table {
-        Some((resolved, _)) => route(&routes, &image, &reflection, side, resolved),
-        None => (0, Vec::new()),
+    let found = if args.patterns {
+        // As the loader without routes: every entry a route finds is missing
+        // unless an anchor found it.
+        routes
+            .ids()
+            .filter(|id| routes.routes(id, side))
+            .map(|id| (id, None))
+            .collect()
+    } else {
+        routes.find(&image, &reflection, side, &table)
     };
-    let slots = match &mut table {
-        Some((resolved, _)) => supply_slots(exe, &reflection, resolved),
-        None => Ok(Slots::default()),
-    };
+    let (count, route_ids) = route(found, &mut table);
+    let steam = args.steam_build.or_else(|| steam_build(dir, side));
+    let game_version = args
+        .game_version
+        .or_else(|| archive.as_ref()?.version()?.split('|').next()?.parse().ok());
     Ok(Build {
         side,
         fingerprint,
-        base,
-        image,
-        reflection,
-        code,
-        code_rva: range.start - base,
+        name: build_name(side, steam, game_version, fingerprint),
+        steam,
+        game_version,
+        anchors,
         table,
         routed: count,
         route_ids,
         slots,
+        archive: dir.join(format!("{name}.kfc")).is_file(),
     })
 }
 
-/// Takes into `table` what the engine routes find, as the loader does at
-/// its start: how many entries they found, and every entry they look for.
-fn route(
-    routes: &tables::Routes,
-    image: &Image<'_>,
-    reflection: &Reflection<'_>,
+/// The Steam build the files beside the game folder `dir` state, as the
+/// loader reads it.
+#[cfg(windows)]
+fn steam_build(dir: &Path, side: tables::Side) -> Option<u64> {
+    let running = match side {
+        tables::Side::Server => enshwick::abi::Side::SERVER,
+        tables::Side::Client => enshwick::abi::Side::CLIENT,
+    };
+    enshwick_loader::builds::steam_build(dir, running).map(enshwick_gamedata::SteamBuild::get)
+}
+
+#[cfg(not(windows))]
+fn steam_build(_: &Path, _: tables::Side) -> Option<u64> {
+    None
+}
+
+/// The build's name as the loader logs it: its side, then the Steam build,
+/// the game version and the executable's fingerprint, each where known.
+fn build_name(
     side: tables::Side,
-    table: &mut Resolved,
-) -> (usize, Vec<String>) {
-    let found = routes.find(image, reflection, side, table);
+    steam_build: Option<u64>,
+    game_version: Option<u64>,
+    fingerprint: Fingerprint,
+) -> String {
+    let steam = steam_build.map(|b| format!("Steam build {b}, "));
+    let version = game_version.map(|v| format!("game {v}, "));
+    format!(
+        "{}, {}{}executable {}",
+        side.as_str(),
+        steam.unwrap_or_default(),
+        version.unwrap_or_default(),
+        spell(fingerprint)
+    )
+}
+
+/// Takes into `table` what the engine routes `found`, as the loader does at
+/// its start, an entry no route found being missing unless an anchor found
+/// it: how many entries they found, and every entry they look for.
+fn route(found: Vec<(&str, Option<tables::Routed>)>, table: &mut Resolved) -> (usize, Vec<String>) {
     let ids = found.iter().map(|(id, _)| (*id).to_owned()).collect();
-    let count = found
-        .into_iter()
-        .filter(|&(id, routed)| {
-            matches!(
-                table.route(id, routed),
-                tables::Routing::Agrees | tables::Routing::Supplied
-            )
-        })
-        .count();
+    let mut count = 0;
+    for (id, routed) in found {
+        match table.route(id, routed) {
+            tables::Routing::Agrees | tables::Routing::Supplied => count += 1,
+            tables::Routing::Unresolved => {
+                table.lack(id);
+            }
+            _ => {}
+        }
+    }
     (count, ids)
 }
 
-/// Gives `table` the attribute slots the game's archive beside `exe`
-/// holds, as the loader does at start.
+/// Gives `table` the attribute slots the game's archive holds, as the
+/// loader does at start.
 #[cfg(windows)]
 fn supply_slots(
-    exe: &Path,
+    archive: Option<&enshwick_gamedata::archive::Archive>,
+    name: &str,
     reflection: &Reflection<'_>,
     table: &mut Resolved,
 ) -> Result<Slots, String> {
@@ -241,15 +292,10 @@ fn supply_slots(
     if wanted.is_empty() {
         return Ok(slots);
     }
-    let dir = exe
-        .parent()
-        .filter(|d| !d.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    let name = exe.file_stem().and_then(|n| n.to_str()).unwrap_or_default();
-    let archive = enshwick_gamedata::archive::Archive::open(dir, name).ok_or_else(|| {
+    let archive = archive.ok_or_else(|| {
         format!("the game's archive {name}.kfc beside the executable does not read")
     })?;
-    let found = enshwick_loader::attribute_slots::read(&archive, reflection)?;
+    let found = enshwick_loader::attribute_slots::read(archive, reflection)?;
     for (id, attribute) in &wanted {
         let Some(slot) = found.get(attribute).and_then(|&s| u64::try_from(s).ok()) else {
             continue;
@@ -259,7 +305,7 @@ fn supply_slots(
             && pinned != slot
         {
             slots.differ.push(format!(
-                "`{id}`: the game's data puts {attribute} in slot {slot}, the table in {pinned}"
+                "`{id}`: the game's data puts {attribute} in slot {slot}, the anchors in {pinned}"
             ));
         }
     }
@@ -267,16 +313,13 @@ fn supply_slots(
 }
 
 #[cfg(not(windows))]
-fn supply_slots(_: &Path, _: &Reflection<'_>, _: &mut Resolved) -> Result<Slots, String> {
+fn supply_slots(
+    _: Option<&enshwick_gamedata::archive::Archive>,
+    _: &str,
+    _: &Reflection<'_>,
+    _: &mut Resolved,
+) -> Result<Slots, String> {
     Err("only a Windows build reads the game's archive".to_owned())
-}
-
-/// The tables the loader embeds.
-fn known_tables() -> Result<Vec<Table>, String> {
-    tables::embedded()
-        .iter()
-        .map(|(file, text)| Table::parse(text).map_err(|e| format!("{file}: {e}")))
-        .collect()
 }
 
 fn spell(fingerprint: Fingerprint) -> String {
@@ -299,59 +342,36 @@ struct ModOutcome {
 
 /// The report; `Ok(true)` when everything works.
 pub(crate) fn run(args: &Args) -> Result<bool, String> {
-    let build = build(&args.exe, args.patterns)?;
+    if args.patterns && args.data.is_some() {
+        return Err(
+            "--data writes what the loader finds with its engine routes, so not with --patterns"
+                .to_owned(),
+        );
+    }
+    let build = build(args)?;
     let mut out = String::new();
     let _w = writeln!(out, "# Compatibility report\n");
     let _w = writeln!(
         out,
-        "`{}`: the {} build `{}`.\n",
+        "`{}`: {}.\n",
         args.exe.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
-        build.side.as_str(),
-        spell(build.fingerprint)
+        build.name
     );
-    let Some((table, source)) = &build.table else {
-        let _w = writeln!(
-            out,
-            "No build table of this side exists: the loader leaves the game vanilla and no mod runs."
-        );
-        emit(args, &out)?;
-        return Ok(false);
-    };
-    let mut works = true;
-    match table.kind() {
-        Kind::Exact => {
-            let _w = writeln!(
-                out,
-                "## Build table\n\n`{}`, made for this build.\n",
-                table.name()
-            );
-            let mut problems = check_exact(&build, source);
-            if let Ok(slots) = &build.slots {
-                problems.extend(slots.differ.iter().cloned());
-            }
-            if problems.is_empty() {
-                let _w = writeln!(
-                    out,
-                    "Its systems match reflection and every pattern and expected bytes match where it pins them.\n"
-                );
-            } else {
-                works = false;
-                let _w = writeln!(out, "It does not match this executable:\n");
-                for problem in problems {
-                    let _w = writeln!(out, "- {problem}");
-                }
-                out.push('\n');
-            }
-        }
-        Kind::Fallback => works = write_carried(&mut out, args, &build, table, source),
-    }
+    let mut works = write_build(&mut out, args, &build);
     match &build.slots {
         Ok(slots) if slots.named > 0 => {
             let _w = writeln!(
                 out,
-                "The game's data beside the executable gives {} of the table's {} attribute slots.\n",
+                "The game's data beside the executable gives {} of the anchors' {} attribute slots.\n",
                 slots.found, slots.named
             );
+            if !slots.differ.is_empty() {
+                works = false;
+                for differ in &slots.differ {
+                    let _w = writeln!(out, "- {differ}");
+                }
+                out.push('\n');
+            }
         }
         Ok(_) => {}
         Err(why) => {
@@ -359,54 +379,42 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         }
     }
     if let Some(path) = &args.data {
-        if !matches!(table.kind(), Kind::Exact) {
-            return Err("no build table is made for this build: pin it first".to_owned());
-        }
-        std::fs::write(path, data(&build, table, source)?)
-            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let path = if path.is_dir() {
+            path.join(tables::file_name(build.side, build.fingerprint))
+        } else {
+            path.clone()
+        };
+        std::fs::write(&path, data(&build)?).map_err(|e| format!("{}: {e}", path.display()))?;
     }
-    write_features(&mut out, table);
+    write_features(&mut out, &build.table);
     works &= write_mods(&mut out, args)?;
     emit(args, &out)?;
     Ok(works)
 }
 
-/// The build table section of a build that carries `source` by its
-/// patterns, as `table`; whether everything works.
-fn write_carried(
-    out: &mut String,
-    args: &Args,
-    build: &Build,
-    table: &Resolved,
-    source: &Table,
-) -> bool {
+/// The section on what the loader finds on `build`; whether it finds every
+/// entry its anchors and routes name.
+fn write_build(out: &mut String, args: &Args, build: &Build) -> bool {
+    let table = &build.table;
+    let entries = table.symbols().len() + table.constants().len();
     let how = if args.patterns {
-        "As asked, the loader's newest table of this side,"
+        "As asked, by the anchors' patterns alone, without the engine routes".to_owned()
     } else {
-        "None is made for this build. The loader takes"
+        format!(
+            "{} by the engine routes, the rest by the anchors' patterns",
+            build.routed
+        )
     };
     let _w = writeln!(
         out,
-        "## Build table\n\n{how} `{}`, finds its entries by their patterns: {} found, {} missing.\n",
-        source.name(),
-        table.symbols().len() + table.constants().len(),
+        "## Build\n\nThe loader finds {entries} entries on this build, {how}; {} missing.\n",
         table.missing().len()
-    );
-    if !args.patterns {
-        let _w = writeln!(out, "Write this build's table with `cargo enshwick pin`.\n");
-    }
-    let _w = writeln!(
-        out,
-        "Patterns find {} of {} symbols and {} of {} constants.\n",
-        table.symbols().len(),
-        source.symbols().len(),
-        table.constants().len() - build.slots.as_ref().map_or(0, |s| s.found),
-        source.constants().len()
     );
     if !table.missing().is_empty() {
         let _w = writeln!(out, "Missing: {}.\n", code_list(table.missing()));
     }
-    let alone: Vec<String> = source
+    let alone: Vec<String> = build
+        .anchors
         .constants()
         .iter()
         .filter(|c| c.one_witness().is_some() && table.constant(c.id()).is_some())
@@ -419,26 +427,47 @@ fn write_carried(
             code_list(&alone)
         );
     }
-    args.patterns && table.missing().is_empty()
+    if tables::reported(build.side, build.fingerprint) {
+        let _w = writeln!(
+            out,
+            "A compatibility report of this loader covers the build.\n"
+        );
+    } else {
+        let _w = writeln!(
+            out,
+            "No compatibility report of this loader covers the build: with `build_patterns = false` the loader keeps it vanilla. `--data crates/enshwick-gamedata/reports` writes its report data.\n"
+        );
+    }
+    table.missing().is_empty()
 }
 
-/// The report data of `build`, whose own table is `source`, as TOML: names,
-/// counts and ids only. An entry is missing when another table of the side
-/// or a route of the side has it and this build does not; each loader
-/// feature that names a missing entry is listed with them.
-fn data(build: &Build, table: &Resolved, source: &Table) -> Result<String, String> {
+/// The report data of `build` as TOML: names, counts and ids only. An entry
+/// is missing when a route or an anchor of the side names it and this build
+/// does not have it, and unread when it is an attribute slot and no game
+/// archive beside the executable reads; each loader feature that names a
+/// missing entry is listed with them.
+fn data(build: &Build) -> Result<String, String> {
     if MODULE_IDS.is_empty() {
         return Err("only a Windows build of this tool knows the loader's features".to_owned());
     }
-    let all = known_tables()?;
+    let table = &build.table;
     let mut known: std::collections::BTreeSet<&str> =
         build.route_ids.iter().map(String::as_str).collect();
-    for other in all.iter().filter(|t| t.side() == source.side()) {
-        known.extend(other.symbols().iter().map(tables::Symbol::id));
-        known.extend(other.constants().iter().map(tables::Constant::id));
-    }
+    known.extend(build.anchors.symbols().iter().map(tables::Symbol::id));
+    known.extend(build.anchors.constants().iter().map(tables::Constant::id));
+    // Without the game's archive the slots are unknown, not missing: the
+    // game always has its archive, a kept executable may not. An archive
+    // that is there but does not give them leaves them missing.
+    let unread: Vec<&str> = match &build.slots {
+        Err(_) if !build.archive => table
+            .attributes()
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .collect(),
+        _ => Vec::new(),
+    };
     // An `<id>.bytes` check is not an entry, and a route drops it.
-    known.retain(|id| id.rsplit('.').next() != Some("bytes"));
+    known.retain(|id| id.rsplit('.').next() != Some("bytes") && !unread.contains(id));
     let missing: Vec<&str> = known
         .iter()
         .copied()
@@ -451,12 +480,12 @@ fn data(build: &Build, table: &Resolved, source: &Table) -> Result<String, Strin
     let mut out = String::from(
         "# What the loader finds on this game build; `cargo xtask compat <exe> --data <file>`\n# writes it.\n\n",
     );
-    let _w = writeln!(out, "table = {:?}", source.name());
-    let _w = writeln!(out, "side = {:?}", source.side().as_str());
-    if let Some(steam) = source.steam_build() {
+    let _w = writeln!(out, "build = {:?}", build.name);
+    let _w = writeln!(out, "side = {:?}", build.side.as_str());
+    if let Some(steam) = build.steam {
         let _w = writeln!(out, "steam_build = {steam}");
     }
-    if let Some(version) = source.game_version() {
+    if let Some(version) = build.game_version {
         let _w = writeln!(out, "game_version = {version}");
     }
     let _w = writeln!(
@@ -466,6 +495,9 @@ fn data(build: &Build, table: &Resolved, source: &Table) -> Result<String, Strin
     );
     let _w = writeln!(out, "routed = {}", build.routed);
     let _w = writeln!(out, "missing = {}", list(&missing));
+    if !unread.is_empty() {
+        let _w = writeln!(out, "unread = {}", list(&unread));
+    }
     for &(name, ids) in MODULE_IDS {
         let named = ids.iter().filter(|id| known.contains(**id)).count();
         let lacks: Vec<&str> = ids
@@ -565,55 +597,6 @@ fn code_list<S: AsRef<str>>(ids: &[S]) -> String {
         .map(|id| format!("`{}`", id.as_ref()))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-/// What does not match in a table made for this build: a system the
-/// reflection puts elsewhere, a pattern that no longer matches where its
-/// symbol is pinned, or expected bytes that differ.
-fn check_exact(build: &Build, table: &Table) -> Vec<String> {
-    let mut problems = Vec::new();
-    for (name, rva) in table.checks() {
-        let entry = build
-            .reflection
-            .system(name)
-            .map_or(0, enshwick_gamedata::reflect::System::entry);
-        if entry != build.base + rva {
-            problems.push(format!(
-                "system `{name}` is not where the table says: nothing loads"
-            ));
-        }
-    }
-    let resolved = table.resolve();
-    for symbol in table.symbols() {
-        if symbol.pattern().is_some()
-            && symbol.find(build.code, build.code_rva) != Some(symbol.rva())
-        {
-            problems.push(format!(
-                "the pattern of `{}` does not find it once where it is pinned",
-                symbol.id()
-            ));
-        }
-        if let Some(want) = resolved.constant(&format!("{}.bytes", symbol.id())) {
-            let have = build.image.u64(build.base + symbol.rva());
-            if have != Some(want) {
-                problems.push(format!(
-                    "`{}` does not start with its expected bytes",
-                    symbol.id()
-                ));
-            }
-        }
-    }
-    for constant in table.constants() {
-        if constant.pattern().is_some()
-            && table.find_pinned(constant, build.code, build.code_rva) != Some(constant.value())
-        {
-            problems.push(format!(
-                "the pattern of `{}` does not find its value once",
-                constant.id()
-            ));
-        }
-    }
-    problems
 }
 
 /// The DLLs `paths` name: each file, and the `*.dll` in each folder.
@@ -727,59 +710,137 @@ mod tests {
         assert!(side_of(Path::new("game.exe")).is_err());
     }
 
-    #[cfg(windows)]
     #[test]
-    fn features_name_what_the_build_lacks() {
-        let all = known_tables().unwrap();
-        let server = tables::newest(&all, tables::Side::Server).unwrap();
-        let exact = server.resolve().parts(MODULE_IDS);
-        assert!(!exact.is_empty());
-        assert!(
-            exact.iter().all(|f| f.missing.is_empty()),
-            "an exact table lacks nothing"
+    fn a_build_is_named_and_filed_by_what_is_known_of_it() {
+        let fp = Fingerprint::new([0xab; 16], 7);
+        let guid = "ab".repeat(16);
+        assert_eq!(
+            build_name(tables::Side::Server, Some(26_319_703), Some(1_283_531), fp),
+            format!("server, Steam build 26319703, game 1283531, executable {guid}/7")
         );
-        let nothing = server.fall_back(&[0; 64], 0x1000, |_| None);
-        let fallback = nothing.parts(MODULE_IDS);
-        assert!(fallback.iter().all(|f| f.missing.len() == f.named));
+        assert_eq!(
+            build_name(tables::Side::Client, None, None, fp),
+            format!("client, executable {guid}/7")
+        );
     }
 
-    /// Each embedded table has its report data in `reports/` under the same
-    /// file name, naming the table's build and only the loader's features;
-    /// on each executable the opt-in `ENSH_EXES` path list names, the data
-    /// is what this tool writes now (skipped without it).
+    fn nothing_found(side: tables::Side) -> Resolved {
+        tables::anchors(side)
+            .unwrap()
+            .fall_back(&[0; 64], 0x1000, |_| None)
+    }
+
+    #[test]
+    fn an_entry_no_route_finds_is_missing_as_the_loader_has_it() {
+        let mut table = nothing_found(tables::Side::Server);
+        let (routed, ids) = route(
+            vec![
+                ("x.route_only", None),
+                ("x.found", Some(tables::Routed::Constant(8))),
+            ],
+            &mut table,
+        );
+        assert_eq!((routed, ids.len()), (1, 2));
+        assert!(table.missing().iter().any(|id| id == "x.route_only"));
+        assert!(table.missing().iter().all(|id| id != "x.found"));
+    }
+
+    #[test]
+    fn report_data_is_refused_for_the_patterns_alone() {
+        let args = Args {
+            exe: PathBuf::from("enshrouded_server.exe"),
+            mods: Vec::new(),
+            report: None,
+            patterns: true,
+            data: Some(PathBuf::from("reports")),
+            steam_build: None,
+            game_version: None,
+        };
+        assert!(run(&args).unwrap_err().contains("--patterns"));
+    }
+
+    /// The attribute slots are unread only when no archive lies beside the
+    /// executable; an archive that does not give them leaves them missing.
     #[cfg(windows)]
     #[test]
-    fn every_table_s_report_data_agrees_with_it() {
+    fn attribute_slots_are_unread_only_without_an_archive() {
+        let side = tables::Side::Server;
+        let fingerprint = Fingerprint::new([0xab; 16], 7);
+        let build = |archive| Build {
+            side,
+            fingerprint,
+            name: build_name(side, None, None, fingerprint),
+            steam: None,
+            game_version: None,
+            anchors: tables::anchors(side).unwrap(),
+            table: nothing_found(side),
+            routed: 0,
+            route_ids: Vec::new(),
+            slots: Err("no slots".to_owned()),
+            archive,
+        };
+        let slot = build(false)
+            .table
+            .attributes()
+            .first()
+            .map(|(id, _)| format!("{id:?}"))
+            .unwrap();
+        let without = data(&build(false)).unwrap();
+        let unread = without
+            .lines()
+            .find(|l| l.starts_with("unread = "))
+            .unwrap();
+        assert!(unread.contains(&slot), "{without}");
+        let with = data(&build(true)).unwrap();
+        assert!(!with.contains("unread = "), "{with}");
+        let missing = with.lines().find(|l| l.starts_with("missing = ")).unwrap();
+        assert!(missing.contains(&slot), "{with}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn features_name_what_a_build_without_code_lacks() {
+        for side in [tables::Side::Server, tables::Side::Client] {
+            let anchors = tables::anchors(side).unwrap();
+            let nothing = anchors.fall_back(&[0; 64], 0x1000, |_| None);
+            let parts = nothing.parts(MODULE_IDS);
+            assert!(parts.iter().all(|f| f.missing.len() == f.named), "{side:?}");
+        }
+    }
+
+    /// Each report in `reports/` is named after its build, says its side and
+    /// names only the loader's features; on each executable the opt-in
+    /// `ENSH_EXES` path list names, the report of its build is what this
+    /// tool writes now, taking the Steam build and game version the report
+    /// states where no file beside the executable does (skipped without it).
+    #[cfg(windows)]
+    #[test]
+    fn every_report_agrees_with_its_build() {
         let dir =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/enshwick-gamedata/reports");
         let read = |file: &str| {
-            std::fs::read_to_string(dir.join(file))
-                .unwrap()
-                .replace("\r\n", "\n")
+            std::fs::read_to_string(dir.join(file)).map(|text| text.replace("\r\n", "\n"))
         };
         let mut files: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
         files.sort();
-        let embedded: Vec<&str> = tables::embedded().iter().map(|&(file, _)| file).collect();
-        assert_eq!(files, embedded, "one report per table");
+        assert!(!files.is_empty());
         let number =
             |data: &toml::Table, key: &str| data.get(key).and_then(toml::Value::as_integer);
-        for &(file, text) in tables::embedded() {
-            let table = Table::parse(text).unwrap();
-            let data: toml::Table = read(file).parse().unwrap();
-            assert_eq!(data["table"].as_str(), Some(table.name()), "{file}");
-            assert_eq!(data["side"].as_str(), Some(table.side().as_str()), "{file}");
+        for file in &files {
+            let data: toml::Table = read(file).unwrap().parse().unwrap();
+            let side = data["side"].as_str().unwrap();
+            assert!(file.starts_with(&format!("{side}-")), "{file}");
+            assert_eq!(file.split('-').count(), 3, "{file}");
+            let name = data["build"].as_str().unwrap();
+            assert!(name.starts_with(side), "{file}");
+            let executable = name.rsplit("executable ").next().unwrap();
             assert_eq!(
-                number(&data, "steam_build"),
-                table.steam_build().map(|b| i64::try_from(b.get()).unwrap()),
-                "{file}"
-            );
-            assert_eq!(
-                number(&data, "game_version"),
-                table.game_version().map(|v| i64::from(v.get())),
-                "{file}"
+                *file,
+                format!("{side}-{}.toml", executable.replace('/', "-")),
+                "a report is filed under the build it names"
             );
             let features = data.get("feature").and_then(toml::Value::as_array);
             for feature in features.into_iter().flatten() {
@@ -794,15 +855,57 @@ mod tests {
             return;
         };
         for exe in std::env::split_paths(&list) {
-            let build = build(&exe, false).unwrap();
-            let (table, source) = build.table.as_ref().unwrap();
-            let &(file, _) = tables::embedded()
-                .iter()
-                .find(|(_, text)| Table::parse(text).unwrap().name() == source.name())
-                .unwrap();
+            let mut args = Args {
+                exe: exe.clone(),
+                mods: Vec::new(),
+                report: None,
+                patterns: false,
+                data: None,
+                steam_build: None,
+                game_version: None,
+            };
+            let first = build(&args).unwrap();
+            let file = tables::file_name(first.side, first.fingerprint);
+            let want = read(&file).unwrap_or_else(|e| panic!("{}: {file}: {e}", exe.display()));
+            let stated: toml::Table = want.parse().unwrap();
+            let dir = exe.parent().unwrap();
+            if dir.join("steamapps").is_dir() {
+                let steam = number(&stated, "steam_build").and_then(|n| u64::try_from(n).ok());
+                assert_eq!(first.steam, steam, "{}", exe.display());
+            }
+            let archive = exe.with_extension("kfc");
+            if archive.is_file() {
+                let version = number(&stated, "game_version").and_then(|n| u64::try_from(n).ok());
+                assert_eq!(first.game_version, version, "{}", exe.display());
+            }
+            let shown = std::env::temp_dir().join(format!("enshwick-compat-{file}.md"));
+            args.report = Some(shown.clone());
+            let works = run(&args).unwrap();
+            let text = std::fs::read_to_string(&shown).unwrap();
+            let _gone = std::fs::remove_file(&shown);
+            let entries = number(&stated, "entries").unwrap();
+            assert!(
+                text.contains(&format!("The loader finds {entries} entries")),
+                "{text}"
+            );
+            assert!(
+                text.contains("A compatibility report of this loader covers"),
+                "{text}"
+            );
             assert_eq!(
-                data(&build, table, source).unwrap(),
-                read(file),
+                text.contains("attribute slots.\n"),
+                archive.is_file(),
+                "{text}"
+            );
+            let complete = stated["missing"].as_array().is_some_and(Vec::is_empty)
+                && !stated.contains_key("unread");
+            assert_eq!(works, complete, "{}", exe.display());
+            args.report = None;
+            args.steam_build = number(&stated, "steam_build").and_then(|n| u64::try_from(n).ok());
+            args.game_version = number(&stated, "game_version").and_then(|n| u64::try_from(n).ok());
+            assert_eq!(
+                data(&build(&args).unwrap()).unwrap(),
+                want,
                 "{}",
                 exe.display()
             );

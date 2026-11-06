@@ -1,24 +1,10 @@
 # What the loader finds on this game build; `cargo xtask compat <exe> --data <file>`
 # writes it.
 
-table = "1.0 server (1269579)"
+build = "server, game 1269579, executable 1c129660cd6efc4f9f0b21652d5ff2bf/387"
 side = "server"
 game_version = 1269579
-entries = 571
-routed = 540
-missing = ["bases.animal_value", "bases.answer_box", "bases.answer_size", "bases.holder_at", "bases.npc_value", "building.box_extent", "building.box_min", "building.box_size", "voxel.grid_stride"]
-
-[[feature]]
-name = "bases"
-state = "partly"
-missing = ["bases.holder_at", "bases.animal_value", "bases.answer_box", "bases.answer_size", "bases.npc_value"]
-
-[[feature]]
-name = "transactions"
-state = "partly"
-missing = ["building.box_extent", "building.box_min", "building.box_size"]
-
-[[feature]]
-name = "voxels"
-state = "partly"
-missing = ["voxel.grid_stride"]
+entries = 567
+routed = 557
+missing = []
+unread = ["attribute.experience_needed_slot", "attribute.fuel_max_slot", "attribute.health_adder_slot", "attribute.health_max_slot", "attribute.mana_adder_slot", "attribute.mana_max_slot", "attribute.shroud_max_slot", "attribute.stamina_adder_slot", "attribute.stamina_max_slot"]

@@ -16,6 +16,7 @@ use anyhow::{Context as _, anyhow, bail};
 mod anchor;
 mod checks;
 mod exe;
+mod found;
 mod patterns;
 mod port;
 mod report;
@@ -34,6 +35,7 @@ use enshwick_gamedata::reflect::Fingerprint;
 use rustc_hash::FxHashMap;
 
 use self::exe::Exe;
+use self::found::{ANCHORS, FOUND, found_table};
 use self::rows::{Row, Side, guid_hex};
 use self::staged::Staged;
 
@@ -149,10 +151,7 @@ fn old_side(
     fingerprint: Fingerprint,
 ) -> anyhow::Result<enshwick_gamedata::Side> {
     if let Some(side) = ported {
-        return Ok(match side {
-            Side::Server => enshwick_gamedata::Side::Server,
-            Side::Client => enshwick_gamedata::Side::Client,
-        });
+        return Ok(gamedata_side(side));
     }
     crate::generate::side_of(&crate::generate::tables()?, fingerprint)
         .with_context(|| format!("no table is for the old build {}", spell(fingerprint)))
@@ -247,13 +246,33 @@ fn port_tables(
     let (Some(old_fp), Some(new_fp)) = (old.fingerprint(), new.fingerprint()) else {
         return Ok(Vec::new());
     };
-    let mut sections = Vec::new();
+    let mut sources = Vec::new();
     for path in table_files(&args.repo)? {
         let src = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
         let row = table::parse(&src).with_context(|| path.display().to_string())?;
-        if !matches(&row, old_fp) {
-            continue;
+        if matches(&row, old_fp) {
+            let source = format!("the table `{}`", relative(&args.repo, &path));
+            sources.push((path, src, row, source));
         }
+    }
+    if let (true, true, Some(old_path)) = (
+        sources.is_empty(),
+        args.repo.join(ANCHORS).is_file(),
+        args.old.as_deref(),
+    ) {
+        let side = side_of_exe(old_path).with_context(|| {
+            format!(
+                "{} has no table and its side shows only in its name: keep it as enshrouded_server.exe or enshrouded.exe",
+                old_path.display()
+            )
+        })?;
+        let src = found_table(&args.repo, side, old)?;
+        let row = table::parse(&src).context("the table found on the old build")?;
+        let path = args.repo.join(table::DIR).join(table_file(side, old_fp));
+        sources.push((path, src, row, FOUND.to_owned()));
+    }
+    let mut sections = Vec::new();
+    for (path, src, row, old_values) in sources {
         let target = path.with_file_name(table_file(row.side, new_fp));
         let mut ported = row::port_row(&row, old, new);
         let source =
@@ -282,6 +301,7 @@ fn port_tables(
         sections.push(report::Section {
             file: format!("{} (ported, not written)", relative(&args.repo, &target)),
             title: name,
+            source: Some(old_values),
             lines: ported.lines,
             text: Some((text.clone(), "toml")),
             unpatterned: patterned.problems,
@@ -292,6 +312,23 @@ fn port_tables(
         tables.push((row.side, source.resolve(), resolved));
     }
     Ok(sections)
+}
+
+/// The side the game executable's file name names.
+fn side_of_exe(path: &Path) -> Option<Side> {
+    let name = path.file_name()?.to_str()?.to_ascii_lowercase();
+    match name.as_str() {
+        "enshrouded_server.exe" => Some(Side::Server),
+        "enshrouded.exe" => Some(Side::Client),
+        _ => None,
+    }
+}
+
+const fn gamedata_side(side: Side) -> enshwick_gamedata::Side {
+    match side {
+        Side::Server => enshwick_gamedata::Side::Server,
+        Side::Client => enshwick_gamedata::Side::Client,
+    }
 }
 
 /// Refreshes the routes' check shapes over the old and the new build for
@@ -323,6 +360,7 @@ fn refresh_checks(
     Ok(vec![report::Section {
         file: checks::ROUTES.to_owned(),
         title: "check shapes".to_owned(),
+        source: None,
         lines: Vec::new(),
         text: (!args.write && changed).then_some((text, "toml")),
         unpatterned: notes,
@@ -370,6 +408,7 @@ fn port_mods(
             sections.push(report::Section {
                 file: file.clone(),
                 title,
+                source: None,
                 lines: ported.lines,
                 text: (!args.write).then_some((text, "toml")),
                 unpatterned: Vec::new(),
@@ -584,10 +623,12 @@ mod tests {
         let Some(path) = std::env::var_os("ENSH_SERVER_EXE") else {
             return;
         };
-        let bytes = fs::read(path).unwrap();
+        let bytes = fs::read(&path).unwrap();
         let exe = Exe::parse(&bytes).unwrap();
         let args = Args {
-            old: None,
+            // A build without a table of its own ports from what the old
+            // executable's name says its side is.
+            old: Some(path.into()),
             new: None,
             patterns: None,
             repo: Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."),
@@ -608,6 +649,16 @@ mod tests {
                 section.file
             );
         }
+    }
+
+    #[test]
+    fn the_side_comes_from_the_executable_s_name() {
+        assert_eq!(
+            side_of_exe(Path::new("x/Enshrouded_Server.exe")),
+            Some(Side::Server)
+        );
+        assert_eq!(side_of_exe(Path::new("enshrouded.exe")), Some(Side::Client));
+        assert_eq!(side_of_exe(Path::new("game.exe")), None);
     }
 
     #[test]

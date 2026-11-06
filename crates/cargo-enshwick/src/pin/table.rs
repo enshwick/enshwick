@@ -86,7 +86,7 @@ fn number(item: &Item) -> Option<u64> {
 }
 
 /// `value` as a table spells it: hex, quoted past `i64::MAX`.
-fn spelled(value: u64) -> String {
+pub(super) fn spelled(value: u64) -> String {
     if i64::try_from(value).is_ok() {
         hex(value)
     } else {

@@ -75,12 +75,14 @@ game update that moves a field changes this crate, not the mods.
   reports how the kept rows port to a new build and writes no table.
 - [`reports/`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/reports)
   holds, under each build's file name, what the loader finds on that build:
-  its Steam build and game version, how many entries it has and how many
-  the engine routes found, the entries it lacks that another build of its
-  side has, and each loader feature that is off or partly off for them.
-  `cargo xtask compat <exe> --data <file>` writes it from the executable,
-  and a test checks it against its table, and against each executable that
-  `ENSH_EXES` lists. It holds names, counts and ids only.
+  its name, Steam build and game version, how many entries the anchors and
+  engine routes find and how many the routes found, the entries a route or
+  anchor of its side names that it lacks, the attribute slots no game
+  archive beside the executable could read, and each loader feature that is
+  off or partly off. `cargo xtask compat <exe> --data reports` writes it
+  from the executable as the loader finds the build, and a test checks each
+  report against each executable that `ENSH_EXES` lists. It holds names,
+  counts and ids only.
 
 ## Patterns
 

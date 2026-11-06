@@ -12,6 +12,8 @@ pub(crate) struct Section {
     pub(crate) file: String,
     /// The row's title: its name or side.
     pub(crate) title: String,
+    /// Where the old build's values came from, when not from `file`.
+    pub(crate) source: Option<String>,
     /// One line per entry.
     pub(crate) lines: Vec<Line>,
     /// The new row's text, when it is not written into the file.
@@ -59,6 +61,9 @@ pub(crate) fn render(old: &str, new: &str, sections: &[Section]) -> String {
     }
     for section in sections {
         let _w = writeln!(out, "## {}: {}\n", section.file, section.title);
+        if let Some(source) = &section.source {
+            let _w = writeln!(out, "Old values: {source}.\n");
+        }
         let _w = writeln!(
             out,
             "| Kind | Id | Old | New | Status | Confidence | Note |\n| --- | --- | --- | --- | --- | --- | --- |"
@@ -113,12 +118,14 @@ mod tests {
             &[Section {
                 file: "x.rs".to_owned(),
                 title: "server".to_owned(),
+                source: Some("the anchors".to_owned()),
                 lines: vec![line("a", Status::Unchanged), line("b", Status::Ambiguous)],
                 text: Some(("{ }".to_owned(), "rust")),
                 unpatterned: vec!["c: no unique window".to_owned()],
             }],
         );
         assert!(report.contains("2 entries: 1 unchanged, 0 moved, 1 ambiguous"));
+        assert!(report.contains("## x.rs: server\n\nOld values: the anchors.\n"));
         assert!(report.contains("## For a human\n\n- symbol `b` ambiguous: why | not\n"));
         assert!(report.contains("| symbol | `a` | 0x10 | - | unchanged | - | why / not |"));
         assert!(report.contains("```rust\n{ }\n```"));

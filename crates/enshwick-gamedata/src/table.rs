@@ -418,8 +418,28 @@ impl Table {
     }
 
     /// The anchors of `side` in the text of an anchors file, as a table
-    /// without a build: its symbols have no address.
-    pub(crate) fn anchors(text: &str, side: Side) -> Result<Self, TableError> {
+    /// without a build whose symbols have no address; [`anchors`](crate::anchors)
+    /// reads the embedded file.
+    ///
+    /// # Errors
+    ///
+    /// [`TableError`] when the text is no anchors file.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::{Side, Table};
+    ///
+    /// let text = r#"
+    /// [server.symbols]
+    /// "f.start" = { pattern = "48 89 5C 24 ?? 57" }
+    /// "#;
+    /// let server = Table::anchors(text, Side::Server)?;
+    /// assert_eq!(server.symbols()[0].id(), "f.start");
+    /// assert!(Table::anchors(text, Side::Client)?.symbols().is_empty());
+    /// # Ok::<(), enshwick_gamedata::TableError>(())
+    /// ```
+    pub fn anchors(text: &str, side: Side) -> Result<Self, TableError> {
         #[derive(serde::Deserialize)]
         #[serde(deny_unknown_fields)]
         struct Rows {

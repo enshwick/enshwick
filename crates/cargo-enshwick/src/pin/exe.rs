@@ -57,6 +57,11 @@ impl<'a> Exe<'a> {
         &self.image
     }
 
+    /// The executable's reflection, scanned once.
+    pub(crate) const fn reflection(&self) -> &Reflection<'a> {
+        &self.reflection
+    }
+
     /// The build fingerprint, when the executable carries one.
     pub(crate) fn fingerprint(&self) -> Option<Fingerprint> {
         self.image.fingerprint()

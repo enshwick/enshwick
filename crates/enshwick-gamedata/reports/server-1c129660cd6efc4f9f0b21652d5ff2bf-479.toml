@@ -1,10 +1,10 @@
 # What the loader finds on this game build; `cargo xtask compat <exe> --data <file>`
 # writes it.
 
-table = "1.0 server (26319703)"
+build = "server, Steam build 26319703, game 1283531, executable 1c129660cd6efc4f9f0b21652d5ff2bf/479"
 side = "server"
 steam_build = 26319703
 game_version = 1283531
-entries = 580
-routed = 540
+entries = 576
+routed = 557
 missing = []

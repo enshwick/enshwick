@@ -19,6 +19,11 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `pin --old` ports an old build that has no table in `tables/` from what
+  its anchors and engine routes find on it, and refreshes the check shapes
+  from that; the report names where each section's old values come from,
+  and an old executable without a table must keep the game's file name
+  (#962).
 - `pin --old --new` writes no loader table: it reports how the kept
   table's rows port, and still writes the mods' build rows and the routes'
   check shapes; `--steam-build` names the report's build and is no longer
