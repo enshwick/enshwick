@@ -365,11 +365,11 @@ fn key_of(path: &str) -> Option<String> {
 ///
 /// A client names a world it saves to Steam by its Steam file name alone,
 /// `world4.ksd`, and a local world by its full path (client 26430625).
-fn full_path<'a>(
-    path: &'a str,
+fn full_path(
+    path: &str,
     side: Side,
     steam: impl FnOnce() -> Option<&'static Path>,
-) -> Option<Cow<'a, str>> {
+) -> Option<Cow<'_, str>> {
     if side != Side::CLIENT || Path::new(path).is_absolute() {
         return Some(Cow::Borrowed(path));
     }
