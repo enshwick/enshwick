@@ -126,7 +126,8 @@ impl World {
     /// [`WorldError::Refused`] for an entity no mod spawned, such as a
     /// vanilla one or one spawned before the world last loaded,
     /// [`WorldError::Gone`] for an entity not in the world yet or any more,
-    /// or on a client or a build without the commands, and
+    /// [`WorldError::Missing`] where no server runs, as on a client in
+    /// another's game, or on a build without the commands, and
     /// [`WorldError::WrongThread`] off the game thread.
     ///
     /// # Examples

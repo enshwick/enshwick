@@ -521,7 +521,8 @@ impl Effects {
     /// place, [`WorldError::Refused`] for one the game's teleport does not
     /// move, such as a prop (it moves actors and characters),
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] on a build without teleports.
+    /// [`WorldError::Missing`] where no server runs or on a build without
+    /// teleports.
     ///
     /// # Examples
     ///

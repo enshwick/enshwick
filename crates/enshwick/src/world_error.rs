@@ -24,8 +24,10 @@ pub enum WorldError {
     /// The entity is not in the world.
     #[error("the entity is not in the world")]
     Gone,
-    /// This game build lacks the piece.
-    #[error("not available on this loader or game build")]
+    /// The call cannot run here: no server runs in this process, as on a
+    /// client in another's game, or this loader or game build lacks the
+    /// piece.
+    #[error("not available here, or on this loader or game build")]
     Missing,
     /// The world refused: a player's character, a save before the world
     /// has loaded, a write that would kill, or a copy the game keeps for

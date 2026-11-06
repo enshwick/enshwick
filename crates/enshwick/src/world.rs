@@ -460,7 +460,8 @@ impl World {
     /// [`WorldError::StaticHalf`] for the static half of an ECS type, the
     /// template's set-up data, [`WorldError::WrongThread`] off the game
     /// thread and
-    /// [`WorldError::Missing`] on a build without writes.
+    /// [`WorldError::Missing`] where no server runs or on a build without
+    /// writes.
     ///
     /// # Examples
     ///

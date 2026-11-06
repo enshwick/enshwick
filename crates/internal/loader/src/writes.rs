@@ -78,11 +78,11 @@ pub(crate) fn component_mut(
     entity: u32,
     hash: u32,
 ) -> Result<*mut c_void, Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let layout = layout(loader).ok_or(Status::UNAVAILABLE)?;
     if entity == 0 {
         return Err(Status::BAD_ARGS);
     }
-    crate::world::server()?;
+    crate::world::entity_call(loader)?;
     let at = crate::world::type_at(loader, hash)?;
     if refused(loader).contains(&hash) {
         return Err(Status::REFUSED);

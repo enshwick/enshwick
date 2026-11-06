@@ -103,7 +103,8 @@ impl World {
     /// [`WorldError::Refused`] for a player's character,
     /// [`WorldError::Gone`] for an entity not in the world,
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] on any other refusal.
+    /// [`WorldError::Missing`] where no server runs, on a build without the
+    /// command, or on any other refusal.
     ///
     /// # Examples
     ///

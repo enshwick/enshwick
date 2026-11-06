@@ -29,6 +29,9 @@ pub(crate) extern "system" fn set_saved(
         return Status::WRONG_THREAD;
     }
     with(Status::MISSING, |s| {
+        if super::world::entity_calls_off(s) {
+            return Status::UNAVAILABLE;
+        }
         let spawned_at = s
             .spawns
             .iter()

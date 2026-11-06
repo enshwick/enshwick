@@ -178,6 +178,20 @@ Each entry names the pull request that made the change.
   together and reaching into the game follow, then shipping, concepts and
   reference. Every chapter keeps its address. Settings, Hooks and Luau mods
   read with shorter sentences and one topic per paragraph (#967).
+- The entity calls tell a call this process cannot make apart from an
+  entity that is gone: `World::destroy`, `World::set_saved`,
+  `Effects::teleport` and the component writes (`World::update`, `set` and
+  the stat setters) fail with `WorldError::Missing` where no server runs, as
+  on a client in another player's game, or on a build without their
+  commands, and keep `WorldError::Gone` for an entity not in the world.
+  `WorldError::Missing` reads "not available here, or on this loader or game
+  build". The fake host answers the same, and `FakeHost::without_entity_commands`
+  plays a build without the commands. `Status::UNAVAILABLE`, ABI 11.13
+  (#969).
+- `ui::HudScreenType`, its `ALL` and the screen names the fake host checks
+  extensions against come from the game's reflection: `cargo enshwick
+  generate` writes them from the game's `HudScreenType`, so a new build's
+  screens need no hand change (#969).
 - A save hold no longer outlasts a shutdown: as a dedicated server or a
   hosted game shuts down, every `World::hold_saves` hold lets go and the
   final save runs, and the log names each mod that held saves and for how
@@ -269,6 +283,10 @@ Each entry names the pull request that made the change.
   only inside a base, a Flame Altar's building zone (#963).
 - A recipe rule a mod sets during init is kept until the loader resolves the
   recipe layout, where the loader refused it (#960).
+- `Load::export_dir` and `enshwick.export_dir` name the folder
+  `export/<id>/` by the mod id, which the loader lists for the mod's folder
+  in `mods/`, where before they took the folder's name; a folder the loader
+  lists no mod in has no export folder (#969).
 - A world's saved weather fronts keep their phenomenon when the mods that
   add phenomena change: the loader writes the phenomena's GUIDs beside the
   save and gives each restored front its phenomenon's new place, where

@@ -380,14 +380,15 @@ impl Load<'_> {
         Ok(std::path::PathBuf::from(path))
     }
 
-    /// The folder `export/<folder>/` in the game folder, named as the mod's
-    /// folder in `mods/`, its id as players install it, where a mod writes
+    /// The folder `export/<id>/` in the game folder, named by the mod id
+    /// whatever the mod's folder in `mods/` is called, where a mod writes
     /// files for tools outside the game, such as a wiki or a map; a mod may
     /// write to any other path too.
     ///
     /// # Errors
     ///
-    /// As [`Load::mod_dir`], and for a mod folder outside a `mods/` folder.
+    /// As [`Load::mod_dir`], for a mod folder outside a `mods/` folder, and
+    /// when the loader lists no mod in that folder.
     ///
     /// # Examples
     ///
@@ -400,18 +401,29 @@ impl Load<'_> {
     #[script]
     pub fn export_dir(&self) -> Result<std::path::PathBuf, Off> {
         let dir = self.mod_dir()?;
-        let mods = dir.parent();
-        match (
-            dir.file_name(),
-            mods.filter(|mods| mods.file_name().is_some_and(|name| name == "mods"))
-                .and_then(std::path::Path::parent),
-        ) {
-            (Some(folder), Some(game)) => Ok(game.join("export").join(folder)),
-            _ => Err(Off::new(format!(
+        let game = dir
+            .parent()
+            .filter(|mods| mods.file_name().is_some_and(|name| name == "mods"))
+            .and_then(std::path::Path::parent);
+        let (Some(game), Some(folder)) = (game, dir.file_name().and_then(|name| name.to_str()))
+        else {
+            return Err(Off::new(format!(
                 "export folder: {} is no folder in mods/",
                 dir.display()
-            ))),
-        }
+            )));
+        };
+        let id = self
+            .host
+            .listing(self.api().mods, false)
+            .into_iter()
+            .find(|entry| crate::mods::folder(&entry.file) == Some(folder))
+            .map(|entry| entry.id)
+            .ok_or_else(|| {
+                Off::new(format!(
+                    "export folder: the loader lists no mod in mods/{folder}"
+                ))
+            })?;
+        Ok(game.join("export").join(id))
     }
 
     /// A value of type `T` kept per world in the mod's data folder of that

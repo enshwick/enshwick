@@ -9,6 +9,12 @@ use crate::abi::{
 };
 use crate::test::table::{found, put, text, with};
 
+/// Whether the entity calls cannot run here, where the loader answers
+/// [`Status::UNAVAILABLE`]: no server runs, or the build lacks the commands.
+pub(crate) fn entity_calls_off(s: &crate::test::table::State) -> bool {
+    s.host.no_entity_commands || !(s.host.side == Side::SERVER || s.host.hosting)
+}
+
 pub(crate) extern "system" fn component(
     _me: ModHandle,
     entity: crate::Entity,
@@ -243,6 +249,9 @@ pub(crate) extern "system" fn world_quiet(_me: ModHandle) -> Status {
 
 pub(crate) extern "system" fn destroy(_me: ModHandle, entity: crate::Entity) -> Status {
     with(Status::MISSING, |s| {
+        if entity_calls_off(s) {
+            return Status::UNAVAILABLE;
+        }
         if s.host.players.iter().any(|p| p.entity == entity) {
             return Status::REFUSED;
         }
@@ -283,6 +292,9 @@ pub(crate) extern "system" fn component_write(
     out: *mut *mut c_void,
 ) -> Status {
     let address = with(Err(Status::MISSING), |s| {
+        if entity_calls_off(s) {
+            return Err(Status::UNAVAILABLE);
+        }
         if s.host.refused_writes.contains(&type_hash) {
             return Err(Status::REFUSED);
         }
@@ -326,6 +338,9 @@ pub(crate) extern "system" fn teleport(_me: ModHandle, request: *const TeleportR
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
+        if entity_calls_off(s) {
+            return Status::UNAVAILABLE;
+        }
         if !s.host.templates.contains_key(&request.entity.0)
             && !s
                 .host

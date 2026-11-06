@@ -206,7 +206,8 @@ systems itself while it steps, so a write from a filter or a hook on a system
 is refused even there. They fail with a `WorldError`: `Gone` for an entity not
 in the world, `Lacks` when it lacks the component, `Refused` for a type the
 loader will not write, `WrongThread` off the game thread or inside a step, and
-`Missing` on a build without writes. A field
+`Missing` where no server runs, as on a client in another player's game, or on
+a build without writes. A field
 of an engine type means what the engine makes of it: a write the engine does
 not expect, such as a value its systems keep elsewhere, may be overwritten or
 do nothing, so check a new write on a test server first.
@@ -244,7 +245,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 `destroy(entity)` asks the server to remove an entity after the systems of
 the next step, the way the game removes things itself: no loot drops and no
 death is raised. It refuses a player's character (`WorldError::Refused`) and
-an entity not in the world (`WorldError::Gone`).
+an entity not in the world (`WorldError::Gone`), and fails with
+`WorldError::Missing` where no server runs or on a build without the command.
 
 `save()` asks the server to save the world now, as its timed saves do;
 [`WorldSaved`](events.md) follows once the save is on disk. A save already
@@ -314,7 +316,9 @@ since the world loaded, from the step after its spawn, and `set_saved(entity, tr
 entity its `DoNotSave` component, or takes it away, after the next step, and
 the next save that starts after that leaves the entity out or keeps it.
 Vanilla entities are refused, so no mod drops the game's own data from a
-save.
+save. An entity not in the world fails with `WorldError::Gone`; where no
+server runs, or on a build without the commands, the call fails with
+`WorldError::Missing`.
 
 ```rust
 use enshwick::events::WorldSaving;

@@ -46,9 +46,12 @@ mod effects;
 mod enemies;
 mod engine_names;
 #[cfg(feature = "unstable")]
+mod entity_calls_unavailable;
+#[cfg(feature = "unstable")]
 mod entity_data;
 #[cfg(feature = "unstable")]
 mod events_described;
+mod export_dir;
 mod exports;
 mod fake_per_test;
 mod fake_refusals;

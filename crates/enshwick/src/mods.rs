@@ -308,7 +308,7 @@ pub fn join_missing() -> Vec<ModEntry> {
 impl Host {
     /// The entries a listing function of the table writes; `load_order`
     /// numbers them as [`all`] lists them, the loader first.
-    fn listing(&self, list: Listing, load_order: bool) -> Vec<ModEntry> {
+    pub(crate) fn listing(&self, list: Listing, load_order: bool) -> Vec<ModEntry> {
         let entry_size = u32::try_from(size_of::<ModInfo>()).unwrap_or(u32::MAX);
         let mut count = 0u32;
         let status = list(
@@ -352,6 +352,14 @@ impl Host {
             })
             .collect()
     }
+}
+
+/// The folder in `mods/` that holds the listed `file`, such as `you.post` for
+/// `mods/you.post/post.dll`; the loader refuses two mods in one folder.
+pub(crate) fn folder(file: &str) -> Option<&str> {
+    file.strip_prefix("mods/")?
+        .split_once('/')
+        .map(|(folder, _)| folder)
 }
 
 /// [`HostApi::mods`] and [`HostApi::join_missing`].
@@ -446,6 +454,15 @@ mod tests {
         assert_eq!(entry.label(), "Trading Post");
         assert_eq!(entry.authors, ["themaiby", "someone"]);
         assert_eq!(entry.license, "MIT");
+    }
+
+    #[test]
+    fn a_listed_file_names_its_folder_only_inside_one_in_mods() {
+        assert_eq!(folder("mods/Post 1.2/post.dll"), Some("Post 1.2"));
+        assert_eq!(folder("mods/you.post/sub/post.dll"), Some("you.post"));
+        assert_eq!(folder("mods/post.dll"), None);
+        assert_eq!(folder("other/you.post/post.dll"), None);
+        assert_eq!(folder(""), None);
     }
 
     static AUTHORS: [Str; 2] = [Str::new("themaiby"), Str::new("someone")];

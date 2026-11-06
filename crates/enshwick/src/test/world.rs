@@ -52,6 +52,23 @@ impl FakeHost {
         self
     }
 
+    /// Plays a game build without the world's entity commands: destroy,
+    /// `set_saved`, teleport and component writes answer
+    /// [`Status::UNAVAILABLE`](crate::abi::Status::UNAVAILABLE), as they do
+    /// on a client that hosts no game.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().world().without_entity_commands().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_entity_commands(mut self) -> Self {
+        self.no_entity_commands = true;
+        self
+    }
+
     /// Makes the component type `type_hash` the static half of its ECS type,
     /// the template's set-up data: reads find it as
     /// [`FakeHost::component`] gives it, and writes are refused with

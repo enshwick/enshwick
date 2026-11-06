@@ -103,7 +103,8 @@ stand on, as it does for respawns, and `.facing_yaw(radians)` turns the
 entity on arrival.
 It fails with `Gone` for an entity not in the world or without a place, and
 with `Refused` for one the game's teleport does not move: it moves actors and
-characters, not props.
+characters, not props. It fails with `Missing` where no server runs or on a
+build without teleports.
 
 ## Spawns
 
