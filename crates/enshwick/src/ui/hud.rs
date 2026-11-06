@@ -115,7 +115,10 @@ impl Hud<'_> {
     }
 }
 
+/// A HUD callback as the loader keeps it, with the host of the mod that
+/// registered it, as [`Drawer`](super::frame::Drawer) keeps it.
 struct Drawer<F> {
+    host: Host,
     draw: Mutex<F>,
 }
 
@@ -127,12 +130,10 @@ where
     let Some(raw) = (unsafe { frame.as_ref() }) else {
         return;
     };
-    let Some(host) = crate::host() else {
-        return;
-    };
     // SAFETY: `user` is the leaked `Drawer<F>` this function was registered
     // with.
     let drawer = unsafe { &*user.cast::<Drawer<F>>() };
+    let host = drawer.host;
     crate::host::guard(
         "panic in a HUD callback",
         || (),
@@ -168,6 +169,7 @@ impl Load<'_> {
         client_only(host, "HUD callbacks")?;
         crate::load::hand_over(
             Drawer {
+                host,
                 draw: Mutex::new(draw),
             },
             |user| (host.api().ui_hud)(host.handle(), draw_hud::<F>, user),

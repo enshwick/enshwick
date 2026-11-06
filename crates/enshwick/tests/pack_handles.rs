@@ -99,4 +99,40 @@ mod tests {
         assert_eq!(rows[0].gained, 14, "each pack's welcome, at its own bonus");
         let _gone = std::fs::remove_dir_all(&data);
     }
+
+    #[test]
+    fn a_pack_draws_its_window_and_hud_under_its_own_handle() {
+        use enshwick::abi::Side;
+        use enshwick::test::Drawn;
+        use enshwick::ui::Anchor;
+
+        let loader = FakeHost::new().side(Side::CLIENT).install();
+        // SAFETY: the fake host's table lives for the process; the loader
+        // makes its own handle the host of the copy that runs the packs.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: as before.
+        let status = unsafe {
+            enshwick::__private::init_pack(loader.api(), ModHandle(1), |load| {
+                load.on_frame(|frame| {
+                    frame.window("pack", "Pack", |w| w.label("framed"));
+                })?;
+                load.on_hud(|hud| hud.text(Anchor::TopRight, "hud line"))?;
+                Ok(())
+            })
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let drawn = loader.draw_frame();
+        assert!(
+            drawn
+                .iter()
+                .any(|d| matches!(d, Drawn::Label { text, .. } if text == "framed")),
+            "the window's label, drawn as the pack: {drawn:?}"
+        );
+        let hud = loader.draw_hud();
+        assert!(
+            hud.iter()
+                .any(|(_, d)| matches!(d, Drawn::Label { text, .. } if text == "hud line")),
+            "the HUD line, drawn as the pack: {hud:?}"
+        );
+    }
 }

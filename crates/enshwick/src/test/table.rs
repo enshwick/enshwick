@@ -8,9 +8,10 @@ use crate::abi::{
     BuildingZoneCheckFn, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo,
     Event, EventFn, ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn,
     InventoryResultFn, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, MidHookFn, ModEventFn,
-    NetMessageFn, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, SkillCheckFn,
-    SpawnRequest, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
-    TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiFrameFn, WeatherFront,
+    ModHandle, NetMessageFn, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn,
+    SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
+    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiFrameFn,
+    WeatherFront,
 };
 use crate::locks::Relock;
 
@@ -215,12 +216,16 @@ pub(crate) struct State {
     pub(crate) fog_opened: bool,
     /// The schemas of the mod's settings files, by name, as TOML.
     pub(crate) config_schemas: std::collections::BTreeMap<String, String>,
-    /// Frame callbacks: callback and pointer.
-    pub(crate) frames: Vec<(UiFrameFn, usize)>,
-    /// HUD callbacks: callback and pointer.
-    pub(crate) huds: Vec<(UiFrameFn, usize)>,
-    /// Extensions of game screens: screen name, edge, callback and pointer.
-    pub(crate) extensions: Vec<(String, u32, UiFrameFn, usize)>,
+    /// Frame callbacks: callback, pointer and the handle that registered it.
+    pub(crate) frames: Vec<(UiFrameFn, usize, ModHandle)>,
+    /// HUD callbacks: callback, pointer and the handle that registered it.
+    pub(crate) huds: Vec<(UiFrameFn, usize, ModHandle)>,
+    /// Extensions of game screens: screen name, edge, callback, pointer and
+    /// the handle that registered it.
+    pub(crate) extensions: Vec<(String, u32, UiFrameFn, usize, ModHandle)>,
+    /// The handle whose callback draws now: the loader refuses a widget
+    /// from any other.
+    pub(crate) drawing: Option<ModHandle>,
     /// The frame token of the extension drawing now, whose window the
     /// loader opened.
     pub(crate) extending: Option<u64>,
@@ -644,6 +649,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         frames: Vec::new(),
         huds: Vec::new(),
         extensions: Vec::new(),
+        drawing: None,
         extending: None,
         hud: None,
         markers: Vec::new(),
