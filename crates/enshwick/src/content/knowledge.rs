@@ -94,7 +94,8 @@ impl ExperienceValue {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum KnowledgeTest {
-    /// A bool set.
+    /// A bool set; a counter is tested with `AtLeast`, since the game asks
+    /// this as a value equal to 1.
     IsSet,
     /// A counter at this count or above, from 1.
     AtLeast(u32),
@@ -102,6 +103,8 @@ pub enum KnowledgeTest {
 
 /// A test of one knowledge entry, vanilla or a mod's, as quests, journal
 /// pages and skill nodes ask for knowledge.
+///
+/// The name is enshwick's; the game's is `KnowledgeQueryData`.
 ///
 /// # Examples
 ///
@@ -281,9 +284,17 @@ pub(crate) fn key_of_hash(value: &Value) -> Option<u32> {
     }
 }
 
-/// The id a `KnowledgeId` holds.
-fn key_of(value: &Value) -> Option<u32> {
+/// The id a `KnowledgeId`, or another value of an `id` hash, holds.
+pub(crate) fn key_of(value: &Value) -> Option<u32> {
     value.field(ID).and_then(key_of_hash)
+}
+
+/// Whether the world or the player map of `knowledge` holds `key`.
+fn knows(knowledge: &Value, key: u32) -> bool {
+    [WORLD_KNOWLEDGE, PLAYER_KNOWLEDGE].iter().any(|map| {
+        matches!(knowledge.field(map).and_then(|map| map.field(KEYS)),
+            Some(Value::List(keys)) if keys.iter().any(|held| key_of(held) == Some(key)))
+    })
 }
 
 /// The list in field `name` of `value`, taken out of it.
@@ -405,9 +416,8 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] for flags without bits or bits on another kind, skill points
-    /// or experience on a world's entry, or an id the loader refuses (see
-    /// [`Load::declare`]). An id the game already knows is logged when the
-    /// game first reads its knowledge, and the entry is left out.
+    /// or experience on a world's entry, an id the game already knows, or
+    /// an id the loader refuses (see [`Load::declare`]).
     ///
     /// # Examples
     ///
@@ -425,16 +435,35 @@ impl Load<'_> {
     #[script]
     pub fn add_knowledge(&mut self, new: NewKnowledge) -> Result<KnowledgeId, Off> {
         new.to_value(KnowledgeId::from_guid(new.id.guid()).get())?;
+        let resource = self.knowledge_without(new.id)?;
         self.declare(new.id)?;
-        self.serve_knowledge(new)
+        self.serve_knowledge(resource, new)
     }
 }
 
 impl Load<'_> {
-    /// Serves the game's knowledge with `new`, whose id the mod declared.
-    pub(super) fn serve_knowledge(&self, new: NewKnowledge) -> Result<KnowledgeId, Off> {
-        let key = KnowledgeId::from_guid(new.id.guid()).get();
+    /// The game's knowledge's resource key, once it is known not to hold the
+    /// entry `id`: other mods' ids are refused by `declare`, the game's only
+    /// here, so a quest never goes in without its knowledge.
+    pub(super) fn knowledge_without(&self, id: Id) -> Result<crate::abi::ResourceKey, Off> {
         let resource = GAME_KNOWLEDGE.key_by_hash(self.hash(GameKnowledgeResource::ID)?);
+        if knows(
+            &self.host().game_value(resource)?,
+            KnowledgeId::from_guid(id.guid()).get(),
+        ) {
+            return Err(Off::new(format!("knowledge {id}: the game knows it")));
+        }
+        Ok(resource)
+    }
+
+    /// Serves the game's knowledge `resource` with `new`, whose id the mod
+    /// declared.
+    pub(super) fn serve_knowledge(
+        &self,
+        resource: crate::abi::ResourceKey,
+        new: NewKnowledge,
+    ) -> Result<KnowledgeId, Off> {
+        let key = KnowledgeId::from_guid(new.id.guid()).get();
         // shortcut: each entry decodes and encodes the whole resource once at its first build; batch a mod's entries when a mod adds hundreds.
         crate::resources::serve_value(self.host(), resource, resource, move |value| {
             add_to(value, new, key)
@@ -491,6 +520,16 @@ mod tests {
             assert_eq!(find(&map, key), Some(key.into()), "{key}");
         }
         assert_eq!(find(&map, 5), None);
+    }
+
+    #[test]
+    fn an_id_either_map_of_the_game_holds_is_known() {
+        let knowledge = Value::Struct(vec![
+            (WORLD_KNOWLEDGE.into(), map(4, &[3])),
+            (PLAYER_KNOWLEDGE.into(), map(4, &[8])),
+        ]);
+        assert!(knows(&knowledge, 3) && knows(&knowledge, 8));
+        assert!(!knows(&knowledge, 5));
     }
 
     #[test]

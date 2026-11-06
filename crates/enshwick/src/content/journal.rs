@@ -98,6 +98,8 @@ impl QuestReward {
 /// One step of a quest: its title and text, shown while `shown_when` holds,
 /// done once `done_when` holds.
 ///
+/// The name is enshwick's; the game's is `JournalEntryResource`.
+///
 /// # Examples
 ///
 /// See the [module](self).
@@ -237,6 +239,8 @@ pub struct PageEntry {
 }
 
 /// A new lore page for [`Load::add_journal_page`].
+///
+/// The name is enshwick's; the game's is `JournalCollectionResource`.
 ///
 /// # Examples
 ///
@@ -485,8 +489,9 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a quest without steps, a count query from 0, or an id
-    /// the loader refuses (see [`Load::declare`]). An id the journal already
+    /// [`Off`] for a quest without steps, a count query from 0, an id the
+    /// game's knowledge holds, or an id the loader refuses (see
+    /// [`Load::declare`]). An id the journal already
     /// holds is logged when the game first reads it, and the quest is left
     /// out.
     ///
@@ -501,13 +506,13 @@ impl Load<'_> {
         for (step, id) in new.steps.iter().zip(step_ids(new.id, new.steps.len())) {
             step.to_value(id)?;
         }
-        self.declare(new.id)?;
-        let quest = self.serve_knowledge(NewKnowledge::new(
-            new.id,
-            Scope::Player,
-            KnowledgeType::Bool,
-        ))?;
+        let resource = self.knowledge_without(new.id)?;
         let key = self.journal()?;
+        self.declare(new.id)?;
+        let quest = self.serve_knowledge(
+            resource,
+            NewKnowledge::new(new.id, Scope::Player, KnowledgeType::Bool),
+        )?;
         crate::resources::serve_value(self.host(), key, key, move |registry| {
             add_quest_to(registry, &new)
         })?;
