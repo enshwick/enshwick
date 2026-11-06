@@ -136,6 +136,8 @@ mod recipe_kinds;
 #[cfg(feature = "unstable")]
 mod recipe_menu;
 mod recipe_rules;
+#[cfg(feature = "typed")]
+mod removal;
 mod required_names;
 mod resource_types;
 mod resource_values;

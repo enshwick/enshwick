@@ -308,6 +308,32 @@ mod tests {
     }
 
     #[test]
+    fn two_mods_removals_and_rekeys_chain_in_load_order() {
+        let entry = |id| {
+            Value::Struct(vec![(
+                ITEM_ID.into(),
+                Value::Struct(vec![("value".into(), Value::Uint(id))]),
+            )])
+        };
+        let table = Value::Struct(vec![(
+            ITEMS.into(),
+            Value::List(vec![entry(1), entry(2), entry(3)]),
+        )]);
+        let first = without(table, 1).unwrap();
+        let second = without(first, 3).unwrap();
+        assert_eq!(second.field(ITEMS), Some(&Value::List(vec![entry(2)])));
+        let old = item(1, 10, Value::Flags(vec![]));
+        let first = rekeyed(item(2, 30, Value::Flags(vec![])), &old).unwrap();
+        let second = rekeyed(item(3, 5, Value::Flags(vec![])), &first).unwrap();
+        assert_eq!(second.field(ITEM_ID).and_then(id_of), Some(1));
+        assert_eq!(
+            second.field(MAX_STACK),
+            Some(&Value::Uint(30)),
+            "never below what an earlier mod served"
+        );
+    }
+
+    #[test]
     fn an_emptied_table_gives_nothing_whether_random_or_a_fill_table() {
         let random = Value::Struct(vec![(ITEMS.into(), Value::List(vec![Value::Uint(1)]))]);
         assert_eq!(

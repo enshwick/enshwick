@@ -168,6 +168,48 @@ mod tests {
     }
 
     #[test]
+    fn a_script_removes_vanilla_content_and_rekeys_an_item() {
+        use enshwick::abi::RecipeRuleKind;
+        use enshwick::test::{ENTITY_ITEM, FILL_TABLE, LOOT_ITEM, OTHER_ITEM};
+
+        let loader = run(
+            FakeHost::new().removal(),
+            &format!(
+                r#"
+                enshwick.content.remove_item("{LOOT_ITEM}")
+                enshwick.content.remove_workshop("{ENTITY_ITEM}")
+                enshwick.content.remove_loot_table("{FILL_TABLE}")
+                enshwick.content.rekey_item("{OTHER_ITEM}", "{LOOT_ITEM}")
+                local ok = pcall(enshwick.content.rekey_item, "{LOOT_ITEM}", "{ENTITY_ITEM}")
+                enshwick.log.info(`entity re-key refused {{not ok}}`)
+                "#
+            ),
+        );
+        let rules = loader.recipe_rules();
+        assert!(
+            rules.contains(&(RecipeRuleKind::OUTPUT, LOOT_ITEM.to_string())),
+            "{rules:?} {:?}",
+            loader.logs()
+        );
+        assert!(rules.contains(&(RecipeRuleKind::WORKSHOP, ENTITY_ITEM.to_string())));
+        assert!(
+            logged(&loader, "entity re-key refused true"),
+            "{:?}",
+            loader.logs()
+        );
+        let item = FakeHost::new()
+            .removal()
+            .hash(types::ITEM_INFO.id())
+            .unwrap();
+        assert!(
+            loader
+                .resources()
+                .iter()
+                .any(|r| r.key == OTHER_ITEM.key_by_hash(item))
+        );
+    }
+
+    #[test]
     fn a_script_adds_a_recipe_beside_a_vanilla_one() {
         let loader = run(
             FakeHost::new().items().recipes(),
