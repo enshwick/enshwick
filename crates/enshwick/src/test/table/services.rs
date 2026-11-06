@@ -119,7 +119,7 @@ pub(crate) extern "system" fn define_event(
 }
 
 pub(crate) extern "system" fn subscribe_event(
-    _me: ModHandle,
+    me: ModHandle,
     spec: *const EventSpec,
     callback: ModEventFn,
     user: *mut c_void,
@@ -142,6 +142,7 @@ pub(crate) extern "system" fn subscribe_event(
             spec.layout.size,
             callback,
             user.expose_provenance(),
+            me,
         ));
         Status::OK
     })
@@ -257,7 +258,7 @@ pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
 }
 
 pub(crate) extern "system" fn subscribe(
-    _me: ModHandle,
+    me: ModHandle,
     event: Event,
     callback: EventFn,
     user: *mut c_void,
@@ -268,7 +269,7 @@ pub(crate) extern "system" fn subscribe(
     }
     with(Status::MISSING, |s| {
         s.subscriptions
-            .push((event, callback, user.expose_provenance()));
+            .push((event, callback, user.expose_provenance(), me));
         Status::OK
     })
 }

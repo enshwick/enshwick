@@ -104,7 +104,7 @@ impl Installed {
     #[must_use = "the count says whether the mod handles the step"]
     pub fn tick(&self, elapsed: Duration) -> usize {
         let elapsed = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
-        let calls: Vec<(EventFn, usize, TickData)> = with(Vec::new(), |s| {
+        let calls: Vec<(EventFn, usize, ModHandle, TickData)> = with(Vec::new(), |s| {
             let ticks = &mut s.ticks;
             ticks.step += 1;
             ticks.nanos = ticks.nanos.saturating_add(elapsed);
@@ -119,7 +119,7 @@ impl Installed {
                 .subscriptions
                 .iter()
                 .filter(|sub| sub.0 == Event::TICKED)
-                .map(|sub| (sub.1, sub.2, tick));
+                .map(|sub| (sub.1, sub.2, sub.3, tick));
             let periodic = ticks
                 .ticks
                 .iter_mut()
@@ -134,20 +134,20 @@ impl Installed {
                         elapsed_nanos: nanos,
                         ..tick
                     };
-                    (t.callback, t.user, data)
+                    (t.callback, t.user, t.owner, data)
                 });
             every_step.chain(periodic).collect()
         });
-        for (callback, user, data) in &calls {
+        for (callback, user, owner, data) in &calls {
             // SAFETY: `data` lives for the call and `user` is the pointer the
             // mod subscribed `callback` with.
-            unsafe {
+            super::table::as_owner(*owner, || unsafe {
                 callback(
                     Event::TICKED,
                     (&raw const *data).cast(),
                     core::ptr::with_exposed_provenance_mut(*user),
                 );
-            };
+            });
         }
         calls.len()
     }
@@ -177,8 +177,8 @@ impl Installed {
 impl FakeTicks {
     /// The mod's periodic tick handlers and their pointers, for a raw raise
     /// of [`Event::TICKED`], which reaches every tick handler.
-    pub(crate) fn handlers(&self) -> impl Iterator<Item = (EventFn, usize)> + '_ {
-        self.ticks.iter().map(|t| (t.callback, t.user))
+    pub(crate) fn handlers(&self) -> impl Iterator<Item = (EventFn, usize, ModHandle)> + '_ {
+        self.ticks.iter().map(|t| (t.callback, t.user, t.owner))
     }
 
     /// The fake server's time: of the last step, in nanoseconds from the first.

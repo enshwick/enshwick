@@ -39,12 +39,12 @@ impl Installed {
                 hud_screen: crate::abi::Str::new(open),
             };
             // SAFETY: a callback the mod registered with its own pointer.
-            unsafe {
+            table::as_owner(owner, || unsafe {
                 callback(
                     &raw const frame,
                     core::ptr::with_exposed_provenance_mut(user),
                 );
-            };
+            });
             let list = table::with(None, |s| {
                 s.drawing = None;
                 s.frame.take()

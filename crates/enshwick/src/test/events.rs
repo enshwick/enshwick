@@ -97,15 +97,17 @@ impl Installed {
             s.subscriptions
                 .iter()
                 .filter(|s| s.0 == event)
-                .map(|s| (s.1, s.2))
+                .map(|s| (s.1, s.2, s.3))
                 .chain(periodic.into_iter().flatten())
                 .collect()
         });
-        for &(callback, user) in &handlers {
+        for &(callback, user, owner) in &handlers {
             // SAFETY: the caller guarantees `data` is null or the event's data
             // struct, readable for the call; `user` is the pointer the mod
             // subscribed `callback` with.
-            unsafe { callback(event, data, core::ptr::with_exposed_provenance_mut(user)) };
+            table::as_owner(owner, || unsafe {
+                callback(event, data, core::ptr::with_exposed_provenance_mut(user));
+            });
         }
         handlers.len()
     }
@@ -139,7 +141,7 @@ impl Installed {
             s.game_events
                 .iter()
                 .filter(|g| g.0 == 0 || g.0 == type_hash)
-                .map(|g| (g.1, g.2))
+                .map(|g| (g.1, g.2, g.3))
                 .collect()
         });
         let data = crate::abi::GameEventData {
@@ -148,15 +150,15 @@ impl Installed {
             size: u32::try_from(bytes.len()).unwrap_or(u32::MAX),
             data: bytes.as_ptr(),
         };
-        for &(callback, user) in &handlers {
+        for &(callback, user, owner) in &handlers {
             // SAFETY: `data` lives for the call and `user` is the pointer the
             // mod subscribed with.
-            unsafe {
+            table::as_owner(owner, || unsafe {
                 callback(
                     &raw const data,
                     core::ptr::with_exposed_provenance_mut(user),
                 );
-            };
+            });
         }
         handlers.len()
     }
@@ -237,18 +239,18 @@ impl Installed {
                         && crate::services::compare(&table::view(&sub.1), &offered).is_ok()
                         && sub.2 as usize <= size_of::<E>()
                 })
-                .map(|sub| (sub.3, sub.4))
+                .map(|sub| (sub.3, sub.4, sub.5))
                 .collect()
         });
-        for &(callback, user) in &handlers {
+        for &(callback, user, owner) in &handlers {
             // SAFETY: the layouts match, the event lives for the call, and
             // `user` is the pointer the mod subscribed with.
-            unsafe {
+            table::as_owner(owner, || unsafe {
                 callback(
                     core::ptr::from_ref(event).cast(),
                     core::ptr::with_exposed_provenance_mut(user),
                 );
-            }
+            });
         }
         handlers.len()
     }

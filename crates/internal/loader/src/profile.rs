@@ -171,18 +171,27 @@ pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
 }
 
 /// Runs `f` with `owner` as the host of the loader's own copy of the API
-/// when `owner` is a data pack, which that copy runs.
+/// when `owner` is a data pack, which that copy runs, and with the loader
+/// as that host otherwise, also inside a pack's callback.
 #[cfg(windows)]
 #[inline]
 fn as_owner<R>(owner: ModIndex, f: impl FnOnce() -> R) -> R {
     let pack = crate::host::loader()
         .and_then(|loader| loader.mods.get(owner.get()))
         .is_some_and(|record| record.pack);
-    if !pack {
-        return f();
+    as_pack_or_loader(pack.then(|| owner.handle()), f)
+}
+
+/// Runs `f` as the data pack `pack` in the loader's own copy of the API, or
+/// as the loader for `None`.
+#[cfg(windows)]
+#[inline]
+fn as_pack_or_loader<R>(pack: Option<enshwick::abi::ModHandle>, f: impl FnOnce() -> R) -> R {
+    match pack {
+        // SAFETY: `API` is the loader's process-wide table, a static.
+        Some(pack) => unsafe { enshwick::__private::as_pack(&raw const crate::host::API, pack, f) },
+        None => enshwick::__private::as_loader(f),
     }
-    // SAFETY: `API` is the loader's process-wide table, a static.
-    unsafe { enshwick::__private::as_pack(&raw const crate::host::API, owner.handle(), f) }
 }
 
 /// Runs `f`: no mod runs off Windows.
@@ -652,6 +661,25 @@ mod tests {
         call(ModIndex::new(usize::MAX), Feature::Events, || {
             assert_eq!(current_callback(), None);
         });
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_pack_s_callback_runs_as_the_pack_and_the_loader_s_callback_inside_it_as_the_loader() {
+        let pack = ModIndex::new(2).handle();
+        let running = || enshwick::host().map(|host| host.handle());
+        as_pack_or_loader(Some(pack), || {
+            assert_eq!(running(), Some(pack));
+            as_pack_or_loader(None, || {
+                assert_eq!(running(), None, "the loader's own code")
+            });
+            assert_eq!(
+                running(),
+                Some(pack),
+                "the pack again after the nested call"
+            );
+        });
+        assert_eq!(running(), None);
     }
 
     #[test]

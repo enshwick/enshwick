@@ -37,15 +37,45 @@ pub struct Host {
     me: ModHandle,
 }
 
-/// The loader's services, once the loader has initialised this mod; for a
-/// data pack, the pack running on this thread.
-///
-/// # Examples
-///
-/// See [`Host`].
-#[must_use]
 pub fn host() -> Option<Host> {
     RUNNING.get().or_else(|| HOST.get().copied())
+}
+
+/// The data pack whose code this thread runs in the loader's copy of the
+/// API; `None` in a mod's own copy and in the loader's own code.
+pub(crate) fn pack() -> Option<Host> {
+    RUNNING
+        .get()
+        .filter(|running| HOST.get().is_none_or(|own| own.me != running.me))
+}
+
+/// Runs `call` with `running` as the answer of [`host`] on this thread, the
+/// process's host for `None`, and restores the answer after, also on a panic.
+pub(crate) fn running_as<R>(running: Option<Host>, call: impl FnOnce() -> R) -> R {
+    struct Restore(Option<Host>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            RUNNING.set(self.0);
+        }
+    }
+    let _restore = Restore(RUNNING.replace(running));
+    call()
+}
+
+/// Spawns `body` on a new thread named `name` that answers [`host`] as the
+/// calling thread does, so a data pack's thread logs and faults as the pack.
+///
+/// # Errors
+///
+/// When the system cannot start a thread.
+pub(crate) fn spawn(
+    name: &str,
+    body: impl FnOnce() + Send + 'static,
+) -> std::io::Result<std::thread::JoinHandle<()>> {
+    let running = RUNNING.get();
+    std::thread::Builder::new()
+        .name(name.to_owned())
+        .spawn(move || running_as(running, body))
 }
 
 /// Runs a mod's callback for the loader; a panic faults the mod with
@@ -152,17 +182,8 @@ impl Host {
         *HOST.get_or_init(|| self)
     }
 
-    /// Runs `call` with this as the answer of [`host`] on this thread, so a
-    /// data pack's code logs, reads and faults as the pack.
     pub(crate) fn scope<R>(self, call: impl FnOnce() -> R) -> R {
-        struct Restore(Option<Host>);
-        impl Drop for Restore {
-            fn drop(&mut self) {
-                RUNNING.set(self.0);
-            }
-        }
-        let _restore = Restore(RUNNING.replace(Some(self)));
-        call()
+        running_as(Some(self), call)
     }
 
     /// The raw table, for calls the safe layer does not wrap.
