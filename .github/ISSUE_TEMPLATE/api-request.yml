@@ -1,0 +1,50 @@
+name: An API call or an idea
+description: Something a mod needs from the API, or an idea for the loader or the API.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        [API coverage](https://enshwick.com/dev/api-coverage/) shows what the API reaches today.
+        Questions about writing a mod go to [Discussions](https://github.com/enshwick/.github/discussions).
+  - type: input
+    id: system
+    attributes:
+      label: Game system
+      description: The part of the game the mod works with, such as crafting, loot, building, the player's inventory or chat.
+    validations:
+      required: true
+  - type: textarea
+    id: need
+    attributes:
+      label: What the mod needs to do
+      description: What the mod does with it, and what it cannot do with the API today.
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      description: The language the mod is written in.
+      options:
+        - Rust
+        - Luau
+        - Both
+        - Not decided yet
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: A sketch of the call or event you would like to write, or a situation in the game where you would use it.
+  - type: dropdown
+    id: pull-request
+    attributes:
+      label: Would you send a pull request?
+      options:
+        - "Yes"
+        - Yes, with some help
+        - "No"
+    validations:
+      required: true

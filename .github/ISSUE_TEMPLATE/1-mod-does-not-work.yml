@@ -1,0 +1,53 @@
+name: A mod does not work
+description: A mod or the loader does something wrong, or nothing at all.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Questions go to [Discussions](https://github.com/enshwick/.github/discussions).
+        The logs are in `logs/enshwick/` in the game's folder, beside `enshrouded.exe` or `enshrouded_server.exe`.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - Single player
+        - Hosting a game for friends
+        - Joining a dedicated server
+        - On the dedicated server itself
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game version
+      description: "`logs/enshwick/report.md` names it, beside the loader version."
+    validations:
+      required: true
+  - type: input
+    id: loader
+    attributes:
+      label: Loader version
+      description: "Named at the top of `logs/enshwick/report.md`."
+    validations:
+      required: true
+  - type: textarea
+    id: mods
+    attributes:
+      label: Mods
+      description: Only when `report.md` cannot be attached; every file in the game's `mods` folder.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Report
+      description: Drag `report.md` from `logs/enshwick/` here, and after a crash `crash.log` too.
+    validations:
+      required: true

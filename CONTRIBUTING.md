@@ -77,6 +77,12 @@ always leaves the lower levels open (served resources, component reads,
 detours on any function), so no mod is blocked by what the API lacks yet.
 Resources several mods may change compose: their patches run in turn.
 
+To ask for an API call or share an idea, open an
+[API request](https://github.com/enshwick/enshwick/issues/new?template=api-request.yml).
+It asks for the game system, what the mod needs to do, its language and an
+example. Before a large pull request, open one first, so nobody builds the
+same thing twice.
+
 Never add game code or data: no decompiled code, no dumps, no binaries. Engine
 facts go in documents as addresses and names, with the game build they were
 found on.

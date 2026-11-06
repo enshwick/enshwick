@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: The modding docs
+    url: https://enshwick.com/dev/
+    about: How to write a mod, and what the API offers today.
+  - name: A question
+    url: https://github.com/enshwick/.github/discussions
+    about: Ask how to install, set up or write a mod in Discussions.
+  - name: Logs and common problems
+    url: https://github.com/enshwick/enshwick/blob/main/book/src/faq.md
+    about: Where the logs are and what the usual messages mean.
+  - name: A security problem
+    url: https://github.com/enshwick/.github/blob/main/SECURITY.md
+    about: Report it privately, never in a public issue.
