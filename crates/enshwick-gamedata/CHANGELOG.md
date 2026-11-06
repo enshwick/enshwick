@@ -13,6 +13,13 @@ Each entry names the pull request that made the change.
   and the RemoveComponents layout (`ecs.remove_components_hashes`,
   `ecs.remove_components_size`) on every game build, the second through
   the engine's own RemoveComponents request (#961).
+- `Table::anchors` reads the anchors of a side from the text of any anchors
+  file (#962).
+- The compatibility reports in `reports/` say what the loader finds on each
+  kept build by its anchors and engine routes: the build's name in place of
+  a table's, the entries the anchors and routes find, and the attribute
+  slots no game archive beside the executable could read as `unread`
+  (#962).
 - Routes fold a record size or stride from index arithmetic (`take =
   "scale"`), match memory through any base register (`[?+*]`) and take the
   n-th of a known number of runs of a repeated shape after a unique anchor
