@@ -101,25 +101,19 @@ pub(super) fn body(loader: &Loader, paint: &Painter<'_>, view: &mut View) {
     let listing = listing(paint, PER_PAGE);
     view.first = listing.clamp_first(view.first, rows.len());
     let range = listing.shown(view.first, rows.len());
-    let mut last_owner = None;
-    for row in rows.get(range).unwrap_or_default() {
-        if last_owner != Some(row.owner) {
-            last_owner = Some(row.owner);
-            let name = loader
-                .mods
-                .get(row.owner.get())
-                .map(crate::host::ModRecord::label)
-                .unwrap_or_default();
-            paint.label(name.as_bytes(), UiWidget::STYLE_H3, false, false);
+    let mut last_mod = None;
+    for (at, row) in rows.iter().enumerate().skip(range.start).take(range.len()) {
+        if last_mod != Some(&row.mod_id) {
+            last_mod = Some(&row.mod_id);
+            paint.label(row.mod_name.as_bytes(), UiWidget::STYLE_H3, false, false);
         }
-        control(loader, paint, view, row, &rows, shared.get(row.index));
+        control(paint, view, row, &rows, shared.get(at));
     }
     pages(paint, listing, &mut view.first, rows.len());
 }
 
 /// One control's line, its two key buttons and what it shares a key with.
 fn control(
-    loader: &Loader,
     paint: &Painter<'_>,
     view: &mut View,
     row: &Row,
@@ -148,14 +142,7 @@ fn control(
         .into_iter()
         .flatten()
         .filter_map(|&other| rows.get(other))
-        .map(|other| {
-            let name = loader
-                .mods
-                .get(other.owner.get())
-                .map(crate::host::ModRecord::label)
-                .unwrap_or_default();
-            format!("{name}: {}", other.label)
-        })
+        .map(|other| format!("{}: {}", other.mod_name, other.label))
         .collect();
     if !others.is_empty() {
         let line = texts::fill("controls.clash", &[("controls", &others.join(", "))]);

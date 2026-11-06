@@ -196,14 +196,12 @@ pub(crate) struct Spec<'a> {
     pub(crate) hold_ms: u32,
 }
 
-/// Seals the controls; on the client reads the player's keys and the screen
-/// gate, on every side the game actions linked controls follow.
 pub(crate) fn link(loader: &Loader) {
     let declared = DECLARED.seal();
-    if declared.is_empty() {
-        return;
+    if !declared.is_empty() {
+        link_actions(loader, declared);
+        too_many_carried(loader, declared);
     }
-    link_actions(loader, declared);
     if loader.side != Side::CLIENT {
         return;
     }
@@ -230,7 +228,7 @@ pub(crate) fn link(loader: &Loader) {
     if !unknown.is_empty() {
         crate::log!(
             INFO,
-            "{}: no running mod declares {}; left alone",
+            "{}: no running mod declares {}; left alone, or for a server's mod",
             bindings::FILE,
             unknown.join(", ")
         );
@@ -250,14 +248,39 @@ pub(crate) fn link(loader: &Loader) {
             )
         })
         .collect();
-    STATE.keys.store(Some(std::sync::Arc::new(keys)));
+    STATE.keys.store(Some(Arc::new(Bound {
+        keys,
+        carried: Vec::new(),
+        carried_at: 0,
+    })));
     match gate(loader) {
         Ok(found) => {
             let _first = STATE.gate.set(found);
             crate::log!(INFO, "controls: keys of {} controls on", declared.len());
         }
+        Err(why) if declared.is_empty() => {
+            crate::log!(INFO, "controls: a server's controls stay off here: {why}");
+        }
         Err(why) => {
             loader.feature_off("mod control keys", why.id(), &why.to_string());
+        }
+    }
+}
+
+/// Warns once for each mod of side server with more controls that run an
+/// action than one message carries to a client.
+fn too_many_carried(loader: &Loader, declared: &[Declared]) {
+    for (index, record) in loader.mods.iter().enumerate() {
+        let carried = declared
+            .iter()
+            .filter(|d| d.owner.get() == index && !d.action.is_empty())
+            .count();
+        if record.manifest.side == Side::SERVER && carried > MAX_CARRIED {
+            crate::log!(
+                WARN,
+                "controls: {} has {carried} controls that run an action; clients get the first {MAX_CARRIED}",
+                record.id
+            );
         }
     }
 }
@@ -412,14 +435,26 @@ fn fire(control: &Declared, kind: u32, player: Option<&PlayerInfo>) {
     );
 }
 
-thread_local! {
-    /// The client's trackers, one per control, and the slots of each control
-    /// down at the last look, on the interface thread.
-    static LOOK: RefCell<(Vec<Tracker>, Vec<u8>)> = const { RefCell::new((Vec::new(), Vec::new())) };
+/// The client's key reader between frames, on the interface thread.
+struct Look {
+    /// One tracker per control, declared then carried.
+    trackers: Vec<Tracker>,
+    /// The slots of each control down at the last look.
+    down: Vec<u8>,
+    /// The [`Bound::carried_at`] the carried trackers belong to.
+    carried_at: u64,
 }
 
-/// Looks at the keys once, in the interface frame of the live interface
-/// context `context`, on the interface thread.
+thread_local! {
+    static LOOK: RefCell<Look> = const {
+        RefCell::new(Look {
+            trackers: Vec::new(),
+            down: Vec::new(),
+            carried_at: 0,
+        })
+    };
+}
+
 pub(crate) fn frame(context: usize) {
     let (Some(gate), Some(declared)) = (STATE.gate.get(), DECLARED.sealed()) else {
         return;
@@ -427,34 +462,70 @@ pub(crate) fn frame(context: usize) {
     if KEYS_FUSE.is_off() {
         return;
     }
-    let Some(keys) = STATE.keys.load_full() else {
+    let Some(bound) = STATE.keys.load_full() else {
         return;
     };
+    if bound.keys.is_empty() {
+        return;
+    }
     let _ran = KEYS_FUSE.run("the mod control keys", || {
         // SAFETY: the one caller passes the frame's live interface context,
         // on the interface thread.
         let open = unsafe { in_game(context, gate) } && !crate::ui::window_shown();
         let window = if open { input::focused_thread() } else { None };
         let now = now_ms();
-        LOOK.with_borrow_mut(|(trackers, down)| {
-            input::keys_down(
-                &keys,
-                window,
-                |c| declared.get(c).is_some_and(|d| !control_off(d)),
-                down,
-            );
-            trackers.resize(declared.len(), Tracker::default());
-            for ((control, tracker), down) in declared.iter().zip(trackers.iter_mut()).zip(down) {
-                if control_off(control) {
+        let hosting = crate::world::hosting();
+        let live = |c: usize| match declared.get(c) {
+            Some(d) => fires_here(d, hosting),
+            None => !hosting,
+        };
+        LOOK.with_borrow_mut(|look| {
+            if look.carried_at != bound.carried_at {
+                look.carried_at = bound.carried_at;
+                look.trackers.truncate(declared.len());
+            }
+            input::keys_down(&bound.keys, window, live, &mut look.down);
+            look.trackers.resize(bound.keys.len(), Tracker::default());
+            for (index, (tracker, down)) in look.trackers.iter_mut().zip(&look.down).enumerate() {
+                if !live(index) {
                     continue;
                 }
-                let kind = tracker.look(*down != 0, now, control.hold_ms) & control.fires;
-                for bit in phases(kind) {
-                    fire(control, bit, None);
+                if let Some(control) = declared.get(index) {
+                    let kind = tracker.look(*down != 0, now, control.hold_ms) & control.fires;
+                    for bit in phases(kind) {
+                        fire(control, bit, None);
+                        if !control.action.is_empty() {
+                            let _sent = crate::actions::run_on_server(
+                                control.mod_id(),
+                                &control.action,
+                                "",
+                                None,
+                            );
+                        }
+                    }
+                } else if let Some(heard) = bound.carried.get(index - declared.len()) {
+                    let c = &heard.control;
+                    let kind = tracker.look(*down != 0, now, c.hold_ms) & c.fires;
+                    for _ in phases(kind) {
+                        let _sent =
+                            crate::actions::run_on_server(&heard.mod_id, &c.action, "", None);
+                    }
                 }
             }
         });
     });
+}
+
+/// Whether `control`'s keys fire on this client: its mod runs, and a mod of
+/// side server only while this client hosts the world, since in another's
+/// its server's own copy carries the control.
+fn fires_here(control: &Declared, hosting: bool) -> bool {
+    crate::host::loader()
+        .and_then(|loader| loader.mods.get(control.owner.get()))
+        .is_some_and(|m| {
+            !m.off.load(core::sync::atomic::Ordering::Acquire)
+                && (hosting || m.manifest.side != Side::SERVER)
+        })
 }
 
 /// Whether `control`'s mod is off.
@@ -565,29 +636,183 @@ pub(crate) fn forget() {
 /// A control as the controls page shows it.
 #[derive(Clone, Debug)]
 pub(crate) struct Row {
-    /// The control's index among the declared.
+    /// The control's index among the declared, then the carried.
     pub(crate) index: usize,
-    pub(crate) owner: ModIndex,
+    /// Its mod's id, which groups the page.
+    pub(crate) mod_id: String,
+    /// Its mod's name, which heads the group.
+    pub(crate) mod_name: String,
     pub(crate) label: String,
     pub(crate) keys: [u32; 2],
 }
 
-/// Every declared control with its keys in force, in declaration order.
+/// Every control with its keys in force: the declared in declaration
+/// order, then the server's carried ones; a declared control the server
+/// carries too shows once, as the server's.
 pub(crate) fn rows() -> Vec<Row> {
-    let (Some(declared), Some(keys)) = (DECLARED.sealed(), STATE.keys.load_full()) else {
+    let (Some(declared), Some(bound), Some(loader)) = (
+        DECLARED.sealed(),
+        STATE.keys.load_full(),
+        crate::host::loader(),
+    ) else {
         return Vec::new();
     };
-    declared
+    let carried_ids: Vec<String> = bound.carried.iter().map(Heard::id).collect();
+    let own = declared
         .iter()
-        .zip(keys.iter())
+        .zip(&bound.keys)
         .enumerate()
+        .filter(|(_, (d, _))| !carried_ids.contains(&d.id))
         .map(|(index, (d, k))| Row {
             index,
-            owner: d.owner,
+            mod_id: d.mod_id().to_owned(),
+            mod_name: loader
+                .mods
+                .get(d.owner.get())
+                .map(crate::host::ModRecord::label)
+                .unwrap_or_default(),
             label: d.label.clone(),
             keys: *k,
-        })
-        .collect()
+        });
+    let carried = bound
+        .carried
+        .iter()
+        .zip(bound.keys.iter().skip(declared.len()))
+        .enumerate()
+        .map(|(at, (heard, k))| Row {
+            index: declared.len() + at,
+            mod_id: heard.mod_id.clone(),
+            mod_name: heard.mod_name.clone(),
+            label: heard.control.label.clone(),
+            keys: *k,
+        });
+    own.chain(carried).collect()
+}
+
+/// Takes the server's controls of its mod `id`, named `name`, on the
+/// client: they replace the mod's earlier ones, with the player's keys from
+/// `mod-controls.toml`. A client that hosts the world runs the mod itself and
+/// takes none.
+pub(crate) fn carry(id: &str, name: &str, controls: &[Carried]) {
+    if crate::world::hosting() {
+        return;
+    }
+    let Some(declared) = DECLARED.sealed() else {
+        return;
+    };
+    let kept = STATE.kept.relock().clone().unwrap_or_default();
+    let (overrides, _) = bindings::parse(&kept.to_string());
+    STATE.keys.rcu(|bound| {
+        let bound = bound.as_ref()?;
+        let carried = crate::remote::carried_after(&bound.carried, id, name, controls);
+        Some(Arc::new(with_carried(
+            bound,
+            declared.len(),
+            carried,
+            &overrides,
+        )))
+    });
+    crate::log!(INFO, "controls: the server carries the controls of {id}");
+}
+
+/// `bound` with `carried` in place of its carried controls, each with the
+/// player's `overrides` over the mod's keys.
+fn with_carried(
+    bound: &Bound,
+    declared: usize,
+    carried: Vec<Heard>,
+    overrides: &std::collections::BTreeMap<String, bindings::Override>,
+) -> Bound {
+    let mut keys: Vec<[u32; 2]> = bound.keys.iter().take(declared).copied().collect();
+    keys.extend(carried.iter().map(|heard| {
+        in_force(
+            heard.control.keys,
+            overrides.get(&heard.id()).copied().unwrap_or_default(),
+        )
+    }));
+    Bound {
+        keys,
+        carried,
+        carried_at: bound.carried_at.wrapping_add(1),
+    }
+}
+
+/// Forgets the server's controls, when the client leaves its world.
+pub(crate) fn forget_carried() {
+    STATE.keys.rcu(|bound| {
+        let bound = bound.as_ref()?;
+        if bound.carried.is_empty() {
+            return Some(Arc::clone(bound));
+        }
+        let declared = DECLARED.sealed().map_or(0, <[Declared]>::len);
+        Some(Arc::new(with_carried(
+            bound,
+            declared,
+            Vec::new(),
+            &std::collections::BTreeMap::new(),
+        )))
+    });
+}
+
+/// Sends the client of `key`, which just said hello, the controls of every
+/// running mod of side server that run an action, in its player's language;
+/// false when its link had no room.
+pub(crate) fn hello(key: u64) -> bool {
+    let (Some(loader), Some(declared)) = (crate::host::loader(), DECLARED.sealed()) else {
+        return true;
+    };
+    if declared.iter().all(|d| d.action.is_empty()) {
+        return true;
+    }
+    crate::texts::for_player(key, || {
+        carried_messages(loader, declared)
+            .iter()
+            .all(|message| crate::net::to_player(key, message))
+    })
+}
+
+/// One [`Message::Controls`] per running mod of side server with controls
+/// that run an action, its texts in the reader's language.
+fn carried_messages(loader: &Loader, declared: &[Declared]) -> Vec<Message> {
+    let language = crate::texts::language();
+    let mut messages = Vec::new();
+    for (index, record) in loader.mods.iter().enumerate() {
+        if record.manifest.side != Side::SERVER
+            || record.off.load(core::sync::atomic::Ordering::Acquire)
+            || record.id.len() > MAX_CARRIED_TEXT
+        {
+            continue;
+        }
+        let name = record.label();
+        let texts = record.texts.relock();
+        let controls: Vec<Carried> = declared
+            .iter()
+            .filter(|d| d.owner.get() == index && !d.action.is_empty())
+            .take(MAX_CARRIED)
+            .map(|d| {
+                let label = texts
+                    .as_ref()
+                    .and_then(|t| t.get(&d.label, language))
+                    .unwrap_or(&d.label);
+                Carried {
+                    name: d.name.clone(),
+                    label: cut(label, MAX_CARRIED_TEXT).to_owned(),
+                    action: d.action.clone(),
+                    keys: d.defaults,
+                    fires: d.fires,
+                    hold_ms: d.hold_ms,
+                }
+            })
+            .collect();
+        if !controls.is_empty() {
+            messages.push(Message::Controls {
+                id: record.id.clone(),
+                name: cut(&name, MAX_CARRIED_TEXT).to_owned(),
+                controls,
+            });
+        }
+    }
+    messages
 }
 
 /// Whether the client reads mod keys on this build.
@@ -595,40 +820,48 @@ pub(crate) fn keys_on() -> bool {
     STATE.gate.get().is_some() && !KEYS_FUSE.is_off()
 }
 
-/// Sets control `index`'s key in `slot` to `bits` (0 unbinds) and writes
-/// the player's file, keeping its entries for controls no running mod
-/// declares.
-///
-/// # Errors
-///
-/// The reason the file could not be written, or that it did not read at
-/// start, so writing would lose it; the key holds for this run.
 pub(crate) fn set_key(
     loader: &Loader,
     index: usize,
     slot: usize,
     bits: u32,
 ) -> Result<(), SetKeyError> {
-    let (Some(declared), Some(keys)) = (DECLARED.sealed(), STATE.keys.load_full()) else {
+    let (Some(declared), Some(bound)) = (DECLARED.sealed(), STATE.keys.load_full()) else {
         return Ok(());
     };
-    let mut keys = keys.as_ref().clone();
+    let mut keys = bound.keys.clone();
     if let Some(slots) = keys.get_mut(index)
         && let Some(key) = slots.get_mut(slot)
     {
         *key = bits;
     }
+    let changed = |defaults: [u32; 2], k: [u32; 2]| {
+        let at = |slot: usize| (k[slot] != defaults[slot]).then_some(k[slot]);
+        [at(0), at(1)]
+    };
     let entries: Vec<(String, bindings::Override)> = declared
         .iter()
         .zip(&keys)
-        .map(|(d, k)| {
-            let changed = |at: usize| (k[at] != d.defaults[at]).then_some(k[at]);
-            (d.id.clone(), [changed(0), changed(1)])
-        })
+        .map(|(d, k)| (d.id.clone(), changed(d.defaults, *k)))
         .collect();
-    STATE.keys.store(Some(std::sync::Arc::new(keys)));
-    let Some(kept) = STATE.kept.relock().clone() else {
-        return Err(SetKeyError::Unread);
+    let carried = index
+        .checked_sub(declared.len())
+        .and_then(|at| bound.carried.get(at))
+        .zip(keys.get(index).copied());
+    STATE.keys.store(Some(Arc::new(Bound {
+        keys,
+        carried: bound.carried.clone(),
+        carried_at: bound.carried_at,
+    })));
+    let kept = {
+        let mut kept = STATE.kept.relock();
+        let Some(kept) = kept.as_mut() else {
+            return Err(SetKeyError::Unread);
+        };
+        if let Some((heard, k)) = carried {
+            bindings::set_kept(kept, &heard.id(), changed(heard.control.keys, k));
+        }
+        kept.clone()
     };
     let path = game_dir(loader).join(bindings::FILE);
     enshwick::files::write_atomically(&path, bindings::render(&entries, &kept))?;

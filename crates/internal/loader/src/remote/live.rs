@@ -111,7 +111,7 @@ pub(crate) fn client(message: Message) {
             heard.news += 1;
         }
         Message::Recipes { first, last, ids } => crate::recipes::received(first, last, &ids),
-        Message::Controls { id, name, controls } => crate::controls::carry(id, name, controls),
+        Message::Controls { id, name, controls } => crate::controls::carry(&id, &name, &controls),
         Message::Query { .. }
         | Message::Edit { .. }
         | Message::ActionsLanguage { .. }

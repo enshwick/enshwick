@@ -116,6 +116,36 @@ pub fn render(entries: &[(String, Override)], kept: &toml::Table) -> String {
     text
 }
 
+/// Sets the file's entry for `control` in `kept` to the slots `set` changes.
+///
+/// `kept` are the entries for controls no running mod declares, such as a
+/// server's carried control, which [`render`] writes back as they are; a
+/// `set` that changes no slot removes the entry.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::bindings::{parse, render, set_kept};
+///
+/// let mut kept = toml::Table::new();
+/// set_kept(&mut kept, "you.weather:day", [Some(0x42), None]);
+/// assert_eq!(parse(&render(&[], &kept)).0["you.weather:day"], [Some(0x42), None]);
+/// set_kept(&mut kept, "you.weather:day", [None, None]);
+/// assert!(kept.is_empty());
+/// ```
+pub fn set_kept(kept: &mut toml::Table, control: &str, set: Override) {
+    let slots: toml::Table = SLOTS
+        .iter()
+        .zip(set)
+        .filter_map(|(slot, bits)| Some(((*slot).to_owned(), toml::Value::Integer(bits?.into()))))
+        .collect();
+    if slots.is_empty() {
+        kept.remove(control);
+    } else {
+        kept.insert(control.to_owned(), toml::Value::Table(slots));
+    }
+}
+
 /// For each control's keys, the other controls that share one of them: the
 /// same key with the same modifiers.
 ///

@@ -203,10 +203,11 @@ impl Heard {
     }
 }
 
-/// The carried controls once the server sent mod `id`'s `controls`: they
-/// take the place of its earlier ones, after the other mods'. A new mod past
-/// [`MAX_CARRIED_MODS`] is left out, so a server cannot grow the list without
-/// end.
+/// The carried controls once the server sent mod `id`'s `controls`.
+///
+/// They take the place of the mod's earlier ones, after the other mods'. A
+/// new mod past [`MAX_CARRIED_MODS`] is left out, so a server cannot grow the
+/// list without end.
 ///
 /// # Examples
 ///
@@ -214,23 +215,23 @@ impl Heard {
 /// use enshwick_loader::remote::{Carried, carried_after};
 ///
 /// let horn = Carried { name: "horn".into(), label: "Horn".into(), action: "honk".into(), keys: [0x23, 0], fires: 1, hold_ms: 500 };
-/// let kept = carried_after(&[], "you.cars", "Cars", vec![horn.clone()]);
-/// let again = carried_after(&kept, "you.cars", "Cars", vec![horn]);
+/// let kept = carried_after(&[], "you.cars", "Cars", &[horn.clone()]);
+/// let again = carried_after(&kept, "you.cars", "Cars", &[horn]);
 /// assert_eq!(again.len(), 1);
 /// assert_eq!(again[0].id(), "you.cars:horn");
 /// ```
 #[must_use]
-pub fn carried_after(kept: &[Heard], id: &str, name: &str, controls: Vec<Carried>) -> Vec<Heard> {
+pub fn carried_after(kept: &[Heard], id: &str, name: &str, controls: &[Carried]) -> Vec<Heard> {
     let mut list: Vec<Heard> = kept.iter().filter(|h| h.mod_id != id).cloned().collect();
     let mut mods: Vec<&str> = list.iter().map(|h| h.mod_id.as_str()).collect();
     mods.dedup();
     if mods.len() >= MAX_CARRIED_MODS {
         return list;
     }
-    list.extend(controls.into_iter().map(|control| Heard {
+    list.extend(controls.iter().map(|control| Heard {
         mod_id: id.to_owned(),
         mod_name: name.to_owned(),
-        control,
+        control: control.clone(),
     }));
     list
 }
