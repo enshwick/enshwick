@@ -501,6 +501,8 @@ pub const NAMESPACES: &[Namespace] = &[
             crate::Load::SCRIPT_CONTENT_ENEMIES,
             #[cfg(feature = "typed")]
             crate::Load::SCRIPT_CONTENT_SPAWNS,
+            #[cfg(feature = "typed")]
+            crate::Load::SCRIPT_CONTENT_KNOWLEDGE,
             crate::Load::SCRIPT_CONTENT_ICONS,
             crate::Load::SCRIPT_CONTENT_RENAMES,
             crate::Load::SCRIPT_CONTENT_CHANGE,

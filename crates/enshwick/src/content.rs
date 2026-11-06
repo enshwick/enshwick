@@ -19,6 +19,8 @@ pub mod enemies;
 pub mod icons;
 mod ids;
 pub mod items;
+#[cfg(feature = "typed")]
+pub mod knowledge;
 pub mod loot_tables;
 pub mod menu;
 pub mod props;

@@ -34,6 +34,38 @@ mod tests {
     }
 
     #[test]
+    fn a_script_adds_a_player_s_knowledge_entry_and_gets_its_id() {
+        let loader = run(
+            FakeHost::new().progression(),
+            r#"
+            local id = enshwick.content.add_knowledge({
+                id = "you.luau:shrine", scope = "Player", kind = "Bool", skill_points = 1,
+            })
+            enshwick.log.info(`knowledge {id}`)
+            local ok = pcall(enshwick.content.add_knowledge, { id = "you.luau:w", scope = "World", kind = "Bool", skill_points = 1 })
+            enshwick.log.info(`world points refused {not ok}`)
+            "#,
+        );
+        let id = enshwick::knowledge::KnowledgeId::from_guid(Id::new("you.luau:shrine").guid());
+        assert!(
+            logged(&loader, &format!("knowledge {id}")),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(
+            logged(&loader, "world points refused true"),
+            "{:?}",
+            loader.logs()
+        );
+        let hash = FakeHost::new()
+            .progression()
+            .hash("GameKnowledgeResource")
+            .unwrap();
+        let knowledge = enshwick::content::knowledge::GAME_KNOWLEDGE.key_by_hash(hash);
+        assert!(loader.resources().iter().any(|r| r.key == knowledge));
+    }
+
+    #[test]
     fn a_script_adds_a_recipe_beside_a_vanilla_one() {
         let loader = run(
             FakeHost::new().items().recipes(),

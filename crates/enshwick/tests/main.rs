@@ -75,6 +75,8 @@ mod item_data;
 #[cfg(feature = "unstable")]
 mod items;
 mod knowledge;
+#[cfg(feature = "typed")]
+mod knowledge_content;
 mod language;
 mod lifecycle;
 mod live_changes;
