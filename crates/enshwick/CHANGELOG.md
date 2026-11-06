@@ -128,6 +128,20 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- A client joins a dedicated server again in the same game process: the
+  loader closes its own socket of the last game before it opens one for
+  the next, where before every join after the first was kicked for a
+  missing hello (#953).
+- A data pack names a vanilla item by its debug name in the running game,
+  as `cargo enshwick pack check` allows; before, the loader read packs as if
+  no game data were at hand and refused such a line (#953).
+- `items = "backpacks"` (`Items::Backpacks`) picks the game's backpacks;
+  before, it picked none (#953).
+- `items::Kind::Consumed` (`ItemAction::CONSUMED`), and with it a use reward
+  (`Action::Consume`, a pack's `consume` reward), comes once the game took
+  the used item from its slot, within 5 seconds of the use, and never for a
+  use the game refuses, such as a healing potion at full health. The fake
+  host's `Installed::refused_use` plays such a use (#953).
 - An action's handler, `allow`, `at` or `per_player` may add an action with
   `Actions::add`; before, the call deadlocked the thread (#947).
 - A use reward (`Action::Consume`, a pack's `consume` reward) follows only
