@@ -1,13 +1,14 @@
 <!--
 type: explanation
-description: Enshwick is a modding API platform for Enshrouded. Its loader runs every mod, so players install one thing; this book is for people who write mods with it.
+description: Enshwick is the modding framework and API for Enshrouded. Its mod loader runs every mod; this book is for the people who write mods with it.
 -->
 
 # Introduction
 
-Enshwick is a modding API platform for [Enshrouded](https://enshrouded.com).
-This book is for people who write mods with it. The Enshwick loader comes with
-the platform and runs every mod, so players install one thing.
+Enshwick is the modding framework and API for
+[Enshrouded](https://enshrouded.com). This book is for people who write mods
+with it. The Enshwick mod loader comes with the framework and runs every mod,
+so players install one thing.
 
 ## What a mod is
 

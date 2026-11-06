@@ -19,6 +19,8 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- The crate's description names Enshwick as the modding framework for
+  Enshrouded (#968).
 - `pin --old` ports an old build that has no table in `tables/` from what
   its anchors and engine routes find on it, and refreshes the check shapes
   from that; the report names where each section's old values come from,

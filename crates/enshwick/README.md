@@ -1,8 +1,8 @@
 # enshwick
 
-The modding API of [Enshwick](https://github.com/enshwick/enshwick) for
-Enshrouded, and the one crate a Rust mod depends on. Enshwick is a modding API
-platform. A mod maker gets:
+The API of [Enshwick](https://github.com/enshwick/enshwick), the modding
+framework for Enshrouded, and the one crate a Rust mod depends on. A mod maker
+gets:
 
 - a typed Rust API for settings, events, the world, items and recipes, the
   game's interface and messages between server and client;
