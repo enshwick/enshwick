@@ -383,7 +383,6 @@ impl FakeHost {
     /// assert!(held + 8 <= host.size(facts::PLAYER_INPUT.id())?);
     /// # Ok::<(), enshwick::Off>(())
     /// ```
-    #[cfg(feature = "unstable")]
     #[must_use]
     pub fn player_input(self) -> Self {
         use crate::resources::{Constant, Kind, Type};
