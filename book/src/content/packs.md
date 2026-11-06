@@ -214,10 +214,13 @@ that deals no damage is left, and the pack's log says so. A weapon deals the
 changed damage once the game sets it up again; the number its tooltip shows
 was written when the item was made and stays.
 
-`slots` changes the chests placed from then on, and chests upgraded to the
-item, since an upgrade places a new chest: a chest placed before keeps the
-size it was placed with, which the save holds. Removing the pack leaves every
-chest as it is. A container only grows, as an upgraded chest moves every item
+`slots` reaches every chest the item places each time a world loads, a
+chest placed before the pack as well as one placed after it: a placed
+chest takes its size from the game's data, not from the save. Removing the
+pack loses no item. A chest whose save holds more slots than the game now
+gives it comes back with 128 slots, the game's largest, every item in its
+slot; a player's game shows it at the game's size while every item fits
+there, and at 128 slots once an item lies past it. A container only grows, as an upgraded chest moves every item
 it holds; an item that places no container is a problem at its line. The
 change reaches every item that places the same container, and the log names
 them; when such items ask for different sizes, the last in load order counts

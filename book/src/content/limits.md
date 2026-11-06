@@ -84,9 +84,11 @@ alone and need no join.
 
 ## Chests
 
-A chest keeps the size it was placed with, which the save holds. A new
-size reaches chests placed after the change; a chest a player upgrades takes
-the new size of the chest it becomes. Slots only grow: a chest a player
+A chest takes its size from the game's data each time a world loads, so a
+new size reaches every chest of that kind, placed before the change or
+after it. When a size goes, as when the mod or pack is removed, no item is
+lost: a chest whose save holds more slots than the game now gives it comes
+back with 128 slots, every item in its slot. Slots only grow: a chest a player
 upgrades moves every item it holds.
 
 ## Stack sizes and saved worlds
