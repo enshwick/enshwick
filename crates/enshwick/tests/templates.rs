@@ -6,7 +6,7 @@
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::abi::{ResourceKey, Status};
+    use enshwick::abi::{Level, ResourceKey, Status};
     use enshwick::content::items::{FuelSetup, METER_TEMPLATE_BASE, NewItem};
     use enshwick::content::templates::{
         ComponentChange, NewTemplate, TEMPLATE_COLLECTION, TemplateId,
@@ -224,6 +224,24 @@ mod tests {
         for id in [TAME, BOSSY, BENCH.part("template"), METER] {
             assert!(templates.contains(&Value::Guid(id.guid())), "{id} listed");
         }
+    }
+
+    #[test]
+    fn naming_a_vanilla_template_first_after_init_warns_once() {
+        let loader = FakeHost::new().items().workshops().meters().install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Templates)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let late = |logs: Vec<(Level, String)>| {
+            logs.into_iter()
+                .filter(|(level, line)| *level == Level::WARN && line.contains("after init"))
+                .count()
+        };
+        assert_eq!(late(loader.logs()), 0, "init named no template");
+        let _wolf = enshwick::content::vanilla::template("Enemy_Wolf");
+        let _again = enshwick::content::vanilla::template("Enemy_Wolf");
+        assert_eq!(late(loader.logs()), 1, "{:?}", loader.logs());
     }
 
     #[test]

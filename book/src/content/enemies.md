@@ -36,7 +36,8 @@ to have them.
 faction and arsenal; `vanilla::template(name)` names any template. The first
 of these calls reads the names of all the game's templates once, 139 ms on a
 dedicated server: a Luau mod makes it at the top level of `main.luau`, where
-no per-second budget applies.
+no per-second budget applies. A Rust mod makes it in `init`; a first call
+after `init` runs on the calling thread and logs a warning.
 
 ## Arsenals
 

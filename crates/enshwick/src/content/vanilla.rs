@@ -481,7 +481,8 @@ impl Vanilla {
     /// The vanilla template named `name`, as the template collection lists
     /// it. The first call reads every template's name once, 139 ms on a
     /// dedicated server (build 26083076), more than a Luau script's budget
-    /// of 100 ms a second: name templates while the mod starts.
+    /// of 100 ms a second: name templates while the mod starts. A Rust mod's
+    /// first call after `init` logs a warning saying so.
     ///
     /// # Errors
     ///
@@ -501,7 +502,14 @@ impl Vanilla {
     pub fn template(&self, name: &str) -> Result<Guid, VanillaError> {
         let names = self
             .template_names
-            .get_or_init(|| self.read_template_names())
+            .get_or_init(|| {
+                if crate::__private::initialised() {
+                    crate::warn_once!(
+                        "vanilla templates named after init: every template's name is read now, on this thread, about 139 ms on a dedicated server; name them in init"
+                    );
+                }
+                self.read_template_names()
+            })
             .as_ref()
             .ok_or(VanillaError::Unreadable("templates"))?;
         match names.get(name).map(Vec::as_slice) {

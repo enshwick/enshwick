@@ -456,6 +456,15 @@ pub fn fault_in(hook: &str, payload: &(dyn core::any::Any + Send)) {
 /// The most detailed level the loader keeps, read once at init.
 static MAX_LEVEL: AtomicU8 = AtomicU8::new(Level::INFO.0);
 
+/// Set once the mod's `init` has returned in this mod life.
+static INITIALISED: crate::fresh::Fresh<()> = crate::fresh::Fresh::new();
+
+/// Whether the mod's `init` has returned, so a slow first read runs inside
+/// the game's frame rather than at start.
+pub(crate) fn initialised() -> bool {
+    INITIALISED.get().is_some()
+}
+
 #[inline]
 #[must_use]
 pub fn enabled(level: Level) -> bool {
@@ -643,6 +652,7 @@ pub unsafe fn init<M: Mod>(
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         M::init(&mut Load::of(host, manifest.side == Side::BOTH, texts))
     }));
+    let _set = INITIALISED.set(());
     match outcome {
         Ok(Ok(state)) => match slot.0.set(state) {
             Ok(()) => Status::OK,
