@@ -75,21 +75,24 @@ Some mods count in the join check. Each mod's page says if it does. A player and
 their server need the same versions of these mods. A player who lacks one, or
 has another version, sees which and does not join. Such a mod that the player
 has and the server does not run is off for that session. Other mods are each
-side's own. At each world load, a server writes the set of mods that ran, with the SHA-256
-of each DLL, to `<save>-mod-data/enshwick/mods.lock` beside the world's save.
+side's own.
+
+At each world load, a server records the mods that ran, with the SHA-256 of
+each DLL. The record is `<save>-mod-data/enshwick/mods.lock` beside the
+world's save.
 
 ### Settings
 
 Mod settings belong to each world. As a world loads, the loader writes each
-mod's settings beside its save, in `<save>-mod-settings/<id>/settings.toml`,
-from the mod's defaults, and adds the settings a newer mod version brings.
+mod's settings into a file beside the world's save, from the mod's defaults.
+When a mod gets a newer version, the loader adds its new settings there. The
+file is `<save>-mod-settings/<id>/settings.toml`.
 
-Change settings in the game with a mod's Settings button on the Mods screen,
-in a world: that world's. On a dedicated server, an administrator changes the
-server's from the same page. The server's console also takes
+To change a world's settings, load the world and press the mod's Settings
+button on the Mods screen. On a dedicated server, an administrator changes the
+server's settings from the same page. The server's console also takes
 `enshwick config <mod> <key> <value>`. A change applies when the world loads
-again. A world's `<save>-mod-settings/enshwick/enshwick.toml` holds the
-loader's own rule for it, `require_enshwick`.
+again.
 
 ### Recipes taken out of a world
 
@@ -101,9 +104,11 @@ that world ([Disabling recipes](book/src/content/disabled-recipes.md)).
 The logs are in `logs/`, one file per source and run, such as
 `logs/enshwick_2026-11-03_10-00-00.log`.
 
-### The loader's own file
+### The loader's own files
 
-`enshwick.toml` in the game's folder sets how much the logs keep.
+`enshwick.toml` in the game's folder sets how much the logs keep. Each world
+has a loader rule of its own, `require_enshwick`, in
+`<save>-mod-settings/enshwick/enshwick.toml`.
 
 ## What is in this repository
 
