@@ -1,6 +1,5 @@
 ---
 source: crates/cargo-enshwick/src/luau.rs
-assertion_line: 589
 expression: definitions()
 ---
 --!strict
