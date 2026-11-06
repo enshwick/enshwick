@@ -84,6 +84,16 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "text.format", 0xaf_f930),
     ("1.0 client (26082781)", "ui.dropdown_external", 0xc76),
     ("1.0 client (26320373)", "ui.dropdown_external", 0xc76),
+    // The editor's commit, which every terrain edit passes; on 26083076 and
+    // 26430253 checked live on server copies.
+    ("1.0 server (1269579)", "voxel.commit", 0x83_39d0),
+    ("1.0 server (26083076)", "voxel.commit", 0x83_5e00),
+    ("1.0 server (26319703)", "voxel.commit", 0x83_fa70),
+    ("1.0 server (26430253)", "voxel.commit", 0x83_fa70),
+    ("1.0 client (1269579)", "voxel.commit", 0x109_e290),
+    ("1.0 client (26082781)", "voxel.commit", 0x10a_03d0),
+    ("1.0 client (26320373)", "voxel.commit", 0x10b_bd80),
+    ("1.0 client (26430625)", "voxel.commit", 0x10b_b030),
 ];
 
 /// Entries no table pins, found only by their route, with the value the

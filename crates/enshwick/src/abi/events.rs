@@ -114,6 +114,14 @@ impl Event {
     /// disk; no data. Raised on the game thread after the step that started
     /// it. Server only. ABI 11.6.
     pub const WORLD_SAVING: Self = Self(22);
+    /// The server's voxel editor wrote voxels of the world: a player's tool
+    /// or building, the game itself, or a mod's terrain edit, transaction
+    /// or undo; data is a [`VoxelEditData`](super::VoxelEditData). One
+    /// event per write, which an undo or a transaction makes per brick of
+    /// 8 voxels; a write that changed nothing raises none. The name is
+    /// enshwick's. Raised on the game thread after the step. Server only.
+    /// ABI 11.11.
+    pub const VOXELS_CHANGED: Self = Self(23);
 }
 
 /// The data of the `PlayerDied` event.

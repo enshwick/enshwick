@@ -482,6 +482,7 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::on_request::<crate::stats::Stats>("stats"),
     Namespace::starting("stats", "", &[crate::Load::SCRIPT_STATS]),
     Namespace::of::<crate::voxels::Voxels>(),
+    Namespace::starting("voxels", "", &[crate::Load::SCRIPT_VOXEL_EDITS]),
     Namespace::of::<crate::terrain::Terrain>(),
     Namespace::of::<crate::content::Content>(),
     Namespace::starting(

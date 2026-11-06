@@ -200,7 +200,8 @@ fn pass(loader: &crate::host::Loader) {
         return;
     };
     while let Some(mut task) = try_ledger().and_then(|mut ledger| ledger.take(&mut pass)) {
-        let outcome = task.run(&mut world, &mut pass);
+        let outcome =
+            crate::voxels::changes::by(task.owner.handle(), || task.run(&mut world, &mut pass));
         let mut ledger = STATE.ledger.relock();
         let go_on = ledger.put(task, outcome);
         STATE.busy.store(ledger.busy(), Ordering::Release);

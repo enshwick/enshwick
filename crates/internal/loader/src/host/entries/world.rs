@@ -787,7 +787,10 @@ pub(crate) extern "system" fn terrain_edit(
         }) else {
             return Status::BAD_ARGS;
         };
-        match caller(me).and_then(|loader| crate::terrain::edit(loader, &edit)) {
+        let edited = caller(me).and_then(|loader| {
+            crate::voxels::changes::by(me, || crate::terrain::edit(loader, &edit))
+        });
+        match edited {
             // SAFETY: `HostApi::terrain_edit` has the mod pass `amount` null or
             // pointing at a writable, aligned `f32` that no other thread
             // touches during the call.

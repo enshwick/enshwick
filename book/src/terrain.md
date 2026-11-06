@@ -58,8 +58,8 @@ stone item.
 
 ## Edits
 
-Every edit changes the ground at once: clients see it, and the save keeps
-it. Positions are in metres and no axis may be below 0; a radius or a height
+Every edit changes the ground at once and clients see it; the save keeps
+it only inside a base ([What a save keeps](#what-a-save-keeps)). Positions are in metres and no axis may be below 0; a radius or a height
 is above 0 and up to `MAX_RADIUS` (16 metres), and smaller edits, up to
 about 8 metres, keep the game's frame short. `Shape::Round` is a disc or a
 sphere, `Shape::Square` a square or a cube.
@@ -438,6 +438,83 @@ hook, they fail with `WrongThread`.
 
 Where each call works is in
 [What may be called where](concepts/threads.md#what-may-be-called-where).
+
+## Hearing every voxel edit
+
+`load.on_voxels_changed(handler)` calls `handler` after the step for each
+write of the server's world voxels: a player digging, shaping or building,
+the game's own changes, and the terrain edits and transactions of mods.
+Each `VoxelEdit` has its `source`, `Game`, `ThisMod` or `OtherMod`, and its
+`changes`: every voxel that changed, with its place, the voxel before and
+the voxel after. The game writes a whole box at a time, aligned to its
+4-metre bricks and larger than the edit, so the loader reads the box before
+the game writes it and hands over only the voxels that differ. An undo and
+a transaction's `write_voxels` write brick by brick, one edit each; a write
+that changes nothing raises none. On a client it runs while the client
+hosts a game.
+
+A mod can keep edits the save drops: the save keeps changes only inside a
+base ([What a save keeps](#what-a-save-keeps)). It stores the changes it
+hears, then puts them back once the world runs again: it reads a box over
+them, which loads that part of the world, and writes it back with
+`write_voxels`. Its own replay comes back as edits whose source is
+`ThisMod`, which it skips.
+
+```rust
+use std::sync::Mutex;
+
+use enshwick::WorldError;
+use enshwick::voxels::{EditSource, VoxelChange, VoxelPos, Voxels};
+use enshwick::world::{TransactionId, World};
+
+static KEPT: Mutex<Vec<VoxelChange>> = Mutex::new(Vec::new());
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_voxels_changed(|edit| {
+        if edit.source != EditSource::ThisMod {
+            let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
+            kept.extend(edit.changes.iter().copied());
+        }
+    })
+}
+
+fn replay(world: World, voxels: Voxels, min: VoxelPos, size: [u32; 3]) -> Result<TransactionId, WorldError> {
+    let mut block = voxels.read(min, size)?;
+    for change in KEPT.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        block.set(change.at, change.after);
+    }
+    world.transaction().write_voxels(&block).commit()
+}
+```
+
+The first read of a part of the world not in memory fails with `NotLoaded`
+and starts loading it; the same read about a second later returns the
+ground as the save has it. No player needs to be near, and `ChunkLoaded`
+does not tell when a box can be read, so a mod tries again from a
+[scheduled task](concepts/threads.md#what-may-be-called-where) until the read
+answers. A mod keeps what it stores in its
+[world store](state.md), beside the save.
+
+From Luau the call is `enshwick.voxels.on_voxels_changed(fn)`, and the
+source is a string:
+
+```luau
+enshwick.voxels.on_voxels_changed(function(edit)
+    if edit.source ~= "ThisMod" then
+        enshwick.log.info(`{#edit.changes} voxels changed`)
+    end
+end)
+```
+
+While a mod listens, every write of the world's voxels costs one more box
+read inside the game's write, and a comparison of the box's voxels. The
+read took 300 nanoseconds for the loader's own writes on a dedicated server,
+and 0.6 to 1.5 microseconds for a player's dig or added soil on a client
+that hosted a game. The loader hooks the write only when a mod listens, so
+without one it costs nothing.
+
+`on_voxels_changed` is stable; the transactions a replay writes with need
+the `unstable` feature ([Stability](stability.md)).
 
 ## Capturing a region
 

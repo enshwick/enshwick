@@ -221,6 +221,8 @@ shapes! {
         TerrainMaterialInfo { header, id, flags, hardness, reserved, item, health },
         TerrainEdit { header, kind, shape, flags, material, position, radius, height, protect },
         Voxel { kind, material, fill, reserved },
+        VoxelChange { at, before, after },
+        VoxelEditData { header, by, min, size, changes, count },
         BuildRights { header, player, refusal, min, max },
         TransactionOp { kind, reserved, data },
         TransactionInfo { header, state, reason, ops, applied, bricks, refusal, reserved, holds, created },

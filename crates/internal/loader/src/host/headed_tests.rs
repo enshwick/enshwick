@@ -96,6 +96,7 @@ macro_rules! headed {
             UiFrame,
             UiMarker,
             UiWidget,
+            VoxelEditData,
             VoxelRegion,
             VoxelWrite,
             WeatherFront,

@@ -32,4 +32,5 @@ mod shrine;
 mod typed;
 mod ui;
 mod vetoes;
+mod voxel_edits;
 mod weather;

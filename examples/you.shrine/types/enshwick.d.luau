@@ -669,6 +669,9 @@ export type Dropdown = {
 --- The edge of the screen an extension's panel sits at, centred along it.
 export type Edge = "Left" | "Right" | "Top" | "Bottom"
 
+--- Who made a `VoxelEdit`.
+export type EditSource = "Game" | "ThisMod" | "OtherMod"
+
 --- A vanilla enemy, from `enemy`: its template, faction and arsenal.
 export type Enemy = {
 	--- The enemy's template.
@@ -2543,6 +2546,24 @@ export type VoxelBox = {
 	voxels: {Voxel},
 }
 
+--- One voxel a `VoxelEdit` changed: where, and what it was and is.
+export type VoxelChange = {
+	--- Its place.
+	at: VoxelPos,
+	--- The voxel before the edit.
+	before: Voxel,
+	--- The voxel after it.
+	after: Voxel,
+}
+
+--- One write of the world's voxels and the voxels it changed, from `Load.on_voxels_changed`. The name is enshwick's: the game names no such write.
+export type VoxelEdit = {
+	--- Who made it.
+	source: EditSource,
+	--- The voxels that changed, at least one, x fastest, then y, then z.
+	changes: {VoxelChange},
+}
+
 --- What a voxel is made of. The kinds are enshwick's names for the ranges of the game's material ids.
 export type VoxelMaterial = "Air" | { Terrain: number } | { Building: number } | { Unknown: number }
 
@@ -3467,6 +3488,9 @@ declare enshwick: {
 		read: (min: VoxelPos, size: {number}) -> VoxelBox,
 		--- The voxel at `at`.
 		sample: (at: VoxelPos) -> Voxel,
+		--- Calls `handler` for every write of the server's world voxels, on the game thread after the step: a player's digging, building and shaping, the game's own changes, and the terrain edits and transactions of mods, this one's included. An undo or a transaction writes brick by brick of 8 voxels, one edit each. On a client it runs while it hosts a game. A panic in `handler` turns the mod off. To keep edits, store the changes and replay them when the world loads: read a box over them with `Voxels.read`, which loads it, until it answers, then write it back with a transaction's `write_voxels`, and skip the edits whose source is `EditSource.ThisMod`. A world's save keeps edits only inside a base, a Flame Altar's building zone.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_voxels_changed: (handler: (arg1: VoxelEdit) -> ()) -> (),
 	},
 	--- The world's terrain: add, dig and flatten ground, and its materials.
 	terrain: {

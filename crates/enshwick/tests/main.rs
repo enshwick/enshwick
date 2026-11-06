@@ -174,6 +174,7 @@ mod typed;
 mod ui;
 mod vanilla_items;
 mod vetoes;
+mod voxel_edits;
 mod voxels;
 mod weather;
 #[cfg(feature = "typed")]

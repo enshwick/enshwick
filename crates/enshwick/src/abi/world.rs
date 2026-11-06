@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Entity, Header, ItemId, KnowledgeId, RecipeId, Str};
+use crate::abi::{Entity, Header, ItemId, KnowledgeId, ModHandle, RecipeId, Str};
 
 /// A game event handed to a [`GameEventFn`], from the ECS event streams
 /// of the server's systems.
@@ -755,6 +755,82 @@ impl Voxel {
         Some(count)
     }
 }
+
+/// One voxel a committed edit changed, as [`VoxelEditData`] lists it: where
+/// it is and what it was and is.
+///
+/// Its layout is frozen: [`VoxelEditData`] points at an array of it with no
+/// entry size.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Voxel, VoxelChange};
+///
+/// let dug = VoxelChange {
+///     at: [200, 80, 200],
+///     before: Voxel { kind: Voxel::TERRAIN, material: 9, fill: 0xff, reserved: 0 },
+///     after: Voxel::default(),
+/// };
+/// assert_eq!(dug.after.kind, Voxel::AIR);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+pub struct VoxelChange {
+    /// The voxel's place, in voxels from the world's corner.
+    pub at: [u32; 3],
+    /// The voxel before the edit.
+    pub before: Voxel,
+    /// The voxel after it.
+    pub after: Voxel,
+}
+
+/// The data of [`Event::VOXELS_CHANGED`](super::Event::VOXELS_CHANGED): one
+/// write of the server's voxel editor and the voxels it changed, borrowed
+/// for the call that hands it over.
+///
+/// The game writes a whole box, aligned to its bricks of 8 voxels and
+/// larger than the edit, so `changes` lists only the voxels that differ
+/// from the box as it was. Layout grows only by appending; read a later
+/// field after [`Header::covers`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, ModHandle, VoxelChange, VoxelEditData};
+///
+/// let changes = [VoxelChange::default()];
+/// let edit = VoxelEditData {
+///     header: Header::of::<VoxelEditData>(),
+///     by: ModHandle::NONE,
+///     min: [192, 72, 192],
+///     size: [16, 16, 16],
+///     changes: changes.as_ptr(),
+///     count: 1,
+/// };
+/// assert_eq!(edit.by, ModHandle::NONE, "a player or the game made it");
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct VoxelEditData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The mod whose call through the API made the edit, such as a
+    /// transaction's write or a terrain edit; [`ModHandle::NONE`] for the
+    /// game's own edits, a player's tools and buildings among them.
+    pub by: ModHandle,
+    /// The lowest corner of the box the game wrote, in voxels.
+    pub min: [u32; 3],
+    /// The box's voxels along each axis.
+    pub size: [u32; 3],
+    /// The voxels that changed, `count` of them, in the box's order: x
+    /// fastest, then y, then z. Valid for the call only.
+    pub changes: *const VoxelChange,
+    /// How many voxels changed, at least one.
+    pub count: u64,
+}
+
+impl_headed!(VoxelEditData);
 
 /// Whether a player may edit a box of the server's world, for
 /// [`HostApi::build_rights`](crate::abi::HostApi::build_rights): the mod

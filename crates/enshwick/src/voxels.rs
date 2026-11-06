@@ -39,6 +39,10 @@
 //! }
 //! ```
 
+mod edits;
+
+pub use edits::{EditSource, VoxelChange, VoxelEdit};
+
 use crate::WorldError;
 use crate::abi;
 use crate::{Host, Load};

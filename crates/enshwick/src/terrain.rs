@@ -3,8 +3,9 @@
 //!
 //! The ground is made of voxels half a metre a side, each of a material:
 //! terrain materials have ids 1 to 127 ([`Terrain::materials`] lists them
-//! with the item digging each yields). An edit changes the ground at once:
-//! clients see it, and the save keeps it. Built pieces are never touched.
+//! with the item digging each yields). An edit changes the ground at once
+//! and clients see it; the save keeps it only inside a base, a Flame
+//! Altar's building zone (server 399). Built pieces are never touched.
 //! A player's shovel and pickaxe also check where the player may build,
 //! take the cost and give the loot and experience; an edit here does none
 //! of that, so a mod decides what it needs. An edit here keeps no undo; a

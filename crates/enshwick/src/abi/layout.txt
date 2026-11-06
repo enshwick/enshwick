@@ -1018,6 +1018,17 @@ Voxel size 4 align 1
     material at 1 size 1 type u8
     fill at 2 size 1 type u8
     reserved at 3 size 1 type u8
+VoxelChange size 20 align 4
+    at at 0 size 12 type [u32; 3]
+    before at 12 size 4 type Voxel
+    after at 16 size 4 type Voxel
+VoxelEditData size 56 align 8 born 56
+    header at 0 size 8 type Header
+    by at 8 size 8 type ModHandle
+    min at 16 size 12 type [u32; 3]
+    size at 28 size 12 type [u32; 3]
+    changes at 40 size 8 type *const VoxelChange
+    count at 48 size 8 type u64
 VoxelRegion size 32 align 4 born 32
     header at 0 size 8 type Header
     min at 8 size 12 type [u32; 3]

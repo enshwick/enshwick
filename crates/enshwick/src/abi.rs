@@ -800,6 +800,9 @@ const _: () = {
     assert!(size_of::<TransactionInfo>() == 8 + 16 + 8 + 8 + 8);
     // Frozen: written as an array.
     assert!(size_of::<Voxel>() == 4);
+    // Frozen: read as an array.
+    assert!(size_of::<VoxelChange>() == 12 + 4 + 4);
+    assert!(size_of::<VoxelEditData>() == 8 + 8 + 24 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, altar_limit_filter) == 24 + 147 * 8);
     assert!(core::mem::offset_of!(HostApi, base_limit) == 24 + 148 * 8);
     assert!(core::mem::offset_of!(HostApi, declare_change) == 24 + 150 * 8);

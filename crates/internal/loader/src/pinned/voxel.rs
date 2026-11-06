@@ -3,6 +3,7 @@
 use super::{Constant, Symbol};
 
 pub(crate) const BUILDING_FIRST: Constant = Constant::new("voxel.building_first");
+pub(crate) const COMMIT: Symbol = Symbol::new("voxel.commit");
 pub(crate) const MATERIALS: Constant = Constant::new("voxel.materials");
 pub(crate) const READ_BOX: Symbol = Symbol::new("voxel.read_box");
 pub(crate) const STORE: Constant = Constant::new("voxel.store");

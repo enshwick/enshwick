@@ -69,7 +69,10 @@ impl Installed {
     /// for a change's box fails instead, with the refusal, as the loader's
     /// rights check does at a transaction's first step; neither refuses a
     /// player at the commit. The fake keeps the bricks of each change's box as
-    /// undo data, and changes nothing it answers reads from.
+    /// undo data, and changes nothing it answers reads from. The voxels an
+    /// applied transaction writes over a box are raised as this mod's
+    /// [`Event::VOXELS_CHANGED`](crate::abi::Event::VOXELS_CHANGED), against
+    /// the fake's loaded voxels; an undo raises none.
     ///
     /// # Examples
     ///
@@ -79,8 +82,9 @@ impl Installed {
     /// assert!(loader.transactions().is_empty());
     /// ```
     pub fn run_transactions(&self) {
-        table::with((), |s| {
+        let written = table::with(Vec::new(), |s| {
             let host = &mut s.host;
+            let mut written = Vec::new();
             for transaction in &mut s.edits.transactions {
                 let refusal = transaction.refusal(host);
                 let bricks = transaction.bricks(host);
@@ -99,6 +103,16 @@ impl Installed {
                                 info.applied = info.ops;
                                 info.bricks = bricks;
                                 info.holds = 0;
+                                for change in &transaction.changes {
+                                    if let FakeChange::Voxels { min, size, voxels } = change {
+                                        written.push(super::voxel_edits::written(
+                                            &host.voxels,
+                                            *min,
+                                            *size,
+                                            voxels,
+                                        ));
+                                    }
+                                }
                             }
                             Err((reason, holds)) => {
                                 let info = &mut transaction.info;
@@ -132,7 +146,11 @@ impl Installed {
                     _ => {}
                 }
             }
+            written
         });
+        for changes in written {
+            let _ran = self.raise_edit(self.handle(), &changes);
+        }
     }
 
     /// Makes the loader's next step meet `reason` for transaction `id`, as
