@@ -242,6 +242,9 @@ unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
 /// game when a hold on that world is unmet, before its save is read.
 fn remember(path: &str, side: Side) {
     static UNPLACED: crate::wire::Drops = crate::wire::Drops::new();
+    if key_of(path).is_none() {
+        return;
+    }
     let path = full_path(path, side, steam_saves).unwrap_or_else(|| {
         if let Some(total) = UNPLACED.add(1) {
             crate::log!(
