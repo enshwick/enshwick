@@ -1155,7 +1155,7 @@ export type KnowledgeData = {
 	value: number,
 }
 
---- A test of one knowledge entry, vanilla or a mod's, as quests, journal pages and skill nodes ask for knowledge.
+--- A test of one knowledge entry, vanilla or a mod's, as quests, journal pages and skill nodes ask for knowledge. The name is enshwick's; the game's is `KnowledgeQueryData`.
 export type KnowledgeQuery = {
 	--- The entry tested.
 	id: number,
@@ -1548,7 +1548,7 @@ export type NewItem = {
 	icon: Icon?,
 }
 
---- A new lore page for `Load.add_journal_page`.
+--- A new lore page for `Load.add_journal_page`. The name is enshwick's; the game's is `JournalCollectionResource`.
 export type NewJournalPage = {
 	--- Its content id.
 	id: string,
@@ -1666,7 +1666,7 @@ export type NewSkillNode = {
 	description: string,
 	--- The skill points it costs; nil keeps the vanilla node's.
 	cost: number?,
-	--- The levels it has; nil keeps the vanilla node's.
+	--- The levels it has; nil keeps the vanilla node's. A node with levels is refused, since the game keeps them in a slot of the vanilla node's own, so a copy of one sets 0.
 	max_level: number?,
 	--- What it is; nil keeps the vanilla node's.
 	kind: typed_SkillNodeType?,
@@ -1959,7 +1959,7 @@ export type QuestData = {
 --- What a quest pays when its last step completes. The name is enshwick's, not the game's.
 export type QuestReward = { Item: string } | { Experience: number }
 
---- One step of a quest: its title and text, shown while `shown_when` holds, done once `done_when` holds.
+--- One step of a quest: its title and text, shown while `shown_when` holds, done once `done_when` holds. The name is enshwick's; the game's is `JournalEntryResource`.
 export type QuestStep = {
 	--- Its title's text tag; give it text with `Load.add_text`.
 	name: string,
@@ -2280,7 +2280,7 @@ export type SkillCheck = {
 --- Which game check asks about a skill node. The name is enshwick's, not the game's.
 export type SkillGate = "FlyMode" | "Other"
 
---- A vanilla node of the skill tree, from `Load.skill_nodes`.
+--- A vanilla node of the skill tree, from `Load.skill_nodes`. The name is enshwick's: it holds a few fields of the game's `SkillTreeNode`.
 export type SkillNode = {
 	--- Its id.
 	id: number,
@@ -3806,7 +3806,7 @@ declare enshwick: {
 		--- The vanilla nodes of the skill tree, to link a mod's nodes from and place them beside.
 		--- Only while the mod starts, at the top level of main.luau.
 		skill_nodes: () -> {SkillNode},
-		--- Adds a node to the skill tree, on the server and the client alike: a copy of the vanilla node `NewSkillNode.like`, its effect and icons among it, at its own place, linked from the nodes it names. A player unlocks it with skill points as the game's own nodes; the tree screen draws it from the data. A player's save keeps a fixed count of unlocked nodes (256 on server 399, beside the game's 243), and the game's own tree takes most of them: every mod's nodes share the rest, in load order.
+		--- Adds a node to the skill tree, on the server and the client alike: a copy of the vanilla node `NewSkillNode.like`, its effect and icons among it, at its own place, linked from the nodes it names. A player unlocks it with skill points as the game's own nodes; the tree screen draws it from the data. A player's save keeps a fixed count of unlocked nodes (256 on server 399, beside the game's 243), and the game's own tree takes most of them: every mod's nodes share the rest, in load order. Each node shows as the mod's feature `skill node <id>` in the status summary and on the Mods screen, with the reason when it is refused.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_skill_node: (new: NewSkillNode) -> number,
 		--- Adds a perk, listed beside the vanilla ones: a copy of the vanilla perk `NewPerk.like` under the mod's content id, with its own name and description, on the server and the client alike.
@@ -3821,7 +3821,7 @@ declare enshwick: {
 		--- Serves the vanilla loot table `table`, random or a container's fill table, giving nothing while the mod runs. Loot players hold is plain stacks and stays.
 		--- Only while the mod starts, at the top level of main.luau.
 		remove_loot_table: (table: string) -> (),
-		--- Serves the vanilla item `old` with the data of the vanilla item `new` while the mod runs, under `old`'s own id: saves, recipes and loot that name `old` get `new`'s look and use. The stack size is at least `old`'s, since the game cuts a held stack above its item's and saves the cut; saves keep `old`'s id, so a world opens as vanilla without the mod.
+		--- Serves the vanilla item `old` with the data of the vanilla item `new` while the mod runs, under `old`'s own id and GUID: saves, recipes and loot that name `old` get `new`'s look and use. The stack size is at least `old`'s, since the game cuts a held stack above its item's and saves the cut; saves keep `old`'s id, so a world opens as vanilla without the mod. Mods that serve `old` chain in load order, and the last re-key's data wins; a build that fails keeps `old` as it was.
 		--- Only while the mod starts, at the top level of main.luau.
 		rekey_item: (old: string, new: string) -> (),
 		--- Serves `icon`'s UI image, built from the vanilla one it starts from when the client first shows it. `Load.add_item` does it for an item's icon.
