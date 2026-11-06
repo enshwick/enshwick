@@ -41,7 +41,7 @@ pub const CONTROLS: u8 = 16;
 /// The controls of one mod a [`Message::Controls`] carries at most.
 pub const MAX_CARRIED: usize = 24;
 /// The longest text a [`Message::Controls`] carries, a label or the mod's
-/// name or id, in bytes; the server cuts a longer one.
+/// name, in bytes; the server cuts a longer one.
 pub const MAX_CARRIED_TEXT: usize = 160;
 
 /// The least time between two changes one player sends.
@@ -205,7 +205,8 @@ impl Heard {
 
 /// The carried controls once the server sent mod `id`'s `controls`.
 ///
-/// They take the place of the mod's earlier ones, after the other mods'. A
+/// They take the place of the mod's earlier ones, where those stood, so a
+/// control sent again keeps its place; a new mod goes after the others. A
 /// new mod past [`MAX_CARRIED_MODS`] is left out, so a server cannot grow the
 /// list without end.
 ///
@@ -222,28 +223,28 @@ impl Heard {
 /// ```
 #[must_use]
 pub fn carried_after(kept: &[Heard], id: &str, name: &str, controls: &[Carried]) -> Vec<Heard> {
+    let known = kept.iter().position(|h| h.mod_id == id);
     let mut list: Vec<Heard> = kept.iter().filter(|h| h.mod_id != id).cloned().collect();
     let mut mods: Vec<&str> = list.iter().map(|h| h.mod_id.as_str()).collect();
     mods.dedup();
-    if mods.len() >= MAX_CARRIED_MODS {
+    if known.is_none() && mods.len() >= MAX_CARRIED_MODS {
         return list;
     }
-    list.extend(controls.iter().map(|control| Heard {
+    // A mod's controls stand together, so its first one's place is free.
+    let at = known.unwrap_or(list.len());
+    let heard = controls.iter().map(|control| Heard {
         mod_id: id.to_owned(),
         mod_name: name.to_owned(),
         control: control.clone(),
-    }));
+    });
+    drop(list.splice(at..at, heard));
     list
 }
 
 /// `text` cut to at most `max` bytes at a character's edge.
 #[must_use]
 pub fn cut(text: &str, max: usize) -> &str {
-    let end = (0..=max.min(text.len()))
-        .rev()
-        .find(|&at| text.is_char_boundary(at))
-        .unwrap_or(0);
-    &text[..end]
+    &text[..text.floor_char_boundary(max)]
 }
 
 /// The bytes of a run's object after its arguments: flags, entity and the
@@ -464,13 +465,13 @@ impl Message {
                 let name = take(bytes)?.to_owned();
                 let (&count, rest) = bytes.split_first()?;
                 *bytes = rest;
-                if id.len() > MAX_CARRIED_TEXT
+                if !enshwick::abi::is_valid_id(&id)
                     || name.len() > MAX_CARRIED_TEXT
                     || usize::from(count) > MAX_CARRIED
                 {
                     return None;
                 }
-                let mut controls = Vec::with_capacity(usize::from(count));
+                let mut controls: Vec<Carried> = Vec::with_capacity(usize::from(count));
                 for _ in 0..count {
                     let (name, label, action) = (take(bytes)?, take(bytes)?, take(bytes)?);
                     let mut words = [0u32; 4];
@@ -487,7 +488,7 @@ impl Message {
                         fires: words[2],
                         hold_ms: words[3],
                     };
-                    if !control.is_valid() {
+                    if !control.is_valid() || controls.iter().any(|c| c.name == control.name) {
                         return None;
                     }
                     controls.push(control);

@@ -606,6 +606,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
             crate::saves::hosting_begins();
             // The client's own world runs every mod of its own.
             crate::host::back_on();
+            crate::controls::forget_carried();
         }
         STATE_RUN if old != STATE_RUN => {
             if loader.side == Side::CLIENT {

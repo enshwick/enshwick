@@ -227,7 +227,8 @@ impl Installed {
     /// are held together, as on a keyboard. Each control the rule of the
     /// [controls](crate::controls) brings down fires what the look decides.
     /// As in the loader, only a client reads keys: on a server nothing
-    /// fires. Returns how many calls the mod got.
+    /// fires, nor for a mod of side server on a client that does not
+    /// host. Returns how many calls the mod got.
     ///
     /// # Examples
     ///
@@ -242,7 +243,10 @@ impl Installed {
     #[must_use = "the count says whether a control fired"]
     pub fn keys(&self, down: &[Key], after: Duration) -> usize {
         let calls = with(Vec::new(), |s| {
-            if s.host.side != crate::abi::Side::CLIENT {
+            // In another's world a mod of side server fires on its server,
+            // which carries the control to the client.
+            let server_mod = s.manifest.as_ref().is_some_and(|m| !m.joins);
+            if s.host.side != crate::abi::Side::CLIENT || (server_mod && !s.host.hosting) {
                 return Vec::new();
             }
             let now = advance(&mut s.controls, after);

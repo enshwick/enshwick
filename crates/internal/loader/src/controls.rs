@@ -196,6 +196,9 @@ pub(crate) struct Spec<'a> {
     pub(crate) hold_ms: u32,
 }
 
+/// Seals the controls; on the client reads the player's keys and the screen
+/// gate, on every side the game actions linked controls follow and the
+/// carried controls' bound.
 pub(crate) fn link(loader: &Loader) {
     let declared = DECLARED.seal();
     if !declared.is_empty() {
@@ -455,6 +458,9 @@ thread_local! {
     };
 }
 
+/// Looks at the keys once, in the interface frame of the live interface
+/// context `context`, on the interface thread: the declared controls fire
+/// here, the carried ones run their action on the server.
 pub(crate) fn frame(context: usize) {
     let (Some(gate), Some(declared)) = (STATE.gate.get(), DECLARED.sealed()) else {
         return;
@@ -664,16 +670,17 @@ pub(crate) fn rows() -> Vec<Row> {
         .zip(&bound.keys)
         .enumerate()
         .filter(|(_, (d, _))| !carried_ids.contains(&d.id))
-        .map(|(index, (d, k))| Row {
-            index,
-            mod_id: d.mod_id().to_owned(),
-            mod_name: loader
-                .mods
-                .get(d.owner.get())
-                .map(crate::host::ModRecord::label)
-                .unwrap_or_default(),
-            label: d.label.clone(),
-            keys: *k,
+        .map(|(index, (d, k))| {
+            let record = loader.mods.get(d.owner.get());
+            Row {
+                index,
+                mod_id: d.mod_id().to_owned(),
+                mod_name: record
+                    .map(crate::host::ModRecord::label)
+                    .unwrap_or_default(),
+                label: record.map_or_else(|| d.label.clone(), |r| label_of(r, &d.label)),
+                keys: *k,
+            }
         });
     let carried = bound
         .carried
@@ -693,22 +700,38 @@ pub(crate) fn rows() -> Vec<Row> {
 /// Takes the server's controls of its mod `id`, named `name`, on the
 /// client: they replace the mod's earlier ones, with the player's keys from
 /// `mod-controls.toml`. A client that hosts the world runs the mod itself and
-/// takes none.
+/// takes none, and a mod this client runs of another side is its own.
 pub(crate) fn carry(id: &str, name: &str, controls: &[Carried]) {
     if crate::world::hosting() {
         return;
     }
-    let Some(declared) = DECLARED.sealed() else {
+    let (Some(declared), Some(loader)) = (DECLARED.sealed(), crate::host::loader()) else {
         return;
     };
+    if loader
+        .mods
+        .iter()
+        .any(|m| m.id == id && m.manifest.side != Side::SERVER)
+    {
+        return;
+    }
     let kept = STATE.kept.relock().clone().unwrap_or_default();
     let (overrides, _) = bindings::parse(&kept.to_string());
+    let mut changed = false;
     STATE.keys.rcu(|bound| {
         let bound = bound.as_ref()?;
         let carried = crate::remote::carried_after(&bound.carried, id, name, controls);
+        // The same controls sent again keep their trackers, so a held key
+        // does not press again.
+        changed = carried != bound.carried;
+        if !changed {
+            return Some(Arc::clone(bound));
+        }
         Some(Arc::new(with_carried(bound, declared, carried, &overrides)))
     });
-    crate::log!(INFO, "controls: the server carries the controls of {id}");
+    if changed {
+        crate::log!(INFO, "controls: the server carries the controls of {id}");
+    }
 }
 
 fn with_carried(
@@ -774,40 +797,30 @@ pub(crate) fn hello(key: u64) -> bool {
 /// One [`Message::Controls`] per running mod of side server with controls
 /// that run an action, its texts in the reader's language.
 fn carried_messages(loader: &Loader, declared: &[Declared]) -> Vec<Message> {
-    let language = crate::texts::language();
     let mut messages = Vec::new();
     for (index, record) in loader.mods.iter().enumerate() {
         if record.manifest.side != Side::SERVER
             || record.off.load(core::sync::atomic::Ordering::Acquire)
-            || record.id.len() > MAX_CARRIED_TEXT
         {
             continue;
         }
-        let name = record.label();
-        let texts = record.texts.relock();
         let controls: Vec<Carried> = declared
             .iter()
             .filter(|d| d.owner.get() == index && !d.action.is_empty())
             .take(MAX_CARRIED)
-            .map(|d| {
-                let label = texts
-                    .as_ref()
-                    .and_then(|t| t.get(&d.label, language))
-                    .unwrap_or(&d.label);
-                Carried {
-                    name: d.name.clone(),
-                    label: cut(label, MAX_CARRIED_TEXT).to_owned(),
-                    action: d.action.clone(),
-                    keys: d.defaults,
-                    fires: d.fires,
-                    hold_ms: d.hold_ms,
-                }
+            .map(|d| Carried {
+                name: d.name.clone(),
+                label: cut(&label_of(record, &d.label), MAX_CARRIED_TEXT).to_owned(),
+                action: d.action.clone(),
+                keys: d.defaults,
+                fires: d.fires,
+                hold_ms: d.hold_ms,
             })
             .collect();
         if !controls.is_empty() {
             messages.push(Message::Controls {
                 id: record.id.clone(),
-                name: cut(&name, MAX_CARRIED_TEXT).to_owned(),
+                name: cut(&record.label(), MAX_CARRIED_TEXT).to_owned(),
                 controls,
             });
         }
@@ -815,60 +828,93 @@ fn carried_messages(loader: &Loader, declared: &[Declared]) -> Vec<Message> {
     messages
 }
 
+/// A control's `label` in the reader's language: a key of its mod's texts,
+/// else as written.
+fn label_of(record: &crate::host::ModRecord, label: &str) -> String {
+    record
+        .texts
+        .relock()
+        .as_ref()
+        .and_then(|t| t.get(label, crate::texts::language()))
+        .unwrap_or(label)
+        .to_owned()
+}
+
 /// Whether the client reads mod keys on this build.
 pub(crate) fn keys_on() -> bool {
     STATE.gate.get().is_some() && !KEYS_FUSE.is_off()
 }
 
+/// Sets control `index`'s key in `slot` to `bits` (0 unbinds) and writes
+/// the player's file, keeping its entries for controls no running mod
+/// declares, a server's carried ones among them.
+///
+/// # Errors
+///
+/// The reason the file could not be written, or that it did not read at
+/// start, so writing would lose it; the key holds for this run.
 pub(crate) fn set_key(
     loader: &Loader,
     index: usize,
     slot: usize,
     bits: u32,
 ) -> Result<(), SetKeyError> {
-    let (Some(declared), Some(bound)) = (DECLARED.sealed(), STATE.keys.load_full()) else {
+    let Some(declared) = DECLARED.sealed() else {
         return Ok(());
     };
-    let carried = index
-        .checked_sub(declared.len())
-        .and_then(|at| bound.carried.get(at));
-    // A carried control this client declares too sets its own control's key.
-    let twin = carried.and_then(|heard| {
-        let id = heard.id();
-        declared.iter().position(|d| d.id == id)
-    });
-    let mut keys = bound.keys.clone();
-    for at in [Some(index), twin].into_iter().flatten() {
-        if let Some(slots) = keys.get_mut(at)
-            && let Some(key) = slots.get_mut(slot)
-        {
-            *key = bits;
-        }
-    }
     let changed = |defaults: [u32; 2], k: [u32; 2]| {
         let at = |slot: usize| (k[slot] != defaults[slot]).then_some(k[slot]);
         [at(0), at(1)]
     };
-    let entries: Vec<(String, bindings::Override)> = declared
-        .iter()
-        .zip(&keys)
-        .map(|(d, k)| (d.id.clone(), changed(d.defaults, *k)))
-        .collect();
-    let carried = carried
-        .filter(|_| twin.is_none())
-        .zip(keys.get(index).copied());
-    STATE.keys.store(Some(Arc::new(Bound {
-        keys,
-        carried: bound.carried.clone(),
-        carried_at: bound.carried_at,
-    })));
+    let mut entries: Vec<(String, bindings::Override)> = Vec::new();
+    let mut carried_set = None;
+    let mut bound_once = false;
+    // A server's message may change the carried list meanwhile, on the chat
+    // thread: this key goes on top of whatever list stands.
+    STATE.keys.rcu(|bound| {
+        let bound = bound.as_ref()?;
+        bound_once = true;
+        let carried = index
+            .checked_sub(declared.len())
+            .and_then(|at| bound.carried.get(at));
+        // A carried control this client declares too sets its own control's key.
+        let twin = carried.and_then(|heard| {
+            let id = heard.id();
+            declared.iter().position(|d| d.id == id)
+        });
+        let mut keys = bound.keys.clone();
+        for at in [Some(index), twin].into_iter().flatten() {
+            if let Some(slots) = keys.get_mut(at)
+                && let Some(key) = slots.get_mut(slot)
+            {
+                *key = bits;
+            }
+        }
+        entries = declared
+            .iter()
+            .zip(&keys)
+            .map(|(d, k)| (d.id.clone(), changed(d.defaults, *k)))
+            .collect();
+        carried_set = carried
+            .filter(|_| twin.is_none())
+            .zip(keys.get(index).copied())
+            .map(|(heard, k)| (heard.id(), changed(heard.control.keys, k)));
+        Some(Arc::new(Bound {
+            keys,
+            carried: bound.carried.clone(),
+            carried_at: bound.carried_at,
+        }))
+    });
+    if !bound_once {
+        return Ok(());
+    }
     let kept = {
         let mut kept = STATE.kept.relock();
         let Some(kept) = kept.as_mut() else {
             return Err(SetKeyError::Unread);
         };
-        if let Some((heard, k)) = carried {
-            bindings::set_kept(kept, &heard.id(), changed(heard.control.keys, k));
+        if let Some((id, set)) = &carried_set {
+            bindings::set_kept(kept, id, *set);
         }
         kept.clone()
     };

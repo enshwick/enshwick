@@ -181,13 +181,19 @@ fn controls(controls: Vec<Carried>) -> Message {
 
 #[test]
 fn a_server_s_controls_round_trip_up_to_their_bound() {
-    let most = controls(vec![
-        Carried {
-            label: "й".repeat(MAX_CARRIED_TEXT / 2),
-            ..horn()
-        };
-        MAX_CARRIED
-    ]);
+    let most = Message::Controls {
+        id: format!("{}.{}", "a".repeat(31), "b".repeat(32)),
+        name: "й".repeat(MAX_CARRIED_TEXT / 2),
+        controls: (0..MAX_CARRIED)
+            .map(|at| Carried {
+                name: format!("{at:0>32}"),
+                label: "й".repeat(MAX_CARRIED_TEXT / 2),
+                action: "a".repeat(32),
+                keys: [0x23, 0x24],
+                ..horn()
+            })
+            .collect(),
+    };
     assert!(most.body().len() + 2 <= crate::wire::MAX_CONTROL);
     for message in [controls(Vec::new()), controls(vec![horn()]), most] {
         assert_eq!(
@@ -206,11 +212,17 @@ fn a_client_refuses_a_server_s_controls_out_of_bounds() {
         label: long.clone(),
         ..horn()
     }])));
-    assert!(refused(Message::Controls {
-        id: long,
-        name: "Cars".into(),
-        controls: Vec::new(),
-    }));
+    for id in [long.as_str(), "", "you.cars:horn", "cars", "You.Cars"] {
+        assert!(
+            refused(Message::Controls {
+                id: id.into(),
+                name: "Cars".into(),
+                controls: Vec::new(),
+            }),
+            "{id:?} is no mod id"
+        );
+    }
+    assert!(refused(controls(vec![horn(), horn()])), "a name twice");
     for bad in [
         Carried {
             name: "Horn".into(),
@@ -244,8 +256,13 @@ fn a_mod_s_carried_controls_replace_its_earlier_ones_and_the_mods_are_bounded() 
     let kept = carried_after(&kept, "you.boats", "Boats", &[horn()]);
     let kept = carried_after(&kept, "you.cars", "Autos", &[lights]);
     let ids: Vec<String> = kept.iter().map(Heard::id).collect();
-    assert_eq!(ids, ["you.boats:horn", "you.cars:lights"]);
-    assert_eq!(kept[1].mod_name, "Autos");
+    assert_eq!(ids, ["you.cars:lights", "you.boats:horn"], "in its place");
+    assert_eq!(kept[0].mod_name, "Autos");
+    assert_eq!(
+        carried_after(&kept, "you.cars", "Autos", &[kept[0].control.clone()]),
+        kept,
+        "sent again, nothing moves"
+    );
     let mut full = Vec::new();
     for at in 0..MAX_CARRIED_MODS {
         full = carried_after(&full, &format!("mod{at}"), "M", &[horn()]);
