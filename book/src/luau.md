@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: A Luau mod is a data pack with scripts: pack.toml and main.luau in a folder, using the modules, names and types of the Rust API, with its differences listed.
+description: A Luau mod is a data pack with scripts: pack.toml and main.luau in a folder. It uses the Rust API's modules, names and types, with its differences listed.
 -->
 
 # Luau mods
@@ -258,8 +258,8 @@ Each mod has these budgets:
 | time per call | 10 ms per call into the scripts, 2 s for `main.luau` at start | the script stops; `pcall` cannot catch it |
 | time per second | 100 ms for all calls into the scripts within one second | the mod turns off |
 
-A server step takes about 50 ms. So a handler that runs on every step does
-little work each time and leaves the rest to a task.
+A server step takes about 50 ms. So a handler that runs on every step should do
+little work each time and leave the rest to a task.
 
 ## When a script fails
 

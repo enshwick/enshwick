@@ -1,11 +1,11 @@
 <!--
 type: tutorial
-description: Build a mod that adds a travel chest to Enshrouded, step by step: the item, its name in two languages, its recipe, and a setting for its cost.
+description: Build a mod that adds a travel chest to Enshrouded, step by step. It covers the item, its name in two languages, its recipe and a setting for its cost.
 -->
 
 # Your first real mod
 
-You build a mod that adds a travel chest. The chest is a new item with its
+You build a mod that adds a travel chest, a new item. The mod gives it its
 own name, a recipe and a setting for its cost. Each step shows the Rust
 code and the same step in Luau.
 

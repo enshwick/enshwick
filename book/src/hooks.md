@@ -136,11 +136,11 @@ has two flags, combined with `HookFlags(a.0 | b.0)`:
 
 A function that many places call often needs a change for one of them only.
 With `CALLER_FRAME`, the
-[`CallerFrame`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
+[`CallerFrame`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/hooks.rs)
 names the call site. Its `return_address()` reads the address the function
-returns to. A mod pins that address per build in its own rows. `stack()` is the caller's stack
-above the return address, and the callee-saved registers are as the caller had
-them, for reading its locals.
+returns to. A mod pins that address per build in its own rows. `stack()` is
+the caller's stack above the return address, and the callee-saved registers
+are as the caller had them, for reading its locals.
 
 ```rust
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -264,10 +264,10 @@ does with its `OFF` flag.
 
 ## One function, both halves of a mod
 
-A client that hosts a game runs the server's code. A `BOTH` mod may then link
-its server half and its client half in one process. When both halves need the same
-function, the mod still links it once: the loader refuses a second link of one
-mod on one function. Link one detour that answers for both, and skip the
+A client that hosts a game runs the server's code. So a `BOTH` mod may link
+its server half and its client half in one process. When both halves need the
+same function, the mod still links it once: the loader refuses a second link
+of one mod on one function. Link one detour that answers for both, and skip the
 other half's link.
 
 Some functions serve both worlds of a hosting client, the client's and the
