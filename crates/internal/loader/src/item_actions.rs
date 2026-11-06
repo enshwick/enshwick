@@ -569,6 +569,10 @@ static USES: Uses = Uses {
 fn watch(call: ItemAction, item: u32, count: u32, at: Instant) {
     let mut watched = USES.watched.relock();
     if watched.len() >= MAX_WATCHED {
+        crate::log!(
+            WARN,
+            "{MAX_WATCHED} item uses wait for the game already: this one raises no consumed"
+        );
         return;
     }
     watched.push(Use {
@@ -581,7 +585,8 @@ fn watch(call: ItemAction, item: u32, count: u32, at: Instant) {
 }
 
 /// The watched uses whose item the game took, read through `slot_now`,
-/// each taken stack paying one use; refused ones are let go.
+/// each item gone from a stack paying one use of its slot, oldest first;
+/// refused ones are let go.
 fn taken(
     at: Instant,
     mut slot_now: impl FnMut(&ItemAction) -> Option<(u32, u32)>,
@@ -591,28 +596,41 @@ fn taken(
     }
     let mut watched = USES.watched.relock();
     let mut done = Vec::new();
-    let mut i = 0;
-    while i < watched.len() {
-        let now = slot_now(&watched[i].call);
-        match watched[i].see(now, at) {
-            Seen::Waiting => i += 1,
-            Seen::Refused => {
-                watched.swap_remove(i);
+    // Per slot that went down this pass: what it holds now, and how many
+    // more of its watched uses the items gone from it pay.
+    let mut paying: Vec<(Use, (u32, u32), u32)> = Vec::new();
+    let mut kept = Vec::with_capacity(watched.len());
+    for mut used in core::mem::take(&mut *watched) {
+        if let Some((_, (item, count), more)) =
+            paying.iter_mut().find(|(paid, ..)| paid.same_slot(&used))
+        {
+            if *more > 0 {
+                *more -= 1;
+                done.push(used.call);
+            } else {
+                used.item = *item;
+                used.count = *count;
+                kept.push(used);
             }
-            Seen::Taken => {
-                let paid = watched.swap_remove(i);
-                // One stack that went down pays one use of its slot.
-                for other in watched.iter_mut().filter(|u| u.same_slot(&paid)) {
-                    if let Some((item, count)) = now {
-                        other.item = item;
-                        other.count = count;
-                    }
-                }
-                done.push(paid.call);
+            continue;
+        }
+        let now = slot_now(&used.call);
+        match (used.see(now, at), now) {
+            (Seen::Waiting, _) => kept.push(used),
+            (Seen::Taken, Some((item, count))) => {
+                let gone = if item == used.item {
+                    used.count - count
+                } else {
+                    used.count
+                };
+                paying.push((used, (item, count), gone.saturating_sub(1)));
+                done.push(used.call);
             }
+            _ => {}
         }
     }
-    USES.any.store(!watched.is_empty(), Ordering::Release);
+    USES.any.store(!kept.is_empty(), Ordering::Release);
+    *watched = kept;
     done
 }
 
@@ -778,6 +796,17 @@ mod tests {
         );
         let slots = |call: &ItemAction| Some(if call.slot == 0 { (7, 3) } else { (7, 1) });
         assert_eq!(taken(at, slots).len(), 2, "both stacks went down");
+        assert!(!USES.any.load(Ordering::Acquire));
+        // Two uses of one stack that the game ran in one step: down by two.
+        watch(drink(100, 0), 7, 5, at);
+        watch(drink(100, 0), 7, 5, at);
+        watch(drink(100, 0), 7, 5, at);
+        assert_eq!(
+            taken(at, |_| Some((7, 3))).len(),
+            2,
+            "two items gone, two uses"
+        );
+        assert_eq!(taken(at, |_| Some((0, 0))).len(), 1, "the stack went");
         assert!(!USES.any.load(Ordering::Acquire));
     }
 
