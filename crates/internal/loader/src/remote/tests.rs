@@ -223,6 +223,14 @@ fn a_client_refuses_a_server_s_controls_out_of_bounds() {
         );
     }
     assert!(refused(controls(vec![horn(), horn()])), "a name twice");
+    assert!(
+        refused(Message::Controls {
+            id: "you.cars".into(),
+            name: "x".repeat(MAX_CARRIED_TEXT + 1),
+            controls: Vec::new(),
+        }),
+        "a mod's name too long"
+    );
     for bad in [
         Carried {
             name: "Horn".into(),

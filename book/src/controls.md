@@ -240,7 +240,8 @@ last look, and fires each matching control, on a client only;
 `game_actions(&player, &held, after)` looks at the game actions the player
 holds as the server does once a step, and fires the linked controls. `FakeHost::bind(name, slot, key)` sets one of the player's
 keys, `FakeHost::side(Side::CLIENT)` makes the fake a client, which alone
-sends player actions,
+sends player actions, and a mod of side `server` reads keys there only with
+`FakeHost::hosting(true)`, as in a game the player hosts;
 `controls()` lists the controls with their keys in force, and
 `action_runs()` the actions a control sent the server, by its handler or by
 `.runs`.
