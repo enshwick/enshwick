@@ -113,7 +113,8 @@ pub use hooks::LinkedHook;
 pub use inventory::SubmittedRequest;
 #[cfg(feature = "typed")]
 pub use progression::{
-    PROGRESSION, QUEST_ITEM, VANILLA_PLAYER_KNOWLEDGE, VANILLA_QUEST, VANILLA_WORLD_KNOWLEDGE,
+    ATTRIBUTE_NODE, PROGRESSION, QUEST_ITEM, ROOT_NODE, SKILL_ROOM, VANILLA_PERK,
+    VANILLA_PLAYER_KNOWLEDGE, VANILLA_QUEST, VANILLA_WORLD_KNOWLEDGE,
 };
 pub use settings::SettingsRefused;
 pub use templates::{

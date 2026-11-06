@@ -153,6 +153,8 @@ mod server_controls;
 mod services;
 mod shapes;
 mod sides;
+#[cfg(feature = "typed")]
+mod skill_tree;
 mod skills;
 #[cfg(feature = "typed")]
 mod spawns;

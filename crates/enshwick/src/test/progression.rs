@@ -14,6 +14,21 @@ const PLAYER_OBJECT: &str = "demo::PlayerKnowledgeObjectResource";
 const JOURNAL: &str = "demo::JournalRegistryResource";
 const COLLECTION: &str = "demo::JournalCollectionResource";
 const QUEST: &str = "demo::JournalQuestResource";
+const TREE: &str = "demo::SkillTreeResource";
+const PERK: &str = "demo::Perk";
+const PERKS: &str = "demo::PerkCollectionResource";
+const UNLOCKS: &str = "demo::ecs::UnlockedSkillNodes";
+
+/// The unlocked nodes the fake's saves keep: room for two nodes beside its
+/// tree's two.
+pub const SKILL_ROOM: u32 = 4;
+/// The vanilla root of the fake's skill tree.
+pub const ROOT_NODE: u32 = 0x0000_0601;
+/// The vanilla attribute node linked from [`ROOT_NODE`].
+pub const ATTRIBUTE_NODE: u32 = 0x0000_0611;
+/// The vanilla perk the fake's perk collection lists.
+pub const VANILLA_PERK: Guid = Guid::parse("c0ffee00-0000-4000-8000-00000000be4c");
+
 /// Each player's quest progression component.
 pub const PROGRESSION: &str = "demo::ecs::PlayerQuestProgressionMode";
 
@@ -159,7 +174,167 @@ fn knowledge_types() -> Vec<Type<'static>> {
     types.extend(map("demo::WorldKnowledgeMap", WORLD_OBJECT));
     types.extend(map("demo::PlayerKnowledgeMap", PLAYER_OBJECT));
     types.extend(journal_types());
+    types.extend(skill_types());
     types
+}
+
+/// The skill tree, the perks and the saved unlocks, with the fields the
+/// fake keeps; a save keeps [`SKILL_ROOM`] unlocked nodes here.
+fn skill_types() -> Vec<Type<'static>> {
+    let field = Field::new;
+    let key = "demo::HashKey32";
+    vec![
+        Type::new("demo::uint16", Kind::Uint16, 2, 2),
+        Type::new("demo::float32", Kind::Float32, 4, 4),
+        named(
+            "demo::float2",
+            8,
+            4,
+            vec![
+                field("x", 0, "demo::float32"),
+                field("y", 4, "demo::float32"),
+            ],
+        ),
+        enumeration(
+            "demo::SkillNodeType",
+            &["Root", "Attribute", "ActiveSkill", "PassiveSkill"],
+        ),
+        blobs(key),
+        named(
+            "demo::SkillTreeNode",
+            40,
+            4,
+            vec![
+                field("id", 0, key),
+                field("uiPosition", 4, "demo::float2"),
+                field("name", 12, key),
+                field("description", 16, key),
+                field("incomingLinks", 20, "demo::BlobArray<demo::HashKey32>"),
+                field("outgoingLinks", 28, "demo::BlobArray<demo::HashKey32>"),
+                field("costs", 36, "demo::uint16"),
+                field("type", 38, "demo::SkillNodeType"),
+                field("maxLevel", 39, "demo::uint8"),
+            ],
+        ),
+        blobs("demo::SkillTreeNode"),
+        named(
+            "demo::SkillTreeNodeLink",
+            16,
+            4,
+            vec![
+                field("id", 0, key),
+                field("sourceNode", 4, key),
+                field("targetNode", 8, key),
+                field("isBidirectional", 12, "demo::bool"),
+            ],
+        ),
+        blobs("demo::SkillTreeNodeLink"),
+        named(
+            TREE,
+            16,
+            4,
+            vec![
+                field("nodes", 0, "demo::BlobArray<demo::SkillTreeNode>"),
+                field("links", 8, "demo::BlobArray<demo::SkillTreeNodeLink>"),
+            ],
+        ),
+        Type::new(
+            "demo::ObjectReference<demo::Text>",
+            Kind::ObjectReference,
+            16,
+            4,
+        ),
+        named(
+            PERK,
+            32,
+            4,
+            vec![
+                field("name", 0, "demo::ObjectReference<demo::Text>"),
+                field("description", 16, "demo::ObjectReference<demo::Text>"),
+            ],
+        ),
+        Type::new(
+            "demo::ObjectReference<demo::Perk>",
+            Kind::ObjectReference,
+            16,
+            4,
+        ),
+        blobs("demo::ObjectReference<demo::Perk>"),
+        named(
+            PERKS,
+            8,
+            4,
+            vec![field(
+                "perks",
+                0,
+                "demo::BlobArray<demo::ObjectReference<demo::Perk>>",
+            )],
+        ),
+        Type::new(
+            "demo::StaticArray<demo::HashKey32,4>",
+            Kind::StaticArray,
+            16,
+            4,
+        )
+        .with_inner(key)
+        .with_count(SKILL_ROOM),
+        named(
+            UNLOCKS,
+            20,
+            4,
+            vec![
+                field("initialized", 0, "demo::bool"),
+                field("knownSkillNodes", 4, "demo::StaticArray<demo::HashKey32,4>"),
+            ],
+        )
+        .with_inner("demo::ecs::Component"),
+    ]
+}
+
+/// The vanilla skill tree: [`ROOT_NODE`] at (0, 0) linked to
+/// [`ATTRIBUTE_NODE`] at (200, 0).
+fn tree_value() -> Value {
+    let node = |id: u32, x: f64, kind: &str, incoming: Vec<Value>, outgoing: Vec<Value>| {
+        fields(vec![
+            ("id", hash_key(id)),
+            (
+                "uiPosition",
+                fields(vec![("x", Value::Float(x)), ("y", Value::Float(0.0))]),
+            ),
+            ("name", hash_key(id + 1)),
+            ("description", hash_key(id + 2)),
+            ("incomingLinks", Value::List(incoming)),
+            ("outgoingLinks", Value::List(outgoing)),
+            ("costs", Value::Uint(1)),
+            ("type", Value::Name(kind.into())),
+            ("maxLevel", Value::Uint(0)),
+        ])
+    };
+    let link = 0x0000_0700;
+    fields(vec![
+        (
+            "nodes",
+            Value::List(vec![
+                node(ROOT_NODE, 0.0, "Root", Vec::new(), vec![hash_key(link)]),
+                node(
+                    ATTRIBUTE_NODE,
+                    200.0,
+                    "Attribute",
+                    vec![hash_key(link)],
+                    Vec::new(),
+                ),
+            ]),
+        ),
+        (
+            "links",
+            Value::List(vec![fields(vec![
+                ("id", hash_key(link)),
+                ("sourceNode", hash_key(ROOT_NODE)),
+                ("targetNode", hash_key(ATTRIBUTE_NODE)),
+                ("isBidirectional", Value::Bool(false)),
+            ])]),
+        ),
+    ])
 }
 
 /// An enum type of `constants`, one byte.
@@ -176,6 +351,10 @@ fn enumeration(name: &'static str, constants: &[&'static str]) -> Type<'static> 
 
 /// The journal and every type it holds, laid out as the game lays them out
 /// (server 387); its ids and text tags are `HashKey32`s here.
+#[expect(
+    clippy::too_many_lines,
+    reason = "a table of reflected types, one entry each"
+)]
 fn journal_types() -> Vec<Type<'static>> {
     let field = Field::new;
     let key = "demo::HashKey32";
@@ -467,7 +646,30 @@ impl FakeHost {
             let key = Guid::parse("33701b26-ec1d-423f-8e06-49f023b91b7f");
             host = host.resource(key.key_by_hash(hash(JOURNAL)), bytes);
         }
-        host.type_hash("GameKnowledgeResource", hash(KNOWLEDGE))
+        let perk = fields(vec![
+            ("name", Value::Guid(Guid([1; 16]))),
+            ("description", Value::Guid(Guid([2; 16]))),
+        ]);
+        let perks = fields(vec![(
+            "perks",
+            Value::List(vec![Value::Guid(VANILLA_PERK)]),
+        )]);
+        let served = [
+            // `content::skills::SKILL_TREE`, `VANILLA_PERK` and `PERK_COLLECTION`.
+            ("108ac23f-a77d-4f18-bfac-acc397edaaf0", TREE, tree_value()),
+            ("c0ffee00-0000-4000-8000-00000000be4c", PERK, perk),
+            ("bcaac92e-70bf-4fdb-8119-001678e7a616", PERKS, perks),
+        ];
+        for (guid, ty, value) in served {
+            if let Ok(bytes) = registry.encode(ty, &value, None) {
+                host = host.resource(Guid::parse(guid).key_by_hash(hash(ty)), bytes);
+            }
+        }
+        host.type_hash("SkillTreeResource", hash(TREE))
+            .type_hash("Perk", hash(PERK))
+            .type_hash("PerkCollectionResource", hash(PERKS))
+            .type_hash("ecs::UnlockedSkillNodes", hash(UNLOCKS))
+            .type_hash("GameKnowledgeResource", hash(KNOWLEDGE))
             .type_hash("JournalRegistryResource", hash(JOURNAL))
             .type_hash("ecs::PlayerQuestProgressionMode", hash(PROGRESSION))
             .type_size("ecs::PlayerQuestProgressionMode", 8)
@@ -491,5 +693,7 @@ mod tests {
         );
         let bytes = registry.encode(JOURNAL, &journal_value(), None).unwrap();
         assert_eq!(registry.decode(JOURNAL, &bytes).unwrap(), journal_value());
+        let bytes = registry.encode(TREE, &tree_value(), None).unwrap();
+        assert_eq!(registry.decode(TREE, &bytes).unwrap(), tree_value());
     }
 }

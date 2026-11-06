@@ -30,6 +30,8 @@ pub mod recipes;
 pub mod renames;
 mod script;
 #[cfg(feature = "typed")]
+pub mod skills;
+#[cfg(feature = "typed")]
 pub mod spawns;
 pub mod templates;
 pub mod vanilla;
