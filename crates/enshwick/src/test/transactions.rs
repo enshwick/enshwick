@@ -69,7 +69,11 @@ impl Installed {
     /// for a change's box fails instead, with the refusal, as the loader's
     /// rights check does at a transaction's first step; neither refuses a
     /// player at the commit. The fake keeps the bricks of each change's box as
-    /// undo data, and changes nothing it answers reads from.
+    /// undo data, and changes nothing it answers reads from. The voxels an
+    /// applied transaction writes over a box are raised as its mod's
+    /// [`Event::VOXELS_CHANGED`](crate::abi::Event::VOXELS_CHANGED) brick by
+    /// brick, against the fake's loaded voxels, and an undo raises them
+    /// back the same way.
     ///
     /// # Examples
     ///
@@ -79,8 +83,9 @@ impl Installed {
     /// assert!(loader.transactions().is_empty());
     /// ```
     pub fn run_transactions(&self) {
-        table::with((), |s| {
+        let written = table::with(Vec::new(), |s| {
             let host = &mut s.host;
+            let mut written = Vec::new();
             for transaction in &mut s.edits.transactions {
                 let refusal = transaction.refusal(host);
                 let bricks = transaction.bricks(host);
@@ -99,6 +104,10 @@ impl Installed {
                                 info.applied = info.ops;
                                 info.bricks = bricks;
                                 info.holds = 0;
+                                written.push((
+                                    transaction.owner,
+                                    voxels_written(host, transaction, false),
+                                ));
                             }
                             Err((reason, holds)) => {
                                 let info = &mut transaction.info;
@@ -118,6 +127,10 @@ impl Installed {
                                 info.applied = 0;
                                 info.bricks = 0;
                                 info.holds = 0;
+                                written.push((
+                                    transaction.owner,
+                                    voxels_written(host, transaction, true),
+                                ));
                             }
                             Err((reason, holds)) => {
                                 let info = &mut transaction.info;
@@ -132,7 +145,11 @@ impl Installed {
                     _ => {}
                 }
             }
+            written
         });
+        for (owner, changes) in written {
+            let _ran = self.raise_bricks(owner, &changes);
+        }
     }
 
     /// Makes the loader's next step meet `reason` for transaction `id`, as
@@ -330,4 +347,32 @@ impl FakeTransaction {
             .find(|&refusal| refusal != 0)
             .unwrap_or(0)
     }
+}
+
+/// The voxels `transaction`'s writes change against the fake's loaded
+/// voxels, or with `undo` the same changes put back.
+fn voxels_written(
+    host: &FakeHost,
+    transaction: &FakeTransaction,
+    undo: bool,
+) -> Vec<crate::abi::VoxelChange> {
+    transaction
+        .changes
+        .iter()
+        .filter_map(|change| match change {
+            FakeChange::Voxels { min, size, voxels } => Some(super::voxel_edits::written(
+                &host.voxels,
+                *min,
+                *size,
+                voxels,
+            )),
+            _ => None,
+        })
+        .flatten()
+        .map(|change| crate::abi::VoxelChange {
+            before: if undo { change.after } else { change.before },
+            after: if undo { change.before } else { change.after },
+            ..change
+        })
+        .collect()
 }

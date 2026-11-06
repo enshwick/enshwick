@@ -13,6 +13,8 @@
 //! past the editor's column grid reads as air with no error, so the loader
 //! refuses a box that leaves the grid, or rises above [`HEIGHT`], itself.
 
+pub(crate) mod changes;
+
 use enshwick::abi::{Status, Voxel};
 
 use crate::pinned;
@@ -20,6 +22,7 @@ use crate::pinned;
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::terrain::EDITOR.id(),
+    pinned::voxel::COMMIT.id(),
     pinned::voxel::FINEST_LEVEL.id(),
     pinned::voxel::GRIDS.id(),
     pinned::voxel::GRID_DEPTH.id(),

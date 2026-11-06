@@ -8225,3 +8225,18 @@ sides = ["server"]
 in = "~caller:~loader:resource.resolve"
 shape = ["lea rdx,[rbp-?]", "lea rcx,[rsp+?]", "call *"]
 take = "address"
+
+# The undo's edit kernel, the one the undo calls; like every edit kernel it
+# hands its box to the editor's commit (server 399 and 26430253).
+[[route]]
+id = "~undo_kernel"
+in = "voxel.undo_apply"
+shape = ["movsd [rsp+?],xmm0", "call *", "mov al,0x1"]
+take = "address"
+
+[[route]]
+id = "voxel.commit"
+in = "~undo_kernel"
+shape = ["call *", "mov bl,0x1"]
+take = "address"
+check = ["mov r11,rsp", "mov [r11+0x20],r9", "mov [r11+0x18],r8"]

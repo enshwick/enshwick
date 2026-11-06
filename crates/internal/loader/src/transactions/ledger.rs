@@ -325,6 +325,8 @@ pub(crate) struct Task {
     epoch: u64,
     mode: Mode,
     work: Work,
+    /// The mod whose transaction it is.
+    pub(crate) owner: ModIndex,
 }
 
 /// How a step's run of a task ended.

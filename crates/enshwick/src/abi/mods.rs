@@ -113,7 +113,7 @@ unsafe impl Sync for ModInfo {}
 /// assert_eq!(ModHandle::NONE, ModHandle(0));
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct ModHandle(pub usize);
 
 impl ModHandle {

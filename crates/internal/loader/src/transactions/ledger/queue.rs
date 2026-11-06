@@ -281,6 +281,7 @@ impl Ledger {
                 epoch: self.epoch,
                 mode,
                 work,
+                owner: self.records[index].owner,
             });
         }
         None

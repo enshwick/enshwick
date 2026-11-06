@@ -103,6 +103,7 @@ mod templates;
 mod ticks;
 mod transactions;
 mod ui;
+mod voxel_edits;
 mod world;
 
 pub use content::{LiveChange, ServedResource};

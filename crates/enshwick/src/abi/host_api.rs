@@ -610,8 +610,9 @@ pub struct HostApi {
     ) -> Status,
     /// Runs a terrain edit in the server's world as the game's terraforming
     /// does, and writes the volume it changed in cubic metres (for a
-    /// flatten, 1 when anything changed) to `amount`; clients see it and
-    /// the save keeps it. Building voxels are left alone.
+    /// flatten, 1 when anything changed) to `amount`; clients see it, and
+    /// the save keeps it inside a base's zone only. Building voxels are left
+    /// alone.
     /// [`Status::BAD_ARGS`] for an edit out of range;
     /// [`Status::OUTSIDE_WORLD`] for one that reaches past the world's edge
     /// or above the height the loader takes, [`Status::NOT_LOADED`] unless

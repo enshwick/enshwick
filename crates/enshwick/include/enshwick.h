@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 11
+#define ENSHWICK_ABI_MINOR 12
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -1183,6 +1183,14 @@ typedef uint32_t EnshwickEvent;
 // disk; no data. Raised on the game thread after the step that started
 // it. Server only. ABI 11.6.
 #define EnshwickEvent_WORLD_SAVING 22
+// The server's voxel editor wrote voxels of the world: a player's tool
+// or building, the game itself, or a mod's terrain edit, transaction
+// or undo; data is a `VoxelEditData`. One
+// event per write, which an undo or a transaction makes per brick of
+// 8 voxels; a write that changed nothing raises none. The name is
+// enshwick's. Raised on the game thread after the step. Server only.
+// ABI 11.12.
+#define EnshwickEvent_VOXELS_CHANGED 23
 
 // A mod event a mod defines, or the one it subscribes to.
 typedef struct EnshwickEventSpec {
@@ -3712,8 +3720,9 @@ typedef struct EnshwickHostApi {
                                       uint32_t *count);
   // Runs a terrain edit in the server's world as the game's terraforming
   // does, and writes the volume it changed in cubic metres (for a
-  // flatten, 1 when anything changed) to `amount`; clients see it and
-  // the save keeps it. Building voxels are left alone.
+  // flatten, 1 when anything changed) to `amount`; clients see it, and
+  // the save keeps it inside a base's zone only. Building voxels are left
+  // alone.
   // `Status::BAD_ARGS` for an edit out of range;
   // `Status::OUTSIDE_WORLD` for one that reaches past the world's edge
   // or above the height the loader takes, `Status::NOT_LOADED` unless
@@ -4959,6 +4968,47 @@ typedef struct EnshwickTickData {
   // and a client counts one more for each game it hosts after the first.
   uint64_t game;
 } EnshwickTickData;
+
+// One voxel a committed edit changed, as `VoxelEditData` lists it: where
+// it is and what it was and is.
+//
+// Its layout is frozen: `VoxelEditData` points at an array of it with no
+// entry size.
+typedef struct EnshwickVoxelChange {
+  // The voxel's place, in voxels from the world's corner.
+  uint32_t at[3];
+  // The voxel before the edit.
+  struct EnshwickVoxel before;
+  // The voxel after it.
+  struct EnshwickVoxel after;
+} EnshwickVoxelChange;
+
+// The data of `Event::VOXELS_CHANGED`: one
+// write of the server's voxel editor and the voxels it changed, borrowed
+// for the call that hands it over.
+//
+// The game writes a whole box, aligned to its bricks of 8 voxels and
+// larger than the edit, so `changes` lists only the voxels that differ
+// from the box as it was. Layout grows only by appending; read a later
+// field after `Header::covers`.
+typedef struct EnshwickVoxelEditData {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The mod whose call through the API made the edit, such as a
+  // transaction's write or a terrain edit; `ModHandle::NONE` for the
+  // game's own edits, a player's tools and buildings among them, and
+  // for the data packs the loader runs.
+  EnshwickModHandle by;
+  // The lowest corner of the box the game wrote, in voxels.
+  uint32_t min[3];
+  // The box's voxels along each axis.
+  uint32_t size[3];
+  // The voxels that changed, `count` of them, in the box's order: x
+  // fastest, then y, then z. Valid for the call only.
+  const struct EnshwickVoxelChange *changes;
+  // How many voxels changed, at least one.
+  uint64_t count;
+} EnshwickVoxelEditData;
 
 // A box of voxels, for `TransactionOp::ERASE`.
 typedef struct EnshwickVoxelRegion {
