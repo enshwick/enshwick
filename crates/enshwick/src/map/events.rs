@@ -77,6 +77,18 @@ fn inside(frame: Option<&super::MapFrame>, position: [f64; 3]) -> bool {
     })
 }
 
+/// Whether a mod hears `sender`'s ping at `now`, given when each sender was
+/// last heard; senders quiet for [`PING_GAP`] are forgotten, so the map
+/// holds only the last tenth of a second's.
+fn heard(last: &mut FxHashMap<Entity, Instant>, sender: Entity, now: Instant) -> bool {
+    last.retain(|_, then| now.duration_since(*then) < PING_GAP);
+    if last.contains_key(&sender) {
+        return false;
+    }
+    last.insert(sender, now);
+    true
+}
+
 #[crate::script(map_events)]
 impl Load<'_> {
     /// Calls `handler` on the server's game thread when a player sets,
@@ -193,15 +205,9 @@ impl Load<'_> {
             }
             drop(frame);
             let now = Instant::now();
-            let mut last = last.relock();
-            if last
-                .get(&entity)
-                .is_some_and(|then| now.duration_since(*then) < PING_GAP)
-            {
+            if !heard(&mut last.relock(), entity, now) {
                 return;
             }
-            last.insert(entity, now);
-            drop(last);
             handler(&MapPinged {
                 player: world.player(entity).map(|p| p.key),
                 entity,
@@ -226,5 +232,17 @@ mod tests {
         assert!(!inside(Some(&frame), [150.0, 0.0, 0.0]));
         assert!(!inside(Some(&frame), [0.0, 0.0, f64::NAN]));
         assert!(inside(None, [1e9, 0.0, 0.0]));
+    }
+
+    #[test]
+    fn a_sender_is_heard_once_a_tenth_of_a_second_and_quiet_senders_are_forgotten() {
+        let mut last = FxHashMap::default();
+        let start = Instant::now();
+        assert!(heard(&mut last, Entity(1), start));
+        assert!(!heard(&mut last, Entity(1), start + PING_GAP / 2));
+        assert!(heard(&mut last, Entity(2), start + PING_GAP / 2));
+        assert!(heard(&mut last, Entity(1), start + PING_GAP));
+        assert!(heard(&mut last, Entity(3), start + PING_GAP * 3));
+        assert_eq!(last.len(), 1, "only the sender heard last stays");
     }
 }
