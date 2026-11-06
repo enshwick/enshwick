@@ -388,7 +388,7 @@ impl FakeHost {
     pub fn player_input(self) -> Self {
         use crate::resources::{Constant, Kind, Type};
         let controls =
-            Type::new("keen::ecs::PlayerInputType", Kind::Enum, 1, 1).with_constants(vec![
+            Type::new("demo::ecs::PlayerInputType", Kind::Enum, 1, 1).with_constants(vec![
                 Constant::new("MainhandAction", 0),
                 Constant::new("ContextualAction", 5),
                 Constant::new("Block", 30),

@@ -353,7 +353,13 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // SAFETY: only the refusing filter wrote `reason`, a text it keeps
         // until its next call on this thread, which comes after this read.
         if let Some(text) = unsafe { reason.as_str() } {
-            crate::build_reasons::refused(filter.owner, player, text);
+            let server = crate::host::loader()
+                .is_some_and(|loader| loader.side == enshwick::abi::Side::SERVER)
+                // SAFETY: `system` is the cursor's system context, null or
+                // live, on the thread running that system (the caller's
+                // contract), all `is_world` asks for.
+                || unsafe { engine.is_world(system, crate::world::server_world()) };
+            crate::build_reasons::refused(filter.owner, player, text, server);
         }
         // SAFETY: `flags` is non-null (the null checks return first) and the
         // check's live `u32` flags word, which nothing else writes during the

@@ -98,9 +98,11 @@ fn now_ms() -> u64 {
 }
 
 /// Keeps mod `owner`'s refusal of `player`'s placement for `text`, on the
-/// cursor check's thread right after the filter returned.
+/// cursor check's thread right after the filter returned: a check in the
+/// `server` world for the notices, any other for the client's own HUD, so a
+/// hosting client shows only its own player's refusals.
 #[cold]
-pub(crate) fn refused(owner: ModIndex, player: u32, text: &str) {
+pub(crate) fn refused(owner: ModIndex, player: u32, text: &str, server: bool) {
     if text.is_empty() {
         return;
     }
@@ -109,8 +111,11 @@ pub(crate) fn refused(owner: ModIndex, player: u32, text: &str) {
         reason: Reason::new(owner, text),
         at_ms: now_ms(),
     };
-    if let Some(mut local) = STATE.local.try_relock() {
-        *local = Some(seen);
+    if !server {
+        if let Some(mut local) = STATE.local.try_relock() {
+            *local = Some(seen);
+        }
+        return;
     }
     let Some(mut slots) = STATE.seen.try_relock() else {
         return;
@@ -256,6 +261,27 @@ mod tests {
     fn the_same_reason_is_told_again_only_after_the_refusals_paused() {
         assert!(!due(&told("low", 5000, 9950), &seen("low", 9966)));
         assert!(due(&told("low", 5000, 9000), &seen("low", 10_500)));
+    }
+
+    #[test]
+    fn a_hosting_client_shows_only_its_own_worlds_refusals_and_tells_only_the_servers() {
+        refused(ModIndex::new(1), 40, "far player", true);
+        assert!(
+            STATE.local.relock().is_none(),
+            "the server world's check is not the HUD's"
+        );
+        assert_eq!(STATE.seen.relock().iter().flatten().count(), 1);
+        refused(ModIndex::new(1), 3, "own cursor", false);
+        let local = STATE
+            .local
+            .relock()
+            .map(|s| (s.player, s.reason.text().to_owned()));
+        assert_eq!(local, Some((3, "own cursor".to_owned())));
+        assert_eq!(
+            STATE.seen.relock().iter().flatten().count(),
+            1,
+            "a client world's entity never reaches the server's notices"
+        );
     }
 
     #[test]
