@@ -176,7 +176,7 @@ pub(crate) fn game_with_tables(containers: &[(&str, Guid)]) -> Vanilla {
     let at = collection.append(&guids, 8);
     assert!(collection.set_array(0, at, u32::try_from(containers.len()).unwrap()));
     data.insert(
-        super::super::workshops::TEMPLATE_COLLECTION.key_by_hash(HASHES.template_collection),
+        super::super::templates::TEMPLATE_COLLECTION.key_by_hash(HASHES.template_collection),
         collection.into_bytes(),
     );
     Vanilla::with_parts(

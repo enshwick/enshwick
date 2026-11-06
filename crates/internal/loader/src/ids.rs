@@ -60,6 +60,43 @@ pub(crate) enum DeclareIdError {
 #[derive(Debug, Default)]
 pub(crate) struct Ids {
     known: FxHashMap<(Space, u32), (Box<str>, Box<str>)>,
+    props: CraftingProps,
+}
+
+/// The crafting props mods add, in the order they were given their index:
+/// the game's own count and the mask's bits, from the first call, and each
+/// prop's GUID.
+#[derive(Debug, Default)]
+struct CraftingProps {
+    bounds: Option<(u8, u8)>,
+    added: Vec<Guid>,
+}
+
+/// Why the loader refuses a crafting prop's index.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum CraftingPropError {
+    /// The call's count of the game's props or the mask's bits differ from
+    /// the first call's.
+    #[error(
+        "crafting prop {prop}: the game's props and the mask read {first} and {width}, not {known_first} and {known_width} as before"
+    )]
+    Bounds {
+        prop: Guid,
+        first: u8,
+        width: u8,
+        known_first: u8,
+        known_width: u8,
+    },
+    /// Every bit of the mask is taken.
+    #[error(
+        "crafting prop {prop}: the game's {width}-bit crafting prop mask is full, {first} by the game and {added} by mods"
+    )]
+    Full {
+        prop: Guid,
+        first: u8,
+        width: u8,
+        added: usize,
+    },
 }
 
 impl Ids {
@@ -87,6 +124,47 @@ impl Ids {
                 Ok(())
             }
         }
+    }
+
+    /// The index of the crafting prop `prop` in a mask of `width` bits
+    /// whose first `first` the game's own props take: the next free one, or
+    /// the one `prop` was given before.
+    pub(crate) fn crafting_prop(
+        &mut self,
+        prop: Guid,
+        first: u8,
+        width: u8,
+    ) -> Result<u8, CraftingPropError> {
+        let props = &mut self.props;
+        let (known_first, known_width) = *props.bounds.get_or_insert((first, width));
+        if (first, width) != (known_first, known_width) {
+            return Err(CraftingPropError::Bounds {
+                prop,
+                first,
+                width,
+                known_first,
+                known_width,
+            });
+        }
+        let at = props
+            .added
+            .iter()
+            .position(|added| *added == prop)
+            .unwrap_or(props.added.len());
+        let index = u8::try_from(at)
+            .ok()
+            .and_then(|at| first.checked_add(at))
+            .filter(|index| *index < width)
+            .ok_or(CraftingPropError::Full {
+                prop,
+                first,
+                width,
+                added: props.added.len(),
+            })?;
+        if at == props.added.len() {
+            props.added.push(prop);
+        }
+        Ok(index)
     }
 
     /// Every content id, sorted, with its mod.
@@ -154,6 +232,21 @@ mod tests {
             why.contains("b:y of b") && why.contains("a:x of a"),
             "{why}"
         );
+    }
+
+    #[test]
+    fn crafting_props_take_the_bits_after_the_game_s_until_the_mask_is_full() {
+        let mut ids = Ids::default();
+        let prop = |n: u8| Guid([n; 16]);
+        assert_eq!(ids.crafting_prop(prop(1), 62, 64), Ok(62));
+        assert_eq!(ids.crafting_prop(prop(2), 62, 64), Ok(63));
+        assert_eq!(ids.crafting_prop(prop(1), 62, 64), Ok(62), "given before");
+        let full = ids.crafting_prop(prop(3), 62, 64).unwrap_err();
+        assert!(full.to_string().contains("64-bit"), "{full}");
+        assert!(matches!(
+            ids.crafting_prop(prop(4), 51, 64),
+            Err(CraftingPropError::Bounds { .. })
+        ));
     }
 
     #[test]

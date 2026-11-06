@@ -137,8 +137,8 @@ impl FakeHost {
     }
 
     /// Gives the game the reflected `types`, for
-    /// [`Registry::game`](crate::resources::Registry::game); a later call
-    /// replaces them.
+    /// [`Registry::game`](crate::resources::Registry::game), beside those of
+    /// earlier calls and presets; a type named again replaces the earlier one.
     ///
     /// # Examples
     ///
@@ -155,9 +155,13 @@ impl FakeHost {
         mut self,
         types: impl IntoIterator<Item = crate::resources::Type<'static>>,
     ) -> Self {
-        let types: Vec<_> = types.into_iter().collect();
+        for ty in types {
+            self.type_list
+                .retain(|held| held.qualified_name() != ty.qualified_name());
+            self.type_list.push(ty);
+        }
         self.types = Some(std::sync::Arc::new(crate::resources::TypeTable::new(
-            &types,
+            &self.type_list,
         )));
         self
     }

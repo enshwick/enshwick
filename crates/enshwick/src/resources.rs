@@ -36,6 +36,7 @@ pub use registry::Registry;
 pub use script::{Bytes, Resources};
 #[doc(hidden)]
 pub use table::TypeTable;
+pub(crate) use table::serve_value;
 pub use types::{Attribute, Constant, Field, Type, crc32, crc64, fnv1a32};
 pub use value::{Value, Variant};
 

@@ -569,6 +569,7 @@ impl Loader {
             event,
             Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
         ) && (crate::item_data::wanted()
+            || crate::weather::follows(self)
             || crate::stats::wanted()
             || crate::data_changes::wanted(self)
             || crate::rate_links::recipes_rated());
@@ -595,6 +596,7 @@ impl Loader {
             crate::data_changes::world_event(self, event);
             crate::rate_links::world_event(event);
             crate::chat_mute::world_event(self, event);
+            crate::weather::world_event(self, event);
         }
         let Some(delivery) = self.delivery.get() else {
             return;

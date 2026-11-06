@@ -177,6 +177,22 @@ pub enum Forecast {
     Any,
 }
 
+/// The most time left a front may have when the world saves for the game to
+/// restore it when the world loads again: 30 minutes of game time.
+///
+/// Measured on server build 26083076: fronts saved with up to 1795 s left
+/// came back, and ones saved with 1825 s left or more did not.
+///
+/// # Examples
+///
+/// ```
+/// use core::time::Duration;
+/// use enshwick::weather::MAX_RESTORED_REMAINING;
+///
+/// assert_eq!(MAX_RESTORED_REMAINING, Duration::from_mins(30));
+/// ```
+pub const MAX_RESTORED_REMAINING: Duration = Duration::from_mins(30);
+
 /// The weather of the server's world; get it from [`Load::weather`].
 ///
 /// # Examples
@@ -286,9 +302,12 @@ impl Weather {
     /// where a layer has them and clear skies elsewhere, for `lasting` of
     /// game time or the game's own for `None`; [`Forecast::Any`] lets the
     /// game pick anew. The game places the fronts itself, as for its own.
-    /// Clients follow, and the next save keeps it. Moving the clock forward
-    /// with [`Clock::set_hours`](crate::daytime::Clock::set_hours) uses up
-    /// the time the fronts have, and the game picks new ones.
+    /// Clients follow. A save keeps a front while it has at most
+    /// [`MAX_RESTORED_REMAINING`] left: after a restart the game picks anew
+    /// in a layer whose front had more, so a longer `lasting` logs a
+    /// warning and lasts only until the world next loads. Moving the clock
+    /// forward with [`Clock::set_hours`](crate::daytime::Clock::set_hours)
+    /// uses up the time the fronts have, and the game picks new ones.
     ///
     /// # Errors
     ///
@@ -307,6 +326,13 @@ impl Weather {
             Forecast::Blizzard => WeatherFront::BLIZZARD,
             Forecast::Any => u32::MAX,
         };
+        if let Some(lasting) = lasting.filter(|&lasting| lasting > MAX_RESTORED_REMAINING) {
+            crate::warn!(
+                "weather: fronts lasting {} s outlive no restart: a save keeps a front only while it has at most {} s left",
+                lasting.as_secs(),
+                MAX_RESTORED_REMAINING.as_secs()
+            );
+        }
         let duration = lasting.map_or(0, |d| {
             i64::try_from(d.as_nanos()).unwrap_or(i64::MAX).max(1)
         });

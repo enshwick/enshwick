@@ -24,7 +24,7 @@ use enshwick::abi::{HookFlags, Side, Status};
 use enshwick::raw::{read_at, read_bytes_at, read_ptr_at, write_at, write_bytes_at, write_ptr_at};
 use rustc_hash::FxHashMap;
 
-use crate::catalogue::types::UI_IMAGE;
+use crate::catalogue::types::{TEMPLATE, UI_IMAGE};
 use crate::chains::Next;
 use crate::host::{Loader, Target};
 use crate::locks::Relock;
@@ -76,6 +76,8 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 /// The listing handed back for the game's own array (its address and
 /// count): built once, as the game lists its UI images once or twice.
 static COMBINED: OnceLock<Combined> = OnceLock::new();
+/// The template listing handed back, as [`COMBINED`] is for UI images.
+static TEMPLATES: OnceLock<Combined> = OnceLock::new();
 
 /// The game's array, as its address and count, and the listing with the
 /// served keys after it.
@@ -267,9 +269,15 @@ pub(crate) fn ready() -> bool {
 }
 
 /// Links the content request, the key listing and the UI registry's fill
-/// on a client that serves UI images.
+/// on a client that serves UI images; on any side that serves templates of
+/// its own, the key listing alone, so the game registers them.
 pub(crate) fn link(loader: &'static Loader) {
-    if loader.side != Side::CLIENT || crate::content::new_keys_of_type(UI_IMAGE).is_empty() {
+    let images =
+        loader.side == Side::CLIENT && !crate::content::new_keys_of_type(UI_IMAGE).is_empty();
+    if !images {
+        if !crate::content::new_keys_of_type(TEMPLATE).is_empty() {
+            link_templates(loader);
+        }
         return;
     }
     let _first = LOADED.set(loader);
@@ -298,6 +306,36 @@ pub(crate) fn link(loader: &'static Loader) {
     );
     if linked {
         crate::log!(INFO, "mod textures: linked for the served UI images");
+    }
+}
+
+/// Links the key listing alone, for served templates, once its code and key
+/// size check out.
+fn link_templates(loader: &'static Loader) {
+    if !loader.code_holds(pinned::textures::KEYS) {
+        crate::log!(
+            WARN,
+            "mod templates off: {} is not the code the loader knows",
+            pinned::textures::KEYS
+        );
+        return;
+    }
+    if loader.offset(pinned::textures::KEY_SIZE) != Some(KEY) {
+        crate::log!(
+            WARN,
+            "mod templates off: this build's resource keys are not {KEY} bytes"
+        );
+        return;
+    }
+    let linked = loader.link_feature(
+        "mod templates (keys)",
+        Target::Pinned(pinned::textures::KEYS),
+        &KEYS_NEXT,
+        keys as KeysFn,
+        HookFlags::NONE,
+    );
+    if linked {
+        crate::log!(INFO, "mod templates: linked for the served templates");
     }
 }
 
@@ -501,13 +539,13 @@ unsafe extern "system" fn keys(
     // holds the next function of that signature; the game's arguments pass
     // unchanged.
     let result = unsafe { KEYS_NEXT.get()(out, database, type_hash, found) };
-    if type_hash != UI_IMAGE || out.is_null() {
+    if !(type_hash == UI_IMAGE || type_hash == TEMPLATE) || out.is_null() {
         return result;
     }
     let _done = TEXTURES_FUSE.run("the keys", || {
         // SAFETY: `out` is non-null by the check before it and is the hooked
         // listing's result, which the listing has just written.
-        unsafe { append(out) };
+        unsafe { append(out, type_hash) };
     });
     result
 }
@@ -532,7 +570,10 @@ unsafe fn hand_back(out: *mut KeysOut, keys: &'static [[u8; KEY]]) {
     unsafe { write_at(out, core::mem::offset_of!(KeysOut, status), 0u8) };
 }
 
-/// Hands back the listing with the served UI images after the game's own.
+/// Hands back the listing of `type_hash` with the served keys of that type
+/// after the game's own: UI images, which the client's UI registry lists, and
+/// templates, which every side registers once at start from this listing
+/// (server 399, checked live with a debugger).
 ///
 /// # Safety
 ///
@@ -541,7 +582,12 @@ unsafe fn hand_back(out: *mut KeysOut, keys: &'static [[u8; KEY]]) {
 /// - Its keys, when not null, are `count` readable keys of [`KEY`] bytes
 ///   that stay alive, as the game never frees the listing.
 /// - Called on the listing's thread, which alone touches `out` meanwhile.
-unsafe fn append(out: *mut KeysOut) {
+unsafe fn append(out: *mut KeysOut, type_hash: u32) {
+    let (combined, images) = if type_hash == UI_IMAGE {
+        (&COMBINED, true)
+    } else {
+        (&TEMPLATES, false)
+    };
     let result = out.cast_const().cast::<u8>();
     // SAFETY: the caller guarantees a live `KeysOut`, whose `keys` pointer
     // field sits at its `offset_of!`.
@@ -553,16 +599,16 @@ unsafe fn append(out: *mut KeysOut) {
     let count: u64 = unsafe { read_at(result, core::mem::offset_of!(KeysOut, count)) };
     let count = usize::try_from(count).unwrap_or(0);
     let original = (listed.addr(), count);
-    if let Some(&(from, keys)) = COMBINED.get()
+    if let Some(&(from, keys)) = combined.get()
         && from == original
     {
         // SAFETY: the caller guarantees `out` is live and writable, and
         // nothing else touches it during the call.
         unsafe { hand_back(out, keys) };
-        LISTED.store(true, Ordering::Release);
+        LISTED.fetch_or(images, Ordering::AcqRel);
         return;
     }
-    let extra = crate::content::new_keys_of_type(UI_IMAGE);
+    let extra = crate::content::new_keys_of_type(type_hash);
     if extra.is_empty() {
         return;
     }
@@ -585,11 +631,18 @@ unsafe fn append(out: *mut KeysOut) {
         }
     }
     let keys: &'static [[u8; KEY]] = Box::leak(keys.into_boxed_slice());
-    let _first = COMBINED.set((original, keys));
+    let _first = combined.set((original, keys));
     // SAFETY: the caller guarantees `out` is live and writable, and nothing
     // else touches it during the call.
     unsafe { hand_back(out, keys) };
-    LISTED.store(true, Ordering::Release);
+    LISTED.fetch_or(images, Ordering::AcqRel);
+    if !images {
+        crate::log!(
+            INFO,
+            "mod templates: {} listed for the game's template registry",
+            extra.len()
+        );
+    }
 }
 
 unsafe extern "system" fn fill(registry: *mut u8) {

@@ -99,6 +99,7 @@ mod saves;
 mod settings;
 mod stats;
 pub(crate) mod table;
+mod templates;
 mod ticks;
 mod transactions;
 mod ui;
@@ -108,6 +109,10 @@ pub use content::{LiveChange, ServedResource};
 pub use hooks::LinkedHook;
 pub use inventory::SubmittedRequest;
 pub use settings::SettingsRefused;
+pub use templates::{
+    BITE, BOSS_CREATURE, CRAFTING_PROP_ITEM, CREATURE, ENEMY, ENEMY_ARSENAL, HOWL, LUNGE, NEST,
+    OTHER_ARSENAL, PROP_ITEM, VANILLA_CRAFTING_PROPS,
+};
 pub use transactions::{FakeChange, FakeTransaction};
 pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 
@@ -313,6 +318,8 @@ pub struct FakeHost {
     archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     resources: FxHashMap<([u8; 16], u32, u32), Vec<u8>>,
     types: Option<std::sync::Arc<crate::resources::TypeTable>>,
+    /// The types of every [`FakeHost::types`] call, which `types` is built from.
+    type_list: Vec<crate::resources::Type<'static>>,
     /// The player's keys by control name, in place of the mod's defaults.
     #[cfg(feature = "unstable")]
     bindings: Vec<(String, usize, Option<crate::controls::Key>)>,
@@ -406,6 +413,7 @@ impl FakeHost {
             archive: std::collections::BTreeMap::new(),
             resources: FxHashMap::default(),
             types: None,
+            type_list: Vec::new(),
             #[cfg(feature = "unstable")]
             bindings: Vec::new(),
             game_version: None,

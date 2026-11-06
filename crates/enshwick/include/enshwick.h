@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 7
+#define ENSHWICK_ABI_MINOR 8
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -4686,6 +4686,21 @@ typedef struct EnshwickHostApi {
   // taking effect after the next step; `Status::BAD_ARGS` for another
   // `held`. A panic in the loader returns `Status::REFUSED`. ABI 11.6.
   EnshwickStatus (*hold_saves)(EnshwickModHandle me, uint8_t held);
+  // Gives the crafting prop `prop` its index in the game's crafting prop
+  // mask and writes it to `out`: `first`, the count of the game's own
+  // props, for the first prop any mod adds, then one more for each new
+  // prop in call order, and the same index again for a prop given one
+  // before. `Status::REFUSED` when the index would reach `width`, the
+  // mask's bits, which turns the mod off naming the prop;
+  // `Status::BAD_ARGS` for a null `prop` or a `first` and `width` other
+  // than the first call's. Allowed during `enshwick_mod_init` only
+  // (`Status::TOO_LATE` after); `prop` and `out` are borrowed for the
+  // call. A panic in the loader returns `Status::REFUSED`. ABI 11.8.
+  EnshwickStatus (*crafting_prop)(EnshwickModHandle me,
+                                  const uint8_t (*prop)[16],
+                                  uint8_t first,
+                                  uint8_t width,
+                                  uint8_t *out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

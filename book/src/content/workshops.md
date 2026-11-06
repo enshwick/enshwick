@@ -63,8 +63,8 @@ the station needs derives from it:
 `add_workshop` serves five resources, a sixth on the client, and with
 `recipe_cost` adds a recipe:
 
-1. the station's template, a copy of the vanilla one whose crafting
-   components (`Crafting`, `CraftingInteraction`,
+1. the station's template, an [entity template](templates.md) copied from the
+   vanilla one, whose crafting components (`Crafting`, `CraftingInteraction`,
    `ClientCraftingInteraction`) name the new workshop;
 2. the template collection with the new template listed;
 3. the station item, a clone of the vanilla station item that places the new
@@ -153,9 +153,10 @@ vanilla workshop's; see [The workshop limit](recipes.md#the-workshop-limit).
 
 ## Errors and removal
 
-`add_workshop` returns `Err(Off)` when a layout is not reflected. A vanilla station whose template lacks a crafting component,
-or whose item does not place `like.template`, is found out when the game
-first reads them, and turns the mod off then.
+`add_workshop` returns `Err(Off)` when a layout is not reflected or the
+vanilla station's template lacks a crafting component. A vanilla station
+whose item does not place `like.template` is found out when the game first
+reads it, and turns the mod off then.
 
 When the mod is removed, placed stations load as the vanilla station they
 were cloned from: see [Content](../content.md#when-a-mod-is-removed). The

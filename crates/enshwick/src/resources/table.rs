@@ -469,6 +469,41 @@ impl Host {
     }
 }
 
+/// Serves the resource `key`, built from the resource `base` the first time
+/// the game reads it: `patch` gets the base's value and returns the value to
+/// serve, which may name only the fields it changes; nil serves the base
+/// unchanged. A base that does not read, a patch that fails, or a value that
+/// does not fit the type is logged, and the base is served unchanged.
+pub(crate) fn serve_value(
+    host: Host,
+    key: crate::abi::ResourceKey,
+    base: crate::abi::ResourceKey,
+    patch: impl Fn(super::Value) -> Result<super::Value, Off> + Send + Sync + 'static,
+) -> Result<(), Off> {
+    let registry = Registry::game()?;
+    let name = registry
+        .hashed(base.type_hash)
+        .ok_or_else(|| Off::new("the base's type is not a type of this build"))?
+        .qualified_name();
+    crate::content::serve(host, key, base, move |bytes| {
+        let keep = |error: &dyn std::fmt::Display| {
+            host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
+            Some(bytes.to_vec())
+        };
+        let value = match registry.decode(name, bytes) {
+            Ok(value) => value,
+            Err(error) => return keep(&error),
+        };
+        match patch(value) {
+            Ok(super::Value::Nil) => Some(bytes.to_vec()),
+            Ok(edited) => registry
+                .encode(name, &edited, Some(bytes))
+                .map_or_else(|error| keep(&error), Some),
+            Err(error) => keep(&error),
+        }
+    })
+}
+
 /// Serves `value` as the new resource `key`, of the type its key names; the
 /// loader builds it from any vanilla resource of that type, whose bytes the
 /// value replaces.

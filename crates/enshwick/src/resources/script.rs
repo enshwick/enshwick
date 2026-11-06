@@ -651,28 +651,8 @@ impl Resources {
         patch: impl Fn(Data) -> Result<Data, Error> + Send + Sync + 'static,
     ) -> Result<(), Off> {
         let (key, base) = (Self::key_of(key)?, Self::key_of(base)?);
-        let registry = Registry::game()?;
-        let name = registry
-            .hashed(base.type_hash)
-            .ok_or_else(|| Off::new("the base's type is not a type of this build"))?
-            .qualified_name();
-        let host = self.host;
-        crate::content::serve(self.host, key, base, move |bytes| {
-            let keep = |error: &dyn std::fmt::Display| {
-                host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
-                Some(bytes.to_vec())
-            };
-            let value = match registry.decode(name, bytes) {
-                Ok(value) => value,
-                Err(error) => return keep(&error),
-            };
-            match patch(value) {
-                Ok(Data::Nil) => Some(bytes.to_vec()),
-                Ok(edited) => registry
-                    .encode(name, &edited, Some(bytes))
-                    .map_or_else(|error| keep(&error), Some),
-                Err(error) => keep(&error),
-            }
+        super::table::serve_value(self.host, key, base, move |value| {
+            patch(value).map_err(|error| Off::new(error.to_string()))
         })
     }
 }

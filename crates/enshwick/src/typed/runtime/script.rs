@@ -146,6 +146,42 @@ impl Row {
     pub fn through_script(&self, value: &Data) -> Result<Data, Off> {
         self.taken(self.shown(value)?)
     }
+
+    /// The generated component of id `id`, its parts joined by `.` or `::`.
+    pub(crate) fn component(id: &str) -> Result<&'static Self, Off> {
+        Self::find(id, "Component")
+    }
+
+    /// A script's table of every field of the type, as the codec writes it.
+    pub(crate) fn value_of(&self, fields: Value) -> Result<Data, Off> {
+        self.taken(Fields(fields))
+    }
+
+    /// `value` with the fields `fields` names replaced, the others kept: a
+    /// script's partial table over a value of the type.
+    pub(crate) fn overlaid(&self, value: &Data, fields: &Value) -> Result<Data, Off> {
+        let Fields(Value::Map(mut current)) = self.shown(value)? else {
+            return Err(Off::new(format!("typed {}: not a struct", self.id)));
+        };
+        let Value::Map(changes) = fields else {
+            return Err(Off::new(format!(
+                "typed {}: the fields to change are a table by field name",
+                self.id
+            )));
+        };
+        for (name, change) in changes {
+            match current.iter_mut().find(|(field, _)| field == name) {
+                Some((_, held)) => held.clone_from(change),
+                None => {
+                    return Err(Off::new(format!(
+                        "typed {}: {name:?} is no field of it",
+                        self.id
+                    )));
+                }
+            }
+        }
+        self.taken(Fields(Value::Map(current)))
+    }
 }
 
 /// A generated component type on the running build, as a script holds it.

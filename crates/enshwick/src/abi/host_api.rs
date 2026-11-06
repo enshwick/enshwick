@@ -1675,4 +1675,21 @@ pub struct HostApi {
     /// taking effect after the next step; [`Status::BAD_ARGS`] for another
     /// `held`. A panic in the loader returns [`Status::REFUSED`]. ABI 11.6.
     pub hold_saves: extern "system" fn(me: ModHandle, held: u8) -> Status,
+    /// Gives the crafting prop `prop` its index in the game's crafting prop
+    /// mask and writes it to `out`: `first`, the count of the game's own
+    /// props, for the first prop any mod adds, then one more for each new
+    /// prop in call order, and the same index again for a prop given one
+    /// before. [`Status::REFUSED`] when the index would reach `width`, the
+    /// mask's bits, which turns the mod off naming the prop;
+    /// [`Status::BAD_ARGS`] for a null `prop` or a `first` and `width` other
+    /// than the first call's. Allowed during `enshwick_mod_init` only
+    /// ([`Status::TOO_LATE`] after); `prop` and `out` are borrowed for the
+    /// call. A panic in the loader returns [`Status::REFUSED`]. ABI 11.8.
+    pub crafting_prop: extern "system" fn(
+        me: ModHandle,
+        prop: *const [u8; 16],
+        first: u8,
+        width: u8,
+        out: *mut u8,
+    ) -> Status,
 }

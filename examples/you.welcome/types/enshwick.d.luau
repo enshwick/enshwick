@@ -102,6 +102,8 @@ export type Altar = {
 	zone: CellBox,
 	--- Its vanilla zone at each level from 1 to the current one, each inside the next; empty while the level is unknown.
 	levels: {CellBox},
+	--- Its template, which names its kind: the vanilla altar's or one from `Load.add_flame_altar`; nil off the server's game thread.
+	template: string?,
 }
 
 --- How many altars a Flame level allows, as an altar limit filter sees it; see `Load.on_altar_limit`.
@@ -152,6 +154,16 @@ export type Apply = {
 export type Arg = {
 }
 
+--- A change of an arsenal: the attacks and behaviours it picks from, and the values of some of its attacks.
+export type ArsenalChange = {
+	--- The attacks, by GUID, each from any vanilla arsenal, in place of the arsenal's; nil keeps them.
+	attacks: {string}?,
+	--- The behaviours, by GUID, each from any vanilla arsenal, in place of the arsenal's; nil keeps them.
+	behaviors: {string}?,
+	--- Values of attacks the arsenal holds after the picks above.
+	tune: {AttackChange}?,
+}
+
 --- Who asks about an action, for its `at` and a list's players.
 export type Ask = {
 	--- The player, as `Ask.player` holds it.
@@ -160,6 +172,20 @@ export type Ask = {
 	language: (self: Ask) -> string,
 	--- The mod's text `key` in the player's language, filled with `values`, a list of `{ name, value }`, as `Ask.say` fills it.
 	say: (self: Ask, key: string, values: {{string}}) -> string,
+}
+
+--- New values of one attack of an arsenal; nil keeps a value.
+export type AttackChange = {
+	--- The attack, by GUID.
+	attack: string,
+	--- How likely an enemy picks it among the attacks that fit.
+	selection_chance: number?,
+	--- How much threat it causes.
+	threat: number?,
+	--- The nearest target it is used on, in metres.
+	min_range: number?,
+	--- The farthest target it is used on, in metres.
+	max_range: number?,
 }
 
 --- A value with its maximum on an item's own entity, as the item's slot shows it: its durability, or its meter (see `FuelSetup`). The name is enshwick's: the game's durability or fuel value with its maximum.
@@ -458,6 +484,16 @@ export type Comfort = {
 	position: vector,
 }
 
+--- A change of one component of a template: `set` it whole, `edit` the fields a table names, or neither to remove it.
+export type ComponentChange = {
+	--- The generated component type by its path in the typed API, such as `ecs.Faction`.
+	component: string,
+	--- The whole component as a table by its field names; added when the template lacks one.
+	set: any?,
+	--- The fields to change as a table by their names; the others keep their values.
+	edit: any?,
+}
+
 --- A generated component type on the running build: entities' components read and written as tables.
 export type ComponentType = {
 	--- `entity`'s component as a table by the generated struct's field names, on the game thread; nil when the entity has none, or off the game thread.
@@ -526,6 +562,12 @@ export type CraftRecipeSuccessEvent = {
 	workshop_id: number,
 	--- The recipe id.
 	recipe_id: number,
+}
+
+--- A crafting prop: placed in a base, it lets the base's workshops make the recipes that require it.
+export type CraftingPropSetup = {
+	--- The recipes, vanilla or added before `Load.add_prop`, that require the prop besides the props they require already.
+	recipes: {string}?,
 }
 
 --- How hard the shroud's curse hits. The loader reads the game's value of each variant by its constant's name.
@@ -612,6 +654,16 @@ export type Dropdown = {
 
 --- The edge of the screen an extension's panel sits at, centred along it.
 export type Edge = "Left" | "Right" | "Top" | "Bottom"
+
+--- A vanilla enemy, from `enemy`: its template, faction and arsenal.
+export type Enemy = {
+	--- The enemy's template.
+	template: string,
+	--- Its faction, when the template names one.
+	faction: typed_FactionType?,
+	--- Its arsenal.
+	arsenal: string,
+}
 
 --- A kind of entity data with a game data value per entity, from `entity_data`.
 export type EntityData = {
@@ -1062,6 +1114,14 @@ export type ItemsChange = {
 --- What a player does with an item; the names are the game's.
 export type Kind = "Consume" | "Trash" | "Equip" | "Unequip" | "Pickup" | "Place" | "Consumed"
 
+--- A Flame Altar kind's zone at one level, as an altar zone filter sets it: see `AltarZone`.
+export type KindZone = {
+	--- Cells added to the vanilla zone on every horizontal side, at least 0.
+	grow: number,
+	--- The zone's height in cells.
+	height: number,
+}
+
 --- The data of the `KnowledgeChanged` event.
 export type KnowledgeData = {
 	--- The player's character, or 0 for the world's knowledge.
@@ -1380,6 +1440,48 @@ export type Modifier = {
 	value: number,
 }
 
+--- A new arsenal for `Load.add_arsenal`: a copy of the vanilla arsenal `like` under `id`, with `change` applied.
+export type NewArsenal = {
+	--- The new arsenal's content id.
+	id: string,
+	--- The vanilla arsenal copied.
+	like: string,
+	--- What the copy changes.
+	change: ArsenalChange?,
+}
+
+--- A new enemy for `Load.add_enemy`: a copy of the vanilla enemy template `like` under `id`, with the values it gives set, then `changes` applied in order.
+export type NewEnemy = {
+	--- The new enemy's content id, its template's.
+	id: string,
+	--- The vanilla enemy template copied.
+	like: string,
+	--- Its level, from 1.
+	level: number?,
+	--- Its health at each level, about this times the vanilla enemy's.
+	health: number?,
+	--- The damage it deals, this times the vanilla enemy's.
+	damage: number?,
+	--- Its faction, which decides whom it fights.
+	faction: typed_FactionType?,
+	--- Its arsenal: a vanilla one or one from `Load.add_arsenal`.
+	arsenal: string?,
+	--- Whether it is a boss.
+	boss: boolean?,
+	--- Further changes of its components, applied after the values above.
+	changes: {ComponentChange}?,
+}
+
+--- A new Flame Altar kind for `Load.add_flame_altar`: a prop copied from a vanilla altar, with its own zone at each level.
+export type NewFlameAltar = {
+	--- The altar's item, a copy of a vanilla altar's item; its other ids derive from it as a prop's do.
+	item: NewItem,
+	--- Its zone at levels 1, 2 and on; a level past the list takes the last one, and an empty list keeps the vanilla zones.
+	zones: {KindZone}?,
+	--- With a cost, the altar is built by a copy of the vanilla altar's recipe whose ingredient counts are times this.
+	recipe_cost: number?,
+}
+
 --- A new item for `Load.add_item`.
 export type NewItem = {
 	--- The new item's id; its game id is `ItemId.from_guid` of its GUID.
@@ -1412,6 +1514,18 @@ export type NewPhenomenon = {
 	values: PhenomenonChange?,
 }
 
+--- A new prop type for `Load.add_prop`. The prop's item is `NewProp.item`; its other ids derive from the item's with `Id.part`: its template `<id>.template`, its recipe `<id>.recipe` and its crafting prop `<id>.crafting-prop`. So the item's id is a plain id, never one derived with `Id.part`. Every id is the mod's own and never changes: saves keep the template GUID of each placed prop.
+export type NewProp = {
+	--- The prop's item, a copy of a vanilla prop's item: what it looks like in the inventory and which template it copies.
+	item: NewItem,
+	--- The changes of the copied template's components, in order.
+	template: {ComponentChange}?,
+	--- With a cost, the prop is built by the recipe `<id>.recipe`, a copy of the vanilla prop's whose ingredient counts are times this, listed in the build menu after it; nil adds no recipe.
+	recipe_cost: number?,
+	--- Makes the prop a crafting prop.
+	crafting_prop: CraftingPropSetup?,
+}
+
 --- A new recipe for `Load.add_recipe`.
 export type NewRecipe = {
 	--- The new recipe's id; its game id is `RecipeId.from_guid` of its GUID.
@@ -1426,6 +1540,16 @@ export type NewRecipe = {
 	cost: number,
 	--- The workshop the recipe is made at, such as one from `Load.add_workshop`; nil keeps the copied recipe's.
 	workshop: string?,
+}
+
+--- A new entity template for `Load.add_template`: a copy of the vanilla template `like` under the mod's content id `id`, with `changes` applied in order. `id` is the mod's own and never changes: saves keep the template GUID of every placed object and creature made from it.
+export type NewTemplate = {
+	--- The new template's content id.
+	id: string,
+	--- The vanilla template copied.
+	like: string,
+	--- The changes of the copy's components, in order.
+	changes: {ComponentChange},
 }
 
 --- A new workshop for `Load.add_workshop`, named by one id. The station item is `id`; the station's other ids derive from it with `Id.part`: its template `<id>.template`, its workshop `<id>.workshop`, its recipe `<id>.recipe`, and the tags of its name and description, `<id>.name` and `<id>.description`. So `id` is a plain id, never one derived with `Id.part`, even when the same id written in full would fit. Every id is the mod's own and never changes: saves keep the template GUID of each placed station and the item id of each stack.
@@ -1613,6 +1737,16 @@ export type Prop = {
 	item: number,
 	--- Where it stands and which way it faces, its `CurrentTransform`.
 	transform: WorldTransform,
+}
+
+--- A prop type a mod added: its item, the template the item places, and its crafting prop when it is one.
+export type PropId = {
+	--- The prop's item, which `world.Prop.item` reports for every placed one.
+	item: number,
+	--- The template the item places.
+	template: string,
+	--- The crafting prop's GUID, for a crafting prop.
+	crafting_prop: string?,
 }
 
 --- Who asks for a survivor's entity, with what it works on. The name is enshwick's, not the game's.
@@ -2017,6 +2151,39 @@ export type Spawn = {
 	--- Whether the entity stays out of the world's save, as the game's own passing animals do: it is gone once the world loads again.
 	do_not_save: boolean?,
 }
+
+--- A template a spawner spawns, for `Load.add_spawn_entry`.
+export type SpawnEntry = {
+	--- The spawners that get the entry.
+	spawner: SpawnerPick,
+	--- The template spawned.
+	template: string,
+	--- How likely the spawner picks it, against the weights of its other entries, which are 1 in most vanilla spawners.
+	weight: number,
+	--- The spawn group it belongs to; nil for none.
+	group: string?,
+	--- The conditions it spawns under, such as only at night; nil for any.
+	conditions: {typed_ecs_SpawnCondition}?,
+}
+
+--- New counts and timeouts of a spawner, for `Load.change_spawner`; nil keeps a value.
+export type SpawnerChange = {
+	--- The fewest it spawns at once.
+	min_spawn_amount: number?,
+	--- The most it spawns at once.
+	max_spawn_amount: number?,
+	--- The most of its spawns alive at a time.
+	max_entities_alive: number?,
+	--- The most it spawns in all.
+	max_total_spawn_count: number?,
+	--- The shortest wait between spawns, in seconds.
+	min_spawn_timeout: number?,
+	--- The longest wait between spawns, in seconds.
+	max_spawn_timeout: number?,
+}
+
+--- The random spawners a change reaches.
+export type SpawnerPick = { Spawner: string } | { Listing: string }
 
 --- A stat kind from `define_stat` or `open_stat`, valid in this game process.
 export type Stat = {
@@ -2439,6 +2606,12 @@ export type ZoneSizes = {
 	--- Has the loader size the altar zones again on the server's next step, as when the mod's settings change what its filter answers. Any thread.
 	changed: (self: ZoneSizes) -> (),
 }
+
+--- The game's enum `ecs.SpawnCondition`, 1 byte.
+export type typed_ecs_SpawnCondition = "IsDay" | "IsNight" | { Other: any }
+
+--- The game's enum `FactionType`, 1 byte.
+export type typed_FactionType = "Environment" | "HitAll" | "Fogger" | "Vukah" | "Scavenger" | "Wildlife" | "WildBeast" | "Player" | "AutomatedPlayer" | "HitOthers" | "Skeleton" | "PlayerAlly" | "FarmAnimal" | "Cyclops" | "Drak" | "Ancients" | { Other: any }
 
 declare enshwick: {
 	--- Calls `handler` on every loader or typed game event named `event`, with its data; subscribe at the top level of main.luau. A game value the API does not name arrives as `Other(<number>)`, a name of ours.
@@ -3089,7 +3262,7 @@ declare enshwick: {
 		at: (position: vector) -> WeatherAt?,
 		--- The fronts now, one per weather layer that has one; empty off the game thread or while no world runs.
 		fronts: () -> {Front},
-		--- Starts new weather in every layer at once: fronts of the forecast where a layer has them and clear skies elsewhere, for `lasting` of game time or the game's own for nil; `Forecast.Any` lets the game pick anew. The game places the fronts itself, as for its own. Clients follow, and the next save keeps it. Moving the clock forward with `Clock.set_hours` uses up the time the fronts have, and the game picks new ones.
+		--- Starts new weather in every layer at once: fronts of the forecast where a layer has them and clear skies elsewhere, for `lasting` of game time or the game's own for nil; `Forecast.Any` lets the game pick anew. The game places the fronts itself, as for its own. Clients follow. A save keeps a front while it has at most `MAX_RESTORED_REMAINING` left: after a restart the game picks anew in a layer whose front had more, so a longer `lasting` logs a warning and lasts only until the world next loads. Moving the clock forward with `Clock.set_hours` uses up the time the fronts have, and the game picks new ones.
 		set: (forecast: Forecast, lasting: number?) -> (),
 		--- Calls `handler` when a front of the server's world starts and when it ends, about a second after, on the game thread; a mod gives the players inside its own weather a buff here. A panic in `handler` turns the mod off.
 		--- Only while the mod starts, at the top level of main.luau.
@@ -3169,6 +3342,9 @@ declare enshwick: {
 		--- As `Load.raise_base_limit`, up to `zones` altars a Flame level in up to `bases` bases; values below the game's own count as the game's, and the largest request of every mod holds. Bases past 16 need more of the game's code; where the loader cannot arm all of it, the game keeps 16 bases with the zones raised, which `base_limit` tells. A world lowers the bases below the request with `set_base_cap`. Unstable: needs the `unstable` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		request_base_limits: (zones: number, bases: number) -> boolean,
+		--- Adds a kind of Flame Altar, on the server and the client alike: a prop copied from the vanilla altar whose item is `item.like`, as `Load.add_prop` adds one, whose altars take the kind's zones through an altar zone filter of this mod, chained with other mods' filters in load order (see `Load.on_altar_zone`). `Altar.template` tells the kind's altars apart.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_flame_altar: (new: NewFlameAltar) -> PropId,
 	},
 	--- Mod items in random loot, and the game's loot passes.
 	loot: {
@@ -3255,6 +3431,10 @@ declare enshwick: {
 		loot_table: (name: string) -> LootTable,
 		--- The vanilla station item named `name` and the template it places.
 		station: (name: string) -> Station,
+		--- The vanilla template named `name`.
+		template: (name: string) -> string,
+		--- The vanilla enemy whose template is named `name`: its template, faction and arsenal.
+		enemy: (name: string) -> Enemy,
 		--- The workshop of the vanilla station item named `name`.
 		workshop: (name: string) -> string,
 		--- How many slots the container that `item` places holds; nil for an item that places none.
@@ -3318,6 +3498,30 @@ declare enshwick: {
 		--- Adds a crafting station with a workshop of its own, on the server and the client alike: the vanilla station's template and item cloned, the template crafting at the new workshop, the item placing the new template, both listed beside what other mods add, a crafting menu for the workshop on the client, and optionally a copy of the vanilla station's recipe that makes the new one. Recipes target the workshop with `NewRecipe.workshop` or `Derived.workshop`. When the mod is removed, the loader serves the vanilla template under the new one's GUID, so placed stations load as the vanilla station.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_workshop: (new: NewWorkshop) -> string,
+		--- Adds an entity template: a copy of the vanilla template `NewTemplate.like` under the mod's content id, its family, model and proxy model kept, with the changes applied in order, and lists it in the game's template collection. On the server and the client alike, so a mod that adds one is a both mod. When the mod is removed, the loader serves the vanilla template under the copy's GUID, so saved objects and creatures load as the vanilla one.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_template: (new: NewTemplate) -> string,
+		--- Changes the components of the vanilla template `template` in memory, the changes applied in order; mods that change one template change it in load order, each on the one before's result. Nothing is written to a save or the archive.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_template: (template: string, changes: {ComponentChange}) -> (),
+		--- Adds a prop type, on the server and the client alike: its item a copy of the vanilla prop's, placing `<id>.template`, a copy of the template the vanilla item places with `NewProp.template` applied; with a cost, a copy of the vanilla prop's recipe that builds it; and with `NewProp.crafting_prop`, a crafting prop the given recipes require. When the mod is removed, the loader serves the vanilla template under the copy's GUID, so placed props load as the vanilla one.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_prop: (new: NewProp) -> PropId,
+		--- Adds an enemy: a copy of the vanilla enemy template `NewEnemy.like` as `Load.add_template` makes it, with its level, health, damage, faction, arsenal and boss mark set where `NewEnemy` gives them, on the server and the client alike. Spawn it by its template, as spawners and `effects.spawn` do.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_enemy: (new: NewEnemy) -> string,
+		--- Adds an arsenal, listed beside the vanilla ones: a copy of the vanilla arsenal `NewArsenal.like` under the mod's content id, with its change applied. An enemy uses it through `NewEnemy.arsenal`.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_arsenal: (new: NewArsenal) -> string,
+		--- Changes the vanilla arsenal `arsenal` in memory, on the server and the client alike; mods that change one arsenal change it in load order, each on the one before's result.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_arsenal: (arsenal: string, change: ArsenalChange) -> (),
+		--- Adds `entry` to the random spawners it picks, after their own entries, on the server; mods that change one spawner change it in load order. The spawner picks it by its weight against the others'.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_spawn_entry: (entry: SpawnEntry) -> (),
+		--- Changes the counts and timeouts of the random spawners `spawner` picks, on the server; mods that change one spawner change it in load order.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_spawner: (spawner: SpawnerPick, change: SpawnerChange) -> (),
 		--- Serves `icon`'s UI image, built from the vanilla one it starts from when the client first shows it. `Load.add_item` does it for an item's icon.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_icon: (icon: Icon) -> (),

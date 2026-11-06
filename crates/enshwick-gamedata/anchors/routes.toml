@@ -4874,7 +4874,7 @@ take = "value"
 
 [[route]]
 id = "textures.key_size"
-sides = ["client"]
+sides = ["client", "server"]
 in = "textures.keys"
 shape = ["mov ecx,[r8+?]", "shl rax,*"]
 take = "value"
@@ -4882,7 +4882,7 @@ shift = true
 
 [[route]]
 id = "textures.keys"
-sides = ["client"]
+sides = ["client", "server"]
 in = "~loader:resource.key_of"
 shape = ["mov rcx,rsi", "lea rax,[rip+?]", "mov [rsi+?],rax", "lea rax,[rip+*]"]
 take = "address"

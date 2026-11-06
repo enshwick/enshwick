@@ -8,6 +8,7 @@ use crate::engine_ids as ids;
 use crate::locks::Relock;
 use crate::{Load, Off};
 
+use super::templates::{ComponentChange, NewTemplate};
 use super::{Blob, EngineFacts, Guid, Id, types};
 
 /// The meter templates the mod serves.
@@ -175,6 +176,38 @@ impl FuelSetup {
     pub fn start_fill(self) -> f32 {
         fill(self.start, self.max_fuel_charges)
     }
+
+    /// The change that gives the water pouch's template this meter: its
+    /// fuel setup holds the maximum and the starting fill, at the offsets
+    /// `facts` give.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the build lacks an offset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::id;
+    /// use enshwick::content::items::FuelSetup;
+    ///
+    /// let host = enshwick::test::FakeHost::new().meters();
+    /// let meter = FuelSetup { template: id!("charges"), max_fuel_charges: 4, start: 1 };
+    /// assert_eq!(meter.change(&host)?.component(), "fuel_setup");
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    pub fn change(self, facts: &(impl EngineFacts + ?Sized)) -> Result<ComponentChange, Off> {
+        let max = i32::from(self.max_fuel_charges).to_le_bytes();
+        let start = self.start_fill().to_le_bytes();
+        let (max_at, start_at) = (
+            facts.offset(ids::FUEL_SETUP_MAX)?,
+            facts.offset(ids::FUEL_SETUP_START)?,
+        );
+        Ok(ComponentChange::edit_bytes(ids::FUEL_SETUP, move |bytes| {
+            super::workshops::put(bytes, max_at, &max)
+                && super::workshops::put(bytes, start_at, &start)
+        }))
+    }
 }
 
 /// The fill that makes the game give an item `count` of `max`: the game
@@ -327,61 +360,10 @@ impl ItemLayout {
     }
 }
 
-/// Where the fields a [`FuelSetup`] template edit touches sit on the running
-/// build, resolved by the loader.
-///
-/// # Examples
-///
-/// See [`clone_meter_template`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MeterLayout {
-    /// A template's components.
-    pub components: usize,
-    /// The component that holds a meter's maximum and starting fill: its
-    /// size, then where the maximum and the fill sit.
-    pub fuel_setup: [usize; 3],
-    /// The hash of that component's type.
-    pub fuel_setup_type: u32,
-    /// The template collection's list of templates.
-    pub templates: usize,
-}
-
-impl MeterLayout {
-    /// The layout `facts` give.
-    ///
-    /// # Errors
-    ///
-    /// The first [`Off`] a fact returns, when the build lacks it.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let layout = enshwick::content::items::MeterLayout::resolve(load)?;
-    ///     assert!(layout.fuel_setup[0] > 0);
-    ///     Ok(())
-    /// }
-    /// ```
-    pub fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
-        Ok(Self {
-            components: facts.offset(ids::TEMPLATE_COMPONENTS)?,
-            fuel_setup: [
-                facts.size(ids::FUEL_SETUP)?,
-                facts.offset(ids::FUEL_SETUP_MAX)?,
-                facts.offset(ids::FUEL_SETUP_START)?,
-            ],
-            fuel_setup_type: facts.hash(ids::FUEL_SETUP)?,
-            templates: facts.offset(ids::TEMPLATE_COLLECTION_TEMPLATES)?,
-        })
-    }
-}
-
 /// A GUID reference in a blob.
 const REFERENCE: usize = 16;
 /// A blob string header.
 const BLOB_STRING: usize = 8;
-/// A `BlobVariant`: type hash, offset from its second word, size.
-const VARIANT: usize = 12;
 
 /// `item`'s item data under `guid`, its own or a former one, made from the
 /// vanilla one in `like` with its id, object GUID, tags, meter and lines.
@@ -453,88 +435,6 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
         info.grow_array(layout.ui_values, size, 4, &[], &rows)?;
     }
     written.then(|| info.into_bytes())
-}
-
-/// A [`FuelSetup`]'s entity template, cloned from the water pouch's in
-/// `template`: its fuel setup holds the meter's maximum and starting fill.
-/// `None` when the template has no fuel setup of the layout's size.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::content::{Blob, Guid};
-/// use enshwick::content::items::{FuelSetup, MeterLayout, clone_meter_template};
-///
-/// let layout = MeterLayout {
-///     components: 0, fuel_setup: [0x28, 0x20, 0x24], fuel_setup_type: 7, templates: 0,
-/// };
-/// // One component: a fuel setup of 0x28 bytes right after its variant.
-/// let mut template = vec![8, 0, 0, 0, 1, 0, 0, 0];
-/// template.extend_from_slice(&7u32.to_le_bytes());
-/// template.extend_from_slice(&8u32.to_le_bytes());
-/// template.extend_from_slice(&0x28u32.to_le_bytes());
-/// template.extend_from_slice(&[0; 0x28]);
-/// let meter = FuelSetup { template: enshwick::content::id!("charges"), max_fuel_charges: 3, start: 3 };
-/// let clone = Blob::new(&clone_meter_template(&layout, &template, &meter).ok_or("no fuel setup")?);
-/// assert_eq!(clone.read_u32(20 + 0x20), Some(3));
-/// # Ok::<(), &str>(())
-/// ```
-#[must_use]
-pub fn clone_meter_template(
-    layout: &MeterLayout,
-    template: &[u8],
-    meter: &FuelSetup,
-) -> Option<Vec<u8>> {
-    let mut blob = Blob::new(template);
-    let (start, count) = blob.array(layout.components)?;
-    let [expected, max_at, fill_at] = layout.fuel_setup;
-    for variant in (0..usize::try_from(count).ok()?).map(|i| start + i * VARIANT) {
-        if blob.read_u32(variant)? != layout.fuel_setup_type {
-            continue;
-        }
-        let data = (variant + 4).checked_add(usize::try_from(blob.read_u32(variant + 4)?).ok()?)?;
-        let size = usize::try_from(blob.read_u32(variant + 8)?).ok()?;
-        if size != expected {
-            return None;
-        }
-        let max = i32::from(meter.max_fuel_charges);
-        let written = blob.write(data + max_at, &max.to_le_bytes())
-            && blob.write(data + fill_at, &meter.start_fill().to_le_bytes());
-        return written.then(|| blob.into_bytes());
-    }
-    None
-}
-
-/// The template collection with `template` listed after the others.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::content::{Blob, Guid};
-/// use enshwick::content::items::{MeterLayout, list_meter_template};
-///
-/// let layout = MeterLayout {
-///     components: 0, fuel_setup: [0x28, 0x20, 0x24], fuel_setup_type: 7, templates: 0,
-/// };
-/// let collection = list_meter_template(&layout, &[0; 8], Guid([7; 16])).ok_or("no list")?;
-/// assert_eq!(Blob::new(&collection).array(0).map(|(_, n)| n), Some(1));
-/// # Ok::<(), &str>(())
-/// ```
-#[must_use]
-pub fn list_meter_template(
-    layout: &MeterLayout,
-    collection: &[u8],
-    template: Guid,
-) -> Option<Vec<u8>> {
-    let mut blob = Blob::new(collection);
-    blob.grow_array(
-        layout.templates,
-        REFERENCE,
-        4,
-        &[],
-        &[(template.0.to_vec(), None)],
-    )?;
-    Some(blob.into_bytes())
 }
 
 /// The item registry with `guid` listed after the others, and its debug name
@@ -699,16 +599,9 @@ impl Load<'_> {
                 None => served.push(meter),
             }
             drop(served);
-            let layout = MeterLayout::resolve(self)?;
-            self.serve(
-                meter.template.key(types::TEMPLATE_RESOURCE)?,
-                METER_TEMPLATE_BASE.key(types::TEMPLATE_RESOURCE)?,
-                move |base| clone_meter_template(&layout, base, &meter),
-            )?;
-            let collection =
-                super::workshops::TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION_RESOURCE)?;
-            self.serve(collection, collection, move |base| {
-                list_meter_template(&layout, base, meter.template.guid())
+            self.add_template(NewTemplate {
+                changes: vec![meter.change(self)?],
+                ..NewTemplate::new(meter.template, METER_TEMPLATE_BASE)
             })?;
         }
         Ok(())
@@ -837,39 +730,6 @@ mod tests {
                 );
             }
         }
-    }
-
-    #[test]
-    fn a_meter_template_holds_the_maximum_and_the_start() {
-        let layout = MeterLayout {
-            components: 0,
-            fuel_setup: [0x28, 0x20, 0x24],
-            fuel_setup_type: 7,
-            templates: 0,
-        };
-        let mut template = vec![8, 0, 0, 0, 2, 0, 0, 0];
-        // A first component of another type, then the fuel setup.
-        for (hash, offset, size) in [(0x1234_u32, 20u32, 4u32), (7, 12, 0x28)] {
-            template.extend_from_slice(&hash.to_le_bytes());
-            template.extend_from_slice(&offset.to_le_bytes());
-            template.extend_from_slice(&size.to_le_bytes());
-        }
-        template.extend_from_slice(&[0; 4 + 0x28]);
-        let meter = FuelSetup {
-            template: TEMPLATE_ID,
-            max_fuel_charges: 5,
-            start: 2,
-        };
-        let clone = Blob::new(&clone_meter_template(&layout, &template, &meter).unwrap());
-        let setup = 20 + 4 + 12;
-        assert_eq!(clone.read_u32(setup + 0x20), Some(5));
-        assert_eq!(clone.read_u32(setup + 0x24), Some(0.4f32.to_bits()));
-
-        let wrong = MeterLayout {
-            fuel_setup: [0x30, 0x20, 0x24],
-            ..layout
-        };
-        assert!(clone_meter_template(&wrong, &template, &meter).is_none());
     }
 
     #[test]

@@ -95,8 +95,10 @@ start that kind of front in every layer that has one and clear skies in the
 others, `Forecast::Clear` clears every layer, and `Forecast::Any` lets the
 game pick anew. The game places the fronts itself, so a front may lie away
 from the players. `lasting` is how long, in game time, or the game's own
-for `None`; then the game goes on as usual. Clients follow, and the next save
-keeps it.
+for `None`; then the game goes on as usual. Clients follow. A save keeps a
+front only while it has at most 30 minutes left (`MAX_RESTORED_REMAINING`):
+after a restart the game picks anew in a layer whose front had more, so a
+longer `lasting` logs a warning and lasts only until the world next loads.
 
 ## Adding and changing phenomena
 

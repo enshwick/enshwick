@@ -498,6 +498,45 @@ pub(crate) extern "system" fn declare_content(
     })
 }
 
+pub(crate) extern "system" fn crafting_prop(
+    me: ModHandle,
+    prop: *const [u8; 16],
+    first: u8,
+    width: u8,
+    out: *mut u8,
+) -> Status {
+    entry("crafting_prop", || {
+        let (loader, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if loader.delivery.get().is_some() {
+            return Status::TOO_LATE;
+        }
+        // SAFETY: `HostApi::crafting_prop` has the mod pass `prop` null or
+        // pointing at a readable `[u8; 16]` for the call; `as_ref` turns
+        // away null.
+        let Some(&prop) = (unsafe { prop.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        let prop = enshwick::content::Guid(prop);
+        match crate::ids::with(|ids| ids.crafting_prop(prop, first, width)) {
+            // SAFETY: `HostApi::crafting_prop` has the mod pass `out` null or
+            // pointing at a writable `u8` that no other thread touches
+            // during the call.
+            Ok(at) => unsafe { put(out, at) },
+            Err(why @ crate::ids::CraftingPropError::Bounds { .. }) => {
+                crate::log!(WARN, "{why}");
+                Status::BAD_ARGS
+            }
+            Err(why) => {
+                loader.turn_off(index, &why.to_string());
+                Status::REFUSED
+            }
+        }
+    })
+}
+
 pub(crate) extern "system" fn use_content(me: ModHandle, id: Str) -> Status {
     entry("use_content", || {
         let (loader, _, record) = match calling(me) {
