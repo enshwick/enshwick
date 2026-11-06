@@ -137,8 +137,8 @@ has two flags, combined with `HookFlags(a.0 | b.0)`:
 A function that many places call often needs a change for one of them only.
 With `CALLER_FRAME`, the
 [`CallerFrame`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
-names the call site: `return_address()` reads the address the function returns
-to, which a mod pins per build in its own rows. `stack()` is the caller's stack
+names the call site. Its `return_address()` reads the address the function
+returns to. A mod pins that address per build in its own rows. `stack()` is the caller's stack
 above the return address, and the callee-saved registers are as the caller had
 them, for reading its locals.
 
@@ -222,7 +222,7 @@ enshwick::declare_mod!(MyMod);
 mod's hooks and handlers instead.
 
 State that changes while the game runs, such as settings applied by
-`on_settings`, goes in atomics or an `ArcSwap` instead; see
+`on_settings`, goes in atomics or an `ArcSwap` instead. See
 [Code in the game's frame](game-frame.md).
 
 ## Panics
@@ -234,8 +234,8 @@ its links. The game runs vanilla where the mod was and never crashes for it.
 The game's function runs once at most. `next.call` keeps what the rest of the
 chain returned. When the body panics before calling it, the call goes on to
 the rest of the chain with the arguments the game passed. When the body
-panics after, the detour returns the kept value and the chain does not run
-again, so a destroy, a grant or a hit never happens twice.
+panics after, the detour returns the kept value, and the chain does not run
+again. A destroy, a grant or a hit never happens twice.
 
 ```rust
 # use std::sync::atomic::{AtomicU32, Ordering};
@@ -254,7 +254,7 @@ fn raise(next: enshwick::Next<'_, extern "system" fn(u32) -> u32>, level: u32) -
 ```
 
 A hardware fault is not a panic. An access violation in a mod's code is not
-caught: the game crashes, and the crash file names the mod
+caught, and the game crashes. The crash file names the mod
 ([The life of a mod](concepts/lifecycle.md), [FAQ](faq.md)).
 
 A panic is a last resort, not error handling. A hook that can fail returns to
@@ -264,8 +264,8 @@ does with its `OFF` flag.
 
 ## One function, both halves of a mod
 
-A client that hosts a game runs the server's code, so a `BOTH` mod may link its
-server half and its client half in one process. When both halves need the same
+A client that hosts a game runs the server's code. A `BOTH` mod may then link
+its server half and its client half in one process. When both halves need the same
 function, the mod still links it once: the loader refuses a second link of one
 mod on one function. Link one detour that answers for both, and skip the
 other half's link.

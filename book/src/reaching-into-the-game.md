@@ -73,7 +73,7 @@ same hook, ask for a call.
 | [Code patches](code-patches.md) | rewrites bytes of the game's code | as for a mid-function hook |
 
 [Finding the game](finding-the-game.md) shows how a mod asks the loader for
-a function, a field or a value by name, so it never holds an address.
+a function, a field or a value by name. The mod never holds an address.
 [Code in the game's frame](game-frame.md), [Pacing and threads](pacing.md)
 and [ECS inside systems](ecs.md) cover what code inside the game's frame
 may do.
@@ -88,5 +88,5 @@ It reads and writes the game's types and resources as values, through
 A lookup that finds nothing returns `Off`: the mod stays off, and the game
 runs vanilla where it would have acted. A panic in a hook turns only that
 mod off. A hook with the wrong type, or a patch that writes the wrong
-bytes, can crash the game, and the crash file names the mod
+bytes, can crash the game. The crash file names the mod
 ([The life of a mod](concepts/lifecycle.md)).
