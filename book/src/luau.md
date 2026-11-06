@@ -235,8 +235,8 @@ A script reaches the game only through `enshwick`. The globals and the
 scripts.
 
 A script has Luau's own libraries for tables, strings, UTF-8, bits, math,
-buffers, vectors and coroutines. The clock is `os.clock`,
-`os.time` and `os.date`. A script has nothing that starts processes or
+buffers, vectors and coroutines. Of the `os` library it
+has the clock, time and date functions. A script has nothing that starts processes or
 loads compiled code.
 
 A script reads only its own folder, with `enshwick.mods.read`. It writes

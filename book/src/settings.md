@@ -127,8 +127,8 @@ exists.
 
 On the struct itself, `text = "key"` names the key of the set's title,
 `config` by default. `validate = path` names a check of your
-own. It is a `fn(&Self) -> Result<(), E>` for any `E` that implements
-`Display`.
+own. It is a `fn(&Self) -> Result<(), E>`, and its error type
+implements `Display`.
 
 ## Groups
 
