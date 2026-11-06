@@ -165,25 +165,31 @@ pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
         .and_then(|o| o.checked_mul(256))
         .map_or(0, |o| o | feature as u32);
     let outer = RUNNING.replace(marker);
-    let result = if is_pack(owner) {
-        // SAFETY: `API` is the loader's process-wide table, a static.
-        unsafe {
-            enshwick::__private::as_pack(&raw const crate::host::API, owner.handle(), || {
-                measured(owner, feature, f)
-            })
-        }
-    } else {
-        measured(owner, feature, f)
-    };
+    let result = as_owner(owner, || measured(owner, feature, f));
     RUNNING.set(outer);
     result
 }
 
-/// Whether mod `owner` is a data pack.
-fn is_pack(owner: ModIndex) -> bool {
-    crate::host::loader()
+/// Runs `f` with `owner` as the host of the loader's own copy of the API
+/// when `owner` is a data pack, which that copy runs.
+#[cfg(windows)]
+#[inline]
+fn as_owner<R>(owner: ModIndex, f: impl FnOnce() -> R) -> R {
+    let pack = crate::host::loader()
         .and_then(|loader| loader.mods.get(owner.get()))
-        .is_some_and(|record| record.pack)
+        .is_some_and(|record| record.pack);
+    if !pack {
+        return f();
+    }
+    // SAFETY: `API` is the loader's process-wide table, a static.
+    unsafe { enshwick::__private::as_pack(&raw const crate::host::API, owner.handle(), f) }
+}
+
+/// Runs `f`: no mod runs off Windows.
+#[cfg(not(windows))]
+#[inline]
+fn as_owner<R>(_owner: ModIndex, f: impl FnOnce() -> R) -> R {
+    f()
 }
 
 /// Runs `f`, timed in `owner`'s bucket for `feature` while timing is on.
