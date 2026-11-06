@@ -706,30 +706,29 @@ pub(crate) fn carry(id: &str, name: &str, controls: &[Carried]) {
     STATE.keys.rcu(|bound| {
         let bound = bound.as_ref()?;
         let carried = crate::remote::carried_after(&bound.carried, id, name, controls);
-        Some(Arc::new(with_carried(
-            bound,
-            declared.len(),
-            carried,
-            &overrides,
-        )))
+        Some(Arc::new(with_carried(bound, declared, carried, &overrides)))
     });
     crate::log!(INFO, "controls: the server carries the controls of {id}");
 }
 
-/// `bound` with `carried` in place of its carried controls, each with the
-/// player's `overrides` over the mod's keys.
 fn with_carried(
     bound: &Bound,
-    declared: usize,
+    declared: &[Declared],
     carried: Vec<Heard>,
     overrides: &std::collections::BTreeMap<String, bindings::Override>,
 ) -> Bound {
-    let mut keys: Vec<[u32; 2]> = bound.keys.iter().take(declared).copied().collect();
+    let own = bound.keys.get(..declared.len()).unwrap_or_default();
+    let mut keys = own.to_vec();
     keys.extend(carried.iter().map(|heard| {
-        in_force(
-            heard.control.keys,
-            overrides.get(&heard.id()).copied().unwrap_or_default(),
-        )
+        let id = heard.id();
+        // A control this client declares too keeps the keys it has here.
+        match declared.iter().position(|d| d.id == id) {
+            Some(twin) => own.get(twin).copied().unwrap_or(heard.control.keys),
+            None => in_force(
+                heard.control.keys,
+                overrides.get(&id).copied().unwrap_or_default(),
+            ),
+        }
     }));
     Bound {
         keys,
@@ -745,7 +744,7 @@ pub(crate) fn forget_carried() {
         if bound.carried.is_empty() {
             return Some(Arc::clone(bound));
         }
-        let declared = DECLARED.sealed().map_or(0, <[Declared]>::len);
+        let declared = DECLARED.sealed().unwrap_or_default();
         Some(Arc::new(with_carried(
             bound,
             declared,
@@ -830,11 +829,21 @@ pub(crate) fn set_key(
     let (Some(declared), Some(bound)) = (DECLARED.sealed(), STATE.keys.load_full()) else {
         return Ok(());
     };
+    let carried = index
+        .checked_sub(declared.len())
+        .and_then(|at| bound.carried.get(at));
+    // A carried control this client declares too sets its own control's key.
+    let twin = carried.and_then(|heard| {
+        let id = heard.id();
+        declared.iter().position(|d| d.id == id)
+    });
     let mut keys = bound.keys.clone();
-    if let Some(slots) = keys.get_mut(index)
-        && let Some(key) = slots.get_mut(slot)
-    {
-        *key = bits;
+    for at in [Some(index), twin].into_iter().flatten() {
+        if let Some(slots) = keys.get_mut(at)
+            && let Some(key) = slots.get_mut(slot)
+        {
+            *key = bits;
+        }
     }
     let changed = |defaults: [u32; 2], k: [u32; 2]| {
         let at = |slot: usize| (k[slot] != defaults[slot]).then_some(k[slot]);
@@ -845,9 +854,8 @@ pub(crate) fn set_key(
         .zip(&keys)
         .map(|(d, k)| (d.id.clone(), changed(d.defaults, *k)))
         .collect();
-    let carried = index
-        .checked_sub(declared.len())
-        .and_then(|at| bound.carried.get(at))
+    let carried = carried
+        .filter(|_| twin.is_none())
         .zip(keys.get(index).copied());
     STATE.keys.store(Some(Arc::new(Bound {
         keys,

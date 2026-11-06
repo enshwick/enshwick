@@ -75,7 +75,7 @@ pub fn parse(text: &str) -> (BTreeMap<String, Override>, Vec<String>) {
 ///
 /// Each key is a scan code, with the key's US name beside it. `kept` are
 /// the file's entries for controls no running mod declares, written back as
-/// they were, read or not.
+/// they were, read or not; one for a control of `entries` goes as that one.
 ///
 /// # Examples
 ///
@@ -96,6 +96,11 @@ pub fn render(entries: &[(String, Override)], kept: &toml::Table) -> String {
          # with its US key name beside it; a name such as \"Shift+E\" works too, and\n\
          # 0 unbinds. A control not listed keeps its mod's keys.\n",
     );
+    let kept: toml::Table = kept
+        .iter()
+        .filter(|(id, _)| !entries.iter().any(|(control, _)| control == *id))
+        .map(|(id, value)| (id.clone(), value.clone()))
+        .collect();
     if !kept.is_empty() {
         let _ = write!(text, "\n{kept}");
     }
@@ -293,6 +298,20 @@ mod tests {
         assert_eq!(read.len(), 2);
         assert_eq!(read["you.lights:on"], entries[2].1);
         assert_eq!(read["you.cars:horn"], entries[0].1);
+    }
+
+    #[test]
+    fn a_kept_entry_for_a_control_written_beside_it_goes_once_as_the_written_one() {
+        let mut kept = toml::Table::new();
+        set_kept(&mut kept, "you.weather:day", [Some(key("F9").bits()), None]);
+        set_kept(&mut kept, "you.boats:horn", [Some(key("H").bits()), None]);
+        let entries = [("you.weather:day".to_owned(), [Some(key("F7").bits()), None])];
+        let text = render(&entries, &kept);
+        assert!(text.parse::<toml::Table>().is_ok(), "{text}");
+        let (read, problems) = parse(&text);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(read["you.weather:day"], entries[0].1);
+        assert_eq!(read["you.boats:horn"], [Some(key("H").bits()), None]);
     }
 
     #[test]
