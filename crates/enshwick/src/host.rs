@@ -368,7 +368,7 @@ mod tests {
                 "panic in a loot pass handler",
                 || (),
                 || panic!("the pack's"),
-            )
+            );
         });
         assert_eq!(
             loader.sent(),
