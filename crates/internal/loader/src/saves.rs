@@ -20,17 +20,19 @@ use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
 
 use enshwick::abi::{Event, HookFlags, Side, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
 use crate::locks::Relock;
-use crate::mod_index::ModIndex;
 use crate::module::Export;
 use crate::pinned;
 use crate::pinned::Constant;
+
+mod holds;
+
+pub(crate) use holds::{hold, shut_down};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -350,13 +352,7 @@ pub(crate) fn hosting_begins() {
 pub(crate) fn forget() {
     *KEYS.relock() = Keys::CLOSED;
     UNDER_WAY.store(false, Ordering::Relaxed);
-    let mut saving = SAVING.relock();
-    // A hold is on its world's saves; carried on, it would stop the next world's.
-    saving.holds.clear();
-    saving.held = None;
-    saving.warn_at = None;
-    saving.ending = false;
-    HOLDING.store(false, Ordering::Release);
+    holds::forget();
 }
 
 /// The world key of a save file path: the path without `.ksd`, so the
@@ -515,105 +511,14 @@ pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
     Ok(())
 }
 
-/// How long saves stay held before the loader warns, and how often the
-/// warning repeats while they stay held.
-const LONG_HOLD: Duration = Duration::from_mins(10);
-
-/// A mod's hold on the world's saves.
-#[derive(Debug, Clone, Copy)]
-struct Hold {
-    owner: ModIndex,
-    since: Instant,
-}
-
-/// The mods' holds on the world's saves.
-#[derive(Debug)]
-struct Saving {
-    /// The mods that hold saves now, in the order they asked.
-    holds: Vec<Hold>,
-    /// The game's save block byte from before the loader set it, while mods
-    /// hold saves.
-    held: Option<u8>,
-    /// When the next warning about saves held without a break is due.
-    warn_at: Option<Instant>,
-    /// Whether the hosted game's shutdown began: a hold from then on
-    /// refuses its final save.
-    ending: bool,
-}
-
-static SAVING: Mutex<Saving> = Mutex::new(Saving {
-    holds: Vec::new(),
-    held: None,
-    warn_at: None,
-    ending: false,
-});
 /// Whether a save was under way at the last step.
 static UNDER_WAY: AtomicBool = AtomicBool::new(false);
-/// Set while a mod holds saves or the loader still has the block byte set,
-/// so a step without holds takes no lock.
-static HOLDING: AtomicBool = AtomicBool::new(false);
 
 /// Whether a save got under way since the last step, the save phase now
 /// `phase`, keeping in `under_way` whether one is.
 fn began(under_way: &AtomicBool, phase: u8) -> bool {
     let was = under_way.swap(phase != 0, Ordering::Relaxed);
     phase != 0 && !was
-}
-
-/// What the game's block byte, now `byte`, needs while mods hold saves
-/// (`holding`), with the byte the game had before the hold (`held`): the
-/// byte to write, if any, and the game's byte to keep. A hold sets the byte
-/// on every step, so the game clearing it does not end the hold; the last
-/// mod letting go gives the game its byte back.
-const fn block(holding: bool, held: Option<u8>, byte: u8) -> (Option<u8>, Option<u8>) {
-    match (holding, held) {
-        (true, None) => (Some(1), Some(byte)),
-        (true, Some(before)) => (if byte == 1 { None } else { Some(1) }, Some(before)),
-        (false, Some(before)) => (Some(before), None),
-        (false, None) => (None, None),
-    }
-}
-
-/// Mod `owner` holds the world's saves (`hold`) or lets them go: the game
-/// saves only while no mod holds them, and a save asked for meanwhile is
-/// refused.
-pub(crate) fn hold(loader: &Loader, owner: ModIndex, hold: bool) -> Status {
-    if layout(loader).is_none() {
-        return Status::MISSING;
-    }
-    let id = mod_id(loader, owner);
-    let mut saving = SAVING.relock();
-    let at = saving.holds.iter().position(|h| h.owner == owner);
-    match (hold, at) {
-        (true, None) => {
-            let since = Instant::now();
-            saving.holds.push(Hold { owner, since });
-            saving.warn_at.get_or_insert(since + LONG_HOLD);
-            HOLDING.store(true, Ordering::Release);
-            if saving.ending {
-                crate::log!(
-                    WARN,
-                    "world saves held by {id} as the game shuts down, so its final save does not run"
-                );
-            } else {
-                crate::log!(INFO, "world saves held by {id}");
-            }
-        }
-        (false, Some(at)) => {
-            saving.holds.remove(at);
-            if saving.holds.is_empty() {
-                saving.warn_at = None;
-            }
-            crate::log!(INFO, "world saves let go by {id}");
-        }
-        _ => {}
-    }
-    Status::OK
-}
-
-/// The id of mod `owner`, for the log.
-fn mod_id(loader: &Loader, owner: ModIndex) -> &str {
-    loader.mods.get(owner.get()).map_or("?", |m| m.id.as_str())
 }
 
 /// After each step on the server's game thread: raises
@@ -640,155 +545,11 @@ pub(crate) fn after_step(loader: &Loader) {
         unsafe { crate::memory::read(system, layout.phase) }
     };
     let started = began(&UNDER_WAY, phase);
-    if HOLDING.load(Ordering::Acquire) {
-        // SAFETY: `server` is `world::server`'s, the live server on its
-        // game thread between steps.
-        let long = unsafe { enforce(layout, server) };
-        if let Some(long) = long {
-            warn_long(loader, &long);
-        }
-    }
+    // SAFETY: `server` is `world::server`'s, the live server on its game
+    // thread between steps.
+    unsafe { holds::after_step(loader, layout, server) };
     if started {
         loader.emit(Event::WORLD_SAVING, None, core::ptr::null());
-    }
-}
-
-/// Sets the game's save block while a running mod holds saves and gives the
-/// byte back once none does; the holds and how long each has lasted when a
-/// warning about saves held long is due.
-///
-/// # Safety
-///
-/// - `server` is the live server, read and written on its game thread
-///   outside a step, where nothing else writes it.
-unsafe fn enforce(layout: &Layout, server: usize) -> Option<Vec<(ModIndex, Duration)>> {
-    let now = Instant::now();
-    let mut saving = SAVING.relock();
-    saving.holds.retain(|h| !crate::host::is_off(h.owner));
-    if saving.holds.is_empty() {
-        saving.warn_at = None;
-    }
-    // SAFETY: `server` is the live server on its game thread outside a step
-    // by this function's `# Safety`; its byte that refuses saves sits at the
-    // table's `server.save_blocked`.
-    let byte: u8 = unsafe { crate::memory::read(server, layout.blocked) };
-    let (write, held) = block(!saving.holds.is_empty(), saving.held, byte);
-    if let Some(write) = write {
-        // SAFETY: the same byte, by the read just before.
-        unsafe { crate::memory::write(server, layout.blocked, write) };
-    }
-    saving.held = held;
-    if saving.holds.is_empty() && held.is_none() {
-        HOLDING.store(false, Ordering::Release);
-    }
-    due(&mut saving.warn_at, now).then(|| {
-        saving
-            .holds
-            .iter()
-            .map(|h| (h.owner, now.duration_since(h.since)))
-            .collect()
-    })
-}
-
-/// Whether a warning about saves held long is due at `now`, the next due at
-/// `next`; a due warning moves `next` on by [`LONG_HOLD`].
-fn due(next: &mut Option<Instant>, now: Instant) -> bool {
-    match *next {
-        Some(at) if now >= at => {
-            *next = Some(now + LONG_HOLD);
-            true
-        }
-        _ => false,
-    }
-}
-
-/// `held` as the log and admins read it: each mod with the whole minutes it
-/// has held saves.
-fn held_by(loader: &Loader, held: &[(ModIndex, Duration)]) -> String {
-    held.iter()
-        .map(|&(owner, long)| format!("{} ({} min)", mod_id(loader, owner), long.as_secs() / 60))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-/// Warns in the log and tells each administrator online that saves are
-/// held long, by the mods of `held`.
-fn warn_long(loader: &Loader, held: &[(ModIndex, Duration)]) {
-    let mods = held_by(loader, held);
-    crate::log!(
-        WARN,
-        "world saves are held long, by {mods}: the game saves only once every mod lets go"
-    );
-    tell_admins(loader, &mods);
-}
-
-/// Tells each administrator online that saves are held long, by `mods`.
-#[cfg(windows)]
-fn tell_admins(loader: &Loader, mods: &str) {
-    let Ok(players) = crate::world::players(loader) else {
-        return;
-    };
-    for player in players
-        .iter()
-        .filter(|p| crate::console::player_is_admin(p))
-    {
-        let key = player.key.get();
-        let text = crate::texts::for_player(key, || {
-            crate::texts::fill("saves.held-long", &[("mods", mods)])
-        });
-        crate::actions::tell(loader, key, &text);
-    }
-}
-
-#[cfg(not(windows))]
-fn tell_admins(_loader: &Loader, _mods: &str) {}
-
-/// The hosted game's shutdown begins, on its game thread: every mod's hold
-/// on saves lets go and the game gets its save block byte back, so the
-/// final save runs, and the log names each mod that held saves and for how
-/// long; then `announce` tells the mods. A mod that holds saves from then on
-/// refuses the final save, and its hold applies at once, before the game
-/// asks for that save.
-pub(crate) fn shut_down(loader: &Loader, announce: impl FnOnce()) {
-    let Some(layout) = layout(loader) else {
-        announce();
-        return;
-    };
-    {
-        let now = Instant::now();
-        let mut saving = SAVING.relock();
-        saving.ending = true;
-        saving.warn_at = None;
-        for hold in core::mem::take(&mut saving.holds) {
-            crate::log!(
-                WARN,
-                "world saves held by {} for {} s are let go as the game shuts down, so its final save runs",
-                mod_id(loader, hold.owner),
-                now.duration_since(hold.since).as_secs()
-            );
-        }
-    }
-    let server = crate::world::server();
-    if let Ok(server) = server {
-        // SAFETY: `world::server` returned the live server on its game
-        // thread outside a step; the game reads it until its teardown.
-        let _long = unsafe { enforce(layout, server) };
-    }
-    announce();
-    if !HOLDING.load(Ordering::Acquire) {
-        return;
-    }
-    match server {
-        Ok(server) => {
-            // SAFETY: `server` is `world::server`'s live server on its game
-            // thread outside a step, and the mods heard of the shutdown on
-            // this same thread, which the game frees the server on only later.
-            let _long = unsafe { enforce(layout, server) };
-        }
-        Err(status) => crate::log!(
-            WARN,
-            "world saves stay held at shutdown: the server is out of reach here ({status:?})"
-        ),
     }
 }
 
@@ -817,39 +578,6 @@ mod tests {
         let steps = [0, 2, 3, 0, 0, 2, 0, 1];
         let began: Vec<bool> = steps.iter().map(|&p| began(&under_way, p)).collect();
         assert_eq!(began, [false, true, false, false, false, true, false, true]);
-    }
-
-    #[test]
-    fn saves_held_long_warn_once_every_ten_minutes_and_not_before() {
-        let start = Instant::now();
-        let mut next = Some(start + LONG_HOLD);
-        let at = |mins: u64, secs: u64| start + Duration::from_secs(mins * 60 + secs);
-        assert!(!due(&mut next, at(9, 59)), "not before ten minutes");
-        assert!(due(&mut next, at(10, 0)));
-        assert!(!due(&mut next, at(10, 1)), "once");
-        assert!(!due(&mut next, at(19, 59)));
-        assert!(due(&mut next, at(20, 0)), "again ten minutes on");
-        let mut none = None;
-        assert!(!due(&mut none, at(60, 0)), "never while nothing is held");
-    }
-
-    #[test]
-    fn a_hold_sets_the_block_on_every_step_and_the_last_release_gives_the_game_its_byte() {
-        assert_eq!(block(true, None, 0), (Some(1), Some(0)));
-        assert_eq!(block(true, Some(0), 1), (None, Some(0)), "already set");
-        assert_eq!(
-            block(true, Some(0), 0),
-            (Some(1), Some(0)),
-            "the game cleared it, and the hold sets it again"
-        );
-        assert_eq!(block(false, Some(0), 1), (Some(0), None));
-        assert_eq!(
-            block(true, None, 1),
-            (Some(1), Some(1)),
-            "the game had it set"
-        );
-        assert_eq!(block(false, Some(1), 1), (Some(1), None));
-        assert_eq!(block(false, None, 0), (None, None), "no hold, no write");
     }
 
     #[test]

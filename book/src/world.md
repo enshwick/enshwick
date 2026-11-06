@@ -280,8 +280,10 @@ held.
 When a dedicated server or a hosted game shuts down, every hold lets go and
 the final save runs; the log names each mod that held saves and for how
 long. `ShutdownStarted` says that the next save is the final one: a mod that
-calls `hold_saves(true)` from that event on refuses the final save, and the
-log names it.
+calls `hold_saves(true)` inside its `ShutdownStarted` handler refuses the
+final save, and the log names it. A hold asked for after that handler is not
+taken, so a mod that keeps calling `hold_saves(true)` does not stop the final
+save.
 
 ```rust
 use enshwick::events::ShutdownStarted;

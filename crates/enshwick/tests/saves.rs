@@ -117,6 +117,11 @@ mod tests {
             "a hold from before the shutdown lets go"
         );
         assert!(!loader.saves_held());
+        world.hold_saves(true).unwrap();
+        assert!(
+            !loader.saves_held(),
+            "a hold asked for after ShutdownStarted is not taken"
+        );
 
         REFUSE_FINAL.store(true, Ordering::Relaxed);
         assert!(

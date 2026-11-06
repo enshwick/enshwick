@@ -75,12 +75,14 @@ impl World {
     /// are outside a safe room. Each mod holds its own; a mod that turns off lets go,
     /// and every hold ends with its hosted game.
     /// As a dedicated server or a hosted game shuts down, every hold lets go,
-    /// so the final save runs; a mod that holds saves again from
-    /// [`ShutdownStarted`](crate::events::ShutdownStarted) on refuses that
-    /// save. The log names each mod that holds or lets go; once saves stay
-    /// held for 10 minutes, the log and a notice to each administrator
-    /// online warn, again every 10 minutes while they stay held. Takes effect after the next step, and at once
-    /// from [`ShutdownStarted`](crate::events::ShutdownStarted) on; any
+    /// so the final save runs; a mod that holds saves again inside its
+    /// [`ShutdownStarted`](crate::events::ShutdownStarted) handler refuses
+    /// that save, and a hold asked for after that handler is not taken. The
+    /// log names each mod that holds or lets go; once saves stay held for 10
+    /// minutes, the log and a notice to each administrator online warn,
+    /// again every 10 minutes while they stay held. Takes effect after the
+    /// next step, and at once inside the
+    /// [`ShutdownStarted`](crate::events::ShutdownStarted) handler; any
     /// thread.
     ///
     /// # Errors
