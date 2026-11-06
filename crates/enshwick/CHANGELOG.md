@@ -138,6 +138,13 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- A save hold no longer outlasts a shutdown: as a dedicated server or a
+  hosted game shuts down, every `World::hold_saves` hold lets go and the
+  final save runs, and the log names each mod that held saves and for how
+  long. A mod that holds saves from `ShutdownStarted` on refuses the final
+  save. Once saves stay held for 10 minutes, the log and a notice to each
+  administrator online warn, again every 10 minutes. The fake loader's
+  `Installed::shut_down` shuts down the same way (#965).
 - **Breaking:** item meters and workshops are made through
   `content::templates`, so `content::items::MeterLayout`,
   `clone_meter_template`, `list_meter_template`,
