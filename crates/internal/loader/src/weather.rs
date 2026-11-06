@@ -543,11 +543,14 @@ fn phenomena(layout: &Layout, resource: &Resource<'_>) -> Option<Vec<[u8; 16]>> 
     (!guids.is_empty()).then_some(guids)
 }
 
-/// Whether the fronts a save restored stay as they are: the saved
-/// phenomena are the running world's, or the save holds none, as a file
-/// written when they did not read would.
-fn keeps_as_saved(saved: &[[u8; 16]], served: &[[u8; 16]]) -> bool {
-    saved.is_empty() || saved == served
+/// The phenomena a save's fronts index: the file's, or the running world's
+/// when the save has no file (one from before the loader kept it) or an
+/// empty one (written while they did not read), so a front whose index now
+/// falls outside its layer is still freed.
+fn as_saved(saved: Option<Vec<[u8; 16]>>, served: &[[u8; 16]]) -> Vec<[u8; 16]> {
+    saved
+        .filter(|saved| !saved.is_empty())
+        .unwrap_or_else(|| served.to_vec())
 }
 
 /// The GUIDs of the phenomena the running world serves, in index order; at
@@ -619,9 +622,8 @@ enum RemapError {
     Unread(std::path::PathBuf, String),
 }
 
-/// Remaps or frees the restored fronts by the GUIDs at `path`. A save
-/// without the file, such as
-/// one from before the loader kept it, keeps its fronts.
+/// Remaps or frees the restored fronts by the GUIDs at `path`; see
+/// [`as_saved`] for a save without them.
 fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
     let layout = layout(loader).ok_or(RemapError::Unloaded(Status::MISSING))?;
     let (system, _) = system(layout).map_err(RemapError::Unloaded)?;
@@ -629,17 +631,15 @@ fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
     let served = phenomena(layout, &resource).ok_or(RemapError::Unloaded(Status::MISSING))?;
     let text = enshwick::files::read_to_string_if_present(path)
         .map_err(|why| RemapError::Unread(path.to_owned(), why.to_string()))?;
-    let Some(text) = text else {
-        return Ok(());
-    };
     let saved = text
-        .lines()
-        .map(|line| enshwick::content::Guid::try_parse(line.trim()).map(|guid| guid.0))
-        .collect::<Option<Vec<_>>>()
-        .ok_or_else(|| RemapError::Unread(path.to_owned(), "a line is no GUID".to_owned()))?;
-    if keeps_as_saved(&saved, &served) {
-        return Ok(());
-    }
+        .map(|text| {
+            text.lines()
+                .map(|line| enshwick::content::Guid::try_parse(line.trim()).map(|guid| guid.0))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| RemapError::Unread(path.to_owned(), "a line is no GUID".to_owned()))
+        })
+        .transpose()?;
+    let saved = as_saved(saved, &served);
     // SAFETY: `resource` holds the weather resource locked, and its
     // reflected `layers` field is a blob array header.
     let BlobArray {
@@ -710,10 +710,12 @@ fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
             moved += 1;
         }
     }
-    crate::log!(
-        INFO,
-        "weather: the phenomena changed since the save; {moved} fronts moved, {freed} layers picked anew"
-    );
+    if moved + freed > 0 {
+        crate::log!(
+            INFO,
+            "weather: the phenomena changed since the save; {moved} fronts moved, {freed} layers picked anew"
+        );
+    }
     Ok(())
 }
 
@@ -942,42 +944,4 @@ pub(crate) fn forget() {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{keeps_as_saved, remapped};
-
-    const A: [u8; 16] = [1; 16];
-    const B: [u8; 16] = [2; 16];
-    const X: [u8; 16] = [9; 16];
-    const C: [u8; 16] = [3; 16];
-
-    #[test]
-    fn a_save_that_holds_no_phenomena_keeps_its_fronts_as_saved() {
-        assert!(
-            keeps_as_saved(&[], &[A, B]),
-            "a file written while they did not read"
-        );
-        assert!(keeps_as_saved(&[A, B], &[A, B]));
-        assert!(!keeps_as_saved(&[A, X], &[A, B]));
-    }
-
-    #[test]
-    fn a_saved_front_follows_its_phenomenon_s_guid_to_its_index_now() {
-        let (saved, served) = ([A, B, X, C], [A, B, C]);
-        let all = (0, 3);
-        assert_eq!(remapped(&saved, &served, all, 3), Some(2), "C moved down");
-        assert_eq!(remapped(&saved, &served, all, 2), None, "X is gone");
-        assert_eq!(remapped(&saved, &served, all, 0), Some(0));
-        assert_eq!(
-            remapped(&saved, &served, all, 4),
-            None,
-            "past the saved list"
-        );
-    }
-
-    #[test]
-    fn a_phenomenon_outside_its_layer_s_range_is_freed() {
-        let (saved, served) = ([A, B, C], [A, B, C]);
-        assert_eq!(remapped(&saved, &served, (0, 2), 2), None);
-        assert_eq!(remapped(&saved, &served, (1, 2), 2), Some(2));
-    }
-}
+mod tests;

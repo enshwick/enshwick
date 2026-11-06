@@ -1,0 +1,54 @@
+use super::{as_saved, remapped};
+
+const A: [u8; 16] = [1; 16];
+const B: [u8; 16] = [2; 16];
+const X: [u8; 16] = [9; 16];
+const C: [u8; 16] = [3; 16];
+
+#[test]
+fn a_save_without_its_phenomena_reads_as_the_running_world_s_so_fronts_past_a_layer_are_freed() {
+    let served = [A, B];
+    assert_eq!(
+        as_saved(None, &served),
+        served,
+        "a save from before the file"
+    );
+    assert_eq!(
+        as_saved(Some(Vec::new()), &served),
+        served,
+        "written while they did not read"
+    );
+    assert_eq!(as_saved(Some(vec![A, X]), &served), [A, X]);
+    let saved = as_saved(None, &served);
+    assert_eq!(
+        remapped(&saved, &served, (0, 2), 1),
+        Some(1),
+        "a vanilla front kept"
+    );
+    assert_eq!(
+        remapped(&saved, &served, (0, 2), 2),
+        None,
+        "a gone mod's front freed"
+    );
+}
+
+#[test]
+fn a_saved_front_follows_its_phenomenon_s_guid_to_its_index_now() {
+    let (saved, served) = ([A, B, X, C], [A, B, C]);
+    let all = (0, 3);
+    assert_eq!(remapped(&saved, &served, all, 3), Some(2), "C moved down");
+    assert_eq!(remapped(&saved, &served, all, 2), None, "X is gone");
+    assert_eq!(remapped(&saved, &served, all, 0), Some(0));
+    assert_eq!(
+        remapped(&saved, &served, all, 4),
+        None,
+        "past the saved list"
+    );
+}
+
+#[test]
+fn a_phenomenon_outside_its_layer_s_range_is_freed() {
+    let (saved, served) = ([A, B, C], [A, B, C]);
+    assert_eq!(remapped(&saved, &served, (0, 2), 2), None);
+    assert_eq!(remapped(&saved, &served, (1, 2), 2), Some(2));
+}
