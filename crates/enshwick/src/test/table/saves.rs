@@ -25,13 +25,13 @@ pub(crate) extern "system" fn set_saved(
     if entity == crate::Entity(0) {
         return Status::BAD_ARGS;
     }
+    if with(false, |s| super::world::entity_calls_off(s)) {
+        return Status::UNAVAILABLE;
+    }
     if !crate::test::table::on_game_thread() {
         return Status::WRONG_THREAD;
     }
     with(Status::MISSING, |s| {
-        if super::world::entity_calls_off(s) {
-            return Status::UNAVAILABLE;
-        }
         let spawned_at = s
             .spawns
             .iter()

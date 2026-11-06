@@ -17,8 +17,9 @@ use crate::world::PropState;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::Script)]
 #[non_exhaustive]
 pub enum WorldError {
-    /// Called off the server's game thread, inside a step (from a filter
-    /// or a hook on a system), or while no server runs.
+    /// Called off the server's game thread or inside a step (from a filter
+    /// or a hook on a system); some reads answer it while no server runs,
+    /// where the entity calls answer [`WorldError::Missing`].
     #[error("not on the server's game thread")]
     WrongThread,
     /// The entity is not in the world.
@@ -95,5 +96,20 @@ impl WorldError {
     /// [`Self::check`] for a call whose missing piece is the feature itself.
     pub(crate) fn from_status(status: Status) -> Result<(), Self> {
         Self::check(status, Self::Missing)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unavailable_call_and_any_status_a_mod_does_not_know_read_as_missing() {
+        for status in [Status::UNAVAILABLE, Status(14), Status(u32::MAX)] {
+            assert_eq!(
+                WorldError::check(status, WorldError::Gone),
+                Err(WorldError::Missing)
+            );
+        }
     }
 }

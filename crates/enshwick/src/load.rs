@@ -98,6 +98,7 @@ impl Off {
             Status::STATIC_HALF => "template data, never written",
             Status::NOT_A_PROP => "not a prop",
             Status::NOT_KEPT => "not found again after a load",
+            Status::UNAVAILABLE => "not available here or on this game build",
             _ => "failed",
         };
         Self::new(format!("{what}: {why}"))
