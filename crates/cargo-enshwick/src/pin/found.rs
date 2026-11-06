@@ -9,6 +9,7 @@ use anyhow::Context as _;
 use super::checks;
 use super::exe::Exe;
 use super::rows::{Side, guid_hex};
+use super::table::spelled;
 
 /// The anchors file, relative to the repository.
 pub(super) const ANCHORS: &str = "crates/enshwick-gamedata/anchors/patterns.toml";
@@ -40,12 +41,12 @@ pub(super) fn found_table(repo: &Path, side: Side, exe: &Exe<'_>) -> anyhow::Res
             .map(u32::from_le_bytes)
     };
     let mut found = anchors.fall_back(code, code_rva, cell);
+    let anchored = found.clone();
     let path = repo.join(checks::ROUTES);
     let routes = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
     let routes =
         enshwick_gamedata::Routes::parse(&routes).with_context(|| path.display().to_string())?;
-    let reflection = enshwick_gamedata::reflect::Reflection::scan(exe.image());
-    for (id, routed) in routes.find(exe.image(), &reflection, gamedata, &found) {
+    for (id, routed) in routes.find(exe.image(), exe.reflection(), gamedata, &found) {
         found.route(id, routed);
     }
     let doc: DocumentMut = text.parse().context("anchors file")?;
@@ -60,28 +61,33 @@ pub(super) fn found_table(repo: &Path, side: Side, exe: &Exe<'_>) -> anyhow::Res
     out["side"] = value(name);
     out["guid"] = value(guid_hex(fingerprint.guid()));
     out["age"] = value(i64::from(fingerprint.age()));
-    out["symbols"] = found_section(rows("symbols"), found.symbols(), "rva")?;
-    out["constants"] = found_section(rows("constants"), found.constants(), "value")?;
+    out["symbols"] = found_section(rows("symbols"), found.symbols(), "rva", |id| {
+        anchored.symbol(id).is_some()
+    })?;
+    out["constants"] = found_section(rows("constants"), found.constants(), "value", |id| {
+        anchored.constant(id).is_some()
+    })?;
     Ok(out.to_string())
 }
 
 /// A table section of the `found` entries: each its anchor row in `rows`
-/// with its value under `key`, else the bare value; a value past `i64` is
-/// spelled as a string, as tables spell it.
+/// with its value under `key` where its pattern found it (`anchored`), else
+/// the bare value, since the row's pattern does not find a value only a
+/// route gave; values are spelled as tables spell them.
 fn found_section(
     rows: Option<&toml_edit::Table>,
     found: &[(String, u64)],
     key: &str,
+    anchored: impl Fn(&str) -> bool,
 ) -> anyhow::Result<toml_edit::Item> {
     use toml_edit::{InlineTable, Item, Value};
     let mut out = toml_edit::Table::new();
     for (id, number) in found {
-        let number: Value = if i64::try_from(*number).is_ok() {
-            format!("{number:#x}").parse()?
-        } else {
-            Value::from(format!("{number:#x}"))
-        };
-        let row = rows.and_then(|r| r.get(id)).and_then(Item::as_inline_table);
+        let number: Value = spelled(*number).parse()?;
+        let row = rows
+            .filter(|_| anchored(id))
+            .and_then(|r| r.get(id))
+            .and_then(Item::as_inline_table);
         let item = match row {
             Some(row) => {
                 let mut with = InlineTable::new();
@@ -105,22 +111,28 @@ mod tests {
     use super::super::{Args, run, side_of_exe, table, table_file};
     use super::*;
 
-    /// The executables the opt-in `ENSH_EXES` path list names that are a
-    /// game executable, with their side; empty without it.
+    /// The game executables, with their side, that the opt-in `ENSH_EXES`
+    /// path list names, then `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE`; empty
+    /// without them.
     fn kept_executables() -> Vec<(Side, PathBuf)> {
-        let Some(list) = std::env::var_os("ENSH_EXES") else {
-            return Vec::new();
-        };
+        let list = std::env::var_os("ENSH_EXES").unwrap_or_default();
         std::env::split_paths(&list)
+            .chain(
+                ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
+                    .into_iter()
+                    .filter_map(std::env::var_os)
+                    .map(PathBuf::from),
+            )
             .filter_map(|path| Some((side_of_exe(&path)?, path)))
             .collect()
     }
 
     #[test]
-    fn a_found_entry_keeps_its_anchor_row_and_a_big_value_is_a_string() {
+    fn an_anchored_entry_keeps_its_row_a_routed_one_does_not_and_a_big_value_is_a_string() {
         let doc: toml_edit::DocumentMut = r#"
 [server.symbols]
 "f.start" = { pattern = "57", rel = 1 }
+"f.routed" = { pattern = "56", rel = 1 }
 [server.constants]
 "f.size" = { value = 0x10, pattern = "48 83 EC ??", at = 3, size = 1 }
 "#
@@ -135,9 +147,10 @@ mod tests {
             ("f.size".to_owned(), 0x20),
             ("f.start.bytes".to_owned(), u64::MAX),
         ];
+        let anchored = |id: &str| id != "f.routed";
         let mut out = toml_edit::DocumentMut::new();
-        out["symbols"] = found_section(rows("symbols"), &symbols, "rva").unwrap();
-        out["constants"] = found_section(rows("constants"), &constants, "value").unwrap();
+        out["symbols"] = found_section(rows("symbols"), &symbols, "rva", anchored).unwrap();
+        out["constants"] = found_section(rows("constants"), &constants, "value", anchored).unwrap();
         let text = out.to_string();
         assert!(
             text.contains(r#""f.start" = { rva = 0x1000, pattern = "57", rel = 1 }"#),
@@ -151,7 +164,7 @@ mod tests {
             "{text}"
         );
         assert!(
-            text.contains(r#""f.start.bytes" = "0xffffffffffffffff""#),
+            text.contains(r#""f.start.bytes" = "0xffff_ffff_ffff_ffff""#),
             "{text}"
         );
     }

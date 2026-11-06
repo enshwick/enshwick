@@ -623,10 +623,12 @@ mod tests {
         let Some(path) = std::env::var_os("ENSH_SERVER_EXE") else {
             return;
         };
-        let bytes = fs::read(path).unwrap();
+        let bytes = fs::read(&path).unwrap();
         let exe = Exe::parse(&bytes).unwrap();
         let args = Args {
-            old: None,
+            // A build without a table of its own ports from what the old
+            // executable's name says its side is.
+            old: Some(path.into()),
             new: None,
             patterns: None,
             repo: Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."),
