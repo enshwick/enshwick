@@ -162,8 +162,11 @@ Each entry names the pull request that made the change.
   before an unreadable page (#945).
 - A world a client hosts from Steam saves has its save information, GUID
   record and mod folders beside its save in Steam's `remote/` folder, as a
-  local world does; before, they were missing and every autosave logged a
-  warning (#955).
+  local world does; before, they sat in the game folder and every autosave
+  logged a warning (#955). Such a world starts from its mods' defaults until
+  its `<stem>-mod-settings` and `<stem>-mod-data` folders are moved from the
+  game folder to `remote/`. When Steam does not name that folder, the world
+  has no mod folders rather than shared ones in the game folder.
 
 ## [1.0.0-alpha.12] - 2026-11-05
 
