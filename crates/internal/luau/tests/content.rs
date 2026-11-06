@@ -124,6 +124,36 @@ mod tests {
     }
 
     #[test]
+    fn a_script_reads_and_sets_a_player_s_quest_progression() {
+        let progression = enshwick::resources::fnv1a32(enshwick::test::PROGRESSION.as_bytes());
+        let loader = run(
+            FakeHost::new().progression().world().component(
+                enshwick::Entity(4096),
+                progression,
+                &[0, 0, 0, 0, 4, 0, 0, 0],
+            ),
+            r"
+            enshwick.log.info(`before {enshwick.knowledge.quest_progression(4096)}`)
+            enshwick.knowledge.set_quest_progression(4096, true)
+            enshwick.log.info(`after {enshwick.knowledge.quest_progression(4096)}`)
+            enshwick.log.info(`nobody {enshwick.knowledge.quest_progression(1)}`)
+            local ok = pcall(enshwick.knowledge.set_quest_progression, 1, true)
+            enshwick.log.info(`nobody refused {not ok}`)
+            ",
+        );
+        let logs = format!("{:?}", loader.logs());
+        assert!(logged(&loader, "before false"), "{logs}");
+        assert!(logged(&loader, "after true"), "{logs}");
+        assert!(logged(&loader, "nobody nil"), "{logs}");
+        assert!(logged(&loader, "nobody refused true"), "{logs}");
+        assert_eq!(
+            loader.component_bytes(enshwick::Entity(4096), progression),
+            Some(vec![1, 0, 0, 0, 5, 0, 0, 0]),
+            "set, its change counted"
+        );
+    }
+
+    #[test]
     fn a_script_lists_the_tree_and_adds_a_node_and_a_perk() {
         let loader = run(
             FakeHost::new().progression(),
