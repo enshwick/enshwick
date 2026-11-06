@@ -587,6 +587,17 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
 ///
 /// - `client` is null or the game client, on the thread that sends its chat.
 unsafe fn client_frame(client: *mut u8, now: Instant) {
+    // Before the hosting branch: a client that left a server to host a game
+    // keeps the session the socket was opened in.
+    if CARRIER.client_retired.load(Ordering::Acquire)
+        && !client.is_null()
+        && let Some(game) = CARRIER.game.get()
+        // SAFETY: `client` is the non-null game client on its chat thread by
+        // this function's `# Safety`.
+        && let Some(session) = unsafe { game.client_session(client) }
+    {
+        close_retired(game, session);
+    }
     if client_hosts() {
         let opened = !CARRIER.hosted_hello.swap(true, Ordering::AcqRel);
         if opened {
@@ -599,8 +610,7 @@ unsafe fn client_frame(client: *mut u8, now: Instant) {
         return;
     }
     let modded = crate::net::server_runs_enshwick();
-    let retired = CARRIER.client_retired.load(Ordering::Acquire);
-    if !modded && !retired && !CARRIER.client_open.load(Ordering::Acquire) {
+    if !modded && !CARRIER.client_open.load(Ordering::Acquire) {
         return;
     }
     let (Some(game), Some(loader)) = (CARRIER.game.get(), crate::host::loader()) else {
@@ -614,12 +624,6 @@ unsafe fn client_frame(client: *mut u8, now: Instant) {
     let Some(session) = (unsafe { game.client_session(client) }) else {
         return;
     };
-    if retired {
-        close_retired(game, session);
-    }
-    if !modded && !CARRIER.client_open.load(Ordering::Acquire) {
-        return;
-    }
     let (inbox, change) = {
         let Some(mut guard) = CARRIER.client.try_relock() else {
             return;
@@ -745,6 +749,9 @@ fn give_back(side: &Mutex<Option<State>>, session: usize, mut inbox: Inbox) {
     }
 }
 
+/// Forgets the client's link and what a hosted game's halves held for
+/// each other, when the client leaves its server or a hosted game ends;
+/// the client's open sockets wait for [`close_retired`].
 pub(crate) fn forget() {
     if let Some(state) = CARRIER.client.relock().take()
         && !state.peers.is_empty()

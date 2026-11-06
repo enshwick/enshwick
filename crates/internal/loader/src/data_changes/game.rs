@@ -216,6 +216,9 @@ pub(crate) fn has_live() -> bool {
     !CHANGES.live.relock().is_empty()
 }
 
+/// Every vanilla item with what a selection reads of it, from the game's
+/// archive; none when the build does not reflect a value it needs or the
+/// archive does not read.
 fn vanilla_items(loader: &Loader) -> Vec<(Guid, ItemTraits)> {
     let items = crate::archive::game().and_then(|archive| items_in(&loader.reflection, archive));
     items.unwrap_or_else(|| {
@@ -645,7 +648,13 @@ mod tests {
             let image = Image::parse(&bytes, Layout::File, None).unwrap();
             let reflection = Reflection::scan(&image);
             let stem = path.file_stem().and_then(|s| s.to_str()).unwrap();
-            let archive = crate::archive::Archive::open(path.parent().unwrap(), stem).unwrap();
+            // A kept executable alone, without its archive, is skipped.
+            let Some(archive) = path
+                .parent()
+                .and_then(|folder| crate::archive::Archive::open(folder, stem))
+            else {
+                continue;
+            };
             let items = items_in(&reflection, &archive).expect(var);
             for (kind, field) in [
                 (Items::Stackable, Field::MaxStackSize),

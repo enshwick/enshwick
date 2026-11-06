@@ -3084,7 +3084,7 @@ typedef struct EnshwickItemAction {
 #define EnshwickItemAction_PLACE 6
 // The game took the item of a `CONSUME` every filter
 // allowed from its slot, at a later step; a use the game refuses, or
-// whose player moves a stack first, raises none. The answer is ignored.
+// whose player does anything else first, raises none. The answer is ignored.
 // ABI 11.7.
 #define EnshwickItemAction_CONSUMED 7
 

@@ -50,8 +50,9 @@ impl Installed {
 
     /// Hands the use `call` to the mod's item filters as the loader would
     /// for a use the game refuses after them, such as a potion at full
-    /// health: the game keeps the item, so no [`ItemAction::CONSUMED`]
-    /// follows. Whether every filter allowed it.
+    /// health, or one whose player does anything else before the game takes
+    /// the item, such as dragging the stack out of its slot: no
+    /// [`ItemAction::CONSUMED`] follows. Whether every filter allowed it.
     ///
     /// # Examples
     ///

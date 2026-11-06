@@ -58,7 +58,7 @@ pub enum Kind {
     Place,
     /// The game took the item of a [`Kind::Consume`] every filter allowed
     /// from its slot; a use the game refuses, such as a potion at full
-    /// health, or whose player moves a stack before the game takes the item,
+    /// health, or whose player does anything else before the game takes it,
     /// raises none. The answer is ignored. A reward or a count of
     /// uses listens here, since a later filter or the game may still refuse
     /// a `Consume`.

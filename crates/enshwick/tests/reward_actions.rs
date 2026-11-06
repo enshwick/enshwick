@@ -280,6 +280,17 @@ mod tests {
             0,
             "a use the game refuses rewards nothing"
         );
+        for _ in 0..3 {
+            assert!(
+                loader.refused_use(&drink(2)),
+                "at full health again, then the stack dragged out of its slot"
+            );
+        }
+        assert_eq!(
+            gained(&loader, 2),
+            0,
+            "a drag after a refused use pays nothing"
+        );
         let _gone = std::fs::remove_dir_all(&data);
     }
 }

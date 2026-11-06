@@ -141,8 +141,8 @@ Each entry names the pull request that made the change.
   (`Action::Consume`, a pack's `consume` reward), comes once the game took
   the used item from its slot, within 5 seconds of the use, and never for a
   use the game refuses, such as a healing potion at full health, nor for
-  one whose player moves, sorts or equips a stack before then, so a stack
-  dragged out of its slot pays no reward. The fake
+  one whose player does anything else before then, so a stack dragged or
+  stashed out of its slot pays no reward. The fake
   host's `Installed::refused_use` plays such a use (#953).
 - An action's handler, `allow`, `at` or `per_player` may add an action with
   `Actions::add`; before, the call deadlocked the thread (#947).

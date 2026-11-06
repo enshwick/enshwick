@@ -324,7 +324,7 @@
           ]
         },
         "consumed": {
-          "description": "Runs once every filter allowed a player's use of the item.",
+          "description": "Runs once the game took the item of a use every filter allowed.",
           "type": [
             "string",
             "null"
