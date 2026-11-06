@@ -526,22 +526,28 @@ fn remapped(
 }
 
 /// The GUIDs of the locked weather resource's phenomena, in index order;
-/// `None` on a build that does not reflect a phenomenon's GUID.
+/// `None` on a build that does not reflect a phenomenon's GUID, or when the
+/// list does not read or is empty, which no world's weather is.
 fn phenomena(layout: &Layout, resource: &Resource<'_>) -> Option<Vec<[u8; 16]>> {
     let guid = layout.phenomenon_guid?;
     // SAFETY: `resource` holds the weather resource locked, and its
     // reflected `phenomenons` field is a blob array header.
     let BlobArray { start, count } =
-        unsafe { BlobArray::read(resource.address() + layout.resource_phenomena) }
-            .unwrap_or_default();
-    Some(
-        (0..count)
-            // SAFETY: `index` is below the resource's phenomenon count and the
-            // resource stays locked; the 16-byte GUID sits at the reflected
-            // `guid` field of a phenomenon.
-            .map(|index| unsafe { read::<[u8; 16]>(start + index * layout.phenomenon_size, guid) })
-            .collect(),
-    )
+        unsafe { BlobArray::read(resource.address() + layout.resource_phenomena) }?;
+    let guids: Vec<[u8; 16]> = (0..count)
+        // SAFETY: `index` is below the resource's phenomenon count and the
+        // resource stays locked; the 16-byte GUID sits at the reflected
+        // `guid` field of a phenomenon.
+        .map(|index| unsafe { read::<[u8; 16]>(start + index * layout.phenomenon_size, guid) })
+        .collect();
+    (!guids.is_empty()).then_some(guids)
+}
+
+/// Whether the fronts a save restored stay as they are: the saved
+/// phenomena are the running world's, or the save holds none, as a file
+/// written when they did not read would.
+fn keeps_as_saved(saved: &[[u8; 16]], served: &[[u8; 16]]) -> bool {
+    saved.is_empty() || saved == served
 }
 
 /// The GUIDs of the phenomena the running world serves, in index order; at
@@ -631,7 +637,7 @@ fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
         .map(|line| enshwick::content::Guid::try_parse(line.trim()).map(|guid| guid.0))
         .collect::<Option<Vec<_>>>()
         .ok_or_else(|| RemapError::Unread(path.to_owned(), "a line is no GUID".to_owned()))?;
-    if saved == served {
+    if keeps_as_saved(&saved, &served) {
         return Ok(());
     }
     // SAFETY: `resource` holds the weather resource locked, and its
@@ -937,12 +943,22 @@ pub(crate) fn forget() {
 
 #[cfg(test)]
 mod tests {
-    use super::remapped;
+    use super::{keeps_as_saved, remapped};
 
     const A: [u8; 16] = [1; 16];
     const B: [u8; 16] = [2; 16];
     const X: [u8; 16] = [9; 16];
     const C: [u8; 16] = [3; 16];
+
+    #[test]
+    fn a_save_that_holds_no_phenomena_keeps_its_fronts_as_saved() {
+        assert!(
+            keeps_as_saved(&[], &[A, B]),
+            "a file written while they did not read"
+        );
+        assert!(keeps_as_saved(&[A, B], &[A, B]));
+        assert!(!keeps_as_saved(&[A, X], &[A, B]));
+    }
 
     #[test]
     fn a_saved_front_follows_its_phenomenon_s_guid_to_its_index_now() {

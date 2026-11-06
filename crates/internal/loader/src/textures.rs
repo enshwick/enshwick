@@ -621,15 +621,7 @@ unsafe fn append(out: *mut KeysOut, type_hash: u32) {
             unsafe { read_at::<[u8; KEY]>(listed.cast(), index * KEY) }
         }));
     }
-    for key in &extra {
-        let mut entry = [0u8; KEY];
-        entry[..16].copy_from_slice(&key.guid);
-        entry[16..20].copy_from_slice(&key.type_hash.to_le_bytes());
-        entry[20..24].copy_from_slice(&key.part.to_le_bytes());
-        if !keys.contains(&entry) {
-            keys.push(entry);
-        }
-    }
+    with_served(&mut keys, &extra);
     let keys: &'static [[u8; KEY]] = Box::leak(keys.into_boxed_slice());
     let _first = combined.set((original, keys));
     // SAFETY: the caller guarantees `out` is live and writable, and nothing
@@ -642,6 +634,20 @@ unsafe fn append(out: *mut KeysOut, type_hash: u32) {
             "mod templates: {} listed for the game's template registry",
             extra.len()
         );
+    }
+}
+
+/// `keys`, the game's listing, with each of `served` after them as the
+/// listing lays a key out (GUID, type hash, part), once each.
+fn with_served(keys: &mut Vec<[u8; KEY]>, served: &[enshwick::abi::ResourceKey]) {
+    for key in served {
+        let mut entry = [0u8; KEY];
+        entry[..16].copy_from_slice(&key.guid);
+        entry[16..20].copy_from_slice(&key.type_hash.to_le_bytes());
+        entry[20..24].copy_from_slice(&key.part.to_le_bytes());
+        if !keys.contains(&entry) {
+            keys.push(entry);
+        }
     }
 }
 
@@ -709,6 +715,23 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn served_keys_follow_the_game_s_listing_once_each_as_it_lays_keys_out() {
+        let key = |guid: u8| enshwick::abi::ResourceKey {
+            guid: [guid; 16],
+            type_hash: TEMPLATE,
+            part: 2,
+        };
+        let mut listed = vec![[7u8; KEY]];
+        with_served(&mut listed, &[key(1), key(1), key(3)]);
+        assert_eq!(listed.len(), 3, "the game's key, then each served one once");
+        assert_eq!(listed[0], [7u8; KEY]);
+        assert_eq!(listed[1][..16], [1; 16]);
+        assert_eq!(listed[1][16..20], TEMPLATE.to_le_bytes());
+        assert_eq!(listed[1][20..24], 2u32.to_le_bytes());
+        assert_eq!(listed[2][..16], [3; 16]);
     }
 
     #[test]
