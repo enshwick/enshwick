@@ -8,7 +8,7 @@
 //! server's step tells each player at most once a second, and the same
 //! reason again only after that player's refusals stopped for a second.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
@@ -81,6 +81,9 @@ struct State {
     any: AtomicBool,
     /// The step's refusals by player, filled on the cursor threads.
     seen: Mutex<[Option<Seen>; SLOTS]>,
+    /// When `local` last changed, in ms since `start` plus one, 0 before any
+    /// refusal, so a HUD frame with no recent one takes no lock.
+    local_at: AtomicU64,
     /// The client's own latest refusal, for its HUD.
     local: Mutex<Option<Seen>>,
     /// What the server told each player lately, on its game thread.
@@ -90,6 +93,7 @@ struct State {
 static STATE: State = State {
     start: OnceLock::new(),
     any: AtomicBool::new(false),
+    local_at: AtomicU64::new(0),
     seen: Mutex::new([None; SLOTS]),
     local: Mutex::new(None),
     told: Mutex::new(Vec::new()),
@@ -117,6 +121,9 @@ pub(crate) fn refused(owner: ModIndex, player: Entity, text: &str, server: bool)
     if !server {
         if let Some(mut local) = STATE.local.try_relock() {
             *local = Some(seen);
+            STATE
+                .local_at
+                .store(seen.at_ms.saturating_add(1), Ordering::Release);
         }
         return;
     }
@@ -222,6 +229,10 @@ thread_local! {
 /// Hands `show` the client's latest reason while the player still aims at
 /// the refused placement, on the interface thread inside the HUD's frame.
 pub(crate) fn hud_line(show: impl FnOnce(&str)) {
+    let at = STATE.local_at.load(Ordering::Acquire);
+    if at == 0 || now_ms().saturating_sub(at - 1) > SHOWN_MS {
+        return;
+    }
     let Some(seen) = STATE.local.try_relock().and_then(|local| *local) else {
         return;
     };
@@ -283,6 +294,12 @@ mod tests {
     #[test]
     fn a_hosting_client_shows_only_its_own_worlds_refusals_and_tells_only_the_servers() {
         assert!(!STATE.any.load(Ordering::Acquire), "an idle step skips");
+        hud_line(|_| panic!("no refusal to show"));
+        assert_eq!(
+            STATE.local_at.load(Ordering::Acquire),
+            0,
+            "an idle HUD frame skips"
+        );
         refused(ModIndex::new(1), Entity(40), "far player", true);
         assert!(
             STATE.local.relock().is_none(),
@@ -291,6 +308,7 @@ mod tests {
         assert_eq!(STATE.seen.relock().iter().flatten().count(), 1);
         assert!(STATE.any.load(Ordering::Acquire), "the step looks");
         refused(ModIndex::new(1), Entity(3), "own cursor", false);
+        assert_ne!(STATE.local_at.load(Ordering::Acquire), 0, "the HUD looks");
         let local = STATE
             .local
             .relock()
