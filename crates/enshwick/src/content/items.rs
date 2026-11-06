@@ -11,8 +11,44 @@ use crate::{Load, Off};
 use super::templates::{ComponentChange, NewTemplate};
 use super::{Blob, EngineFacts, Guid, Id, types};
 
-/// The meter templates the mod serves.
-static METERS: crate::fresh::Fresh<Mutex<Vec<FuelSetup>>> = crate::fresh::Fresh::new();
+/// What the mod added: the meter templates it serves, and its items.
+#[derive(Debug, Default)]
+struct Added {
+    meters: Vec<FuelSetup>,
+    items: Vec<NewItem>,
+}
+
+static ADDED: crate::fresh::Fresh<Mutex<Added>> = crate::fresh::Fresh::new();
+
+/// The item this mod added under `guid`, its current id.
+pub(crate) fn added(guid: Guid) -> Option<NewItem> {
+    ADDED
+        .get_or_init(Mutex::default)
+        .relock()
+        .items
+        .iter()
+        .find(|item| item.id.guid() == guid)
+        .cloned()
+}
+
+/// [`clone_item`] as the game may read it now: without its icon until this
+/// client shows served icons, since an icon its UI does not know ends the
+/// game.
+pub(crate) fn served_clone(
+    layout: &ItemLayout,
+    like: &[u8],
+    item: &NewItem,
+    guid: Guid,
+) -> Option<Vec<u8>> {
+    if item.icon.is_some() && !super::icons::ready() {
+        let vanilla = NewItem {
+            icon: None,
+            ..item.clone()
+        };
+        return clone_item(layout, like, &vanilla, guid);
+    }
+    clone_item(layout, like, item, guid)
+}
 
 /// The game's item registry resource.
 pub const ITEM_REGISTRY: Guid = Guid::parse("3064d35d-7342-40ca-bdc9-aad58f83bf45");
@@ -549,7 +585,9 @@ impl Load<'_> {
             self.add_one_item(item.clone(), old, debug_name)?;
         }
         let (guid, debug_name) = (item.id.guid(), item.debug_name.clone());
-        self.add_one_item(item, guid, debug_name)
+        self.add_one_item(item.clone(), guid, debug_name)?;
+        ADDED.get_or_init(Mutex::default).relock().items.push(item);
+        Ok(())
     }
 
     fn add_one_item(&mut self, item: NewItem, guid: Guid, debug_name: String) -> Result<(), Off> {
@@ -568,18 +606,7 @@ impl Load<'_> {
         self.serve(
             guid.key(types::ITEM_INFO)?,
             like.key(types::ITEM_INFO)?,
-            move |base| {
-                // Naming an icon the client's UI does not know ends the
-                // game: only once the loader says it shows served ones.
-                if item.icon.is_some() && !super::icons::ready() {
-                    let vanilla = NewItem {
-                        icon: None,
-                        ..item.clone()
-                    };
-                    return clone_item(&layout, base, &vanilla, guid);
-                }
-                clone_item(&layout, base, &item, guid)
-            },
+            move |base| served_clone(&layout, base, &item, guid),
         )?;
         let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY_RESOURCE)?;
         self.serve(registry, registry, move |base| {
@@ -587,7 +614,8 @@ impl Load<'_> {
         })?;
         if let Some(meter) = meter {
             // Items of one kind may share their template: serve it once.
-            let mut served = METERS.get_or_init(Mutex::default).relock();
+            let mut added = ADDED.get_or_init(Mutex::default).relock();
+            let served = &mut added.meters;
             match served.iter().find(|m| m.template == meter.template) {
                 Some(same) if *same == meter => return Ok(()),
                 Some(_) => {
@@ -598,7 +626,7 @@ impl Load<'_> {
                 }
                 None => served.push(meter),
             }
-            drop(served);
+            drop(added);
             self.add_template(NewTemplate {
                 changes: vec![meter.change(self)?],
                 ..NewTemplate::new(meter.template, METER_TEMPLATE_BASE)

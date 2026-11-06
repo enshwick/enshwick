@@ -278,7 +278,7 @@ mod tests {
         // SAFETY: the fake host's table lives for the process.
         let status = unsafe {
             enshwick::__private::init_pack(loader.api(), ModHandle(1), |load| {
-                load.on::<WorldLoaded>(|_| assert_eq!(handle(), Some(ModHandle(1))))?;
+                load.on::<WorldLoaded>(|()| assert_eq!(handle(), Some(ModHandle(1))))?;
                 load.on::<Ticked>(|_| assert_eq!(handle(), Some(ModHandle(1))))?;
                 Ok(())
             })

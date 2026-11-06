@@ -27,6 +27,7 @@ use crate::resources::{Registry, Value};
 use crate::typed::{ItemFlag, Reflected as _};
 use crate::{Load, Off};
 
+use super::items::{self, ItemLayout};
 use super::{EngineFacts, Guid, types};
 
 /// The game's names of the fields a removal reads and writes (server 399).
@@ -233,8 +234,9 @@ impl Load<'_> {
         Err(Off::new(format!("loot table {table}: not in the game")))
     }
 
-    /// Serves the vanilla item `old` with the data of the vanilla item
-    /// `new` while the mod runs, under `old`'s own id and GUID: saves,
+    /// Serves the vanilla item `old` with the data of the item `new` while
+    /// the mod runs, under `old`'s own id and GUID. `new` is a vanilla item
+    /// or one this mod added with [`Load::add_item`] before the call. Saves,
     /// recipes and loot that name `old` get `new`'s look and use. The stack
     /// size is at least `old`'s, since the game cuts a held stack above its
     /// item's and saves the cut; saves keep `old`'s id, so a world opens as
@@ -255,12 +257,36 @@ impl Load<'_> {
     pub fn rekey_item(&mut self, old: Guid, new: Guid) -> Result<(), Off> {
         let host = self.host();
         let key = old.key(types::ITEM_INFO)?;
-        let data = host.game_value(new.key(types::ITEM_INFO)?)?;
-        rekeyed(&host.game_value(key)?, &data)
+        let data: Box<dyn Fn() -> Result<Value, Off> + Send + Sync> = match items::added(new) {
+            None => {
+                let data = host.game_value(new.key(types::ITEM_INFO)?)?;
+                Box::new(move || Ok(data.clone()))
+            }
+            Some(item) => {
+                let layout = ItemLayout::resolve(self)?;
+                let like = host
+                    .game_resource(item.like.key(types::ITEM_INFO)?)
+                    .ok_or_else(|| {
+                        Off::new(format!("its base item {}: not in the game", item.like))
+                    })?;
+                // Cloned again at each build, as the mod's own item is, so its
+                // icon shows once the client can.
+                Box::new(move || {
+                    let bytes = items::served_clone(&layout, &like, &item, new)
+                        .ok_or_else(|| Off::new("the mod's item does not clone from its base"))?;
+                    let registry = Registry::game()?;
+                    let ty = registry
+                        .hashed(key.type_hash)
+                        .ok_or_else(|| Off::new("item data: not a type of this build"))?;
+                    Ok(registry.decode(ty.qualified_name(), &bytes)?)
+                })
+            }
+        };
+        rekeyed(&host.game_value(key)?, &data()?)
             .map_err(|off| Off::new(format!("re-key {old} to {new}: {off}")))?;
         // Served from `old` itself, so other mods' patches of it chain and a
         // failed build keeps the vanilla item rather than none.
-        crate::resources::serve_value(host, key, key, move |item| rekeyed(&item, &data))
+        crate::resources::serve_value(host, key, key, move |item| rekeyed(&item, &data()?))
     }
 }
 

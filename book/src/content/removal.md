@@ -57,8 +57,10 @@ A table the game lacks returns `Err(Off)`.
 ## Serve one item with another's data
 
 `load.rekey_item(old, new)` serves the vanilla item `old` with the data of
-the vanilla item `new`, under `old`'s own id. Saves, recipes and loot that
-name `old` get `new`'s look and use. On a server copy of server 399, wood
+the item `new`, under `old`'s own id. `new` is a vanilla item, or an item
+the mod added with `load.add_item` before the call, with its name, tooltip
+lines, meter and icon. Saves, recipes and loot that name `old` get `new`'s
+look and use. On a server copy of server 399, wood
 logs re-keyed to an arrow read as the arrow, stack size 500 and category
 ammunition, and every held stack of logs stayed.
 
