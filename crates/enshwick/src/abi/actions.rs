@@ -103,6 +103,26 @@ impl ActionTarget {
         entity: Entity(0),
         position: [0.0; 3],
     };
+
+    /// Whether a loader takes this target: only the flags above, and a
+    /// finite position where [`ActionTarget::POSITION`] is set. The client,
+    /// the server and the fake loader hold every target to it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::ActionTarget;
+    ///
+    /// let unknown = ActionTarget { flags: ActionTarget::ENTITY | 8, ..ActionTarget::NONE };
+    /// assert!(!unknown.is_valid());
+    /// let entity = ActionTarget { flags: ActionTarget::ENTITY, position: [f64::NAN; 3], ..ActionTarget::NONE };
+    /// assert!(entity.is_valid(), "an unset position is not read");
+    /// ```
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.flags & !(Self::ENTITY | Self::POSITION) == 0
+            && (self.flags & Self::POSITION == 0 || self.position.iter().all(|c| c.is_finite()))
+    }
 }
 
 impl ActionCall {

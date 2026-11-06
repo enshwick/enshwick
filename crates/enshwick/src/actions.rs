@@ -443,7 +443,12 @@ unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out
     let reply = crate::host::guard("panic in an action", String::new, || match call.kind {
         ActionCall::SHEET => registry.sheet(&player, language),
         ActionCall::RUN => {
-            let target = ActionTarget::from_raw(&call.target);
+            let covered = call.header.covers(
+                core::mem::offset_of!(ActionCall, target) + size_of::<crate::abi::ActionTarget>(),
+            );
+            let target = covered
+                .then(|| ActionTarget::from_raw(&call.target))
+                .flatten();
             registry.run_from_interface(&player, action, args, language, target)
         }
         ActionCall::CONSOLE => {

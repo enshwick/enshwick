@@ -42,7 +42,12 @@ fn a_run_s_object_with_unknown_flags_or_an_endless_position_reads_as_none() {
     assert_eq!(sent_back(ActionTarget::POSITION, f64::NAN), None);
     assert_eq!(sent_back(ActionTarget::POSITION, f64::INFINITY), None);
     assert_eq!(sent_back(8, finite), None);
+    assert_eq!(sent_back(ActionTarget::ENTITY | 8, finite), None);
     assert_eq!(sent_back(0, finite), None);
+    assert!(
+        sent_back(ActionTarget::ENTITY, f64::NAN).is_some(),
+        "a position the flags do not set is not read"
+    );
 }
 use enshwick::config::Field;
 

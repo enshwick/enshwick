@@ -157,11 +157,7 @@ fn take_target(bytes: &[u8]) -> Option<ActionTarget> {
         position: [number(8), number(16), number(24)],
         ..ActionTarget::NONE
     };
-    let known = ActionTarget::ENTITY | ActionTarget::POSITION;
-    (target.flags != 0
-        && target.flags & !known == 0
-        && target.position.iter().all(|c| c.is_finite()))
-    .then_some(target)
+    (target.flags != 0 && target.is_valid()).then_some(target)
 }
 
 fn put(out: &mut Vec<u8>, text: &str) {

@@ -303,7 +303,7 @@ pub(crate) extern "system" fn run_action_at(
                 <enshwick::abi::ActionTarget as enshwick::abi::Headed>::BORN,
             )
         };
-        if target.is_some_and(|t| !t.position.iter().all(|c| c.is_finite())) {
+        if target.is_some_and(|t| !t.is_valid()) {
             return Status::BAD_ARGS;
         }
         let target = target.filter(|t| t.flags != 0);
