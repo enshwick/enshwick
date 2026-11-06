@@ -12,7 +12,8 @@ use crate::{Load, Off, abi};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum EditSource {
-    /// The game: a player's tools and buildings, or the game's own work.
+    /// The game: a player's tools and buildings, or the game's own work;
+    /// also the data packs the loader runs, which are no mod of their own.
     Game,
     /// This mod, through the API: its terrain edits, its transactions and
     /// their undos, such as a replay of edits it stored.
@@ -70,6 +71,12 @@ impl VoxelChange {
 pub struct VoxelEdit {
     /// Who made it.
     pub source: EditSource,
+    /// The lowest corner of the box the game wrote, aligned to its bricks
+    /// of 8 voxels: a [`Voxels::read`](super::Voxels::read) of `min` and
+    /// `size` reads the whole box again.
+    pub min: VoxelPos,
+    /// The box's voxels along each axis.
+    pub size: [u32; 3],
     /// The voxels that changed, at least one, x fastest, then y, then z.
     pub changes: Vec<VoxelChange>,
 }
@@ -96,6 +103,8 @@ impl VoxelEdit {
                 by if by == me => EditSource::ThisMod,
                 _ => EditSource::OtherMod,
             },
+            min: VoxelPos::from(data.min),
+            size: data.size,
             changes: changes
                 .iter()
                 .map(|change| VoxelChange {
@@ -124,9 +133,14 @@ impl Load<'_> {
     /// skip the edits whose source is [`EditSource::ThisMod`]. A world's
     /// save keeps edits only inside a base, a Flame Altar's building zone.
     ///
+    /// On a game build without the editor's write the handler never runs,
+    /// and the log and the Mods screen say why. A write the loader cannot
+    /// read, or one past 262,144 changed voxels waiting in a step, is not
+    /// raised; the log counts it.
+    ///
     /// # Errors
     ///
-    /// [`Off`] after init, or on a game build without the editor's write.
+    /// [`Off`] after init.
     ///
     /// # Examples
     ///

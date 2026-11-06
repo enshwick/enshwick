@@ -444,14 +444,19 @@ Where each call works is in
 `load.on_voxels_changed(handler)` calls `handler` after the step for each
 write of the server's world voxels: a player digging, shaping or building,
 the game's own changes, and the terrain edits and transactions of mods.
-Each `VoxelEdit` has its `source`, `Game`, `ThisMod` or `OtherMod`, and its
-`changes`: every voxel that changed, with its place, the voxel before and
-the voxel after. The game writes a whole box at a time, aligned to its
-4-metre bricks and larger than the edit, so the loader reads the box before
-the game writes it and hands over only the voxels that differ. An undo and
-a transaction's `write_voxels` write brick by brick, one edit each; a write
-that changes nothing raises none. On a client it runs while the client
-hosts a game.
+Each `VoxelEdit` has its `source`, `Game`, `ThisMod` or `OtherMod`, the box
+the game wrote (`min` and `size`), and its `changes`: every voxel that
+changed, with its place, the voxel before and the voxel after. The game
+writes a whole box at a time, aligned to its 4-metre bricks and larger than
+the edit, so the loader reads the box before the game writes it and hands
+over only the voxels that differ. An undo and a transaction's
+`write_voxels` write brick by brick, one edit each; a write that changes
+nothing raises none. Data packs write as the game. On a client it runs
+while the client hosts a game.
+
+On a game build without the write, the handler never runs, and the log and
+the Mods screen say why. A box over 128 voxels a side, or past 262,144
+changed voxels waiting in one step, is not raised; the log counts it.
 
 A mod can keep edits the save drops: the save keeps changes only inside a
 base ([What a save keeps](#what-a-save-keeps)). It stores the changes it

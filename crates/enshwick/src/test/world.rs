@@ -645,7 +645,7 @@ pub(crate) struct VoxelGrid {
 
 impl VoxelGrid {
     /// The voxel at `at`, when the grid holds it.
-    fn get(&self, at: [u32; 3]) -> Option<crate::abi::Voxel> {
+    pub(crate) fn get(&self, at: [u32; 3]) -> Option<crate::abi::Voxel> {
         let mut index = 0usize;
         for axis in (0..3).rev() {
             let offset = at[axis].checked_sub(self.min[axis])?;

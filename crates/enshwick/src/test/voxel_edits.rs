@@ -11,9 +11,12 @@ impl Installed {
     /// step: [`Event::VOXELS_CHANGED`] with `changes`, made by `source`,
     /// [`EditSource::Game`] for a player's tool or building. A write that
     /// changes nothing raises none, nor do changes whose voxel stays the
-    /// same. Returns how many handlers ran. The fake also raises the
-    /// voxels each transaction writes as this mod's edit when
-    /// [`Installed::run_transactions`] applies it.
+    /// same. The edit's box is the one of the game's bricks of 8 voxels
+    /// around `changes`. Returns how many handlers ran. The fake also
+    /// raises the voxels each transaction writes, and its undo puts back,
+    /// as its mod's edits brick by brick when
+    /// [`Installed::run_transactions`] runs it; its terrain edits raise
+    /// none, so a test raises those here.
     ///
     /// # Examples
     ///
@@ -43,18 +46,23 @@ impl Installed {
         self.raise_edit(by, &changes)
     }
 
-    /// Raises `changes`, a write by the mod of `by`; none when empty.
+    /// Raises `changes`, one write by the mod of `by` over the bricks
+    /// around them; none when empty.
     pub(crate) fn raise_edit(&self, by: ModHandle, changes: &[abi::VoxelChange]) -> usize {
         if changes.is_empty() {
             return 0;
         }
-        let min = [0, 1, 2].map(|axis| changes.iter().map(|c| c.at[axis]).min().unwrap_or(0));
-        let max = [0, 1, 2].map(|axis| changes.iter().map(|c| c.at[axis]).max().unwrap_or(0));
+        let min = [0, 1, 2]
+            .map(|axis| changes.iter().map(|c| c.at[axis]).min().unwrap_or(0) / BRICK * BRICK);
+        let end = [0, 1, 2].map(|axis| {
+            let last = changes.iter().map(|c| c.at[axis]).max().unwrap_or(0);
+            (last / BRICK).saturating_add(1).saturating_mul(BRICK)
+        });
         let edit = abi::VoxelEditData {
             header: Header::of::<abi::VoxelEditData>(),
             by,
             min,
-            size: [0, 1, 2].map(|axis| max[axis] - min[axis] + 1),
+            size: [0, 1, 2].map(|axis| end[axis] - min[axis]),
             changes: changes.as_ptr(),
             count: changes.len() as u64,
         };
@@ -62,7 +70,25 @@ impl Installed {
         // pointing at `count` changes, all living for the call.
         unsafe { self.raise_raw(Event::VOXELS_CHANGED, (&raw const edit).cast()) }
     }
+
+    /// Raises `changes` brick by brick, one write each, as the loader
+    /// raises a transaction's write and its undo.
+    pub(crate) fn raise_bricks(&self, by: ModHandle, changes: &[abi::VoxelChange]) -> usize {
+        let mut bricks: std::collections::BTreeMap<[u32; 3], Vec<abi::VoxelChange>> =
+            std::collections::BTreeMap::new();
+        for change in changes {
+            let [x, y, z] = change.at.map(|axis| axis / BRICK);
+            bricks.entry([z, y, x]).or_default().push(*change);
+        }
+        bricks
+            .values()
+            .map(|brick| self.raise_edit(by, brick))
+            .sum()
+    }
 }
+
+/// The side of the game's voxel bricks, which its writes are aligned to.
+const BRICK: u32 = 8;
 
 /// The voxels a write of `voxels` over the box of `size` from `min`
 /// changes against the fake's loaded `grids`, where a voxel no grid holds
@@ -84,8 +110,10 @@ pub(crate) fn written(
                 index / (width * height),
             ];
             let at = [0, 1, 2].map(|axis| min[axis] + u32::try_from(offset[axis]).unwrap_or(0));
-            let before = VoxelGrid::read(grids, at, [1; 3])
-                .and_then(|voxels| voxels.first().copied())
+            let before = grids
+                .iter()
+                .rev()
+                .find_map(|grid| grid.get(at))
                 .unwrap_or_default();
             (before != after).then_some(abi::VoxelChange { at, before, after })
         })

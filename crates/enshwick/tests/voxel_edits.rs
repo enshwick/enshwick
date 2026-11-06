@@ -16,6 +16,8 @@ mod tests {
     static VOXELS: OnceLock<Voxels> = OnceLock::new();
     /// The edits the mod heard, with their source.
     static HEARD: Mutex<Vec<(EditSource, Vec<VoxelChange>)>> = Mutex::new(Vec::new());
+    /// The box of each edit the mod heard.
+    static BOXES: Mutex<Vec<(VoxelPos, [u32; 3])>> = Mutex::new(Vec::new());
 
     struct Keeper;
 
@@ -29,6 +31,7 @@ mod tests {
                     .lock()
                     .unwrap()
                     .push((edit.source, edit.changes.clone()));
+                BOXES.lock().unwrap().push((edit.min, edit.size));
             })?;
             Ok(Self)
         }
@@ -50,10 +53,15 @@ mod tests {
     }
 
     fn started() -> enshwick::test::Installed {
+        started_over(VoxelPos::new(10, 20, 30), [3, 2, 2], &[ROCK; 12])
+    }
+
+    fn started_over(min: VoxelPos, size: [u32; 3], ground: &[Voxel]) -> enshwick::test::Installed {
         HEARD.lock().unwrap().clear();
+        BOXES.lock().unwrap().clear();
         let loader = enshwick::test::FakeHost::new()
             .world()
-            .voxels(VoxelPos::new(10, 20, 30), [3, 2, 2], &[ROCK; 12])
+            .voxels(min, size, ground)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Keeper)`.
         let status =
@@ -78,6 +86,19 @@ mod tests {
 
         assert_eq!(loader.voxels_changed(EditSource::Game, &[dug]), 1);
         assert_eq!(*HEARD.lock().unwrap(), [(EditSource::Game, vec![dug])]);
+    }
+
+    #[test]
+    fn an_edit_names_the_box_of_the_game_s_bricks_it_wrote() {
+        let loader = started();
+        let dug = change(VoxelPos::new(10, 20, 30), ROCK, AIR);
+        let far = change(VoxelPos::new(17, 20, 30), ROCK, AIR);
+
+        assert_eq!(loader.voxels_changed(EditSource::Game, &[dug, far]), 1);
+        assert_eq!(
+            *BOXES.lock().unwrap(),
+            [(VoxelPos::new(8, 16, 24), [16, 8, 8])]
+        );
     }
 
     #[test]
@@ -131,6 +152,57 @@ mod tests {
             *HEARD.lock().unwrap(),
             [(EditSource::ThisMod, vec![dug, up, far])],
             "in the box's order, x fastest, then y, then z"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "unstable")]
+    fn a_transaction_and_its_undo_reach_the_mod_brick_by_brick_as_its_own() {
+        let loader = started_over(VoxelPos::new(6, 20, 30), [4, 1, 1], &[AIR, AIR, AIR, ROCK]);
+        let world = WORLD.get().unwrap();
+        let mut filled = VOXELS
+            .get()
+            .unwrap()
+            .read(VoxelPos::new(6, 20, 30), [4, 1, 1])
+            .unwrap();
+        for x in 6..9 {
+            assert!(filled.set(VoxelPos::new(x, 20, 30), ROCK));
+        }
+        let id = world.transaction().write_voxels(&filled).commit().unwrap();
+        loader.run_transactions();
+        let at = |x| VoxelPos::new(x, 20, 30);
+        assert_eq!(
+            *HEARD.lock().unwrap(),
+            [
+                (
+                    EditSource::ThisMod,
+                    vec![change(at(6), AIR, ROCK), change(at(7), AIR, ROCK)]
+                ),
+                (EditSource::ThisMod, vec![change(at(8), AIR, ROCK)]),
+            ],
+            "one edit per brick of 8 voxels"
+        );
+        assert_eq!(
+            *BOXES.lock().unwrap(),
+            [
+                (VoxelPos::new(0, 16, 24), [8; 3]),
+                (VoxelPos::new(8, 16, 24), [8; 3])
+            ]
+        );
+        HEARD.lock().unwrap().clear();
+
+        world.undo(id).unwrap();
+        loader.run_transactions();
+        assert_eq!(
+            *HEARD.lock().unwrap(),
+            [
+                (
+                    EditSource::ThisMod,
+                    vec![change(at(6), ROCK, AIR), change(at(7), ROCK, AIR)]
+                ),
+                (EditSource::ThisMod, vec![change(at(8), ROCK, AIR)]),
+            ],
+            "the undo puts the voxels back"
         );
     }
 }
