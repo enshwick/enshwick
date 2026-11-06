@@ -106,4 +106,19 @@ mod tests {
             loader.logs()
         );
     }
+
+    #[test]
+    fn a_script_s_control_that_runs_an_action_asks_the_server_without_its_handler() {
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT),
+            r#"
+            enshwick.controls.control({ name = "day", label = "day", key = "F8", runs = "day" }, function() end)
+            local ok = pcall(enshwick.controls.control, { name = "night", label = "night", runs = "Night" }, function() end)
+            enshwick.log.info(`bad action {ok}`)
+        "#,
+        );
+        assert!(logged(&loader, "bad action false"), "{:?}", loader.logs());
+        assert_eq!(loader.keys(&[key("F8")], Duration::from_millis(16)), 1);
+        assert_eq!(loader.action_runs(), [("day".to_owned(), String::new())]);
+    }
 }
