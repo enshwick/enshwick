@@ -331,10 +331,12 @@ impl Load<'_> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct ScreenChanged {
-    /// The screen open until now; `None` outside a game.
+    /// The screen open until now, as [`Frame::open_screen`](super::Frame::open_screen)
+    /// reads it: `None` outside a game and for a screen [`HudScreenType`]
+    /// does not name.
     #[script(default)]
     pub before: Option<HudScreenType>,
-    /// The screen open now; `None` outside a game.
+    /// The screen open now, read the same way.
     #[script(default)]
     pub now: Option<HudScreenType>,
 }

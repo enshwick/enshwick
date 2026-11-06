@@ -2013,9 +2013,9 @@ export type Screen = "Menu" | "Loading" | "InGame"
 
 --- The game's screen the player has open changing, from `Load.on_screen_changed`. The name is enshwick's.
 export type ScreenChanged = {
-	--- The screen open until now; nil outside a game.
+	--- The screen open until now, as `Frame.open_screen` reads it: nil outside a game and for a screen `HudScreenType` does not name.
 	before: HudScreenType?,
-	--- The screen open now; nil outside a game.
+	--- The screen open now, read the same way.
 	now: HudScreenType?,
 }
 
