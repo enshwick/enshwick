@@ -507,6 +507,8 @@ pub const NAMESPACES: &[Namespace] = &[
             crate::Load::SCRIPT_CONTENT_JOURNAL,
             #[cfg(feature = "typed")]
             crate::Load::SCRIPT_CONTENT_SKILLS,
+            #[cfg(feature = "typed")]
+            crate::Load::SCRIPT_CONTENT_REMOVAL,
             crate::Load::SCRIPT_CONTENT_ICONS,
             crate::Load::SCRIPT_CONTENT_RENAMES,
             crate::Load::SCRIPT_CONTENT_CHANGE,

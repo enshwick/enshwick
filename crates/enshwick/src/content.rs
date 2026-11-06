@@ -27,6 +27,8 @@ pub mod loot_tables;
 pub mod menu;
 pub mod props;
 pub mod recipes;
+#[cfg(feature = "typed")]
+pub mod removal;
 pub mod renames;
 mod script;
 #[cfg(feature = "typed")]
