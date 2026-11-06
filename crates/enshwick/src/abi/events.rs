@@ -120,7 +120,7 @@ impl Event {
     /// event per write, which an undo or a transaction makes per brick of
     /// 8 voxels; a write that changed nothing raises none. The name is
     /// enshwick's. Raised on the game thread after the step. Server only.
-    /// ABI 11.11.
+    /// ABI 11.12.
     pub const VOXELS_CHANGED: Self = Self(23);
 }
 

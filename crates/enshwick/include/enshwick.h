@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 11
+#define ENSHWICK_ABI_MINOR 12
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -1189,7 +1189,7 @@ typedef uint32_t EnshwickEvent;
 // event per write, which an undo or a transaction makes per brick of
 // 8 voxels; a write that changed nothing raises none. The name is
 // enshwick's. Raised on the game thread after the step. Server only.
-// ABI 11.11.
+// ABI 11.12.
 #define EnshwickEvent_VOXELS_CHANGED 23
 
 // A mod event a mod defines, or the one it subscribes to.

@@ -8,6 +8,16 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `voxels`: `Load::on_voxels_changed` hears every write of the server's
+  world voxels after the step, a player's digging and building, the game's
+  own and the terrain edits and transactions of mods, as a `VoxelEdit`: its
+  `EditSource` (`Game`, `ThisMod` or `OtherMod`) and each `VoxelChange`,
+  the voxel's place before and after. A mod keeps edits the save drops by
+  storing them and writing them back with `write_voxels`, and skips its
+  own replay. Luau reaches it as `enshwick.voxels.on_voxels_changed`.
+  `Event::VOXELS_CHANGED`, `VoxelEditData` and `VoxelChange`, ABI 11.12.
+  The fake host raises edits with `voxels_changed`, and a transaction's
+  voxel writes as the mod's own (#963).
 - `Control::runs(action)` (unstable): a control runs the mod's own action on
   the server, for the player, each time it fires on a client; the server
   checks who may run it and shows the reply as a notice. The server sends
@@ -227,6 +237,8 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- The terrain docs said the save keeps every terrain edit; it keeps one
+  only inside a base, a Flame Altar's building zone (#963).
 - A world's saved weather fronts keep their phenomenon when the mods that
   add phenomena change: the loader writes the phenomena's GUIDs beside the
   save and gives each restored front its phenomenon's new place, where
