@@ -1,12 +1,12 @@
 <!--
 type: tutorial
-description: Build a mod that adds a travel chest to Enshrouded, step by step: the item, its name in two languages, its recipe, and a setting for its cost.
+description: Build a mod that adds a travel chest to Enshrouded, step by step. It covers the item, its name in two languages, its recipe and a setting for its cost.
 -->
 
 # Your first real mod
 
-You build a mod that adds a travel chest: a new item with its own name, a
-recipe for it, and a setting that sets its cost. Each step shows the Rust
+You build a mod that adds a travel chest, a new item. The mod gives it its
+own name, a recipe and a setting for its cost. Each step shows the Rust
 code and the same step in Luau.
 
 ## Start the mod
@@ -18,8 +18,8 @@ sides:
 cargo enshwick new you.travel-chest --side both
 ```
 
-The recipe calls are [unstable](stability.md). In `Cargo.toml`, replace
-the line `enshwick.workspace = true` under `[dependencies]` with:
+The recipe calls are [unstable](stability.md). Open `Cargo.toml`. Under
+`[dependencies]`, replace the line `enshwick.workspace = true` with:
 
 ```toml
 [dependencies]
@@ -136,7 +136,7 @@ workshop and derives many recipes at once.
 
 ## Let the admin set the cost
 
-A setting belongs to each world: the loader writes it to a file beside the
+A setting belongs to each world. The loader writes it to a file beside the
 world's save, and an admin changes it on the Mods screen. The recipe asks
 for its cost each time the game builds the recipe list, and the settings
 handler has the game build it again. This is the whole `src/lib.rs` after

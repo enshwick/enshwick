@@ -1,6 +1,6 @@
 <!--
 type: tutorial
-description: The smallest Enshwick mod in each form, a data pack, a Luau script and a Rust mod, each a few lines that show a result in the log and in the game.
+description: The smallest Enshwick mod in each form: a data pack, a Luau script and a Rust mod. Each is a few lines that show a result in the log and in the game.
 -->
 
 # Hello, world
@@ -112,8 +112,8 @@ crate. This one writes the same line and greets each player who joins.
 
 1. Run `cargo enshwick new you.hello-rust`. It makes the crate
    `hello-rust/`.
-2. The greeting uses [unstable](stability.md) calls. In `Cargo.toml`,
-   replace the line `enshwick.workspace = true` under `[dependencies]`
+2. The greeting uses [unstable](stability.md) calls. Open `Cargo.toml`.
+   Under `[dependencies]`, replace the line `enshwick.workspace = true`
    with:
 
    ```toml
@@ -173,8 +173,8 @@ What each piece does:
   subscribes to [`PlayerJoined`](events.md).
 - `load.world()` is the handle to the server's [world](world.md). The
   handler moves it in and shows the joining player a notice.
-- Any `?` that fails turns the mod off, with the reason in the log, and the
-  game runs on without it ([The life of a mod](concepts/lifecycle.md)).
+- Any `?` that fails turns the mod off, and the log gives the reason. The game runs
+  on without it ([The life of a mod](concepts/lifecycle.md)).
 - `declare_mod!` exports the mod to the loader.
 
 ## What `cargo enshwick new` makes
@@ -184,7 +184,7 @@ name. Each part is of `[a-z0-9-]`, at most 64 characters in all, and the
 name starts with a letter, since it names the crate too. The author part
 keeps two mods of one name apart.
 
-`--side` says where the mod runs: `server`, the default, or `both` when
+`--side` says where the mod runs. Pass `server`, the default, or `both` when
 players' games need it too ([Sides and hosting](concepts/sides-and-hosting.md)).
 `--dir` sets the folder the crate goes into, the current one by default.
 
