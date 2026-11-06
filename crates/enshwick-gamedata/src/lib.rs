@@ -835,6 +835,66 @@ age = 1
         );
     }
 
+    /// Every kept build is reported on its own side only, and no other
+    /// build is: not another age of its executable, nor another guid.
+    #[test]
+    fn a_report_covers_exactly_its_own_build_and_side() {
+        for table in tables() {
+            let fingerprint = table.fingerprint();
+            let other = match table.side() {
+                Side::Server => Side::Client,
+                Side::Client => Side::Server,
+            };
+            let mut guid = fingerprint.guid();
+            guid[15] ^= 1;
+            assert!(reported(table.side(), fingerprint), "{}", table.name());
+            assert!(!reported(other, fingerprint), "{}", table.name());
+            let aged = Fingerprint::new(fingerprint.guid(), fingerprint.age() + 1);
+            assert!(!reported(table.side(), aged), "{}", table.name());
+            let moved = Fingerprint::new(guid, fingerprint.age());
+            assert!(!reported(table.side(), moved), "{}", table.name());
+        }
+    }
+
+    /// An entry a route found nothing for is missing only when no row
+    /// holds it, and once.
+    #[test]
+    fn an_unrouted_entry_is_missing_only_without_a_row() {
+        let table = Table::parse(
+            "name = \"t\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 1\n[symbols]\n\"f.held\" = 0x10\n[constants]\n\"c.held\" = 3\n",
+        )
+        .unwrap();
+        let mut resolved = table.resolve();
+        assert!(!resolved.lack("f.held"));
+        assert!(!resolved.lack("c.held"));
+        assert!(resolved.lack("f.new"));
+        assert!(!resolved.lack("f.new"));
+        assert_eq!(resolved.missing(), ["f.new"]);
+    }
+
+    /// An anchor is a pattern row without an address; one with an address,
+    /// a bare address or no pattern is refused.
+    #[test]
+    fn an_anchor_has_a_pattern_and_no_address() {
+        let anchor = |row: &str| {
+            Table::anchors(
+                &format!("[server.symbols]\n\"a.b\" = {row}\n"),
+                Side::Server,
+            )
+        };
+        let found = anchor("{ pattern = \"90 C3\" }").unwrap();
+        assert_eq!(found.symbols()[0].rva(), 0);
+        for bad in ["0x10", "{ pattern = \"90 C3\", rva = 0x10 }", "{ at = 1 }"] {
+            assert!(anchor(bad).is_err(), "{bad}");
+        }
+        assert!(
+            Table::anchors("[server.symbols]\n", Side::Client)
+                .unwrap()
+                .symbols()
+                .is_empty()
+        );
+    }
+
     #[test]
     fn malformed_tables_are_refused() {
         assert!(matches!(Table::parse("name = 1"), Err(TableError::Toml(_))));

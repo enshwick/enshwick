@@ -550,6 +550,10 @@ fn an_ordinal_takes_the_nth_run_after_its_anchor() {
         row("t.after", "after = [\"call ?\"]\nnth = 1"),
         row("t.past", "after = [\"call ?\"]\nnth = 3"),
         row("t.anchors", "after = [\"mov eax,0x7\"]\nnth = 1"),
+        row("t.named", "after = [\"call {t.leaf}\"]\nnth = 2"),
+        "[[route]]\nid = \"t.unique\"\nin = \"sys_b\"\nshape = [\"call {t.leaf}\", \"mov eax,0x7\"]\n".to_owned(),
+        "[[route]]\nid = \"~fn:a\"\nloads = [\"hello\"]\n".to_owned(),
+        "[[route]]\nid = \"t.leaf\"\ncalled_by = [\"~fn:a\", \"sys_b\"]\n".to_owned(),
     ]
     .concat();
     let routes = Routes::parse(&text).unwrap();
@@ -560,8 +564,11 @@ fn an_ordinal_takes_the_nth_run_after_its_anchor() {
         [
             ("t.after", Some(Routed::Reached(0x1015))),
             ("t.anchors", None),
+            ("t.leaf", Some(Routed::Reached(0x1040))),
+            ("t.named", Some(Routed::Reached(0x101a))),
             ("t.past", None),
             ("t.second", Some(Routed::Reached(0x101a))),
+            ("t.unique", Some(Routed::Symbol(0x1010))),
         ]
     );
     for bad in [
@@ -758,6 +765,32 @@ fn a_scale_folds_the_factors_of_one_index_and_refuses_what_it_cannot_follow() {
         scale(&[0x48, 0x6b, 0xc1, 0x48, 0x8b, 0x04, 0x02]),
         Some(0x48)
     );
+    // lea rcx,[rcx+rcx*4]; shl rcx,4: the register the last one writes
+    assert_eq!(
+        scale(&[0x48, 0x8d, 0x0c, 0x89, 0x48, 0xc1, 0xe1, 0x04]),
+        Some(80)
+    );
+    // mov rax,rcx; shl rax,4; sub rax,rcx; mov eax,[rdx+rax]
+    assert_eq!(
+        scale(&[
+            0x48, 0x89, 0xc8, 0x48, 0xc1, 0xe0, 0x04, 0x48, 0x29, 0xc8, 0x8b, 0x04, 0x02
+        ]),
+        Some(15)
+    );
+    // cmp rcx,[rip+0x10]; lea rax,[rcx+rcx*2]; mov eax,[rdx+rax*4]: RIP is no index
+    assert_eq!(
+        scale(&[
+            0x48, 0x3b, 0x0d, 0x10, 0, 0, 0, 0x48, 0x8d, 0x04, 0x49, 0x8b, 0x04, 0x82
+        ]),
+        Some(12)
+    );
+    // lea r9,[rax+rax*4]; xor ecx,ecx; mov eax,[rdx+r9]: a write of another register
+    assert_eq!(
+        scale(&[0x4c, 0x8d, 0x0c, 0x80, 0x31, 0xc9, 0x42, 0x8b, 0x04, 0x0a]),
+        Some(5)
+    );
+    // lea rax,[rcx+rcx*2]; shl rax,cl: a shift by a register
+    assert_eq!(scale(&[0x48, 0x8d, 0x04, 0x49, 0x48, 0xd3, 0xe0]), None);
     // lea rax,[rcx+rdx]: the first instruction reads two registers
     assert_eq!(scale(&[0x48, 0x8d, 0x04, 0x11]), None);
     // mov eax,[rcx]: a factor of 1 multiplies nothing
