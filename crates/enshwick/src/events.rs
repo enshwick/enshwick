@@ -229,7 +229,7 @@ without_data! {
     WorldSaving = WORLD_SAVING;
     /// [`Event::SHUTDOWN_STARTED`]; the world's next save is its final one,
     /// which runs unless a mod holds saves from now on
-    /// ([`World::hold_saves`](crate::world::World::hold_saves)).
+    /// (`World::hold_saves`).
     ShutdownStarted = SHUTDOWN_STARTED;
     /// [`Event::JOIN_REFUSED`]; [`crate::mods::join_missing`] lists the mods.
     JoinRefused = JOIN_REFUSED;

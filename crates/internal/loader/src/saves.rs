@@ -517,7 +517,7 @@ pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
 
 /// How long saves stay held before the loader warns, and how often the
 /// warning repeats while they stay held.
-const LONG_HOLD: Duration = Duration::from_secs(10 * 60);
+const LONG_HOLD: Duration = Duration::from_mins(10);
 
 /// A mod's hold on the world's saves.
 #[derive(Debug, Clone, Copy)]
@@ -775,19 +775,20 @@ pub(crate) fn shut_down(loader: &Loader, announce: impl FnOnce()) {
         let _long = unsafe { enforce(layout, server) };
     }
     announce();
+    if !HOLDING.load(Ordering::Acquire) {
+        return;
+    }
     match server {
-        // SAFETY: `server` is `world::server`'s live server on its game
-        // thread outside a step, and the mods heard of the shutdown on this
-        // same thread, which the game frees the server on only later.
-        Ok(server) if HOLDING.load(Ordering::Acquire) => {
+        Ok(server) => {
+            // SAFETY: `server` is `world::server`'s live server on its game
+            // thread outside a step, and the mods heard of the shutdown on
+            // this same thread, which the game frees the server on only later.
             let _long = unsafe { enforce(layout, server) };
         }
-        Ok(_) => {}
-        Err(status) if HOLDING.load(Ordering::Acquire) => crate::log!(
+        Err(status) => crate::log!(
             WARN,
             "world saves stay held at shutdown: the server is out of reach here ({status:?})"
         ),
-        Err(_) => {}
     }
 }
 
