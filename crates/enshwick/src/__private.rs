@@ -465,6 +465,8 @@ pub(crate) fn initialised() -> bool {
     INITIALISED.get().is_some()
 }
 
+#[inline]
+#[must_use]
 pub fn enabled(level: Level) -> bool {
     level.0 <= MAX_LEVEL.load(Ordering::Relaxed)
         || crate::host::pack().is_some_and(|pack| level.0 <= pack.log_level().0)
@@ -487,7 +489,7 @@ unsafe extern "system" fn refresh_level(
 /// shortcut: a pack's line takes one uncontended lock per call; move to a
 /// lock-free table if a pack's `warn_every!` shows in a frame trace.
 fn for_pack<T: Default + Send + Sync + 'static>(site: &'static T) -> &'static T {
-    type Sites = rustc_hash::FxHashMap<(usize, u32), &'static (dyn core::any::Any + Send + Sync)>;
+    type Sites = rustc_hash::FxHashMap<(usize, usize), &'static (dyn core::any::Any + Send + Sync)>;
     static SITES: std::sync::LazyLock<std::sync::Mutex<Sites>> =
         std::sync::LazyLock::new(std::sync::Mutex::default);
     let Some(pack) = crate::host::pack() else {
@@ -511,6 +513,8 @@ impl Once {
         Self(AtomicU64::new(0))
     }
 
+    #[inline]
+    #[must_use]
     pub fn first(&'static self) -> bool {
         let this = for_pack(self);
         let life = crate::fresh::life();
@@ -769,10 +773,10 @@ pub unsafe fn as_pack<R>(api: *const HostApi, me: ModHandle, call: impl FnOnce()
     }
 }
 
-/// Runs `call`, the loader's call into its own code or a mod DLL's, with
-/// [`host`](crate::host()) answering the process's host on this thread,
-/// also when a data pack's code called in, so a panic or a line there is
-/// not the pack's.
+/// Runs `call`, the loader's call into its own code or a mod DLL's, as the
+/// process's host, also inside a data pack's call.
+///
+/// A panic or a line there is then not the pack's.
 pub fn as_loader<R>(call: impl FnOnce() -> R) -> R {
     crate::host::running_as(None, call)
 }

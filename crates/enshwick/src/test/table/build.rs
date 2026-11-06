@@ -68,8 +68,14 @@ pub(crate) extern "system" fn mod_dir(_me: ModHandle, out: *mut Str) -> Status {
     )
 }
 
-pub(crate) extern "system" fn log_level(_me: ModHandle) -> Level {
-    with(Level::INFO, |s| s.host.log_level)
+pub(crate) extern "system" fn log_level(me: ModHandle) -> Level {
+    with(Level::INFO, |s| {
+        s.host
+            .pack_log_levels
+            .iter()
+            .find(|(pack, _)| *pack == me)
+            .map_or(s.host.log_level, |(_, level)| *level)
+    })
 }
 
 pub(crate) extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status {

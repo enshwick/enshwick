@@ -671,7 +671,7 @@ mod tests {
         as_pack_or_loader(Some(pack), || {
             assert_eq!(running(), Some(pack));
             as_pack_or_loader(None, || {
-                assert_eq!(running(), None, "the loader's own code")
+                assert_eq!(running(), None, "the loader's own code");
             });
             assert_eq!(
                 running(),

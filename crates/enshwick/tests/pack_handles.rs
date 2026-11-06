@@ -211,4 +211,81 @@ mod tests {
             "the HUD line, drawn as the pack: {hud:?}"
         );
     }
+
+    #[test]
+    fn a_pack_s_debug_line_passes_at_the_pack_s_level_while_the_loader_keeps_info() {
+        use enshwick::abi::Level;
+
+        let loader = FakeHost::new()
+            .pack_log_level(ModHandle(2), Level::DEBUG)
+            .install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        unsafe {
+            enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                enshwick::debug!("from the pack");
+            });
+        };
+        enshwick::debug!("from the loader");
+        assert_eq!(
+            loader.sent(),
+            [(ModHandle(2), Level::DEBUG, "from the pack".to_owned())]
+        );
+    }
+
+    #[test]
+    fn a_once_and_an_every_site_log_for_each_pack_that_reaches_them() {
+        use std::time::Duration;
+
+        fn sites() {
+            enshwick::info_once!("first time");
+            enshwick::warn_every!(Duration::from_secs(3600), "now and then");
+        }
+
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        for pack in [ModHandle(2), ModHandle(2), ModHandle(3)] {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe { enshwick::__private::as_pack(loader.api(), pack, sites) };
+        }
+        sites();
+        sites();
+        let by: Vec<ModHandle> = loader.sent().into_iter().map(|(by, ..)| by).collect();
+        assert_eq!(
+            by,
+            [
+                ModHandle(2),
+                ModHandle(2),
+                ModHandle(3),
+                ModHandle(3),
+                ModHandle(9),
+                ModHandle(9),
+            ],
+            "each pack and the loader once per site: {:?}",
+            loader.sent()
+        );
+    }
+
+    #[test]
+    fn a_pack_s_event_and_tick_handlers_run_as_the_pack() {
+        use std::time::Duration;
+
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        let status = unsafe {
+            enshwick::__private::init_pack(loader.api(), ModHandle(1), |load| {
+                load.on::<WorldLoaded>(|_| assert_eq!(handle(), Some(ModHandle(1))))?;
+                load.on::<Ticked>(|_| assert_eq!(handle(), Some(ModHandle(1))))?;
+                Ok(())
+            })
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
+        assert_eq!(loader.tick(Duration::from_millis(50)), 1);
+        assert_eq!(handle(), Some(ModHandle(9)), "the loader's after the calls");
+    }
 }

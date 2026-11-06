@@ -37,6 +37,13 @@ pub struct Host {
     me: ModHandle,
 }
 
+/// The loader's services, once the loader has initialised this mod; for a
+/// data pack, the pack running on this thread.
+///
+/// # Examples
+///
+/// See [`Host`].
+#[must_use]
 pub fn host() -> Option<Host> {
     RUNNING.get().or_else(|| HOST.get().copied())
 }
@@ -182,6 +189,8 @@ impl Host {
         *HOST.get_or_init(|| self)
     }
 
+    /// Runs `call` with this as the answer of [`host`] on this thread, so a
+    /// data pack's code logs, reads and faults as the pack.
     pub(crate) fn scope<R>(self, call: impl FnOnce() -> R) -> R {
         running_as(Some(self), call)
     }
@@ -399,6 +408,24 @@ mod tests {
                 "off: panic in a loot pass handler: the pack's".to_owned()
             )]
         );
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn a_thread_spawned_in_a_pack_s_scope_runs_as_the_pack() {
+        let loader = crate::test::FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { crate::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        let pack = unsafe { Host::new(loader.api(), ModHandle(2)) }.expect("the fake's table");
+        let (sender, seen) = std::sync::mpsc::channel();
+        let spawned = pack.scope(|| {
+            spawn("pack-thread", move || {
+                let _sent = sender.send(host().map(|host| host.handle()));
+            })
+        });
+        spawned.expect("a thread").join().expect("no panic");
+        assert_eq!(seen.recv().ok(), Some(Some(ModHandle(2))));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! Settings: the running world's settings files and the mod's checks.
 
-use crate::abi::Level;
 use crate::abi::Str;
+use crate::abi::{Level, ModHandle};
 
 use super::FakeHost;
 use super::Installed;
@@ -83,6 +83,26 @@ impl FakeHost {
     #[must_use]
     pub fn log_level(mut self, level: Level) -> Self {
         self.log_level = level;
+        self
+    }
+
+    /// The most detailed level the loader keeps for the lines of the data
+    /// pack `pack`, as `enshwick.toml` sets it per mod id; the other handles
+    /// keep [`log_level`](Self::log_level).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Level, ModHandle};
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .pack_log_level(ModHandle(2), Level::DEBUG)
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn pack_log_level(mut self, pack: ModHandle, level: Level) -> Self {
+        self.pack_log_levels.push((pack, level));
         self
     }
 }
