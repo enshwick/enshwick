@@ -2,6 +2,10 @@
 
 A Luau mod for Enshrouded, run by the [Enshwick](https://github.com/enshwick/enshwick) loader.
 
+It greets each player who joins and counts their visits. An administrator
+presses F8 to tell everyone how many players are online. The mod runs on the
+server only, and the server sends this key to each player's Controls page.
+
 1. Edit `main.luau`. `types/enshwick.d.luau` declares the API for
    [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp); point the editor's
    `luau-lsp.types.definitionFiles` setting at it as `@enshwick`.
