@@ -148,6 +148,9 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- The crate's description, README and root docs, and the book's introduction,
+  describe Enshwick as the modding framework and API for Enshrouded, with its
+  mod loader (#968).
 - A save hold no longer outlasts a shutdown: as a dedicated server or a
   hosted game shuts down, every `World::hold_saves` hold lets go and the
   final save runs, and the log names each mod that held saves and for how
