@@ -21,6 +21,7 @@ struct Added {
 static ADDED: crate::fresh::Fresh<Mutex<Added>> = crate::fresh::Fresh::new();
 
 /// The item this mod added under `guid`, its current id.
+#[cfg(feature = "typed")]
 pub(crate) fn added(guid: Guid) -> Option<NewItem> {
     ADDED
         .get_or_init(Mutex::default)

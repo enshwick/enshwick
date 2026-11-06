@@ -4,9 +4,6 @@
 # entry leaves when its code moves to what the rule asks. Nothing new goes
 # here: a deliberate exception is `// ast-grep-ignore` with its reason.
 
-# The meter templates a mod serves, collected during its init; they move
-# into the content domain's state struct beside the items they serve.
-static-is-registry-fuse-or-state crates/enshwick/src/content/items.rs static METERS: crate::fresh::Fresh<Mutex<Vec<FuelSetup>>> = crate::fresh::Fresh::new();
 # The texts each mod or data pack handed the loader; they move into the
 # texts domain's state struct.
 static-is-registry-fuse-or-state crates/enshwick/src/i18n.rs static HANDED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, Texts)>>> =

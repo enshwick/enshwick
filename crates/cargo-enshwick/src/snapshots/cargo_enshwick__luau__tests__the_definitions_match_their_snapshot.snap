@@ -1,5 +1,6 @@
 ---
 source: crates/cargo-enshwick/src/luau.rs
+assertion_line: 589
 expression: definitions()
 ---
 --!strict
@@ -3823,7 +3824,7 @@ declare enshwick: {
 		--- Serves the vanilla loot table `table`, random or a container's fill table, giving nothing while the mod runs. Loot players hold is plain stacks and stays.
 		--- Only while the mod starts, at the top level of main.luau.
 		remove_loot_table: (table: string) -> (),
-		--- Serves the vanilla item `old` with the data of the vanilla item `new` while the mod runs, under `old`'s own id and GUID: saves, recipes and loot that name `old` get `new`'s look and use. The stack size is at least `old`'s, since the game cuts a held stack above its item's and saves the cut; saves keep `old`'s id, so a world opens as vanilla without the mod. Mods that serve `old` chain in load order, and the last re-key's data wins; a build that fails keeps `old` as it was.
+		--- Serves the vanilla item `old` with the data of the item `new` while the mod runs, under `old`'s own id and GUID. `new` is a vanilla item or one this mod added with `Load.add_item` before the call. Saves, recipes and loot that name `old` get `new`'s look and use. The stack size is at least `old`'s, since the game cuts a held stack above its item's and saves the cut; saves keep `old`'s id, so a world opens as vanilla without the mod. Mods that serve `old` chain in load order, and the last re-key's data wins; a build that fails keeps `old` as it was.
 		--- Only while the mod starts, at the top level of main.luau.
 		rekey_item: (old: string, new: string) -> (),
 		--- Serves `icon`'s UI image, built from the vanilla one it starts from when the client first shows it. `Load.add_item` does it for an item's icon.
