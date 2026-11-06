@@ -125,8 +125,8 @@ assert_eq!(cost.accepts(), "1 to 100");
 The field's doc comment is its English description wherever no translation
 exists.
 
-Two attributes go on the struct itself. `text = "key"` names the key of the
-set's title, `config` by default. `validate = path` names a check of your
+On the struct itself, `text = "key"` names the key of the set's title,
+`config` by default. `validate = path` names a check of your
 own. It is a `fn(&Self) -> Result<(), E>` for any `E` that implements
 `Display`.
 
@@ -216,9 +216,9 @@ change, on a thread that is not fixed:
 
 Settings never change what a mod registers in `init`. Install hooks, add
 content and change game data there in every case. Let the handler set the
-values they read instead. A hook checks a flag, rather than being linked or
-not. A staff's charges apply to each item, rather than being baked into the
-item.
+values they read instead. A hook stays linked and checks a flag. A staff
+sets its charges on each item from the settings, and the item's own data
+stays the same.
 
 This holds in single player, in a hosted game and on a dedicated server. It
 is also why a client agrees with its server: the client registered its
@@ -301,7 +301,7 @@ world's settings:
 With no world running, the console refuses a change, since settings belong
 to each world. A key names one element of a list by its index, such as
 `per_level[2]`, and a grouped setting by its dotted key. A value is TOML,
-such as `5` or `"text"`; text settings also take plain words.
+such as `5` or `"text"`. Text settings also take plain words.
 
 ## The Mods screen
 
