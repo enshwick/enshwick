@@ -70,6 +70,34 @@ fn a_removed_prop_comes_back_on_undo_as_it_was() {
 }
 
 #[test]
+fn a_placed_prop_counts_as_the_mods_own_and_a_prop_an_undo_brings_back_does_not() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.props.insert(40, prop(20.0));
+    world.last_entity = 40;
+    let placed = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(30.0))])
+        .unwrap();
+    let removed = ledger
+        .commit(
+            ME,
+            None,
+            vec![Change::RemoveProp {
+                entity: 40,
+                discard_state: false,
+            }],
+        )
+        .unwrap();
+    run_out(&mut ledger, &mut world);
+    ledger.undo(ME, removed).unwrap();
+    run_out(&mut ledger, &mut world);
+    assert_eq!(state(&ledger, placed).0, TransactionInfo::APPLIED);
+    assert_eq!(state(&ledger, removed).0, TransactionInfo::UNDONE);
+    assert_eq!(world.props.len(), 2, "the removed prop is back");
+    assert_eq!(world.owned, [41], "only the prop the mod placed");
+}
+
+#[test]
 fn a_removed_prop_whose_place_is_taken_is_not_brought_back() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);

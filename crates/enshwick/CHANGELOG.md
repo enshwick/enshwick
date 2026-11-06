@@ -56,7 +56,7 @@ Each entry names the pull request that made the change.
 - `World::set_saved` keeps a live entity a mod spawned or placed out of the
   world's saves, or puts it back, through the game's own `DoNotSave`
   commands, from the next step on; vanilla entities are refused. Luau
-  reaches it as `enshwick.world.set_saved`. `HostApi::set_saved`, ABI 11.10;
+  reaches it as `enshwick.world.set_saved`. `HostApi::set_saved`, ABI 11.9;
   the fake host reports the entities left out with `unsaved` (#961).
 - `items::Kind::Consumed`: every item filter hears a use once all of them
   allowed it, the place to count uses or reward one. `ItemAction::CONSUMED`,

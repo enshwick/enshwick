@@ -174,6 +174,9 @@ pub(crate) struct State {
     pub(crate) teleports: Vec<TeleportRequest>,
     /// The spawns the mod asked for, with the ids handed out.
     pub(crate) spawns: Vec<(u32, SpawnRequest)>,
+    /// The step each of `spawns` was asked in: the entity is in the world
+    /// from the next one, as the loader's spawns are.
+    pub(crate) spawn_steps: Vec<u64>,
     pub(crate) craft_filters: Vec<(CraftCheckFn, usize)>,
     /// Channels the mod opened: full name, id, handler and pointer.
     pub(crate) channels: Vec<(String, u32, NetMessageFn, usize)>,
@@ -627,6 +630,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         emits: Vec::new(),
         teleports: Vec::new(),
         spawns: Vec::new(),
+        spawn_steps: Vec::new(),
         craft_filters: Vec::new(),
         daytime: None,
         clock_speed: None,

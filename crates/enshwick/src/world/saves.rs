@@ -99,21 +99,26 @@ impl World {
         ))
     }
 
-    /// Keeps `entity` out of the world's saves (`saved` false), or puts it
-    /// back in them, through the game's own `DoNotSave` component: an entity
-    /// left out is gone after the server restarts, while the world goes on.
-    /// Only entities a mod spawned ([`Effects::spawn`](crate::effects::Effects::spawn))
-    /// or placed (a transaction's props) in this world are allowed, so no
-    /// mod drops the game's own data from a save. The change shows from the
-    /// next step and counts from the next save that starts after it. For a
-    /// new entity, [`Spawn::do_not_save`](crate::effects::Spawn::do_not_save)
-    /// keeps it out from its first step. On the server's game thread only.
+    /// Keeps an entity of the mod's out of the world's saves, or puts it back
+    /// in them.
+    ///
+    /// With `saved` false the game's own `DoNotSave` component leaves it out:
+    /// it is gone after the server restarts, while the world goes on. Only
+    /// entities a mod spawned ([`Effects::spawn`](crate::effects::Effects::spawn))
+    /// or placed (a transaction's props) since the world loaded are allowed,
+    /// from the step after their spawn, so no mod drops the game's own data
+    /// from a save; once the world loads again, they count as the game's.
+    /// The change shows from the next step and counts from the next save
+    /// that starts after it. For a new entity,
+    /// [`Spawn::do_not_save`](crate::effects::Spawn::do_not_save) keeps it
+    /// out from its first step. On the server's game thread only.
     ///
     /// # Errors
     ///
     /// [`WorldError::Refused`] for an entity no mod spawned, such as a
-    /// vanilla one, [`WorldError::Gone`] for an entity not in the world yet
-    /// or any more, or on a client or a build without the commands, and
+    /// vanilla one or one spawned before the world last loaded,
+    /// [`WorldError::Gone`] for an entity not in the world yet or any more,
+    /// or on a client or a build without the commands, and
     /// [`WorldError::WrongThread`] off the game thread.
     ///
     /// # Examples

@@ -123,6 +123,10 @@ impl Voxels for Game<'_> {
         Ok(entity)
     }
 
+    fn placed(&mut self, entity: u32, prop: &Prop) {
+        crate::spawns::note(self.loader, entity, prop.template);
+    }
+
     fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status> {
         props::read(self.loader, entity)
     }

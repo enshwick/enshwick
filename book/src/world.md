@@ -273,7 +273,7 @@ hosted game.
 An entity spawned with `Spawn::new().do_not_save()` stays out of the save,
 as the game's own passing animals do: it is gone once the world loads again.
 `set_saved(entity, false)` leaves out an entity a mod spawned or placed
-earlier, and `set_saved(entity, true)` puts it back in: the game gives the
+since the world loaded, from the step after its spawn, and `set_saved(entity, true)` puts it back in: the game gives the
 entity its `DoNotSave` component, or takes it away, after the next step, and
 the next save that starts after that leaves the entity out or keeps it.
 Vanilla entities are refused, so no mod drops the game's own data from a

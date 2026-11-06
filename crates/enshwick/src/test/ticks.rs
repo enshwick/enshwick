@@ -23,7 +23,7 @@ struct FakeTick {
 #[derive(Default)]
 pub(crate) struct FakeTicks {
     /// The last step [`Installed::tick`] ran, 0 before the first.
-    step: u64,
+    pub(crate) step: u64,
     /// The time of that step, in nanoseconds from the first.
     nanos: u64,
     /// The hosted games that ended: the steps run in game one more.

@@ -95,7 +95,10 @@ mod tests {
 
     #[test]
     fn a_mod_keeps_its_own_entities_out_of_the_save_and_never_a_vanilla_one() {
-        let loader = enshwick::test::FakeHost::new().world().install();
+        let loader = enshwick::test::FakeHost::new()
+            .world()
+            .prop(Entity(500), enshwick::ItemId::new(30), [0.0; 3])
+            .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -104,6 +107,12 @@ mod tests {
         let decoy = effects.spawn([3; 16], [0.0; 3], Spawn::new()).unwrap();
         let other = effects.spawn([3; 16], [0.0; 3], Spawn::new()).unwrap();
 
+        assert_eq!(
+            world.set_saved(decoy, false),
+            Err(enshwick::WorldError::Gone),
+            "a spawn is in the world only from the next step"
+        );
+        assert_eq!(loader.tick(Duration::from_millis(50)), 0);
         world.set_saved(decoy, false).unwrap();
         world.set_saved(other, false).unwrap();
         world.set_saved(decoy, false).unwrap();
@@ -112,9 +121,14 @@ mod tests {
         assert_eq!(loader.unsaved(), [decoy], "put back in the save");
 
         assert_eq!(
-            world.set_saved(Entity(7), false),
+            world.set_saved(Entity(500), false),
             Err(enshwick::WorldError::Refused),
-            "an entity no mod spawned is refused"
+            "a vanilla prop is refused"
+        );
+        assert_eq!(
+            world.set_saved(Entity(7), false),
+            Err(enshwick::WorldError::Gone),
+            "an entity not in the world is gone"
         );
         let off_thread = std::thread::spawn(move || world.set_saved(decoy, true))
             .join()

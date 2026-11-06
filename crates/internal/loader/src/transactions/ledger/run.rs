@@ -61,11 +61,14 @@ impl Task {
             let actor = work.actor.unwrap_or(0);
             match &op.change {
                 Change::PlaceProp(prop) => match world.spawn_prop(prop, actor) {
-                    Ok(entity) => work.done.push(Done::Placed {
-                        entity,
-                        prop: *prop,
-                        settings: Settings::Unread,
-                    }),
+                    Ok(entity) => {
+                        world.placed(entity, prop);
+                        work.done.push(Done::Placed {
+                            entity,
+                            prop: *prop,
+                            settings: Settings::Unread,
+                        });
+                    }
                     Err(reason) => return failed(reason),
                 },
                 &Change::RemoveProp {

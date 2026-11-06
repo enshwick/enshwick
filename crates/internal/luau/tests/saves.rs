@@ -53,19 +53,39 @@ mod tests {
     #[test]
     fn a_script_keeps_its_own_entity_out_of_the_save_and_never_a_vanilla_one() {
         let loader = run(
-            FakeHost::new().world(),
+            FakeHost::new().world().prop(
+                enshwick::Entity(500),
+                enshwick::ItemId::new(30),
+                [0.0; 3],
+            ),
             r#"
+            local decoy
+            enshwick.on("WorldSaved", function()
+                decoy = enshwick.effects.spawn("03030303-0303-0303-0303-030303030303", vector.create(0, 0, 0), {})
+                local ok, why = pcall(enshwick.world.set_saved, decoy, false)
+                enshwick.log.info(`same step left out {ok}: {why}`)
+            end)
             enshwick.on("WorldSaving", function()
-                local decoy = enshwick.effects.spawn("03030303-0303-0303-0303-030303030303", vector.create(0, 0, 0), {})
                 enshwick.world.set_saved(decoy, false)
-                local ok, why = pcall(enshwick.world.set_saved, 7, false)
+                local ok, why = pcall(enshwick.world.set_saved, 500, false)
                 enshwick.log.info(`vanilla left out {ok}: {why}`)
             end)
             "#,
         );
         // SAFETY: the event carries no data.
+        let spawned = unsafe { loader.raise_raw(Event::WORLD_SAVED, core::ptr::null()) };
+        let _handlers = loader.tick(std::time::Duration::from_millis(50));
+        // SAFETY: the event carries no data.
         let handled = unsafe { loader.raise_raw(Event::WORLD_SAVING, core::ptr::null()) };
-        assert_eq!(handled, 1, "{:?}", loader.logs());
+        assert_eq!((spawned, handled), (1, 1), "{:?}", loader.logs());
+        assert!(
+            logged(
+                &loader,
+                "same step left out false: runtime error: enshwick.world.set_saved: the entity is not in the world"
+            ),
+            "{:?}",
+            loader.logs()
+        );
         let spawned: Vec<_> = loader
             .spawns()
             .into_iter()

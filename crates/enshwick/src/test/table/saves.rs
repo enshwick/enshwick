@@ -26,13 +26,31 @@ pub(crate) extern "system" fn set_saved(
         return Status::WRONG_THREAD;
     }
     with(Status::MISSING, |s| {
-        let spawned = s.spawns.iter().any(|(id, _)| *id == entity.0)
-            || s.edits
-                .transactions
-                .iter()
-                .any(|t| t.created.contains(&entity));
-        if !spawned {
-            return Status::REFUSED;
+        let spawned_at = s
+            .spawns
+            .iter()
+            .zip(&s.spawn_steps)
+            .find(|((id, _), _)| *id == entity.0)
+            .map(|(_, &at)| at);
+        let placed = s
+            .edits
+            .transactions
+            .iter()
+            .any(|t| t.created.contains(&entity));
+        match spawned_at {
+            Some(at) if at >= s.ticks.step => return Status::MISSING,
+            Some(_) => {}
+            None if placed => {}
+            None => {
+                let vanilla = s.host.templates.contains_key(&entity.0)
+                    || s.host.placed.iter().any(|(_, p)| p.entity == entity)
+                    || s.host.props.iter().any(|p| p.entity == entity);
+                return if vanilla {
+                    Status::REFUSED
+                } else {
+                    Status::MISSING
+                };
+            }
         }
         s.save.unsaved.retain(|&e| e != entity.0);
         if saved == 0 {
