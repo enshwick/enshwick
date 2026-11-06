@@ -144,8 +144,8 @@ Each entry names the pull request that made the change.
   `TEMPLATE_COLLECTION` moved to `content::templates`, and `WorkshopLayout`
   lost its `crafting`, `interaction` and `client` fields (#952).
 - The ABI is 11.10: mods built for 11.9 and older load as before (#957).
-- The loader logs once when the map's marker list has no room for a mod's
-  markers, with how many it left out, where it dropped them silently
+- With developer tools on, the loader logs once when the map's marker list
+  has no room for a mod's markers, with how many it left out, where it dropped them silently
   (#957).
 - The loader finds every game build the same way, a new one too: by the
   anchors of `enshwick-gamedata` carried by their code patterns, then the

@@ -440,7 +440,10 @@ fn append() {
         unsafe { core::ptr::copy_nonoverlapping(entry.ptr(), slot, layout.entry_size) };
         count += 1;
     }
-    if left_out > 0 && !MARKERS.told_full.swap(true, Ordering::Relaxed) {
+    if left_out > 0
+        && crate::host::loader().is_some_and(|loader| loader.developer_tools)
+        && !MARKERS.told_full.swap(true, Ordering::Relaxed)
+    {
         crate::log!(
             WARN,
             "map markers: the map's list holds {count} of {capacity} entries{}; {left_out} mod markers do not show",
