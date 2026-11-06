@@ -32,6 +32,13 @@ fn the_tables_layouts_fit_the_loader_s_buffers() {
         let lookup = |id: &str| constant(&table, id);
         let layout = Layout::read(&lookup).unwrap();
         assert_eq!(layout.nav, [0, 0x20, 0x24, 0x28, 0x30, 0x34, 0x48]);
+        assert_eq!(layout.dropdown_external, Some(0xc76));
+        let unrouted = |id: &str| (id != pinned::ui::DROPDOWN_EXTERNAL.id()).then(|| lookup(id))?;
+        assert_eq!(
+            Layout::read(&unrouted).map(|l| l.dropdown_external).ok(),
+            Some(None),
+            "a build whose dropdown mode byte no route finds keeps the interface"
+        );
         DialogLayout::read(&lookup).unwrap();
         let grown = |id: &str| {
             if id == pinned::ui::LABEL_EXTENT.id() {

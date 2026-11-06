@@ -315,12 +315,27 @@ impl Engine {
         }
         config.u8(layout.dropdown_count, u8::try_from(count).unwrap_or(0));
         config.u8(layout.dropdown_enabled, u8::from(!read_only));
-        config.u8(layout.dropdown_external, 1);
+        if let Some(external) = layout.dropdown_external {
+            config.u8(external, 1);
+        }
         // An index past the entries, "none", stays inside the config the
         // game reads the shown entry from.
         let last = count.min(capacity.saturating_sub(1));
         let shown = index.min(u32::try_from(last).unwrap_or(0));
         let mut value = i32::try_from(shown).unwrap_or(0);
+        if layout.dropdown_external.is_none() {
+            // SAFETY: `self.dropdown` is the game's `ui.dropdown`, checked in
+            // `Engine::resolve`, inside the window this function's `# Safety`
+            // gives; at most `ui.dropdown_capacity` entries fill the config
+            // before `ui.dropdown_count` (`Layout::checked`), `value` is a
+            // live integer the game writes, and the open state may be null.
+            let changed =
+                unsafe { (self.dropdown)(config.ptr(), &raw mut value, core::ptr::null_mut()) }
+                    != 0;
+            return (changed && !read_only)
+                .then(|| u32::try_from(value).ok())
+                .flatten();
+        }
         let mut clicked = 0u8;
         // SAFETY: `self.dropdown` is the game's `ui.dropdown`, checked in
         // `Engine::resolve`, inside the window this function's `# Safety`
@@ -328,11 +343,12 @@ impl Engine {
         // `ui.dropdown_count` (`Layout::checked`), and `value` and `clicked`
         // are live locals the game writes.
         let _shown = unsafe { (self.dropdown)(config.ptr(), &raw mut value, &raw mut clicked) };
-        if read_only {
-            return None;
-        }
         let id = label.hash ^ count as u64;
         let open = OPEN_DROPDOWN.get();
+        if read_only {
+            OPEN_DROPDOWN.set(open.filter(|&o| o != id));
+            return None;
+        }
         OPEN_DROPDOWN.set(toggled(open, id, clicked != 0));
         if OPEN_DROPDOWN.get() != Some(id) {
             return None;
