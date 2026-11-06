@@ -289,6 +289,10 @@ mod tests {
     fn the_same_reason_is_told_again_only_after_the_refusals_paused() {
         assert!(!due(&told("low", Some(5000), 9950), &seen("low", 9966)));
         assert!(due(&told("low", Some(5000), 9000), &seen("low", 10_500)));
+        assert!(
+            !due(&told("low", Some(5000), 9000), &seen("low", 9000 + GAP_MS)),
+            "a pause of exactly the gap is no pause"
+        );
     }
 
     #[test]
@@ -307,6 +311,19 @@ mod tests {
         );
         assert_eq!(STATE.seen.relock().iter().flatten().count(), 1);
         assert!(STATE.any.load(Ordering::Acquire), "the step looks");
+        refused(ModIndex::new(1), Entity(40), "nearer", true);
+        let kept: Vec<_> = STATE
+            .seen
+            .relock()
+            .iter()
+            .flatten()
+            .map(|s| s.reason.text().to_owned())
+            .collect();
+        assert_eq!(
+            kept,
+            ["nearer"],
+            "a player's later refusal takes their slot"
+        );
         refused(ModIndex::new(1), Entity(3), "own cursor", false);
         assert_ne!(STATE.local_at.load(Ordering::Acquire), 0, "the HUD looks");
         let local = STATE
