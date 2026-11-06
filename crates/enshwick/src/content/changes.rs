@@ -66,8 +66,10 @@ pub enum Field {
     CraftingDuration,
     /// How many slots a container holds, 8 to 128 in steps of 8 and never
     /// fewer than it has; the entry is the item that places it, and the
-    /// change reaches every item that places the same container. Containers
-    /// placed before keep their size, which the save holds. Unstable:
+    /// change reaches every item that places the same container. Every placed
+    /// container of the kind takes the size at each world load, those placed
+    /// before the change too; one saved with more slots than its kind now
+    /// gives comes back at 128 slots with every item kept. Unstable:
     /// changing it needs the `unstable` feature and may change in any
     /// release.
     Slots,

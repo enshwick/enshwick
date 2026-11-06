@@ -5,19 +5,23 @@ use core::ffi::c_void;
 use crate::abi::{ConfigCheckFn, ContentRename, Level, ModHandle, ModInfo, Status, Str};
 use crate::test::table::{found, put, text, with};
 
-pub(crate) extern "system" fn fault(_me: ModHandle, reason: Str) {
+pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) {
     let reason = text(reason);
     // The loader logs every turn-off with its reason.
     let line = format!("off: {}", reason.replace('\t', " "));
     with((), |s| {
         s.faults.push(reason);
+        s.sent.push((me, Level::ERROR, line.clone()));
         s.logs.push((Level::ERROR, line));
     });
 }
 
-pub(crate) extern "system" fn log(_me: ModHandle, level: Level, message: Str) {
+pub(crate) extern "system" fn log(me: ModHandle, level: Level, message: Str) {
     let message = text(message);
-    with((), |s| s.logs.push((level, message)));
+    with((), |s| {
+        s.sent.push((me, level, message.clone()));
+        s.logs.push((level, message));
+    });
 }
 
 pub(crate) extern "system" fn settings(_me: ModHandle, file: Str, out: *mut Str) -> Status {

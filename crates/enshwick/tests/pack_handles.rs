@@ -151,4 +151,64 @@ mod tests {
         assert!(panicked.is_err());
         assert_eq!(handle(), Some(ModHandle(9)));
     }
+
+    #[test]
+    fn a_pack_s_log_line_goes_out_under_the_pack_s_handle() {
+        use enshwick::abi::Level;
+
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        unsafe {
+            enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                enshwick::warn!("from the pack");
+            });
+        };
+        enshwick::warn!("from the loader");
+        assert_eq!(
+            loader.sent(),
+            [
+                (ModHandle(2), Level::WARN, "from the pack".to_owned()),
+                (ModHandle(9), Level::WARN, "from the loader".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_pack_draws_its_window_and_hud_under_its_own_handle() {
+        use enshwick::abi::Side;
+        use enshwick::test::Drawn;
+        use enshwick::ui::Anchor;
+
+        let loader = FakeHost::new().side(Side::CLIENT).install();
+        // SAFETY: the fake host's table lives for the process; the loader
+        // makes its own handle the host of the copy that runs the packs.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: `init_pack` needs a host table that lives for the process,
+        // which the installed fake host's is.
+        let status = unsafe {
+            enshwick::__private::init_pack(loader.api(), ModHandle(1), |load| {
+                load.on_frame(|frame| {
+                    frame.window("pack", "Pack", |w| w.label("framed"));
+                })?;
+                load.on_hud(|hud| hud.text(Anchor::TopRight, "hud line"))?;
+                Ok(())
+            })
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let drawn = loader.draw_frame();
+        assert!(
+            drawn
+                .iter()
+                .any(|d| matches!(d, Drawn::Label { text, .. } if text == "framed")),
+            "the window's label, drawn as the pack: {drawn:?}"
+        );
+        let hud = loader.draw_hud();
+        assert!(
+            hud.iter()
+                .any(|(_, d)| matches!(d, Drawn::Label { text, .. } if text == "hud line")),
+            "the HUD line, drawn as the pack: {hud:?}"
+        );
+    }
 }

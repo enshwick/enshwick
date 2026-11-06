@@ -19,8 +19,10 @@ thread_local! {
 
 /// The loader's services for this mod, valid for the life of the process.
 ///
-/// Each mod DLL links its own copy of this crate, so [`host`] always answers
-/// for the mod that calls it.
+/// Each mod DLL links its own copy of this crate, so [`host`] answers for the
+/// mod that calls it. The loader's own copy runs every data pack and answers
+/// the pack whose code runs on the calling thread, so its answer is not kept
+/// across calls.
 ///
 /// # Examples
 ///
@@ -35,7 +37,8 @@ pub struct Host {
     me: ModHandle,
 }
 
-/// The loader's services, once the loader has initialised this mod.
+/// The loader's services, once the loader has initialised this mod; for a
+/// data pack, the pack running on this thread.
 ///
 /// # Examples
 ///
@@ -350,6 +353,31 @@ mod tests {
             abi_major: major,
             abi_minor: minor,
         }
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn a_panic_guarded_in_a_scope_faults_the_scoped_mod() {
+        let loader = crate::test::FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { crate::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        let pack = unsafe { Host::new(loader.api(), ModHandle(2)) }.expect("the fake's table");
+        pack.scope(|| {
+            guard(
+                "panic in a loot pass handler",
+                || (),
+                || panic!("the pack's"),
+            )
+        });
+        assert_eq!(
+            loader.sent(),
+            [(
+                ModHandle(2),
+                Level::ERROR,
+                "off: panic in a loot pass handler: the pack's".to_owned()
+            )]
+        );
     }
 
     #[test]

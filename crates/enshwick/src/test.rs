@@ -654,4 +654,18 @@ impl Installed {
     pub fn faults(&self) -> Vec<String> {
         table::with(Vec::new(), |s| s.faults.clone())
     }
+
+    /// Every log line and fault line with the handle it came under, so a
+    /// test tells a data pack's lines from the loader's.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.sent().is_empty());
+    /// ```
+    #[must_use]
+    pub fn sent(&self) -> Vec<(ModHandle, Level, String)> {
+        table::with(Vec::new(), |s| s.sent.clone())
+    }
 }
