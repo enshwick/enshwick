@@ -179,6 +179,7 @@ it and says why.
 | `inventory::Inventories::read`, `inventory::Inventories::read_in` | A reader borrowed for one call. Luau reads through `enshwick.inventory` itself: `slot`, `root`, `durability` and `meter`. |
 | `stats::Stat::from_ref`, `stats::Def::to_def` | A stat from the binary interface's reference or the loader's own table, which a script never holds. |
 | `world::World::component` | A pointer into the game's memory. |
+| `vetoes::BuildVerdict::refuse_because` | A Luau build filter refuses with a reason by returning the reason as a string. |
 | `status::Load::feature`, `state::ModLocal::*` | Rust's own init and statics. A script's start is its `main.luau`, and it keeps values in its own locals. |
 | `resources::Type::*`, `resources::Field::*`, `resources::Attribute::*`, `resources::Constant::*`, `resources::Kind::*`, `resources::Registry::*`, `resources::TypeTable::*`, `resources::Variant::*`, `resources::CodecError::*` | The reflected types as Rust values. Luau gets a type as the table `enshwick.resources.named` gives: its names, hashes, layout, fields, constants and attributes; a variant is `{ type = ..., value = ... }`. |
 | `game_events::EventType::*`, `game_events::RawGameEvent::*`, `game_events::Load::game_event_types`, `Load::game_event_type`, `Load::on_raw_game_event`, `Load::on_every_raw_game_event`, `Load::on_raw_event`, `Load::type_size` | A game event by its reflected type, read field by field in Rust. Luau names the fields and their kinds: `enshwick.on_game_type`, and `enshwick.game_event_types` lists the types. |

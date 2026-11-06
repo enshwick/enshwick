@@ -86,6 +86,45 @@ player in the game sees, in metres; `None` while it is off. The server keeps
 it only while the player plays, never in the save. It fails like
 `markers()`, and with `Missing` on a game build without waypoints.
 
+## Hearing waypoints and pings
+
+`load.on_waypoint(handler)` calls the handler on the server's game thread
+when a player sets, moves or clears their waypoint, with a
+`WaypointChanged`: the player's account, their character and the new
+`position`, `None` once cleared. The waypoints are compared on a tick every
+tenth of a second, so a change shows within that; the waypoint a player has
+when they join counts as no change.
+
+`load.on_ping(handler)` calls the handler for each ping, the game's
+`UiPingEvent`, with a `MapPinged`: the pinging player's account, `None` for a
+ping a mod raised for another entity, the entity it comes from and where.
+One sender is heard at most once a tenth of a second.
+
+Both come from what a client sends, so neither hands on a place outside
+the [map's frame](#the-maps-frame); a waypoint there is named once in the
+log. Both are unstable: a server copy showed a ping a mod raises reaching
+`on_ping`, and a player's own ping and waypoint are not yet seen in the
+game (see [Stability](stability.md)).
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_waypoint(|change| match change.position {
+        Some(at) => enshwick::info!("{:?} marks {at:?}", change.player),
+        None => enshwick::info!("{:?} clears the waypoint", change.player),
+    })?;
+    load.on_ping(|ping| enshwick::info!("{:?} pings {:?}", ping.player, ping.position))
+}
+```
+
+```luau
+enshwick.map.on_waypoint(function(change)
+    enshwick.log.info(`{change.player} marks {change.position}`)
+end)
+enshwick.map.on_ping(function(ping)
+    enshwick.log.info(`{ping.entity} pings {ping.position}`)
+end)
+```
+
 ## The map's frame
 
 `map.frame()` returns a `MapFrame`: where the world's map starts, how far

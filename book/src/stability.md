@@ -45,6 +45,7 @@ change in any release, a patch included.
 | Changes of `Field::MaxStackSize` and `Field::Slots` from a mod; the same changes in data packs carry no promise either                                    | how a player's game shows a chest above 72 slots, a raised stack and a grown backpack is not yet seen    |
 | Damage filters (`Load::on_damage`, `Damage`, `DamageCause`), `events::PlayerDied` and the `killer` fields of `EntityDiedEvent`                            | the order of the game's attributes and who it records as a killer are not yet seen                       |
 | `Load::add_recipe`, `add_recipe_with` and `derive_recipes`                                                                                                | what crafting a new recipe leaves in a player's knowledge is not yet seen                                |
+| `input`, `Frame::open_screen` and `Load::on_screen_changed`                                                                                               | young; which control each bit stands for and which screen is open are not yet seen in the game           |
 
 The API reference marks each of these items "Unstable". Turn the feature on in
 the mod's `Cargo.toml`:

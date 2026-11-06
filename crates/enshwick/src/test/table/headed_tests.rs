@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 /// The helpers that read or write a headed struct only as far as its header
 /// says; `declared` reads a spec through `get_headed`, and `list` writes
 /// entries `entry_size` apart.
-const HELPERS: [&str; 11] = [
+const HELPERS: [&str; 12] = [
+    "ActionTarget::read(",
     " list(",
     "::list(",
     "get_headed(",

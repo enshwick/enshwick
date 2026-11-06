@@ -438,6 +438,32 @@ impl Installed {
         Some(unsafe { core::slice::from_raw_parts(data, len) }.to_vec())
     }
 
+    /// Writes `bytes` over the component [`FakeHost::component`] gave
+    /// `entity`, as a game system would between two steps; bytes past the
+    /// component's length are left out. Whether it had one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity(7), 1, &[4, 2]).install();
+    /// assert!(loader.set_component(enshwick::Entity(7), 1, &[9]));
+    /// assert_eq!(loader.component_bytes(enshwick::Entity(7), 1), Some(vec![9, 2]));
+    /// ```
+    #[must_use = "false means the fake gave `entity` no such component"]
+    pub fn set_component(&self, entity: crate::Entity, type_hash: u32, bytes: &[u8]) -> bool {
+        let Some((address, len)) = table::with(None, |s| {
+            s.host.components.get(&(entity.0, type_hash)).copied()
+        }) else {
+            return false;
+        };
+        let data: *mut u8 = core::ptr::with_exposed_provenance_mut(address);
+        // SAFETY: `component` leaked `len` initialised bytes at `address`,
+        // which only the fake and the mod's calls touch, and no call of the
+        // mod's runs while the test writes.
+        unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), data, bytes.len().min(len)) };
+        true
+    }
+
     /// The game events the mod raised, `(type hash, bytes)`, in order.
     ///
     /// # Examples

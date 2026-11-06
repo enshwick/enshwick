@@ -7,6 +7,8 @@ mod abi_versions;
 #[cfg(feature = "unstable")]
 mod accounts;
 #[cfg(feature = "unstable")]
+mod action_targets;
+#[cfg(feature = "unstable")]
 mod actions;
 #[cfg(feature = "unstable")]
 mod affixes;
@@ -64,6 +66,8 @@ mod hud;
 mod icons;
 mod icons_hidden;
 mod init_off;
+#[cfg(feature = "unstable")]
+mod input;
 mod inventory;
 mod item_changes;
 #[cfg(feature = "unstable")]
@@ -81,6 +85,8 @@ mod manifest_flags;
 #[cfg(feature = "unstable")]
 mod map;
 #[cfg(feature = "unstable")]
+mod map_events;
+#[cfg(feature = "unstable")]
 mod map_marker_types;
 mod mid_hook;
 mod mod_index;
@@ -90,6 +96,8 @@ mod no_mod_points;
 mod no_ui;
 #[cfg(feature = "unstable")]
 mod notices;
+#[cfg(feature = "unstable")]
+mod open_screen;
 mod pacing;
 #[cfg(feature = "unstable")]
 mod pack_handles;

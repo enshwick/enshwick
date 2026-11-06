@@ -84,6 +84,71 @@ pub enum HudScreenType {
 }
 
 impl HudScreenType {
+    /// Every screen, in the game's order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ui::HudScreenType;
+    ///
+    /// assert!(HudScreenType::ALL.contains(&HudScreenType::Map));
+    /// ```
+    pub const ALL: [Self; NAMES.len()] = [
+        Self::InGame,
+        Self::SystemMenu,
+        Self::SettingsMenu,
+        Self::InGameMenu,
+        Self::Map,
+        Self::Journal,
+        Self::Character,
+        Self::PlayerCrafting,
+        Self::Backpack,
+        Self::SkillTree,
+        Self::SkillTreeRespec,
+        Self::FlameAltar,
+        Self::AltarUpgrade,
+        Self::FlameUpgrade,
+        Self::AltarDeactivate,
+        Self::AltarReskill,
+        Self::AltarItemPickup,
+        Self::LoreReading,
+        Self::Signpost,
+        Self::LogicEditor,
+        Self::ReadOnlyLootChest,
+        Self::StorageChest,
+        Self::Collection,
+        Self::FeedingStation,
+        Self::StationBasedCrafting,
+        Self::NpcDialog,
+        Self::NpcCrafting,
+        Self::FactoryCrafting,
+        Self::BlueprintMultiTool,
+        Self::BlueprintMultiToolMaterialCatalog,
+        Self::OvergrowthMultiTool,
+        Self::DecayMultiTool,
+        Self::ScrewdriverMultiToolBuildingMode,
+        Self::ScrewdriverMultiToolGraphManager,
+        Self::ScrewdriverMultiToolEntityConfig,
+        Self::TerraformingSideMenu,
+        Self::NpcSummonerMenu,
+        Self::UserFeedback,
+        Self::TwitchDrops,
+        Self::RedeemCommerceProducts,
+        Self::CommerceProductChest,
+        Self::ItemTinting,
+        Self::TextChat,
+        Self::Social,
+        Self::ShroudForge,
+        Self::CharacterCustomization,
+        Self::Rename,
+        Self::TakeScreenshot,
+        Self::InfoPopup,
+        Self::NewCommerceUnlock,
+        Self::NoUi,
+        Self::TechGallery,
+        Self::YcPlayground,
+    ];
+
     /// The game's name of the screen, which the loader looks up in the
     /// running build.
     ///
@@ -93,6 +158,22 @@ impl HudScreenType {
     #[must_use]
     pub const fn name(self) -> &'static str {
         NAMES[self as usize]
+    }
+
+    /// The screen the game names `name`; `None` for a name this enum lacks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ui::HudScreenType;
+    ///
+    /// assert_eq!(HudScreenType::from_name("Map"), Some(HudScreenType::Map));
+    /// assert_eq!(HudScreenType::from_name("Map2"), None);
+    /// ```
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        let index = NAMES.iter().position(|known| *known == name)?;
+        Self::ALL.get(index).copied()
     }
 }
 
@@ -189,6 +270,75 @@ impl Load<'_> {
             "screen extension",
         )
     }
+
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// Calls `handler` on the thread that draws the interface when the
+    /// game's screen the player has open changes, as
+    /// [`Frame::open_screen`](super::Frame::open_screen) reads it: a chest,
+    /// the map or a survivor's dialog opening or closing. The screens are
+    /// compared once per frame, which costs a few bytes compared; the first
+    /// frame in a game counts as a change from `None`. Client only. A panic
+    /// in `handler` turns the mod off.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a server or after `init`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ui::HudScreenType;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_screen_changed(|change| {
+    ///         if change.now == Some(HudScreenType::StorageChest) {
+    ///             enshwick::info!("a chest opened");
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    pub fn on_screen_changed<F>(&mut self, mut handler: F) -> Result<(), Off>
+    where
+        F: FnMut(&ScreenChanged) + Send + 'static,
+    {
+        let mut seen: &'static str = "";
+        let mut before = None;
+        self.on_frame(move |frame| {
+            // SAFETY: the loader keeps the name for the life of the process
+            // (`UiFrame`'s `hud_screen`).
+            let name: &'static str = unsafe { frame.hud_screen.as_str() }.unwrap_or("");
+            if name == seen {
+                return;
+            }
+            seen = name;
+            let now = HudScreenType::from_name(name);
+            if now != before {
+                let change = ScreenChanged { before, now };
+                before = now;
+                handler(&change);
+            }
+        })
+    }
+}
+
+/// The game's screen the player has open changing, from
+/// [`Load::on_screen_changed`]. The name is enshwick's.
+///
+/// # Examples
+///
+/// See [`Load::on_screen_changed`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub struct ScreenChanged {
+    /// The screen open until now, as [`Frame::open_screen`](super::Frame::open_screen)
+    /// reads it: `None` outside a game and for a screen [`HudScreenType`]
+    /// does not name.
+    #[script(default)]
+    pub before: Option<HudScreenType>,
+    /// The screen open now, read the same way.
+    #[script(default)]
+    pub now: Option<HudScreenType>,
 }
 
 #[cfg(test)]
@@ -202,6 +352,14 @@ mod tests {
         assert_eq!(HudScreenType::NoUi.name(), "NoUi");
         assert_eq!(HudScreenType::YcPlayground.name(), "YcPlayground");
         assert!(OPEN.iter().all(|open| NAMES.contains(open)));
+    }
+
+    #[test]
+    fn every_screen_sits_at_its_own_place_and_reads_back_from_its_name() {
+        for (index, screen) in HudScreenType::ALL.into_iter().enumerate() {
+            assert_eq!(screen as usize, index);
+            assert_eq!(HudScreenType::from_name(screen.name()), Some(screen));
+        }
     }
 
     #[test]

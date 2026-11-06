@@ -28,6 +28,8 @@ mod bases;
 pub mod bindings;
 #[cfg(windows)]
 mod buffs;
+#[cfg(windows)]
+mod build_reasons;
 pub mod builds;
 #[cfg(windows)]
 mod calls;

@@ -4,7 +4,7 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    AccountActionType, ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo,
+    AccountActionType, ActionFn, ActionTarget, ActiveBuff, AffixDefData, AffixRoll, AltarInfo,
     AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo,
     BuildCheckFn, BuildInfo, BuildRights, BuildingZoneCheckFn, CallFn, CallSpec, CallerFrame,
     ChangeId, ChangeOp, ChatFilterFn, ComfortFn, ConfigCheckFn, ContentRename, ControlFn,
@@ -1703,4 +1703,18 @@ pub struct HostApi {
     /// thread only ([`Status::WRONG_THREAD`] elsewhere). A panic in the
     /// loader returns [`Status::REFUSED`]. ABI 11.9.
     pub set_saved: extern "system" fn(me: ModHandle, entity: Entity, saved: u8) -> Status,
+    /// Runs the mod's action `action` with `args` as
+    /// [`HostApi::run_action`] does, naming the object `target` the run acts
+    /// on, null for none; the server hands it to the mod's `at` and handler
+    /// in [`ActionCall::target`](crate::abi::ActionCall::target), to check
+    /// as any object a client names.
+    /// Client only; [`Status::BAD_ARGS`] for a position that is not finite.
+    /// Strings and `target` are borrowed for the call. A panic in the
+    /// loader returns [`Status::REFUSED`]. ABI 11.10.
+    pub run_action_at: extern "system" fn(
+        me: ModHandle,
+        action: Str,
+        args: Str,
+        target: *const ActionTarget,
+    ) -> Status,
 }

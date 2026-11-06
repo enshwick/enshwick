@@ -1,5 +1,6 @@
 [ja]
 "actions.close" = "閉じる"
+"actions.out-of-reach" = "遠すぎます。"
 "controls" = "操作"
 "controls.key" = "キー: {key}"
 "controls.second" = "第2キー: {key}"

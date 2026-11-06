@@ -23,6 +23,8 @@ pub struct Frame<'f> {
     pub(super) host: Host,
     pub(super) token: u64,
     pub(super) screen: Screen,
+    /// The game screen's name, as the loader keeps it for the process.
+    pub(super) hud_screen: Str,
     pub(super) _life: PhantomData<&'f mut ()>,
     pub(super) _thread: PhantomData<*const ()>,
 }
@@ -36,6 +38,36 @@ impl Frame<'_> {
     #[must_use]
     pub fn screen(&self) -> Screen {
         self.screen
+    }
+
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// The game's screen the player has open in this frame, such as a
+    /// storage chest's, and [`HudScreenType::InGame`](super::HudScreenType::InGame)
+    /// in the world with none open; `None` outside a game, for a screen this
+    /// enum does not name and on a game build where the loader does not
+    /// find it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ui::HudScreenType;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_frame(|frame| {
+    ///         if frame.open_screen() == Some(HudScreenType::Map) {
+    ///             // Draw beside the map.
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn open_screen(&self) -> Option<super::HudScreenType> {
+        // SAFETY: the loader keeps the text for the process (`UiFrame`'s
+        // `hud_screen`), and `Str::EMPTY` points at a static.
+        let name = unsafe { self.hud_screen.as_str() }?;
+        super::HudScreenType::from_name(name)
     }
 
     fn draw(&mut self, widget: &mut UiWidget) -> bool {
@@ -266,6 +298,14 @@ where
                 host,
                 token: raw.token,
                 screen,
+                hud_screen: if raw
+                    .header
+                    .covers(core::mem::offset_of!(UiFrame, hud_screen) + size_of::<Str>())
+                {
+                    raw.hud_screen
+                } else {
+                    Str::EMPTY
+                },
                 _life: PhantomData,
                 _thread: PhantomData,
             });

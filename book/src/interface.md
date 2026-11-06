@@ -216,6 +216,39 @@ adds a panel whose button runs a player action, and tests it with
 `extend_screen` returns `Off`; when the build lacks the place where the open
 screen is read, the panels stay off, and the log and the Mods screen say why.
 
+### Which screen is open
+
+`frame.open_screen()` returns the `HudScreenType` the player has open in that
+frame, `InGame` in the world with no screen open, and `None` outside a game
+or on a game build where the loader does not find it. `load.on_screen_changed(handler)`
+calls the handler on the interface thread with a `ScreenChanged`, its
+`before` and `now`, each time the open screen changes: a chest, the map or a
+survivor's dialog opening or closing. The loader reads the screen once a
+frame, from the same byte as the panels.
+
+```rust
+use enshwick::ui::HudScreenType;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_screen_changed(|change| {
+        if change.now == Some(HudScreenType::StorageChest) {
+            enshwick::info!("a chest opened");
+        }
+    })
+}
+```
+
+```luau
+enshwick.ui.on_screen_changed(function(change)
+    if change.now == "StorageChest" then
+        enshwick.log.info("a chest opened")
+    end
+end)
+```
+
+The screen names its kind only, not the object it belongs to, such as
+which chest.
+
 ## A prompt on the mod's object
 
 A mod's object gets the game's own prompt when it is placed from a template

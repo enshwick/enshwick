@@ -1,5 +1,6 @@
 [en]
 "actions.close" = "Close"
+"actions.out-of-reach" = "That is too far away."
 "controls" = "Controls"
 "controls.key" = "Key: {key}"
 "controls.second" = "Second key: {key}"

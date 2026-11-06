@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Entity, Header, PlayerInfo, Str};
+use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 
 /// A question the loader asks a mod about its player actions, registered
 /// with [`HostApi::actions`](super::HostApi::actions).
@@ -27,6 +27,7 @@ use crate::abi::{Entity, Header, PlayerInfo, Str};
 ///     },
 ///     action: Str::new("access"),
 ///     args: Str::new("p0000000000000009\tb1"),
+///     target: enshwick::abi::ActionTarget::NONE,
 /// };
 /// assert_eq!(call.kind, ActionCall::RUN);
 /// ```
@@ -49,9 +50,117 @@ pub struct ActionCall {
     /// The action's arguments in the sheet's encoding, for
     /// [`ActionCall::RUN`]; valid for the call.
     pub args: Str,
+    /// The object the player's client named for [`ActionCall::RUN`]; no
+    /// flags for none, and for the other questions.
+    pub target: ActionTarget,
 }
 
-impl_headed!(ActionCall);
+impl_headed!(ActionCall, born = 144);
+
+/// The object a run of an action names, sent with
+/// [`HostApi::run_action_at`](super::HostApi::run_action_at) and handed back
+/// to the mod in [`ActionCall::target`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{ActionTarget, Header};
+///
+/// let chest = ActionTarget {
+///     header: Header::of::<ActionTarget>(),
+///     flags: ActionTarget::POSITION,
+///     entity: enshwick::Entity(0),
+///     position: [10.0, 2.0, -4.5],
+/// };
+/// assert_eq!(chest.flags & ActionTarget::ENTITY, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+pub struct ActionTarget {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Which fields hold a value: [`ActionTarget::ENTITY`],
+    /// [`ActionTarget::POSITION`], both or none.
+    pub flags: u32,
+    /// The object's entity in the server's world, with
+    /// [`ActionTarget::ENTITY`].
+    pub entity: Entity,
+    /// Where it stands, in metres, with [`ActionTarget::POSITION`].
+    pub position: [f64; 3],
+}
+
+impl_headed!(ActionTarget);
+
+impl ActionTarget {
+    /// `entity` holds the object's entity.
+    pub const ENTITY: u32 = 1;
+    /// `position` holds where it stands.
+    pub const POSITION: u32 = 2;
+    /// No object.
+    pub const NONE: Self = Self {
+        header: Header::of::<Self>(),
+        flags: 0,
+        entity: Entity(0),
+        position: [0.0; 3],
+    };
+
+    /// Whether a loader takes this target: only the flags above, and a
+    /// finite position where [`ActionTarget::POSITION`] is set. The client,
+    /// the server and the fake loader hold every target to it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::ActionTarget;
+    ///
+    /// let unknown = ActionTarget { flags: ActionTarget::ENTITY | 8, ..ActionTarget::NONE };
+    /// assert!(!unknown.is_valid());
+    /// let entity = ActionTarget { flags: ActionTarget::ENTITY, position: [f64::NAN; 3], ..ActionTarget::NONE };
+    /// assert!(entity.is_valid(), "an unset position is not read");
+    /// ```
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.flags & !(Self::ENTITY | Self::POSITION) == 0
+            && (self.flags & Self::POSITION == 0 || self.position.iter().all(|c| c.is_finite()))
+    }
+
+    /// Reads the target a mod passes with a run, as the client loader and the
+    /// fake loader take it: `Ok(None)` for null or no flags, and
+    /// [`Status::BAD_ARGS`] for a header too short or a target that is not
+    /// [valid](Self::is_valid).
+    ///
+    /// # Errors
+    ///
+    /// [`Status::BAD_ARGS`] for a target the loader refuses.
+    ///
+    /// # Safety
+    ///
+    /// - `raw` is null, or points at an `ActionTarget` readable for the size
+    ///   its header states, which no other thread writes during the call.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{ActionTarget, Status};
+    ///
+    /// let mut short = ActionTarget { flags: ActionTarget::ENTITY, ..ActionTarget::NONE };
+    /// short.header.size = 8;
+    /// // SAFETY: `short` is a whole local `ActionTarget`.
+    /// assert_eq!(unsafe { ActionTarget::read(&raw const short) }, Err(Status::BAD_ARGS));
+    /// // SAFETY: null is allowed.
+    /// assert_eq!(unsafe { ActionTarget::read(core::ptr::null()) }, Ok(None));
+    /// ```
+    pub unsafe fn read(raw: *const Self) -> Result<Option<Self>, Status> {
+        if raw.is_null() {
+            return Ok(None);
+        }
+        // SAFETY: the caller's contract, for the size the header states.
+        let target = unsafe { super::read_headed(raw, <Self as super::Headed>::BORN) }
+            .filter(Self::is_valid)
+            .ok_or(Status::BAD_ARGS)?;
+        Ok(Some(target).filter(|t| t.flags != 0))
+    }
+}
 
 impl ActionCall {
     /// The actions the player may use now, as a sheet: the reply is the

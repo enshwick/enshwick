@@ -18,6 +18,7 @@ macro_rules! headed {
     ($check:ident) => {
         $check!(
             ActionCall,
+            ActionTarget,
             ActiveBuff,
             AffixDefData,
             AffixRoll,
@@ -397,7 +398,8 @@ fn a_list_whose_first_header_is_shorter_than_a_header_is_refused() {
 /// it through a helper that knows the header.
 #[test]
 fn every_entry_point_passes_headed_pointers_through_a_sized_helper() {
-    const HELPERS: [&str; 6] = [
+    const HELPERS: [&str; 7] = [
+        "ActionTarget::read(",
         "get_headed(",
         "put_headed(",
         "get_headed_list(",

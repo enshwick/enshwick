@@ -151,6 +151,11 @@ end)
 `Sprint` or `QuickUse0`. A member a game build lacks leaves the control to
 its keys, with a line in the log.
 
+## Reading the game's controls a player holds
+
+[The controls a player holds](input.md) reads which of the game's controls
+any player holds this step, on the server, vanilla clients included.
+
 ## The player's keys
 
 The Mods screen's Controls page lists every mod's controls under the mod's

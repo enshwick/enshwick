@@ -1,5 +1,6 @@
 [es]
 "actions.close" = "Cerrar"
+"actions.out-of-reach" = "Eso está demasiado lejos."
 "controls" = "Controles"
 "controls.key" = "Tecla: {key}"
 "controls.second" = "Segunda tecla: {key}"

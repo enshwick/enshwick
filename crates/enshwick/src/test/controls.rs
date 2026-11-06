@@ -37,6 +37,8 @@ pub(crate) struct FakeControls {
     now: u64,
     /// The action runs the mod sent the server: action and arguments.
     runs: Vec<(String, String)>,
+    /// The object each run named, in the order of `runs`.
+    targets: Vec<Option<crate::actions::ActionTarget>>,
 }
 
 pub(crate) extern "system" fn control(
@@ -100,6 +102,32 @@ pub(crate) extern "system" fn run_action(_me: ModHandle, action: Str, args: Str)
             return Status::MISSING;
         }
         s.controls.runs.push((action, args));
+        s.controls.targets.push(None);
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn run_action_at(
+    _me: ModHandle,
+    action: Str,
+    args: Str,
+    target: *const crate::abi::ActionTarget,
+) -> Status {
+    // SAFETY: the safe layer passes null or a live `ActionTarget` for the call.
+    let named = match unsafe { crate::abi::ActionTarget::read(target) } {
+        Ok(named) => named,
+        Err(status) => return status,
+    };
+    let named = named
+        .as_ref()
+        .and_then(crate::actions::ActionTarget::from_raw);
+    let (action, args) = (text(action), text(args));
+    with(Status::MISSING, |s| {
+        if s.host.side != crate::abi::Side::CLIENT {
+            return Status::MISSING;
+        }
+        s.controls.runs.push((action, args));
+        s.controls.targets.push(named);
         Status::OK
     })
 }
@@ -327,6 +355,21 @@ impl Installed {
     #[must_use]
     pub fn action_runs(&self) -> Vec<(String, String)> {
         with(Vec::new(), |s| s.controls.runs.clone())
+    }
+
+    /// The object each of [`action_runs`](Self::action_runs) named with
+    /// [`Actions::run_at`](crate::actions::Actions::run_at), in the same
+    /// order; `None` for a run without one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.action_targets().is_empty());
+    /// ```
+    #[must_use]
+    pub fn action_targets(&self) -> Vec<Option<crate::actions::ActionTarget>> {
+        with(Vec::new(), |s| s.controls.targets.clone())
     }
 }
 

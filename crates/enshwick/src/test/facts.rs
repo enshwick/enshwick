@@ -173,6 +173,11 @@ pub const UI_PING_EVENT_POSITION: Fact = Fact(ids::UI_PING_POSITION);
 /// The marker of a player character, set by
 /// [`FakeHost::container_kinds`](super::FakeHost::container_kinds).
 pub const PLAYER_INPUT: Fact = Fact(ids::PLAYER_INPUT);
+/// Where a `PlayerInput` keeps the `u64` of the game controls held, set by
+/// [`FakeHost::player_input`](super::FakeHost::player_input).
+pub const PLAYER_INPUT_DIGITAL: Fact = Fact(ids::PLAYER_INPUT_DIGITAL);
+/// The game's enum of controls, whose constants name the held bits.
+pub const PLAYER_INPUT_TYPE: Fact = Fact(ids::PLAYER_INPUT_TYPE);
 /// The marker of an NPC.
 pub const NPC: Fact = Fact(ids::NPC);
 /// The marker of an animal.

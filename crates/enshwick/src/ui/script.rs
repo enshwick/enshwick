@@ -123,6 +123,7 @@ pub(crate) struct ScriptFrame {
     host: Host,
     token: u64,
     screen: Screen,
+    hud_screen: crate::abi::Str,
 }
 
 impl ScriptFrame {
@@ -131,6 +132,7 @@ impl ScriptFrame {
             host: frame.host,
             token: frame.token,
             screen: frame.screen,
+            hud_screen: frame.hud_screen,
         }
     }
 
@@ -141,6 +143,7 @@ impl ScriptFrame {
             host: self.host,
             token: self.token,
             screen: self.screen,
+            hud_screen: self.hud_screen,
             _life: core::marker::PhantomData,
             _thread: core::marker::PhantomData,
         }
@@ -152,7 +155,22 @@ impl Object for ScriptFrame {
         "Frame",
         "One frame of the interface: draw widgets in order through it, during its callback.",
     );
-    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_FRAME];
+    const PARTS: &'static [&'static [Function<Self>]] = &[
+        Self::SCRIPT_FRAME,
+        #[cfg(feature = "unstable")]
+        Self::SCRIPT_OPEN_SCREEN,
+    ];
+}
+
+#[cfg(feature = "unstable")]
+#[crate::script(open_screen)]
+impl ScriptFrame {
+    /// The game's screen the player has open in this frame, as
+    /// [`Frame::open_screen`] says.
+    #[script(name = "open_screen")]
+    pub(crate) fn open_screen_script(&self) -> Option<super::HudScreenType> {
+        self.frame().open_screen()
+    }
 }
 
 #[crate::script(frame)]
@@ -449,6 +467,20 @@ mod unstable {
             draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
         ) -> Result<(), Off> {
             self.extend_screen(screen, edge, move |frame| draw(ScriptFrame::of(frame)))
+        }
+
+        /// Calls `handler` with each change of the game's screen the player
+        /// has open, as [`Load::on_screen_changed`] does.
+        ///
+        /// # Errors
+        ///
+        /// As [`Load::on_screen_changed`].
+        #[script(name = "on_screen_changed")]
+        pub(crate) fn on_screen_changed_script(
+            &mut self,
+            handler: impl Fn(crate::ui::ScreenChanged) + Send + Sync + 'static,
+        ) -> Result<(), Off> {
+            self.on_screen_changed(move |change| handler(*change))
         }
     }
 }

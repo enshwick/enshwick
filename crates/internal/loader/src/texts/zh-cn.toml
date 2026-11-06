@@ -1,5 +1,6 @@
 [zh-cn]
 "actions.close" = "关闭"
+"actions.out-of-reach" = "距离太远。"
 "controls" = "操作"
 "controls.key" = "按键：{key}"
 "controls.second" = "第二按键：{key}"

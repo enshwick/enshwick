@@ -730,9 +730,10 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 189 * 8);
+    assert!(size_of::<HostApi>() == 24 + 190 * 8);
     assert!(core::mem::offset_of!(HostApi, crafting_prop) == 24 + 187 * 8);
     assert!(core::mem::offset_of!(HostApi, set_saved) == 24 + 188 * 8);
+    assert!(core::mem::offset_of!(HostApi, run_action_at) == 24 + 189 * 8);
     assert!(core::mem::offset_of!(HostApi, chat_filter) == 24 + 184 * 8);
     assert!(core::mem::offset_of!(HostApi, save_info) == 24 + 185 * 8);
     assert!(core::mem::offset_of!(HostApi, hold_saves) == 24 + 186 * 8);
@@ -889,7 +890,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, actions) == 24 + 135 * 8);
     assert!(core::mem::offset_of!(HostApi, event_types) == 24 + 136 * 8);
     assert!(size_of::<EventTypeInfo>() == 8 + 16 + 4 + 4);
-    assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16);
+    assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16 + 40);
     assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 39 * 8);
     assert!(core::mem::offset_of!(HostApi, building_zone_check_filter) == 24 + 41 * 8);
     assert!(core::mem::offset_of!(HostApi, survivor_lookup) == 24 + 42 * 8);
@@ -907,12 +908,12 @@ const _: () = {
     assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, build_filter) == 24 + 63 * 8);
     assert!(size_of::<CraftCheck>() == 8 + 16);
-    assert!(size_of::<BuildCheck>() == 8 + 8 + 24);
+    assert!(size_of::<BuildCheck>() == 8 + 8 + 24 + 8);
     assert!(core::mem::offset_of!(HostApi, net_ready) == 24 + 66 * 8);
     assert!(size_of::<NetMessage>() == 8 + 8 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, notify) == 24 + 67 * 8);
     assert!(core::mem::offset_of!(HostApi, ui_dialog) == 24 + 94 * 8);
-    assert!(size_of::<UiFrame>() == 24);
+    assert!(size_of::<UiFrame>() == 40);
     assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32);
     assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
     assert!(core::mem::offset_of!(HostApi, texts) == 24 + 98 * 8);

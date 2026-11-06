@@ -8,7 +8,10 @@
 use std::sync::Arc;
 
 use super::registry::Registry;
-use super::{Action, Actions, Arg, Ask, FindSubjectError, Outcome, Request, Subject, Value, Via};
+use super::{
+    Action, ActionTarget, Actions, Arg, Ask, FindSubjectError, Outcome, Request, Subject, Value,
+    Via,
+};
 use crate::i18n::{Language, Texts};
 use crate::script::{
     self, Answer, Bound, Callback, Class, Error, FromScript, Function, IntoScript, Object, Param,
@@ -193,6 +196,7 @@ struct Listed {
 pub(crate) struct ScriptAsk {
     player: Player,
     language: Language,
+    target: Option<ActionTarget>,
     registry: Arc<Registry>,
 }
 
@@ -201,6 +205,7 @@ impl ScriptAsk {
         Self {
             player: ask.player.clone(),
             language: ask.language,
+            target: ask.target,
             registry: Arc::clone(registry),
         }
     }
@@ -228,6 +233,13 @@ impl ScriptAsk {
         self.language
     }
 
+    /// The object the client named for this run, as [`Ask::target`] holds
+    /// it.
+    #[script(name = "target")]
+    pub(crate) fn target_script(&self) -> Option<ActionTarget> {
+        self.target
+    }
+
     /// The mod's text `key` in the player's language, filled with `values`,
     /// a list of `{ name, value }`, as [`Ask::say`] fills it.
     #[script(name = "say")]
@@ -245,6 +257,7 @@ pub(crate) struct ScriptRequest {
     args: Vec<Value>,
     language: Language,
     via: Via,
+    target: Option<ActionTarget>,
     registry: Arc<Registry>,
 }
 
@@ -287,6 +300,12 @@ impl ScriptRequest {
     #[script(name = "via")]
     pub(crate) fn via_script(&self) -> Via {
         self.via
+    }
+
+    /// The object the client named, as [`Request::target`] holds it.
+    #[script(name = "target")]
+    pub(crate) fn target_script(&self) -> Option<ActionTarget> {
+        self.target
     }
 
     /// The mod's text `key` in the player's language, filled with `values`,
@@ -373,6 +392,7 @@ impl Actions {
                 args: request.args.to_vec(),
                 language: request.language,
                 via: request.via,
+                target: request.target,
                 registry: Arc::clone(&registry),
             })
         })
@@ -391,6 +411,26 @@ impl Actions {
     )]
     pub(crate) fn run_script(&self, action: &str, args: Vec<Value>) -> Result<(), Off> {
         self.run(action, &args)
+    }
+
+    /// On a client, asks the server to run this mod's action `action` with
+    /// `args` on the object `target`, as [`Actions::run_at`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Actions::run_at`].
+    #[script(name = "run_at")]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a script hands the list over as its own copy"
+    )]
+    pub(crate) fn run_at_script(
+        &self,
+        action: &str,
+        args: Vec<Value>,
+        target: ActionTarget,
+    ) -> Result<(), Off> {
+        self.run_at(action, &args, target)
     }
 }
 

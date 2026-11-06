@@ -8,6 +8,34 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `input` (unstable): `Load::input` and `Input::held(player)` read the game
+  actions a player holds this step in the server's world, also for a player
+  without Enshwick, as an `InputMask` (`contains(GameAction)`, `iter`,
+  `bits`); the running build's reflection names each bit. Luau:
+  `enshwick.input.held(entity)`, the list of the held actions' game names
+  (#957).
+- `Frame::open_screen` says which of the game's screens (`HudScreenType`)
+  the player has open in a frame, and `Load::on_screen_changed` hears each
+  change as a `ScreenChanged`, both client only; `HudScreenType::ALL` and
+  `from_name`. Luau: `frame:open_screen()` and
+  `enshwick.ui.on_screen_changed`. `UiFrame::hud_screen`, ABI 11.10 (#957).
+- A build filter refuses with a reason the builder reads:
+  `BuildVerdict::RefuseBecause` (`BuildVerdict::refuse_because`), a key of
+  the mod's texts or plain words. A client running the mod shows it under
+  the build cursor; the server sends it once as a notice, at most once a
+  second per player. `Load::on_build` takes any answer that turns into a
+  `BuildVerdict`, `bool` included; a Luau filter returns a string to refuse
+  with that reason. `BuildCheck::reason`, ABI 11.10 (#957).
+- Player actions name the object they act on: `Actions::run_at` with an
+  `ActionTarget` (the server's entity, a position, or both), which the
+  handler reads in `Ask::target` and `Request::target` once the server
+  checked it: a named entity must exist there and gives its own position,
+  and the object must stand within 12 metres of the player; Luau `actions:run_at`, `ask:target()` and `request:target()`.
+  `HostApi::run_action_at` and `ActionCall::target`, ABI 11.10 (#957).
+- `Load::on_waypoint` hears a player's waypoint set, moved or cleared
+  (`WaypointChanged`), and `Load::on_ping` each ping (`MapPinged`), on the
+  server, a place outside the map's frame left out; Luau
+  `enshwick.map.on_waypoint` and `on_ping` (#957).
 - Luau mods reach the typed API (`typed`): `enshwick.typed.component_type`,
   `event_type` and `resource_type` open a generated component, event or
   resource by its id, such as `ecs.Health`, at start, with
@@ -116,6 +144,17 @@ Each entry names the pull request that made the change.
   `content::workshops::clone_template` and `list_template` are gone,
   `TEMPLATE_COLLECTION` moved to `content::templates`, and `WorkshopLayout`
   lost its `crafting`, `interaction` and `client` fields (#952).
+- **Breaking:** the fake loader's `Installed::build` returns
+  `Result<(), Option<String>>`, the refusing filter's reason if any, in
+  place of a `bool`; a Luau build filter's answer is typed `any`, and a value
+  other than nil, a boolean or a string refuses (#957).
+- `abi::ActionTarget::read` reads the object a run names as the loaders
+  take it; `run_action_at` refuses a target whose header is too short with
+  `BAD_ARGS`, where it ran the action without the object (#957).
+- The ABI is 11.10: mods built for 11.9 and older load as before (#957).
+- With developer tools on, the loader logs once when the map's marker list
+  has no room for a mod's markers, with how many it left out, where it dropped them silently
+  (#957).
 - The loader finds every game build the same way, a new one too: by the
   anchors of `enshwick-gamedata` carried by their code patterns, then the
   engine routes. It reads no per-build table at run time, and an entry

@@ -10,7 +10,7 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use enshwick::abi::{ActionCall, ActionFn, Header, PlayerInfo, Status, Str};
+use enshwick::abi::{ActionCall, ActionFn, ActionTarget, Header, PlayerInfo, Status, Str};
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -84,14 +84,15 @@ fn running(loader: &Loader) -> Vec<Registered> {
         .collect()
 }
 
-/// Asks `registered` its question `kind` about `player`; the reply.
+/// Asks `registered` its question `kind` about `player`, with the action
+/// and its arguments and the object `target` the run names; the reply.
 fn ask(
     registered: Registered,
     kind: u32,
     player: &PlayerInfo,
     language: u32,
-    action: &str,
-    args: &str,
+    (action, args): (&str, &str),
+    target: ActionTarget,
 ) -> String {
     let call = ActionCall {
         header: Header::of::<ActionCall>(),
@@ -100,6 +101,7 @@ fn ask(
         player: *player,
         action: Str::new(action),
         args: Str::new(args),
+        target,
     };
     let mut reply = Str::EMPTY;
     // SAFETY: the callback lives in the mod's DLL, which stays loaded; the
@@ -126,7 +128,14 @@ pub(crate) fn console(loader: &Loader, index: usize, rest: &str) -> Option<Strin
         .into_iter()
         .find(|r| r.owner == ModIndex::new(index))?;
     let console = crate::console::the_console();
-    let reply = ask(registered, ActionCall::CONSOLE, &console, 0, rest, "");
+    let reply = ask(
+        registered,
+        ActionCall::CONSOLE,
+        &console,
+        0,
+        (rest, ""),
+        ActionTarget::NONE,
+    );
     Some(reply.get(1..).unwrap_or_default().to_owned())
 }
 
@@ -149,8 +158,16 @@ pub(crate) fn language(key: u64, language: u32) {
     server_state(|s| s.clients.entry(key).or_default().language = language);
 }
 
-/// A client runs mod `id`'s action, on the server's game thread.
-pub(crate) fn run(loader: &Loader, key: u64, id: &str, action: &str, args: &str) {
+/// A client runs mod `id`'s action on the object `target` its client named,
+/// on the server's game thread.
+pub(crate) fn run(
+    loader: &Loader,
+    key: u64,
+    id: &str,
+    action: &str,
+    args: &str,
+    target: Option<ActionTarget>,
+) {
     let now = Instant::now();
     let (language, admitted) = server_state(|s| {
         let client = s.clients.entry(key).or_default();
@@ -175,7 +192,33 @@ pub(crate) fn run(loader: &Loader, key: u64, id: &str, action: &str, args: &str)
     else {
         return;
     };
-    let reply = ask(registered, ActionCall::RUN, &player, language, action, args);
+    let target = match target {
+        None => ActionTarget::NONE,
+        Some(named) => {
+            let position = |entity| crate::world::fixed_position(loader, entity);
+            let Some(target) = reached(named, player.entity, |e| {
+                position(e).map(enshwick::ecs::metres)
+            }) else {
+                crate::log!(
+                    DEBUG,
+                    "{key:016x} named an object out of reach for {id}:{action}"
+                );
+                let text =
+                    crate::texts::for_player(key, || crate::texts::text("actions.out-of-reach"));
+                tell(loader, key, text);
+                return;
+            };
+            target
+        }
+    };
+    let reply = ask(
+        registered,
+        ActionCall::RUN,
+        &player,
+        language,
+        (action, args),
+        target,
+    );
     let (ok, text) = match reply.split_at_checked(1) {
         Some(("1", text)) => (true, text),
         Some((_, text)) => (false, text),
@@ -189,11 +232,43 @@ pub(crate) fn run(loader: &Loader, key: u64, id: &str, action: &str, args: &str)
         if ok { "done" } else { "refused" }
     );
     if !text.is_empty() {
-        let shown = one_line(text);
-        if crate::notices::send(loader, key, &shown).is_err() {
-            let _queued = crate::chat::send(key, &shown);
-        }
+        tell(loader, key, &one_line(text));
     }
+}
+
+/// Tells player `key` `text` as a notice, or in chat to a client that
+/// cannot show one.
+fn tell(loader: &Loader, key: u64, text: &str) {
+    if crate::notices::send(loader, key, text).is_err() {
+        let _queued = crate::chat::send(key, text);
+    }
+}
+
+/// How far from the player an object their client names may stand, in
+/// metres: enshwick's bound, wider than the reach of anything a player
+/// opens where they stand.
+const REACH: f64 = 12.0;
+
+/// The object `named` as the server sees it, for `player`, with `position`
+/// reading an entity's place in the server's world: a named entity must
+/// stand there and gives its own position over the client's, and the
+/// object must stand within [`REACH`] of the player; `None` refuses the run.
+fn reached(
+    named: ActionTarget,
+    player: enshwick::Entity,
+    position: impl Fn(enshwick::Entity) -> Option<[f64; 3]>,
+) -> Option<ActionTarget> {
+    let mut target = named;
+    if target.flags & ActionTarget::ENTITY != 0 {
+        target.position = position(target.entity)?;
+        target.flags |= ActionTarget::POSITION;
+    }
+    if target.flags & ActionTarget::POSITION == 0 {
+        return None;
+    }
+    let from = position(player)?;
+    let distance_sq: f64 = (0..3).map(|i| (target.position[i] - from[i]).powi(2)).sum();
+    (distance_sq <= REACH * REACH).then_some(target)
 }
 
 /// A reply's lines joined into the one line a notice shows.
@@ -206,12 +281,19 @@ pub(crate) fn forget() {
     *SERVER.relock() = None;
 }
 
-/// Runs mod `id`'s action on the server; false while it takes no messages.
-pub(crate) fn run_on_server(id: &str, action: &str, args: &str) -> bool {
+/// Runs mod `id`'s action on the server, on the object `target` names if
+/// any; false while it takes no messages.
+pub(crate) fn run_on_server(
+    id: &str,
+    action: &str,
+    args: &str,
+    target: Option<ActionTarget>,
+) -> bool {
     crate::net::to_server(&Message::ActionRun {
         id: id.to_owned(),
         action: action.to_owned(),
         args: args.to_owned(),
+        target,
     })
 }
 
@@ -231,5 +313,47 @@ mod tests {
     fn a_reply_of_several_lines_shows_every_line_in_its_notice() {
         assert_eq!(one_line("3 players\nAnn\r\nBob"), "3 players Ann Bob");
         assert_eq!(one_line("Сейф"), "Сейф");
+    }
+
+    fn places(entity: enshwick::Entity) -> Option<[f64; 3]> {
+        match entity.0 {
+            2 => Some([100.0, 5.0, 100.0]),
+            40 => Some([104.0, 5.0, 103.0]),
+            41 => Some([400.0, 5.0, 100.0]),
+            _ => None,
+        }
+    }
+
+    fn named(flags: u32, entity: u32, position: [f64; 3]) -> ActionTarget {
+        ActionTarget {
+            flags,
+            entity: enshwick::Entity(entity),
+            position,
+            ..ActionTarget::NONE
+        }
+    }
+
+    #[test]
+    fn a_named_position_counts_only_within_reach_of_the_player() {
+        let near = named(ActionTarget::POSITION, 0, [108.0, 5.0, 100.0]);
+        assert_eq!(reached(near, enshwick::Entity(2), places), Some(near));
+        let far = named(ActionTarget::POSITION, 0, [113.0, 5.0, 100.0]);
+        assert_eq!(reached(far, enshwick::Entity(2), places), None);
+        assert_eq!(reached(near, enshwick::Entity(9), places), None);
+    }
+
+    #[test]
+    fn a_named_entity_counts_where_the_server_sees_it_not_where_the_client_says() {
+        let both = ActionTarget::ENTITY | ActionTarget::POSITION;
+        let lied = named(both, 41, [100.0, 5.0, 100.0]);
+        assert_eq!(reached(lied, enshwick::Entity(2), places), None);
+        let chest = reached(
+            named(ActionTarget::ENTITY, 40, [0.0; 3]),
+            enshwick::Entity(2),
+            places,
+        );
+        assert_eq!(chest, Some(named(both, 40, [104.0, 5.0, 103.0])));
+        let gone = named(ActionTarget::ENTITY, 77, [100.0, 5.0, 100.0]);
+        assert_eq!(reached(gone, enshwick::Entity(2), places), None);
     }
 }

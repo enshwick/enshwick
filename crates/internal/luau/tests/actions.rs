@@ -260,4 +260,62 @@ mod tests {
             loader.logs()
         );
     }
+
+    #[test]
+    fn a_script_runs_its_action_on_a_named_object_and_its_at_reads_it() {
+        let client = run(
+            FakeHost::new().side(Side::CLIENT),
+            r#"
+            local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+            actions:add({ id = "switch", label = "Switch" }, function() return enshwick.actions.done("") end)
+            actions:run_at("switch", {}, { position = vector.create(1, 2, 3) })
+            "#,
+        );
+        assert_eq!(
+            client.action_targets(),
+            [Some(enshwick::actions::ActionTarget::at([1.0, 2.0, 3.0]))],
+            "{:?}",
+            client.logs()
+        );
+    }
+
+    #[test]
+    fn a_script_s_at_and_handler_get_the_object_the_client_named() {
+        let owner = player(2, 1, "Owl", false);
+        let loader = run(
+            FakeHost::new().player(owner),
+            r#"
+            local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+            actions:add({
+                id = "switch",
+                label = "Switch",
+                at = function(ask)
+                    local target = ask:target()
+                    if target == nil then
+                        return { Err = "Open a safe first" }
+                    end
+                    return { Ok = enshwick.actions.subject("7", "safe at " .. target.position.x) }
+                end,
+            }, function(request)
+                return enshwick.actions.done("entity " .. tostring(request:target().entity))
+            end)
+            "#,
+        );
+        let chest = enshwick::actions::ActionTarget::entity(enshwick::Entity(4096))
+            .with_position([5.0, 0.0, 0.0]);
+        assert_eq!(
+            loader
+                .ask_action_at(&owner, 0, "switch", "", chest)
+                .as_deref(),
+            Some("1entity 4096"),
+            "{:?}",
+            loader.logs()
+        );
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::RUN, &owner, 0, "switch", "")
+                .as_deref(),
+            Some("0Open a safe first")
+        );
+    }
 }

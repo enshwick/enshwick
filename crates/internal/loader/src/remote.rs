@@ -11,6 +11,7 @@
 
 use std::time::{Duration, Instant};
 
+use enshwick::abi::ActionTarget;
 use enshwick::config::Schema;
 
 use crate::texts;
@@ -54,7 +55,7 @@ pub const RUN_RATE: f64 = 10.0;
 pub const RUN_BURST: f64 = 20.0;
 
 /// A message between a client's loader and its server's.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Message {
     /// The server's settings of mod `id`, every file seen as one, as TOML,
     /// without a secret.
@@ -120,7 +121,49 @@ pub enum Message {
         action: String,
         /// The arguments, in the sheet's encoding.
         args: String,
+        /// The object the run names, if any; a loader before it sends none,
+        /// and one before it reads past the arguments.
+        target: Option<ActionTarget>,
     },
+}
+
+/// The bytes of a run's object after its arguments: flags, entity and the
+/// position's three numbers.
+const TARGET_BYTES: usize = 4 + 4 + 24;
+
+fn put_target(out: &mut Vec<u8>, target: &ActionTarget) {
+    out.extend_from_slice(&target.flags.to_le_bytes());
+    out.extend_from_slice(&target.entity.0.to_le_bytes());
+    for coordinate in target.position {
+        out.extend_from_slice(&coordinate.to_le_bytes());
+    }
+}
+
+/// A run's object from the bytes after its arguments: `None` for none, or
+/// for flags this loader does not know or a position that is not finite,
+/// which no loader sends.
+fn take_target(bytes: &[u8]) -> Option<ActionTarget> {
+    let bytes = bytes.first_chunk::<TARGET_BYTES>()?;
+    let word =
+        |at: usize| u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
+    let number = |at: usize| {
+        let mut eight = [0; 8];
+        eight.copy_from_slice(&bytes[at..at + 8]);
+        f64::from_le_bytes(eight)
+    };
+    let flags = word(0);
+    let target = ActionTarget {
+        flags,
+        entity: enshwick::Entity(word(4)),
+        // Bytes the flags leave unset read as zero, so the message writes back the same.
+        position: if flags & ActionTarget::POSITION == 0 {
+            [0.0; 3]
+        } else {
+            [number(8), number(16), number(24)]
+        },
+        ..ActionTarget::NONE
+    };
+    (target.flags != 0 && target.is_valid()).then_some(target)
 }
 
 fn put(out: &mut Vec<u8>, text: &str) {
@@ -204,10 +247,18 @@ impl Message {
                 }
             }
             Self::ActionsLanguage { language } => out.extend_from_slice(&language.to_le_bytes()),
-            Self::ActionRun { id, action, args } => {
+            Self::ActionRun {
+                id,
+                action,
+                args,
+                target,
+            } => {
                 put(&mut out, id);
                 put(&mut out, action);
                 put(&mut out, args);
+                if let Some(target) = target {
+                    put_target(&mut out, target);
+                }
             }
         }
         out
@@ -268,6 +319,7 @@ impl Message {
                 id: take(bytes)?.to_owned(),
                 action: take(bytes)?.to_owned(),
                 args: take(bytes)?.to_owned(),
+                target: take_target(bytes),
             },
             _ => return None,
         })
@@ -346,7 +398,7 @@ impl AdmitEditError {
 }
 
 /// What the server does with a message a client sent, by [`Queries::gate`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Gate {
     /// Serve it.
     Pass,

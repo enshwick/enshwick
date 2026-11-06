@@ -184,8 +184,13 @@ fn answer(loader: &Loader, key: u64, message: Message) {
             snapshot(loader, key, &id, admin);
         }
         Message::ActionsLanguage { language } => crate::actions::language(key, language),
-        Message::ActionRun { id, action, args } => {
-            crate::actions::run(loader, key, &id, &action, &args);
+        Message::ActionRun {
+            id,
+            action,
+            args,
+            target,
+        } => {
+            crate::actions::run(loader, key, &id, &action, &args, target);
         }
         Message::Sync { .. }
         | Message::Snapshot { .. }

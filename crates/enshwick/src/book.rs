@@ -103,6 +103,7 @@ mod unstable {
         Rewards => "content/rewards.md",
         Actions => "actions.md",
         Controls => "controls.md",
+        Input => "input.md",
         Chat => "chat.md",
         Messages => "messages.md",
         Interface => "interface.md",

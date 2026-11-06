@@ -26,6 +26,14 @@ export type ActionOutcome = {
 	text: string,
 }
 
+--- The object a run of an action names, such as the chest whose screen holds the panel that ran it: its entity in the server's world, where it stands, or both. The name is enshwick's.
+export type ActionTarget = {
+	--- Its entity in the server's world, as the server sent it to the client; entity ids differ between the worlds of a server and its clients.
+	entity: number?,
+	--- Where it stands, in metres.
+	position: vector?,
+}
+
 --- A value the player picked for an argument, in the order of `Action.arg`; a list hands the player and the switch.
 export type ActionValue = { Player: ActionValuePlayer } | { Choice: number } | { Number: number } | { Toggle: boolean }
 
@@ -43,6 +51,8 @@ export type Actions = {
 	add: (self: Actions, action: PlayerAction, handler: (arg1: Request) -> ActionOutcome?) -> (),
 	--- On a client, asks the server to run this mod's action `action` with `args`, as `Actions.run` does.
 	run: (self: Actions, action: string, args: {ActionValue}) -> (),
+	--- On a client, asks the server to run this mod's action `action` with `args` on the object `target`, as `Actions.run_at` does.
+	run_at: (self: Actions, action: string, args: {ActionValue}, target: ActionTarget) -> (),
 }
 
 --- Rolls on crafted items, for `Load.add_craft_affixes`.
@@ -170,6 +180,8 @@ export type Ask = {
 	player: (self: Ask) -> Player,
 	--- The language they read, as `Ask.language` holds it.
 	language: (self: Ask) -> string,
+	--- The object the client named for this run, as `Ask.target` holds it.
+	target: (self: Ask) -> ActionTarget?,
 	--- The mod's text `key` in the player's language, filled with `values`, a list of `{ name, value }`, as `Ask.say` fills it.
 	say: (self: Ask, key: string, values: {{string}}) -> string,
 }
@@ -801,6 +813,8 @@ export type Frame = {
 	progress: (self: Frame, fraction: number) -> (),
 	--- Plays one of the game's interface sounds, as `Frame.sound` does.
 	sound: (self: Frame, sound: Sound) -> (),
+	--- The game's screen the player has open in this frame, as `Frame.open_screen` says.
+	open_screen: (self: Frame) -> HudScreenType?,
 }
 
 --- A front of weather, from `Weather.fronts`.
@@ -1332,6 +1346,16 @@ export type MapMarkerType = {
 	show_above_fog_of_war: boolean,
 	--- Whether its markers show their label.
 	show_label: boolean,
+}
+
+--- A ping on the map and in the world, the game's `UiPingEvent`, from `Load.on_ping`.
+export type MapPinged = {
+	--- The pinging player's account; nil for a ping a mod raised for another entity.
+	player: string?,
+	--- The entity the ping comes from.
+	entity: number,
+	--- Where, in metres.
+	position: vector,
 }
 
 --- A player in a `MapSnapshot`.
@@ -1890,6 +1914,8 @@ export type Request = {
 	language: (self: Request) -> string,
 	--- Where it came from, as `Request.via` holds it.
 	via: (self: Request) -> Via,
+	--- The object the client named, as `Request.target` holds it.
+	target: (self: Request) -> ActionTarget?,
 	--- The mod's text `key` in the player's language, filled with `values`, a list of `{ name, value }`, as `Request.say` fills it.
 	say: (self: Request, key: string, values: {{string}}) -> string,
 }
@@ -1980,6 +2006,14 @@ export type Scope = "World" | "Player"
 
 --- Where the player is while a frame draws.
 export type Screen = "Menu" | "Loading" | "InGame"
+
+--- The game's screen the player has open changing, from `Load.on_screen_changed`. The name is enshwick's.
+export type ScreenChanged = {
+	--- The screen open until now, as `Frame.open_screen` reads it: nil outside a game and for a screen `HudScreenType` does not name.
+	before: HudScreenType?,
+	--- The screen open now, read the same way.
+	now: HudScreenType?,
+}
 
 --- An op and its value, as `aggregate` takes them from a script.
 export type ScriptModifier = {
@@ -2518,6 +2552,16 @@ export type VoxelPos = {
 	y: number,
 	--- Across the other way.
 	z: number,
+}
+
+--- A player's waypoint set, moved or cleared, from `Load.on_waypoint`. The name is enshwick's.
+export type WaypointChanged = {
+	--- The player's account.
+	player: string,
+	--- Their character.
+	entity: number,
+	--- Where the waypoint is now, in metres; nil once cleared.
+	position: vector?,
 }
 
 --- How the weather is at a place, from `Weather.at`: weights that add up to 1, as the game's systems weigh it. The name is enshwick's, not the game's.
@@ -3093,14 +3137,17 @@ declare enshwick: {
 		--- Adds a panel at `edge` of the game's screen `screen` and runs `draw` once per frame while it is open, with the frame lent to it, as `Load.extend_screen` does.
 		--- Only while the mod starts, at the top level of main.luau.
 		extend_screen: (screen: HudScreenType, edge: Edge, draw: (arg1: Frame) -> ()) -> (),
+		--- Calls `handler` with each change of the game's screen the player has open, as `Load.on_screen_changed` does.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_screen_changed: (handler: (arg1: ScreenChanged) -> ()) -> (),
 	},
 	vetoes: {
 		--- Runs `filter` on each player's craft request in the server's world, before the crafting system reads it; returning `false` refuses it, and nothing is made or taken. It runs on the game thread, where `World` reads work, in the dedicated server or a hosting client.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_craft: (filter: (arg1: CraftRecipeEvent) -> boolean?) -> (),
-		--- Runs `filter` after the game's cursor check allows a placement; returning `false` refuses it as the game refuses a placement without building permission. It runs on both sides, on the cursor systems' worker threads: the server's answer decides, and a client running the mod shows the cursor as not allowed. The cursor check runs on every frame a player aims to build, so `filter` must not allocate, lock or log, and gives the same answer on both sides.
+		--- Runs `filter` after the game's cursor check allows a placement, as `Load.on_build` does. The filter returns nil or `true` to allow, `false` to refuse as the game refuses a placement without building permission, or a string to refuse and tell the builder why: a key of the mod's texts or plain words; any other value refuses. It runs on both sides, on every frame a player aims to build: the server's answer decides, so `filter` gives the same answer on both sides and stays quick.
 		--- Only while the mod starts, at the top level of main.luau.
-		on_build: (filter: (arg1: Placement) -> boolean?) -> (),
+		on_build: (filter: (arg1: Placement) -> any) -> (),
 	},
 	chat: {
 		--- Runs `filter` on every line a player types, inside the game's chat post on the server's game thread, after the chat mute and in load order with other mods' filters; it keeps, drops or rewrites the line. A panic turns this filter off alone, and lines pass it. On a client it runs while it hosts a game.
@@ -3114,6 +3161,11 @@ declare enshwick: {
 		--- Runs `filter` before the game allows a player's interaction with an entity; returning `false` refuses it the game's own way. It runs in the server's world only, in the dedicated server or a hosting client, on the thread of the system that checks the interaction: keep it quick and never block. The game asks whether to offer an interaction for every entity in each player's reach on every frame, so `filter` runs many times a frame: it must not allocate, lock or log. Moves, sorts, stock draws, dismantling and upgrades ask once per action. An interaction without a player's character or without a target is allowed unasked.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_interaction: (filter: (arg1: Interaction) -> boolean?) -> (),
+	},
+	--- The game's controls each player holds, read in the server's world.
+	input: {
+		--- The game's controls `player` holds this step, as their client last sent them; nil for an entity that is no player. Read on the server's game thread between steps, in the server's world, so a vanilla client's player reads the same. A script gets the list of the held actions' game names, as a control's `link` names them.
+		held: (player: number) -> {string}?,
 	},
 	items: {
 		--- Runs `filter` on each player's action with any item in the server's world; returning `false` refuses a `Kind.Consume`, `Kind.Trash`, `Kind.Equip` or `Kind.Unequip` the game's own way, and is ignored for the others. It runs on the thread of the system that runs the action, once per action: keep it quick and never block.
@@ -3288,6 +3340,12 @@ declare enshwick: {
 		waypoint: (player: number) -> vector?,
 		--- What the map shows now as a `MapSnapshot`: every player with position and waypoint, the Flame Altars of `altars` with their bases, every marker and the map's frame. Without `altars` the snapshot has none; without a frame its `frame` is nil; on a game build without waypoints no player has one. The loader reads every marker, so take one now and then, not every step.
 		snapshot: (altars: Altars?) -> MapSnapshot,
+		--- Calls `handler` on the server's game thread when a player sets, moves or clears the waypoint all players see. The waypoints are compared on a tick every tenth of a second, so a change shows within that; a player's waypoint when they join counts as no change. A waypoint outside the map is not handed on, and the log says so once. On a client it hears only a game that client hosts.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_waypoint: (handler: (arg1: WaypointChanged) -> ()) -> (),
+		--- Calls `handler` on the server's game thread for each ping a player makes on the map or in the world, and each one a mod raises with `Effects.ping`. A sender is heard at most once a tenth of a second, and a ping outside the map is not handed on.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_ping: (handler: (arg1: MapPinged) -> ()) -> (),
 		--- The fog's size, scale and version.
 		state: () -> FogState,
 		--- Copies the box of `size` pixels at `min`.

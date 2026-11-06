@@ -47,7 +47,7 @@ use content::{
     item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_keys,
     resource_read, serve_resource, set_change, types,
 };
-use controls::{control, run_action};
+use controls::{control, run_action, run_action_at};
 use gameplay::{
     account_knowledge, altar_limit_filter, altar_zone_filter, altar_zones_changed, altars,
     altars_open, apply_buff, base_limit, base_zones, buff_types, buffs, build_filter,
@@ -237,6 +237,9 @@ pub(crate) struct State {
     /// The frame token of the extension drawing now, whose window the
     /// loader opened.
     pub(crate) extending: Option<u64>,
+    /// The game screen the player has open, as frames and HUDs hear it;
+    /// empty for none.
+    pub(crate) open_screen: &'static str,
     /// What the HUD drawing now drew, with each item's anchor, while one
     /// draws.
     pub(crate) hud: Option<(u64, Vec<(u32, super::Drawn)>)>,
@@ -662,6 +665,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         extensions: Vec::new(),
         drawing: None,
         extending: None,
+        open_screen: "",
         hud: None,
         markers: Vec::new(),
         config_checks: std::collections::BTreeMap::new(),
@@ -1048,4 +1052,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     hold_saves,
     crafting_prop,
     set_saved,
+    run_action_at,
 };
