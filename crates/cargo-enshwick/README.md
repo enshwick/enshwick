@@ -131,7 +131,9 @@ row.
    `--write` puts each new mod row right after its old one and writes the
    refreshed check shapes; the report names the build by `--steam-build` and
    `--game-version` when they are given. Without `--write` the report carries
-   the ported table and the new rows instead. It writes every file or none:
+   the ported table and the new rows instead. An old build without a table
+   in `tables/` ports from what its anchors and engine routes find on it, and
+   the report says where each section's old values come from. It writes every file or none:
    when one cannot be written, the others stay as they were. The exit code is 0 when nothing
    needs a human, 2 when something does, and 1 on an error.
 4. **Review.** The report lists every entry with its verdict. Settle each item
@@ -140,13 +142,15 @@ row.
    the report cannot port needs its route or anchor fixed. Read `git diff`,
    build, and try the new build in game.
 5. **Write the report data** of the new build, which the compatibility page
-   reads, under the build's file name:
+   reads; given the folder, it takes the build's file name:
 
    ```bash
    cargo xtask compat server/enshrouded_server.exe \
-     --data crates/enshwick-gamedata/reports/<table file name>
+     --data crates/enshwick-gamedata/reports
    ```
 
+   `--steam-build` and `--game-version` name the build when no Steam
+   appmanifest or game archive lies beside the executable.
 6. **Open a pull request** with the report data, the rows, any fixed route or
    anchor and the report's summary. Never commit an executable or anything
    else from the game.
