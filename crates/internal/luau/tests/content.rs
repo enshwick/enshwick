@@ -66,6 +66,64 @@ mod tests {
     }
 
     #[test]
+    fn a_script_adds_a_quest_and_a_page_and_changes_a_vanilla_quest() {
+        let loader = run(
+            FakeHost::new().progression(),
+            &format!(
+                r#"
+                local given = enshwick.content.add_knowledge({{ id = "you.luau:given", scope = "Player", kind = "Bool" }})
+                local is_given = {{ id = given, scope = "Player", test = "IsSet" }}
+                local quest = enshwick.content.add_quest({{
+                    id = "you.luau:trail",
+                    name = enshwick.content.guid("you.luau:trail.name"),
+                    source = "None",
+                    kind = "PlayerQuest",
+                    steps = {{ {{
+                        name = enshwick.content.guid("you.luau:trail.1"),
+                        text = enshwick.content.guid("you.luau:trail.1.text"),
+                        shown_when = is_given,
+                        done_when = {{ id = given, scope = "Player", test = {{ AtLeast = 1 }} }},
+                    }} }},
+                    rewards = {{ {{ Item = "{CHEST}" }} }},
+                }})
+                enshwick.log.info(`quest {{quest}}`)
+                enshwick.content.add_journal_page({{
+                    id = "you.luau:lore",
+                    category = enshwick.content.guid("you.luau:lore.category"),
+                    name = enshwick.content.guid("you.luau:lore.name"),
+                    entries = {{ {{
+                        name = enshwick.content.guid("you.luau:lore.1"),
+                        text = enshwick.content.guid("you.luau:lore.1.text"),
+                        shown_when = is_given,
+                    }} }},
+                }})
+                enshwick.content.change_quest({VANILLA}, {{ add_rewards = {{ {{ Item = "{CHEST}" }} }} }})
+                local ok = pcall(enshwick.content.change_quest, 1, {{}})
+                enshwick.log.info(`unknown quest refused {{not ok}}`)
+                "#,
+                VANILLA = enshwick::test::VANILLA_QUEST,
+            ),
+        );
+        let quest = enshwick::knowledge::KnowledgeId::from_guid(Id::new("you.luau:trail").guid());
+        assert!(
+            logged(&loader, &format!("quest {quest}")),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(
+            logged(&loader, "unknown quest refused true"),
+            "{:?}",
+            loader.logs()
+        );
+        let hash = FakeHost::new()
+            .progression()
+            .hash("JournalRegistryResource")
+            .unwrap();
+        let journal = enshwick::content::journal::JOURNAL_REGISTRY.key_by_hash(hash);
+        assert!(loader.resources().iter().any(|r| r.key == journal));
+    }
+
+    #[test]
     fn a_script_adds_a_recipe_beside_a_vanilla_one() {
         let loader = run(
             FakeHost::new().items().recipes(),
