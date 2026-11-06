@@ -517,29 +517,6 @@ fn fallback(
     (key == base).then(|| bytes.to_vec())
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::abi::ResourceKey;
-
-    #[test]
-    fn a_failed_patch_keeps_a_game_resource_and_serves_no_new_one() {
-        let key = |guid: u8| ResourceKey {
-            guid: [guid; 16],
-            type_hash: 7,
-            part: 0,
-        };
-        assert_eq!(
-            super::fallback(key(1), key(1), b"base"),
-            Some(b"base".to_vec())
-        );
-        assert_eq!(
-            super::fallback(key(2), key(1), b"base"),
-            None,
-            "a copy turns the mod off"
-        );
-    }
-}
-
 /// Serves `value` as the new resource `key`, of the type its key names; the
 /// loader builds it from any vanilla resource of that type, whose bytes the
 /// value replaces.
@@ -611,4 +588,27 @@ pub(crate) fn declare(host: Host, id: &str) -> Result<crate::content::Guid, Off>
     crate::load::ok(status, crate::content::Guid(out), || {
         format!("content id {id}")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::abi::ResourceKey;
+
+    #[test]
+    fn a_failed_patch_keeps_a_game_resource_and_serves_no_new_one() {
+        let key = |guid: u8| ResourceKey {
+            guid: [guid; 16],
+            type_hash: 7,
+            part: 0,
+        };
+        assert_eq!(
+            super::fallback(key(1), key(1), b"base"),
+            Some(b"base".to_vec())
+        );
+        assert_eq!(
+            super::fallback(key(2), key(1), b"base"),
+            None,
+            "a copy turns the mod off"
+        );
+    }
 }

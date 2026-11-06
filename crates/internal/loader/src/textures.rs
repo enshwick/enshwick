@@ -306,10 +306,9 @@ pub(crate) fn link(loader: &'static Loader) {
             }
         }
     }
-    if !keys_linked
-        && !(crate::content::new_keys_of_type(TEMPLATE).is_empty()
-            && crate::content::orphan_templates().is_empty())
-    {
+    let templates = !crate::content::new_keys_of_type(TEMPLATE).is_empty()
+        || !crate::content::orphan_templates().is_empty();
+    if templates && !keys_linked {
         link_templates(loader);
     }
 }

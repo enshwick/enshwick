@@ -5,7 +5,6 @@
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::abi::Status;
     use enshwick::content::Id;
     use enshwick::content::items::NewItem;
     use enshwick::content::props::{CraftingPropSetup, NewProp};
