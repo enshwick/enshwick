@@ -7,6 +7,13 @@
 //! The controls are the game's player input, each a [`GameAction`]; the
 //! running build's reflection names each bit.
 //!
+//! The held controls are what the player's client sent, and any client can
+//! send any of them, as fast as it likes. Read them for what the player
+//! could do with the keys anyway, such as a stance or a hint; never let
+//! them decide something that matters, such as rights, rewards or an admin
+//! step. That comes from the server's own state, or from an
+//! [action](crate::actions), which the server checks on every run.
+//!
 //! # Examples
 //!
 //! ```

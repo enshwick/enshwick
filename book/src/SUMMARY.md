@@ -38,6 +38,7 @@
 - [Knowledge and quests](knowledge.md)
 - [Player actions](actions.md)
 - [Controls](controls.md)
+  - [The controls a player holds](input.md)
 - [Chat, notices and the console](chat.md)
 - [Messages between server and client](messages.md)
 - [The interface](interface.md)

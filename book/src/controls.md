@@ -153,49 +153,8 @@ its keys, with a line in the log.
 
 ## Reading the game's controls a player holds
 
-`load.input()` returns an `Input`, and `input.held(player)` the game actions
-that player holds this step: an `InputMask`, with `contains(GameAction)`,
-`iter()` and the raw `bits()`. It reads the player's own input in the
-server's world, as their client last sent it, so it reads a player without
-Enshwick the same way. It runs on the server's game thread between steps,
-such as in a tick, and returns `None` for an entity that is no player. The
-running build's reflection names each bit; a bit it does not name is in
-`bits()` only.
-
-```rust
-use std::time::Duration;
-
-use enshwick::controls::GameAction;
-
-fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let input = load.input()?;
-    let world = load.world()?;
-    load.on_tick(Duration::from_secs(1), move |_| {
-        for player in world.players() {
-            if let Ok(Some(held)) = input.held(player.entity)
-                && held.contains(GameAction::Block)
-            {
-                enshwick::info!("{} blocks", player.name);
-            }
-        }
-    })?;
-    Ok(())
-}
-```
-
-```luau
-enshwick.on_tick(1, function()
-    for _, player in enshwick.world.players() do
-        local held = enshwick.input.held(player.entity)
-        if held ~= nil and table.find(held, "Block") then
-            enshwick.log.info(`{player.name} blocks`)
-        end
-    end
-end)
-```
-
-In Luau, `held` returns the list of the held actions' game names, as a
-control's `link` names them, such as `"ContextualAction_Tap"`.
+[The controls a player holds](input.md) reads which of the game's controls
+any player holds this step, on the server, vanilla clients included.
 
 ## The player's keys
 
