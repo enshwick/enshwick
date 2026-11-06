@@ -4992,7 +4992,8 @@ typedef struct EnshwickVoxelEditData {
   struct EnshwickHeader header;
   // The mod whose call through the API made the edit, such as a
   // transaction's write or a terrain edit; `ModHandle::NONE` for the
-  // game's own edits, a player's tools and buildings among them.
+  // game's own edits, a player's tools and buildings among them, and
+  // for the data packs the loader runs.
   EnshwickModHandle by;
   // The lowest corner of the box the game wrote, in voxels.
   uint32_t min[3];
