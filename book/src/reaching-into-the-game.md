@@ -73,7 +73,7 @@ same hook, ask for a call.
 | [Code patches](code-patches.md) | rewrites bytes of the game's code | as for a mid-function hook |
 
 [Finding the game](finding-the-game.md) shows how a mod asks the loader for
-a function, a field or a value by name. The mod never holds an address.
+a function, a field or a value by name. So the mod never holds an address.
 [Code in the game's frame](game-frame.md), [Pacing and threads](pacing.md)
 and [ECS inside systems](ecs.md) cover what code inside the game's frame
 may do.

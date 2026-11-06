@@ -235,7 +235,7 @@ The game's function runs once at most. `next.call` keeps what the rest of the
 chain returned. When the body panics before calling it, the call goes on to
 the rest of the chain with the arguments the game passed. When the body
 panics after, the detour returns the kept value, and the chain does not run
-again. A destroy, a grant or a hit never happens twice.
+again. So a destroy, a grant or a hit never happens twice.
 
 ```rust
 # use std::sync::atomic::{AtomicU32, Ordering};

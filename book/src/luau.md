@@ -248,7 +248,7 @@ game folder, named as the mod's own folder.
 
 The sandbox keeps a script's mistakes small, but it is no security
 boundary. A write may name any path the game may write, as a Rust mod's
-may. A Luau mod needs the same trust as a Rust mod.
+may. So a Luau mod needs the same trust as a Rust mod.
 
 Each mod has these budgets:
 
@@ -258,7 +258,7 @@ Each mod has these budgets:
 | time per call | 10 ms per call into the scripts, 2 s for `main.luau` at start | the script stops; `pcall` cannot catch it |
 | time per second | 100 ms for all calls into the scripts within one second | the mod turns off |
 
-A server step takes about 50 ms. A handler that runs on every step does
+A server step takes about 50 ms. So a handler that runs on every step does
 little work each time and leaves the rest to a task.
 
 ## When a script fails
