@@ -92,4 +92,34 @@ mod tests {
             .collect();
         assert_eq!(flags, [(kept, 0), (passing, SpawnRequest::DO_NOT_SAVE)]);
     }
+
+    #[test]
+    fn a_mod_keeps_its_own_entities_out_of_the_save_and_never_a_vanilla_one() {
+        let loader = enshwick::test::FakeHost::new().world().install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let (world, effects) = (*WORLD.get().unwrap(), EFFECTS.get().unwrap());
+        let decoy = effects.spawn([3; 16], [0.0; 3], Spawn::new()).unwrap();
+        let other = effects.spawn([3; 16], [0.0; 3], Spawn::new()).unwrap();
+
+        world.set_saved(decoy, false).unwrap();
+        world.set_saved(other, false).unwrap();
+        world.set_saved(decoy, false).unwrap();
+        assert_eq!(loader.unsaved(), [other, decoy]);
+        world.set_saved(other, true).unwrap();
+        assert_eq!(loader.unsaved(), [decoy], "put back in the save");
+
+        assert_eq!(
+            world.set_saved(Entity(7), false),
+            Err(enshwick::WorldError::Refused),
+            "an entity no mod spawned is refused"
+        );
+        let off_thread = std::thread::spawn(move || world.set_saved(decoy, true))
+            .join()
+            .unwrap();
+        assert_eq!(off_thread, Err(enshwick::WorldError::WrongThread));
+        assert_eq!(loader.unsaved(), [decoy]);
+    }
 }

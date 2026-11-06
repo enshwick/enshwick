@@ -1,5 +1,5 @@
 //! `enshwick.world` saves: the saving event, the save on disk, holding saves
-//! and a spawn the save leaves out, as a Rust mod's.
+//! and the entities the save leaves out, as a Rust mod's.
 
 #[cfg(test)]
 mod tests {
@@ -48,5 +48,37 @@ mod tests {
         assert!(!loader.saves_held());
         let flags: Vec<u64> = loader.spawns().into_iter().map(|(_, r)| r.flags).collect();
         assert_eq!(flags, [SpawnRequest::DO_NOT_SAVE], "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn a_script_keeps_its_own_entity_out_of_the_save_and_never_a_vanilla_one() {
+        let loader = run(
+            FakeHost::new().world(),
+            r#"
+            enshwick.on("WorldSaving", function()
+                local decoy = enshwick.effects.spawn("03030303-0303-0303-0303-030303030303", vector.create(0, 0, 0), {})
+                enshwick.world.set_saved(decoy, false)
+                local ok, why = pcall(enshwick.world.set_saved, 7, false)
+                enshwick.log.info(`vanilla left out {ok}: {why}`)
+            end)
+            "#,
+        );
+        // SAFETY: the event carries no data.
+        let handled = unsafe { loader.raise_raw(Event::WORLD_SAVING, core::ptr::null()) };
+        assert_eq!(handled, 1, "{:?}", loader.logs());
+        let spawned: Vec<_> = loader
+            .spawns()
+            .into_iter()
+            .map(|(id, _)| enshwick::Entity(id))
+            .collect();
+        assert_eq!(loader.unsaved(), spawned, "{:?}", loader.logs());
+        assert!(
+            logged(
+                &loader,
+                "vanilla left out false: runtime error: enshwick.world.set_saved: refused by the world"
+            ),
+            "{:?}",
+            loader.logs()
+        );
     }
 }
