@@ -183,6 +183,21 @@ fn every_route_holds_on_every_kept_build() {
     }
 }
 
+/// A [`ROUTED_ONLY`] row with a table or route id that does not exist would
+/// check nothing, so each names a kept table and a route of its side.
+#[test]
+fn every_routed_only_row_names_a_kept_table_and_a_route() {
+    let tables = tables();
+    let routes = Routes::embedded().unwrap();
+    for &(name, id, _) in ROUTED_ONLY {
+        let table = tables.iter().find(|t| t.name() == name);
+        assert!(
+            table.is_some_and(|t| routes.routes(id, t.side())),
+            "{name}: {id}"
+        );
+    }
+}
+
 /// On every [`executables`] entry, the anchors of its side carried by their
 /// patterns and then every engine route, with no table behind them, give
 /// each entry its own table pins the value it pins, and miss, as the loader
