@@ -80,6 +80,7 @@ mod typed {
         Knowledge => "content/knowledge.md",
         Journal => "content/journal.md",
         Skills => "content/skills.md",
+        Removal => "content/removal.md",
     }
 }
 

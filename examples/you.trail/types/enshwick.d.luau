@@ -3718,6 +3718,18 @@ declare enshwick: {
 		--- Adds a perk, listed beside the vanilla ones: a copy of the vanilla perk `NewPerk.like` under the mod's content id, with its own name and description, on the server and the client alike.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_perk: (new: NewPerk) -> string,
+		--- Takes the vanilla item `item` out of play while the mod runs: no recipe makes it, no crafting or build menu lists it, and no loot table or starting inventory gives it. The item stays registered, so the stacks players hold keep it and a world opens as vanilla without the mod; a mod that wants held copies gone takes them out with the inventory API. Mods' changes of loot chain in load order: a later mod that gives the item a count gives it back.
+		--- Only while the mod starts, at the top level of main.luau.
+		remove_item: (item: string) -> (),
+		--- Takes the vanilla workshop of the station item `station` out of play while the mod runs: no recipe is made at it, and no recipe builds the station. Placed stations stay in the world, since they are entities of the station's template, which the mod leaves alone.
+		--- Only while the mod starts, at the top level of main.luau.
+		remove_workshop: (station: string) -> (),
+		--- Serves the vanilla loot table `table`, random or a container's fill table, giving nothing while the mod runs. Loot players hold is plain stacks and stays.
+		--- Only while the mod starts, at the top level of main.luau.
+		remove_loot_table: (table: string) -> (),
+		--- Serves the vanilla item `old` with the data of the vanilla item `new` while the mod runs, under `old`'s own id: saves, recipes and loot that name `old` get `new`'s look and use. The stack size is at least `old`'s, since the game cuts a held stack above its item's and saves the cut; saves keep `old`'s id, so a world opens as vanilla without the mod.
+		--- Only while the mod starts, at the top level of main.luau.
+		rekey_item: (old: string, new: string) -> (),
 		--- Serves `icon`'s UI image, built from the vanilla one it starts from when the client first shows it. `Load.add_item` does it for an item's icon.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_icon: (icon: Icon) -> (),
