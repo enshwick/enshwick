@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 9
+#define ENSHWICK_ABI_MINOR 10
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -4710,7 +4710,7 @@ typedef struct EnshwickHostApi {
   // entity not in the world, on a client or on a build without the
   // commands; `Status::BAD_ARGS` for entity 0. On the server's game
   // thread only (`Status::WRONG_THREAD` elsewhere). A panic in the
-  // loader returns `Status::REFUSED`. ABI 11.9.
+  // loader returns `Status::REFUSED`. ABI 11.10.
   EnshwickStatus (*set_saved)(EnshwickModHandle me, EnshwickEntity entity, uint8_t saved);
 } EnshwickHostApi;
 

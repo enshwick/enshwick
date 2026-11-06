@@ -1701,6 +1701,6 @@ pub struct HostApi {
     /// entity not in the world, on a client or on a build without the
     /// commands; [`Status::BAD_ARGS`] for entity 0. On the server's game
     /// thread only ([`Status::WRONG_THREAD`] elsewhere). A panic in the
-    /// loader returns [`Status::REFUSED`]. ABI 11.9.
+    /// loader returns [`Status::REFUSED`]. ABI 11.10.
     pub set_saved: extern "system" fn(me: ModHandle, entity: Entity, saved: u8) -> Status,
 }
