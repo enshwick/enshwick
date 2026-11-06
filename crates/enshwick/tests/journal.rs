@@ -34,7 +34,7 @@ mod tests {
     }
 
     fn tag(name: &str) -> Guid {
-        Guid::named(name)
+        Guid::named(&format!("you.trail:{name}"))
     }
 
     struct Trail;
