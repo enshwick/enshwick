@@ -370,7 +370,7 @@ impl FakeHost {
     /// Each player's `PlayerInput` with the game controls held, and the
     /// reflected enum of controls as the type registry holds it, with
     /// `MainhandAction` at bit 0, `ContextualAction` at 5 and `Block` at 30;
-    /// what [`Input::held`](crate::input::Input::held) reads.
+    /// what `Input::held` reads, with the `unstable` feature.
     ///
     /// # Examples
     ///
