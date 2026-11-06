@@ -34,6 +34,212 @@ mod tests {
     }
 
     #[test]
+    fn a_script_adds_a_player_s_knowledge_entry_and_gets_its_id() {
+        let loader = run(
+            FakeHost::new().progression(),
+            r#"
+            local id = enshwick.content.add_knowledge({
+                id = "you.luau:shrine", scope = "Player", kind = "Bool", skill_points = 1,
+            })
+            enshwick.log.info(`knowledge {id}`)
+            local ok = pcall(enshwick.content.add_knowledge, { id = "you.luau:w", scope = "World", kind = "Bool", skill_points = 1 })
+            enshwick.log.info(`world points refused {not ok}`)
+            "#,
+        );
+        let id = enshwick::knowledge::KnowledgeId::from_guid(Id::new("you.luau:shrine").guid());
+        assert!(
+            logged(&loader, &format!("knowledge {id}")),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(
+            logged(&loader, "world points refused true"),
+            "{:?}",
+            loader.logs()
+        );
+        let hash = FakeHost::new()
+            .progression()
+            .hash("GameKnowledgeResource")
+            .unwrap();
+        let knowledge = enshwick::content::knowledge::GAME_KNOWLEDGE.key_by_hash(hash);
+        assert!(loader.resources().iter().any(|r| r.key == knowledge));
+    }
+
+    #[test]
+    fn a_script_adds_a_quest_and_a_page_and_changes_a_vanilla_quest() {
+        let loader = run(
+            FakeHost::new().progression(),
+            &format!(
+                r#"
+                local given = enshwick.content.add_knowledge({{ id = "you.luau:given", scope = "Player", kind = "Bool" }})
+                local is_given = {{ id = given, scope = "Player", test = "IsSet" }}
+                local quest = enshwick.content.add_quest({{
+                    id = "you.luau:trail",
+                    name = enshwick.content.guid("you.luau:trail.name"),
+                    source = "None",
+                    kind = "PlayerQuest",
+                    steps = {{ {{
+                        name = enshwick.content.guid("you.luau:trail.1"),
+                        text = enshwick.content.guid("you.luau:trail.1.text"),
+                        shown_when = is_given,
+                        done_when = {{ id = given, scope = "Player", test = {{ AtLeast = 1 }} }},
+                    }} }},
+                    rewards = {{ {{ Item = "{CHEST}" }} }},
+                }})
+                enshwick.log.info(`quest {{quest}}`)
+                enshwick.content.add_journal_page({{
+                    id = "you.luau:lore",
+                    category = enshwick.content.guid("you.luau:lore.category"),
+                    name = enshwick.content.guid("you.luau:lore.name"),
+                    entries = {{ {{
+                        name = enshwick.content.guid("you.luau:lore.1"),
+                        text = enshwick.content.guid("you.luau:lore.1.text"),
+                        shown_when = is_given,
+                    }} }},
+                }})
+                enshwick.content.change_quest({VANILLA}, {{ add_rewards = {{ {{ Item = "{CHEST}" }} }} }})
+                local ok = pcall(enshwick.content.change_quest, 1, {{}})
+                enshwick.log.info(`unknown quest refused {{not ok}}`)
+                "#,
+                VANILLA = enshwick::test::VANILLA_QUEST,
+            ),
+        );
+        let quest = enshwick::knowledge::KnowledgeId::from_guid(Id::new("you.luau:trail").guid());
+        assert!(
+            logged(&loader, &format!("quest {quest}")),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(
+            logged(&loader, "unknown quest refused true"),
+            "{:?}",
+            loader.logs()
+        );
+        let hash = FakeHost::new()
+            .progression()
+            .hash("JournalRegistryResource")
+            .unwrap();
+        let journal = enshwick::content::journal::JOURNAL_REGISTRY.key_by_hash(hash);
+        assert!(loader.resources().iter().any(|r| r.key == journal));
+    }
+
+    #[test]
+    fn a_script_reads_and_sets_a_player_s_quest_progression() {
+        let progression = enshwick::resources::fnv1a32(enshwick::test::PROGRESSION.as_bytes());
+        let loader = run(
+            FakeHost::new().progression().world().component(
+                enshwick::Entity(4096),
+                progression,
+                &[0, 0, 0, 0, 4, 0, 0, 0],
+            ),
+            r"
+            enshwick.log.info(`before {enshwick.knowledge.quest_progression(4096)}`)
+            enshwick.knowledge.set_quest_progression(4096, true)
+            enshwick.log.info(`after {enshwick.knowledge.quest_progression(4096)}`)
+            enshwick.log.info(`nobody {enshwick.knowledge.quest_progression(1)}`)
+            local ok = pcall(enshwick.knowledge.set_quest_progression, 1, true)
+            enshwick.log.info(`nobody refused {not ok}`)
+            ",
+        );
+        let logs = format!("{:?}", loader.logs());
+        assert!(logged(&loader, "before false"), "{logs}");
+        assert!(logged(&loader, "after true"), "{logs}");
+        assert!(logged(&loader, "nobody nil"), "{logs}");
+        assert!(logged(&loader, "nobody refused true"), "{logs}");
+        assert_eq!(
+            loader.component_bytes(enshwick::Entity(4096), progression),
+            Some(vec![1, 0, 0, 0, 5, 0, 0, 0]),
+            "set, its change counted"
+        );
+    }
+
+    #[test]
+    fn a_script_lists_the_tree_and_adds_a_node_and_a_perk() {
+        let loader = run(
+            FakeHost::new().progression(),
+            &format!(
+                r#"
+                local nodes = enshwick.content.skill_nodes()
+                local root = nodes[1]
+                enshwick.log.info(`{{#nodes}} nodes, first a {{root.kind}}`)
+                local node = enshwick.content.add_skill_node({{
+                    id = "you.luau:endurance",
+                    like = nodes[2].id,
+                    x = root.x,
+                    y = root.y + 300,
+                    links_from = {{ root.id }},
+                    name = enshwick.content.guid("you.luau:endurance.name"),
+                    description = enshwick.content.guid("you.luau:endurance.text"),
+                    cost = 1,
+                }})
+                enshwick.log.info(`node {{node}}`)
+                local ok = pcall(enshwick.content.add_skill_node, {{
+                    id = "you.luau:near", like = nodes[2].id, x = root.x, y = root.y,
+                    name = enshwick.content.guid("you.luau:n"), description = enshwick.content.guid("you.luau:n.text"),
+                }})
+                enshwick.log.info(`near refused {{not ok}}`)
+                local perk = enshwick.content.add_perk({{
+                    id = "you.luau:thirst", like = "{PERK}",
+                    name = enshwick.content.guid("you.luau:thirst.name"),
+                    description = enshwick.content.guid("you.luau:thirst.text"),
+                }})
+                enshwick.log.info(`perk {{perk}}`)
+                "#,
+                PERK = enshwick::test::VANILLA_PERK,
+            ),
+        );
+        let logs = format!("{:?}", loader.logs());
+        assert!(logged(&loader, "2 nodes, first a Root"), "{logs}");
+        let node = Id::new("you.luau:endurance").guid().fnv1a();
+        assert!(logged(&loader, &format!("node {node}")), "{logs}");
+        assert!(logged(&loader, "near refused true"), "{logs}");
+        let perk = Id::new("you.luau:thirst").guid();
+        assert!(logged(&loader, &format!("perk {perk}")), "{logs}");
+    }
+
+    #[test]
+    fn a_script_removes_vanilla_content_and_rekeys_an_item() {
+        use enshwick::abi::RecipeRuleKind;
+        use enshwick::test::{ENTITY_ITEM, FILL_TABLE, LOOT_ITEM, OTHER_ITEM};
+
+        let loader = run(
+            FakeHost::new().removal(),
+            &format!(
+                r#"
+                enshwick.content.remove_item("{LOOT_ITEM}")
+                enshwick.content.remove_workshop("{ENTITY_ITEM}")
+                enshwick.content.remove_loot_table("{FILL_TABLE}")
+                enshwick.content.rekey_item("{OTHER_ITEM}", "{LOOT_ITEM}")
+                local ok = pcall(enshwick.content.rekey_item, "{LOOT_ITEM}", "{ENTITY_ITEM}")
+                enshwick.log.info(`entity re-key refused {{not ok}}`)
+                "#
+            ),
+        );
+        let rules = loader.recipe_rules();
+        assert!(
+            rules.contains(&(RecipeRuleKind::OUTPUT, LOOT_ITEM.to_string())),
+            "{rules:?} {:?}",
+            loader.logs()
+        );
+        assert!(rules.contains(&(RecipeRuleKind::WORKSHOP, ENTITY_ITEM.to_string())));
+        assert!(
+            logged(&loader, "entity re-key refused true"),
+            "{:?}",
+            loader.logs()
+        );
+        let item = FakeHost::new()
+            .removal()
+            .hash(types::ITEM_INFO.id())
+            .unwrap();
+        assert!(
+            loader
+                .resources()
+                .iter()
+                .any(|r| r.key == OTHER_ITEM.key_by_hash(item))
+        );
+    }
+
+    #[test]
     fn a_script_adds_a_recipe_beside_a_vanilla_one() {
         let loader = run(
             FakeHost::new().items().recipes(),

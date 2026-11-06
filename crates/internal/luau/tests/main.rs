@@ -29,6 +29,7 @@ mod rewards;
 mod saves;
 mod scripts;
 mod shrine;
+mod trail;
 mod typed;
 mod ui;
 mod vetoes;

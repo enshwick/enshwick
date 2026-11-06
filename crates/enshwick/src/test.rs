@@ -93,8 +93,12 @@ mod pacing;
 mod players;
 mod points;
 mod presets;
+#[cfg(feature = "typed")]
+mod progression;
 mod props;
 mod rates;
+#[cfg(feature = "typed")]
+mod removal;
 mod saves;
 mod settings;
 mod stats;
@@ -109,6 +113,13 @@ mod world;
 pub use content::{LiveChange, ServedResource};
 pub use hooks::LinkedHook;
 pub use inventory::SubmittedRequest;
+#[cfg(feature = "typed")]
+pub use progression::{
+    ATTRIBUTE_NODE, PROGRESSION, QUEST_ITEM, ROOT_NODE, SKILL_ROOM, VANILLA_PERK,
+    VANILLA_PLAYER_KNOWLEDGE, VANILLA_QUEST, VANILLA_WORLD_KNOWLEDGE,
+};
+#[cfg(feature = "typed")]
+pub use removal::{ENTITY_ITEM, FILL_TABLE, LOOT_ITEM, OTHER_ITEM, RANDOM_LOOT, SPARE_ITEM};
 pub use settings::SettingsRefused;
 pub use templates::{
     BITE, BOSS_CREATURE, CRAFTING_PROP_ITEM, CREATURE, ENEMY, ENEMY_ARSENAL, HOWL, LUNGE, NEST,

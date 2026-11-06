@@ -75,6 +75,9 @@ struct Live {
 static DISABLED: LazyLock<ArcSwap<Disabled>> = LazyLock::new(ArcSwap::default);
 static LISTS: LazyLock<ArcSwap<Lists>> = LazyLock::new(ArcSwap::default);
 static LIVE: Mutex<Option<Live>> = Mutex::new(None);
+/// The loader part these rules are, as the status summary and the Mods
+/// screen name it.
+const PART: &str = "disabled recipes";
 static LAYOUT: OnceLock<Option<RecipeLayout>> = OnceLock::new();
 /// Set when the rules or what they resolve against changed.
 static DIRTY: AtomicBool = AtomicBool::new(true);
@@ -90,12 +93,7 @@ fn layout() -> Option<&'static RecipeLayout> {
 
 /// Sets disabled recipes up: the layout and the lookup hook. Before arming.
 pub(crate) fn init(loader: &'static Loader) {
-    let resolved = RecipeLayout::resolve(&Reflected(&loader.reflection));
-    if let Err(off) = &resolved {
-        crate::log!(WARN, "disabled recipes off: {off}");
-    }
-    let _first = LAYOUT.set(resolved.ok());
-    if layout().is_none() {
+    if !keep_layout(RecipeLayout::resolve(&Reflected(&loader.reflection))) {
         return;
     }
     if !crate::code::link_recipe_lookup(loader) {
@@ -105,6 +103,17 @@ pub(crate) fn init(loader: &'static Loader) {
         );
     }
     DIRTY.store(true, Ordering::Release);
+}
+
+/// Keeps the resolved layout, or turns disabled recipes off where players
+/// and admins see it: the rules mods set in init then do nothing.
+fn keep_layout(resolved: Result<RecipeLayout, impl core::fmt::Display>) -> bool {
+    if let Err(off) = &resolved {
+        crate::log!(WARN, "disabled recipes off: {off}");
+        crate::diag::part_off(PART, &off.to_string());
+    }
+    let _first = LAYOUT.set(resolved.ok());
+    layout().is_some()
 }
 
 /// The world's own recipe file, while a world runs.
@@ -390,7 +399,9 @@ pub(crate) fn rule(owner: ModIndex, kind: RecipeRuleKind, name: &str, disable: b
     if name.is_empty() {
         return Status::BAD_ARGS;
     }
-    if layout().is_none() {
+    // Mods' init runs before `init` resolves the layout: keep their rules
+    // until then, and refuse only on a build known to lack it.
+    if LAYOUT.get().is_some_and(Option::is_none) {
         return Status::MISSING;
     }
     live(|l| {
@@ -749,6 +760,33 @@ mod tests {
             made.as_deref(),
             Some(&[1_u64, 2][..]),
             "the old list lives on"
+        );
+    }
+
+    #[test]
+    fn a_mod_s_rule_from_init_is_kept_until_the_layout_resolves_and_shows_off_without_it() {
+        assert!(LAYOUT.get().is_none(), "one process per test");
+        let owner = ModIndex::new(3);
+        assert_eq!(
+            rule(owner, RecipeRuleKind::OUTPUT, "a-guid", true),
+            Status::OK
+        );
+        assert!(live(|l| l.mods.contains(&(
+            3,
+            Kind::Output,
+            "a-guid".to_owned()
+        ))));
+        assert!(!keep_layout(Err("no recipe layout")));
+        assert!(
+            crate::diag::parts_off()
+                .iter()
+                .any(|off| off.part == PART && off.reason == "no recipe layout"),
+            "the rules kept from init show as off"
+        );
+        assert_eq!(
+            rule(owner, RecipeRuleKind::OUTPUT, "a-guid", true),
+            Status::MISSING,
+            "a build without the layout refuses"
         );
     }
 

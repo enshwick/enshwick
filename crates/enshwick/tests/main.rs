@@ -74,7 +74,11 @@ mod item_changes;
 mod item_data;
 #[cfg(feature = "unstable")]
 mod items;
+#[cfg(feature = "typed")]
+mod journal;
 mod knowledge;
+#[cfg(feature = "typed")]
+mod knowledge_content;
 mod language;
 mod lifecycle;
 mod live_changes;
@@ -132,6 +136,8 @@ mod recipe_kinds;
 #[cfg(feature = "unstable")]
 mod recipe_menu;
 mod recipe_rules;
+#[cfg(feature = "typed")]
+mod removal;
 mod required_names;
 mod resource_types;
 mod resource_values;
@@ -149,6 +155,8 @@ mod server_controls;
 mod services;
 mod shapes;
 mod sides;
+#[cfg(feature = "typed")]
+mod skill_tree;
 mod skills;
 #[cfg(feature = "typed")]
 mod spawns;

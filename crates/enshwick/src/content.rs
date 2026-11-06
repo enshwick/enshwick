@@ -19,12 +19,20 @@ pub mod enemies;
 pub mod icons;
 mod ids;
 pub mod items;
+#[cfg(feature = "typed")]
+pub mod journal;
+#[cfg(feature = "typed")]
+pub mod knowledge;
 pub mod loot_tables;
 pub mod menu;
 pub mod props;
 pub mod recipes;
+#[cfg(feature = "typed")]
+pub mod removal;
 pub mod renames;
 mod script;
+#[cfg(feature = "typed")]
+pub mod skills;
 #[cfg(feature = "typed")]
 pub mod spawns;
 pub mod templates;

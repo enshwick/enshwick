@@ -57,6 +57,16 @@ Each entry names the pull request that made the change.
   (`WaypointChanged`), and `Load::on_ping` each ping (`MapPinged`), on the
   server, a place outside the map's frame left out; Luau
   `enshwick.map.on_waypoint` and `on_ping` (#957).
+- `content::knowledge`, `content::journal`, `content::skills` and
+  `content::removal` (behind `typed`), in Rust and Luau: mods add knowledge
+  entries of the world or of each player with skill points and experience;
+  quests of steps on knowledge with rewards, lore pages, changes of vanilla
+  quests and a player's quest progression; skill nodes copied from vanilla
+  ones within the room a player's save keeps, and perks; and take vanilla
+  items, workshops and loot tables out of play, or serve a vanilla item with
+  another's data under its own id, while every held stack survives (#960).
+- The example `you.trail`, a Luau mod with a quest, a lore page and a skill
+  node (#960).
 - Luau mods reach the typed API (`typed`): `enshwick.typed.component_type`,
   `event_type` and `resource_type` open a generated component, event or
   resource by its id, such as `ecs.Health`, at start, with
@@ -257,6 +267,8 @@ Each entry names the pull request that made the change.
 
 - The terrain docs said the save keeps every terrain edit; it keeps one
   only inside a base, a Flame Altar's building zone (#963).
+- A recipe rule a mod sets during init is kept until the loader resolves the
+  recipe layout, where the loader refused it (#960).
 - A world's saved weather fronts keep their phenomenon when the mods that
   add phenomena change: the loader writes the phenomena's GUIDs beside the
   save and gives each restored front its phenomenon's new place, where

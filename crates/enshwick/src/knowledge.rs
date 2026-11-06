@@ -226,6 +226,13 @@ impl Grant {
 #[derive(Clone, Copy, Debug)]
 pub struct Knowledge {
     host: Host,
+    /// Each player's quest progression and the world it is read in, where
+    /// the build has them.
+    #[cfg(feature = "typed")]
+    progression: Option<(
+        crate::typed::ComponentType<crate::typed::ecs::PlayerQuestProgressionMode>,
+        crate::world::World,
+    )>,
 }
 
 impl crate::script::Bound for Knowledge {
@@ -531,6 +538,56 @@ impl Knowledge {
     pub fn completed(&self, player: Entity, quest: KnowledgeId) -> bool {
         self.get(player, quest).is_some_and(|known| known.is_set())
     }
+
+    /// Whether the player whose character is `player` follows the quests on
+    /// their own (personal progression) rather than with the world; `None`
+    /// for a player not in the game, off the game thread, or on a build
+    /// without it.
+    ///
+    /// # Examples
+    ///
+    /// See [`Knowledge::set_quest_progression`].
+    #[cfg(feature = "typed")]
+    #[must_use]
+    #[script]
+    pub fn quest_progression(&self, player: Entity) -> Option<bool> {
+        let (ty, world) = self.progression?;
+        let mode = ty.read(world, player).ok()??;
+        Some(mode.is_in_personal_progression_mode)
+    }
+
+    /// Sets whether the player whose character is `player` follows the
+    /// quests on their own, as the game's own setting in the journal does:
+    /// the server sets it and the game sends it to the clients.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a player not in the game, off the game thread, or on a
+    /// build without it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn alone(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity) {
+    ///     if knowledge.quest_progression(player) == Some(false) {
+    ///         let _ = knowledge.set_quest_progression(player, true);
+    ///     }
+    /// }
+    /// ```
+    #[cfg(feature = "typed")]
+    #[script]
+    pub fn set_quest_progression(&self, player: Entity, personal: bool) -> Result<(), Off> {
+        let (ty, world) = self
+            .progression
+            .ok_or_else(|| Off::new("quest progression: not on this build"))?;
+        let mut mode = ty
+            .read(world, player)?
+            .ok_or_else(|| Off::new(format!("quest progression: no player {player:?}")))?;
+        mode.is_in_personal_progression_mode = personal;
+        // The game counts each change, which the clients follow (server 387).
+        mode.change_counter = mode.change_counter.wrapping_add(1);
+        ty.write(world, player, &mode)
+    }
 }
 
 /// Why the loader's knowledge guard refuses a client's request.
@@ -724,6 +781,12 @@ impl Load<'_> {
     /// See the [module](self).
     #[must_use]
     pub fn knowledge(&mut self) -> Knowledge {
-        Knowledge { host: self.host() }
+        Knowledge {
+            host: self.host(),
+            #[cfg(feature = "typed")]
+            progression: crate::typed::ComponentType::resolve(self)
+                .ok()
+                .zip(self.world().ok()),
+        }
     }
 }

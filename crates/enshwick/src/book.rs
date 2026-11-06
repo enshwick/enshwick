@@ -77,6 +77,10 @@ mod typed {
         Props => "content/props.md",
         Enemies => "content/enemies.md",
         Spawns => "content/spawns.md",
+        Knowledge => "content/knowledge.md",
+        Journal => "content/journal.md",
+        Skills => "content/skills.md",
+        Removal => "content/removal.md",
     }
 }
 

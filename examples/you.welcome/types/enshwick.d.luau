@@ -1151,6 +1151,16 @@ export type KnowledgeData = {
 	value: number,
 }
 
+--- A test of one knowledge entry, vanilla or a mod's, as quests, journal pages and skill nodes ask for knowledge. The name is enshwick's; the game's is `KnowledgeQueryData`.
+export type KnowledgeQuery = {
+	--- The entry tested.
+	id: number,
+	--- Whose the entry is: a player's entry is tested for the player the game asks about, a world's for the world.
+	scope: Scope,
+	--- What it asks of the entry.
+	test: KnowledgeTest,
+}
+
 --- Knowledge a client asks the server for in its input, from `Load.on_knowledge_input`. The name is enshwick's, not the game's. Unstable: needs the `unstable` feature and may change in any release.
 export type KnowledgeRequest = {
 	--- The asking player's character.
@@ -1168,6 +1178,9 @@ export type KnowledgeRequest = {
 	--- Whether it goes through so far: after the guard, which refuses only when enforcing, and the filters that ran before.
 	allowed: boolean,
 }
+
+--- What a `KnowledgeQuery` asks of its entry. The name is enshwick's, not the game's.
+export type KnowledgeTest = "IsSet" | { AtLeast: number }
 
 --- What a knowledge value is.
 export type KnowledgeType = "Bool" | "Counter" | "Flags" | { Other: number }
@@ -1531,6 +1544,46 @@ export type NewItem = {
 	icon: Icon?,
 }
 
+--- A new lore page for `Load.add_journal_page`. The name is enshwick's; the game's is `JournalCollectionResource`.
+export type NewJournalPage = {
+	--- Its content id.
+	id: string,
+	--- The text tag of the category the journal lists it under.
+	category: string,
+	--- Its title's text tag.
+	name: string,
+	--- Its entries, in order.
+	entries: {PageEntry},
+}
+
+--- A new knowledge entry for `Load.add_knowledge`.
+export type NewKnowledge = {
+	--- Its content id; its knowledge id is the id's `KnowledgeId.from_guid`.
+	id: string,
+	--- Whose it is.
+	scope: Scope,
+	--- What it is: a bool, a counter or flags.
+	kind: KnowledgeType,
+	--- The bits a flags entry may hold; 0 for a bool or a counter.
+	flags: number?,
+	--- The skill points a player's entry gives when it is granted.
+	skill_points: number?,
+	--- The experience a player's entry gives when it is granted.
+	experience: number?,
+}
+
+--- A new perk for `Load.add_perk`: a copy of the vanilla perk `like` with its own texts.
+export type NewPerk = {
+	--- Its content id, its GUID the perk's.
+	id: string,
+	--- The vanilla perk copied, by GUID.
+	like: string,
+	--- Its name's text tag.
+	name: string,
+	--- Its description's text tag.
+	description: string,
+}
+
 --- A weather phenomenon of a mod's own: a copy of one of the game's, its clouds and look included, with values changed, in a weather layer. The game knows only clouds, rain and blizzards, so a phenomenon picks one of them; a new look needs client assets and is not offered. Every client draws weather from its own copy of the resource, so a mod that adds one runs on clients too.
 export type NewPhenomenon = {
 	--- Its content id, `mod:name`.
@@ -1555,6 +1608,26 @@ export type NewProp = {
 	crafting_prop: CraftingPropSetup?,
 }
 
+--- A new quest for `Load.add_quest`.
+export type NewQuest = {
+	--- Its content id; its quest id is the id's `KnowledgeId.from_guid`.
+	id: string,
+	--- Its title's text tag.
+	name: string,
+	--- Who gives it, which groups it in the journal.
+	source: typed_QuestSourceType,
+	--- Whether it is the world's, each player's, or the game's `Auto`.
+	kind: typed_QuestType,
+	--- Whether the journal lists it as a main quest.
+	main: boolean?,
+	--- Whether one player's completion unlocks it for every player.
+	for_all_players: boolean?,
+	--- Its steps, in order.
+	steps: {QuestStep},
+	--- What it pays when its last step completes.
+	rewards: {QuestReward}?,
+}
+
 --- A new recipe for `Load.add_recipe`.
 export type NewRecipe = {
 	--- The new recipe's id; its game id is `RecipeId.from_guid` of its GUID.
@@ -1569,6 +1642,30 @@ export type NewRecipe = {
 	cost: number,
 	--- The workshop the recipe is made at, such as one from `Load.add_workshop`; nil keeps the copied recipe's.
 	workshop: string?,
+}
+
+--- A new skill node for `Load.add_skill_node`: a copy of the vanilla node `like`, its effect and icons among it, with the values it gives.
+export type NewSkillNode = {
+	--- Its content id; its node id is the id's GUID hashed as the game hashes ids.
+	id: string,
+	--- The vanilla node copied.
+	like: number,
+	--- Where the tree screen draws it, across, in the tree's units: vanilla nodes lie about 100 to 6500 apart.
+	x: number,
+	--- Where the tree screen draws it, down.
+	y: number,
+	--- The nodes it is unlocked from, vanilla or a mod's.
+	links_from: {number}?,
+	--- Its title's text tag.
+	name: string,
+	--- Its description's text tag.
+	description: string,
+	--- The skill points it costs; nil keeps the vanilla node's.
+	cost: number?,
+	--- The levels it has; nil keeps the vanilla node's. A node with levels is refused, since the game keeps them in a slot of the vanilla node's own, so a copy of one sets 0.
+	max_level: number?,
+	--- What it is; nil keeps the vanilla node's.
+	kind: typed_SkillNodeType?,
 }
 
 --- A new entity template for `Load.add_template`: a copy of the vanilla template `like` under the mod's content id `id`, with `changes` applied in order. `id` is the mod's own and never changes: saves keep the template GUID of every placed object and creature made from it.
@@ -1634,6 +1731,16 @@ export type Outcome = {
 	done: Done,
 	--- One per operation when the request ran, else empty.
 	ops: {OpResult},
+}
+
+--- One entry of a journal page, shown once `shown_when` holds.
+export type PageEntry = {
+	--- Its title's text tag.
+	name: string,
+	--- Its text's tag.
+	text: string,
+	--- When the journal shows it.
+	shown_when: KnowledgeQuery,
 }
 
 --- Who a message comes from or goes to.
@@ -1825,12 +1932,45 @@ export type PurposeUniqueness = {
 	home: {number},
 }
 
+--- A change of a vanilla quest for `Load.change_quest`; nil and empty lists keep what the quest holds.
+export type QuestChange = {
+	--- The rewards in place of the quest's.
+	rewards: {QuestReward}?,
+	--- Rewards after those.
+	add_rewards: {QuestReward}?,
+	--- Whether one player's completion unlocks it for every player.
+	for_all_players: boolean?,
+	--- Changes of its steps' knowledge.
+	steps: {StepChange}?,
+}
+
 --- The data of the `QuestCompleted` event.
 export type QuestData = {
 	--- The player's character.
 	entity: number,
 	--- The quest's id, a player knowledge id.
 	quest: number,
+}
+
+--- What a quest pays when its last step completes. The name is enshwick's, not the game's.
+export type QuestReward = { Item: string } | { Experience: number }
+
+--- One step of a quest: its title and text, shown while `shown_when` holds, done once `done_when` holds. The name is enshwick's; the game's is `JournalEntryResource`.
+export type QuestStep = {
+	--- Its title's text tag; give it text with `Load.add_text`.
+	name: string,
+	--- Its text's tag.
+	text: string,
+	--- When the journal shows it.
+	shown_when: KnowledgeQuery,
+	--- When it is done.
+	done_when: KnowledgeQuery,
+	--- Parts the journal counts as it moves on, each done when it holds.
+	progress: {KnowledgeQuery}?,
+	--- The item whose icon it shows.
+	icon: number?,
+	--- The level it suits; 0 for none.
+	level: number?,
 }
 
 --- How many enemies random spawners bring. The loader reads the game's value of each variant by its constant's name.
@@ -2136,6 +2276,18 @@ export type SkillCheck = {
 --- Which game check asks about a skill node. The name is enshwick's, not the game's.
 export type SkillGate = "FlyMode" | "Other"
 
+--- A vanilla node of the skill tree, from `Load.skill_nodes`. The name is enshwick's: it holds a few fields of the game's `SkillTreeNode`.
+export type SkillNode = {
+	--- Its id.
+	id: number,
+	--- What it is: a root, an attribute, an active or a passive skill.
+	kind: typed_SkillNodeType,
+	--- Where the tree screen draws it, across.
+	x: number,
+	--- Where the tree screen draws it, down.
+	y: number,
+}
+
 --- A slider row as a script draws it: the fields of `Slider`'s builder, its range as `min` and `max`.
 export type Slider = {
 	--- The row's label.
@@ -2308,6 +2460,16 @@ export type Stats = {
 	name_key: (self: Stats, id: string) -> string?,
 	--- The value `def` gives with `modifiers`, each an op and its value, as `aggregate` gives it.
 	aggregate: (self: Stats, def: StatDef, modifiers: {ScriptModifier}) -> number,
+}
+
+--- A change of a step of a vanilla quest; nil keeps a query.
+export type StepChange = {
+	--- The step, from 0.
+	step: number,
+	--- When the journal shows it.
+	shown_when: KnowledgeQuery?,
+	--- When it is done.
+	done_when: KnowledgeQuery?,
 }
 
 --- One of the game's named text styles.
@@ -2683,6 +2845,15 @@ export type typed_ecs_SpawnCondition = "IsDay" | "IsNight" | { Other: any }
 
 --- The game's enum `FactionType`, 1 byte.
 export type typed_FactionType = "Environment" | "HitAll" | "Fogger" | "Vukah" | "Scavenger" | "Wildlife" | "WildBeast" | "Player" | "AutomatedPlayer" | "HitOthers" | "Skeleton" | "PlayerAlly" | "FarmAnimal" | "Cyclops" | "Drak" | "Ancients" | { Other: any }
+
+--- The game's enum `QuestSourceType`, 1 byte.
+export type typed_QuestSourceType = "None" | "Flame" | "Blacksmith" | "Alchemist" | "Huntress" | "Farmer" | "Carpenter" | "CryptKeeper" | "Bard" | "ChineseNewYearTrader" | "Barber" | "Fisher" | "AncientResearcher" | "Grassland" | "Deepforest" | "Steppes" | "Desert" | "ColdHeights" | "Wetlands" | "AncientLands" | { Other: any }
+
+--- The game's enum `QuestType`, 1 byte.
+export type typed_QuestType = "Auto" | "WorldQuest" | "PlayerQuest" | { Other: any }
+
+--- The game's enum `SkillNodeType`, 1 byte.
+export type typed_SkillNodeType = "Root" | "Attribute" | "ActiveSkill" | "PassiveSkill" | { Other: any }
 
 declare enshwick: {
 	--- Calls `handler` on every loader or typed game event named `event`, with its data; subscribe at the top level of main.luau. A game value the API does not name arrives as `Other(<number>)`, a name of ours.
@@ -3266,6 +3437,10 @@ declare enshwick: {
 		quests: () -> {number},
 		--- Whether the player whose character is `player` completed quest `quest` and got its rewards.
 		completed: (player: number, quest: number) -> boolean,
+		--- Whether the player whose character is `player` follows the quests on their own (personal progression) rather than with the world; nil for a player not in the game, off the game thread, or on a build without it.
+		quest_progression: (player: number) -> boolean?,
+		--- Sets whether the player whose character is `player` follows the quests on their own, as the game's own setting in the journal does: the server sets it and the game sends it to the clients.
+		set_quest_progression: (player: number, personal: boolean) -> (),
 		--- Runs `filter` on each player's knowledge input, as `Load.on_knowledge_input` does; its answer replaces the verdict so far, and nil or an error keeps it.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_knowledge_input: (filter: (arg1: KnowledgeRequest) -> boolean?) -> (),
@@ -3612,6 +3787,39 @@ declare enshwick: {
 		--- Changes the counts and timeouts of the random spawners `spawner` picks, on the server; mods that change one spawner change it in load order.
 		--- Only while the mod starts, at the top level of main.luau.
 		change_spawner: (spawner: SpawnerPick, change: SpawnerChange) -> (),
+		--- Adds a knowledge entry beside the game's own, on the server and the client alike, and returns its knowledge id. The game grants, sends and saves it like a vanilla entry; a player's entry gives its skill points and experience when granted. A save keeps the values of the mod's entries while the mod runs; a save made without the mod drops them, so they read 0 when the mod comes back (server 399, read on a server copy).
+		--- Only while the mod starts, at the top level of main.luau.
+		add_knowledge: (new: NewKnowledge) -> number,
+		--- Adds a quest to the journal beside the game's, on the server and the client alike, and returns its quest id: a player's bool the game sets when it pays the quest, as for its own. Each step shows while its `shown_when` holds and is done once its `done_when` holds; the game pays the rewards when the last step is done. A mod moves the quest on by granting the knowledge its steps ask for.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_quest: (new: NewQuest) -> number,
+		--- Adds a lore page to the journal, on the server and the client alike: its entries show once their knowledge holds, listed under its category.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_journal_page: (new: NewJournalPage) -> (),
+		--- Changes the vanilla quest `quest` in memory, on the server and the client alike: its rewards, whether it unlocks for every player, and its steps' knowledge. Mods that change one quest change it in load order, each on the one before's result; `Knowledge.quests` lists the quest ids. `Knowledge.quests`: crate.knowledge.Knowledge.quests
+		--- Only while the mod starts, at the top level of main.luau.
+		change_quest: (quest: number, change: QuestChange) -> (),
+		--- The vanilla nodes of the skill tree, to link a mod's nodes from and place them beside.
+		--- Only while the mod starts, at the top level of main.luau.
+		skill_nodes: () -> {SkillNode},
+		--- Adds a node to the skill tree, on the server and the client alike: a copy of the vanilla node `NewSkillNode.like`, its effect and icons among it, at its own place, linked from the nodes it names. A player unlocks it with skill points as the game's own nodes; the tree screen draws it from the data. A player's save keeps a fixed count of unlocked nodes (256 on server 399, beside the game's 243), and the game's own tree takes most of them: every mod's nodes share the rest, in load order. Each node shows as the mod's feature `skill node <id>` in the status summary and on the Mods screen, with the reason when it is refused.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_skill_node: (new: NewSkillNode) -> number,
+		--- Adds a perk, listed beside the vanilla ones: a copy of the vanilla perk `NewPerk.like` under the mod's content id, with its own name and description, on the server and the client alike.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_perk: (new: NewPerk) -> string,
+		--- Takes the vanilla item `item` out of play while the mod runs: no recipe makes it, no crafting or build menu lists it, and no loot table or starting inventory gives it. The item stays registered, so the stacks players hold keep it and a world opens as vanilla without the mod; a mod that wants held copies gone takes them out with the inventory API. Mods' changes of loot chain in load order: a later mod that gives the item a count gives it back.
+		--- Only while the mod starts, at the top level of main.luau.
+		remove_item: (item: string) -> (),
+		--- Takes the vanilla workshop of the station item `station` out of play while the mod runs: no recipe is made at it, and no recipe builds the station. Placed stations stay in the world, since they are entities of the station's template, which the mod leaves alone.
+		--- Only while the mod starts, at the top level of main.luau.
+		remove_workshop: (station: string) -> (),
+		--- Serves the vanilla loot table `table`, random or a container's fill table, giving nothing while the mod runs. Loot players hold is plain stacks and stays.
+		--- Only while the mod starts, at the top level of main.luau.
+		remove_loot_table: (table: string) -> (),
+		--- Serves the vanilla item `old` with the data of the vanilla item `new` while the mod runs, under `old`'s own id and GUID: saves, recipes and loot that name `old` get `new`'s look and use. The stack size is at least `old`'s, since the game cuts a held stack above its item's and saves the cut; saves keep `old`'s id, so a world opens as vanilla without the mod. Mods that serve `old` chain in load order, and the last re-key's data wins; a build that fails keeps `old` as it was.
+		--- Only while the mod starts, at the top level of main.luau.
+		rekey_item: (old: string, new: string) -> (),
 		--- Serves `icon`'s UI image, built from the vanilla one it starts from when the client first shows it. `Load.add_item` does it for an item's icon.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_icon: (icon: Icon) -> (),
