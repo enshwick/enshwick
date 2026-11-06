@@ -1,29 +1,20 @@
 # What the loader finds on this game build; `cargo xtask compat <exe> --data <file>`
 # writes it.
 
-table = "1.0 client (1269579)"
+build = "client, game 1269579, executable 69f0e9573b32c24a8838d3fff550824c/410"
 side = "client"
 game_version = 1269579
-entries = 857
-routed = 777
-missing = ["bases.animal_value", "bases.base_ids", "bases.npc_value", "bases.record_base_id", "building.box_extent", "building.box_min", "building.box_size", "net.message_release", "voxel.grid_stride"]
+entries = 795
+routed = 792
+missing = ["bases.base_ids", "bases.record_base_id", "net.message_release"]
+unread = ["attribute.experience_needed_slot", "attribute.fuel_max_slot", "attribute.health_adder_slot", "attribute.health_max_slot", "attribute.mana_adder_slot", "attribute.mana_max_slot", "attribute.shroud_max_slot", "attribute.stamina_adder_slot", "attribute.stamina_max_slot"]
 
 [[feature]]
 name = "bases"
 state = "partly"
-missing = ["bases.base_ids", "bases.animal_value", "bases.npc_value", "bases.record_base_id"]
+missing = ["bases.base_ids", "bases.record_base_id"]
 
 [[feature]]
 name = "carrier"
 state = "partly"
 missing = ["net.message_release"]
-
-[[feature]]
-name = "transactions"
-state = "partly"
-missing = ["building.box_extent", "building.box_min", "building.box_size"]
-
-[[feature]]
-name = "voxels"
-state = "partly"
-missing = ["voxel.grid_stride"]

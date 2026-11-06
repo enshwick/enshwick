@@ -1,10 +1,11 @@
 # What the loader finds on this game build; `cargo xtask compat <exe> --data <file>`
 # writes it.
 
-table = "1.0 client (26082781)"
+build = "client, Steam build 26082781, game 1273043, executable 69f0e9573b32c24a8838d3fff550824c/426"
 side = "client"
 steam_build = 26082781
 game_version = 1273043
-entries = 886
-routed = 780
+entries = 798
+routed = 795
 missing = []
+unread = ["attribute.experience_needed_slot", "attribute.fuel_max_slot", "attribute.health_adder_slot", "attribute.health_max_slot", "attribute.mana_adder_slot", "attribute.mana_max_slot", "attribute.shroud_max_slot", "attribute.stamina_adder_slot", "attribute.stamina_max_slot"]
