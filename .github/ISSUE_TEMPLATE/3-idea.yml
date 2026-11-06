@@ -1,0 +1,16 @@
+name: An idea
+description: A mod, a feature of the loader or the modding API.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you would like
+      description: What a player, a server admin or a mod author could do then that they cannot do now.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: The situation where you missed it.

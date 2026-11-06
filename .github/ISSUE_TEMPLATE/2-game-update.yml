@@ -1,0 +1,45 @@
+name: A game update broke something
+description: A mod or the loader stopped working after Enshrouded updated.
+labels: [bug, game-update]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        After an update the loader keeps running and turns off what it cannot find in the new build. The Mods screen lists what is off, and the loader's log in `logs/` names each missing entry.
+  - type: textarea
+    id: what
+    attributes:
+      label: What stopped working
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game version
+      description: "The `game:` line of the loader's log, `logs/enshwick_<date>_<time>.log`, names it."
+    validations:
+      required: true
+  - type: dropdown
+    id: side
+    attributes:
+      label: Which game
+      options:
+        - The game client
+        - The dedicated server
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: loader
+    attributes:
+      label: Loader version
+      description: The loader's log names it.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Drag the loader's log of the run after the update here, `logs/enshwick_<date>_<time>.log`. Paths in the log show your folders, so read it before you share it.
+    validations:
+      required: true
