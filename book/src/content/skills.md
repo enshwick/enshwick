@@ -5,9 +5,9 @@ description: Mods add skill nodes to the skill tree within the room a player's s
 
 # Skill nodes and perks
 
-A mod adds nodes to the skill tree: each copies a vanilla node's effect and
-icons, at a place of its own, linked from vanilla or mod nodes. A mod also
-adds perks copied from vanilla perks with texts of their own.
+A mod adds skill tree nodes, each copying a vanilla node's effect and icons
+at a place of its own, linked from vanilla or mod nodes, and perks copied
+from vanilla perks with texts of their own.
 
 ## A node of the mod's own
 

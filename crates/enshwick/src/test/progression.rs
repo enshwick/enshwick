@@ -238,6 +238,17 @@ fn skill_types() -> Vec<Type<'static>> {
                 field("links", 8, "demo::BlobArray<demo::SkillTreeNodeLink>"),
             ],
         ),
+    ]
+    .into_iter()
+    .chain(perk_types())
+    .collect()
+}
+
+/// The perks and the saved unlocks of [`skill_types`].
+fn perk_types() -> Vec<Type<'static>> {
+    let field = Field::new;
+    let key = "demo::HashKey32";
+    vec![
         Type::new(
             "demo::ObjectReference<demo::Text>",
             Kind::ObjectReference,

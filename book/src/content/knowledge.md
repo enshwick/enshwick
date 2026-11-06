@@ -5,9 +5,9 @@ description: Mods add knowledge entries of the world or of each player, with ski
 
 # Knowledge entries
 
-A mod adds knowledge entries of its own beside the game's: a bool, a counter
-or flags, of the world or of each player. The game grants, sends and saves
-them like its own, so quests, journal pages and skill nodes can rest on them.
+A mod adds knowledge entries beside the game's: a bool, a counter or flags,
+per world or per player. The game grants, sends and saves them like
+its own, so quests, pages and skill nodes rest on them.
 
 ## An entry of the mod's own
 

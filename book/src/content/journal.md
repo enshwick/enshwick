@@ -5,11 +5,10 @@ description: Mods add quests and lore pages to the journal on knowledge, change 
 
 # Quests and journal pages
 
-A mod adds quests and lore pages to the game's journal and changes the
-game's quests. A quest is steps that show and complete on
-[knowledge](knowledge.md), and rewards the game pays when its last step
-completes. The journal, its tracker and its notices are the game's own
-screens, drawn from data.
+A mod adds quests and lore pages to the journal and changes the game's
+quests. A quest's steps show and complete on [knowledge](knowledge.md); its
+rewards pay out when the last step completes. The game's own screens draw
+them.
 
 ## A quest of the mod's own
 
