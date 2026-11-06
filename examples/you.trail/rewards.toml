@@ -1,0 +1,27 @@
+#:schema ./rewards.schema.json
+# The actions that move the quest of main.luau on, each setting one of its
+# knowledge entries. `cargo enshwick id you.trail:given` prints an entry's
+# GUID.
+
+# Gives the quest and shows the lore page.
+[[reward]]
+id = "given"
+on = { join = true }
+give = [{ knowledge = "c38e109e-73ec-5c2d-870d-1411b40a40f7" }] # you.trail:given
+limit = "once"
+
+# Completes the first step.
+[[reward]]
+id = "wood"
+# Material_T1_Wood_Logs
+on = { pickup = "3f4093ae-75ed-4e5d-bd0b-784ba83b88f5" }
+give = [{ knowledge = "f1a8b8c7-1be7-55c5-b347-eaeb9b2d5334" }] # you.trail:wood
+limit = "once"
+
+# Completes the second step, which pays the quest's torch.
+[[reward]]
+id = "resin"
+# Material_T1_Resin
+on = { pickup = "bbb778fa-2ddb-4615-bf82-51d064a83ba4" }
+give = [{ knowledge = "64ae55cf-7d19-5f21-beb0-785ec2fbab5d" }] # you.trail:resin
+limit = "once"

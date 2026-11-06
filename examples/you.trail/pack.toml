@@ -1,0 +1,8 @@
+#:schema ./pack.schema.json
+id = "you.trail"
+version = "0.1.0"
+name = "Trail"
+description = "A quest of two steps, a lore page and a skill node: each shows in the game's own journal and skill tree."
+authors = ["Enshwick"]
+license = "MIT"
+side = "both"
