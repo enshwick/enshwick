@@ -13,9 +13,16 @@ its own folder in `mods/`.
 | `mods/<folder>/` | the mod's installation: its DLL or pack, and an installation [hold](#holds) | the installer |
 
 `<stem>` is the save's file name without `.ksd`, such as `world0`. The game
-keeps every world of a machine in one folder: a dedicated server's
-`savegame/`, a client's Steam `remote/` or `Saved Games\Enshrouded\`. The
+keeps a dedicated server's worlds in `savegame/`; on a client, the worlds saved to Steam in Steam's
+`userdata/<account>/1203620/remote/` and the local worlds in
+`Saved Games\keen games\Enshrouded\default\` (client 26430625). The
 loader creates a world's folders when something first writes there.
+
+Steam Cloud carries a world saved to Steam to the player's other computers,
+but not its two mod folders: on another computer the world starts from each
+mod's defaults with no data, until the player copies the folders over. When
+Steam does not name the account's folder, a world saved to Steam has no mod
+folders and the loader logs why.
 
 Settings are what a player chooses; data is what the mod remembers. Keep them
 apart: never write the settings file from the mod, and never ask a player to
