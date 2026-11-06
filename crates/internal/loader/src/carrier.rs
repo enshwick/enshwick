@@ -541,8 +541,13 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
     {
         set_host(key);
     }
+    let host_key = CARRIER.host_key.load(Ordering::Acquire);
     state.peers.retain(|&key, peer| {
-        let live = machines.iter().any(|&(k, m)| k == key && m == peer.machine);
+        // A socket opened to the host's own player before its key was known
+        // goes too.
+        let live = machines
+            .iter()
+            .any(|&(k, m)| k == key && m == peer.machine && wired(k, m, host, host_key));
         if !live && game.holds(peer.socket, peer.slot) {
             game.close(session, peer.socket);
         }
@@ -554,7 +559,6 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
     if state.off {
         return;
     }
-    let host_key = CARRIER.host_key.load(Ordering::Acquire);
     for &(key, machine) in machines {
         let due = state
             .tried

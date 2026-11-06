@@ -238,6 +238,31 @@ fn every_other_player_on_a_machine_of_its_own_gets_a_socket() {
 }
 
 #[test]
+fn a_socket_opened_to_the_host_s_player_before_its_key_was_known_goes() {
+    let _alone = alone();
+    PACKET.store(1200, Ordering::Relaxed);
+    let game = Game::for_test(fake_create, fake_destroy, fake_limit);
+    let host: [u32; 2] = [1, 0];
+    let session = host.as_ptr().expose_provenance();
+    let mut slot = None;
+    let state = fresh(&mut slot, session);
+    for (key, machine) in [(7, 2), (8, 3)] {
+        state.peers.insert(
+            key,
+            Peer {
+                machine,
+                ..peer(true)
+            },
+        );
+    }
+    host_for_test(7);
+    members(&game, session, state, &[(7, 2), (8, 3)], Instant::now());
+    unhost_for_test();
+    let kept: Vec<u64> = state.peers.keys().copied().collect();
+    assert_eq!(kept, [8], "the remote player keeps its socket");
+}
+
+#[test]
 fn a_session_turned_off_is_on_again_after_the_game_ends() {
     let _alone = alone();
     *CARRIER.server.relock() = Some(members_twice(0));
